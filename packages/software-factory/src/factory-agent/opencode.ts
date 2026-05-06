@@ -234,17 +234,6 @@ export class OpencodeFactoryAgent implements LoopAgent {
     }
 
     try {
-      // Subscribe to the per-directory event stream BEFORE creating the
-      // session so we can't miss the eventual `session.idle` event. The
-      // SDK's `session.prompt` HTTP call is *supposed* to block until
-      // the model + tool loop completes, but in opencode 1.14.34 the
-      // response often isn't flushed once the loop exits — leaving the
-      // promise hanging long after the server-side session is idle.
-      // Driving completion off the event bus is reliable; the prompt's
-      // return value is unused (the captured DONE / CLARIFICATION
-      // signal carries everything we need).
-      let events = await client.event.subscribe();
-
       let session = await client.session.create({
         query: { directory: this.config.workspaceDir },
       });
@@ -253,9 +242,18 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
 
-      // Fire the prompt; let opencode start its loop. Don't await — see
-      // the comment above. Swallow errors so an upstream rejection
-      // can't escape past the event-driven wait below.
+      // The SDK's `session.prompt` HTTP call is *supposed* to block
+      // until the model + tool loop completes, but in opencode
+      // 1.14.34 the response often isn't flushed once the loop exits
+      // — leaving the promise hanging long after the server-side
+      // session is idle. Same issue with the `client.event.subscribe`
+      // SSE stream (events that fire before the SSE connection is
+      // fully established are silently lost). Polling
+      // `client.session.status` is a coarse but reliable workaround:
+      // SessionStatus is a discriminated union of `idle | retry |
+      // busy`, so we wait until our session leaves `busy`. The
+      // prompt's return value is unused — DONE / CLARIFICATION
+      // signals come back through the MCP server, not the prompt.
       let promptPromise = client.session
         .prompt({
           path: { id: sessionId },
@@ -273,23 +271,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
         });
 
       try {
-        for await (let event of events.stream) {
-          if (
-            event.type === 'session.idle' &&
-            event.properties.sessionID === sessionId
-          ) {
-            break;
-          }
-          if (
-            event.type === 'session.error' &&
-            event.properties.sessionID === sessionId
-          ) {
-            log.warn(
-              `session.error from opencode: ${JSON.stringify(event.properties.error)}`,
-            );
-            break;
-          }
-        }
+        await waitForSessionIdle(client, sessionId);
       } finally {
         // Best-effort: drain any pending prompt resolution before
         // teardown so its socket gets closed cleanly.
@@ -563,4 +545,48 @@ function serializeSignalResult(result: unknown): unknown {
     return { ...r, signal: tag };
   }
   return result;
+}
+
+/**
+ * Poll `client.session.status` until our session settles in `idle`. Used
+ * as a workaround for the unreliable completion signals on
+ * `session.prompt` and `client.event.subscribe` in opencode 1.14.34.
+ *
+ * The session is `idle` immediately after creation too, so we wait for
+ * the first non-idle observation (the transition into `busy` or `retry`
+ * driven by the prompt request) before treating a subsequent `idle` as
+ * "the loop finished". `MAX_WAIT_MS` bounds the wait so a hung session
+ * can't trap the factory loop forever.
+ */
+async function waitForSessionIdle(
+  client: { session: { status: (opts?: any) => Promise<unknown> } },
+  sessionId: string,
+): Promise<void> {
+  const POLL_INTERVAL_MS = 750;
+  const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
+  let started = Date.now();
+  let observedBusy = false;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() - started > MAX_WAIT_MS) {
+      throw new Error(
+        `Timed out after ${MAX_WAIT_MS}ms waiting for opencode session ${sessionId} to settle.`,
+      );
+    }
+
+    let res = (await client.session.status()) as {
+      data?: Record<string, { type: string }>;
+    };
+    let status = res.data?.[sessionId];
+    if (status) {
+      if (status.type !== 'idle') {
+        observedBusy = true;
+      } else if (observedBusy) {
+        return;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
 }
