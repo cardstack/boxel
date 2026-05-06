@@ -1,7 +1,7 @@
 import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
-import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
 import { Deferred } from '@cardstack/runtime-common';
