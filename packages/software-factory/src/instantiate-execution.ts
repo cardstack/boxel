@@ -24,7 +24,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
-import { retryWithPoll } from './retry-with-poll';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
 import { readCard } from './workspace-fs';
 
 let log = logger('instantiate-execution');
@@ -721,6 +721,34 @@ function extractLinkedExamples(
 }
 
 async function defaultInstantiateCard(
+  client: BoxelCLIClient,
+  realmServerUrl: string,
+  moduleUrl: string,
+  cardName: string,
+  realmUrl: string,
+  instanceData?: string,
+): Promise<InstantiateModuleResult> {
+  // Source POSTs return before realm indexing settles, so a load attempt
+  // immediately after a write can transiently fail with "module URL not
+  // found" until the in-memory module map is populated. Bound-poll past
+  // that race; isTransientIndexNotFound stops matching the moment
+  // indexing resolves either way (success or error_doc), so retries
+  // never persist past a real indexer failure.
+  return retryWithPoll(
+    () =>
+      attemptInstantiateCard(
+        client,
+        realmServerUrl,
+        moduleUrl,
+        cardName,
+        realmUrl,
+        instanceData,
+      ),
+    (r) => !r.passed && isTransientIndexNotFound(r.error),
+  );
+}
+
+async function attemptInstantiateCard(
   client: BoxelCLIClient,
   realmServerUrl: string,
   moduleUrl: string,

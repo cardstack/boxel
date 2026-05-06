@@ -12,11 +12,11 @@
  * agent / test paths where event subscription isn't practical.
  */
 
-const DEFAULT_TOTAL_WAIT_MS = 5_000;
+const DEFAULT_TOTAL_WAIT_MS = 10_000;
 const DEFAULT_POLL_MS = 250;
 
 export interface RetryWithPollOptions {
-  /** Total time to keep retrying before giving up. Default 5s. */
+  /** Total time to keep retrying before giving up. Default 10s. */
   totalWaitMs?: number;
   /** Sleep between attempts. Default 250ms. */
   pollMs?: number;
@@ -52,4 +52,19 @@ export async function retryWithPoll<T>(
     result = await attempt();
   }
   return result;
+}
+
+/**
+ * Match the realm's "module URL not found" load failure — the signature
+ * of an in-flight indexing race where the source is on disk but the
+ * in-memory module map hasn't been populated yet. Once the indexer
+ * settles (success OR with an error_doc), the realm surfaces a
+ * different error class — TypeError, parse error, or the indexed
+ * error_doc message — so this predicate stops matching and retries
+ * stop. Any caller that retries on the indexing race should match on
+ * this and only this.
+ */
+export function isTransientIndexNotFound(error: string | undefined): boolean {
+  if (!error) return false;
+  return /\bnot found\b/i.test(error);
 }
