@@ -27,27 +27,126 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "links": [
-      {
-        "asDropdown": false,
-        "icon": "bolt",
-        "includeVars": false,
-        "keepTime": false,
-        "tags": [],
-        "targetBlank": true,
-        "title": "Grant ${permission_label} to ${matrix_username}",
-        "tooltip": "",
-        "type": "link",
-        "url": "${realm_server}_grafana-upsert-realm-user-permission?realm=${realm_url}&user=${matrix_username}&read=${read_flag}&write=${write_flag}"
-      }
-    ],
+    "links": [],
     "panels": [
       {
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Permissions for the selected realm. Use the variables above to set the realm URL, Matrix username, and permission level, then click the Grant link.",
+        "description": "Operator action: grant the selected permission level to the chosen Matrix user on the chosen realm. The button POSTs to the realm-server with an Authorization: Bearer header (token substituted into a hidden constant template variable at apply time from SSM, CS-10929). Confirmation dialog shows what's about to change.",
+        "fieldConfig": {
+          "defaults": {
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Grant ${permission_label} to ${matrix_username} on ${realm_url}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-upsert-realm-user-permission",
+                  "queryParams": [
+                    ["realm", "${realm_url}"],
+                    ["user", "${matrix_username}"],
+                    ["read", "${read_flag}"],
+                    ["write", "${write_flag}"]
+                  ],
+                  "headers": [
+                    ["Authorization", "Bearer ${grafana_secret}"]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Grant ${permission_label} to ${matrix_username} on ${realm_url}?",
+                "oneClick": false
+              }
+            ],
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "from": 0,
+                  "result": {
+                    "index": 0,
+                    "text": "Grant"
+                  },
+                  "to": 9999999999999
+                },
+                "type": "range"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS click;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Grant Permission",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Permissions for the selected realm. Use the variables above to set the realm URL, Matrix username, and permission level, then click the Grant Permission button above.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -115,7 +214,7 @@
           "h": 12,
           "w": 24,
           "x": 0,
-          "y": 0
+          "y": 4
         },
         "id": 1,
         "options": {
@@ -290,6 +389,13 @@
           "name": "realm_server",
           "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
           "type": "constant"
         }
       ]

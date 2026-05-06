@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import ColorField from '../fields/color'; // ² Color field for customization
+import ColorField from 'https://cardstack.com/base/color'; // ² Color field for customization
 import { tracked } from '@glimmer/tracking';
 import { fn, concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';

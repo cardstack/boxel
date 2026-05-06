@@ -11,7 +11,7 @@ import { TextInputValidator } from 'https://cardstack.com/base/text-input-valida
 import { NumberSerializer } from '@cardstack/runtime-common';
 import Grid2x2Icon from '@cardstack/boxel-icons/grid-2x2';
 
-import { getNumericValue, clamp } from './number/util/index';
+import { getNumericValue, clamp } from 'https://cardstack.com/base/number/util/index';
 
 // Options interface for quantity field
 export interface QuantityOptions {
