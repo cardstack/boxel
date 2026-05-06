@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #MISE description="Start host app + full dev stack (host must be ready before realm server)"
 #MISE dir="packages/realm-server"
 
