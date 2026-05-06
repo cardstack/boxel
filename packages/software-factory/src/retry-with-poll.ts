@@ -12,11 +12,11 @@
  * agent / test paths where event subscription isn't practical.
  */
 
-const DEFAULT_TOTAL_WAIT_MS = 10_000;
+const DEFAULT_TOTAL_WAIT_MS = 30_000;
 const DEFAULT_POLL_MS = 250;
 
 export interface RetryWithPollOptions {
-  /** Total time to keep retrying before giving up. Default 10s. */
+  /** Total time to keep retrying before giving up. Default 30s. */
   totalWaitMs?: number;
   /** Sleep between attempts. Default 250ms. */
   pollMs?: number;

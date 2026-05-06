@@ -81,8 +81,10 @@ export interface ToolBuilderConfig {
   client: BoxelCLIClient;
   /**
    * Local workspace directory mirroring the target realm. All target-realm
-   * card reads/writes happen here; sync with the realm is orchestrated
-   * elsewhere in the loop.
+   * card reads/writes happen here. The orchestrator pushes the workspace
+   * to the realm between agent turns; the realm-touching `run_*` tools
+   * also call `syncWorkspace` before invoking the prerenderer so a
+   * mid-turn evaluate/instantiate/test sees the agent's current writes.
    */
   workspaceDir: string;
   /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
