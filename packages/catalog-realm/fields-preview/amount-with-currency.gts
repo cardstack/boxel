@@ -1,4 +1,4 @@
-import AmountWithCurrencyField from '../fields/amount-with-currency';
+import AmountWithCurrencyField from 'https://cardstack.com/base/amount-with-currency';
 
 import {
   CardDef,
