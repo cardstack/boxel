@@ -12,7 +12,7 @@ export default class ShowFileCommand extends HostBaseCommand<
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   description =
-    'Show a file in the code submode. The fileUrl must be a fully qualified URL.';
+    'Show a file in the code submode. The fileIdentifier must be a fully qualified URL.';
 
   static actionVerb = 'Show File';
 
@@ -22,7 +22,7 @@ export default class ShowFileCommand extends HostBaseCommand<
     return FileIdentifierCard;
   }
 
-  requireInputFields = ['fileUrl'];
+  requireInputFields = ['fileIdentifier'];
 
   protected async run(
     input: BaseCommandModule.FileIdentifierCard,

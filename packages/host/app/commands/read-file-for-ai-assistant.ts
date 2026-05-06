@@ -21,7 +21,7 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
     return FileIdentifierCard;
   }
 
-  requireInputFields = ['fileUrl'];
+  requireInputFields = ['fileIdentifier'];
 
   protected async run(
     input: BaseCommandModule.FileIdentifierCard,
