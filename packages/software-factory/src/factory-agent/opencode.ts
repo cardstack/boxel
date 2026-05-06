@@ -307,7 +307,12 @@ export class OpencodeFactoryAgent implements LoopAgent {
     });
 
     this.currentHooks = {
-      onToolCall: (entry) => toolCallLog.push(entry),
+      onToolCall: (entry) => {
+        toolCallLog.push(entry);
+        log.info(
+          `factory tool: ${entry.tool}(${summarizeArgs(entry.args)}) [${entry.durationMs}ms]`,
+        );
+      },
       onSignal: (signal) => {
         captured = signal;
         resolveSignal();
@@ -319,6 +324,15 @@ export class OpencodeFactoryAgent implements LoopAgent {
         query: { directory: workspaceDir },
       });
       let sessionId = (session.data as { id: string }).id;
+      log.info(`session: ${sessionId}`);
+
+      // Subscribe to opencode's per-directory event bus for *logging
+      // only* (completion detection still uses `time.updated` polling
+      // — events were unreliable enough to break that). Best-effort:
+      // any error tearing the SSE stream is swallowed.
+      let stopEventLog = subscribeForLogging(client, sessionId).catch(
+        () => undefined,
+      );
 
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
@@ -363,9 +377,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
           waitForSessionIdle(client, sessionId, workspaceDir),
         ]);
       } finally {
-        // Best-effort: drain any pending prompt resolution before
-        // moving on so its socket gets closed cleanly.
+        // Best-effort: drain any pending prompt resolution + the
+        // event-log subscription before moving on so their sockets
+        // get closed cleanly.
         await promptPromise;
+        await stopEventLog;
       }
     } finally {
       this.currentHooks = undefined;
@@ -666,10 +682,16 @@ async function waitForSessionIdle(
   // failed). We return cleanly so the outer factory loop can continue
   // to the next iteration instead of crashing the whole run.
   const MAX_CONSECUTIVE_LIST_FAILURES = 5;
+  // Periodic heartbeat so users running `factory:go` see proof the
+  // model is making progress (or stuck) instead of staring at a
+  // silent terminal for minutes.
+  const HEARTBEAT_MS = 15_000;
   let started = Date.now();
   let lastUpdated: number | undefined;
   let stableSince: number | undefined;
   let consecutiveFailures = 0;
+  let lastHeartbeat = Date.now();
+  let lastHeartbeatUpdated: number | undefined;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -715,8 +737,90 @@ async function waitForSessionIdle(
       }
     }
 
+    let now = Date.now();
+    if (now - lastHeartbeat >= HEARTBEAT_MS) {
+      let elapsedSec = Math.round((now - started) / 1000);
+      let activity =
+        lastUpdated === lastHeartbeatUpdated
+          ? `idle ${Math.round((now - (stableSince ?? now)) / 1000)}s`
+          : 'active';
+      log.info(
+        `waiting on opencode session [${elapsedSec}s elapsed, ${activity}]`,
+      );
+      lastHeartbeat = now;
+      lastHeartbeatUpdated = lastUpdated;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
+}
+
+/**
+ * Subscribe to opencode's `/event` SSE stream and log step transitions
+ * + native tool invocations + session.idle for our session. Best-effort
+ * — completion detection still uses `time.updated` polling, this is
+ * purely for visibility into what the model is doing during long opus
+ * runs.
+ */
+async function subscribeForLogging(
+  client: { event: { subscribe: () => Promise<unknown> } },
+  sessionId: string,
+): Promise<void> {
+  let events: { stream: AsyncIterable<unknown> };
+  try {
+    events = (await client.event.subscribe()) as {
+      stream: AsyncIterable<unknown>;
+    };
+  } catch {
+    return;
+  }
+  try {
+    for await (let raw of events.stream) {
+      let event = raw as {
+        type?: string;
+        properties?: Record<string, unknown>;
+      };
+      let props = event.properties ?? {};
+      if (props.sessionID && props.sessionID !== sessionId) continue;
+      switch (event.type) {
+        case 'session.idle':
+          log.info(`opencode session.idle`);
+          return;
+        case 'session.error':
+          log.warn(
+            `opencode session.error: ${JSON.stringify(props.error ?? {})}`,
+          );
+          return;
+        case 'message.part.updated': {
+          let part = props.part as
+            | { type?: string; tool?: string; state?: { status?: string } }
+            | undefined;
+          if (
+            part?.type === 'tool' &&
+            part.tool &&
+            part.state?.status === 'completed'
+          ) {
+            log.info(`opencode tool: ${part.tool}`);
+          }
+          break;
+        }
+        default:
+          // ignore other events
+          break;
+      }
+    }
+  } catch {
+    // SSE stream torn down — that's fine, the logging task is done.
+  }
+}
+
+function summarizeArgs(args: Record<string, unknown>): string {
+  let entries = Object.entries(args).map(([k, v]) => {
+    let s = typeof v === 'string' ? v : JSON.stringify(v);
+    if (typeof s === 'string' && s.length > 60) s = s.slice(0, 57) + '...';
+    return `${k}=${s}`;
+  });
+  return entries.join(', ');
 }
 
 /**
