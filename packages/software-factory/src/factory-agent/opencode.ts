@@ -306,6 +306,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
       } catch {
         // best-effort
       }
+      // `opencode.close()` returns synchronously and doesn't wait for
+      // the subprocess to actually exit; the next iteration will hit
+      // EADDRINUSE on port 4096 if we don't poll the port until it's
+      // free here. 5s is generous — opencode usually exits in <1s.
+      await waitForPortFree(4096, 5000);
       await mcp.close().catch(() => undefined);
     }
 
@@ -590,8 +595,14 @@ async function waitForSessionIdle(
   sessionId: string,
   workspaceDir: string,
 ): Promise<void> {
-  const POLL_INTERVAL_MS = 500;
-  const STABILITY_WINDOW_MS = 2000;
+  const POLL_INTERVAL_MS = 750;
+  // Generous: `time.updated` appears to tick on step boundaries rather
+  // than per `message.part.delta`, and opus can sit 30+ seconds
+  // "thinking" between steps. The polling is only a fallback for when
+  // the model exits without calling `signal_done` / `request_clarification`,
+  // so the wider window costs nothing on the happy path (signal-captured
+  // race short-circuits this).
+  const STABILITY_WINDOW_MS = 60_000;
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
   let started = Date.now();
   let lastUpdated: number | undefined;
@@ -625,5 +636,28 @@ async function waitForSessionIdle(
     }
 
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+  }
+}
+
+/**
+ * Block until a TCP port is free on localhost, or `timeoutMs` elapses
+ * (whichever comes first). Used after `opencode.close()` because the
+ * SDK's close call doesn't wait for the spawned subprocess to actually
+ * exit and release the fixed port 4096 — without this guard the next
+ * `OpencodeFactoryAgent.run()` in the same process hits EADDRINUSE.
+ */
+async function waitForPortFree(port: number, timeoutMs: number): Promise<void> {
+  let deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    let free = await new Promise<boolean>((resolve) => {
+      let probe = createHttpServer();
+      probe.unref();
+      probe.once('error', () => resolve(false));
+      probe.listen(port, '127.0.0.1', () => {
+        probe.close(() => resolve(true));
+      });
+    });
+    if (free) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
