@@ -4,10 +4,10 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { asExpressions, insert, query } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
 import {
-  deleteFromRegistryByUrl,
-  deletePublishedFromRegistryBySource,
-  mirrorPublishedRealmToRegistry,
-  mirrorSourceRealmToRegistry,
+  deleteRegistryRowByUrl,
+  deletePublishedRowsBySourceUrl,
+  upsertPublishedRealmInRegistry,
+  insertSourceRealmInRegistry,
 } from '../lib/realm-registry-writes';
 
 interface RegistryRow {
@@ -72,7 +72,7 @@ async function seedBootstrapRow(dbAdapter: PgAdapter, url: string) {
 }
 
 module(basename(__filename), function () {
-  module('mirrorPublishedRealmToRegistry', function (hooks) {
+  module('upsertPublishedRealmInRegistry', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
       beforeEach: async (adapter) => {
@@ -81,7 +81,7 @@ module(basename(__filename), function () {
     });
 
     test('inserts a published row when absent', async function (assert) {
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: 'http://user.localhost:4201/site/',
         publishedRealmId: '11111111-2222-3333-4444-555555555555',
         ownerUsername: 'realm/_published_xyz',
@@ -104,14 +104,14 @@ module(basename(__filename), function () {
 
     test('updates last_published_at on repeat publish', async function (assert) {
       const url = 'http://user.localhost:4201/site/';
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: url,
         publishedRealmId: 'uuid-1',
         ownerUsername: 'realm/_published_x',
         sourceRealmURL: 'http://localhost:4201/luke/src/',
         lastPublishedAt: 1_700_000_000_000,
       });
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: url,
         publishedRealmId: 'uuid-1',
         ownerUsername: 'realm/_published_x',
@@ -131,7 +131,7 @@ module(basename(__filename), function () {
       const url = 'https://cardstack.com/base/';
       await seedBootstrapRow(dbAdapter, url);
 
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: url,
         publishedRealmId: 'uuid-x',
         ownerUsername: 'realm/_published_x',
@@ -146,7 +146,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('mirrorSourceRealmToRegistry', function (hooks) {
+  module('insertSourceRealmInRegistry', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
       beforeEach: async (adapter) => {
@@ -155,7 +155,7 @@ module(basename(__filename), function () {
     });
 
     test('inserts a source row when absent', async function (assert) {
-      await mirrorSourceRealmToRegistry(dbAdapter, {
+      await insertSourceRealmInRegistry(dbAdapter, {
         url: 'http://localhost:4201/luke/my-realm/',
         diskId: 'luke/my-realm',
         ownerUsername: 'luke',
@@ -175,12 +175,12 @@ module(basename(__filename), function () {
 
     test('is a no-op when the url already exists (ON CONFLICT DO NOTHING)', async function (assert) {
       const url = 'http://localhost:4201/luke/my-realm/';
-      await mirrorSourceRealmToRegistry(dbAdapter, {
+      await insertSourceRealmInRegistry(dbAdapter, {
         url,
         diskId: 'luke/my-realm',
         ownerUsername: 'luke',
       });
-      await mirrorSourceRealmToRegistry(dbAdapter, {
+      await insertSourceRealmInRegistry(dbAdapter, {
         url,
         diskId: 'luke/different-path',
         ownerUsername: 'luke',
@@ -195,7 +195,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('deleteFromRegistryByUrl', function (hooks) {
+  module('deleteRegistryRowByUrl', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
       beforeEach: async (adapter) => {
@@ -205,14 +205,14 @@ module(basename(__filename), function () {
 
     test('deletes a published row', async function (assert) {
       const url = 'http://user.localhost:4201/site/';
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: url,
         publishedRealmId: 'uuid',
         ownerUsername: 'realm/_published_x',
         sourceRealmURL: 'http://localhost:4201/luke/src/',
         lastPublishedAt: 1_700_000_000_000,
       });
-      await deleteFromRegistryByUrl(dbAdapter, url);
+      await deleteRegistryRowByUrl(dbAdapter, url);
       assert.strictEqual(
         await getRegistryRow(dbAdapter, url),
         undefined,
@@ -222,12 +222,12 @@ module(basename(__filename), function () {
 
     test('deletes a source row', async function (assert) {
       const url = 'http://localhost:4201/luke/src/';
-      await mirrorSourceRealmToRegistry(dbAdapter, {
+      await insertSourceRealmInRegistry(dbAdapter, {
         url,
         diskId: 'luke/src',
         ownerUsername: 'luke',
       });
-      await deleteFromRegistryByUrl(dbAdapter, url);
+      await deleteRegistryRowByUrl(dbAdapter, url);
       assert.strictEqual(
         await getRegistryRow(dbAdapter, url),
         undefined,
@@ -238,7 +238,7 @@ module(basename(__filename), function () {
     test('does NOT delete a bootstrap row (kind != bootstrap guard)', async function (assert) {
       const url = 'https://cardstack.com/base/';
       await seedBootstrapRow(dbAdapter, url);
-      await deleteFromRegistryByUrl(dbAdapter, url);
+      await deleteRegistryRowByUrl(dbAdapter, url);
 
       const row = await getRegistryRow(dbAdapter, url);
       assert.ok(row, 'bootstrap row still exists');
@@ -246,10 +246,7 @@ module(basename(__filename), function () {
     });
 
     test('is a no-op when the url is absent', async function (assert) {
-      await deleteFromRegistryByUrl(
-        dbAdapter,
-        'http://does-not-exist.example/',
-      );
+      await deleteRegistryRowByUrl(dbAdapter, 'http://does-not-exist.example/');
       assert.strictEqual(
         (await getAllRegistryRows(dbAdapter)).length,
         0,
@@ -258,7 +255,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('deletePublishedFromRegistryBySource', function (hooks) {
+  module('deletePublishedRowsBySourceUrl', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
       beforeEach: async (adapter) => {
@@ -268,14 +265,14 @@ module(basename(__filename), function () {
 
     test('deletes all published rows sourced from a given url', async function (assert) {
       const sourceUrl = 'http://localhost:4201/luke/src/';
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: 'http://user1.localhost:4201/a/',
         publishedRealmId: 'uuid-a',
         ownerUsername: 'realm/_published_a',
         sourceRealmURL: sourceUrl,
         lastPublishedAt: 1,
       });
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: 'http://user2.localhost:4201/b/',
         publishedRealmId: 'uuid-b',
         ownerUsername: 'realm/_published_b',
@@ -283,7 +280,7 @@ module(basename(__filename), function () {
         lastPublishedAt: 2,
       });
       // A published row sourced from a DIFFERENT realm — should survive.
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: 'http://user3.localhost:4201/c/',
         publishedRealmId: 'uuid-c',
         ownerUsername: 'realm/_published_c',
@@ -291,7 +288,7 @@ module(basename(__filename), function () {
         lastPublishedAt: 3,
       });
 
-      await deletePublishedFromRegistryBySource(dbAdapter, sourceUrl);
+      await deletePublishedRowsBySourceUrl(dbAdapter, sourceUrl);
 
       const rows = await getAllRegistryRows(dbAdapter);
       assert.strictEqual(rows.length, 1, 'only the unrelated row remains');
@@ -303,12 +300,12 @@ module(basename(__filename), function () {
       // some published rows. The helper deletes the published rows but leaves
       // the source realm's own row alone (it's matched by url, not source_url).
       const sourceUrl = 'http://localhost:4201/luke/src/';
-      await mirrorSourceRealmToRegistry(dbAdapter, {
+      await insertSourceRealmInRegistry(dbAdapter, {
         url: sourceUrl,
         diskId: 'luke/src',
         ownerUsername: 'luke',
       });
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL: 'http://user.localhost:4201/pub/',
         publishedRealmId: 'uuid-pub',
         ownerUsername: 'realm/_published_pub',
@@ -316,7 +313,7 @@ module(basename(__filename), function () {
         lastPublishedAt: 1,
       });
 
-      await deletePublishedFromRegistryBySource(dbAdapter, sourceUrl);
+      await deletePublishedRowsBySourceUrl(dbAdapter, sourceUrl);
 
       const rows = await getAllRegistryRows(dbAdapter);
       assert.strictEqual(rows.length, 1);

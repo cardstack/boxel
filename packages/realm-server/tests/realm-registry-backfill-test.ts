@@ -132,9 +132,10 @@ module(basename(__filename), function () {
 
     test('skips the _published directory during source-realm scan', async function (assert) {
       seedRealmJson(join(realmsRootPath, 'luke', 'src'), { name: 'src' });
-      // Create a _published/<uuid>/.realm.json — should NOT be picked up as a
-      // source realm. (Published realms go through a different code path that
-      // cross-references published_realms.)
+      // Create a _published/<uuid>/.realm.json — should NOT be picked up as
+      // a source realm. (Published rows are written by the publish handler
+      // directly into realm_registry; the boot-time scan does not recover
+      // them from disk.)
       seedRealmJson(
         join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, 'some-uuid'),
         { name: 'pub' },
@@ -156,48 +157,8 @@ module(basename(__filename), function () {
       assert.strictEqual(
         rows.filter((r) => r.kind === 'published').length,
         0,
-        '_published dir without a published_realms row yields no registry row',
+        'boot-time scan does not write published rows from disk',
       );
-    });
-
-    test('inserts published rows by cross-referencing published_realms + disk', async function (assert) {
-      const publishedId = '11111111-2222-3333-4444-555555555555';
-      const { valueExpressions, nameExpressions } = asExpressions({
-        id: publishedId,
-        owner_username: 'realm/_published_11111111',
-        source_realm_url: 'http://localhost:4201/luke/src/',
-        published_realm_url: 'http://user.localhost:4201/live/',
-        last_published_at: '1700000000000',
-      });
-      await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      );
-
-      seedRealmJson(
-        join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, publishedId),
-        { name: 'live' },
-      );
-      seedRealmJson(join(realmsRootPath, 'luke', 'src'), { name: 'src' });
-
-      await runRegistryBackfill({
-        dbAdapter,
-        realmsRootPath,
-        serverURL,
-        bootstrapRealms: [],
-      });
-
-      const rows = await allRegistryRows(dbAdapter);
-      const published = rows.find((r) => r.kind === 'published');
-      assert.ok(published, 'a published row was written');
-      assert.strictEqual(published!.url, 'http://user.localhost:4201/live/');
-      assert.strictEqual(published!.disk_id, publishedId);
-      assert.strictEqual(
-        published!.source_url,
-        'http://localhost:4201/luke/src/',
-      );
-      assert.strictEqual(published!.last_published_at, '1700000000000');
-      assert.false(published!.pinned);
     });
 
     test('is idempotent: running twice produces the same rows', async function (assert) {

@@ -127,7 +127,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('inserts a row from a published realm sidecar correlated via published_realms', async function (assert) {
+    test('inserts a row from a published realm sidecar correlated via realm_registry', async function (assert) {
       const publishedRoot = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       const uuid = '00000000-0000-0000-0000-000000000001';
       const publishedRealmUrl = 'http://localhost:4201/_published/abc/';
@@ -135,17 +135,17 @@ module(basename(__filename), function () {
         publishable: false,
       });
       await query(dbAdapter, [
-        `INSERT INTO published_realms (id, published_realm_url, source_realm_url, owner_username, last_published_at) VALUES (`,
-        param(uuid),
-        `,`,
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at, pinned) VALUES (`,
         param(publishedRealmUrl),
-        `,`,
-        param('http://localhost:4201/luke/my-realm/'),
+        `, 'published', `,
+        param(uuid),
         `,`,
         param('luke'),
         `,`,
+        param('http://localhost:4201/luke/my-realm/'),
+        `,`,
         param(Date.now()),
-        `)`,
+        `, false)`,
       ]);
 
       await runRealmMetadataBackfill({

@@ -45,10 +45,15 @@ export interface RegistryBackfillOpts {
 //   1. Bootstrap rows from CLI args (upserted, always pinned=true)
 //   2. Source rows from realmsRootPath/<owner>/<endpoint>/.realm.json
 //      (inserted if absent, pinned=false)
-//   3. Published rows cross-referenced from published_realms + on-disk
-//      realmsRootPath/_published/<uuid>/ (inserted if absent, pinned=false)
-//   4. Warns on registry rows whose disk path is missing
-//   5. Warns on bootstrap rows that no longer have a matching CLI arg
+//   3. Warns on registry rows whose disk path is missing
+//   4. Warns on bootstrap rows that no longer have a matching CLI arg
+//
+// Published rows are written by handle-publish-realm and persist in
+// realm_registry directly; there is no boot-time disk-scan recovery for them.
+// (Pre-Phase-4-PR-2 the recovery joined the legacy `published_realms` table
+// against the on-disk uuid directories; CS-10897 dropped that table, so the
+// registry is the only source for the URL/owner/source metadata that disk
+// alone doesn't carry.)
 //
 // Called from main.ts before the per-realm mount loop runs, so the registry
 // reflects the full set of known realms before any Realm is constructed. All
@@ -71,24 +76,19 @@ export async function runRegistryBackfill(
   const sourceDiscovered = await safeStep('source', () =>
     upsertSourceRealms(opts),
   );
-  const publishedDiscovered = await safeStep('published', () =>
-    upsertPublishedRealms(opts),
-  );
   await safeStep('orphan-check', () => warnOnOrphans(opts));
   await safeStep('stale-bootstrap-check', () =>
     warnOnStaleBootstrapRows(opts, bootstrapUrls ?? new Set()),
   );
 
-  // Note: `sourceDiscovered` / `publishedDiscovered` are the number of
-  // realm directories seen on disk, not the number of INSERTs actually
-  // executed. Under ON CONFLICT DO NOTHING, a second run reports the same
-  // counts even if no rows change. That's intentional — the count is a
-  // measure of the scan, not the diff.
+  // Note: `sourceDiscovered` is the number of realm directories seen on
+  // disk, not the number of INSERTs actually executed. Under ON CONFLICT DO
+  // NOTHING, a second run reports the same count even if no rows change.
+  // That's intentional — the count is a measure of the scan, not the diff.
   log.info(
     `registry backfill complete in ${Date.now() - started}ms ` +
       `(bootstrap=${bootstrapUrls?.size ?? 0}, ` +
-      `sourceDiscovered=${sourceDiscovered ?? 0}, ` +
-      `publishedDiscovered=${publishedDiscovered ?? 0})`,
+      `sourceDiscovered=${sourceDiscovered ?? 0})`,
   );
 }
 
@@ -185,69 +185,6 @@ async function upsertSourceRealms(opts: RegistryBackfillOpts): Promise<number> {
       ]);
       count += 1;
     }
-  }
-  return count;
-}
-
-async function upsertPublishedRealms(
-  opts: RegistryBackfillOpts,
-): Promise<number> {
-  const publishedRoot = join(opts.realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-  if (!existsSync(publishedRoot)) {
-    return 0;
-  }
-
-  // Correlate on-disk uuid directory names with published_realms rows to get
-  // the url/owner/source/last_published_at metadata that disk alone doesn't
-  // carry. Post-Phase-4 this can read straight from realm_registry; while the
-  // legacy table still exists, this is the authoritative source.
-  const rows = (await query(opts.dbAdapter, [
-    `SELECT id::text AS id, published_realm_url, source_realm_url, owner_username, last_published_at FROM published_realms`,
-  ])) as Array<{
-    id: string;
-    published_realm_url: string;
-    source_realm_url: string;
-    owner_username: string;
-    last_published_at: number | string | null;
-  }>;
-  const byId = new Map(rows.map((r) => [r.id, r]));
-
-  let count = 0;
-  for (const entry of readdirSync(publishedRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory()) {
-      continue;
-    }
-    const uuid = entry.name;
-    if (!existsSync(join(publishedRoot, uuid, '.realm.json'))) {
-      continue;
-    }
-    const row = byId.get(uuid);
-    if (!row) {
-      log.warn(
-        `published realm directory at ${join(publishedRoot, uuid)} has no matching published_realms row; skipping`,
-      );
-      continue;
-    }
-    const lastPublishedAt =
-      row.last_published_at == null ? null : Number(row.last_published_at);
-    await query(opts.dbAdapter, [
-      `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at, pinned) VALUES (`,
-      param(row.published_realm_url),
-      `,`,
-      param('published'),
-      `,`,
-      param(uuid),
-      `,`,
-      param(row.owner_username),
-      `,`,
-      param(row.source_realm_url),
-      `,`,
-      param(lastPublishedAt),
-      `,`,
-      param(false),
-      `) ON CONFLICT (url) DO NOTHING`,
-    ]);
-    count += 1;
   }
   return count;
 }

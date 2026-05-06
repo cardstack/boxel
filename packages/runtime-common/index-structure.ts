@@ -85,11 +85,3 @@ export const coerceTypes = Object.freeze({
   value: 'JSON',
   timing_diagnostics: 'JSON',
 });
-
-export interface PublishedRealmTable {
-  id: string;
-  owner_username: string;
-  source_realm_url: string;
-  published_realm_url: string;
-  last_published_at: string;
-}

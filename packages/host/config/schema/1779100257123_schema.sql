@@ -103,15 +103,6 @@
    PRIMARY KEY ( url, cache_scope, auth_user_id ) 
 );
 
- CREATE TABLE IF NOT EXISTS published_realms (
-   id DEFAULT (hex(randomblob(16))) NOT NULL,
-   owner_username TEXT NOT NULL,
-   source_realm_url TEXT NOT NULL,
-   published_realm_url TEXT NOT NULL,
-   last_published_at,
-   PRIMARY KEY ( id ) 
-);
-
  CREATE TABLE IF NOT EXISTS realm_file_meta (
    realm_url TEXT NOT NULL,
    file_path TEXT NOT NULL,
