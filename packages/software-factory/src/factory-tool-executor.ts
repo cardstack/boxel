@@ -21,7 +21,7 @@ export interface ToolExecutorConfig {
   /** Additional scratch realm URL prefixes that are allowed. */
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
-  sourceRealmUrl?: string;
+  sourceRealmIdentifier?: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
   /** Per-invocation timeout in ms (default: 60 000). */
@@ -174,7 +174,7 @@ export class ToolExecutor {
     toolArgs: Record<string, unknown>,
   ): void {
     // Source realm protection (when configured).
-    let sourceUrl = this.config.sourceRealmUrl;
+    let sourceUrl = this.config.sourceRealmIdentifier;
     if (sourceUrl) {
       let normalizedSource = ensureTrailingSlash(sourceUrl);
 

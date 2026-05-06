@@ -322,7 +322,7 @@ function buildFetchTranspiledModuleTool(
     },
     execute: async (args) => {
       let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealmIdentifier(config, args.realm as string | undefined);
       return config.client.readTranspiled(realmUrl, path);
     },
   };
@@ -350,7 +350,7 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
     },
     execute: async (args) => {
       let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealmIdentifier(config, args.realm as string | undefined);
       let result = await config.client.search(realmUrl, query);
       return result.ok ? { data: result.data } : { error: result.error };
     },
@@ -962,7 +962,7 @@ function buildRegisteredTool(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function resolveRealmUrl(
+function resolveRealmIdentifier(
   config: ToolBuilderConfig,
   _realm: string | undefined,
 ): string {

@@ -109,7 +109,7 @@ module('factory-tool-executor > source realm protection', function () {
     let sourceUrl = 'https://realms.example.test/source/';
     let executor = new ToolExecutor(
       registry,
-      makeConfig({ sourceRealmUrl: sourceUrl }),
+      makeConfig({ sourceRealmIdentifier: sourceUrl }),
     );
 
     try {

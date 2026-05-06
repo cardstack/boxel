@@ -233,7 +233,7 @@ async function main(): Promise<void> {
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmIdentifier: 'https://realms.example.test/user/target/',
-    sourceRealmUrl: 'https://realms.example.test/user/source/',
+    sourceRealmIdentifier: 'https://realms.example.test/user/source/',
     allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
     client: safetyClient,
   });

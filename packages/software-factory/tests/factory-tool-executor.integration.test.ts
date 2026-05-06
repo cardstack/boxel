@@ -152,7 +152,7 @@ module('factory-tool-executor integration > safety constraints', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmIdentifier: `${origin}/user/target/`,
-        sourceRealmUrl: sourceUrl,
+        sourceRealmIdentifier: sourceUrl,
         client,
       });
 

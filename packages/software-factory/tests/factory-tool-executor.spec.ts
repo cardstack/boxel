@@ -84,8 +84,8 @@ async function buildToolsForRealm(
   // Fetch schemas via _run-command. The realmUrl targets the test realm
   // (where the owner has permissions), while the codeRef module URL points
   // to the source realm where darkfactory.gts is defined.
-  let sourceRealmUrl = sourceRealmURLFor(realm.realmServerURL).href;
-  let darkfactoryModule = `${sourceRealmUrl}darkfactory`;
+  let sourceRealmIdentifier = sourceRealmURLFor(realm.realmServerURL).href;
+  let darkfactoryModule = `${sourceRealmIdentifier}darkfactory`;
 
   let cardTypeSchemas = new Map<
     string,

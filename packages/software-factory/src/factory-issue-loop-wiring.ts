@@ -445,7 +445,7 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
 async function loadDarkFactorySchemas(
   client: BoxelCLIClient,
   realmServerUrl: string,
-  commandRealmUrl: string,
+  commandRealmIdentifier: string,
   darkfactoryModuleBase: string,
 ): Promise<
   | Map<
@@ -471,7 +471,7 @@ async function loadDarkFactorySchemas(
       let schema = await fetchCardTypeSchema(
         client,
         realmServerUrl,
-        commandRealmUrl,
+        commandRealmIdentifier,
         {
           module: rri(darkfactoryModule),
           name: cardName,
@@ -494,7 +494,7 @@ async function loadDarkFactorySchemas(
       let schema = await fetchCardTypeSchema(
         client,
         realmServerUrl,
-        commandRealmUrl,
+        commandRealmIdentifier,
         { module: rri(mod), name },
       );
       if (schema) {

@@ -28,12 +28,12 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
 }) => {
   let realmServerUrl = realm.realmServerURL.href;
   // The darkfactory module lives in the source realm, not the test realm
-  let sourceRealmUrl = ensureTrailingSlash(
+  let sourceRealmIdentifier = ensureTrailingSlash(
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealmIdentifier,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -42,11 +42,11 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
   try {
     let response = await client.runCommand(
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealmIdentifier,
       GET_CARD_TYPE_SCHEMA_COMMAND,
       {
         codeRef: {
-          module: `${sourceRealmUrl}darkfactory`,
+          module: `${sourceRealmIdentifier}darkfactory`,
           name: 'Project',
         },
       },
@@ -71,12 +71,12 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
 
 test('fetches Issue schema with enum fields', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let sourceRealmUrl = ensureTrailingSlash(
+  let sourceRealmIdentifier = ensureTrailingSlash(
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealmIdentifier,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -86,9 +86,9 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     let schema = await fetchCardTypeSchema(
       client,
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealmIdentifier,
       {
-        module: rri(`${sourceRealmUrl}darkfactory`),
+        module: rri(`${sourceRealmIdentifier}darkfactory`),
         name: 'Issue',
       },
     );
@@ -110,12 +110,12 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
 
 test('fetches KnowledgeArticle schema', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let sourceRealmUrl = ensureTrailingSlash(
+  let sourceRealmIdentifier = ensureTrailingSlash(
     sourceRealmURLFor(realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealmIdentifier,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -125,9 +125,9 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
     let schema = await fetchCardTypeSchema(
       client,
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealmIdentifier,
       {
-        module: rri(`${sourceRealmUrl}darkfactory`),
+        module: rri(`${sourceRealmIdentifier}darkfactory`),
         name: 'KnowledgeArticle',
       },
     );
