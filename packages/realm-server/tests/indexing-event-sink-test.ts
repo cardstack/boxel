@@ -29,6 +29,7 @@ function makeRecordingAdapter(): {
       async getColumnNames() {
         return [];
       },
+      async notify() {},
     },
   };
 }
@@ -374,6 +375,7 @@ module(basename(__filename), function () {
         async getColumnNames() {
           return [];
         },
+        async notify() {},
       };
       let sink = new IndexingEventSink({ flushIntervalMs: 10 });
       sink.setAdapter(slowAdapter);
