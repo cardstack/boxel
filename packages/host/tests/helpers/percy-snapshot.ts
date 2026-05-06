@@ -20,8 +20,35 @@ export default async function percySnapshot(
   // Load every @font-face the page has declared, not just a hard-coded list.
   // This covers IBM Plex Sans, IBM Plex Mono (used by Monaco), IBM Plex Serif
   // and any future additions, without needing to keep the helper in sync.
-  await Promise.all(Array.from(document.fonts, (f) => f.load()));
+  //
+  // `allSettled` (not `all`) because Chrome rejects FontFace.load() with a
+  // generic `DOMException: A network error occurred.` when the font fetch
+  // fails — typically a transient hiccup pulling a non-critical font over the
+  // wire in CI. Letting that bubble out turns the *whole* test red with no URL
+  // attached. The hard-coded IBM Plex Sans `document.fonts.check` below stays
+  // the load-bearing assertion: if the font that actually moves Percy pixels
+  // is missing, fail there with a clear message.
+  let fontResults = await Promise.allSettled(
+    Array.from(document.fonts, (f) => f.load().then(() => f)),
+  );
   await document.fonts.ready;
+
+  let failedFonts = fontResults.flatMap((result, idx) => {
+    if (result.status !== 'rejected') {
+      return [];
+    }
+    let face = Array.from(document.fonts)[idx];
+    let descriptor = face
+      ? `${face.weight} ${face.style} "${face.family}"`
+      : `<font#${idx}>`;
+    let reason = describeFontLoadError(result.reason);
+    return [`${descriptor}: ${reason}`];
+  });
+  if (failedFonts.length) {
+    console.warn(
+      `[percy-snapshot] ${failedFonts.length} @font-face load(s) failed; continuing snapshot. Failures:\n  ${failedFonts.join('\n  ')}`,
+    );
+  }
 
   // The hard-coded Sans check remains as a load-bearing assertion: this font
   // is the default body font, and a capture without it shifts every text
@@ -69,4 +96,17 @@ export default async function percySnapshot(
   }
 
   await originalPercySnapshot(...args);
+}
+
+function describeFontLoadError(reason: unknown): string {
+  if (reason instanceof Error) {
+    let header = reason.name
+      ? `${reason.name}: ${reason.message}`
+      : reason.message;
+    return header || 'Unknown error';
+  }
+  if (typeof reason === 'string') {
+    return reason;
+  }
+  return String(reason);
 }
