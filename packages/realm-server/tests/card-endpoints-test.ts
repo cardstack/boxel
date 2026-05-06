@@ -873,6 +873,73 @@ module(basename(__filename), function () {
             'deeply nested linksToMany returns first match',
           );
         });
+
+        test('returns an ETag and public cache-control on a 200 response', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let etag = response.get('etag') ?? '';
+          assert.ok(etag, 'response carries an ETag');
+          assert.true(
+            /^\d+:card$/.test(etag),
+            `ETag matches "<indexed_at>:card" pattern (got ${etag})`,
+          );
+          assert.strictEqual(
+            response.get('cache-control'),
+            'public, max-age=0, must-revalidate',
+            'world-readable realm advertises public cache-control',
+          );
+        });
+
+        test('returns 304 when If-None-Match matches the current ETag', async function (assert) {
+          let firstResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(firstResponse.status, 200, 'first GET succeeds');
+          let etag = firstResponse.get('etag') ?? '';
+          assert.ok(etag, 'first response carries an ETag');
+
+          let secondResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(
+            secondResponse.status,
+            304,
+            'matching If-None-Match short-circuits to 304',
+          );
+          assert.strictEqual(
+            secondResponse.get('etag'),
+            etag,
+            '304 response echoes the ETag',
+          );
+          assert.strictEqual(
+            secondResponse.get('cache-control'),
+            'public, max-age=0, must-revalidate',
+            '304 response keeps the cache-control directive',
+          );
+          // 304 must not have a body — `response.body` may be `{}` when
+          // supertest can't decode an empty buffer, so check `response.text`.
+          assert.notOk(secondResponse.text, '304 response has no body');
+        });
+
+        test('returns 200 when If-None-Match does not match', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', '"stale-etag"');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'non-matching If-None-Match falls through to a fresh 200',
+          );
+          assert.ok(response.body.data, 'full body is returned');
+          assert.ok(response.get('etag'), '200 response still carries an ETag');
+        });
       });
 
       module('published realm', function (hooks) {
@@ -1101,6 +1168,15 @@ module(basename(__filename), function () {
             response.get('X-boxel-realm-public-readable'),
             undefined,
             'realm is not public readable',
+          );
+          assert.strictEqual(
+            response.get('cache-control'),
+            'private, max-age=0, must-revalidate',
+            'auth-gated realm advertises private cache-control so a shared cache cannot serve one user the response of another',
+          );
+          assert.ok(
+            response.get('etag'),
+            'auth-gated response carries an ETag',
           );
         });
 
@@ -2407,6 +2483,105 @@ module(basename(__filename), function () {
             afterStat.mtimeMs,
             initialStat.mtimeMs,
             'card file not rewritten for no-op patch',
+          );
+        });
+
+        test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
+          // Capture the pre-patch ETag, mutate the card, and verify the PATCH
+          // response advertises a *different* ETag for the new state — that's
+          // the contract that lets the caller cache the post-patch body
+          // without an extra round-trip GET.
+          let initialResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let originalEtag = initialResponse.get('etag') ?? '';
+          assert.ok(originalEtag, 'initial GET returns an ETag');
+
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(patchResponse.status, 200, 'PATCH succeeds');
+          let patchEtag = patchResponse.get('etag') ?? '';
+          assert.ok(patchEtag, 'PATCH response carries an ETag');
+          assert.true(
+            /^\d+:card$/.test(patchEtag),
+            `PATCH ETag matches "<indexed_at>:card" pattern (got ${patchEtag})`,
+          );
+          assert.notStrictEqual(
+            patchEtag,
+            originalEtag,
+            'PATCH advances the ETag because indexed_at bumps on the rewrite',
+          );
+
+          // Sending the OLD etag against If-None-Match must NOT short-circuit
+          // (otherwise we'd serve a stale 304 after a write).
+          let staleResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', originalEtag);
+          assert.strictEqual(
+            staleResponse.status,
+            200,
+            'old ETag no longer matches → fresh 200',
+          );
+          assert.strictEqual(
+            staleResponse.get('etag'),
+            patchEtag,
+            'GET reports the new ETag',
+          );
+
+          // And the new etag from the PATCH must short-circuit on next GET.
+          let cachedResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', patchEtag);
+          assert.strictEqual(
+            cachedResponse.status,
+            304,
+            'new ETag from PATCH lets a follow-up GET short-circuit',
+          );
+        });
+
+        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+          let initialResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let initialEtag = initialResponse.get('etag');
+          assert.ok(initialEtag, 'initial GET returns an ETag');
+
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
+          assert.strictEqual(
+            patchResponse.get('etag'),
+            initialEtag,
+            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
           );
         });
 

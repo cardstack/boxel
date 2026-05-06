@@ -230,6 +230,11 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+// Card+JSON ETag base is the index row's `indexed_at`, which bumps on
+// every reindex — direct writes AND dependency-triggered re-writes —
+// so it correctly fingerprints the assembled JSON:API document
+// (primary + included links) without us having to materialize it.
+const CARD_JSON_ETAG_VARIANT = 'card';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
 // #moduleCache entries on file writes. Payload shape is `<realmURL>:<path>`.
@@ -3185,11 +3190,17 @@ export class Realm {
         let createdAt = await this.getCreatedTime(
           this.paths.local(url) + '.json',
         );
+        let etag = buildEtag(
+          entry.indexedAt ?? undefined,
+          CARD_JSON_ETAG_VARIANT,
+        );
         return createResponse({
           body: JSON.stringify(existingDoc, null, 2),
           init: {
             headers: {
               'content-type': SupportedMimeType.CardJson,
+              'cache-control': this.cardJsonCacheControl(requestContext),
+              ...(etag ? { etag } : {}),
               ...lastModifiedHeader(existingDoc),
               ...(createdAt != null
                 ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -3308,17 +3319,38 @@ export class Realm {
         },
       });
     }
+    let etag = buildEtag(
+      entry && entry.type !== 'error'
+        ? (entry.indexedAt ?? undefined)
+        : undefined,
+      CARD_JSON_ETAG_VARIANT,
+    );
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: {
           'content-type': SupportedMimeType.CardJson,
+          'cache-control': this.cardJsonCacheControl(requestContext),
+          ...(etag ? { etag } : {}),
           ...lastModifiedHeader(doc),
           ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
         },
       },
       requestContext,
     });
+  }
+
+  private cardJsonCacheControl(requestContext: RequestContext): string {
+    // Match the source/module pattern: world-readable realms get `public`
+    // so a CDN can revalidate; auth-gated realms get `private` so a shared
+    // cache won't store one user's response and serve it to another.
+    // max-age=0 forces revalidation on every request, which combined with
+    // the ETag means the browser asks the server but the server returns
+    // 304 (cheap) when the index hasn't moved.
+    let cacheVisibility = requestContext.permissions['*']?.includes('read')
+      ? 'public'
+      : 'private';
+    return `${cacheVisibility}, max-age=0, must-revalidate`;
   }
 
   private async getCard(
@@ -3333,12 +3365,59 @@ export class Realm {
     }
     localPath = localPath.replace(/\.json$/, '');
     let url = this.paths.fileURL(localPath);
-    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-      loadLinks: true,
-    });
     let start = Date.now();
     try {
+      // Peek at the index entry first to compute the ETag without paying
+      // the loadLinks fan-out cost. On a cache hit (If-None-Match matches),
+      // we can return 304 in ~5ms instead of the ~100ms+ that the full
+      // assembly costs against a card with many included resources.
+      let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
+        includeErrors: true,
+      });
+      if (instanceEntry === undefined) {
+        if (await this.nonJsonFileExists(localPath)) {
+          return unsupportedMediaType(request, requestContext);
+        } else {
+          return notFound(request, requestContext);
+        }
+      }
+
+      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let etag: string | undefined;
+      if (
+        instanceEntry.type === 'instance' &&
+        instanceEntry.indexedAt != null
+      ) {
+        etag = buildEtag(instanceEntry.indexedAt, CARD_JSON_ETAG_VARIANT);
+        if (etag && request.headers.get('if-none-match') === etag) {
+          return createResponse({
+            requestContext,
+            body: null,
+            init: {
+              status: 304,
+              headers: {
+                etag,
+                'cache-control': cacheControl,
+                ...(instanceEntry.lastModified != null
+                  ? {
+                      'last-modified': formatRFC7231(
+                        instanceEntry.lastModified * 1000,
+                      ),
+                    }
+                  : {}),
+              },
+            },
+          });
+        }
+      }
+
+      // Cache miss: assemble the full doc.
+      let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
+        loadLinks: true,
+      });
       if (maybeError === undefined) {
+        // The instance row vanished between the two reads — same response
+        // path as the up-front not-found check.
         if (await this.nonJsonFileExists(localPath)) {
           return unsupportedMediaType(request, requestContext);
         } else {
@@ -3396,11 +3475,20 @@ export class Realm {
       // Prefer created_at from DB for instance JSON
       let pathForDb = this.paths.local(url) + '.json';
       let createdAt = await this.getCreatedTime(pathForDb);
+      // Prefer the indexedAt from the just-loaded doc — it's the most
+      // recent read and may differ from the first peek if a write landed
+      // between the two queries.
+      let responseEtag = buildEtag(
+        maybeError.indexedAt ?? undefined,
+        CARD_JSON_ETAG_VARIANT,
+      );
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
+            'cache-control': cacheControl,
+            ...(responseEtag ? { etag: responseEtag } : {}),
             ...lastModifiedHeader(card),
             ...(createdAt != null
               ? { 'x-created': formatRFC7231(createdAt * 1000) }

@@ -80,6 +80,11 @@ type SearchResult = SearchResultDoc | SearchResultError;
 interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
+  // indexed_at on the primary card's index row. Bumps on every reindex
+  // (direct file write OR dependency-triggered re-write), so it's a
+  // complete fingerprint for the assembled card+json document and is
+  // used as the ETag base by the realm's GET/PATCH handlers.
+  indexedAt: number | null;
 }
 
 export interface SearchResultError {
@@ -457,7 +462,7 @@ export class RealmIndexQueryEngine {
     }
     relativizeDocument(doc, this.realmURL);
     await this.attachRealmInfo(doc);
-    return { type: 'doc', doc };
+    return { type: 'doc', doc, indexedAt: instance.indexedAt };
   }
 
   async instance(
