@@ -1125,19 +1125,17 @@ export class Realm {
   // same path. Best-effort — failures are logged and swallowed because the
   // local write already succeeded and a missed NOTIFY is a bounded cache-
   // staleness window (see docs §9 "Cache-invalidation NOTIFY missed"), not
-  // a correctness failure.
+  // a correctness failure. Adapters without pub/sub (e.g. SQLite in the
+  // host/browser context) implement notify as a no-op.
   async #notifyFileChange(path: LocalPath): Promise<void> {
     try {
-      await query(this.#dbAdapter, [
-        `SELECT pg_notify(`,
-        param(REALM_FILE_CHANGES_CHANNEL),
-        `,`,
-        param(`${this.url}:${path}`),
-        `)`,
-      ]);
+      await this.#dbAdapter.notify(
+        REALM_FILE_CHANGES_CHANNEL,
+        `${this.url}:${path}`,
+      );
     } catch (err: unknown) {
       this.#log.warn(
-        `pg_notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
+        `notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
       );
     }
   }

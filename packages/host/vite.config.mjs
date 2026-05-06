@@ -5,8 +5,14 @@ import {
   ember,
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
+import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const require = createRequire(import.meta.url);
 
@@ -72,6 +78,98 @@ const sourceMapJsResolver = {
     return null;
   },
 };
+
+const optimizedDepRE = /[/\\]node_modules[/\\]\.vite[/\\]deps[/\\].+\.js$/;
+const optimizedDepUrlRE = /^\/node_modules\/\.vite\/deps\/.+\.js$/;
+
+// Per-process cache so we touch each map file at most once per dev server.
+const paddedMapPaths = new Set();
+
+async function padOptimizedDepSourcemap(file) {
+  if (!optimizedDepRE.test(file)) {
+    return;
+  }
+
+  let mapPath = `${file}.map`;
+  if (paddedMapPaths.has(mapPath)) {
+    return;
+  }
+  paddedMapPaths.add(mapPath);
+
+  let map;
+  try {
+    map = JSON.parse(await readFile(mapPath, 'utf8'));
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(map.sources) || map.sources.length === 0) {
+    return;
+  }
+
+  let mapDir = path.dirname(mapPath);
+  let sourceRoot = typeof map.sourceRoot === 'string' ? map.sourceRoot : '';
+  let sourcesContent = Array.isArray(map.sourcesContent)
+    ? [...map.sourcesContent]
+    : [];
+  let changed = false;
+  for (let i = 0; i < map.sources.length; i++) {
+    if (sourcesContent[i] != null) {
+      continue;
+    }
+    // Vite refuses to hydrate sourcesContent from paths that escape the
+    // optimized-dep package boundary, which is why these slots come back
+    // null. We can read the file ourselves to preserve DevTools source
+    // viewing for vendor code; if the read fails, fall back to an empty
+    // string so the slot is at least populated and the warning stays quiet.
+    let srcPath = map.sources[i];
+    let resolved =
+      typeof srcPath === 'string'
+        ? path.resolve(mapDir, sourceRoot, srcPath)
+        : null;
+    let content = '';
+    if (resolved) {
+      try {
+        content = await readFile(resolved, 'utf8');
+      } catch {
+        content = '';
+      }
+    }
+    sourcesContent[i] = content;
+    changed = true;
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  map.sourcesContent = sourcesContent;
+  await writeFile(mapPath, JSON.stringify(map));
+}
+
+function quietOptimizedDepSourcemapWarnings() {
+  return {
+    name: 'boxel-quiet-optimized-dep-sourcemap-warnings',
+    apply: 'serve',
+    configureServer(server) {
+      let depsDir = path.resolve(server.config.root, 'node_modules/.vite/deps');
+      server.middlewares.use(async (req, _res, next) => {
+        try {
+          let pathname = decodeURI((req.url ?? '').split('?')[0]);
+          if (optimizedDepUrlRE.test(pathname)) {
+            let file = path.resolve(server.config.root, pathname.slice(1));
+            if (file.startsWith(`${depsDir}${path.sep}`)) {
+              await padOptimizedDepSourcemap(file);
+            }
+          }
+        } catch {
+          // This only quiets optional sourcemap hydration; never block requests.
+        }
+        next();
+      });
+    },
+  };
+}
 
 // In environment mode (BOXEL_ENVIRONMENT set), scripts/vite-with-traefik.js
 // exposes the public Traefik hostname via BOXEL_HOST_HOSTNAME so we can let it
@@ -152,11 +250,13 @@ export default defineConfig(({ mode }) => ({
     scopedCSS(),
     classicEmberSupport(),
     ember(),
+    quietOptimizedDepSourcemapWarnings(),
     // extra plugins here
     babel({
       babelHelpers: 'runtime',
       extensions,
     }),
+    boxelUIChecksumPlugin(__dirname),
   ],
   optimizeDeps: {
     exclude: ['@sqlite.org/sqlite-wasm', 'content-tag'],

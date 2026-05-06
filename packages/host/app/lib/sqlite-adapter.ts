@@ -53,6 +53,10 @@ export default class SQLiteAdapter implements DBAdapter {
     return await this.internalExecute(sql, opts);
   }
 
+  // SQLite has no pub/sub primitive and the host runs a single in-process
+  // realm with no peers to notify, so this is intentionally a no-op.
+  async notify(_channel: string, _payload: string): Promise<void> {}
+
   private async internalExecute(sql: string, opts?: ExecuteOptions) {
     sql = this.adjustSQL(sql);
     return await this.query(sql, opts);
