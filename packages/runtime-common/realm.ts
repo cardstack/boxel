@@ -3771,23 +3771,6 @@ export class Realm {
 
   public async search(query: Query): Promise<LinkableCollectionDocument> {
     assertQuery(query);
-    // Drain any in-flight incremental indexing before reading boxel_index.
-    // Search results serve the realm's canonical indexed view; without
-    // this drain, a search immediately after a write that didn't await
-    // indexing would return a stale snapshot. Covers both in-process
-    // callers (federated-search) and HTTP callers (_search delegates here).
-    let pendingIndex = this.incrementalIndexing();
-    if (pendingIndex) {
-      let startedAt = Date.now();
-      this.#log.info(
-        `Realm.search drain start: ${this.url} query=${JSON.stringify(query).slice(0, 200)}`,
-      );
-      await pendingIndex;
-      let elapsed = Date.now() - startedAt;
-      if (elapsed > 1000) {
-        this.#log.info(`Realm.search drain took ${elapsed}ms for ${this.url}`);
-      }
-    }
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
     });
@@ -3924,21 +3907,6 @@ export class Realm {
     },
   ): Promise<PrerenderedCardCollectionDocument> {
     assertQuery(query);
-    // Drain any in-flight incremental indexing — see search() for rationale.
-    let pendingIndex = this.incrementalIndexing();
-    if (pendingIndex) {
-      let startedAt = Date.now();
-      this.#log.info(
-        `Realm.searchPrerendered drain start: ${this.url} query=${JSON.stringify(query).slice(0, 200)}`,
-      );
-      await pendingIndex;
-      let elapsed = Date.now() - startedAt;
-      if (elapsed > 1000) {
-        this.#log.info(
-          `Realm.searchPrerendered drain took ${elapsed}ms for ${this.url}`,
-        );
-      }
-    }
     let results = await this.#realmIndexQueryEngine.searchPrerendered(query, {
       htmlFormat: opts.htmlFormat,
       cardUrls: opts.cardUrls,
