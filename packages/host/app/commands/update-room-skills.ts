@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardErrorJSONAPI, isCardInstance } from '@cardstack/runtime-common';
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -97,19 +97,13 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
               skillCardCache.set(skillId, skillCard);
               skillsNeedingUpload.push(skillCard);
             } else {
-              // Skill load returned something that isn't a usable skill card
-              // (commonly a CardErrorJSONAPI). The activation is silently
-              // dropped; surface a warning so test flakes / production
-              // regressions don't go unattributed.
               console.warn(
-                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get did not return a Skill instance`,
-                maybeSkillCard,
+                `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": ${describeStoreResult(maybeSkillCard)}`,
               );
             }
           } catch (err) {
             console.warn(
-              `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get threw`,
-              err,
+              `[UpdateRoomSkillsCommand] skipping activation of "${skillId}": store.get threw: ${errorSummary(err)}`,
             );
           }
         }
@@ -153,13 +147,11 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
                 return skillCard;
               }
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get did not return a Skill instance`,
-                maybeSkillCard,
+                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": ${describeStoreResult(maybeSkillCard)}`,
               );
             } catch (err) {
               console.warn(
-                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get threw`,
-                err,
+                `[UpdateRoomSkillsCommand] cannot rehydrate enabled skill "${skillId}": store.get threw: ${errorSummary(err)}`,
               );
             }
             return undefined;
@@ -209,4 +201,31 @@ export default class UpdateRoomSkillsCommand extends HostBaseCommand<
       },
     );
   }
+}
+
+// Stable, redaction-safe one-line summary of whatever `store.get` produced for
+// a skill. Avoids dumping the full instance / error payload (which can be
+// large and may carry user content) while still naming the failure mode.
+function describeStoreResult(result: unknown): string {
+  if (result == null) {
+    return `store.get returned ${result === null ? 'null' : 'undefined'}`;
+  }
+  if (isCardErrorJSONAPI(result)) {
+    let status = (result as { status?: number }).status;
+    let title = (result as { title?: string }).title;
+    return `store.get returned a CardErrorJSONAPI (status=${status ?? 'n/a'}, title=${JSON.stringify(title ?? '')})`;
+  }
+  if (isCardInstance(result)) {
+    return `store.get returned a card instance that is not a Skill (id=${
+      (result as { id?: string }).id ?? '<no id>'
+    })`;
+  }
+  return `store.get returned an unrecognized value of type ${typeof result}`;
+}
+
+function errorSummary(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message || err.name;
+  }
+  return typeof err === 'string' ? err : `<${typeof err}>`;
 }

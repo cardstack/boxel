@@ -2063,10 +2063,11 @@ export async function addSkillToAiAssistant(
       },
     );
   } catch (err) {
-    // Capture diagnostics so future flakes are easier to attribute. The error
-    // surface from `waitUntil` is intentionally terse — we want a snapshot of
-    // what the matrix-service believed the room contained at the moment of
-    // timeout.
+    // Re-throw with a richer message so the failure report attributes the
+    // flake without us writing to console.* (which can interleave across
+    // parallel runs and trip console-error guards in some setups). The
+    // snapshot describes what the matrix-service believed the room contained
+    // at the moment of timeout.
     let snapshot = matrixService.getRoomData(resolvedRoomId)?.skillsConfig;
     let diagnostic = {
       roomId: resolvedRoomId,
@@ -2078,11 +2079,14 @@ export async function addSkillToAiAssistant(
         snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
       commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
     };
-    console.error(
-      `[addSkillToAiAssistant] timeout diagnostics: ${JSON.stringify(
-        diagnostic,
-      )}`,
+    let originalMessage = err instanceof Error ? err.message : String(err);
+    let enriched = new Error(
+      `${originalMessage} | diagnostics: ${JSON.stringify(diagnostic)}`,
     );
-    throw err;
+    // Preserve the original failure for any tooling that walks .cause without
+    // relying on the es2022 Error constructor option (host targets es2020).
+    (enriched as Error & { cause?: unknown }).cause =
+      err instanceof Error ? err : undefined;
+    throw enriched;
   }
 }
