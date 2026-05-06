@@ -107,7 +107,7 @@ should shell out via Bash to `boxel run-command <specifier> --realm <url>
 
 ### Self-Validation (optional, no side effects)
 
-All five tools are safe to call repeatedly mid-turn; none of them write a realm artifact. The orchestrator still runs the full validation pipeline (which persists the durable `TestRun` / `LintResult` / `ParseResult` / `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling any of these is optional.
+All five tools are safe to call repeatedly mid-turn; none of them write a realm artifact. The orchestrator still runs the full validation pipeline (which persists the durable `TestRun` / `LintResult` / `ParseResult` / `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling any of these is optional. The realm-touching tools (`run_evaluate`, `run_instantiate`, `run_tests`) push your workspace to the realm before invoking the prerenderer, so they always see the writes you've just made — no manual sync needed.
 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file.
 - `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Use it when you want feedback before signalling done.

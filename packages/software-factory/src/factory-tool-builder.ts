@@ -91,6 +91,15 @@ export interface ToolBuilderConfig {
   realmServerUrl: string;
   /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
   hostAppUrl?: string;
+  /**
+   * Push the local workspace to the target realm. The orchestrator only
+   * syncs the workspace between agent turns, so a mid-turn `run_evaluate`
+   * / `run_instantiate` / `run_test` would otherwise hit a realm that
+   * doesn't yet have the agent's writes from the current turn. The
+   * realm-touching `run_*` tools call this before invoking the
+   * prerenderer so the realm reflects the agent's latest source.
+   */
+  syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
   cardTypeSchemas?: Map<
     string,
@@ -205,6 +214,23 @@ export function buildFactoryTools(
   }
 
   return tools;
+}
+
+/**
+ * Push the local workspace to the realm before a `run_*` tool invokes the
+ * prerenderer. Native `Write` tool calls only land in the workspace until
+ * the orchestrator's between-turn sync, so a mid-turn realm-touching tool
+ * would otherwise see a realm without the agent's own writes from this
+ * turn. Callers receive a string error message on failure so they can
+ * surface it to the agent through their result shape.
+ */
+async function syncWorkspaceForToolRun(
+  config: ToolBuilderConfig,
+  toolName: string,
+): Promise<string | undefined> {
+  let result = await config.syncWorkspace();
+  if (result.ok) return undefined;
+  return `Failed to sync workspace to realm before ${toolName}: ${result.error ?? 'unknown error'}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -643,6 +669,19 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
       'target realm. Auth: per-realm JWT.',
     parameters: { type: 'object', properties: {} },
     execute: async () => {
+      let syncError = await syncWorkspaceForToolRun(config, 'run_tests');
+      if (syncError) {
+        return {
+          status: 'error',
+          passedCount: 0,
+          failedCount: 0,
+          skippedCount: 0,
+          durationMs: 0,
+          testFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         client: config.client,
@@ -729,8 +768,18 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      // `run_evaluate` runs in the prerenderer sandbox and reads modules
-      // from the realm, so it doesn't need the workspace.
+      let syncError = await syncWorkspaceForToolRun(config, 'run_evaluate');
+      if (syncError) {
+        return {
+          status: 'error',
+          modulesChecked: 0,
+          modulesWithErrors: 0,
+          durationMs: 0,
+          evaluableFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,
@@ -829,6 +878,18 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
+      let syncError = await syncWorkspaceForToolRun(config, 'run_instantiate');
+      if (syncError) {
+        return {
+          status: 'error',
+          instancesChecked: 0,
+          instancesWithErrors: 0,
+          durationMs: 0,
+          instanceFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,

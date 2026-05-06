@@ -165,6 +165,8 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
+  let syncWorkspace = () =>
+    syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir);
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     darkfactoryModuleUrl,
@@ -174,6 +176,7 @@ export async function runFactoryIssueLoop(
     testResultsModuleUrl,
     cardTypeSchemas,
     hostAppUrl,
+    syncWorkspace,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -234,8 +237,7 @@ export async function runFactoryIssueLoop(
     createValidator,
     targetRealmUrl,
     workspaceDir,
-    syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace,
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
