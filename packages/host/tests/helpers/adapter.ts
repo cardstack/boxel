@@ -59,6 +59,8 @@ interface TestAdapterContents {
 }
 
 let shimmedModuleIndicator = '// this file is shimmed';
+let sharedCardApiModule: CardAPI | undefined;
+let sharedCardApiImport: Promise<CardAPI> | undefined;
 
 export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
@@ -145,10 +147,7 @@ export class TestRealmAdapter implements RealmAdapter {
     if (!this.#loader) {
       throw new Error('bug: loader needs to be set in test adapter');
     }
-
-    let cardApi = await this.#loader.import<CardAPI>(
-      `${baseRealm.url}card-api`,
-    );
+    let cardApi = await getSharedCardApi(this.#loader);
     for (let { content, url } of this.#potentialModulesAndInstances) {
       if (cardApi.isCard(content)) {
         cardApi.setCardAsSavedForTest(
@@ -170,6 +169,9 @@ export class TestRealmAdapter implements RealmAdapter {
   setLoader(loader: Loader) {
     // Should remove this once CS-6720 is finished
     this.#loader = loader;
+    if (sharedCardApiModule) {
+      shimSharedCardApi(loader, sharedCardApiModule);
+    }
     this.prepareInstances();
   }
 
@@ -261,9 +263,7 @@ export class TestRealmAdapter implements RealmAdapter {
     if (value instanceof Uint8Array) {
       fileRefContent = value;
     } else if (path.endsWith('.json')) {
-      let cardApi = await this.#loader.import<CardAPI>(
-        `${baseRealm.url}card-api`,
-      );
+      let cardApi = await getSharedCardApi(this.#loader);
       if (cardApi.isCard(value)) {
         let doc = cardApi.serializeCard(value);
         fileRefContent = JSON.stringify(doc);
@@ -461,4 +461,30 @@ export class TestRealmAdapter implements RealmAdapter {
       messages: [],
     };
   }
+}
+
+async function getSharedCardApi(loader: Loader): Promise<CardAPI> {
+  if (sharedCardApiModule) {
+    shimSharedCardApi(loader, sharedCardApiModule);
+    return sharedCardApiModule;
+  }
+  if (!sharedCardApiImport) {
+    sharedCardApiImport = loader
+      .import<CardAPI>(`${baseRealm.url}card-api`)
+      .then((cardApi) => {
+        sharedCardApiModule = cardApi;
+        return cardApi;
+      })
+      .catch((error) => {
+        sharedCardApiImport = undefined;
+        throw error;
+      });
+  }
+  let cardApi = await sharedCardApiImport;
+  shimSharedCardApi(loader, cardApi);
+  return cardApi;
+}
+
+function shimSharedCardApi(loader: Loader, cardApi: CardAPI): void {
+  loader.shimModule(`${baseRealm.url}card-api`, cardApi as Record<string, any>);
 }
