@@ -19,6 +19,11 @@ on:
       - "packages/software-factory/**"
       - "package.json"
       - "pnpm-lock.yaml"
+      # CI boot path: see comment on the equivalent block in ci.yaml.
+      - ".mise.toml"
+      - ".github/actions/**"
+      - "mise-tasks/**"
+      - "packages/observability/scripts/**"
   workflow_dispatch:
 
 concurrency:

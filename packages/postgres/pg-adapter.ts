@@ -291,6 +291,12 @@ export class PgAdapter implements DBAdapter {
     }
   }
 
+  async notify(channel: string, payload: string): Promise<void> {
+    await this.execute('SELECT pg_notify($1, $2)', {
+      bind: [channel, payload],
+    });
+  }
+
   // @deprecated — prefer `subscribe(channel, handler)`. Each call to listen()
   // opens its own dedicated Client connection for the duration of `fn`, which
   // doesn't scale as the number of LISTEN-using callers grows. subscribe()

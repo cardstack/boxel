@@ -15,6 +15,7 @@ function makeDBAdapter(
 ): DBAdapter {
   return {
     kind: 'pg',
+    notify: async () => {},
     isClosed: false,
     execute: async (sql: string, opts?: ExecuteOptions) => {
       assertion?.(sql, opts);

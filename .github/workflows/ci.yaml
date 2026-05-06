@@ -47,6 +47,17 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # CI boot path. Each gated suite runs `./.github/actions/init`
+              # (which calls `jdx/mise-action`, sourcing `.mise.toml` for tool
+              # versions) and then `mise run test-services:*` (which sources
+              # every script under mise-tasks/, with dev-log-tee.sh as a
+              # runtime dep). A breaking change to any of these can take down
+              # all the suites without matching a per-package filter — the
+              # exact failure mode that hid PR #4671.
+              - '.mise.toml'
+              - '.github/actions/**'
+              - 'mise-tasks/**'
+              - 'packages/observability/scripts/**'
             boxel:
               - *shared
               - '.github/workflows/build-host.yml'

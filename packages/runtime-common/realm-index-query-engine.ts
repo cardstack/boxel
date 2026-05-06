@@ -207,18 +207,17 @@ export class RealmIndexQueryEngine {
         : query.fields?.['card'];
       let linkOpts = linkFields ? { ...opts, linkFields } : opts;
       let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
-      let included: (CardResource<Saved> | FileMetaResource)[] = [];
-      for (let resource of doc.data) {
-        included = await this.loadLinks(
-          {
-            realmURL: this.realmURL,
-            resource,
-            omit,
-            included,
-          },
-          linkOpts,
-        );
-      }
+      // Process all root resources together so a single batched DB query
+      // resolves their first-level links (1+1 instead of N+M sequential
+      // round-trips). See CS-11038.
+      let included = await this.loadLinks(
+        {
+          realmURL: this.realmURL,
+          rootResources: doc.data,
+          omit,
+        },
+        linkOpts,
+      );
       if (included.length > 0) {
         doc.included = included;
       }
@@ -446,7 +445,7 @@ export class RealmIndexQueryEngine {
       let included = await this.loadLinks(
         {
           realmURL: this.realmURL,
-          resource: doc.data,
+          rootResources: [doc.data],
           omit: [...(doc.data.id ? [doc.data.id] : [])],
         },
         opts,
@@ -478,7 +477,7 @@ export class RealmIndexQueryEngine {
     return await this.loadLinks(
       {
         realmURL: this.realmURL,
-        resource,
+        rootResources: [resource],
         omit: [...(resource.id ? [resource.id] : [])],
       },
       opts,
@@ -876,246 +875,480 @@ export class RealmIndexQueryEngine {
     }
   }
 
+  private async fetchCrossRealmLinks(
+    urls: string[],
+    invocationId: string,
+    layerIndex: number,
+  ): Promise<Map<string, CardResource<Saved>>> {
+    let entries = await Promise.all(
+      urls.map(async (url) => {
+        let response: Response;
+        try {
+          response = await this.#fetch(url, {
+            headers: { Accept: SupportedMimeType.CardJson },
+          });
+        } catch (err: unknown) {
+          let message =
+            err instanceof Error ? err.message : String(err ?? 'unknown');
+          this.#log.warn(
+            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch threw for ${url}: ${message}`,
+          );
+          throw err;
+        }
+        if (!response.ok) {
+          this.#log.warn(
+            `[loadLinks ${invocationId}] layer=${layerIndex} cross-realm fetch failed for ${url} status=${response.status}`,
+          );
+          throw await CardError.fromFetchResponse(url, response);
+        }
+        let json = await response.json();
+        if (!isSingleCardDocument(json)) {
+          throw new Error(
+            `instance ${url} is not a card document. it is: ${JSON.stringify(
+              json,
+              null,
+              2,
+            )}`,
+          );
+        }
+        let linkResource: CardResource<Saved> = {
+          ...json.data,
+          ...{ links: { self: json.data.id } },
+        };
+        return [url, linkResource] as const;
+      }),
+    );
+    return new Map(entries);
+  }
+
   // TODO The caller should provide a list of fields to be included via JSONAPI
   // request. currently we just use the maxLinkDepth to control how deep to load
-  // links
+  // links.
+  //
+  // Level-order BFS: each layer issues at most one batched DB query for
+  // in-realm cards and one for in-realm file-meta resources, alongside
+  // Promise.all-fanout cross-realm fetches, all running concurrently
+  // regardless of how many siblings reference links at that depth.
   private async loadLinks(
     {
       realmURL,
-      resource,
+      rootResources,
       omit = [],
       included = [],
-      visited = [],
-      stack = [],
     }: {
       realmURL: URL;
-      resource: LooseCardResource | FileMetaResource;
+      rootResources: (LooseCardResource | FileMetaResource)[];
       omit?: string[];
       included?: (CardResource<Saved> | FileMetaResource)[];
-      visited?: string[];
-      stack?: string[];
     },
     opts?: Options,
   ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
-    if (resource.id != null) {
-      if (visited.includes(resource.id)) {
-        return [];
-      }
-      visited.push(resource.id);
-    }
+    // Diagnostic correlation id — lets us match log lines from the same
+    // loadLinks invocation across layers when investigating CI failures.
+    let invocationId = `${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     let realmPath = new RealmPaths(realmURL);
-    let processedRelationships = new Set<string>();
-    let processRelationships = async () => {
-      for (let entry of relationshipEntries(resource.relationships)) {
-        let { relationship, key, fieldName } = entry;
-        if (processedRelationships.has(key)) {
+    let omitSet = new Set(omit);
+    let visited = new Set<string>();
+
+    type LayerItem = {
+      resource: LooseCardResource | FileMetaResource;
+      stack: string[];
+      applyLinkFields: boolean;
+      // Roots are returned in doc.data; everything else gets cloned and
+      // pushed onto included[] *after* its relationships are rewritten in
+      // its own layer (preserving the original implementation's order: the
+      // recursive caller cloned a resource only after the recursive call
+      // had already mutated its relationship.data fields).
+      isRoot: boolean;
+    };
+    let layer: LayerItem[] = [];
+    for (let resource of rootResources) {
+      if (resource.id != null) {
+        if (visited.has(resource.id)) {
           continue;
         }
-        if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
-          continue;
-        }
-        if (!relationship.links?.self) {
-          continue;
-        }
-        if (Array.isArray(relationship.data)) {
-          throw new Error(
-            `bug: relationship ${key} cannot be a list when loading links`,
-          );
-        }
-        let relationshipType = relationship.data?.type;
-        let expectsFileMeta = relationshipType === FileMetaResourceType;
-        let expectsCard = relationshipType === CardResourceType;
-        // Stale index payloads can incorrectly record file relationships as
-        // type "card" (or omit type entirely) when linked files were indexed
-        // after instances. In that case, trust the field declaration.
-        if (
-          !expectsFileMeta &&
-          (relationshipType === CardResourceType || !relationshipType)
-        ) {
-          expectsFileMeta = await this.fieldExpectsFileMeta(
-            resource,
-            key,
-            opts,
-          );
-          if (expectsFileMeta) {
-            expectsCard = false;
-          }
-        }
-        processedRelationships.add(key);
-        let linkURL = new URL(
-          resolveCardReference(
-            relationship.links.self,
-            resource.id ? cardIdToURL(resource.id) : realmURL,
-          ),
+        visited.add(resource.id);
+      }
+      layer.push({
+        resource,
+        stack: [],
+        applyLinkFields: !!opts?.linkFields,
+        isRoot: true,
+      });
+    }
+
+    this.#log.debug(
+      `[loadLinks ${invocationId}] start realm=${realmURL.href} roots=${layer.length} omit=${omitSet.size} linkFields=${opts?.linkFields?.length ?? 'none'}`,
+    );
+
+    let layerIndex = 0;
+    while (layer.length > 0) {
+      let currentLayerIndex = layerIndex++;
+      // Step 1: run populateQueryFields for every resource in this layer in
+      // parallel. Each runs an independent searchCards query for its
+      // computed query-fields; collapsing those across the layer is a
+      // separate optimization (out of scope for CS-11038).
+      try {
+        await Promise.all(
+          layer.map(async ({ resource, applyLinkFields }) => {
+            let popOpts = applyLinkFields
+              ? opts
+              : opts?.linkFields
+                ? { ...opts, linkFields: undefined }
+                : opts;
+            let storedDefs = (
+              resource.meta as {
+                queryFieldDefs?: Record<string, QueryFieldMeta>;
+              }
+            )?.queryFieldDefs;
+            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
+              await this.populateQueryFieldsFromMeta(
+                resource,
+                realmURL,
+                storedDefs,
+                popOpts,
+              );
+            } else {
+              await this.populateQueryFields(resource, realmURL, popOpts);
+            }
+          }),
         );
-        let linkResource: CardResource<Saved> | FileMetaResource | undefined;
-        if (realmPath.inRealm(rri(linkURL.href))) {
-          if (expectsCard || (!relationshipType && !expectsFileMeta)) {
-            let maybeResult = await this.#indexQueryEngine.getInstance(
-              linkURL,
-              opts,
+      } catch (err: unknown) {
+        // Surface the failing resource in the log; an unowned rejection
+        // here was a strong candidate for the "A network error occurred"
+        // teardown failures observed during the CS-11038 investigation.
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        this.#log.warn(
+          `[loadLinks ${invocationId}] layer=${currentLayerIndex} populateQueryFields rejected for layer of ${layer.length} resource(s): ${message}`,
+        );
+        throw err;
+      }
+
+      // Step 2: walk every resource's relationships, classify each link,
+      // and accumulate URL sets for the batched DB queries.
+      type Entry = {
+        item: LayerItem;
+        relationship: import('./resource-types').Relationship;
+        linkURL: URL;
+        relationshipId: URL;
+        relationshipIdStr: string;
+        relationshipType:
+          | typeof CardResourceType
+          | typeof FileMetaResourceType
+          | undefined;
+        expectsCard: boolean;
+        expectsFileMeta: boolean;
+        inRealm: boolean;
+      };
+      let entries: Entry[] = [];
+      let inRealmCardURLs = new Set<string>();
+      let inRealmFileURLs = new Set<string>();
+      let crossRealmURLs = new Set<string>();
+
+      for (let item of layer) {
+        let { resource, applyLinkFields } = item;
+        let activeOpts = applyLinkFields
+          ? opts
+          : opts?.linkFields
+            ? { ...opts, linkFields: undefined }
+            : opts;
+        let processed = new Set<string>();
+
+        for (let entry of relationshipEntries(resource.relationships)) {
+          let { relationship, key, fieldName } = entry;
+          if (processed.has(key)) {
+            continue;
+          }
+          if (
+            activeOpts?.linkFields &&
+            !activeOpts.linkFields.includes(fieldName)
+          ) {
+            continue;
+          }
+          if (!relationship.links?.self) {
+            continue;
+          }
+          if (Array.isArray(relationship.data)) {
+            throw new Error(
+              `bug: relationship ${key} cannot be a list when loading links`,
             );
+          }
+          processed.add(key);
+
+          let relationshipType = relationship.data?.type as
+            | typeof CardResourceType
+            | typeof FileMetaResourceType
+            | undefined;
+          let expectsFileMeta = relationshipType === FileMetaResourceType;
+          let expectsCard = relationshipType === CardResourceType;
+          // Stale index payloads can incorrectly record file relationships
+          // as type "card" (or omit type entirely) when linked files were
+          // indexed after instances. Trust the field declaration in that
+          // case.
+          if (
+            !expectsFileMeta &&
+            (relationshipType === CardResourceType || !relationshipType)
+          ) {
+            expectsFileMeta = await this.fieldExpectsFileMeta(
+              resource,
+              key,
+              activeOpts,
+            );
+            if (expectsFileMeta) {
+              expectsCard = false;
+            }
+          }
+
+          let linkURL = new URL(
+            resolveCardReference(
+              relationship.links.self,
+              resource.id ? cardIdToURL(resource.id) : realmURL,
+            ),
+          );
+          let resolvedSelf: string;
+          try {
+            resolvedSelf = resolveCardReference(
+              relationship.links.self,
+              resource.id,
+            );
+          } catch {
+            throw new Error(
+              `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+            );
+          }
+          let relationshipId = maybeURL(resolvedSelf);
+          if (!relationshipId) {
+            throw new Error(
+              `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+            );
+          }
+          // Use prefix form (e.g. @cardstack/catalog/...) when available
+          // so relationship data.id stays portable across environments.
+          let relationshipIdStr = unresolveCardReference(relationshipId.href);
+
+          let inRealm = realmPath.inRealm(rri(linkURL.href));
+          if (inRealm) {
+            if (expectsCard || (!relationshipType && !expectsFileMeta)) {
+              inRealmCardURLs.add(linkURL.href);
+            }
+            if (expectsFileMeta) {
+              inRealmFileURLs.add(linkURL.href);
+            }
+          } else {
+            crossRealmURLs.add(linkURL.href);
+          }
+
+          entries.push({
+            item,
+            relationship,
+            linkURL,
+            relationshipId,
+            relationshipIdStr,
+            relationshipType,
+            expectsCard,
+            expectsFileMeta,
+            inRealm,
+          });
+        }
+      }
+
+      this.#log.debug(
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} size=${layer.length} entries=${entries.length} inRealmCards=${inRealmCardURLs.size} inRealmFiles=${inRealmFileURLs.size} crossRealm=${crossRealmURLs.size}`,
+      );
+
+      // Step 3: issue this layer's batched DB queries plus cross-realm
+      // fetches concurrently. In-realm links collapse to one batched query
+      // per kind (instances + file-meta); cross-realm links fan out one
+      // fetch per unique URL via Promise.all alongside the DB round-trips.
+      let batchStart = Date.now();
+      let instanceMap: Map<string, InstanceOrError>;
+      let fileMap: Map<string, IndexedFile>;
+      let crossRealmMap: Map<string, CardResource<Saved>>;
+      try {
+        [instanceMap, fileMap, crossRealmMap] = await Promise.all([
+          inRealmCardURLs.size > 0
+            ? this.#indexQueryEngine.getInstances(
+                [...inRealmCardURLs].map((u) => new URL(u)),
+                opts,
+              )
+            : Promise.resolve(new Map<string, InstanceOrError>()),
+          inRealmFileURLs.size > 0
+            ? this.#indexQueryEngine.getFiles(
+                [...inRealmFileURLs].map((u) => new URL(u)),
+                opts,
+              )
+            : Promise.resolve(new Map<string, IndexedFile>()),
+          crossRealmURLs.size > 0
+            ? this.fetchCrossRealmLinks(
+                [...crossRealmURLs],
+                invocationId,
+                currentLayerIndex,
+              )
+            : Promise.resolve(new Map<string, CardResource<Saved>>()),
+        ]);
+      } catch (err: unknown) {
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        this.#log.warn(
+          `[loadLinks ${invocationId}] layer=${currentLayerIndex} batched index lookup rejected (cards=${inRealmCardURLs.size} files=${inRealmFileURLs.size} crossRealm=${crossRealmURLs.size}): ${message}`,
+        );
+        throw err;
+      }
+      this.#log.debug(
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size} crossRealm=${crossRealmMap.size}/${crossRealmURLs.size}`,
+      );
+
+      // Step 4: per-entry — resolve linkResource from the prefetched
+      // maps (in-realm or cross-realm), build the next layer, and
+      // rewrite relationship.data with the same semantics as the
+      // original recursive implementation.
+      let nextLayer: LayerItem[] = [];
+      for (let entry of entries) {
+        let linkResource: CardResource<Saved> | FileMetaResource | undefined;
+
+        if (entry.inRealm) {
+          if (
+            entry.expectsCard ||
+            (!entry.relationshipType && !entry.expectsFileMeta)
+          ) {
+            let maybeResult = instanceMap.get(entry.linkURL.href);
             if (maybeResult?.type === 'instance') {
               linkResource = maybeResult.instance;
             }
           }
-          if (!linkResource) {
-            if (expectsFileMeta) {
-              let fileEntry = await this.#indexQueryEngine.getFile(
-                linkURL,
-                opts,
-              );
-              if (fileEntry) {
-                linkResource = fileResourceFromIndex(linkURL, fileEntry);
-              }
+          if (!linkResource && entry.expectsFileMeta) {
+            let fileEntry = fileMap.get(entry.linkURL.href);
+            if (fileEntry) {
+              linkResource = fileResourceFromIndex(entry.linkURL, fileEntry);
             }
           }
         } else {
-          let response = await this.#fetch(linkURL, {
-            headers: { Accept: SupportedMimeType.CardJson },
-          });
-          if (!response.ok) {
-            let cardError = await CardError.fromFetchResponse(
-              linkURL.href,
-              response,
-            );
-            throw cardError;
-          }
-          let json = await response.json();
-          if (!isSingleCardDocument(json)) {
-            throw new Error(
-              `instance ${
-                linkURL.href
-              } is not a card document. it is: ${JSON.stringify(
-                json,
-                null,
-                2,
-              )}`,
-            );
-          }
-          linkResource = {
-            ...json.data,
-            ...{ links: { self: json.data.id } },
-          };
+          linkResource = crossRealmMap.get(entry.linkURL.href);
         }
+
+        let descendStack =
+          entry.item.resource.id != null
+            ? [entry.item.resource.id, ...entry.item.stack]
+            : entry.item.stack;
+
+        // TODO stop using maxLinkDepth. we should save the JSON-API doc
+        // in the index based on keeping track of the rendered fields
+        // and invalidate the index as consumed cards change.
+        //
+        // Gate uses the CURRENT item's stack length (ancestors only),
+        // matching the original recursive `stack.length <= maxLinkDepth`
+        // check which ran before pushing the current resource onto the
+        // stack for the recursive call. Using descendStack.length here
+        // would cut traversal off one level early.
         let foundLinks = false;
-        // TODO stop using maxLinkDepth. we should save the JSON-API doc in the
-        // index based on keeping track of the rendered fields and invalidate the
-        // index as consumed cards change
-        if (linkResource && stack.length <= maxLinkDepth) {
-          // When linkFields is set, we only apply it at the first level of
-          // link loading. For nested relationships, we clear linkFields so
-          // that all deeper relationships are fully loaded (up to
-          // maxLinkDepth). This means linkFields only constrains the
-          // immediate relationships of the root card.
-          let recursiveOpts = opts?.linkFields
-            ? { ...opts, linkFields: undefined }
-            : opts;
-          for (let includedResource of await this.loadLinks(
-            {
-              realmURL,
-              resource: linkResource,
-              omit,
-              included: [...included, linkResource],
-              visited,
-              stack: [...(resource.id != null ? [resource.id] : []), ...stack],
-            },
-            recursiveOpts,
-          )) {
-            foundLinks = true;
-            if (
-              includedResource.id &&
-              !omit.includes(includedResource.id) &&
-              !included.find((r) => r.id === includedResource.id)
-            ) {
-              let rewrittenResource = cloneDeep({
-                ...includedResource,
-                ...{ links: { self: includedResource.id } },
-              });
-              visitInstanceURLs(rewrittenResource, (url, setURL) =>
-                absolutizeInstanceURL(url, rewrittenResource.id, setURL),
-              );
-              visitModuleDeps(rewrittenResource, (url, setURL) =>
-                absolutizeInstanceURL(url, rewrittenResource.id, (newURL) =>
-                  setURL(newURL as RealmResourceIdentifier),
-                ),
-              );
-              included.push(rewrittenResource);
+        if (linkResource && entry.item.stack.length <= maxLinkDepth) {
+          let alreadyVisited =
+            linkResource.id != null && visited.has(linkResource.id);
+          if (!alreadyVisited) {
+            if (linkResource.id != null) {
+              visited.add(linkResource.id);
             }
+            // Schedule expansion at the next layer. linkFields applies
+            // only at the root layer; nested relationships are fully
+            // loaded up to maxLinkDepth. The clone+push to included[]
+            // happens at the END of that layer's processing — once the
+            // resource's relationships have been rewritten — so the
+            // clone captures the mutations rather than the pre-rewrite
+            // state from pristine_doc.
+            nextLayer.push({
+              resource: linkResource,
+              stack: descendStack,
+              applyLinkFields: false,
+              isRoot: false,
+            });
+            foundLinks = true;
+          } else if (linkResource.id != null) {
+            // Already visited — either a root (in omit) or scheduled for
+            // inclusion at the end of its own processing layer. Either way
+            // it's part of our doc, so relationship.data still gets
+            // rewritten below.
+            foundLinks = true;
           }
         }
-        let resolvedSelf: string;
-        try {
-          resolvedSelf = resolveCardReference(
-            relationship.links.self!,
-            resource.id,
-          );
-        } catch {
-          throw new Error(
-            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
-          );
-        }
-        let relationshipId = maybeURL(resolvedSelf);
-        if (!relationshipId) {
-          throw new Error(
-            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
-          );
-        }
-        // Use prefix form (e.g. @cardstack/catalog/...) when available,
-        // so relationship data.id stays portable across environments.
-        let relationshipIdStr = unresolveCardReference(relationshipId.href);
+
         if (
           foundLinks ||
-          omit.includes(relationshipIdStr) ||
-          included.find((i) => i.id === relationshipIdStr)
+          omitSet.has(entry.relationshipIdStr) ||
+          included.find((i) => i.id === entry.relationshipIdStr)
         ) {
-          relationship.data = {
+          entry.relationship.data = {
             type: linkResource?.type ?? CardResourceType,
-            id: relationshipIdStr,
+            id: entry.relationshipIdStr,
           };
         } else if (!linkResource) {
           // Even when the linked resource is unavailable, ensure
-          // relationship.data has the correct type so stale
-          // pristine_doc entries (missing data.type) for file
-          // relationships are not misidentified as card links.
+          // relationship.data has the correct type so stale pristine_doc
+          // entries (missing data.type) for file relationships are not
+          // misidentified as card links.
           let fallbackRelationshipType:
             | typeof CardResourceType
             | typeof FileMetaResourceType;
-          if (expectsFileMeta) {
+          if (entry.expectsFileMeta) {
             fallbackRelationshipType = FileMetaResourceType;
           } else {
             fallbackRelationshipType =
-              (relationshipType as
-                | typeof CardResourceType
-                | typeof FileMetaResourceType
-                | undefined) ?? CardResourceType;
+              entry.relationshipType ?? CardResourceType;
           }
-          relationship.data = {
+          entry.relationship.data = {
             type: fallbackRelationshipType,
-            id: relationshipId.href,
+            id: entry.relationshipId.href,
           };
         }
       }
-    };
 
-    await processRelationships();
-    // When cacheOnlyDefinitions is set (file-meta during prerendering), use
-    // pre-extracted query field metadata from the resource's meta instead of
-    // calling lookupDefinition (which could deadlock).
-    let storedDefs = (
-      resource.meta as { queryFieldDefs?: Record<string, QueryFieldMeta> }
-    )?.queryFieldDefs;
-    if (opts?.cacheOnlyDefinitions && storedDefs) {
-      await this.populateQueryFieldsFromMeta(
-        resource,
-        realmURL,
-        storedDefs,
-        opts,
-      );
-    } else {
-      await this.populateQueryFields(resource, realmURL, opts);
+      // Step 5: clone+absolutize each non-root layer item and push it onto
+      // included[]. Doing this AFTER step 4 ensures the cloned snapshot
+      // reflects any relationship.data rewrites we just applied to the
+      // resource (matching the original recursive implementation, which
+      // cloned in the parent's loop only after the recursive call had
+      // mutated the child's relationships).
+      for (let item of layer) {
+        if (item.isRoot) {
+          continue;
+        }
+        // Non-root items always originate from the batched index lookup
+        // (which returns CardResource<Saved>) or a cross-realm fetch (which
+        // is normalized to the same shape), so the runtime type is always
+        // strictly assignable to included[].
+        let resource = item.resource as CardResource<Saved> | FileMetaResource;
+        if (resource.id == null) {
+          continue;
+        }
+        if (omitSet.has(resource.id)) {
+          continue;
+        }
+        if (included.find((r) => r.id === resource.id)) {
+          continue;
+        }
+        let rewritten = cloneDeep({
+          ...resource,
+          ...{ links: { self: resource.id } },
+        });
+        visitInstanceURLs(rewritten, (url, setURL) =>
+          absolutizeInstanceURL(url, rewritten.id, setURL),
+        );
+        visitModuleDeps(rewritten, (url, setURL) =>
+          absolutizeInstanceURL(url, rewritten.id, (newURL) =>
+            setURL(newURL as RealmResourceIdentifier),
+          ),
+        );
+        included.push(rewritten);
+      }
+
+      layer = nextLayer;
     }
-    await processRelationships();
+
+    this.#log.debug(
+      `[loadLinks ${invocationId}] complete layers=${layerIndex} included=${included.length} visited=${visited.size}`,
+    );
     return included;
   }
 }
