@@ -7,10 +7,10 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from '../fields/number'; // ² Import catalog number field
+import NumberField from 'https://cardstack.com/base/number'; // ² Import catalog number field
 import RatingField from '../fields/rating'; // ³ Import catalog rating field
 import MultipleImageField from '../fields/multiple-image'; // ⁴ Import catalog multiple image field
-import DateField from '../fields/date'; // ¹⁴ Import catalog date field
+import DateField from 'https://cardstack.com/base/date'; // ¹⁴ Import catalog date field
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';

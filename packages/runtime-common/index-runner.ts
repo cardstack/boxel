@@ -35,7 +35,10 @@ import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
-import { discoverInvalidations } from './index-runner/discover-invalidations';
+import {
+  discoverInvalidations,
+  type DiscoverInvalidationsResult,
+} from './index-runner/discover-invalidations';
 import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
@@ -181,9 +184,11 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
     );
     let invalidateStart = Date.now();
-    invalidations = (
-      await current.discoverInvalidations(current.realmURL, mtimes)
-    ).map((href) => new URL(href));
+    let discoverResult = await current.discoverInvalidations(
+      current.realmURL,
+      mtimes,
+    );
+    invalidations = discoverResult.urls.map((href) => new URL(href));
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
     );
@@ -194,6 +199,8 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    let resumedRows = current.batch.resumedRows;
+    let resumedSkipped = 0;
     current.#onProgress?.({
       type: 'indexing-started',
       realmURL: current.realmURL.href,
@@ -205,6 +212,31 @@ export class IndexRunner {
     try {
       let filesCompleted = 0;
       for (let invalidation of invalidations) {
+        // Resume guard. If a previous attempt of this same job already
+        // wrote URL_X to the working table AND the EFS mtime hasn't
+        // changed since, skip the visit — the existing working row is
+        // still authoritative and `applyBatchUpdates` will promote it
+        // (the constructor pre-seeded it into `#invalidations`). If
+        // mtime DID change, fall through to a normal visit so the
+        // upsert in `updateEntry` overwrites the resumed row with
+        // current content.
+        let resumedMtime = resumedRows.get(invalidation.href);
+        if (resumedMtime !== undefined) {
+          let currentMtime = discoverResult.filesystemMtimes[invalidation.href];
+          if (currentMtime !== undefined && currentMtime === resumedMtime) {
+            resumedSkipped++;
+            filesCompleted++;
+            current.#onProgress?.({
+              type: 'file-visited',
+              realmURL: current.realmURL.href,
+              jobId: current.#jobInfo.jobId,
+              url: invalidation.href,
+              filesCompleted,
+              totalFiles: invalidations.length,
+            });
+            continue;
+          }
+        }
         await current.tryToVisit(invalidation);
         filesCompleted++;
         current.#onProgress?.({
@@ -215,6 +247,11 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+      }
+      if (resumedSkipped > 0) {
+        current.#perfLog.debug(
+          `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
+        );
       }
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
@@ -314,6 +351,8 @@ export class IndexRunner {
     }
 
     let hrefs = urls.map((u) => u.href);
+    let resumedRows = current.batch.resumedRows;
+    let resumedSkipped = 0;
     current.#onProgress?.({
       type: 'indexing-started',
       realmURL: current.realmURL.href,
@@ -330,6 +369,12 @@ export class IndexRunner {
           hrefs.includes(invalidation.href)
         ) {
           // file is deleted, there is nothing to visit
+        } else if (resumedRows.has(invalidation.href)) {
+          // Previous attempt of this job already produced a working
+          // row for this URL. `args.changes` is the deterministic seed
+          // for incremental jobs; if the file changed again, that's a
+          // different changeset enqueued as a separate job. Skip.
+          resumedSkipped++;
         } else {
           await current.tryToVisit(invalidation);
         }
@@ -342,6 +387,11 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+      }
+      if (resumedSkipped > 0) {
+        current.#perfLog.debug(
+          `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
+        );
       }
 
       let { totalIndexEntries } = await current.batch.done();
@@ -501,7 +551,7 @@ export class IndexRunner {
   private async discoverInvalidations(
     url: URL,
     indexMtimes: LastModifiedTimes,
-  ): Promise<string[]> {
+  ): Promise<DiscoverInvalidationsResult> {
     return await discoverInvalidations({
       url,
       indexMtimes,
