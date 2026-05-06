@@ -230,10 +230,19 @@ const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
-// Card+JSON ETag base is the index row's `indexed_at`, which bumps on
-// every reindex — direct writes AND dependency-triggered re-writes —
-// so it correctly fingerprints the assembled JSON:API document
-// (primary + included links) without us having to materialize it.
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
+// per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
+// validators and split the cache key. Two inputs feed the base:
+//   - `indexed_at` on the primary card's index row, which bumps on
+//     direct writes AND dependency-triggered re-writes (so the deps
+//     graph carries cascading invalidations forward through it);
+//   - md5 of the cached `RealmInfo`, since `attachRealmInfo()`
+//     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
+//     into the assembled response at request time and that field
+//     can change without any card being re-indexed.
+// `buildCardJsonEtag()` constructs the value; cards with foreign-
+// realm instance deps suppress emission entirely because cross-realm
+// invalidation doesn't cascade `indexed_at` today.
 const CARD_JSON_ETAG_VARIANT = 'card';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
@@ -316,14 +325,14 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `<indexed_at>-<realmInfoHash>:card`. Combines the
-// per-card index timestamp (which captures direct writes and
-// dependency-triggered reindexes) with a hash of the local realm's
-// info — the only request-time mutation `attachRealmInfo()` makes
-// that isn't visible to the index. A null indexedAt suppresses the
-// ETag entirely; a null realmInfoHash falls back to the indexed_at
-// alone, which keeps `<indexed_at>:card` working in the rare case
-// where the cache was nulled and somehow hasn't been repopulated.
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>:card"`. The value
+// is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
+// browsers don't re-quote inbound validators and an unquoted token
+// would fail strict-validator parsing in some intermediaries.
+// `indexedAt` captures direct + dep-cascaded writes; the
+// `realmInfoHash` captures `attachRealmInfo()`'s request-time
+// injection of `meta.realmInfo` (which can flip without re-indexing
+// any card). A null `indexedAt` suppresses ETag emission entirely.
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
@@ -332,7 +341,22 @@ function buildCardJsonEtag(
     return undefined;
   }
   let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
-  return `${base}:${CARD_JSON_ETAG_VARIANT}`;
+  return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+}
+
+// RFC 9110 §13.1.2: `If-None-Match` may be `*`, a comma-separated
+// list of validators, and individual entries may be weak (`W/`-
+// prefixed). For GET we don't distinguish weak vs. strong (spec
+// says weak comparison is fine for non-range requests), so strip
+// the `W/` prefix and compare the bare quoted value to our ETag.
+function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
+  let value = headerValue.trim();
+  if (value === '*') {
+    return true;
+  }
+  return value
+    .split(',')
+    .some((token) => token.trim().replace(/^W\//, '') === etag);
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -3442,30 +3466,46 @@ export class Realm {
   }
 
   private isForeignRealmDep(dep: string): boolean {
-    // Registered prefix references (`@cardstack/...`) and host-hosted
-    // module pseudo-URLs (`packages/...`, `https://cardstack.com/base/...`)
-    // are stable platform code, not consumer-realm-mutable instance data;
-    // they're always present on every published card and treating them as
-    // foreign would suppress ETags universally — defeating the
-    // optimization. The dependency we actually care about is a card
-    // *instance* in another realm; instance deps come through as absolute
-    // http(s) URLs whose origin matches a real realm.
-    if (!dep.startsWith('http://') && !dep.startsWith('https://')) {
+    // Resolve registered prefixes back to absolute URLs first.
+    // Production deployments register every realm via
+    // `addRealmMapping`, so deps in `boxel_index.deps` are typically
+    // stored in prefix form (`@cardstack/foreign-realm/foo.json`) —
+    // comparing them as raw strings against `this.url` would always
+    // say "not foreign" and the guard would silently fail to fire.
+    let resolved: string;
+    try {
+      resolved = resolveCardReference(dep, undefined);
+    } catch {
+      // Bare specifier with no matching prefix mapping. `loadLinks`
+      // can't fetch it, so it's not a request-time mutation source —
+      // not a foreign-instance dep for our purposes.
       return false;
     }
-    if (dep.startsWith('https://cardstack.com/base/')) {
+    // Only foreign card *instance* deps put us at risk of stale 304s.
+    // Module deps (`.gts`/`.ts`/`.js`) and scoped CSS don't load
+    // through `loadLinks` and don't contribute to the assembled
+    // `included[]`. Cards universally adopt from base modules
+    // (`https://cardstack.com/base/card-api.gts`) — treating those
+    // as foreign would blanket-suppress every card's ETag. The
+    // relationship-dependency extractor normalizes instance deps to
+    // `.json` (see `dependency-normalization.ts`), so checking that
+    // suffix isolates the deps we actually care about.
+    if (!resolved.endsWith('.json')) {
       return false;
     }
-    return !dep.startsWith(this.url);
+    return !resolved.startsWith(this.url);
   }
 
   private cardJsonCacheControl(requestContext: RequestContext): string {
-    // Match the source/module pattern: world-readable realms get `public`
-    // so a CDN can revalidate; auth-gated realms get `private` so a shared
-    // cache won't store one user's response and serve it to another.
-    // max-age=0 forces revalidation on every request, which combined with
-    // the ETag means the browser asks the server but the server returns
-    // 304 (cheap) when the index hasn't moved.
+    // Mirrors the source/module convention for the public/private
+    // visibility decision (world-readable realms get `public` so a
+    // CDN can revalidate; auth-gated realms get `private` so a shared
+    // cache won't serve one user's body to another). Adds an explicit
+    // `must-revalidate` that source/module don't need: card+json
+    // responses are richer (full JSON:API doc), so we want to be
+    // strict that intermediaries can't serve stale-while-revalidate
+    // even briefly. With `max-age=0` the browser always asks, the
+    // ETag short-circuit returns 304 cheaply when nothing changed.
     let cacheVisibility = requestContext.permissions['*']?.includes('read')
       ? 'public'
       : 'private';
@@ -3478,79 +3518,97 @@ export class Realm {
   ): Promise<Response> {
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
+    // `.json` requests always 302 to the canonical no-extension URL,
+    // regardless of cache state. Doing the redirect before any DB
+    // peek keeps clients consistent: the canonical URL is the only
+    // one that ever serves a 200 + ETag, and intermediaries that
+    // cache the 302 don't end up holding a cache key against the
+    // `.json` form. (Was previously only checked on the cache-miss
+    // path, so a `.json` request with `If-None-Match` could short-
+    // circuit to 304 with no redirect — splitting client/server
+    // cache keys.)
+    if (requestedHadJsonExtension) {
+      let canonicalPath = this.paths.local(
+        this.paths.fileURL(
+          requestedLocalPath.replace(/\.json$/, '') || 'index',
+        ),
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: {
+            Location: `${new URL(this.url).pathname}${canonicalPath}`,
+          },
+        },
+      });
+    }
     let localPath = requestedLocalPath;
     if (localPath === '') {
       localPath = 'index';
     }
-    localPath = localPath.replace(/\.json$/, '');
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      // Prime the realm-info cache up front so the ETag base picks up
-      // request-time mutations that don't bump `indexed_at` —
-      // specifically `attachRealmInfo()` which injects `meta.realmInfo`
-      // (name / icon / `lastPublishedAt`) at response-assembly time.
-      // A `/_config` PATCH or publish nulls `#cachedRealmInfo`, the
-      // next `getRealmInfo()` repopulates it AND its hash, and the
-      // hash flips — so old ETags from before the config change no
-      // longer match. Without this, a 304 here would serve a body
-      // whose `meta.realmInfo` is stale despite no re-indexing.
-      await this.getRealmInfo();
-      let realmInfoHash = this.getCachedRealmInfoHash();
-
-      // Peek at the index entry next to compute the ETag without paying
-      // the loadLinks fan-out cost. On a cache hit (If-None-Match matches),
-      // we can return 304 in ~5ms instead of the ~100ms+ that the full
-      // assembly costs against a card with many included resources.
-      let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
-        includeErrors: true,
-      });
-      if (instanceEntry === undefined) {
-        if (await this.nonJsonFileExists(localPath)) {
-          return unsupportedMediaType(request, requestContext);
-        } else {
-          return notFound(request, requestContext);
-        }
-      }
-
       let cacheControl = this.cardJsonCacheControl(requestContext);
-      let etag: string | undefined;
-      let hasForeignDeps = this.hasForeignRealmDeps(instanceEntry.deps);
-      if (
-        !hasForeignDeps &&
-        instanceEntry.type === 'instance' &&
-        instanceEntry.indexedAt != null
-      ) {
-        etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
-        if (etag && request.headers.get('if-none-match') === etag) {
-          return createResponse({
-            requestContext,
-            body: null,
-            init: {
-              status: 304,
-              headers: {
-                etag,
-                'cache-control': cacheControl,
-                ...(instanceEntry.lastModified != null
-                  ? {
-                      'last-modified': formatRFC7231(
-                        instanceEntry.lastModified * 1000,
-                      ),
-                    }
-                  : {}),
+      let ifNoneMatch = request.headers.get('if-none-match');
+
+      // Conditional-GET fast path. Only run the cheap `instance()`
+      // peek when the client sent a validator — otherwise we'd be
+      // paying an extra DB round-trip on cache misses since
+      // `cardDocument()` below does its own `instance()` lookup.
+      if (ifNoneMatch) {
+        await this.getRealmInfo();
+        let realmInfoHash = this.getCachedRealmInfoHash();
+        let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
+          includeErrors: true,
+        });
+        if (instanceEntry === undefined) {
+          if (await this.nonJsonFileExists(localPath)) {
+            return unsupportedMediaType(request, requestContext);
+          } else {
+            return notFound(request, requestContext);
+          }
+        }
+        if (
+          !this.hasForeignRealmDeps(instanceEntry.deps) &&
+          instanceEntry.type === 'instance' &&
+          instanceEntry.indexedAt != null
+        ) {
+          let etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
+          if (etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+            return createResponse({
+              requestContext,
+              body: null,
+              init: {
+                status: 304,
+                headers: {
+                  etag,
+                  'cache-control': cacheControl,
+                  ...(instanceEntry.lastModified != null
+                    ? {
+                        'last-modified': formatRFC7231(
+                          instanceEntry.lastModified * 1000,
+                        ),
+                      }
+                    : {}),
+                },
               },
-            },
-          });
+            });
+          }
         }
       }
 
-      // Cache miss: assemble the full doc.
+      // Cache miss (or the conditional was a non-match): assemble
+      // the full doc. `cardDocument()` runs `attachRealmInfo()`
+      // which (re)populates the realm-info cache, so the hash we
+      // read for the response ETag below reflects the post-assembly
+      // realm info.
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
       });
       if (maybeError === undefined) {
-        // The instance row vanished between the two reads — same response
-        // path as the up-front not-found check.
         if (await this.nonJsonFileExists(localPath)) {
           return unsupportedMediaType(request, requestContext);
         } else {
@@ -3583,17 +3641,12 @@ export class Realm {
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
 
+      // The 302 redirect for the `.json` form is now done up-front
+      // (see top of method). Here we only need to redirect for the
+      // legacy normalization case where `paths.fileURL(localPath)`
+      // produces a different `paths.local()` than what we started
+      // with — same as the prior implementation's behavior.
       let foundPath = this.paths.local(url);
-      if (requestedHadJsonExtension) {
-        return createResponse({
-          requestContext,
-          body: null,
-          init: {
-            status: 302,
-            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
-          },
-        });
-      }
       if (localPath !== foundPath) {
         return createResponse({
           requestContext,
@@ -3608,15 +3661,14 @@ export class Realm {
       // Prefer created_at from DB for instance JSON
       let pathForDb = this.paths.local(url) + '.json';
       let createdAt = await this.getCreatedTime(pathForDb);
-      // Prefer the indexedAt from the just-loaded doc — it's the most
-      // recent read and may differ from the first peek if a write landed
-      // between the two queries. Re-read the realm-info hash too so a
-      // race against a /_config PATCH between the early peek and the
-      // cardDocument() call resolves to the post-PATCH hash. Suppress
-      // the response ETag too if the doc has foreign-realm deps —
-      // emitting one a 304 path can never honor would only mislead
-      // clients into sending validators we'll always reject.
-      let responseEtag = hasForeignDeps
+      // Use deps + indexedAt from the just-loaded doc — `cardDocument()`
+      // saw a snapshot that may differ from the early peek if a write
+      // landed between the two reads. Suppress the ETag if the doc
+      // depends on foreign-realm cards: cross-realm invalidation
+      // doesn't cascade `indexed_at`, so a validator we emit here
+      // could 304 a follow-up request whose `included[]` should have
+      // been re-fetched from the foreign realm.
+      let responseEtag = this.hasForeignRealmDeps(maybeError.deps)
         ? undefined
         : buildCardJsonEtag(
             maybeError.indexedAt,
@@ -4803,9 +4855,17 @@ export class Realm {
   > {
     try {
       // Phase 4: read from realm_registry; aliases keep callers stable.
+      // ORDER BY pins the result order so that
+      // `getLastPublishedAt()` -> `Object.fromEntries(rows.map(...))` ->
+      // `JSON.stringify(realmInfo)` produces a *deterministic* hash for
+      // the same logical state. Without it, two realm-server instances
+      // (or the same instance after a restart) can hash the same data
+      // to different ETag bases purely on Postgres row-order luck —
+      // missed-304 storms instead of cache hits.
       let results = (await query(this.#dbAdapter, [
         `SELECT url AS published_realm_url, last_published_at FROM realm_registry WHERE kind = 'published' AND source_url =`,
         param(this.url),
+        `ORDER BY url`,
       ])) as { published_realm_url: string; last_published_at: string }[];
 
       return results;
@@ -4898,7 +4958,15 @@ export class Realm {
     return this.#cachedRealmInfoHash ?? undefined;
   }
 
-  private invalidateCachedRealmInfo(): void {
+  // Public so the publish/unpublish handlers can invalidate the SOURCE
+  // realm's cache when a derivative is (un)published. The source
+  // realm's `lastPublishedAt` map (which feeds into `RealmInfo` and
+  // therefore the card+json ETag's hash) is computed from
+  // `realm_registry` rows where `source_url = this.url`; publishing
+  // X' from X bumps that map but doesn't otherwise touch X's
+  // `.realm.json` or `realm_metadata`, so without this hook a 304
+  // would be served against the *pre-publish* hash forever.
+  invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
     this.#cachedRealmInfoHash = null;
   }

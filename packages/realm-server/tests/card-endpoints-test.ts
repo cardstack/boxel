@@ -883,7 +883,7 @@ module(basename(__filename), function () {
           let etag = response.get('etag') ?? '';
           assert.ok(etag, 'response carries an ETag');
           assert.true(
-            /^\d+(?:-[0-9a-f]+)?:card$/.test(etag),
+            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(etag),
             `ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${etag})`,
           );
           assert.strictEqual(
@@ -2517,7 +2517,7 @@ module(basename(__filename), function () {
           let patchEtag = patchResponse.get('etag') ?? '';
           assert.ok(patchEtag, 'PATCH response carries an ETag');
           assert.true(
-            /^\d+(?:-[0-9a-f]+)?:card$/.test(patchEtag),
+            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(patchEtag),
             `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${patchEtag})`,
           );
           assert.notStrictEqual(
