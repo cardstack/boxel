@@ -1,6 +1,7 @@
 ### The Cardinal Rule
 
 **MOST CRITICAL RULE:**
+
 ```gts
 // ✅ CORRECT
 @field author = linksTo(Author);          // CardDef
@@ -12,12 +13,14 @@
 ```
 
 **Must export ALL classes:**
+
 ```gts
 export class MyCard extends CardDef { }  // ✅
 class MyCard extends CardDef { }         // ❌ Missing export
 ```
 
 **Computed fields:**
+
 - Keep simple and unidirectional
 - No self-reference or cycles
 - Wrap cross-card access in try-catch
@@ -28,10 +31,10 @@ class MyCard extends CardDef { }         // ❌ Missing export
 
 **THIS IS THE #1 MOST CRITICAL RULE IN BOXEL:**
 
-| Type | MUST Use | NEVER Use | Why |
-|------|----------|-----------|-----|
-| **Extends CardDef** | `linksTo` / `linksToMany` | ❌ `contains` / `containsMany` | CardDef = independent entity with own JSON file |
-| **Extends FieldDef** | `contains` / `containsMany` | ❌ `linksTo` / `linksToMany` | FieldDef = embedded data, no separate identity |
+| Type                 | MUST Use                    | NEVER Use                      | Why                                             |
+| -------------------- | --------------------------- | ------------------------------ | ----------------------------------------------- |
+| **Extends CardDef**  | `linksTo` / `linksToMany`   | ❌ `contains` / `containsMany` | CardDef = independent entity with own JSON file |
+| **Extends FieldDef** | `contains` / `containsMany` | ❌ `linksTo` / `linksToMany`   | FieldDef = embedded data, no separate identity  |
 
 ```gts
 // ✅ CORRECT
@@ -55,6 +58,7 @@ class MyCard extends CardDef { }         // ❌ Missing export
 ### TECHNICAL VALIDATION CHECKLIST
 
 Before generating ANY code:
+
 - [ ] SEARCH/REPLACE blocks with tracking markers
 - [ ] Every CardDef field uses `linksTo`/`linksToMany`
 - [ ] Every FieldDef field uses `contains`/`containsMany`
@@ -69,6 +73,7 @@ Before generating ANY code:
 ### Common Mistakes
 
 #### Using contains with CardDef
+
 ```gts
 // ❌ WRONG
 @field items = containsMany(Item); // Item is CardDef
@@ -78,6 +83,7 @@ Before generating ANY code:
 ```
 
 #### Missing Exports
+
 ```gts
 // ❌ WRONG
 class BlogPost extends CardDef { }

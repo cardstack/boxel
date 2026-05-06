@@ -7,8 +7,8 @@ The `@cardstack/runtime-common` package exposes its surface at two granularities
 
 **Subpath exports are NOT re-exported from the bare module.** Common subpaths and the names they expose:
 
-| Subpath | Useful exports |
-|---|---|
+| Subpath                                 | Useful exports                                                 |
+| --------------------------------------- | -------------------------------------------------------------- |
 | `@cardstack/runtime-common/marked-sync` | `markdownToHtml`, `preloadMarkdownLanguages`, `wrapTablesHtml` |
 
 If you reach for a subpath-only export on the bare module — a common slip when a name is "almost" on the right module — the runtime catches the mismatch at module-load time and surfaces a tight `ReferenceError` that names both the missing export and the source module. So a wrong import path is visible immediately, with an actionable message, instead of producing a confusing downstream `TypeError` from inside Glimmer's helper-encoder.
@@ -20,6 +20,7 @@ When in doubt: **prefer the subpath import** for anything that isn't a core runt
 ## Async loading external CDN libraries
 
 **Async loading pattern:**
+
 ```gts
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -36,12 +37,14 @@ private loadLibrary = task(async () => {
 ```
 
 **Key Rules:**
+
 1. Use Modifiers for DOM access
 2. Use ember-concurrency tasks for async
 3. Bind external data to model fields
 4. Provide loading states
 
 **Task types:**
+
 - `task` - Concurrent execution
 - `restartableTask` - Cancel previous, start new
 - `enqueueTask` - Sequential queue
@@ -58,9 +61,10 @@ For fetching data from external APIs, use `ember-concurrency`. The core of this 
 - keepLatest: Drops intermediate queued tasks but keeps the most recent one to run after the current task completes.
 
 Here is an example where we are:
-- loading data when component is first rendered, 
+
+- loading data when component is first rendered,
 - reloading it when user clicks on a button,
-- adding some artificial delay using `await timeout(ms)` from `ember-concurrency`. Caution:  do not use `setTimeout`.
+- adding some artificial delay using `await timeout(ms)` from `ember-concurrency`. Caution: do not use `setTimeout`.
 
 ```
 import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
@@ -73,30 +77,30 @@ import perform from 'ember-concurrency/helpers/perform';
 
 export class CurrencyLoader extends CardDef {
   static displayName = 'Currency Loader';
-  
+
   @field loadingStatus = contains(StringField);
   @field currencies = contains(StringField);
-  
+
   static isolated = class Isolated extends Component<typeof this> {
     constructor(owner: any, args: any) {
       super(owner, args);
       this.loadCurrencies.perform();
     }
-    
+
     private loadCurrencies = restartableTask(async () => {
       this.args.model.loadingStatus = 'Loading...';
       const response = await fetch('/api/currencies');
       await timeout(1000); // Visual feedback
-      
+
       this.args.model.currencies = await response.json();
       this.args.model.loadingStatus = "";
     });
-    
+
     <template>
       <div>
         <p>Status: {{@model.loadingStatus}}</p>
         <p>Data: {{@model.currencies}}</p>
-        
+
         <Button {{on 'click' (perform this.loadCurrencies)}}>
           Reload Currencies
         </Button>
@@ -111,6 +115,7 @@ export class CurrencyLoader extends CardDef {
 **When to Use External Libraries:** Sometimes you need specialized functionality like 3D graphics (Three.js), data visualization (D3), or charts. Boxel plays well with external libraries when you follow the right patterns.
 
 **Key Rules:**
+
 1. **Always use Modifiers for DOM access** - Never manipulate DOM directly
 2. **Use ember-concurrency tasks** for async operations like loading libraries
 3. **Bind external data to model fields** for reactive updates

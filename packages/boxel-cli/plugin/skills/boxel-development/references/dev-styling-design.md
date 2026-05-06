@@ -1,16 +1,20 @@
 ## CSS Safety Essentials
 
 **Always scoped:**
+
 ```gts
 <template>
-  <div class="my-card">...</div>
-  <style scoped>  /* MANDATORY */
-    .my-card { }
+  <div class='my-card'>...</div>
+  <style scoped>
+    /* MANDATORY */
+    .my-card {
+    }
   </style>
 </template>
 ```
 
 **CSS comments (NEVER use //):**
+
 ```css
 /* ✅ CORRECT: Block comments */
 .card { color: blue; }
@@ -19,10 +23,15 @@
 ```
 
 **Never use global selectors:**
+
 ```css
 /* ❌ WRONG */
-:root { --color: blue; }
-body { margin: 0; }
+:root {
+  --color: blue;
+}
+body {
+  margin: 0;
+}
 
 /* ✅ CORRECT */
 .my-component {
@@ -31,10 +40,11 @@ body { margin: 0; }
 ```
 
 **Formatters for display:**
+
 ```hbs
-{{formatCurrency @model.price currency="USD"}}
-{{formatDateTime @model.date size="medium"}}
-{{formatNumber @model.count size="tiny"}}
+{{formatCurrency @model.price currency='USD'}}
+{{formatDateTime @model.date size='medium'}}
+{{formatNumber @model.count size='tiny'}}
 ```
 
 ## Design Philosophy and Competitive Styling
@@ -44,6 +54,7 @@ Design and implement your stylesheet to fit the domain you are generating. Resea
 Approach: Study the leading players' design patterns, then create something that feels more modern, intuitive, and polished. Focus on micro-interactions, thoughtful spacing, superior visual hierarchy, and removing friction from user workflows.
 
 Key Areas to Compete On:
+
 - Visual polish: better typography, spacing, and color schemes
 - Interaction design: smoother animations, better feedback, clearer affordances
 - Information architecture: more logical organization, better progressive disclosure
@@ -68,7 +79,7 @@ Implementation tip: Define CSS variables at component root and use fallbacks.
 .component {
   --card-padding: var(--boxel-sp, 1rem);
   --card-radius: var(--boxel-border-radius-sm, 0.5rem);
-  --card-shadow: var(--boxel-box-shadow, 0 2px 4px rgba(0,0,0,0.1));
+  --card-shadow: var(--boxel-box-shadow, 0 2px 4px rgba(0, 0, 0, 0.1));
   padding: var(--card-padding);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
@@ -85,22 +96,30 @@ Implementation tip: Define CSS variables at component root and use fallbacks.
 - Numbers: tabular-nums for data tables and metrics when available
 
 Example:
+
 ```css
-.title { font-size: clamp(1rem, 2.5vw, 1.25rem); font-weight: 700; }
-.subtle { font-size: 0.75rem; opacity: 0.8; }
+.title {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  font-weight: 700;
+}
+.subtle {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
 ```
 
 ## Format Dimensions Comparison
 
-| Format   | Width            | Height           | Parent Sets | Key Behavior |
-|----------|------------------|------------------|-------------|-------------|
-| Isolated | Max-width, center| Natural + scroll | No          | Full detail, scrollable content |
-| Embedded | Fills container  | Natural          | Width only  | Truncation/expand controls handled by parent |
-| Fitted   | Fills exactly    | Fills exactly    | Both        | Must adapt to fixed grid slots |
-| Atom     | Inline           | Inline           | No          | Minimal inline representation |
-| Edit     | Fills container  | Natural form     | Width only  | Form layout, grows with fields |
+| Format   | Width             | Height           | Parent Sets | Key Behavior                                 |
+| -------- | ----------------- | ---------------- | ----------- | -------------------------------------------- |
+| Isolated | Max-width, center | Natural + scroll | No          | Full detail, scrollable content              |
+| Embedded | Fills container   | Natural          | Width only  | Truncation/expand controls handled by parent |
+| Fitted   | Fills exactly     | Fills exactly    | Both        | Must adapt to fixed grid slots               |
+| Atom     | Inline            | Inline           | No          | Minimal inline representation                |
+| Edit     | Fills container   | Natural form     | Width only  | Form layout, grows with fields               |
 
 Notes:
+
 - Fitted requires internal subformats (badge, strip, tile, card) via container queries
 - Embedded should be height-flexible; parents may clamp and offer "view more"
 - Isolated should ensure comfortable reading with scrollable mat and generous padding

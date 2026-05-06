@@ -22,6 +22,7 @@ import {
   writeFileSync,
 } from 'fs';
 import { resolve } from 'path';
+import { format, resolveConfig } from 'prettier';
 
 const BOXEL_SKILLS_VERSION = 'v0.0.22';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
@@ -153,6 +154,25 @@ function frontmatter(name: string, description: string): string {
   return `---\nname: ${name}\ndescription: ${desc}\n---\n`;
 }
 
+/**
+ * Write `content` to `filePath` after running it through the repo's Prettier
+ * config. Without this the generated markdown drifts from the committed copy
+ * whenever any local format pass (pre-commit hook, `pnpm format`, editor on-save)
+ * touches it, breaking the boxel-skills sync freshness CI gate.
+ */
+async function writeFormattedMarkdown(
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const config = (await resolveConfig(filePath)) ?? {};
+  const formatted = await format(content, {
+    ...config,
+    parser: 'markdown',
+    filepath: filePath,
+  });
+  writeFileSync(filePath, formatted);
+}
+
 function clearReferencesDir(skillName: string): void {
   const refsDir = resolve(PLUGIN_DIR, 'skills', skillName, 'references');
   if (existsSync(refsDir)) {
@@ -160,11 +180,11 @@ function clearReferencesDir(skillName: string): void {
   }
 }
 
-function emitAggregator(
+async function emitAggregator(
   sourceRoot: string,
   card: SkillCard,
   related: RelatedSkill[],
-): void {
+): Promise<void> {
   const name = card.id;
   const skillDir = resolve(PLUGIN_DIR, 'skills', name);
   mkdirSync(skillDir, { recursive: true });
@@ -174,7 +194,7 @@ function emitAggregator(
   mkdirSync(refsDir, { recursive: true });
   for (const r of related) {
     const body = getLeafBody(sourceRoot, r.id);
-    writeFileSync(resolve(refsDir, `${r.id}.md`), body);
+    await writeFormattedMarkdown(resolve(refsDir, `${r.id}.md`), body);
   }
 
   const cardName = getCardName(card);
@@ -237,13 +257,13 @@ function emitAggregator(
       .join('\n')
       .replace(/\n{3,}/g, '\n\n')
       .trimEnd() + '\n';
-  writeFileSync(resolve(skillDir, 'SKILL.md'), content);
+  await writeFormattedMarkdown(resolve(skillDir, 'SKILL.md'), content);
   console.log(
     `wrote plugin/skills/${name}/SKILL.md + ${related.length} references`,
   );
 }
 
-function emitLeaf(sourceRoot: string, card: SkillCard): void {
+async function emitLeaf(sourceRoot: string, card: SkillCard): Promise<void> {
   const name = card.id;
   const skillDir = resolve(PLUGIN_DIR, 'skills', name);
   mkdirSync(skillDir, { recursive: true });
@@ -253,11 +273,11 @@ function emitLeaf(sourceRoot: string, card: SkillCard): void {
     DESCRIPTION_OVERRIDES[name] || getCardSummary(card) || cardName;
   const body = getLeafBody(sourceRoot, name).trimEnd() + '\n';
   const content = `${frontmatter(name, description)}\n${body}`;
-  writeFileSync(resolve(skillDir, 'SKILL.md'), content);
+  await writeFormattedMarkdown(resolve(skillDir, 'SKILL.md'), content);
   console.log(`wrote plugin/skills/${name}/SKILL.md (single-file leaf)`);
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const sourceRoot = resolveSourceRoot();
   const cards = loadSkillCards(sourceRoot);
 
@@ -284,9 +304,9 @@ function main(): void {
           `Aggregator "${id}" has no related skills — JSON shape unexpected.`,
         );
       }
-      emitAggregator(sourceRoot, card, related);
+      await emitAggregator(sourceRoot, card, related);
     } else if (card.kind === 'SkillPlusMarkdown') {
-      emitLeaf(sourceRoot, card);
+      await emitLeaf(sourceRoot, card);
     } else {
       throw new Error(
         `ALLOWLIST entry "${id}" has unsupported adoptsFrom.name: "${card.kind}"`,
@@ -314,4 +334,7 @@ function main(): void {
   );
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -1,11 +1,13 @@
 ### Replicate API Essentials
 
 **Gateway URL Pattern:**
+
 ```
 https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/replicate/v1/models/{owner}/{model}/predictions
 ```
 
 **Required Headers:**
+
 ```typescript
 {
   'Content-Type': 'application/json',
@@ -14,6 +16,7 @@ https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/replicate/v1/models/{ow
 ```
 
 **Request Structure:**
+
 ```typescript
 {
   input: {
@@ -34,8 +37,8 @@ const SizeField = enumField(StringField, {
   options: [
     { value: '1K', label: '1K (1024px)' },
     { value: '2K', label: '2K (2048px)' },
-    { value: 'custom', label: 'Custom' }
-  ]
+    { value: 'custom', label: 'Custom' },
+  ],
 });
 ```
 
@@ -49,7 +52,7 @@ import { CloudflareImage } from 'https://realms-staging.stack.cards/catalog/clou
 
 // Build request
 const requestBody = {
-  input: { prompt: input.prompt }
+  input: { prompt: input.prompt },
 };
 
 // Add conditional parameters
@@ -63,7 +66,7 @@ const response = await new SendRequestViaProxyCommand(ctx).execute({
   url: 'https://gateway.ai.cloudflare.com/v1/.../replicate/v1/models/{owner}/{model}/predictions',
   method: 'POST',
   requestBody: JSON.stringify(requestBody),
-  headers: { 'Content-Type': 'application/json', 'Prefer': 'wait' }
+  headers: { 'Content-Type': 'application/json', Prefer: 'wait' },
 });
 
 // Parse response
@@ -73,7 +76,7 @@ let imageUrl = Array.isArray(data.output) ? data.output[0] : data.output;
 // Upload result
 const uploaded = await new UploadImageCommand(ctx).execute({
   sourceImageUrl: imageUrl,
-  targetRealmUrl: input.realm
+  targetRealmUrl: input.realm,
 });
 
 return await new GetCardCommand(ctx).execute({ cardId: uploaded.cardId });

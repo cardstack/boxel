@@ -149,7 +149,6 @@ GrammyAward/              # Instances in PascalCase directory
   }
 }
 ```
-```
 
 ### JSON Structure Rules
 

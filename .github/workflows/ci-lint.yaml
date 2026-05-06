@@ -159,9 +159,30 @@ jobs:
           set -euo pipefail
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
-          # Did any synopsis line change?
-          SYNOPSIS_CHANGED=$(git diff "$BASE" "$HEAD" -- 'packages/boxel-cli/plugin/skills/**/SKILL.md' \
-            | grep -E '^[+-](### `boxel |\*\*Arguments|\*\*Options|- `[-A-Za-z]+|- `<|- `\[)' || true)
+          # `actions/checkout` uses default depth, so $BASE (a `main` SHA) usually
+          # isn't local. Fetch both explicitly so `git diff`/`git show` succeed.
+          git fetch --no-tags --depth=1 origin "$BASE" "$HEAD"
+          # Did the generated-commands block change in any SKILL.md? Compare the
+          # block at $BASE vs $HEAD per-file. Any difference inside the markers
+          # (heading, description, argument, blank line) flips SYNOPSIS_CHANGED.
+          # `git cat-file -e` is the explicit existence probe — using `git show`
+          # with `2>/dev/null` would still propagate exit 128 and trip pipefail.
+          extract_block() {
+            local rev="$1" path="$2"
+            if git cat-file -e "$rev:$path" 2>/dev/null; then
+              git show "$rev:$path" \
+                | awk '/<!-- generated:commands:start -->/,/<!-- generated:commands:end -->/'
+            fi
+          }
+          SYNOPSIS_CHANGED=
+          while IFS= read -r f; do
+            base_block=$(extract_block "$BASE" "$f")
+            head_block=$(extract_block "$HEAD" "$f")
+            if [ "$base_block" != "$head_block" ]; then
+              SYNOPSIS_CHANGED=1
+              break
+            fi
+          done < <(git ls-tree -r --name-only "$HEAD" -- packages/boxel-cli/plugin/skills | grep '/SKILL\.md$' || true)
           if [ -z "$SYNOPSIS_CHANGED" ]; then
             echo "No generated synopsis changes detected; skipping version-bump check."
             exit 0
@@ -184,9 +205,12 @@ jobs:
           set -euo pipefail
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.event.pull_request.head.sha }}"
+          # See note in the previous step — fetch base/head explicitly because
+          # `actions/checkout` uses default depth and $BASE often isn't local.
+          git fetch --no-tags --depth=1 origin "$BASE" "$HEAD"
           SKILLS_CHANGED=$(git diff --name-only "$BASE" "$HEAD" -- \
             'packages/boxel-cli/plugin/skills/boxel-development/**' \
-            'packages/boxel-cli/plugin/skills/boxel-design/**' || true)
+            'packages/boxel-cli/plugin/skills/boxel-design/**')
           if [ -z "$SKILLS_CHANGED" ]; then
             echo "No boxel-skills-derived changes detected; skipping version-bump check."
             exit 0
