@@ -144,11 +144,20 @@ files=(provisioning/datasources/*.yaml)
 echo "apply-datasources: env=${env_name} server=${grafana_server} files=${#files[@]}" >&2
 
 # Validate that every ${VAR} the YAML references is set to a non-empty
-# value before we call envsubst. envsubst substitutes unset / empty vars
-# with empty strings, so a typo in a placeholder name OR an empty SSM
-# value would silently push e.g. `url: ""` / `password: ""` to Grafana.
-# Catching it here lines up with the stricter preflight in apply.sh.
-assert_placeholders_resolved() {
+# value, then envsubst ONLY those refs. Two reasons we pass an explicit
+# allowlist to envsubst rather than letting it substitute everything:
+#
+#   1. envsubst with no args also expands bare `$VAR` (no braces). If a
+#      datasource entry ever embeds shell-meta or Grafana template syntax,
+#      an empty allowlist would silently empty-substitute it. Pinning to
+#      the discovered ${UPPER_VAR} refs keeps everything else literal.
+#   2. envsubst substitutes unset / empty vars with empty strings, so a
+#      typo in a placeholder name OR an empty SSM value would silently
+#      push e.g. `url: ""` / `password: ""` to Grafana. The validate step
+#      catches that before envsubst runs.
+#
+# Same shape as apply-alerting.sh and render-config.sh.
+resolve_placeholders() {
   local raw="$1" file="$2"
   local refs ref name
   refs="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' <<<"$raw" | sort -u || true)"
@@ -157,6 +166,11 @@ assert_placeholders_resolved() {
     name="${ref#\$\{}"; name="${name%\}}"
     [[ -n "${!name:-}" ]] || fail "${file}: \${${name}} referenced but not set (or empty) in environment"
   done <<<"$refs"
+  if [[ -n "$refs" ]]; then
+    envsubst "$(tr '\n' ' ' <<<"$refs")" <<<"$raw"
+  else
+    printf '%s\n' "$raw"
+  fi
 }
 
 for f in "${files[@]}"; do
@@ -167,8 +181,7 @@ for f in "${files[@]}"; do
   # through the same path — Grafana's HTTP API accepts it on POST/PUT
   # exactly as it appears in the file-provisioning shape.
   yq -o json -I0 '.datasources[]' "$f" | while IFS= read -r raw; do
-    assert_placeholders_resolved "$raw" "$f"
-    payload="$(envsubst <<<"$raw")"
+    payload="$(resolve_placeholders "$raw" "$f")"
     upsert "$payload"
   done
 done

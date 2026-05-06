@@ -37,6 +37,11 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
       #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      #   /staging/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
+      #                                      button panels for `Authorization:
+      #                                      Bearer ${grafana_secret}`; matches
+      #                                      the realm-server task's existing
+      #                                      shared secret)
       # If the role doesn't exist or is missing one of those grants, the
       # configure-aws-credentials step below will succeed but the SSM
       # fetch step will fail with AccessDenied — apply the infra config first.
@@ -97,6 +102,7 @@ jobs:
           fetch BOXEL_DB_NAME          /staging/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+          fetch GRAFANA_SECRET         /staging/boxel/GRAFANA_SECRET       --with-decryption
 
       - name: Lint
         # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time
