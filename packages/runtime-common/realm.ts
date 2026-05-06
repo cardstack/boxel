@@ -3219,10 +3219,9 @@ export class Realm {
         // attachRealmInfo() and (re)populated the realm-info cache —
         // so the cached hash is current as of this response.
         await this.getRealmInfo();
-        let etag = buildCardJsonEtag(
-          entry.indexedAt,
-          this.getCachedRealmInfoHash(),
-        );
+        let etag = this.hasForeignRealmDeps(entry.deps)
+          ? undefined
+          : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
         return createResponse({
           body: JSON.stringify(existingDoc, null, 2),
           init: {
@@ -3353,10 +3352,10 @@ export class Realm {
     // attachRealmInfo(), but only when entry was a non-error doc.
     // On the error fallback we may still need to populate it.
     await this.getRealmInfo();
-    let etag = buildCardJsonEtag(
-      entry && entry.type !== 'error' ? entry.indexedAt : undefined,
-      this.getCachedRealmInfoHash(),
-    );
+    let etag =
+      entry && entry.type !== 'error' && !this.hasForeignRealmDeps(entry.deps)
+        ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
+        : undefined;
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
@@ -3370,6 +3369,47 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // Card+JSON ETags are unsafe when the card has dependencies that live
+  // in OTHER realms — `index-writer.calculateInvalidations` filters
+  // dependents by `realm_url = $thisRealm` (see the comment there:
+  // "probably need to reevaluate this condition when we get to cross
+  // realm invalidation"), so a foreign card change propagates to the
+  // foreign realm's `indexed_at` but never to ours. With cross-realm
+  // invalidation off, a stable local `indexed_at` does NOT mean the
+  // assembled `included[]` is current — `loadLinks` will re-fetch the
+  // foreign card via HTTP and may surface new content. To avoid
+  // serving stale 304s, suppress ETag emission entirely when any dep
+  // points outside this realm.
+  private hasForeignRealmDeps(deps: string[] | null | undefined): boolean {
+    if (!deps?.length) {
+      return false;
+    }
+    for (let dep of deps) {
+      if (this.isForeignRealmDep(dep)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isForeignRealmDep(dep: string): boolean {
+    // Registered prefix references (`@cardstack/...`) and host-hosted
+    // module pseudo-URLs (`packages/...`, `https://cardstack.com/base/...`)
+    // are stable platform code, not consumer-realm-mutable instance data;
+    // they're always present on every published card and treating them as
+    // foreign would suppress ETags universally — defeating the
+    // optimization. The dependency we actually care about is a card
+    // *instance* in another realm; instance deps come through as absolute
+    // http(s) URLs whose origin matches a real realm.
+    if (!dep.startsWith('http://') && !dep.startsWith('https://')) {
+      return false;
+    }
+    if (dep.startsWith('https://cardstack.com/base/')) {
+      return false;
+    }
+    return !dep.startsWith(this.url);
   }
 
   private cardJsonCacheControl(requestContext: RequestContext): string {
@@ -3428,7 +3468,9 @@ export class Realm {
 
       let cacheControl = this.cardJsonCacheControl(requestContext);
       let etag: string | undefined;
+      let hasForeignDeps = this.hasForeignRealmDeps(instanceEntry.deps);
       if (
+        !hasForeignDeps &&
         instanceEntry.type === 'instance' &&
         instanceEntry.indexedAt != null
       ) {
@@ -3523,11 +3565,16 @@ export class Realm {
       // recent read and may differ from the first peek if a write landed
       // between the two queries. Re-read the realm-info hash too so a
       // race against a /_config PATCH between the early peek and the
-      // cardDocument() call resolves to the post-PATCH hash.
-      let responseEtag = buildCardJsonEtag(
-        maybeError.indexedAt,
-        this.getCachedRealmInfoHash(),
-      );
+      // cardDocument() call resolves to the post-PATCH hash. Suppress
+      // the response ETag too if the doc has foreign-realm deps —
+      // emitting one a 304 path can never honor would only mislead
+      // clients into sending validators we'll always reject.
+      let responseEtag = hasForeignDeps
+        ? undefined
+        : buildCardJsonEtag(
+            maybeError.indexedAt,
+            this.getCachedRealmInfoHash(),
+          );
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
