@@ -206,11 +206,15 @@ module(basename(__filename), function () {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         );
+      // Card+json is now ETag-cacheable (CS-11010): the realm advertises
+      // public/private + max-age=0 + must-revalidate so browsers always
+      // revalidate, but a matching If-None-Match short-circuits to 304.
       assert.strictEqual(
         response.headers['cache-control'],
-        'no-store, no-cache, must-revalidate',
+        'public, max-age=0, must-revalidate',
         'cache control header is set correctly',
       );
+      assert.ok(response.headers['etag'], 'ETag header is present');
     });
 
     test('serves file meta with dedicated accept header', async function (assert) {
@@ -632,6 +636,62 @@ module(basename(__filename), function () {
           updatedCardResponse.body.data.meta.realmInfo.name,
           'Updated Realm Name',
           'card realmInfo reflects updated realm name without re-indexing',
+        );
+      });
+
+      test('card ETag invalidates after realm config change so old If-None-Match does not 304 stale realmInfo', async function (assert) {
+        // Capture the pre-PATCH ETag.
+        let initialResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(initialResponse.status, 200, 'initial GET succeeds');
+        let initialEtag = initialResponse.headers['etag'];
+        assert.ok(initialEtag, 'initial response carries an ETag');
+
+        // Change the realm name — this nulls the cached realmInfo without
+        // touching boxel_index, so a naive `indexed_at`-only ETag would
+        // still match and 304 with stale `meta.realmInfo`. The fix folds
+        // a hash of the realmInfo into the ETag base.
+        let patchResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { name: 'Etag Invalidation Test Realm' },
+            },
+          });
+        assert.strictEqual(patchResponse.status, 200, 'config patch succeeded');
+
+        // Replay the GET with the OLD ETag. It must NOT 304: the assembled
+        // body now has a different `meta.realmInfo.name`, so the validator
+        // has to recognize that as a content change.
+        let revalidationResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json')
+          .set('If-None-Match', initialEtag);
+        assert.strictEqual(
+          revalidationResponse.status,
+          200,
+          'old ETag does not match after /_config PATCH; server returns full 200',
+        );
+        assert.notStrictEqual(
+          revalidationResponse.headers['etag'],
+          initialEtag,
+          'fresh response carries a different ETag',
+        );
+        assert.strictEqual(
+          revalidationResponse.body.data.meta.realmInfo.name,
+          'Etag Invalidation Test Realm',
+          'fresh response reflects the post-PATCH realm name',
         );
       });
 

@@ -316,6 +316,25 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
+// Card+JSON ETag = `<indexed_at>-<realmInfoHash>:card`. Combines the
+// per-card index timestamp (which captures direct writes and
+// dependency-triggered reindexes) with a hash of the local realm's
+// info — the only request-time mutation `attachRealmInfo()` makes
+// that isn't visible to the index. A null indexedAt suppresses the
+// ETag entirely; a null realmInfoHash falls back to the indexed_at
+// alone, which keeps `<indexed_at>:card` working in the rare case
+// where the cache was nulled and somehow hasn't been repopulated.
+function buildCardJsonEtag(
+  indexedAt: number | null | undefined,
+  realmInfoHash: string | undefined,
+): string | undefined {
+  if (indexedAt == null) {
+    return undefined;
+  }
+  let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
+  return `${base}:${CARD_JSON_ETAG_VARIANT}`;
+}
+
 function computeContentHash(content: string | Uint8Array): string {
   try {
     if (content instanceof Uint8Array) {
@@ -531,6 +550,12 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #cachedRealmInfo: RealmInfo | null = null;
+  // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
+  // card+json ETag so a /_config PATCH (or any other path that nulls
+  // `#cachedRealmInfo`) invalidates cached card responses, even
+  // though the index row's `indexed_at` doesn't bump on a config
+  // change. Recomputed lazily alongside the cached realm info.
+  #cachedRealmInfoHash: string | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -1094,13 +1119,13 @@ export class Realm {
     // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
     // baked into the prerendered HTML — clearing only after the pass
     // would be too late.
-    this.#cachedRealmInfo = null;
+    this.invalidateCachedRealmInfo();
     let { completed } = this.#realmIndexUpdater.publishFullIndex(
       priority ?? systemInitiatedPriority,
       { clearLastModified: opts?.clearLastModified },
     );
     await completed;
-    this.#cachedRealmInfo = null;
+    this.invalidateCachedRealmInfo();
   }
 
   async flushUpdateEvents() {
@@ -1297,7 +1322,7 @@ export class Realm {
           (f) => f === '.realm.json' || f === 'realm.json',
         )
       ) {
-        this.#cachedRealmInfo = null;
+        this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
         eventName: 'update',
@@ -3190,9 +3215,13 @@ export class Realm {
         let createdAt = await this.getCreatedTime(
           this.paths.local(url) + '.json',
         );
-        let etag = buildEtag(
-          entry.indexedAt ?? undefined,
-          CARD_JSON_ETAG_VARIANT,
+        // entry.doc came from cardDocument(), which already called
+        // attachRealmInfo() and (re)populated the realm-info cache —
+        // so the cached hash is current as of this response.
+        await this.getRealmInfo();
+        let etag = buildCardJsonEtag(
+          entry.indexedAt,
+          this.getCachedRealmInfoHash(),
         );
         return createResponse({
           body: JSON.stringify(existingDoc, null, 2),
@@ -3319,11 +3348,14 @@ export class Realm {
         },
       });
     }
-    let etag = buildEtag(
-      entry && entry.type !== 'error'
-        ? (entry.indexedAt ?? undefined)
-        : undefined,
-      CARD_JSON_ETAG_VARIANT,
+    // Same rationale as the no-op short-circuit branch above:
+    // cardDocument() above primed the realm-info cache via
+    // attachRealmInfo(), but only when entry was a non-error doc.
+    // On the error fallback we may still need to populate it.
+    await this.getRealmInfo();
+    let etag = buildCardJsonEtag(
+      entry && entry.type !== 'error' ? entry.indexedAt : undefined,
+      this.getCachedRealmInfoHash(),
     );
     return createResponse({
       body: JSON.stringify(doc, null, 2),
@@ -3367,7 +3399,19 @@ export class Realm {
     let url = this.paths.fileURL(localPath);
     let start = Date.now();
     try {
-      // Peek at the index entry first to compute the ETag without paying
+      // Prime the realm-info cache up front so the ETag base picks up
+      // request-time mutations that don't bump `indexed_at` —
+      // specifically `attachRealmInfo()` which injects `meta.realmInfo`
+      // (name / icon / `lastPublishedAt`) at response-assembly time.
+      // A `/_config` PATCH or publish nulls `#cachedRealmInfo`, the
+      // next `getRealmInfo()` repopulates it AND its hash, and the
+      // hash flips — so old ETags from before the config change no
+      // longer match. Without this, a 304 here would serve a body
+      // whose `meta.realmInfo` is stale despite no re-indexing.
+      await this.getRealmInfo();
+      let realmInfoHash = this.getCachedRealmInfoHash();
+
+      // Peek at the index entry next to compute the ETag without paying
       // the loadLinks fan-out cost. On a cache hit (If-None-Match matches),
       // we can return 304 in ~5ms instead of the ~100ms+ that the full
       // assembly costs against a card with many included resources.
@@ -3388,7 +3432,7 @@ export class Realm {
         instanceEntry.type === 'instance' &&
         instanceEntry.indexedAt != null
       ) {
-        etag = buildEtag(instanceEntry.indexedAt, CARD_JSON_ETAG_VARIANT);
+        etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
         if (etag && request.headers.get('if-none-match') === etag) {
           return createResponse({
             requestContext,
@@ -3477,10 +3521,12 @@ export class Realm {
       let createdAt = await this.getCreatedTime(pathForDb);
       // Prefer the indexedAt from the just-loaded doc — it's the most
       // recent read and may differ from the first peek if a write landed
-      // between the two queries.
-      let responseEtag = buildEtag(
-        maybeError.indexedAt ?? undefined,
-        CARD_JSON_ETAG_VARIANT,
+      // between the two queries. Re-read the realm-info hash too so a
+      // race against a /_config PATCH between the early peek and the
+      // cardDocument() call resolves to the post-PATCH hash.
+      let responseEtag = buildCardJsonEtag(
+        maybeError.indexedAt,
+        this.getCachedRealmInfoHash(),
       );
       return createResponse({
         body: JSON.stringify(card, null, 2),
@@ -4743,8 +4789,24 @@ export class Realm {
   async getRealmInfo(): Promise<RealmInfo> {
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
+      this.#cachedRealmInfoHash = computeContentHash(
+        JSON.stringify(this.#cachedRealmInfo),
+      );
     }
     return this.#cachedRealmInfo;
+  }
+
+  // Snapshot of the realm-info hash used as part of the card+json ETag.
+  // Returns undefined if the cache has been invalidated since the last
+  // `getRealmInfo()` call — callers should call `getRealmInfo()` first
+  // (which we already do on every getCard request) to refresh the hash.
+  private getCachedRealmInfoHash(): string | undefined {
+    return this.#cachedRealmInfoHash ?? undefined;
+  }
+
+  private invalidateCachedRealmInfo(): void {
+    this.#cachedRealmInfo = null;
+    this.#cachedRealmInfoHash = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -5108,7 +5170,7 @@ export class Realm {
       });
     }
 
-    this.#cachedRealmInfo = null;
+    this.invalidateCachedRealmInfo();
 
     let realmInfo = await this.parseRealmInfo();
     let doc = {
