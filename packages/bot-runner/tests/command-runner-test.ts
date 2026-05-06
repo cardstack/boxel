@@ -84,6 +84,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -228,6 +229,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -447,6 +449,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -541,6 +544,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -678,6 +682,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -890,6 +895,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
@@ -1009,6 +1015,7 @@ module('command runner', () => {
     ]);
     let dbAdapter = {
       kind: 'pg',
+      notify: async () => {},
       isClosed: false,
       execute: async (sql: string, opts?: ExecuteOptions) => {
         if (sql.includes('FROM bot_commands WHERE bot_id =')) {
