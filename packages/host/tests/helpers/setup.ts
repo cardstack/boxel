@@ -7,10 +7,12 @@ import {
   setupApplicationTest as emberSetupApplicationTest,
   setupRenderingTest as emberSetupRenderingTest,
 } from 'ember-qunit';
+import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
+import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
 
 import { clearRemoteRealmCache } from './realm-server-mock/routes';
 
@@ -285,9 +287,20 @@ function formatErrorForLog(error: unknown): string {
   return String(error);
 }
 
+// Seed the AI Assistant open/closed preference to 'false' before each test so
+// the existing test helpers (which click to open) are not double-toggled by
+// the persistence behavior added in CS-11071. Keeping tests deterministic and
+// matching the historical default of "panel closed until the test opens it".
+function seedAiAssistantClosed(hooks: NestedHooks) {
+  hooks.beforeEach(function () {
+    window.localStorage.setItem(AiAssistantOpen, 'false');
+  });
+}
+
 export function setupApplicationTest(hooks: NestedHooks) {
   emberSetupApplicationTest(hooks);
   setupWindowMock(hooks);
+  seedAiAssistantClosed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
@@ -307,6 +320,7 @@ export function setupApplicationTest(hooks: NestedHooks) {
 export function setupRenderingTest(hooks: NestedHooks) {
   emberSetupRenderingTest(hooks);
   setupWindowMock(hooks);
+  seedAiAssistantClosed(hooks);
   setupFetchDebugging(hooks);
   setupUnhandledRejectionDiagnostics(hooks);
   hooks.afterEach(async function () {
