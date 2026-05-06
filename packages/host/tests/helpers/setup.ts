@@ -8,6 +8,7 @@ import {
   setupRenderingTest as emberSetupRenderingTest,
 } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
+import * as QUnit from 'qunit';
 
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
@@ -26,12 +27,20 @@ import { cleanupMonacoEditorModels } from './index';
 const inFlightFetches = new Map<number, string>();
 let nextFetchId = 0;
 
+// Track the most recent failed fetches per test so a "Promise rejected during X"
+// failure (which surfaces the generic browser TypeError "A network error
+// occurred." with no URL) can be correlated with the actual request that blew
+// up. Each entry is `${method} ${url}: ${reason}`; cleared in beforeEach.
+const recentFailedFetches: string[] = [];
+const RECENT_FAILED_FETCHES_LIMIT = 20;
+
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
 
   hooks.beforeEach(function () {
     inFlightFetches.clear();
+    recentFailedFetches.length = 0;
     if (!globalThis.fetch) {
       return;
     }
@@ -44,9 +53,9 @@ function setupFetchDebugging(hooks: NestedHooks) {
       try {
         return await boundFetch(input, init);
       } catch (error) {
-        console.error(
-          `[test-fetch] ${method} ${url} failed: ${formatErrorForLog(error)}`,
-        );
+        let reason = formatErrorForLog(error);
+        console.error(`[test-fetch] ${method} ${url} failed: ${reason}`);
+        rememberFailedFetch(method, url, reason);
         throw error;
       } finally {
         inFlightFetches.delete(id);
@@ -65,10 +74,25 @@ function setupFetchDebugging(hooks: NestedHooks) {
   });
 }
 
+function rememberFailedFetch(method: string, url: string, reason: string) {
+  recentFailedFetches.push(`${method} ${url}: ${reason}`);
+  if (recentFailedFetches.length > RECENT_FAILED_FETCHES_LIMIT) {
+    recentFailedFetches.splice(
+      0,
+      recentFailedFetches.length - RECENT_FAILED_FETCHES_LIMIT,
+    );
+  }
+}
+
 // surface unhandled rejections during tests with full stacks + in-flight URLs
 function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
   let handler: ((event: PromiseRejectionEvent) => void) | undefined;
   let target: Window | undefined;
+  let originalOnUncaughtException:
+    | ((error: unknown) => void)
+    | undefined
+    | null;
+  let wrappedOnUncaughtException: ((error: unknown) => void) | undefined;
 
   hooks.beforeEach(function () {
     // Host tests run in the browser; if `window` is missing or doesn't expose
@@ -78,24 +102,45 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
       typeof window.addEventListener === 'function'
         ? window
         : undefined;
-    if (!target) {
-      return;
-    }
-    handler = (event: PromiseRejectionEvent) => {
-      // Observation only — do NOT call event.preventDefault(). QUnit's own
-      // unhandled-rejection handling must still run and fail the test.
-      let inFlightSnapshot = Array.from(inFlightFetches.values());
-      console.error(
-        [
+    if (target) {
+      handler = (event: PromiseRejectionEvent) => {
+        // Observation only — do NOT call event.preventDefault(). QUnit's own
+        // unhandled-rejection handling must still run and fail the test.
+        logRejectionDiagnostics(
           '[test-unhandled-rejection]',
           formatRejectionReason(event.reason),
-          inFlightSnapshot.length
-            ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
-            : 'in-flight fetches at rejection time: <none>',
-        ].join('\n'),
-      );
+        );
+      };
+      target.addEventListener('unhandledrejection', handler);
+    }
+
+    // Wrap QUnit.onUncaughtException so QUnit-handled rejections (e.g.,
+    // "Promise rejected during X: A network error occurred." — which propagates
+    // via the test's awaited promise chain rather than firing a global
+    // `unhandledrejection` event) also dump in-flight + recently-failed fetch
+    // context. Without this hook, the failure message exposes only the generic
+    // browser TypeError with no URL, making field-playground / code-submode
+    // network-error flakes effectively unattributable.
+    let qunitGlobal = QUnit as unknown as {
+      onUncaughtException?: (error: unknown) => void;
     };
-    target.addEventListener('unhandledrejection', handler);
+    if (qunitGlobal && typeof qunitGlobal === 'object') {
+      originalOnUncaughtException = qunitGlobal.onUncaughtException;
+      wrappedOnUncaughtException = (error: unknown) => {
+        try {
+          logRejectionDiagnostics(
+            '[test-qunit-uncaught]',
+            formatRejectionReason(error),
+          );
+        } catch (_e) {
+          // never let diagnostic logging swallow the original failure
+        }
+        if (typeof originalOnUncaughtException === 'function') {
+          originalOnUncaughtException(error);
+        }
+      };
+      qunitGlobal.onUncaughtException = wrappedOnUncaughtException;
+    }
   });
 
   hooks.afterEach(function () {
@@ -104,7 +149,39 @@ function setupUnhandledRejectionDiagnostics(hooks: NestedHooks) {
     }
     handler = undefined;
     target = undefined;
+
+    let qunitGlobal = QUnit as unknown as {
+      onUncaughtException?: (error: unknown) => void;
+    };
+    if (
+      qunitGlobal &&
+      typeof qunitGlobal === 'object' &&
+      qunitGlobal.onUncaughtException === wrappedOnUncaughtException
+    ) {
+      qunitGlobal.onUncaughtException = originalOnUncaughtException as
+        | ((error: unknown) => void)
+        | undefined;
+    }
+    wrappedOnUncaughtException = undefined;
+    originalOnUncaughtException = undefined;
   });
+}
+
+function logRejectionDiagnostics(prefix: string, formattedReason: string) {
+  let inFlightSnapshot = Array.from(inFlightFetches.values());
+  let recent = recentFailedFetches.slice();
+  console.error(
+    [
+      prefix,
+      formattedReason,
+      inFlightSnapshot.length
+        ? `in-flight fetches at rejection time (${inFlightSnapshot.length}):\n  ${inFlightSnapshot.join('\n  ')}`
+        : 'in-flight fetches at rejection time: <none>',
+      recent.length
+        ? `recent failed fetches this test (${recent.length}):\n  ${recent.join('\n  ')}`
+        : 'recent failed fetches this test: <none>',
+    ].join('\n'),
+  );
 }
 
 function formatRejectionReason(reason: unknown): string {
