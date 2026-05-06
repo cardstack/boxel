@@ -1,14 +1,3 @@
-import {
-  Isolated,
-  Embedded,
-  Fitted,
-  Atom,
-  Edit,
-  Head,
-  Markdown,
-  type Icon,
-} from '@cardstack/boxel-ui/icons';
-
 export type Format =
   | 'isolated'
   | 'embedded'
@@ -18,7 +7,7 @@ export type Format =
   | 'head'
   | 'metadata'
   | 'markdown'
-  | 'form-edit';
+  | 'form';
 
 export function isValidFormat(
   format: string,
@@ -36,26 +25,6 @@ export const formats: Format[] = [
   'head',
   'markdown',
 ];
-
-export type FormatWithIcon = {
-  format: Format;
-  icon?: Icon | null;
-};
-
-export const formatIcons: Partial<Record<Format, Icon>> = {
-  isolated: Isolated,
-  embedded: Embedded,
-  atom: Atom,
-  fitted: Fitted,
-  edit: Edit,
-  head: Head,
-  markdown: Markdown,
-};
-
-export const formatsWithIcons: FormatWithIcon[] = formats.map((f) => ({
-  format: f,
-  icon: formatIcons[f] ?? null,
-}));
 
 export const FITTED_FORMATS = [
   {

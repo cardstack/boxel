@@ -51,7 +51,9 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
+import FormatChooser from '../code-submode/format-chooser';
 import PillFormatChooser from '../code-submode/pill-format-chooser';
+import { type FormatWithIcon, formatsWithIcons, Form } from '../card-formats';
 
 import FittedFormatGallery from './fitted-format-gallery';
 import MarkdownPreview from './markdown-preview';
@@ -87,7 +89,7 @@ export default class PreviewPanel extends Component<Signature> {
 
   private get format(): Format {
     let format = this.args.format ?? 'isolated';
-    if (!this.availableFormats.includes(format)) {
+    if (!this.availableFormats.map((f) => f.format).includes(format)) {
       return 'isolated';
     }
     return format;
@@ -176,6 +178,33 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get availableFormats() {
+    let allFormats = formatsWithIcons;
+    if (this.isCard) {
+      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
+      const hasCustomEdit = ctor.hasCustomEditTemplate;
+      // Insert 'form' (toggle standard view) right after 'edit' ONLY
+      // when this card has a custom edit template. Note: a card that
+      // shares the same component for edit and isolated (e.g.
+      // Polymorph: `static edit = PolymorphIsolated`) still counts as
+      // having a custom edit — `hasCustomEditTemplate` is `edit !==
+      // CardDef.edit`, regardless of whether it equals isolated.
+      const result: FormatWithIcon[] = [];
+      for (const f of allFormats) {
+        result.push(f);
+        if (f.format === 'edit' && hasCustomEdit) {
+          result.push({ format: 'form', icon: Form });
+        }
+      }
+      return result;
+    }
+    let formats = allFormats.filter((f) => f.format !== 'edit');
+    if (this.isFileDef) {
+      return [...formats, { format: 'metadata' as Format }];
+    }
+    return formats;
+  }
+
+  private get pillAvailableFormats() {
     if (this.isCard) {
       const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
       const hasCustomEdit = ctor.hasCustomEditTemplate;
@@ -320,12 +349,12 @@ export default class PreviewPanel extends Component<Signature> {
         </CardContainer>
       </div>
     </div>
-
-    <div class='card-renderer-format-chooser'>
-      <PillFormatChooser
+    <div class='card-renderer-format-chooser-container'>
+      <FormatChooser
+        class='card-renderer-format-chooser'
         @format={{this.format}}
         @setFormat={{@setFormat}}
-        @formats={{this.availableFormats}}
+        @formatsWithIcons={{this.availableFormats}}
       />
     </div>
 
@@ -380,7 +409,7 @@ export default class PreviewPanel extends Component<Signature> {
          shell would hug the chooser and create a stuck-compact loop
          when room becomes available again). The dark capsule +
          radius lives on the chooser itself in this layout. */
-      .card-renderer-format-chooser {
+      .card-renderer-format-chooser-container {
         position: absolute;
         bottom: var(--boxel-sp-sm);
         left: 0;
@@ -388,10 +417,13 @@ export default class PreviewPanel extends Component<Signature> {
         display: flex;
         justify-content: center;
         padding: 0 var(--boxel-sp-sm);
-        pointer-events: none;
       }
-      .card-renderer-format-chooser :deep(.pill-format-chooser) {
-        pointer-events: auto;
+      .card-renderer-format-chooser {
+        --boxel-format-chooser-border-color: var(--boxel-400);
+        margin: 0;
+        max-width: 100%;
+        box-shadow: none;
+        border-radius: var(--boxel-border-radius-2xl);
       }
       :deep(.fitted-format-gallery) {
         padding: var(--boxel-sp-sm);
@@ -399,13 +431,6 @@ export default class PreviewPanel extends Component<Signature> {
       .preview {
         box-shadow: none;
         border-radius: 0;
-      }
-      :deep(.format-chooser) {
-        --boxel-format-chooser-border-color: var(--boxel-400);
-        margin: 0;
-        width: 100%;
-        box-shadow: none;
-        border-radius: var(--boxel-border-radius);
       }
     </style>
   </template>
