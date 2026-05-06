@@ -4,6 +4,7 @@ import {
   CheckpointManager,
   type Checkpoint,
 } from '../../lib/checkpoint-manager';
+import { findCheckpoint } from '../../lib/find-checkpoint';
 import { prompt } from '../../lib/prompt';
 import {
   BOLD,
@@ -177,34 +178,6 @@ async function restoreCheckpointStep(
       error: `Failed to restore checkpoint: ${errorMessage(e)}`,
     };
   }
-}
-
-type FindResult =
-  | { kind: 'found'; target: Checkpoint }
-  | { kind: 'none' }
-  | { kind: 'ambiguous'; matches: Checkpoint[] };
-
-function findCheckpoint(ref: string, checkpoints: Checkpoint[]): FindResult {
-  const trimmed = ref.trim();
-  // Empty refs would `startsWith('')`-match every hash and silently restore
-  // the newest checkpoint — guard explicitly.
-  if (trimmed === '') return { kind: 'none' };
-  // Digit-only input is always an index lookup. Falling through to hash
-  // matching when out of range would silently match short hashes whose prefix
-  // happens to be digits.
-  if (/^\d+$/.test(trimmed)) {
-    const num = parseInt(trimmed, 10);
-    if (num >= 1 && num <= checkpoints.length) {
-      return { kind: 'found', target: checkpoints[num - 1] };
-    }
-    return { kind: 'none' };
-  }
-  const matches = checkpoints.filter(
-    (cp) => cp.hash.startsWith(trimmed) || cp.shortHash === trimmed,
-  );
-  if (matches.length === 0) return { kind: 'none' };
-  if (matches.length === 1) return { kind: 'found', target: matches[0] };
-  return { kind: 'ambiguous', matches };
 }
 
 /**
