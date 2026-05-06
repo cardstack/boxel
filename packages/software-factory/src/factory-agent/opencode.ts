@@ -271,7 +271,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
         });
 
       try {
-        await waitForSessionIdle(client, sessionId);
+        await waitForSessionIdle(client, sessionId, this.config.workspaceDir);
       } finally {
         // Best-effort: drain any pending prompt resolution before
         // teardown so its socket gets closed cleanly.
@@ -548,19 +548,24 @@ function serializeSignalResult(result: unknown): unknown {
 }
 
 /**
- * Poll `client.session.status` until our session settles in `idle`. Used
- * as a workaround for the unreliable completion signals on
- * `session.prompt` and `client.event.subscribe` in opencode 1.14.34.
+ * Poll `client.session.status` until our session settles. Used as a
+ * workaround for the unreliable completion signals on `session.prompt`
+ * and `client.event.subscribe` in opencode 1.14.34.
  *
- * The session is `idle` immediately after creation too, so we wait for
- * the first non-idle observation (the transition into `busy` or `retry`
- * driven by the prompt request) before treating a subsequent `idle` as
- * "the loop finished". `MAX_WAIT_MS` bounds the wait so a hung session
- * can't trap the factory loop forever.
+ * Empirically, `/session/status` returns a map of *currently busy*
+ * sessions: an entry appears when the session enters `busy`/`retry` and
+ * disappears once the session goes idle. So we wait for our sessionId
+ * to first show up (the prompt transitioned the session into busy) and
+ * then for it to either report `type: 'idle'` or vanish from the map.
+ * Both paths mean "the loop finished". The `directory` query has to
+ * match the directory used at session-create time; otherwise the
+ * response is `{}` regardless of session state. `MAX_WAIT_MS` bounds
+ * the wait so a hung session can't trap the factory loop forever.
  */
 async function waitForSessionIdle(
   client: { session: { status: (opts?: any) => Promise<unknown> } },
   sessionId: string,
+  workspaceDir: string,
 ): Promise<void> {
   const POLL_INTERVAL_MS = 750;
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
@@ -575,16 +580,24 @@ async function waitForSessionIdle(
       );
     }
 
-    let res = (await client.session.status()) as {
+    let res = (await client.session.status({
+      query: { directory: workspaceDir },
+    })) as {
       data?: Record<string, { type: string }>;
     };
     let status = res.data?.[sessionId];
     if (status) {
+      // Session is in the status map — it's working (busy / retry) or
+      // the rare moment where it's reporting idle while still listed.
       if (status.type !== 'idle') {
         observedBusy = true;
       } else if (observedBusy) {
         return;
       }
+    } else if (observedBusy) {
+      // Session was previously in the map and has now disappeared —
+      // opencode dropped the entry on idle transition. We're done.
+      return;
     }
 
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
