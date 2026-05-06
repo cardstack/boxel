@@ -1240,18 +1240,23 @@ export class RealmIndexQueryEngine {
         if (item.isRoot) {
           continue;
         }
-        if (item.resource.id == null) {
+        // Non-root items always originate from the batched index lookup
+        // (which returns CardResource<Saved>) or a cross-realm fetch (which
+        // is normalized to the same shape), so the runtime type is always
+        // strictly assignable to included[].
+        let resource = item.resource as CardResource<Saved> | FileMetaResource;
+        if (resource.id == null) {
           continue;
         }
-        if (omitSet.has(item.resource.id)) {
+        if (omitSet.has(resource.id)) {
           continue;
         }
-        if (included.find((r) => r.id === item.resource.id)) {
+        if (included.find((r) => r.id === resource.id)) {
           continue;
         }
         let rewritten = cloneDeep({
-          ...item.resource,
-          ...{ links: { self: item.resource.id } },
+          ...resource,
+          ...{ links: { self: resource.id } },
         });
         visitInstanceURLs(rewritten, (url, setURL) =>
           absolutizeInstanceURL(url, rewritten.id, setURL),
