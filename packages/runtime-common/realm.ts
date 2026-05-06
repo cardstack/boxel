@@ -1047,7 +1047,7 @@ export class Realm {
           requestContext,
         });
       }
-      if (!this.paths.inRealm(rri(parsedURL.href))) {
+      if (!this.paths.inRealm(parsedURL)) {
         return badRequest({
           message: `URL is not in realm: ${parsedURL.href}`,
           requestContext,
@@ -5389,7 +5389,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(rri(parsed.href));
+  return baseRealm.inRealm(parsed);
 }
 
 function lastModifiedHeader(

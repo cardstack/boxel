@@ -32,6 +32,7 @@ import {
 
 import {
   hasExecutableExtension,
+  RealmPaths,
   ri,
   rri,
   SupportedMimeType,
@@ -989,13 +990,12 @@ export default class Workspace extends Component<Signature> {
     this.deleteError = undefined;
 
     try {
+      let realmPath = new RealmPaths(ri(this.args.realmURL));
       let isActiveWorkspace =
         this.operatorModeStateService.realmURL === this.args.realmURL ||
         this.operatorModeStateService
           .getOpenCardIds()
-          .some((cardId) =>
-            this.realm.contains(ri(this.args.realmURL), rri(cardId)),
-          ) ||
+          .some((cardId) => realmPath.inRealm(rri(cardId))) ||
         this.operatorModeStateService.codePathString?.startsWith(
           this.args.realmURL,
         );

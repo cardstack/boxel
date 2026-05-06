@@ -26,6 +26,7 @@ import {
   parseSearchURL,
   ri,
   rri,
+  RealmPaths,
   runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -34,7 +35,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
@@ -70,7 +70,6 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
 export class SearchResource<
   T extends CardDef | FileDef = CardDef,
 > extends Resource<Args<T>> {
-  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
@@ -303,8 +302,9 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
+        let realmPath = new RealmPaths(ri(realm));
         let cards = this.instances.filter((card) =>
-          this.realm.contains(ri(realm), rri(card.id)),
+          realmPath.inRealm(rri(card.id)),
         );
         return { realm, cards };
       })

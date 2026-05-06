@@ -21,7 +21,6 @@ import {
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   RealmPaths,
-  rri,
   fetchSessionRoom,
   hasExtension,
   executableExtensions,
@@ -621,7 +620,7 @@ export class RealmServer {
     let legacy = this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
       realmURL.protocol = requestURL.protocol;
-      return new RealmPaths(realmURL).inRealm(rri(requestURL.href));
+      return new RealmPaths(realmURL).inRealm(requestURL);
     });
     if (legacy) {
       return legacy;
@@ -629,7 +628,7 @@ export class RealmServer {
     for (const url of this.reconciler.knownByUrl.keys()) {
       let realmURL = new URL(url);
       realmURL.protocol = requestURL.protocol;
-      if (new RealmPaths(realmURL).inRealm(rri(requestURL.href))) {
+      if (new RealmPaths(realmURL).inRealm(requestURL)) {
         return await this.reconciler.lookupOrMount(url);
       }
     }
