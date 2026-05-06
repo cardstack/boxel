@@ -41,8 +41,8 @@ export interface FactoryEntrypointOptions {
    * OpenRouter API key for direct billing on the `--agent openrouter`
    * path. Read from `--openrouter-api-key <key>` or env
    * `OPENROUTER_API_KEY`. When unset, the OpenRouter path falls
-   * through to the realm-server `_request-forward` proxy (boxel
-   * tokens). Ignored on every other backend.
+   * through to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). Ignored on every other backend.
    */
   openRouterApiKey?: string;
   debug?: boolean;
@@ -149,8 +149,8 @@ export function getFactoryEntrypointUsage(): string {
     '  --openrouter-api-key <key>  OpenRouter API key for the openrouter backend.',
     '                              When set, opencode talks to OpenRouter directly with this key.',
     '                              When unset (and OPENROUTER_API_KEY env is also unset), the',
-    '                              backend falls back to proxying through the realm server',
-    '                              (`_request-forward`) — burns boxel tokens.',
+    '                              backend falls back to the realm server passthrough at',
+    '                              `/_openrouter/chat/completions` — burns boxel tokens.',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',

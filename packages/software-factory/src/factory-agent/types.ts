@@ -10,9 +10,6 @@
 // Constants
 // ---------------------------------------------------------------------------
 
-export const OPENROUTER_CHAT_URL =
-  'https://openrouter.ai/api/v1/chat/completions' as const;
-
 /**
  * Default OpenRouter model when `--agent openrouter` is selected without
  * a `=<model-id>` suffix.
@@ -80,7 +77,8 @@ export interface FactoryAgentConfig {
   client: import('@cardstack/boxel-cli/api').BoxelCLIClient;
   maxSkillTokens?: number;
   /** Call OpenRouter directly with this API key instead of going through the
-   *  realm server `_request-forward` proxy. Useful for local dev / CI. */
+   *  realm-server `/_openrouter/chat/completions` passthrough. Useful for
+   *  local dev / CI. */
   openRouterApiKey?: string;
   /** When true, log prompts sent to the LLM and responses received to stderr. */
   debug?: boolean;

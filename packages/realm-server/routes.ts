@@ -28,6 +28,7 @@ import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
+import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough';
 import handlePostDeployment from './handlers/handle-post-deployment';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
@@ -163,6 +164,13 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_request-forward',
     jwtMiddleware(args.realmSecretSeed),
     handleRequestForward({
+      dbAdapter: args.dbAdapter,
+    }),
+  );
+  router.post(
+    '/_openrouter/chat/completions',
+    jwtMiddleware(args.realmSecretSeed),
+    handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
     }),
   );

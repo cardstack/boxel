@@ -19,14 +19,18 @@
  *        env). Configure opencode with a custom OpenAI-compatible
  *        provider whose baseURL is OpenRouter and Authorization is
  *        the user's bearer.
- *      - **Proxy** — no key. Spin up a tiny localhost HTTP server
- *        that translates OpenAI-style requests into the realm
- *        server's `_request-forward` shape (`{ url, method,
- *        requestBody }`), forwards via JWT-authed `BoxelCLIClient
- *        .authedServerFetch`, and returns the response. Configure
- *        opencode's provider to point at the relay's local URL.
- *        Burns the operator's boxel tokens — same as the prior
- *        `OpenRouterFactoryAgent` proxy mode.
+ *      - **Passthrough** — no key. Point opencode's provider straight
+ *        at the realm server's `_openrouter/chat/completions`
+ *        endpoint and stamp a freshly-fetched server JWT into the
+ *        provider's static `Authorization` header. The realm server
+ *        validates the JWT, looks up the OpenRouter API key
+ *        server-side, forwards verbatim, and bills credits to the
+ *        operator's boxel account — same model the previous
+ *        `_request-forward`-based relay used, just without the
+ *        in-process HTTP hop. The JWT is fetched once per `run()` and
+ *        not refreshed mid-session, but the realm-server JWT lives
+ *        for 7 days so a single ticket run is in no danger of
+ *        outlasting it.
  *
  *   2. **Build MCP server for factory tools.** Spin up an in-process
  *      HTTP MCP server (`@modelcontextprotocol/sdk` Streamable HTTP
@@ -50,14 +54,10 @@
  *      `"factory:done"` / `"factory:clarification"` and we match on
  *      the tag.)
  *
- *   5. **Tear down.** Close opencode, stop the relay server (if any),
- *      stop the MCP HTTP server.
+ *   5. **Tear down.** Close opencode, stop the MCP HTTP server.
  */
 
-import {
-  createServer as createHttpServer,
-  type Server as HttpServer,
-} from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 
@@ -98,7 +98,6 @@ import {
   requireDarkfactoryModuleUrl,
   type PromptLoader,
 } from '../factory-prompt-loader';
-import { OPENROUTER_CHAT_URL } from './types';
 import type {
   AgentContext,
   AgentRunResult,
@@ -131,14 +130,15 @@ const FACTORY_MCP_TOOL_NAMES = new Set([
 export interface OpencodeAgentConfig {
   /** OpenRouter model ID (e.g., `anthropic/claude-opus-4-7`). */
   model: string;
-  /** Realm server URL — used by the proxy-mode relay to reach `_request-forward`. */
+  /** Realm server URL — used in passthrough mode as the base for opencode's provider. */
   realmServerUrl: string;
-  /** Boxel CLI client used by the proxy-mode relay for JWT-authed forward calls. */
+  /** Boxel CLI client — used in passthrough mode to fetch the server JWT we hand opencode. */
   client: import('@cardstack/boxel-cli/api').BoxelCLIClient;
   /**
    * If set, opencode talks to OpenRouter directly with this key in
    * the Authorization header. If unset, the agent falls back to
-   * proxy mode (boxel JWT → realm-server `_request-forward`).
+   * passthrough mode (boxel JWT → realm-server
+   * `/_openrouter/chat/completions`).
    */
   openRouterApiKey?: string;
   /**
@@ -181,7 +181,6 @@ export class OpencodeFactoryAgent implements LoopAgent {
       },
     });
 
-    let relay: { url: string; close: () => Promise<void> } | undefined;
     let providerConfig: OpencodeConfig['provider'];
     if (this.config.openRouterApiKey) {
       providerConfig = buildDirectProviderConfig(
@@ -189,11 +188,17 @@ export class OpencodeFactoryAgent implements LoopAgent {
         this.config.openRouterApiKey,
       );
     } else {
-      relay = await startProxyRelayServer(
+      // Passthrough mode: fetch a server JWT once and stamp it into
+      // the provider's static headers. The realm server's
+      // `/_openrouter/chat/completions` endpoint validates the JWT,
+      // applies the server-side OpenRouter key, and bills credits to
+      // this user.
+      let serverToken = await this.config.client.getServerToken();
+      providerConfig = buildPassthroughProviderConfig(
+        this.config.model,
         this.config.realmServerUrl,
-        this.config.client,
+        serverToken,
       );
-      providerConfig = buildRelayProviderConfig(this.config.model, relay.url);
     }
 
     let { createOpencodeServer, createOpencodeClient } =
@@ -224,7 +229,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
     if (this.config.debug) {
       log.info(
-        `Agent backend: opencode (model=${this.config.model}, mode=${this.config.openRouterApiKey ? 'direct' : 'proxy'})`,
+        `Agent backend: opencode (model=${this.config.model}, mode=${this.config.openRouterApiKey ? 'direct' : 'passthrough'})`,
       );
     }
 
@@ -257,9 +262,6 @@ export class OpencodeFactoryAgent implements LoopAgent {
         // best-effort
       }
       await mcp.close().catch(() => undefined);
-      if (relay) {
-        await relay.close().catch(() => undefined);
-      }
     }
 
     if (captured?.kind === 'done') {
@@ -341,100 +343,42 @@ function buildDirectProviderConfig(
 }
 
 /**
- * Build the opencode provider config for proxy mode.
+ * Build the opencode provider config for passthrough mode.
  *
- * Points opencode at the local relay server (started by
- * `startProxyRelayServer`) which re-shapes OpenAI-style requests into
- * the realm server's `_request-forward` proxy shape.
+ * Points opencode at the realm server's
+ * `/_openrouter/chat/completions` endpoint and stamps a server JWT
+ * into the provider's static `Authorization` header. AI-SDK's
+ * OpenAI-compatible provider appends `/chat/completions` to whatever
+ * `baseURL` we hand it, so we set `baseURL` to `<realmServerUrl>/_openrouter`.
+ *
+ * The realm server validates the JWT (via `jwtMiddleware`), applies
+ * the server-side OpenRouter API key, forwards verbatim, and bills
+ * the operator's credits — same auth + billing model as the previous
+ * relay-based proxy mode, just without the in-process HTTP hop.
  */
-function buildRelayProviderConfig(
+function buildPassthroughProviderConfig(
   model: string,
-  relayUrl: string,
+  realmServerUrl: string,
+  serverToken: string,
 ): OpencodeConfig['provider'] {
+  let baseURL = new URL('_openrouter', realmServerUrl).toString();
   return {
     [FACTORY_PROVIDER_ID]: {
       npm: '@ai-sdk/openai-compatible',
-      name: 'OpenRouter (boxel proxy)',
+      name: 'OpenRouter (boxel passthrough)',
       options: {
-        baseURL: relayUrl,
+        baseURL,
       },
       models: {
         [model]: {
           name: model,
           tool_call: true,
+          headers: {
+            Authorization: serverToken,
+          },
         },
       },
     },
-  };
-}
-
-/**
- * Spin up a localhost HTTP relay server that translates OpenAI-style
- * `/chat/completions` requests into the boxel realm server's
- * `_request-forward` proxy shape, forwards them via the JWT-authed
- * `BoxelCLIClient.authedServerFetch`, and returns the response body
- * verbatim.
- *
- * The relay listens on `127.0.0.1:<random>` and shuts down when
- * `close()` resolves. opencode points its provider at the relay's
- * URL, so from the model's perspective it's just talking to a normal
- * OpenAI-compatible endpoint.
- */
-async function startProxyRelayServer(
-  realmServerUrl: string,
-  client: import('@cardstack/boxel-cli/api').BoxelCLIClient,
-): Promise<{ url: string; close: () => Promise<void> }> {
-  let proxyUrl = new URL('_request-forward', realmServerUrl).toString();
-
-  let server: HttpServer = createHttpServer((req, res) => {
-    if (req.method !== 'POST') {
-      res.statusCode = 405;
-      res.end('relay: only POST is supported');
-      return;
-    }
-
-    let chunks: Buffer[] = [];
-    req.on('data', (c) => chunks.push(Buffer.from(c)));
-    req.on('end', async () => {
-      try {
-        let body = Buffer.concat(chunks).toString('utf8');
-        let response = await client.authedServerFetch(proxyUrl, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: OPENROUTER_CHAT_URL,
-            method: 'POST',
-            requestBody: body,
-          }),
-        });
-        let text = await response.text();
-        res.statusCode = response.status;
-        res.setHeader(
-          'Content-Type',
-          response.headers.get('Content-Type') ?? 'application/json',
-        );
-        res.end(text);
-      } catch (err) {
-        res.statusCode = 502;
-        res.end(
-          `relay: forward failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
-  });
-
-  await new Promise<void>((resolve) => {
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  let port = (server.address() as AddressInfo).port;
-  let url = `http://127.0.0.1:${port}`;
-
-  return {
-    url,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
 

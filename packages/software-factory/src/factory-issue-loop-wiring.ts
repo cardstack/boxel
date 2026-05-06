@@ -74,9 +74,9 @@ export interface IssueLoopWiringConfig {
   /**
    * OpenRouter API key for direct billing. Only honoured when
    * `agent === 'openrouter'`. When unset, the OpenRouter path falls
-   * back to the realm-server `_request-forward` proxy (boxel
-   * tokens). The CLI plumbs this through from `--openrouter-api-key`
-   * or env `OPENROUTER_API_KEY`.
+   * back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). The CLI plumbs this through from
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
    */
   openRouterApiKey?: string;
   debug?: boolean;
@@ -252,9 +252,9 @@ export interface CreateLoopAgentConfig {
   /**
    * Optional OpenRouter API key. When set, the opencode-backed
    * `--agent openrouter` path uses it directly; when unset, the agent
-   * falls back to the realm-server `_request-forward` proxy (boxel
-   * tokens). Read from CLI flag `--openrouter-api-key` or env
-   * `OPENROUTER_API_KEY`.
+   * falls back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). Read from CLI flag
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
    */
   openRouterApiKey?: string;
   realmServerUrl: string;
@@ -334,7 +334,7 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
         config.openRouterApiKey && config.openRouterApiKey.trim() !== ''
           ? config.openRouterApiKey.trim()
           : (process.env.OPENROUTER_API_KEY?.trim() ?? undefined);
-      let mode = apiKey ? 'direct' : 'proxy';
+      let mode = apiKey ? 'direct' : 'passthrough';
       return {
         agent: new OpencodeFactoryAgent({
           model,

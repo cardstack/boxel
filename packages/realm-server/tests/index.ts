@@ -234,6 +234,7 @@ import './transpile-test';
 import './types-endpoint-test';
 import './virtual-network-test';
 import './request-forward-test';
+import './openrouter-passthrough-test';
 import './publish-unpublish-realm-test';
 import './boxel-domain-availability-test';
 import './get-boxel-claimed-domain-test';
