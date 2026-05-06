@@ -105,6 +105,8 @@ services:
       # alloy/config.alloy follows the per-service files via loki.source.file.
       # If you override BOXEL_LOG_DIR for the mise tasks, also export it here
       # (or in a `.env` file beside this compose file) so both ends agree.
+      # Must be an absolute path: the mise tasks and Compose resolve relative
+      # paths from different base directories. dev-log-tee.sh enforces this.
       - ${BOXEL_LOG_DIR:-/tmp/boxel-logs}:/var/log/boxel-host:ro
     depends_on:
       loki:

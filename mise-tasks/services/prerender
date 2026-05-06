@@ -3,6 +3,11 @@
 #MISE depends=["infra:ensure-traefik"]
 #MISE dir="packages/realm-server"
 
+# Propagate the prerender server's exit status through the trailing
+# `| dev-log-tee.sh` pipeline so mise sees crashes instead of the tee stage's
+# clean EOF.
+set -o pipefail
+
 # Tee stdout+stderr to a per-service log file so the local Alloy scraper
 # (packages/observability/alloy/config.alloy) can pick this up via
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.

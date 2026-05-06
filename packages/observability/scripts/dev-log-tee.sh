@@ -23,8 +23,25 @@
 
 set -uo pipefail
 
+# Dev logs include JWTs and request bodies. Default `022` umask would
+# create world-readable files under /tmp; restrict to owner-only.
+umask 077
+
 SERVICE_NAME="${1:?dev-log-tee.sh: missing service name}"
 LOG_DIR="${BOXEL_LOG_DIR:-/tmp/boxel-logs}"
+
+# Reject relative BOXEL_LOG_DIR overrides — the wrapper resolves relative
+# paths from each mise task's `dir=` (packages/realm-server), but Compose
+# resolves them from the compose file directory, so a relative override
+# silently makes the writer and the Alloy bind-mount point at different
+# host directories. The default ("/tmp/boxel-logs") is absolute.
+case "$LOG_DIR" in
+	/*) ;;
+	*)
+		echo "dev-log-tee.sh: BOXEL_LOG_DIR must be an absolute path (got: $LOG_DIR)" >&2
+		exit 1
+		;;
+esac
 
 # Best-effort: tee into the per-service log file if the directory is
 # writable. Otherwise fall through to plain `cat`, so the dev process keeps
