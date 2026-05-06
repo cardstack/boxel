@@ -15,7 +15,7 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
 import InfoIcon from '@cardstack/boxel-icons/info';
 
-import DateField from './date';
+import DateField from 'https://cardstack.com/base/date';
 
 class RecurringPatternFieldEdit extends Component<
   typeof RecurringPatternField
