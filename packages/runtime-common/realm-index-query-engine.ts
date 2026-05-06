@@ -898,6 +898,11 @@ export class RealmIndexQueryEngine {
     },
     opts?: Options,
   ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
+    // Diagnostic correlation id — lets us match log lines from the same
+    // loadLinks invocation across layers when investigating CI failures.
+    let invocationId = `${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     let realmPath = new RealmPaths(realmURL);
     let omitSet = new Set(omit);
     let visited = new Set<string>();
@@ -929,35 +934,53 @@ export class RealmIndexQueryEngine {
       });
     }
 
+    this.#log.debug(
+      `[loadLinks ${invocationId}] start realm=${realmURL.href} roots=${layer.length} omit=${omitSet.size} linkFields=${opts?.linkFields?.length ?? 'none'}`,
+    );
+
+    let layerIndex = 0;
     while (layer.length > 0) {
+      let currentLayerIndex = layerIndex++;
       // Step 1: run populateQueryFields for every resource in this layer in
       // parallel. Each runs an independent searchCards query for its
       // computed query-fields; collapsing those across the layer is a
       // separate optimization (out of scope for CS-11038).
-      await Promise.all(
-        layer.map(async ({ resource, applyLinkFields }) => {
-          let popOpts = applyLinkFields
-            ? opts
-            : opts?.linkFields
-              ? { ...opts, linkFields: undefined }
-              : opts;
-          let storedDefs = (
-            resource.meta as {
-              queryFieldDefs?: Record<string, QueryFieldMeta>;
+      try {
+        await Promise.all(
+          layer.map(async ({ resource, applyLinkFields }) => {
+            let popOpts = applyLinkFields
+              ? opts
+              : opts?.linkFields
+                ? { ...opts, linkFields: undefined }
+                : opts;
+            let storedDefs = (
+              resource.meta as {
+                queryFieldDefs?: Record<string, QueryFieldMeta>;
+              }
+            )?.queryFieldDefs;
+            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
+              await this.populateQueryFieldsFromMeta(
+                resource,
+                realmURL,
+                storedDefs,
+                popOpts,
+              );
+            } else {
+              await this.populateQueryFields(resource, realmURL, popOpts);
             }
-          )?.queryFieldDefs;
-          if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-            await this.populateQueryFieldsFromMeta(
-              resource,
-              realmURL,
-              storedDefs,
-              popOpts,
-            );
-          } else {
-            await this.populateQueryFields(resource, realmURL, popOpts);
-          }
-        }),
-      );
+          }),
+        );
+      } catch (err: unknown) {
+        // Surface the failing resource in the log; an unowned rejection
+        // here was a strong candidate for the "A network error occurred"
+        // teardown failures observed during the CS-11038 investigation.
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        this.#log.warn(
+          `[loadLinks ${invocationId}] layer=${currentLayerIndex} populateQueryFields rejected for layer of ${layer.length} resource(s): ${message}`,
+        );
+        throw err;
+      }
 
       // Step 2: walk every resource's relationships, classify each link,
       // and accumulate URL sets for the batched DB queries.
@@ -1084,23 +1107,42 @@ export class RealmIndexQueryEngine {
         }
       }
 
+      this.#log.debug(
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} size=${layer.length} entries=${entries.length} inRealmCards=${inRealmCardURLs.size} inRealmFiles=${inRealmFileURLs.size} crossRealm=${entries.filter((e) => !e.inRealm).length}`,
+      );
+
       // Step 3: issue this layer's batched DB queries — at most two
       // round-trips (instances + file-meta) regardless of how many
       // siblings reference links at this depth.
-      let [instanceMap, fileMap] = await Promise.all([
-        inRealmCardURLs.size > 0
-          ? this.#indexQueryEngine.getInstances(
-              [...inRealmCardURLs].map((u) => new URL(u)),
-              opts,
-            )
-          : Promise.resolve(new Map<string, InstanceOrError>()),
-        inRealmFileURLs.size > 0
-          ? this.#indexQueryEngine.getFiles(
-              [...inRealmFileURLs].map((u) => new URL(u)),
-              opts,
-            )
-          : Promise.resolve(new Map<string, IndexedFile>()),
-      ]);
+      let batchStart = Date.now();
+      let instanceMap: Map<string, InstanceOrError>;
+      let fileMap: Map<string, IndexedFile>;
+      try {
+        [instanceMap, fileMap] = await Promise.all([
+          inRealmCardURLs.size > 0
+            ? this.#indexQueryEngine.getInstances(
+                [...inRealmCardURLs].map((u) => new URL(u)),
+                opts,
+              )
+            : Promise.resolve(new Map<string, InstanceOrError>()),
+          inRealmFileURLs.size > 0
+            ? this.#indexQueryEngine.getFiles(
+                [...inRealmFileURLs].map((u) => new URL(u)),
+                opts,
+              )
+            : Promise.resolve(new Map<string, IndexedFile>()),
+        ]);
+      } catch (err: unknown) {
+        let message =
+          err instanceof Error ? err.message : String(err ?? 'unknown error');
+        this.#log.warn(
+          `[loadLinks ${invocationId}] layer=${currentLayerIndex} batched index lookup rejected (cards=${inRealmCardURLs.size} files=${inRealmFileURLs.size}): ${message}`,
+        );
+        throw err;
+      }
+      this.#log.debug(
+        `[loadLinks ${invocationId}] layer=${currentLayerIndex} batch fetched in ${Date.now() - batchStart}ms instances=${instanceMap.size}/${inRealmCardURLs.size} files=${fileMap.size}/${inRealmFileURLs.size}`,
+      );
 
       // Step 4: per-entry — resolve linkResource (in-realm: from the
       // batched maps; cross-realm: per-entry fetch), build the next
@@ -1127,10 +1169,23 @@ export class RealmIndexQueryEngine {
             }
           }
         } else {
-          let response = await this.#fetch(entry.linkURL, {
-            headers: { Accept: SupportedMimeType.CardJson },
-          });
+          let response: Response;
+          try {
+            response = await this.#fetch(entry.linkURL, {
+              headers: { Accept: SupportedMimeType.CardJson },
+            });
+          } catch (err: unknown) {
+            let message =
+              err instanceof Error ? err.message : String(err ?? 'unknown');
+            this.#log.warn(
+              `[loadLinks ${invocationId}] layer=${currentLayerIndex} cross-realm fetch threw for ${entry.linkURL.href}: ${message}`,
+            );
+            throw err;
+          }
           if (!response.ok) {
+            this.#log.warn(
+              `[loadLinks ${invocationId}] layer=${currentLayerIndex} cross-realm fetch failed for ${entry.linkURL.href} status=${response.status}`,
+            );
             let cardError = await CardError.fromFetchResponse(
               entry.linkURL.href,
               response,
@@ -1272,6 +1327,9 @@ export class RealmIndexQueryEngine {
       layer = nextLayer;
     }
 
+    this.#log.debug(
+      `[loadLinks ${invocationId}] complete layers=${layerIndex} included=${included.length} visited=${visited.size}`,
+    );
     return included;
   }
 }
