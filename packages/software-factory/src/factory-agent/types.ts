@@ -312,6 +312,13 @@ export interface AgentRunResult {
  */
 export interface LoopAgent {
   run(context: AgentContext, tools: LoopFactoryTool[]): Promise<AgentRunResult>;
+  /**
+   * Optional: tear down any persistent backend state (long-lived
+   * subprocesses, MCP servers, sockets). The orchestrator calls this
+   * once after every agent.run() in the factory:go run completes.
+   * Agents whose state is fully owned by `run()` can omit this.
+   */
+  close?(): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

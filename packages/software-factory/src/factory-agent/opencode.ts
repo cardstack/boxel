@@ -158,33 +158,75 @@ interface CapturedSignal {
   message?: string;
 }
 
+interface RunHooks {
+  onToolCall: (entry: ToolCallEntry) => void;
+  onSignal: (signal: CapturedSignal) => void;
+}
+
 export class OpencodeFactoryAgent implements LoopAgent {
   private config: OpencodeAgentConfig;
   private promptLoader: PromptLoader;
+
+  // Long-lived opencode subprocess + MCP server. Spawned once on the
+  // first `run()` and reused for every subsequent iteration. opencode
+  // 1.14.34 has rapid-restart failure modes (fresh-spawn `session.prompt`
+  // POSTs return `TypeError: fetch failed` often enough to make a per-
+  // iteration spawn unworkable), and tearing the subprocess down between
+  // sessions is exactly the wrong shape for the SDK anyway — opencode is
+  // a long-lived server with many short-lived sessions.
+  private opencode?: { url: string; close: () => void };
+  private mcp?: { url: string; close: () => Promise<void> };
+  private client?: ReturnType<
+    Awaited<ReturnType<typeof loadOpencodeSdk>>['createOpencodeClient']
+  >;
+  // Active per-run hooks the long-lived MCP server forwards into.
+  private currentHooks?: RunHooks;
+  private resolvedWorkspaceDir?: string;
 
   constructor(config: OpencodeAgentConfig, promptLoader?: PromptLoader) {
     this.config = config;
     this.promptLoader = promptLoader ?? new FilePromptLoader();
   }
 
-  async run(
-    context: AgentContext,
-    tools: FactoryTool[],
-  ): Promise<AgentRunResult> {
-    let mcpTools = tools.filter((t) => FACTORY_MCP_TOOL_NAMES.has(t.name));
-    let toolCallLog: ToolCallEntry[] = [];
-    let captured: CapturedSignal | undefined;
-    let resolveSignal: () => void;
-    let signalCaptured = new Promise<void>((resolve) => {
-      resolveSignal = resolve;
-    });
+  /**
+   * Tear down the long-lived opencode subprocess + MCP server. The
+   * orchestrator calls this in its outer `finally` after all issue
+   * iterations are done.
+   */
+  async close(): Promise<void> {
+    let opencode = this.opencode;
+    let mcp = this.mcp;
+    this.opencode = undefined;
+    this.mcp = undefined;
+    this.client = undefined;
+    this.currentHooks = undefined;
 
-    let mcp = await startFactoryMcpServer(mcpTools, {
-      onToolCall: (entry) => toolCallLog.push(entry),
-      onSignal: (signal) => {
-        captured = signal;
-        resolveSignal();
-      },
+    if (opencode) {
+      try {
+        opencode.close();
+      } catch {
+        // best-effort
+      }
+      // `opencode.close()` only sends SIGTERM, which the 1.14.34
+      // binary ignores. waitForPortFree escalates to SIGKILL.
+      await waitForPortFree(4096, 1000);
+    }
+    if (mcp) {
+      await mcp.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * Spin up the long-lived MCP server + opencode subprocess on first
+   * use. The MCP server's tool-call / signal callbacks dispatch into
+   * `currentHooks`, which `run()` swaps in / out around each session.
+   */
+  private async ensureStarted(mcpTools: FactoryTool[]): Promise<void> {
+    if (this.opencode) return;
+
+    this.mcp = await startFactoryMcpServer(mcpTools, {
+      onToolCall: (entry) => this.currentHooks?.onToolCall(entry),
+      onSignal: (signal) => this.currentHooks?.onSignal(signal),
     });
 
     let providerConfig: OpencodeConfig['provider'];
@@ -198,7 +240,8 @@ export class OpencodeFactoryAgent implements LoopAgent {
       // the provider's static headers. The realm server's
       // `/_openrouter/chat/completions` endpoint validates the JWT,
       // applies the server-side OpenRouter key, and bills credits to
-      // this user.
+      // this user. The 7-day JWT TTL means a single factory:go run
+      // is in no danger of outlasting the cached value.
       let serverToken = await this.config.client.getServerToken();
       providerConfig = buildPassthroughProviderConfig(
         this.config.model,
@@ -209,13 +252,13 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
     let { createOpencodeServer, createOpencodeClient } =
       await loadOpencodeSdk();
-    let opencode = await createOpencodeServer({
+    this.opencode = await createOpencodeServer({
       config: {
         provider: providerConfig,
         mcp: {
           [MCP_SERVER_NAME]: {
             type: 'remote',
-            url: mcp.url,
+            url: this.mcp.url,
             enabled: true,
           },
         },
@@ -231,23 +274,47 @@ export class OpencodeFactoryAgent implements LoopAgent {
         },
       },
     });
-    let client = createOpencodeClient({ baseUrl: opencode.url });
+    this.client = createOpencodeClient({ baseUrl: this.opencode.url });
+    // Resolve the workspace to its canonical real path once. opencode
+    // normalizes the `directory` query through its own realpath before
+    // storing the session (e.g. `/var/folders/...` →
+    // `/private/var/folders/...` on macOS), and `session.list` /
+    // `session.status` filter by exact-string match — so the directory
+    // we send must match what opencode files internally.
+    this.resolvedWorkspaceDir = realpathSync(this.config.workspaceDir);
 
     if (this.config.debug) {
       log.info(
         `Agent backend: opencode (model=${this.config.model}, mode=${this.config.openRouterApiKey ? 'direct' : 'passthrough'})`,
       );
     }
+  }
+
+  async run(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): Promise<AgentRunResult> {
+    let mcpTools = tools.filter((t) => FACTORY_MCP_TOOL_NAMES.has(t.name));
+    await this.ensureStarted(mcpTools);
+    let client = this.client!;
+    let workspaceDir = this.resolvedWorkspaceDir!;
+
+    let toolCallLog: ToolCallEntry[] = [];
+    let captured: CapturedSignal | undefined;
+    let resolveSignal: () => void;
+    let signalCaptured = new Promise<void>((resolve) => {
+      resolveSignal = resolve;
+    });
+
+    this.currentHooks = {
+      onToolCall: (entry) => toolCallLog.push(entry),
+      onSignal: (signal) => {
+        captured = signal;
+        resolveSignal();
+      },
+    };
 
     try {
-      // Resolve the workspace to its canonical real path. opencode
-      // normalizes the directory query through its own realpath
-      // before storing the session (e.g. `/var/folders/...` →
-      // `/private/var/folders/...` on macOS). If we don't pre-
-      // resolve, the directory we pass to `session.status` later
-      // won't string-match the one opencode recorded at create
-      // time, so the status map comes back empty.
-      let workspaceDir = realpathSync(this.config.workspaceDir);
       let session = await client.session.create({
         query: { directory: workspaceDir },
       });
@@ -268,37 +335,21 @@ export class OpencodeFactoryAgent implements LoopAgent {
       // present and reliable here. The prompt's return value is
       // unused — DONE / CLARIFICATION signals come back through the
       // MCP server, not the prompt.
-      let promptBody = {
-        path: { id: sessionId },
-        body: {
-          model: {
-            providerID: FACTORY_PROVIDER_ID,
-            modelID: this.config.model,
+      let promptPromise = client.session
+        .prompt({
+          path: { id: sessionId },
+          body: {
+            model: {
+              providerID: FACTORY_PROVIDER_ID,
+              modelID: this.config.model,
+            },
+            system: systemPrompt,
+            parts: [{ type: 'text', text: prompt }],
           },
-          system: systemPrompt,
-          parts: [{ type: 'text', text: prompt } as const],
-        },
-      };
-      let promptPromise = (async () => {
-        try {
-          return await client.session.prompt(promptBody);
-        } catch (err) {
-          // opencode 1.14.34 occasionally fails the very first
-          // `/session/{id}/message` POST on a freshly-spawned subprocess
-          // with `TypeError: fetch failed`. A short delay + one retry
-          // hides the flake.
-          log.warn(
-            `session.prompt rejected (${String(err)}), retrying once...`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          try {
-            return await client.session.prompt(promptBody);
-          } catch (err2) {
-            log.warn(`session.prompt rejected on retry: ${String(err2)}`);
-            return undefined;
-          }
-        }
-      })();
+        })
+        .catch((err) => {
+          log.warn(`session.prompt rejected: ${String(err)}`);
+        });
 
       try {
         // Happy path: the model calls `signal_done` (or
@@ -313,21 +364,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
         ]);
       } finally {
         // Best-effort: drain any pending prompt resolution before
-        // teardown so its socket gets closed cleanly.
+        // moving on so its socket gets closed cleanly.
         await promptPromise;
       }
     } finally {
-      try {
-        opencode.close();
-      } catch {
-        // best-effort
-      }
-      // `opencode.close()` only sends SIGTERM and the binary in 1.14.34
-      // ignores it. Wait briefly for graceful exit, then escalate to
-      // SIGKILL if the port is still held — otherwise the next
-      // iteration's `createOpencodeServer` always hits EADDRINUSE.
-      await waitForPortFree(4096, 1000);
-      await mcp.close().catch(() => undefined);
+      this.currentHooks = undefined;
     }
 
     if (captured?.kind === 'done') {

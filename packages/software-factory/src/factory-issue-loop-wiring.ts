@@ -238,7 +238,20 @@ export async function runFactoryIssueLoop(
     maxOuterCycles: config.maxOuterCycles,
   };
 
-  return runIssueLoop(issueLoopConfig);
+  try {
+    return await runIssueLoop(issueLoopConfig);
+  } finally {
+    // Some agents (notably `OpencodeFactoryAgent`) hold persistent
+    // backend state across iterations — long-lived opencode subprocess
+    // + MCP server + JWT'd HTTP client. Tear that down here so a
+    // crash mid-loop doesn't orphan an opencode process holding
+    // port 4096.
+    if (typeof agent.close === 'function') {
+      await agent.close().catch((err) => {
+        log.warn(`agent.close() failed: ${String(err)}`);
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
