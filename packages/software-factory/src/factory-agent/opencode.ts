@@ -234,6 +234,17 @@ export class OpencodeFactoryAgent implements LoopAgent {
     }
 
     try {
+      // Subscribe to the per-directory event stream BEFORE creating the
+      // session so we can't miss the eventual `session.idle` event. The
+      // SDK's `session.prompt` HTTP call is *supposed* to block until
+      // the model + tool loop completes, but in opencode 1.14.34 the
+      // response often isn't flushed once the loop exits — leaving the
+      // promise hanging long after the server-side session is idle.
+      // Driving completion off the event bus is reliable; the prompt's
+      // return value is unused (the captured DONE / CLARIFICATION
+      // signal carries everything we need).
+      let events = await client.event.subscribe();
+
       let session = await client.session.create({
         query: { directory: this.config.workspaceDir },
       });
@@ -242,19 +253,48 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
 
-      // Submit the prompt. SDK's `session.prompt` blocks until the
-      // model + tool loop completes (or aborts on signal).
-      await client.session.prompt({
-        path: { id: sessionId },
-        body: {
-          model: {
-            providerID: FACTORY_PROVIDER_ID,
-            modelID: this.config.model,
+      // Fire the prompt; let opencode start its loop. Don't await — see
+      // the comment above. Swallow errors so an upstream rejection
+      // can't escape past the event-driven wait below.
+      let promptPromise = client.session
+        .prompt({
+          path: { id: sessionId },
+          body: {
+            model: {
+              providerID: FACTORY_PROVIDER_ID,
+              modelID: this.config.model,
+            },
+            system: systemPrompt,
+            parts: [{ type: 'text', text: prompt }],
           },
-          system: systemPrompt,
-          parts: [{ type: 'text', text: prompt }],
-        },
-      });
+        })
+        .catch((err) => {
+          log.warn(`session.prompt rejected: ${String(err)}`);
+        });
+
+      try {
+        for await (let event of events.stream) {
+          if (
+            event.type === 'session.idle' &&
+            event.properties.sessionID === sessionId
+          ) {
+            break;
+          }
+          if (
+            event.type === 'session.error' &&
+            event.properties.sessionID === sessionId
+          ) {
+            log.warn(
+              `session.error from opencode: ${JSON.stringify(event.properties.error)}`,
+            );
+            break;
+          }
+        }
+      } finally {
+        // Best-effort: drain any pending prompt resolution before
+        // teardown so its socket gets closed cleanly.
+        await promptPromise;
+      }
     } finally {
       try {
         opencode.close();
