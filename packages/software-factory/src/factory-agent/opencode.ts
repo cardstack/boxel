@@ -174,11 +174,16 @@ export class OpencodeFactoryAgent implements LoopAgent {
     let mcpTools = tools.filter((t) => FACTORY_MCP_TOOL_NAMES.has(t.name));
     let toolCallLog: ToolCallEntry[] = [];
     let captured: CapturedSignal | undefined;
+    let resolveSignal: () => void;
+    let signalCaptured = new Promise<void>((resolve) => {
+      resolveSignal = resolve;
+    });
 
     let mcp = await startFactoryMcpServer(mcpTools, {
       onToolCall: (entry) => toolCallLog.push(entry),
       onSignal: (signal) => {
         captured = signal;
+        resolveSignal();
       },
     });
 
@@ -280,7 +285,16 @@ export class OpencodeFactoryAgent implements LoopAgent {
         });
 
       try {
-        await waitForSessionIdle(client, sessionId, workspaceDir);
+        // Happy path: the model calls `signal_done` (or
+        // `request_clarification`), MCP captures it, and we return
+        // instantly. Fallback for when the model exits the loop
+        // without signaling: poll `time.updated` for a stability
+        // window so we still return rather than hang on the dead
+        // `prompt` HTTP promise.
+        await Promise.race([
+          signalCaptured,
+          waitForSessionIdle(client, sessionId, workspaceDir),
+        ]);
       } finally {
         // Best-effort: drain any pending prompt resolution before
         // teardown so its socket gets closed cleanly.
@@ -576,8 +590,8 @@ async function waitForSessionIdle(
   sessionId: string,
   workspaceDir: string,
 ): Promise<void> {
-  const POLL_INTERVAL_MS = 750;
-  const STABILITY_WINDOW_MS = 5000;
+  const POLL_INTERVAL_MS = 500;
+  const STABILITY_WINDOW_MS = 2000;
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes; comfortable upper bound for opus
   let started = Date.now();
   let lastUpdated: number | undefined;
