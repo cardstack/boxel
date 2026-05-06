@@ -1753,9 +1753,19 @@ export class Realm {
 
     if (files.size > 0) {
       try {
+        // /_atomic returns once writes are durable, not once they are
+        // indexed. Callers that need indexed state must drain via
+        // realm.incrementalIndexing() (server-side) or wait on the
+        // matrix 'index' incremental event (client-side). Mixed
+        // module+instance batches are still serialized correctly: the
+        // in-loop intermediate flush in _batchWrite at the
+        // lastWriteType === 'module' && currentWriteType === 'instance'
+        // gate is always awaited, so an instance's fileSerialization
+        // sees its module already indexed.
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
           serializeFile: true,
+          waitForIndex: false,
         });
       } catch (e: any) {
         if (e instanceof CardError) {

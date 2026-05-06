@@ -17,6 +17,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
 
 let log = logger('eval-execution');
 
@@ -366,6 +367,24 @@ function getExtensionRank(file: string): number {
 }
 
 async function defaultEvaluateModule(
+  client: BoxelCLIClient,
+  realmServerUrl: string,
+  moduleUrl: string,
+  realmUrl: string,
+): Promise<EvalModuleResult> {
+  // Source POSTs return before realm indexing settles, so a load attempt
+  // immediately after a write can transiently fail with "module URL not
+  // found" until the in-memory module map is populated. Bound-poll past
+  // that race; isTransientIndexNotFound stops matching the moment
+  // indexing resolves either way (success or error_doc), so retries
+  // never persist past a real indexer failure.
+  return retryWithPoll(
+    () => attemptEvaluateModule(client, realmServerUrl, moduleUrl, realmUrl),
+    (r) => !r.passed && isTransientIndexNotFound(r.error),
+  );
+}
+
+async function attemptEvaluateModule(
   client: BoxelCLIClient,
   realmServerUrl: string,
   moduleUrl: string,

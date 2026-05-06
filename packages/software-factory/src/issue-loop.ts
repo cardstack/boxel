@@ -26,6 +26,7 @@ import type { IssueStore } from './issue-scheduler';
 
 import { IssueScheduler } from './issue-scheduler';
 import { logger } from './logger';
+import { retryWithPoll } from './retry-with-poll';
 
 let log = logger('issue-loop');
 
@@ -290,7 +291,16 @@ export async function runIssueLoop(
             `  in_progress flip didn't sync to realm — realm still shows ${issue.status}; sync error: ${pickupSync.error ?? 'unknown'}`,
           );
         } else {
-          issue = await scheduler.refreshIssueState(issue);
+          // The realm's source POST returns once writes are durable,
+          // but the search index that refreshIssueState consults
+          // settles asynchronously. Bound-poll until the index reflects
+          // the status flip we just synced; fall through to whatever
+          // the index shows after the deadline.
+          let pickupIssue: SchedulableIssue = issue;
+          issue = await retryWithPoll(
+            () => scheduler.refreshIssueState(pickupIssue),
+            (r) => r.status !== 'in_progress',
+          );
         }
       } catch (err) {
         log.warn(
@@ -426,8 +436,21 @@ export async function runIssueLoop(
         );
       }
 
-      // Refresh issue state from realm
-      issue = await scheduler.refreshIssueState(issue);
+      // Refresh issue state from realm. When the agent signal_done'd and
+      // we just synced status='done' to the realm, bound-poll until the
+      // search index reflects that — otherwise we'd read stale
+      // `in_progress` here, run a wasted inner iteration, and only
+      // settle on the next pass. Other paths (sync failed, validation
+      // failed) refresh once and trust whatever the index shows.
+      let expectedDoneSync =
+        agentSignaledDone && validationResults?.passed && !syncFailed;
+      let currentIssue: SchedulableIssue = issue;
+      issue = expectedDoneSync
+        ? await retryWithPoll(
+            () => scheduler.refreshIssueState(currentIssue),
+            (r) => r.status !== 'done',
+          )
+        : await scheduler.refreshIssueState(currentIssue);
       log.info(`  Issue state after refresh: status=${issue.status}`);
 
       // Check exit conditions

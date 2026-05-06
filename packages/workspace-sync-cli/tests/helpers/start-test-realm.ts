@@ -189,31 +189,51 @@ export async function startTestRealmServer(
   }
 
   // Wait for ready message
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Realm server failed to start within 60 seconds'));
-    }, 60000);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Realm server failed to start within 60 seconds'));
+      }, 60000);
 
-    const handleError = (err: Error) => {
-      clearTimeout(timeout);
-      reject(err);
-    };
-
-    workerProcess.on('error', handleError);
-    realmProcess.on('error', handleError);
-
-    realmProcess.on('message', (message) => {
-      if (message === 'ready') {
+      const handleError = (err: Error) => {
         clearTimeout(timeout);
-        resolve();
-      }
-    });
+        reject(err);
+      };
 
-    realmProcess.on('exit', (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`Realm server exited with code ${code}`));
+      workerProcess.on('error', handleError);
+      realmProcess.on('error', handleError);
+
+      realmProcess.on('message', (message) => {
+        if (message === 'ready') {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+
+      realmProcess.on('exit', (code) => {
+        clearTimeout(timeout);
+        reject(new Error(`Realm server exited with code ${code}`));
+      });
     });
-  });
+  } catch (err) {
+    // Kill any spawned child processes that survived the startup failure
+    // (e.g., realm server died but worker manager is still running). They
+    // hold open IPC channels that would otherwise keep the qunit process
+    // alive after every test in the suite has reported failure.
+    for (let proc of [workerProcess, realmProcess]) {
+      if (proc.exitCode === null && proc.signalCode === null) {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          // process already gone
+        }
+      }
+    }
+    await new Promise<void>((resolve) =>
+      prerenderServer.close(() => resolve()),
+    );
+    throw err;
+  }
 
   let sqlResults: ((results: string) => void) | undefined;
   let sqlError: ((error: string) => void) | undefined;

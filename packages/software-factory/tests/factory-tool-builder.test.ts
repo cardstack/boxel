@@ -130,6 +130,7 @@ function makeConfig(
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
     workspaceDir: workspaceDir ?? workspace!.dir,
     cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
+    syncWorkspace: async () => ({ ok: true }),
     ...rest,
   };
   if (workspace) {

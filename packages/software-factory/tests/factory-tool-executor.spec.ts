@@ -129,6 +129,7 @@ async function buildToolsForRealm(
       client,
       workspaceDir,
       cardTypeSchemas,
+      syncWorkspace: async () => ({ ok: true }),
     },
     executor,
     registry,
