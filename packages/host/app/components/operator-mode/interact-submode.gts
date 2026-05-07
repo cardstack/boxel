@@ -156,20 +156,24 @@ export default class InteractSubmode extends Component {
     | ReturnType<getCardCollection>
     | undefined;
 
-  // Skip our shortcut handlers when another part of the UI owns the
-  // keyboard: a modal/dialog is open, or the event came from a text
-  // field (ember-keyboard dispatches at the document level, so we still
-  // need to filter out keystrokes that another component is handling
-  // — e.g. the search sheet's own Escape, which blurs its input
-  // *before* our handler runs).
-  private shouldIgnoreShortcut(event: KeyboardEvent) {
-    if (document.body.classList.contains('has-modal')) return true;
-    if (isInteractiveTarget(event.target)) return true;
-    return false;
-  }
-
   @action private handleEscape(event: KeyboardEvent) {
-    if (this.shouldIgnoreShortcut(event)) return;
+    // A modal owns Escape regardless of where focus is.
+    if (document.body.classList.contains('has-modal')) return;
+
+    if (isInteractiveTarget(event.target)) {
+      let el = event.target as HTMLElement;
+      // Field inside a stack card: peel the focus off first so a
+      // second Escape can fall through to exit edit / close.
+      if (el.closest('[data-stack-card]')) {
+        event.preventDefault();
+        el.blur();
+        return;
+      }
+      // Field outside any stack card (search sheet, AI assistant, etc.):
+      // defer to that field's own Escape handler.
+      return;
+    }
+
     let item = this.mostRecentlyOpenedStackItem;
     if (!item) return;
 
@@ -187,7 +191,10 @@ export default class InteractSubmode extends Component {
   }
 
   @action private handleToggleEdit(event: KeyboardEvent) {
-    if (this.shouldIgnoreShortcut(event)) return;
+    // Ctrl+E works even when focus is in an input — that's the whole
+    // point of the shortcut: flip in/out of edit without first having
+    // to click somewhere else. Modals still own the keyboard, though.
+    if (document.body.classList.contains('has-modal')) return;
     let item = this.mostRecentlyOpenedStackItem;
     // Files have no edit format; nothing to toggle.
     if (!item || item.type === 'file') return;

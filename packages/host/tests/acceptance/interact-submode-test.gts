@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   find,
+  focus,
   typeIn,
   triggerKeyEvent,
   settled,
@@ -588,6 +589,60 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
         .doesNotExist('a second Escape from view mode closes the item');
+    });
+
+    test('Escape from a focused field in an edit-mode card blurs first, then exits edit, then closes', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      let fieldInput = '[data-test-field="firstName"] input';
+      await focus(fieldInput);
+      assert.dom(fieldInput).isFocused('field is focused at the start');
+
+      // Step 1: Escape from inside the field blurs it (edit mode preserved).
+      await triggerKeyEvent(fieldInput, 'keydown', 'Escape');
+      assert
+        .dom(fieldInput)
+        .isNotFocused('first Escape blurred the field but kept edit mode');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('card is still in edit mode after the field blur');
+
+      // Step 2: With nothing focused, Escape exits edit mode.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('second Escape returned the card to view mode');
+
+      // Step 3: A third Escape closes the item.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('third Escape closed the item');
+    });
+
+    test('Ctrl+E toggles edit mode even while focus is in a field', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      let fieldInput = '[data-test-field="firstName"] input';
+      await focus(fieldInput);
+      assert.dom(fieldInput).isFocused();
+
+      // Ctrl+E from inside the input flips edit→isolated without
+      // requiring the user to click out first.
+      await triggerKeyEvent(fieldInput, 'keydown', 'KeyE', { ctrlKey: true });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Ctrl+E exited edit mode despite the field being focused');
     });
 
     test('Ctrl+E toggles edit mode on the most recently opened item', async function (assert) {
