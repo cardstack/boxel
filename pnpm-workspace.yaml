@@ -255,18 +255,3 @@ minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@glint/ember-tsc"
   - "@glint/template"
-  # opencode publishes ~hourly; pin via package.json and exclude here.
-  - "@opencode-ai/sdk"
-  - "opencode-ai"
-  - "opencode-darwin-arm64"
-  - "opencode-darwin-x64"
-  - "opencode-darwin-x64-baseline"
-  - "opencode-linux-arm64"
-  - "opencode-linux-arm64-musl"
-  - "opencode-linux-x64"
-  - "opencode-linux-x64-baseline"
-  - "opencode-linux-x64-baseline-musl"
-  - "opencode-linux-x64-musl"
-  - "opencode-windows-arm64"
-  - "opencode-windows-x64"
-  - "opencode-windows-x64-baseline"
