@@ -7,13 +7,13 @@
   "noise_floor_ms": 50,
   "scenarios": {
     "GET Validations/eval_sticky-note-1": {
-      "median_ms": 103.31
+      "median_ms": 105.28
     },
     "GET Issues/sticky-note": {
-      "median_ms": 86.07
+      "median_ms": 86.52
     },
     "search filter-by-type Validations": {
-      "median_ms": 106.63
+      "median_ms": 106.9
     }
   }
 }
