@@ -291,12 +291,12 @@ export async function runBench(
 
     const results: Result[] = [];
     for (const scenario of scenarios) {
-      // First call: warm + validate. Subsequent warmup calls: warm without
-      // re-validating (reduces startup variance without doubling I/O).
-      let validatedOnce = false;
-      for (let i = 0; i < Math.max(1, warmup); i++) {
-        await timeOnce(scenario, ctx, !validatedOnce);
-        validatedOnce = true;
+      // Validate the scenario once before any timed work. Separated from
+      // warmup so the reported `warmup` count matches the iterations
+      // actually run — `WARMUP=0` means zero warmup requests, period.
+      await timeOnce(scenario, ctx, true);
+      for (let i = 0; i < warmup; i++) {
+        await timeOnce(scenario, ctx, false);
       }
       const samples: number[] = [];
       for (let i = 0; i < iterations; i++) {
