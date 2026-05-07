@@ -205,7 +205,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Logs from realm-server, worker, prerender, and prerender-manager for a specific indexing job. Two query patterns: (A) `[job: J.R]` substring — emitted by all four services after CS-XXXXX wired the `x-boxel-job-id` header through the prerender call chain; (B) `[indexing-progress] ... job=J` events emitted by the worker (file-by-file progress feed). Both vars pre-set by drill-throughs from the Indexing dashboard.",
+        "description": "Logs from realm-server, worker, prerender, and prerender-manager for a specific indexing job. Two query patterns: (A) `[job: J.R]` substring — emitted by all four services after the `x-boxel-job-id` header was wired through the prerender call chain; (B) `[indexing-progress] ... job=J` events emitted by the worker (file-by-file progress feed). Both vars pre-set by drill-throughs from the Indexing dashboard.",
         "gridPos": {
           "h": 14,
           "w": 24,
