@@ -28,10 +28,7 @@ export function relativeURL(
   if (realmURL) {
     let realmPath = new RealmPaths(realmURL);
     // don't return a relative URL for URL that is outside of our realm
-    if (
-      realmPath.inRealm(relativeTo) &&
-      !realmPath.inRealm(url)
-    ) {
+    if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(url)) {
       return undefined;
     }
   }

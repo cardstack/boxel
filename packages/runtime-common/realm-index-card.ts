@@ -16,10 +16,7 @@ export function isRealmIndexCardId(
       typeof realm === 'string' ? new URL(realm) : realm,
     );
     let cardURL = cardIdToURL(cardId);
-    return (
-      realmPaths.inRealm(cardURL) &&
-      realmPaths.local(cardURL) === 'index'
-    );
+    return realmPaths.inRealm(cardURL) && realmPaths.local(cardURL) === 'index';
   } catch {
     return false;
   }
