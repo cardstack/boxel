@@ -68,13 +68,13 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator actions: trigger a reindex via the realm-server. Live blast-radius (pending / in-flight / oldest pending) is fetched from boxel_index/jobs every refresh; the reindex buttons disable themselves while an indexing job is already in flight for the selected realm. Each click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
+        "description": "System-wide operator action: queue a full reindex across every realm. The button disables itself while a `full-reindex` orchestration job is already pending or running. Per-realm reindex moved to the Realms dashboard. Click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
         "fieldConfig": {
           "defaults": {},
           "overrides": []
         },
         "gridPos": {
-          "h": 11,
+          "h": 4,
           "w": 24,
           "x": 0,
           "y": 0
@@ -103,52 +103,6 @@
           },
           "elements": [
             {
-              "id": "realm_picker",
-              "type": "select",
-              "title": "Realm",
-              "tooltip": "Pick the realm to operate on. Selection is mirrored into the URL (?var-full_index_realm=…) so links to this dashboard preselect a realm.",
-              "labelWidth": 28,
-              "section": "current",
-              "optionsSource": "Query",
-              "options": [],
-              "queryField": {
-                "refId": "A",
-                "value": "realm"
-              },
-              "queryOptions": {
-                "source": "B",
-                "label": "label",
-                "value": "value"
-              },
-              "value": ""
-            },
-            {
-              "id": "pending",
-              "type": "disabled",
-              "title": "Pending jobs (this realm)",
-              "tooltip": "Indexing jobs queued for the selected realm with no live worker reservation.",
-              "labelWidth": 28,
-              "section": "current",
-              "fieldName": "pending",
-              "queryField": {
-                "refId": "A",
-                "value": "pending"
-              }
-            },
-            {
-              "id": "in_flight",
-              "type": "disabled",
-              "title": "In-flight (this realm)",
-              "tooltip": "Indexing jobs currently held by a worker for the selected realm. While > 0, the per-realm reindex button is disabled.",
-              "labelWidth": 28,
-              "section": "current",
-              "fieldName": "in_flight",
-              "queryField": {
-                "refId": "A",
-                "value": "in_flight"
-              }
-            },
-            {
               "id": "pending_full_reindex",
               "type": "disabled",
               "title": "Pending full-reindex",
@@ -162,53 +116,11 @@
               }
             },
             {
-              "id": "oldest_pending_human",
-              "type": "disabled",
-              "title": "Oldest pending",
-              "tooltip": "Age of the oldest pending indexing job for the selected realm. Sustained age usually means workers are saturated or stuck.",
-              "labelWidth": 28,
-              "section": "current",
-              "fieldName": "oldest_pending_human",
-              "queryField": {
-                "refId": "A",
-                "value": "oldest_pending_human"
-              }
-            },
-            {
-              "id": "last_reindex_status",
-              "type": "disabledTextarea",
-              "title": "Last reindex (this realm)",
-              "tooltip": "Most recent from-scratch-index for the selected realm. Reads from the jobs / job_progress tables (CS-10930).",
-              "labelWidth": 28,
-              "rows": 2,
-              "section": "current",
-              "fieldName": "last_reindex_status",
-              "queryField": {
-                "refId": "A",
-                "value": "last_reindex_status"
-              }
-            },
-            {
-              "id": "btn_reindex_realm",
-              "type": "button",
-              "title": "",
-              "buttonLabel": "Reindex ${full_index_realm:text}",
-              "tooltip": "POST /_grafana-reindex?realm=${full_index_realm}. Disabled while an indexing job is in flight for this realm.",
-              "labelWidth": 28,
-              "section": "actions",
-              "show": "form",
-              "size": "md",
-              "variant": "primary",
-              "value": "",
-              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0) > 0;",
-              "customCode": "const realm = '${full_index_realm}';\nconst inFlight = Number((context.panel.elements.find(function(e){return e.id==='in_flight';})||{}).value || 0);\nconst pending = Number((context.panel.elements.find(function(e){return e.id==='pending';})||{}).value || 0);\nconst oldest = (context.panel.elements.find(function(e){return e.id==='oldest_pending_human';})||{}).value || 'n/a';\nif (inFlight > 0) {\n  context.grafana.notifyWarning(['Reindex blocked', 'An indexing job is already in flight for this realm. Wait for it to finish before triggering a new one.']);\n  return;\n}\nif (!window.confirm('Reindex ' + realm + '?\\n\\nBlast radius:\\n  pending: ' + pending + '\\n  oldest pending: ' + oldest + '\\n\\nThis will queue a from-scratch index for the selected realm only.')) { return; }\ntry {\n  const r = await fetch('${realm_server}_grafana-reindex?realm=' + encodeURIComponent(realm), { method: 'POST', headers: { 'Authorization': 'Bearer ${grafana_secret}' } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Reindex queued', 'Started reindex of ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Reindex failed', String(err)]);\n}\n"
-            },
-            {
               "id": "btn_reindex_all",
               "type": "button",
               "title": "",
               "buttonLabel": "Reindex ALL realms",
-              "tooltip": "POST /_grafana-full-reindex. Disabled while a `full-reindex` orchestration job is already pending or running. Long-running — every realm is reindexed.",
+              "tooltip": "POST /_grafana-full-reindex. Disabled while a `full-reindex` orchestration job is already pending or running. Long-running \u2014 every realm is reindexed.",
               "labelWidth": 28,
               "section": "actions",
               "show": "form",
@@ -227,7 +139,6 @@
             "method": "query",
             "payload": {}
           },
-          "elementValueChanged": "if (context.element.id === 'realm_picker' && context.element.value) {\n  context.grafana.locationService.partial({ 'var-full_index_realm': context.element.value }, true);\n}\n",
           "layout": {
             "orientation": "horizontal",
             "padding": 10,
@@ -294,22 +205,11 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "WITH realm_jobs AS (\n  SELECT j.*\n    FROM jobs j\n   WHERE j.job_type IN ('from-scratch-index','incremental-index')\n     AND COALESCE(j.args->>'realmURL','') = '${full_index_realm}'\n),\nrealm_pending AS (\n  SELECT COUNT(*) AS n,\n         MIN(j.created_at) AS oldest_created\n    FROM realm_jobs j\n    LEFT JOIN job_reservations jr ON j.id = jr.job_id\n      AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n   WHERE j.status = 'unfulfilled' AND jr.id IS NULL\n),\nrealm_in_flight AS (\n  SELECT COUNT(*) AS n\n    FROM realm_jobs j\n    JOIN job_reservations jr ON j.id = jr.job_id\n      AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n   WHERE j.finished_at IS NULL\n),\npending_full_reindex AS (\n  SELECT COUNT(*) AS n\n    FROM jobs j\n   WHERE j.job_type = 'full-reindex'\n     AND j.finished_at IS NULL\n),\nlast_reindex AS (\n  SELECT j.id, j.created_at AS started, j.finished_at AS finished,\n         j.status,\n         COALESCE(jp.files_completed, 0) AS files_completed,\n         COALESCE(jp.total_files, 0) AS total_files\n    FROM realm_jobs j\n    LEFT JOIN job_progress jp ON jp.job_id = j.id\n   WHERE j.job_type = 'from-scratch-index'\n   ORDER BY j.created_at DESC\n   LIMIT 1\n)\nSELECT\n  '${full_index_realm}' AS realm,\n  COALESCE((SELECT n FROM realm_pending), 0) AS pending,\n  COALESCE((SELECT n FROM realm_in_flight), 0) AS in_flight,\n  COALESCE((SELECT n FROM pending_full_reindex), 0) AS pending_full_reindex,\n  CASE\n    WHEN (SELECT oldest_created FROM realm_pending) IS NULL THEN '—'\n    ELSE TO_CHAR(NOW() - (SELECT oldest_created FROM realm_pending), 'HH24:MI:SS')\n      || ' (since ' || TO_CHAR((SELECT oldest_created FROM realm_pending) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC)'\n  END AS oldest_pending_human,\n  COALESCE(\n    (SELECT\n       CASE\n         WHEN finished IS NULL AND started IS NOT NULL THEN\n           'running — ' || files_completed || '/' || NULLIF(total_files,0) || ' files, started ' || TO_CHAR(started AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC'\n         WHEN finished IS NOT NULL THEN\n           INITCAP(COALESCE(status::text,'finished')) || ' at ' || TO_CHAR(finished AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC'\n         ELSE COALESCE(status::text,'unknown')\n       END\n     FROM last_reindex),\n    'never'\n  ) AS last_reindex_status;",
+            "rawSql": "SELECT COUNT(*) AS pending_full_reindex FROM jobs WHERE job_type = 'full-reindex' AND finished_at IS NULL;",
             "refId": "A"
-          },
-          {
-            "datasource": {
-              "type": "grafana-postgresql-datasource",
-              "uid": "cef5v5sl9k7i8f"
-            },
-            "editorMode": "code",
-            "format": "table",
-            "rawQuery": true,
-            "rawSql": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS label, url AS value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
-            "refId": "B"
           }
         ],
-        "title": "Operator Actions",
+        "title": "Operator Actions: Full reindex",
         "type": "volkovlabs-form-panel"
       },
       {
@@ -453,7 +353,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Age of the oldest pending indexing job. Red after 5 minutes — sustained values here usually mean workers are saturated or stuck.",
+        "description": "Age of the oldest pending indexing job. Red after 5 minutes \u2014 sustained values here usually mean workers are saturated or stuck.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -523,7 +423,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Indexing-job flow rates. Three series — `arrived` (jobs queued), `started` (a worker reserved them), `completed` (jobs.finished_at set). Bucketed by 30s. A persistent gap between arrived and completed indicates worker saturation.",
+        "description": "Indexing-job flow rates. Three series \u2014 `arrived` (jobs queued), `started` (a worker reserved them), `completed` (jobs.finished_at set). Bucketed by 30s. A persistent gap between arrived and completed indicates worker saturation.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -619,7 +519,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Stocks of indexing jobs over time. `pending` = queued, no live reservation; `in_flight` = a worker has an open reservation; `completed` = cumulative finished. Bucketed at 1 minute over the panel's time range. Cost: O(buckets × indexing-jobs in window) per refresh — if this gets slow, switch to a snapshot/materialized table.",
+        "description": "Stocks of indexing jobs over time. `pending` = queued, no live reservation; `in_flight` = a worker has an open reservation; `completed` = cumulative finished. Bucketed at 1 minute over the panel's time range. Cost: O(buckets \u00d7 indexing-jobs in window) per refresh \u2014 if this gets slow, switch to a snapshot/materialized table.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1160,7 +1060,7 @@
         ],
         "title": "Queued Indexing Jobs",
         "type": "table",
-        "description": "Indexing jobs (from-scratch-index, incremental-index) waiting on a worker. Same query as Job Queue → Waiting Jobs, narrowed to indexing job types."
+        "description": "Indexing jobs (from-scratch-index, incremental-index) waiting on a worker. Same query as Job Queue \u2192 Waiting Jobs, narrowed to indexing job types."
       }
     ],
     "refresh": "5s",
