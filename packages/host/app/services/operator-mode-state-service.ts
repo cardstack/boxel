@@ -57,7 +57,10 @@ import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import { removeFileExtension } from '../utils/card-search/types';
 
-import { ModuleInspectorSelections } from '../utils/local-storage-keys';
+import {
+  AiAssistantOpen,
+  ModuleInspectorSelections,
+} from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
 
@@ -136,6 +139,15 @@ interface OpenFileSubscriber {
 export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
+// Read the user's persisted AI Assistant open/closed preference. Defaults to
+// `true` for first-ever visits; URL state still takes precedence over this.
+function readPersistedAiAssistantOpen(): boolean {
+  let raw = window.localStorage.getItem(AiAssistantOpen);
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return true;
+}
+
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray<Stack>([]),
@@ -144,7 +156,7 @@ export default class OperatorModeStateService extends Service {
     hostModePrimaryCard: null,
     hostModeStack: [],
     openDirs: new TrackedMap<string, string[]>(),
-    aiAssistantOpen: true,
+    aiAssistantOpen: readPersistedAiAssistantOpen(),
     newFileDropdownOpen: false,
     cardPreviewFormat: 'isolated' as Format,
     workspaceChooserOpened: false,
@@ -217,11 +229,13 @@ export default class OperatorModeStateService extends Service {
 
   openAiAssistant = () => {
     this._state.aiAssistantOpen = true;
+    window.localStorage.setItem(AiAssistantOpen, 'true');
     this.schedulePersist();
   };
 
   closeAiAssistant = () => {
     this._state.aiAssistantOpen = false;
+    window.localStorage.setItem(AiAssistantOpen, 'false');
     this.schedulePersist();
   };
 
@@ -252,7 +266,7 @@ export default class OperatorModeStateService extends Service {
       hostModePrimaryCard: null,
       hostModeStack: new TrackedArray([]),
       openDirs: new TrackedMap<string, string[]>(),
-      aiAssistantOpen: false,
+      aiAssistantOpen: readPersistedAiAssistantOpen(),
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
       newFileDropdownOpen: false,
       cardPreviewFormat: 'isolated' as Format,
@@ -1027,7 +1041,8 @@ export default class OperatorModeStateService extends Service {
       openDirs,
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
-      aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      aiAssistantOpen:
+        rawState.aiAssistantOpen ?? readPersistedAiAssistantOpen(),
       moduleInspector:
         rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
       cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
