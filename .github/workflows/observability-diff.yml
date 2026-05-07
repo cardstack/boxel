@@ -75,6 +75,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need full history so `diff.sh --only-changed-since=origin/<base>`
+          # can run `git diff --name-only origin/<base>...HEAD` to scope
+          # the diff to files this PR actually changes (vs total drift
+          # between staging and main).
+          fetch-depth: 0
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
@@ -131,10 +137,15 @@ jobs:
       - name: Compute diff
         id: diff
         working-directory: packages/observability
+        env:
+          # Scope the diff to files THIS PR changes (vs total drift between
+          # staging and main, which can be large and unrelated to the PR).
+          # `pull_request.base.ref` is the target branch (typically `main`).
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -eo pipefail
           DIFF_FILE="$(mktemp)"
-          ./scripts/diff.sh --env staging > "$DIFF_FILE"
+          ./scripts/diff.sh --env staging --only-changed-since="origin/${PR_BASE_REF}" > "$DIFF_FILE"
           # Persist the diff path for the next step (raw stdout via $GITHUB_OUTPUT
           # has multi-line / size limits we want to handle in JS instead).
           echo "diff_file=$DIFF_FILE" >> "$GITHUB_OUTPUT"
