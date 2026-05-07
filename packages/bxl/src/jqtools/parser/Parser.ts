@@ -68,6 +68,7 @@ export class Parser {
   static normalizeBinaryAst(ast: BinaryAst): BinaryAst {
     if (
       ast.right.type === 'binary' &&
+      !ast.right.parenthesized &&
       this.getPrecedence(ast.operator) ===
         this.getPrecedence(ast.right.operator)
     ) {
@@ -372,6 +373,14 @@ export class Parser {
           this.input.next();
           const exp = this.parseExpression();
           this.skipPunc(')');
+          // Mark binary expressions that came from explicit parens so
+          // the normalizer (which left-associates equal-precedence
+          // chains) doesn't dissolve the grouping. Without this, the
+          // inner `B + C` in `A - (B + C)` gets pulled across the `-`
+          // and the AST evaluates as `(A - B) + C`.
+          if (exp.type === 'binary') {
+            (exp as BinaryAst).parenthesized = true;
+          }
           return exp;
         }
 

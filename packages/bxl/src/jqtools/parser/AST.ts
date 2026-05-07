@@ -179,6 +179,14 @@ export interface BinaryAst {
   operator: BinaryOperator;
   left: ExpressionAst;
   right: ExpressionAst;
+  /**
+   * Set when this AST node was produced by a parenthesized expression
+   * (e.g. the inner `B + C` in `A - (B + C)`). The normalizer treats
+   * that as a hard grouping boundary and refuses to reassociate the
+   * parent binary across it — without this flag, `A - (B + C)` would
+   * normalize to `(A - B) + C` because `+` and `-` share precedence.
+   */
+  parenthesized?: boolean;
 }
 
 export type UnaryOperator = '-';

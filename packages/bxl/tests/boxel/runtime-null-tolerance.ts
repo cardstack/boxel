@@ -187,6 +187,61 @@ check('§11a empty-vitals card returns null instead of throwing', () => {
   strictEqual(compute.call(fuzzEmptyVitals), null);
 });
 
+// --- Parenthesization regression (jq parser left-associativity) ---
+//
+// Pre-fix bug: `A - (B + C)` normalized to `(A - B) + C` because `+`
+// and `-` share precedence and the AST normalizer reassociated across
+// the (parenthesized) RHS. Caught by the airline middle-wolverine
+// realm's contributionProfit computeVia, which has the exact shape
+// `Revenue - (FuelCost + CrewCost + ...)`.
+
+check('paren regression: 100 - (50 + 30) === 20', () => {
+  strictEqual(
+    evaluateBxl('100 - (50 + 30)', null, { readableSyntax: false }).value,
+    20,
+  );
+});
+
+check('paren regression: A - (B + C) over a card', () => {
+  strictEqual(
+    evaluateBxl('.a - (.b + .c)', { a: 100, b: 50, c: 30 }, { readableSyntax: false }).value,
+    20,
+  );
+});
+
+check('paren regression: A - (B - C) === A - B + C', () => {
+  // `5 - (3 - 1)` should be 3, not 1.
+  strictEqual(
+    evaluateBxl('5 - (3 - 1)', null, { readableSyntax: false }).value,
+    3,
+  );
+});
+
+check('paren regression: realistic contributionProfit shape', () => {
+  // Mirrors the airline FlightProfit.contributionProfit formula on
+  // the AA1001 fixture with stress-test fuel price.
+  const card = {
+    passengers: 198,
+    scheduledFareUsd: 419.76,
+    ancillaryUsdPerPax: 32,
+    cargoRevenueUsd: 1450,
+    codeshareShareUsd: 0,
+    fuelGallons: 5650,
+    fuelPriceUsdGal: 5.99,
+    crewCostUsd: 5235.2,
+    airportFeesUsd: 18879.6,
+    maintenanceCostUsd: 7940,
+    ownershipCostUsd: 11200,
+    fixedFlightCostUsd: 5200,
+  };
+  const compute = expression(
+    jq`(.passengers * .scheduledFareUsd) + (.passengers * .ancillaryUsdPerPax) + .cargoRevenueUsd - .codeshareShareUsd - (.fuelGallons * .fuelPriceUsdGal + .crewCostUsd + .airportFeesUsd + .maintenanceCostUsd + .ownershipCostUsd + .fixedFlightCostUsd)`,
+  );
+  // Net rev 90898.48 − op cost 82298.30 = 8600.18.
+  const out = compute.call(card) as number;
+  strictEqual(Math.round(out * 100) / 100, 8600.18);
+});
+
 // ----------------------------------------------------------------
 
 console.log(
