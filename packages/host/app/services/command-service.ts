@@ -25,6 +25,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
@@ -517,9 +518,54 @@ export default class CommandService extends Service {
     return result;
   }
 
+  // CS-11045: Find the bot message in current room state that currently owns
+  // the given commandRequestId. Walks events newest-first so the latest event
+  // wins (handles the streaming → m.replace shape: the original streaming
+  // event and later replace events both carry the commandRequests array; the
+  // latest replace is the one ai-bot's /messages view agrees on).
+  private getCurrentEventIdForCommandRequest(
+    roomId: string | undefined,
+    commandRequestId: string | undefined,
+  ): string | undefined {
+    if (!roomId || !commandRequestId) {
+      return undefined;
+    }
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      return undefined;
+    }
+    let events = roomResource.events;
+    for (let i = events.length - 1; i >= 0; i--) {
+      let e = events[i] as any;
+      if (e?.type !== 'm.room.message') {
+        continue;
+      }
+      let requests = e.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY];
+      if (
+        Array.isArray(requests) &&
+        requests.some((r: any) => r?.id === commandRequestId)
+      ) {
+        return e.event_id;
+      }
+    }
+    return undefined;
+  }
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    let { arguments: payload, eventId, id: commandRequestId } = command;
+    let { arguments: payload, id: commandRequestId } = command;
+    // CS-11045: Source the bot-message event_id from current room state at
+    // execute time rather than the snapshot taken when the MessageCommand was
+    // constructed. The snapshot is the streaming/original event_id; once a
+    // later m.replace event in room.events owns the commandRequest, that
+    // event's id is the canonical link the rest of the system (including
+    // ai-bot's view of /messages) will agree on. Fall back to the snapshot if
+    // no matching event is found in current room state.
+    let eventId =
+      this.getCurrentEventIdForCommandRequest(
+        command.message.roomId,
+        commandRequestId,
+      ) ?? command.eventId;
     let resultCard: CardDef | undefined;
     // There may be some race conditions where the command is already being executed when this task starts
     if (
