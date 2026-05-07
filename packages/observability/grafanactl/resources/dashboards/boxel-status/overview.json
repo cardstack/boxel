@@ -20,7 +20,7 @@
         }
       ]
     },
-    "description": "Top-level health view. Service-health stats use Loki log volume in the last 5m as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard.",
+    "description": "Top-level health view. Service-health stats use Loki log volume over the dashboard time range as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Narrow the time picker to ~5m for strict liveness; widen to surface bursty local-dev activity. Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
@@ -28,7 +28,7 @@
     "panels": [
       {
         "datasource": { "type": "loki", "uid": "loki" },
-        "description": "Log lines from realm-server in the last 5m. Red = no recent activity.",
+        "description": "Log lines from realm-server over the dashboard time range. Red = service silent; transparent = no streams reporting.",
         "fieldConfig": {
           "defaults": {
             "color": { "mode": "thresholds" },
@@ -59,7 +59,7 @@
         "pluginVersion": "12.4.3",
         "targets": [{
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({service=\"realm-server\"}[5m]))",
+          "expr": "sum(count_over_time({service=\"realm-server\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
         "title": "Realm Server",
@@ -67,7 +67,7 @@
       },
       {
         "datasource": { "type": "loki", "uid": "loki" },
-        "description": "Log lines from prerender-server in the last 5m.",
+        "description": "Log lines from prerender-server over the dashboard time range.",
         "fieldConfig": {
           "defaults": {
             "color": { "mode": "thresholds" },
@@ -97,7 +97,7 @@
         "pluginVersion": "12.4.3",
         "targets": [{
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({service=\"prerender\"}[5m]))",
+          "expr": "sum(count_over_time({service=\"prerender\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
         "title": "Prerender Server",
@@ -105,7 +105,7 @@
       },
       {
         "datasource": { "type": "loki", "uid": "loki" },
-        "description": "Log lines from prerender-manager in the last 5m.",
+        "description": "Log lines from prerender-manager over the dashboard time range.",
         "fieldConfig": {
           "defaults": {
             "color": { "mode": "thresholds" },
@@ -135,7 +135,7 @@
         "pluginVersion": "12.4.3",
         "targets": [{
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({service=\"prerender-manager\"}[5m]))",
+          "expr": "sum(count_over_time({service=\"prerender-manager\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
         "title": "Prerender Manager",
@@ -143,7 +143,7 @@
       },
       {
         "datasource": { "type": "loki", "uid": "loki" },
-        "description": "Log lines from worker in the last 5m.",
+        "description": "Log lines from worker over the dashboard time range.",
         "fieldConfig": {
           "defaults": {
             "color": { "mode": "thresholds" },
@@ -173,7 +173,7 @@
         "pluginVersion": "12.4.3",
         "targets": [{
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({service=\"worker\"}[5m]))",
+          "expr": "sum(count_over_time({service=\"worker\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
         "title": "Worker",
@@ -181,7 +181,7 @@
       },
       {
         "datasource": { "type": "loki", "uid": "loki" },
-        "description": "Log lines from synapse in the last 5m.",
+        "description": "Log lines from synapse over the dashboard time range.",
         "fieldConfig": {
           "defaults": {
             "color": { "mode": "thresholds" },
@@ -211,7 +211,7 @@
         "pluginVersion": "12.4.3",
         "targets": [{
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "sum(count_over_time({service=\"synapse\"}[5m]))",
+          "expr": "sum(count_over_time({service=\"synapse\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
         "title": "Synapse",
