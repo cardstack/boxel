@@ -8,7 +8,15 @@ import {
   awaitPendingCost,
   handleStreamingRequest,
   trackCostDeduction,
+  type StreamingInstrumentation,
 } from '../lib/proxy-forward';
+import {
+  analyzeRequest,
+  createResponseAnalyzer,
+  isInstrumentationEnabled,
+  writeInstrumentationRecord,
+  type InstrumentationRecord,
+} from '../lib/proxy-instrument';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -126,6 +134,27 @@ export default function handleOpenRouterPassthrough({
       };
       const finalBody = JSON.stringify(openAIBody);
 
+      // Instrumentation (toggled by FACTORY_INSTRUMENT_PATH). Captures
+      // request prompt sizes and per-response tool-call counts /
+      // timing / usage to a JSONL file. See lib/proxy-instrument.ts
+      // and packages/software-factory/OPENCODE_PERFORMANCE.md.
+      const instrumentEnabled = isInstrumentationEnabled();
+      const requestStats = instrumentEnabled ? analyzeRequest(rawBody) : null;
+      const responseAnalyzer = instrumentEnabled
+        ? createResponseAnalyzer()
+        : null;
+      const writeStreamingRecord = (): void => {
+        if (!instrumentEnabled || !requestStats || !responseAnalyzer) return;
+        const record: InstrumentationRecord = {
+          ts: new Date().toISOString(),
+          user: matrixUserId,
+          endpoint: 'openrouter-passthrough',
+          request: requestStats,
+          response: responseAnalyzer.finalize(),
+        };
+        writeInstrumentationRecord(record);
+      };
+
       if (isStreaming) {
         if (!destinationConfig.supportsStreaming) {
           await sendResponseForBadRequest(
@@ -134,6 +163,13 @@ export default function handleOpenRouterPassthrough({
           );
           return;
         }
+        const streamingInstrument: StreamingInstrumentation | undefined =
+          responseAnalyzer
+            ? {
+                onSSEData: responseAnalyzer.onSSEData,
+                onDone: writeStreamingRecord,
+              }
+            : undefined;
         await handleStreamingRequest(
           ctxt,
           OPENROUTER_CHAT_URL,
@@ -143,10 +179,12 @@ export default function handleOpenRouterPassthrough({
           destinationConfig,
           dbAdapter,
           matrixUserId,
+          streamingInstrument,
         );
         return;
       }
 
+      const nonStreamingStart = Date.now();
       const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
         method: 'POST',
         headers,
@@ -160,6 +198,51 @@ export default function handleOpenRouterPassthrough({
         matrixUserId,
         responseData,
       );
+
+      // For non-streaming responses, mine the same fields the SSE
+      // analyzer collects so the JSONL stays uniform across modes.
+      if (instrumentEnabled && requestStats) {
+        const choice = (responseData?.choices ?? [])[0] ?? {};
+        const message = choice.message ?? {};
+        const toolCalls = Array.isArray(message.tool_calls)
+          ? message.tool_calls
+          : [];
+        const usage = responseData?.usage ?? {};
+        const record: InstrumentationRecord = {
+          ts: new Date().toISOString(),
+          user: matrixUserId,
+          endpoint: 'openrouter-passthrough',
+          request: requestStats,
+          response: {
+            toolCallsCount: toolCalls.length,
+            toolCallNames: toolCalls.map(
+              (tc: { function?: { name?: string } }) =>
+                tc.function?.name ?? '<unknown>',
+            ),
+            assistantTextChars:
+              typeof message.content === 'string' ? message.content.length : 0,
+            finishReason:
+              typeof choice.finish_reason === 'string'
+                ? choice.finish_reason
+                : null,
+            usagePromptTokens:
+              typeof usage.prompt_tokens === 'number'
+                ? usage.prompt_tokens
+                : null,
+            usageCompletionTokens:
+              typeof usage.completion_tokens === 'number'
+                ? usage.completion_tokens
+                : null,
+            usageTotalTokens:
+              typeof usage.total_tokens === 'number'
+                ? usage.total_tokens
+                : null,
+            ttfbMs: null,
+            durationMs: Date.now() - nonStreamingStart,
+          },
+        };
+        writeInstrumentationRecord(record);
+      }
 
       const response = new Response(JSON.stringify(responseData), {
         status: externalResponse.status,
