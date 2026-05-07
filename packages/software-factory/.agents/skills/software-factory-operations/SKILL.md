@@ -51,28 +51,97 @@ Inspect before writing. Read or grep the file you plan to change, and
 glob for sibling files (e.g. existing card definitions in the same
 directory) before creating new ones.
 
-### Tracker-schema cards — always use the structured factory tools
+### Tracker-schema cards — write JSON directly
 
-**Critical:** Project, Issue, KnowledgeArticle, Spec, and issue comments
-have dedicated factory tools that enforce schema and invariants. **Do
-not** create or update them by writing the underlying `.json` directly
-(via native `Write` on the Claude backend, or via `write_file` on
-OpenRouter) — going around the structured tools produces malformed
-cards or silently violates invariants the orchestrator depends on.
+Project, Issue, KnowledgeArticle, and Spec cards are plain `.json` files
+in the workspace. Use `Write` (Claude) or `write_file` (OpenRouter) to
+create them and `Read` + `Edit` (or `Read` + `Write` of the merged
+document) to update them — same workspace fs surface as `.gts` files.
 
-| File / artifact                       | Use this tool         |
-| ------------------------------------- | --------------------- |
-| `Projects/<slug>.json`                | `update_project`      |
-| `Issues/<slug>.json`                  | `update_issue`        |
-| `Knowledge Articles/<slug>.json`      | `create_knowledge`    |
-| `Spec/<slug>.json`                    | `create_catalog_spec` |
-| Append a comment to an existing issue | `add_comment`         |
+| File path                        | adoptsFrom                                                     |
+| -------------------------------- | -------------------------------------------------------------- |
+| `Projects/<slug>.json`           | `{module: "<darkfactoryModuleUrl>", name: "Project"}`          |
+| `Issues/<slug>.json`             | `{module: "<darkfactoryModuleUrl>", name: "Issue"}`            |
+| `Knowledge Articles/<slug>.json` | `{module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle"}` |
+| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`    |
 
-These tools auto-construct the JSON:API document with the correct
-`adoptsFrom`, do read-patch-write merging that preserves attributes
-you did not pass, and (for issues) enforce that `description` stays
-immutable and that the agent only proposes the legal status
-transitions (`blocked` / `backlog`).
+`<darkfactoryModuleUrl>` is named in the system prompt — use that value
+verbatim.
+
+**Always fetch the live schema before writing.** Field names, enum
+values, and relationship keys for each card type are introspected at
+runtime — never hard-coded in this skill. Call
+`get_card_schema({ module, name })` for the card you're about to write
+and use the returned `{ attributes, relationships? }` JSON Schema to
+shape the document. The bootstrap skill covers the bootstrap-specific
+attribute population guidance; this skill covers the operational
+patterns (read-before-write, comments, invariants) that layer on top.
+
+**Read before write.** When updating any tracker card, `Read` the file
+first, change only the attributes you intend to update, then write the
+merged document back. Don't overwrite the whole file with only your
+new fields — you'll silently drop the existing attributes.
+
+**Issue invariants you must enforce yourself** (these used to be
+enforced by a wrapper tool; they aren't anymore):
+
+- **`description` is immutable** after the issue is created. If you
+  need to add context — blocked reasons, progress notes, validation
+  failures, clarification requests — append to the `comments` array
+  instead. See "Adding a comment to an existing issue" below.
+- **Status transitions are restricted.** You may set `status` to
+  `"blocked"` (cannot proceed) or `"backlog"` (unblock). Never set
+  `status` to `"done"` or `"in_progress"` — those are owned by the
+  orchestrator based on `signal_done` + validation results.
+
+### Adding a comment to an existing issue
+
+Issue cards carry a containsMany comments array on `attributes`. To
+append a comment:
+
+1. Call `get_card_schema({ module: "<darkfactoryModuleUrl>", name: "Issue" })` if you don't already have the Issue schema cached. The comments array entry is itself an object with its own field shape — use the field names returned by the schema (the body / author / timestamp fields) verbatim. The timestamp field on a comment is **not** the same as the Issue's own top-level `createdAt` / `updatedAt` attributes; the schema disambiguates them.
+2. `Read` the issue's `.json`.
+3. Append a new entry to the comments array on `data.attributes`, populating the body (markdown comment text), the author (e.g. `"factory-agent"` or `"orchestrator"`), and the comment-timestamp field (ISO timestamp).
+4. `Write` (or `Edit`) the document back. **Do not modify the
+   description or any other attribute** — comments are append-only.
+
+### Catalog Spec card shape
+
+Spec cards (`Spec/<slug>.json`) adopt from
+`https://cardstack.com/base/spec` / `Spec`, **not** from the tracker
+module. Fetch the live schema before writing:
+
+```
+get_card_schema({ module: "https://cardstack.com/base/spec", name: "Spec" })
+```
+
+Use the returned `{ attributes, relationships? }` to shape the
+document. What the schema does **not** tell you and you must supply
+yourself for entry-point cards:
+
+- A display title and short description suitable for the catalog.
+- The spec-type field set to the enum value the schema returns for
+  card-style specs (vs. apps, fields, etc.).
+- A code-ref attribute pointing at your `.gts` definition, formatted as
+  `{module: "../<slug>", name: "<PascalClass>"}` (relative path, no
+  `.gts` extension) so the spec resolves the definition relative to
+  itself.
+- A markdown usage guide for the catalog page.
+- A linked-examples relationship populated with one or more sample
+  instances:
+
+  ```json
+  "<linked-examples-key>": [
+    { "links": { "self": "../<CardType>/<instance-id>" } },
+    ...
+  ]
+  ```
+
+  (The schema names the relationship key.)
+
+The full document envelope is the same as for tracker cards (`data` /
+`type: "card"` / `attributes` / `relationships` / `meta.adoptsFrom`),
+just with the `https://cardstack.com/base/spec` adoptsFrom.
 
 ### Realm-side reads (factory tools)
 
@@ -87,23 +156,22 @@ or drive control flow.
   - **Claude backend:** run `boxel search --realm <target-realm-url> --query '<json>' --json` via `Bash`. **Quoting:** single-quote the entire JSON object so the shell does not expand or split it; keep all keys and string values double-quoted inside. Example: `boxel search --realm https://realms.example/h/p/ --query '{"filter":{"type":{"module":"https://cardstack.com/base/spec","name":"Spec"}}}' --json`. Pipe through `jq` if you want a focused projection.
   - **OpenRouter backend:** call the factory `search_realm({ query, realm? })` tool with the same structured query object — no shell quoting concerns.
 
-### Updating Project State
+### Fetching live card-type schemas
 
-- `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. The tool's parameters include a dynamic JSON schema describing available fields — use it to know valid field names and types. The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
-- `update_issue({ path, attributes, relationships? })` — Update an Issue card. Same structured interface with dynamic field schema in the tool parameters. **Note:** `description` is stripped — issue descriptions are immutable after creation. Use `add_comment` to add context.
-- `add_comment({ path, body, author })` — Append a comment to an existing issue. Use this to record context, blocked reasons, validation failures, or any post-creation updates. Comments are append-only — they cannot be edited or deleted.
-- `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
-- `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
+`get_card_schema({ module, name })` returns the live JSON Schema
+(`{ attributes, relationships? }`) for any `CardDef`, introspected from
+the actual class via the realm server's prerenderer (the same path the
+AI Bot uses for its patch-tool schemas). Always call this before
+writing a tracker card (Project / Issue / KnowledgeArticle), a Spec
+card, or any other card whose shape you need to know. Schemas are
+cached per-process, so repeated calls with the same code ref are free.
 
-### Running Host Commands
+### Running other Host Commands
 
-You do not need to invoke Boxel host commands from the agent — the
-orchestrator pre-loads the card-type schemas you need and bakes them
-into the structured update tools' parameter schemas. If a future
-workflow does need a host command, the OpenRouter backend exposes
-`run_command({ command, commandInput? })` and the Claude backend
-should shell out via Bash to `boxel run-command <specifier> --realm <url>
---input '<json>' --json`.
+For host commands beyond the schema fetch, the OpenRouter backend
+exposes `run_command({ command, commandInput? })` and the Claude
+backend should shell out via Bash to
+`boxel run-command <specifier> --realm <url> --input '<json>' --json`.
 
 ### Self-Validation (optional, no side effects)
 
@@ -120,21 +188,17 @@ All five tools are safe to call repeatedly mid-turn; none of them write a realm 
 - `signal_done()` — Signal that the current issue is complete. Call this only after all implementation and test files have been written.
 - `request_clarification({ message })` — Signal that you cannot proceed and need human input. Describe what is blocking.
 
-### Important: Issue Descriptions Are Immutable
-
-**Never modify an issue's `description` field after creation.** The description captures the original intent of the issue. If you need to add context — blocked reasons, progress notes, clarification requests, or any post-creation information — use `add_comment` instead. The `update_issue` tool strips `description` changes automatically.
-
 ## Required Flow
 
 1. **Inspect before writing.** Search the target realm for existing cards (Bash + `boxel search` on Claude, `search_realm` on OpenRouter — see the Realm-side reads section above). Read or grep the workspace files you plan to change (or sibling files in the same directory) before creating or modifying anything.
 2. **Write card definitions** (`.gts`) into the workspace.
 3. **Write `.test.gts` test files** co-located with card definitions. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) into the workspace.
-5. **Create a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief by calling `create_catalog_spec` — never via native `Write`. Link sample instances via `linkedExamples`.
+5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) — adoptsFrom `https://cardstack.com/base/spec` / `Spec`. Link sample instances via `relationships.linkedExamples`.
 6. **(Optional) Call `run_tests()`** to self-validate before signalling done. This returns test results in-memory without writing any realm artifacts. Iterating on your own work with `run_tests` is faster than round-tripping through the orchestrator pipeline.
 7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the full validation pipeline (which persists a `TestRun` card, among other artifacts) automatically after this.
 8. **If tests fail**, the orchestrator feeds failure details back. Re-read the affected workspace files, fix them, and call `signal_done()` again.
-9. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
+9. **Record progress** by appending to the issue's `comments` array (Read + Edit the issue JSON). Never modify the issue's `description`.
 
 ## Target Realm Artifact Structure
 

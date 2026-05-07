@@ -236,6 +236,14 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealm: string;
+  /**
+   * Module URL where the tracker schema (Project / Issue / KnowledgeArticle)
+   * is published. Surfaced in the system prompt so the agent can hand-write
+   * the correct `meta.adoptsFrom.module` when constructing tracker JSON via
+   * native `Write` — replaces the structured tools that used to do this
+   * automatically.
+   */
+  darkfactoryModuleUrl?: string;
   /** Validation results from the prior inner-loop iteration (used for pass/fail checks). */
   validationResults?: ValidationResults;
   /** Pre-formatted validation context from Validator.formatForContext() — the sole mechanism for validation reaching the LLM. */

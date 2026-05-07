@@ -1755,17 +1755,23 @@ export class Realm {
       try {
         // /_atomic returns once writes are durable, not once they are
         // indexed. Callers that need indexed state must drain via
-        // realm.incrementalIndexing() (server-side) or wait on the
-        // matrix 'index' incremental event (client-side). Mixed
+        // realm.incrementalIndexing() (server-side), wait on the matrix
+        // 'index' incremental event (client-side), or opt-in to a
+        // synchronous response by passing `?waitForIndex=true` on the
+        // POST URL. The query-param path is intended for one-shot CLI /
+        // agent flows where Matrix subscription is impractical and a
+        // search poll-loop would race indexing latency. Mixed
         // module+instance batches are still serialized correctly: the
         // in-loop intermediate flush in _batchWrite at the
         // lastWriteType === 'module' && currentWriteType === 'instance'
         // gate is always awaited, so an instance's fileSerialization
         // sees its module already indexed.
+        let waitForIndex =
+          new URL(request.url).searchParams.get('waitForIndex') === 'true';
         writeResults = await this.writeMany(files, {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
           serializeFile: true,
-          waitForIndex: false,
+          waitForIndex,
         });
       } catch (e: any) {
         if (e instanceof CardError) {

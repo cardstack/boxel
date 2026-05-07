@@ -19,7 +19,10 @@ completion. Inspect existing state before making changes — do not guess.
   is blocked.
 - When all implementation and test files have been written, call signal_done.
 - Issue descriptions are immutable after creation. Never modify an issue's
-  description. Use add_comment to append context, blocked reasons, or updates.
+  `description`. To add context — blocked reasons, progress notes, validation
+  failures — append a new entry to the issue's `attributes.comments[]` array
+  (Read the issue JSON, push a new Comment, Write the document back). The
+  software-factory-operations skill documents the Comment shape.
 - Card definitions are `.gts` files; card instances are `.json` files. Both
   live in the local workspace, which the orchestrator syncs to the target
   realm between iterations.
@@ -31,6 +34,26 @@ completion. Inspect existing state before making changes — do not guess.
 # Realms
 
 - Target realm: {{targetRealm}}
+
+# Tracker schema module URL
+
+When you create a Project, Issue, or KnowledgeArticle JSON file, set
+`data.meta.adoptsFrom.module` to **`{{darkfactoryModuleUrl}}`** — this
+is the live module URL for the tracker schema in this run. The exact
+`adoptsFrom.name` per file (`Project` / `Issue` / `KnowledgeArticle`)
+and the JSON:API document envelope are documented in the
+software-factory-bootstrap and software-factory-operations skills.
+
+Catalog Spec cards adopt from `https://cardstack.com/base/spec` /
+`Spec` instead, regardless of the target realm.
+
+**Always fetch the live schema before writing a tracker or Spec card.**
+Do not rely on memorized field names or enum values for these card
+types — call `get_card_schema({ module, name })` first and use the
+returned `{ attributes, relationships? }` JSON Schema verbatim. The
+tool introspects the real `CardDef` at runtime, so the shape stays
+correct as the tracker schema evolves. Schemas are cached per-process,
+so repeat calls are cheap.
 
 {{#each skills}}
 

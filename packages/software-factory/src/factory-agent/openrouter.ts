@@ -21,6 +21,7 @@ import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
+  requireDarkfactoryModuleUrl,
   type PromptLoader,
 } from '../factory-prompt-loader';
 import {
@@ -331,6 +332,7 @@ export class OpenRouterFactoryAgent implements LoopAgent {
 
     return this.promptLoader.load('system', {
       targetRealm: context.targetRealm,
+      darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
       skills,
     });
   }

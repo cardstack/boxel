@@ -109,8 +109,9 @@ export interface RunFactoryEntrypointDependencies {
     workspaceDir: string,
   ) => Promise<void>;
   /**
-   * Push the workspace to the target realm (prefer-local). Tests stub
-   * this out. Defaults to `client.sync({ preferLocal: true })`.
+   * Push the workspace to the target realm (prefer-local) and wait for
+   * the realm's indexer to settle before returning. Tests stub this
+   * out. Defaults to `client.sync({ preferLocal: true, waitForIndex: true })`.
    */
   syncWorkspaceToRealm?: (
     client: BoxelCLIClient,
@@ -292,7 +293,11 @@ export async function runFactoryEntrypoint(
   });
 
   // Push the freshly-written seed (and any other pre-existing workspace
-  // state) to the realm so the scheduler's `listIssues()` query sees it.
+  // state) to the realm. `defaultSyncWorkspaceToRealm` uses
+  // `waitForIndex: true` so the realm-server only responds after the
+  // indexer has processed the batch — the next step is `listIssues()`,
+  // which hits the index, and CS-11003 PR 2 made `+source` POSTs
+  // fire-and-forget by default.
   let syncWorkspaceToRealm =
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
@@ -430,8 +435,17 @@ async function defaultSyncWorkspaceToRealm(
   realmUrl: string,
   workspaceDir: string,
 ): Promise<void> {
+  // `waitForIndex: true` makes the realm-server's `_atomic` handler block
+  // on indexing before responding (`?waitForIndex=true` query param).
+  // Required here because the next step is `runFactoryIssueLoop` →
+  // `listIssues()`, which hits the realm's index. Without this the loop
+  // would race CS-11003 PR 2's deferred `+source` POST and exit with
+  // `outcome=all_issues_done, issues=0` despite a freshly-synced seed.
   let result = await withStdoutRedirected(() =>
-    client.sync(realmUrl, workspaceDir, { preferLocal: true }),
+    client.sync(realmUrl, workspaceDir, {
+      preferLocal: true,
+      waitForIndex: true,
+    }),
   );
   if (result.error) {
     throw new Error(`Failed to sync workspace to realm: ${result.error}`);

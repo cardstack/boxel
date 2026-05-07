@@ -9,27 +9,65 @@ Use this skill when the current issue has `issueType: bootstrap`. Your job is
 to read the brief, create project artifacts, and set up the issue backlog for
 the implementation phase.
 
-## Use the structured factory tools — never `Write` / `write_file`
+## How to write tracker-schema cards
 
-All cards created in this skill (Project, KnowledgeArticle, Issue) are
-**tracker-schema cards** with dedicated factory tools that enforce schema
-and invariants. Always create them through these tools — never by writing
-the underlying `.json` directly via native `Write` (Claude backend) or
-`write_file` (OpenRouter backend):
+Project, KnowledgeArticle, and Issue cards are plain `.json` files in
+the workspace. Use the workspace fs surface to write them — `Write`
+(Claude backend) or `write_file` (OpenRouter backend) — with the
+JSON:API document envelope shown below.
 
-| Card to create / update               | Use this tool      |
-| ------------------------------------- | ------------------ |
-| `Projects/<slug>.json`                | `update_project`   |
-| `Knowledge Articles/<slug>-*.json`    | `create_knowledge` |
-| `Issues/<slug>-<card-slug>.json`      | `update_issue`     |
-| Append a comment to an existing issue | `add_comment`      |
+**The system prompt names the live tracker module URL** (the value you
+should put in `data.meta.adoptsFrom.module` for Project / Issue /
+KnowledgeArticle cards). Use that URL verbatim — do not try to derive it.
 
-These tools accept the `path`, `attributes`, and `relationships` you'd
-otherwise hand-construct as JSON:API. They auto-construct the document
-with the correct `adoptsFrom`, do read-patch-write merging that
-preserves attributes you did not pass, and (for issues) keep
-`description` immutable. Bypassing them produces malformed cards or
-silently violates invariants the orchestrator depends on.
+| File                               | adoptsFrom.name    |
+| ---------------------------------- | ------------------ |
+| `Projects/<slug>.json`             | `Project`          |
+| `Knowledge Articles/<slug>-*.json` | `KnowledgeArticle` |
+| `Issues/<slug>-<card-slug>.json`   | `Issue`            |
+
+For each card, the document is:
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": { ... per the live schema (see below) ... },
+    "relationships": { ... per the live schema (see below) ... },
+    "meta": {
+      "adoptsFrom": {
+        "module": "<darkfactoryModuleUrl from system prompt>",
+        "name": "<Project | Issue | KnowledgeArticle>"
+      }
+    }
+  }
+}
+```
+
+### Fetch the live schema before writing
+
+Do **not** memorize attribute names, enum values, or relationship keys
+for these cards — they evolve. Before writing a Project / Issue /
+KnowledgeArticle JSON file, call:
+
+```
+get_card_schema({ module: "<darkfactoryModuleUrl>", name: "Project" })
+```
+
+(and the same for `Issue` / `KnowledgeArticle`). The tool returns the
+live `{ attributes, relationships? }` JSON Schema introspected from the
+real `CardDef` — including the allowed enum values for fields like
+`status` / `priority` / `issueType` / `articleType` / `projectStatus`
+and the relationship keys (`project`, `relatedKnowledge`,
+`knowledgeBase`, `blockedBy`, etc.). Use the field names, types, and
+enums it returns verbatim. Schemas are cached per-process, so repeated
+calls are cheap.
+
+Catalog Spec cards (`Spec/<slug>.json`) are different — they adopt from
+`https://cardstack.com/base/spec` / `Spec`. Fetch their schema the same
+way: `get_card_schema({ module: "https://cardstack.com/base/spec",
+name: "Spec" })`. The catalog spec workflow is documented in the
+software-factory-operations skill.
 
 ## Naming Conventions
 
@@ -42,51 +80,49 @@ Derive names from the brief title:
   - `"Employee Handbook"` → `EH`
   - `"Customer Relationship Manager"` → `CRM` (first 3-4 words)
 
-## Card Schemas
+## Card Authoring Guidance
+
+The field/relationship shapes for each card type are fetched at runtime
+via `get_card_schema` (see "Fetch the live schema before writing"
+above). This section covers what is **not** in the schema: what to put
+in those fields and how to organize the bootstrap output.
 
 ### Project Card
 
 **Path:** `Projects/<slug>.json`
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Project" }`
+**adoptsFrom.name:** `Project`
 
-| Field              | Type     | Example                                         |
-| ------------------ | -------- | ----------------------------------------------- |
-| `projectCode`      | String   | `"SN"`                                          |
-| `projectName`      | String   | `"Sticky Note"`                                 |
-| `projectStatus`    | Enum     | `"active"`                                      |
-| `objective`        | String   | Brief content summary                           |
-| `scope`            | Markdown | Full brief content by sections                  |
-| `technicalContext` | Markdown | `"Generated by factory:go from brief at <url>"` |
-| `successCriteria`  | Markdown | Checklist from brief section headings           |
+Fetch the schema, then populate the attributes from the brief:
 
-**Relationships:**
+- The project-name attribute → the brief's title (e.g. `"Sticky Note"`).
+- The project-code attribute → 2–4 uppercase initials from the title (e.g. `"SN"`).
+- The objective / scope / technical-context / success-criteria attributes → derive from the brief content. Use markdown.
+- The status attribute → use one of the enum values returned by the schema for an active project (typically the "active" / starting state — the schema's enum is the source of truth, never guess).
 
-- `knowledgeBase.0` → `{ links: { self: "../Knowledge Articles/<slug>-<article-slug>" } }` (one entry per article)
+**Relationships:** the schema names the array relationship that links a
+project to its knowledge articles. Populate one entry per article you
+create (paths like `../Knowledge Articles/<slug>-<article-slug>`).
 
 ### KnowledgeArticle Card
 
 **Paths:** `Knowledge Articles/<slug>-<article-slug>.json` (as many as needed)
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle" }`
+**adoptsFrom.name:** `KnowledgeArticle`
 
 Always create at least two articles:
 
-- **Brief Context** (`<slug>-brief-context`) — full brief content and background, `articleType: "context"`
-- **Agent Onboarding** (`<slug>-agent-onboarding`) — how to work on this project, `articleType: "onboarding"`
+- **Brief Context** (`<slug>-brief-context`) — full brief content and background.
+- **Agent Onboarding** (`<slug>-agent-onboarding`) — how to work on this project.
 
-Add more as the brief warrants (e.g., detailed visual design, deep domain knowledge). Keep each article cohesive with a clear guiding principle.
-
-| Field          | Type     | Description                                                                   |
-| -------------- | -------- | ----------------------------------------------------------------------------- |
-| `articleTitle` | String   | Descriptive title, e.g. `"<title> — Brief Context"`, `"<title> — Data Model"` |
-| `articleType`  | String   | One of: `"context"`, `"onboarding"`, `"reference"`, `"decision"`              |
-| `content`      | Markdown | Article body                                                                  |
-| `tags`         | String[] | Relevant tags for skill resolution                                            |
-| `updatedAt`    | DateTime | ISO timestamp                                                                 |
+Add more as the brief warrants (e.g., detailed visual design, deep
+domain knowledge). Keep each article cohesive with a clear guiding
+principle. Use the `articleType` enum values returned by the schema to
+classify each one (e.g., one for context, one for onboarding); use the
+schema's enum literally.
 
 ### Issue Card — Organized by Entry-Point Card
 
 **Paths:** `Issues/<slug>-<card-name-slug>.json` (one per entry-point card, named after the card)
-**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Issue" }`
+**adoptsFrom.name:** `Issue`
 
 Organize implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the catalog. Create **one issue per entry-point card**, named after that card.
 
@@ -96,31 +132,56 @@ Each issue covers the full scope of its entry-point card:
 - QUnit tests (`.test.gts`) for the entry-point card **and** all its support cards
 - Catalog Spec (`Spec/<card-name>.json`) with realistic example instances via `linkedExamples`
 
-Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do **not** need their own catalog specs or separate issues.
+Interior cards (field cards, helper cards, linked supporting types) are
+implemented as part of their entry-point card's issue. They need tests
+but do **not** need their own catalog specs or separate issues.
 
-| Field                | Type     | Description                                                       |
-| -------------------- | -------- | ----------------------------------------------------------------- |
-| `issueId`            | String   | `"<projectCode>-<N>"` (sequential)                                |
-| `summary`            | String   | `"Implement <card name> card"` (named after the entry-point card) |
-| `description`        | Markdown | Card to create, fields, support cards, tests, spec, examples      |
-| `issueType`          | Enum     | `"feature"`                                                       |
-| `status`             | Enum     | `"backlog"`                                                       |
-| `priority`           | Enum     | `"high"` for first, `"medium"` for subsequent                     |
-| `order`              | Number   | Sequential (1, 2, 3, ...)                                         |
-| `acceptanceCriteria` | Markdown | Checklist: card def, support cards, tests, spec, examples         |
-| `createdAt`          | DateTime | ISO timestamp                                                     |
-| `updatedAt`          | DateTime | ISO timestamp                                                     |
+**Populating attributes** (consult the schema for the exact field names and enum values):
 
-**Relationships for each issue:**
+- The issue-id attribute → `"<projectCode>-<N>"` (sequential).
+- The summary attribute → `"Implement <card name> card"`.
+- The description attribute → markdown describing the card to create, its fields, support cards, tests, spec, and examples. **Immutable after creation** — see Issue Invariants below.
+- The issue-type / status / priority attributes → use the enum values returned by the schema. For a fresh bootstrap, all issues start in the "backlog" state with issue-type "feature". Mark the first issue as the highest non-critical priority and the rest a step lower.
+- An `order` field (sequential integer 1, 2, 3, …) for the scheduler.
+- The acceptance-criteria attribute → markdown checklist: card def, support cards, tests, spec, examples.
+- Timestamp fields → ISO timestamps. Note that on Issues these are top-level attributes (e.g. `createdAt` / `updatedAt`) — distinct from the timestamp field inside individual `comments[]` entries (which is named `datetime`, see operations skill). The schema is the source of truth.
 
-- `project` → `{ links: { self: "../Projects/<slug>" } }`
-- `relatedKnowledge.0` → `{ links: { self: "../Knowledge Articles/<slug>-brief-context" } }`
-- `relatedKnowledge.1` → `{ links: { self: "../Knowledge Articles/<slug>-agent-onboarding" } }`
-- `blockedBy` → issues for any entry-point cards this card depends on
+**Relationships for each issue** (the schema names the keys):
 
-**Dependency ordering:** If one entry-point card depends on another (e.g., card B uses card A as a field type or linked card), order the issues so the depended-upon card is implemented first. Set `order` values accordingly (dependency-free cards get lower order numbers) and wire `blockedBy` so consuming cards cannot start until their dependencies are done.
+- A `project` link → `../Projects/<slug>`.
+- Knowledge-article links — one entry per knowledge article you want loaded into the agent's context (typically the brief-context and agent-onboarding articles you created above).
+- A blocked-by relationship for any issues that must complete first.
+
+**Dependency ordering:** If one entry-point card depends on another
+(e.g., card B uses card A as a field type or linked card), order the
+issues so the depended-upon card is implemented first. Set `order`
+values accordingly (dependency-free cards get lower order numbers) and
+wire the blocked-by relationship so consuming cards cannot start until
+their dependencies are done.
 
 If the brief describes only one entry-point card, create one issue. If it describes multiple, create one per entry-point card ordered so dependency cards come first.
+
+## Issue Invariants — read carefully
+
+The orchestrator depends on three rules about Issue cards. Before this
+skill rewrite they were enforced by a wrapper tool that stripped /
+ignored disallowed fields automatically. Now that you write the JSON
+directly, you must enforce them yourself:
+
+1. **`description` is immutable after creation.** Never modify an
+   Issue's `description` once the card exists. To add post-creation
+   context (blocked reasons, validation failures, progress notes), use
+   the `comments` array instead — see "Adding a comment to an existing
+   issue" in the operations skill.
+2. **`status` transitions are restricted to the agent.** You may set
+   `status` to `"blocked"` (cannot proceed) or `"backlog"` (unblock).
+   Never set `status` to `"done"` or `"in_progress"` — those are owned
+   by the orchestrator based on `signal_done` + validation results.
+3. **Read before write for updates.** When updating an existing Issue
+   (or any tracker card), `Read` the file first, modify only the
+   attributes you intend to change, then `Write` (or `Edit`) the merged
+   document back. Do not overwrite the whole file with only the new
+   fields — you'll silently drop existing attributes the file had.
 
 ## Why Relationships Matter
 
@@ -130,42 +191,42 @@ issue, `ContextBuilder.buildForIssue()` traverses these relationships to
 load the Project card and Knowledge Articles into the agent's context. Without
 these relationships, the agent would have no project scope or brief content.
 
-## How `attributes` and `relationships` map to the structured tools
+## Document Envelope
 
-The schema tables above describe the `attributes` you pass to
-`update_project`, `create_knowledge`, and `update_issue`. The tool
-auto-constructs the JSON:API document with the correct `adoptsFrom`, so
-you do **not** pass `meta` — only the attributes and relationships.
-
-Example call shape (for an Issue):
+All three card types share the same JSON:API envelope — only the
+`attributes`, `relationships`, and `adoptsFrom.name` differ. The
+attribute names, enum values, and relationship keys come from the
+schema you fetched with `get_card_schema`; the envelope is fixed:
 
 ```json
 {
-  "path": "Issues/sticky-note.json",
-  "attributes": {
-    "issueId": "SN-1",
-    "summary": "Implement Sticky Note card",
-    "description": "...",
-    "issueType": "feature",
-    "status": "backlog",
-    "priority": "high",
-    "order": 1,
-    "acceptanceCriteria": "...",
-    "createdAt": "2026-05-04T00:00:00Z",
-    "updatedAt": "2026-05-04T00:00:00Z"
-  },
-  "relationships": {
-    "project": { "links": { "self": "../Projects/sticky-note" } },
-    "relatedKnowledge.0": {
-      "links": { "self": "../Knowledge Articles/sticky-note-brief-context" }
+  "data": {
+    "type": "card",
+    "attributes": {
+      // populate per the schema returned by:
+      //   get_card_schema({ module: "<darkfactoryModuleUrl>", name: "Issue" })
+    },
+    "relationships": {
+      // each relationship key from the schema points at a sibling
+      // card via a relative path; arrays use indexed keys (key.0, key.1, …)
+      "<project-relationship-key>": {
+        "links": { "self": "../Projects/<slug>" }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "<darkfactoryModuleUrl from system prompt>",
+        "name": "Issue"
+      }
     }
   }
 }
 ```
 
-Use relative paths (`../`) for relationship links since cards are in
-sibling directories. The schema in each tool's parameter definition is
-authoritative — read it before calling the tool.
+Use relative paths (`../`) for `links.self` since cards live in sibling
+directories within the workspace. The same envelope applies to Project
+and KnowledgeArticle — only the `adoptsFrom.name` and the
+schema-derived attributes/relationships change.
 
 ## Completion
 

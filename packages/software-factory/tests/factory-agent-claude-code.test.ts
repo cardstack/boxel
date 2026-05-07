@@ -50,6 +50,9 @@ function makeContext(): AgentContext {
     knowledge: [],
     skills: [],
     targetRealm: 'https://realms.example.test/hassan/personal/',
+    // System-prompt rendering requires this — see requireDarkfactoryModuleUrl.
+    darkfactoryModuleUrl:
+      'https://realms.example.test/software-factory/darkfactory',
   };
 }
 
@@ -413,13 +416,11 @@ module('factory-agent-claude-code', function () {
         'Grep',
       ]);
 
+      // CS-11033: native fs tools must NOT appear in allowedTools.
+      // The SDK auto-approves anything in allowedTools and skips
+      // canUseTool entirely. Keeping Write/Edit/etc out of this list
+      // is what causes the path-scoping hook to actually fire.
       assert.deepEqual(capturedOptions!.allowedTools, [
-        'Read',
-        'Write',
-        'Edit',
-        'Bash',
-        'Glob',
-        'Grep',
         'mcp__factory__signal_done',
       ]);
 
@@ -429,16 +430,67 @@ module('factory-agent-claude-code', function () {
         'cwd is set to the factory workspace so native fs tools resolve realm-relative paths',
       );
 
-      // `dontAsk` (instead of bypassPermissions) keeps every tool in
-      // allowedTools auto-approved while still firing canUseTool, which
-      // we use to scope native fs tools to the workspace.
-      assert.strictEqual(capturedOptions!.permissionMode, 'dontAsk');
+      // `default` (verified empirically — see scripts/canusetool-repro.ts)
+      // is the only permission mode where the SDK invokes canUseTool
+      // for tools outside allowedTools and honors the hook's
+      // allow/deny. `dontAsk` and `bypassPermissions` either skip the
+      // hook entirely or silently deny without consulting it.
+      assert.strictEqual(capturedOptions!.permissionMode, 'default');
       assert.strictEqual(
         typeof capturedOptions!.canUseTool,
         'function',
         'canUseTool is wired so native fs ops can be scoped to the workspace',
       );
       assert.deepEqual(capturedOptions!.settingSources, []);
+    });
+
+    test('native fs tools are NOT auto-approved so canUseTool can gate them (CS-11033)', async function (assert) {
+      // Regression guard. The SDK skips canUseTool for any tool in
+      // allowedTools — verified empirically in scripts/canusetool-repro.ts.
+      // If a future change adds Read / Write / Edit / MultiEdit /
+      // NotebookEdit / NotebookRead to allowedTools (or switches
+      // permissionMode away from `default`), the workspace-scoping
+      // hook becomes dead code and the model can write to absolute
+      // paths outside the factory workspace again. Lock both
+      // conditions so that regression is caught at unit-test time.
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        { workspaceDir: '/tmp/factory-workspace-test' },
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [makeTool({ name: 'signal_done' })]);
+
+      let allowed = capturedOptions!.allowedTools ?? [];
+      for (let pathScopedTool of [
+        'Read',
+        'Write',
+        'Edit',
+        'MultiEdit',
+        'NotebookEdit',
+        'NotebookRead',
+      ]) {
+        assert.notOk(
+          allowed.includes(pathScopedTool),
+          `${pathScopedTool} must stay out of allowedTools so canUseTool fires for every call`,
+        );
+      }
+      assert.strictEqual(
+        capturedOptions!.permissionMode,
+        'default',
+        'permissionMode must be `default` — other modes either skip canUseTool or silently deny',
+      );
+      assert.strictEqual(
+        typeof capturedOptions!.canUseTool,
+        'function',
+        'canUseTool must be wired alongside the above two conditions',
+      );
     });
 
     test('filters factory tools that have native or boxel CLI alternatives', async function (assert) {
