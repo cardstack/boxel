@@ -24,12 +24,16 @@ import {
 } from '../helpers/integration';
 
 let profileManager: ProfileManager;
-let cleanupProfile: () => void;
+let cleanupProfile: (() => void) | undefined;
 let realmUrl: string;
 const localDirs: string[] = [];
 const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
 const REMOTE_VISIBILITY_TIMEOUT_MS = 5_000;
 const JWT_TEST_USER = '@cli-watch-test:localhost';
+
+function currentTestName(): string {
+  return expect.getState().currentTestName ?? 'unknown test';
+}
 
 function makeLocalDir(): string {
   let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-watch-int-'));
@@ -87,14 +91,27 @@ async function remoteMutation(
   init: RequestInit,
 ): Promise<Response> {
   let controller = new AbortController();
+  let upstreamSignal = init.signal;
+  let removeAbortListener: (() => void) | undefined;
   let timedOut = false;
   let timeout = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, REMOTE_REQUEST_TIMEOUT_MS);
   let startedAt = Date.now();
-  let currentTestName = expect.getState().currentTestName ?? 'unknown test';
+  let testName = currentTestName();
   let url = buildFileUrl(realm, relPath);
+
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) {
+      controller.abort(upstreamSignal.reason);
+    } else {
+      let onAbort = () => controller.abort(upstreamSignal.reason);
+      upstreamSignal.addEventListener('abort', onAbort, { once: true });
+      removeAbortListener = () =>
+        upstreamSignal.removeEventListener('abort', onAbort);
+    }
+  }
 
   try {
     return await profileManager.authedRealmFetch(url, {
@@ -107,11 +124,12 @@ async function remoteMutation(
       ? `timed out after ${REMOTE_REQUEST_TIMEOUT_MS}ms`
       : formatFetchError(error);
     throw new Error(
-      `remote ${init.method ?? 'GET'} ${relPath} failed during "${currentTestName}" after ${elapsedMs}ms: ${detail}`,
+      `remote ${init.method ?? 'GET'} ${relPath} failed during "${testName}" after ${elapsedMs}ms: ${detail}`,
       { cause: error instanceof Error ? error : undefined },
     );
   } finally {
     clearTimeout(timeout);
+    removeAbortListener?.();
   }
 }
 
@@ -138,6 +156,7 @@ async function waitForRemoteVisibility(
   realm: string,
   relPath: string,
   mode: 'present' | 'absent',
+  opts?: { previousMtime?: number },
 ): Promise<void> {
   let targetUrl = buildFileUrl(realm, relPath);
   let deadline = Date.now() + REMOTE_VISIBILITY_TIMEOUT_MS;
@@ -146,14 +165,19 @@ async function waitForRemoteVisibility(
   while (Date.now() < deadline) {
     let mtimes = await fetchRemoteMtimes(realm);
     lastSeen = mtimes[targetUrl];
-    if (mode === 'present' ? lastSeen !== undefined : lastSeen === undefined) {
+    if (
+      mode === 'present'
+        ? lastSeen !== undefined &&
+          (opts?.previousMtime === undefined || lastSeen !== opts.previousMtime)
+        : lastSeen === undefined
+    ) {
       return;
     }
     await sleep(50);
   }
 
   throw new Error(
-    `remote ${relPath} did not become ${mode} in _mtimes within ${REMOTE_VISIBILITY_TIMEOUT_MS}ms (lastSeen=${lastSeen ?? 'missing'})`,
+    `remote ${relPath} did not become ${mode} in _mtimes within ${REMOTE_VISIBILITY_TIMEOUT_MS}ms (lastSeen=${lastSeen ?? 'missing'}, previousMtime=${opts?.previousMtime ?? 'missing'})`,
   );
 }
 
@@ -162,11 +186,14 @@ async function writeRemoteFile(
   relPath: string,
   content: string,
 ): Promise<void> {
+  let previousMtime = (await fetchRemoteMtimes(realm))[
+    buildFileUrl(realm, relPath)
+  ];
   let response = await remoteMutation(realm, relPath, {
     method: 'POST',
     headers: {
-      'Content-Type': 'text/plain;charset=UTF-8',
       Accept: 'application/vnd.card+source',
+      'Content-Type': 'text/plain;charset=UTF-8',
     },
     body: content,
   });
@@ -175,7 +202,7 @@ async function writeRemoteFile(
       `writeRemoteFile ${relPath} failed: ${response.status} ${response.statusText}`,
     );
   }
-  await waitForRemoteVisibility(realm, relPath, 'present');
+  await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
 }
 
 async function deleteRemoteFile(realm: string, relPath: string): Promise<void> {
@@ -225,7 +252,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanupProfile?.();
-  cleanupProfile = undefined as unknown as () => void;
+  cleanupProfile = undefined;
 });
 
 afterAll(async () => {
@@ -346,9 +373,10 @@ describe('realm watch (integration)', () => {
 
   it('groups bursts of remote changes into a single debounced flush', async () => {
     let localDir = makeLocalDir();
+    let debounceMs = 2_000;
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
-      debounceMs: 2_000,
+      debounceMs,
       quiet: true,
     });
     await watcher.initialize();
@@ -357,8 +385,19 @@ describe('realm watch (integration)', () => {
 
     let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
     let resolveFlush!: () => void;
-    let flushSettled = new Promise<void>((resolve) => {
-      resolveFlush = resolve;
+    let flushTimeout: ReturnType<typeof setTimeout>;
+    let flushSettled = new Promise<void>((resolve, reject) => {
+      flushTimeout = setTimeout(() => {
+        reject(
+          new Error(
+            `debounced flush did not settle within ${debounceMs + 1_000}ms during "${currentTestName()}"`,
+          ),
+        );
+      }, debounceMs + 1_000);
+      resolveFlush = () => {
+        clearTimeout(flushTimeout);
+        resolve();
+      };
     });
     let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
       flushes.push(result);
