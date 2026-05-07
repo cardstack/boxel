@@ -461,6 +461,106 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('closed');
     });
 
+    test('Escape closes the most recently opened stack item', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('top item is rendered before Escape');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist('Escape closed the topmost item');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the underlying item remains open');
+    });
+
+    test('Escape does not close a stack item while a modal is open', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Open the delete-confirmation modal via the card's more-options menu.
+      await click(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-more-options-button]`,
+      );
+      await click('[data-test-boxel-menu-item-text="Delete"]');
+
+      assert
+        .dom('[data-test-delete-modal-container]')
+        .exists('delete modal is open');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the card under the modal stays open');
+    });
+
+    test('Escape closes the most recently opened item when it lives in a non-rightmost stack (left-neighbor drop)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Make Pet/mango clickable in the search prompt as a recent card.
+      let operatorModeStateService = getService('operator-mode-state-service');
+      let recentCardsService = getService('recent-cards-service');
+      operatorModeStateService.state.stacks[0].map((item) =>
+        recentCardsService.add(item.id),
+      );
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+
+      // Drop a card into a NEW LEFT-side stack: stack 0 becomes [Mango],
+      // the original stack shifts to index 1 with [Fadhlan]. Mango is
+      // now the most recently opened item, even though it sits in the
+      // leftmost (non-rightmost) stack.
+      await click('[data-test-add-card-left-stack]');
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango');
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist(
+          'Escape closed the leftmost item because it was opened most recently',
+        );
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the right-side stack item remains open');
+    });
+
+    test('Escape does not close a stack item while focus is in a text input', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Opening the search sheet focuses its input.
+      await click('[data-test-open-search-field]');
+      assert.dom('[data-test-search-field]').isFocused();
+
+      // Escape from inside the input should dismiss the search sheet
+      // (its own handler) WITHOUT also closing the card beneath it.
+      await triggerKeyEvent('[data-test-search-field]', 'keydown', 'Escape');
+
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('Escape inside an input did not close the underlying card');
+    });
+
     test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [

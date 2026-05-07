@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -125,6 +126,15 @@ interface CardToDelete {
   title: string;
 }
 
+function isFocusInTextInput(): boolean {
+  let el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  let tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -146,6 +156,42 @@ export default class InteractSubmode extends Component {
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
+
+  constructor(owner: Owner, args: {}) {
+    super(owner, args);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('keydown', this.onWindowKeydown);
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', this.onWindowKeydown);
+    }
+  }
+
+  @action private onWindowKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    if (event.defaultPrevented) return;
+    // A modal or dialog is open — let it own the Escape key.
+    if (document.body.classList.contains('has-modal')) return;
+    if (this.cardToDelete) return;
+    // The user is typing in a text field (search sheet, inline rename,
+    // contenteditable card content). Let the field handle its own
+    // Escape semantics (blur, cancel) without closing the card under it.
+    if (isFocusInTextInput()) return;
+
+    let item = this.mostRecentlyOpenedStackItem;
+    if (!item) return;
+    this.close(item);
+  }
+
+  private get mostRecentlyOpenedStackItem(): StackItem | undefined {
+    let topItems = this.operatorModeStateService.topMostStackItems();
+    if (topItems.length === 0) return undefined;
+    return topItems.reduce((a, b) => (b.openedAt > a.openedAt ? b : a));
+  }
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];

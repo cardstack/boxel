@@ -17,6 +17,7 @@ interface Args {
     fieldName?: string;
     fieldType?: 'linksTo' | 'linksToMany';
   };
+  openedAt?: number;
 }
 
 export type StackItemType = 'card' | 'file';
@@ -52,6 +53,8 @@ export function detectStackItemTypeForTarget(
   return fileMetaInstanceOrError ? 'file' : 'card';
 }
 
+let nextOpenedAt = 0;
+
 export class StackItem {
   // `format`, `request`, `useBaseTemplate` are tracked so that callers
   // can mutate them IN PLACE (e.g. flipping `format` from 'isolated' →
@@ -66,6 +69,11 @@ export class StackItem {
   @tracked useBaseTemplate?: boolean;
   stackIndex: number;
   type: StackItemType;
+  // Monotonic per-construction sequence used to identify the most
+  // recently opened item across multiple stacks (e.g. for Escape-key
+  // close). Construction-time is the right signal: pushing the same id
+  // again creates a new StackItem.
+  readonly openedAt: number;
   #id: string;
   relationshipContext?:
     | {
@@ -83,6 +91,7 @@ export class StackItem {
       type,
       useBaseTemplate,
       relationshipContext,
+      openedAt,
     } = args;
 
     this.#id = id.replace(/\.json$/, '');
@@ -92,6 +101,7 @@ export class StackItem {
     this.type = inferStackItemType(type);
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
+    this.openedAt = openedAt ?? ++nextOpenedAt;
   }
 
   get id() {
@@ -107,7 +117,11 @@ export class StackItem {
       relationshipContext,
       type,
       useBaseTemplate,
+      openedAt,
     } = this;
+    // Preserve the original open-time so clones (id swap on persist,
+    // stack shift on left-neighbor drop) don't masquerade as a fresh
+    // open and steal "most recently opened" precedence.
     return new StackItem({
       format,
       request,
@@ -116,6 +130,7 @@ export class StackItem {
       stackIndex,
       relationshipContext,
       useBaseTemplate,
+      openedAt,
       ...args,
     });
   }
