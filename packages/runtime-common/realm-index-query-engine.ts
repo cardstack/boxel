@@ -58,12 +58,18 @@ import type {
   QueryFieldMeta,
   Saved,
 } from './resource-types';
-import type { FieldDefinition } from './definitions';
+import { getImmediateFieldDef, type FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
   getValueForResourcePath,
 } from './query-field-utils';
+
+// We allow up to this many traversals into the same card type per
+// `populateQueryFields` walk, matching the field-set the host emits at
+// indexing time (`getFieldDefinitions` in `runtime-common/definitions.ts`
+// uses the same depth for repeated card types).
+const RECURSING_DEPTH = 3;
 
 type Options = {
   loadLinks?: true;
@@ -292,11 +298,14 @@ export class RealmIndexQueryEngine {
       } else {
         definition = await this.#definitionLookup.lookupDefinition(codeRef);
       }
+      if (!definition) {
+        return false;
+      }
       // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
       let fieldName = fieldKey.includes('.')
         ? fieldKey.slice(0, fieldKey.indexOf('.'))
         : fieldKey;
-      let fieldDefinition = definition.fields[fieldName];
+      let fieldDefinition = getImmediateFieldDef(definition, fieldName);
       if (!fieldDefinition) {
         return false;
       }
@@ -517,49 +526,111 @@ export class RealmIndexQueryEngine {
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
-    let definition: import('./definitions').Definition | undefined;
-    if (opts?.cacheOnlyDefinitions) {
-      definition = await this.#definitionLookup.lookupCachedDefinition(codeRef);
-      if (!definition) {
-        return;
-      }
-    } else {
-      definition = await this.#definitionLookup.lookupDefinition(codeRef);
+    let definition = await this.lookupDefinitionForOpts(codeRef, opts);
+    if (!definition) {
+      return;
     }
-    for (let [fieldName, fieldDefinition] of Object.entries(
-      definition.fields,
-    )) {
+    await this.walkAndPopulateQueryFields(
+      resource,
+      definition,
+      '',
+      realmURL,
+      opts,
+      [internalKeyFor(definition.codeRef, undefined)],
+    );
+  }
+
+  // Walk the field tree from `definition` looking for computed
+  // linksTo / linksToMany fields and running their queries. Recurses
+  // through `contains` / `containsMany` of non-primitive fieldOrCards
+  // because the new top-level-only `Definition.fields` shape no longer
+  // pre-materializes nested paths. Visited-card-type counting matches
+  // `getFieldDefinitions`'s `RECURSING_DEPTH = 3`-per-cycle policy so
+  // the field set we visit matches the schema the host originally
+  // emitted.
+  private async walkAndPopulateQueryFields(
+    resource: LooseCardResource | FileMetaResource,
+    definition: import('./definitions').Definition,
+    prefix: string,
+    realmURL: URL,
+    opts: Options | undefined,
+    visited: string[],
+  ): Promise<void> {
+    for (let [fieldName, defId] of Object.entries(definition.fields)) {
+      let fieldDefinition = definition.fieldDefs[defId];
+      if (!fieldDefinition) {
+        continue;
+      }
+      let fullFieldName = prefix ? `${prefix}.${fieldName}` : fieldName;
+
       let queryDefinition = this.getQueryDefinition(fieldDefinition);
+      if (
+        queryDefinition &&
+        (fieldDefinition.type === 'linksTo' ||
+          fieldDefinition.type === 'linksToMany')
+      ) {
+        if (opts?.linkFields && !opts.linkFields.includes(fullFieldName)) {
+          continue;
+        }
+        let { results, errors, searchURL } = await this.executeQueryForField({
+          fieldDefinition,
+          fieldName: fullFieldName,
+          queryDefinition,
+          resource,
+          realmURL,
+          opts,
+        });
+        this.applyQueryResults({
+          fieldDefinition,
+          fieldName: fullFieldName,
+          resource,
+          results,
+          errors,
+          searchURL,
+        });
+        continue;
+      }
 
       if (
-        (fieldDefinition.type !== 'linksTo' &&
-          fieldDefinition.type !== 'linksToMany') ||
-        !queryDefinition
+        fieldDefinition.isPrimitive ||
+        (fieldDefinition.type !== 'contains' &&
+          fieldDefinition.type !== 'containsMany')
       ) {
         continue;
       }
-
-      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
+      if (!isResolvedCodeRef(fieldDefinition.fieldOrCard)) {
         continue;
       }
-
-      let { results, errors, searchURL } = await this.executeQueryForField({
-        fieldDefinition,
-        fieldName,
-        queryDefinition,
+      let childCardKey = internalKeyFor(fieldDefinition.fieldOrCard, undefined);
+      if (visited.filter((v) => v === childCardKey).length > RECURSING_DEPTH) {
+        continue;
+      }
+      let childDef = await this.lookupDefinitionForOpts(
+        fieldDefinition.fieldOrCard,
+        opts,
+      );
+      if (!childDef) {
+        continue;
+      }
+      await this.walkAndPopulateQueryFields(
         resource,
+        childDef,
+        fullFieldName,
         realmURL,
         opts,
-      });
-      this.applyQueryResults({
-        fieldDefinition,
-        fieldName,
-        resource,
-        results,
-        errors,
-        searchURL,
-      });
+        [...visited, childCardKey],
+      );
     }
+  }
+
+  private async lookupDefinitionForOpts(
+    codeRef: import('./code-ref').ResolvedCodeRef,
+    opts: Options | undefined,
+  ): Promise<import('./definitions').Definition | undefined> {
+    if (opts?.cacheOnlyDefinitions) {
+      return await this.#definitionLookup.lookupCachedDefinition(codeRef);
+    }
+    return await this.#definitionLookup.lookupDefinition(codeRef);
   }
 
   // Populate query-based relationship fields using pre-extracted metadata

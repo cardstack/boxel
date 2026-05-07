@@ -61,7 +61,11 @@ import {
   type BoxelIndexTable,
   type CardTypeSummary,
 } from './index-structure';
-import type { Definition, FieldDefinition } from './definitions';
+import {
+  getFieldDef,
+  type Definition,
+  type FieldDefinition,
+} from './definitions';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
@@ -1331,7 +1335,11 @@ export class IndexQueryEngine {
       [],
       // Leaf field handler
       async (definition, expression, pathTraveled) => {
-        let field = getField(definition, pathTraveled);
+        let field = await getField(
+          definition,
+          pathTraveled,
+          this.#definitionLookup,
+        );
         if (isFieldPlural(field)) {
           rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
           return [
@@ -1356,7 +1364,11 @@ export class IndexQueryEngine {
         enter: async (definition, expression, pathTraveled) => {
           // we work forwards determining if any interior fields are plural
           // since that requires a different style predicate
-          let field = getField(definition, pathTraveled);
+          let field = await getField(
+            definition,
+            pathTraveled,
+            this.#definitionLookup,
+          );
           if (isFieldPlural(field)) {
             rootPluralPath = trimPathAtFirstPluralField(pathTraveled);
             return [
@@ -1369,7 +1381,11 @@ export class IndexQueryEngine {
           // we populate the singular fields backwards as we can only do that
           // after we are assured that we are not leveraging the plural style
           // predicate
-          let field = getField(definition, pathTraveled);
+          let field = await getField(
+            definition,
+            pathTraveled,
+            this.#definitionLookup,
+          );
           if (!isFieldPlural(field) && !rootPluralPath) {
             let fieldName = currentField(pathTraveled);
             return ['->', param(fieldName), ...expression];
@@ -1412,7 +1428,11 @@ export class IndexQueryEngine {
       async (definition, expression, pathTraveled) => {
         let queryValue: any;
         let [value] = expression;
-        let field = getField(definition, pathTraveled);
+        let field = await getField(
+          definition,
+          pathTraveled,
+          this.#definitionLookup,
+        );
         let serializer = field.serializerName
           ? getSerializer(field.serializerName)
           : undefined;
@@ -1460,7 +1480,7 @@ export class IndexQueryEngine {
     let currentPath = removeBrackets(
       [...pathTraveled, currentSegment].join('.'),
     );
-    let field = getField(definition, currentPath);
+    let field = await getField(definition, currentPath, this.#definitionLookup);
     // we use '[]' to denote plural fields as that has important ramifications
     // to how we compose our queries in the various handlers and ultimately in
     // SQL construction
@@ -1526,12 +1546,18 @@ function isFieldPlural(field: FieldDefinition): boolean {
   return field.type === 'containsMany' || field.type === 'linksToMany';
 }
 
-function getField(
+async function getField(
   definition: Definition,
   pathTraveled: string,
-): FieldDefinition {
+  definitionLookup: DefinitionLookup,
+): Promise<FieldDefinition> {
   let cleansedPath = removeBrackets(pathTraveled);
-  let field = definition.fields[cleansedPath];
+  let field = await getFieldDef(definition, cleansedPath, async (codeRef) => {
+    if (!isResolvedCodeRef(codeRef)) {
+      return undefined;
+    }
+    return await definitionLookup.lookupDefinition(codeRef);
+  });
   if (!field) {
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a
