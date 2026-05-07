@@ -23,6 +23,7 @@ original incident.
 |---|---|
 | `runtime-null-tolerance.ts` | §6 (null iteration) · §7 (null arithmetic) · §8 (assertString/Number) · §9 (startswith/endswith) · §11a (factory smoke) |
 | `expression-factory.ts` | §10 (jq backslash) · §11 (mode dispatch) · §11a (`as` materialization, Excel-error catch) |
+| `compiler-readable.ts` | §11 (readableSyntax dispatch) · §12 (PascalCase fallback) · §13 (JQ_KEYWORDS guard) · §16 (mixed-syntax) |
 
 ## Running
 
