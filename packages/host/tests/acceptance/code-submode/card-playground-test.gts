@@ -192,33 +192,67 @@ async function waitForHeadPreviewText(
   expectedText: string,
   context: string,
 ) {
+  let safeQuerySelector = (selector: string) => {
+    try {
+      return { element: document.querySelector(selector), error: null };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          element: null,
+          error: {
+            name: error.name,
+            message: error.message,
+          },
+        };
+      }
+      return {
+        element: null,
+        error: {
+          name: 'UnknownError',
+          message: String(error),
+        },
+      };
+    }
+  };
+
+  let readSelectorText = (selector: string) => {
+    let { element, error } = safeQuerySelector(selector);
+    return {
+      text: element?.textContent?.trim() ?? null,
+      error,
+    };
+  };
+
   try {
-    await waitUntil(
-      () =>
-        document.querySelector(selector)?.textContent?.trim() === expectedText,
-      { timeout: 5000 },
-    );
+    await waitUntil(() => readSelectorText(selector).text === expectedText, {
+      timeout: 5000,
+    });
   } catch (error) {
+    let actual = readSelectorText(selector);
+    let googleTitle = readSelectorText('.google-title');
+    let googleDescription = readSelectorText('.google-description');
+    let googleSiteName = readSelectorText('.google-site-name');
+    let previewPanel = safeQuerySelector('[data-test-playground-panel]');
+
     console.info(
-      `head preview diagnostics ${JSON.stringify({
+      'head preview diagnostics',
+      {
         context,
         selector,
         expectedText,
-        actualText:
-          document.querySelector(selector)?.textContent?.trim() ?? null,
-        googleTitleText:
-          document.querySelector('.google-title')?.textContent?.trim() ?? null,
-        googleDescriptionText:
-          document.querySelector('.google-description')?.textContent?.trim() ??
-          null,
-        googleSiteNameText:
-          document.querySelector('.google-site-name')?.textContent?.trim() ??
-          null,
+        actualText: actual.text,
+        selectorError: actual.error,
+        googleTitleText: googleTitle.text,
+        googleTitleError: googleTitle.error,
+        googleDescriptionText: googleDescription.text,
+        googleDescriptionError: googleDescription.error,
+        googleSiteNameText: googleSiteName.text,
+        googleSiteNameError: googleSiteName.error,
         playgroundPreviewHtml:
-          document
-            .querySelector('[data-test-playground-panel]')
-            ?.innerHTML?.slice(0, 2000) ?? null,
-      })}`,
+          previewPanel.element?.innerHTML?.slice(0, 2000) ?? null,
+        playgroundPreviewError: previewPanel.error,
+      },
+      error,
     );
     throw error;
   }
