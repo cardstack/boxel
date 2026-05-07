@@ -123,6 +123,7 @@ module('Unit | query', function (hooks) {
       @field date = contains(DateField);
     }
 
+    loader.shimModule(`${testRealmURL}address`, { Address });
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
@@ -214,6 +215,8 @@ module('Unit | query', function (hooks) {
       async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
         let key = internalKeyFor(codeRef, undefined);
         switch (key) {
+          case `${testRealmURL}address/Address`:
+            return await buildDefinition(Address as unknown as typeof CardDef);
           case `${testRealmURL}person/Person`:
             return await buildDefinition(Person);
           case `${testRealmURL}fancy-person/FancyPerson`:

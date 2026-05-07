@@ -2439,6 +2439,70 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.data.length, 1, 'found one card');
         });
 
+        test('PATCH preserves nested contains attribute values on disk', async function (assert) {
+          // Regression test for the file-serializer's handling of dotted
+          // attribute paths. Person.cardInfo is `contains(CardInfoField)`
+          // and CardInfoField has its own immediate fields like
+          // `summary` and `notes`. A PATCH that writes
+          // `attributes.cardInfo.summary` must persist that value to
+          // disk; an earlier shape relied on materialized
+          // `definition.fields["cardInfo.summary"]` entries to find the
+          // FieldDefinition, and the no-materialization shape requires
+          // `processAttributes` to descend into the child definition
+          // (CardInfoField) at recursion. Without that, the nested
+          // attribute is silently dropped.
+          let entry = 'person-1.json';
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Mango',
+                  cardInfo: {
+                    name: 'Mango Card',
+                    notes: 'a friendly dog',
+                    summary: 'good boy',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body.data.attributes?.cardInfo,
+            {
+              name: 'Mango Card',
+              notes: 'a friendly dog',
+              summary: 'good boy',
+              cardThumbnailURL: null,
+            },
+            'nested cardInfo values present in PATCH response',
+          );
+
+          let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
+          assert.ok(existsSync(cardFile), 'card json exists on disk');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card.data.attributes?.cardInfo,
+            {
+              name: 'Mango Card',
+              notes: 'a friendly dog',
+              summary: 'good boy',
+              cardThumbnailURL: null,
+            },
+            'nested cardInfo values persisted to disk by file-serializer',
+          );
+        });
+
         test('no-op patch returns existing lastModified and does not rewrite file', async function (assert) {
           let cardFile = join(
             dir.name,
