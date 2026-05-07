@@ -200,10 +200,12 @@ module('Unit | query', function (hooks) {
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
 
     async function buildDefinition(cardDef: typeof CardDef) {
+      let { fields, fieldDefs } = getFieldDefinitions(api, cardDef);
       return {
         codeRef: identifyCard(cardDef),
         displayName: cardDef.displayName,
-        fields: getFieldDefinitions(api, cardDef),
+        fields,
+        fieldDefs,
       } as Definition;
     }
 

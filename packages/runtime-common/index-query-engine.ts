@@ -61,7 +61,11 @@ import {
   type BoxelIndexTable,
   type CardTypeSummary,
 } from './index-structure';
-import type { Definition, FieldDefinition } from './definitions';
+import {
+  getFieldDef,
+  type Definition,
+  type FieldDefinition,
+} from './definitions';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
@@ -1531,7 +1535,7 @@ function getField(
   pathTraveled: string,
 ): FieldDefinition {
   let cleansedPath = removeBrackets(pathTraveled);
-  let field = definition.fields[cleansedPath];
+  let field = getFieldDef(definition, cleansedPath);
   if (!field) {
     if (currentField(pathTraveled) === '_cardType') {
       // this is a little awkward--we have the need to treat '_cardType' as a

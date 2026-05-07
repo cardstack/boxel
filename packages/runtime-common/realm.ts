@@ -5574,9 +5574,13 @@ export class Realm {
             let fieldDefinition =
               await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
             if (fieldDefinition) {
-              for (const [subFieldName, subFieldDefinition] of Object.entries(
+              for (const [subFieldName, defId] of Object.entries(
                 fieldDefinition.fields,
               )) {
+                let subFieldDefinition = fieldDefinition.fieldDefs[defId];
+                if (!subFieldDefinition) {
+                  continue;
+                }
                 const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
                 customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
               }
@@ -5599,9 +5603,13 @@ export class Realm {
         let fieldDefinition =
           await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
         if (fieldDefinition) {
-          for (const [subFieldName, subFieldDefinition] of Object.entries(
+          for (const [subFieldName, defId] of Object.entries(
             fieldDefinition.fields,
           )) {
+            let subFieldDefinition = fieldDefinition.fieldDefs[defId];
+            if (!subFieldDefinition) {
+              continue;
+            }
             const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
             customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
           }

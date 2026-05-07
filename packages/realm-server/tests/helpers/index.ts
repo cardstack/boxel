@@ -39,7 +39,7 @@ import {
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
-  type Definition,
+  type FieldDefinition,
   type Prerenderer,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
@@ -2352,7 +2352,12 @@ export const cardInfo = {
   cardThumbnailURL: null,
 };
 
-export const cardDefinition: Definition['fields'] = {
+// Hand-written legacy-shape fixture (pre-CS-11079, before
+// `Definition.fields` switched to a path-to-defId map). Typed as the
+// flat `Record<string, FieldDefinition>` shape directly because no
+// caller uses this through `Definition`. Kept around for any test that
+// wants a realistic-looking field map without booting a host runtime.
+export const cardDefinition: Record<string, FieldDefinition> = {
   id: {
     type: 'contains',
     isComputed: false,

@@ -1,4 +1,4 @@
-import type { Definition, FieldDefinition } from './index';
+import { getFieldDef, type Definition, type FieldDefinition } from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
@@ -306,7 +306,9 @@ function getFieldDefinition(
   definition: Definition,
   customFieldDefinitions?: Record<string, FieldDefinition>,
 ): FieldDefinition | undefined {
-  return customFieldDefinitions?.[fieldPath] ?? definition.fields[fieldPath];
+  return (
+    customFieldDefinitions?.[fieldPath] ?? getFieldDef(definition, fieldPath)
+  );
 }
 
 function parseRelationshipKey(key: string): string {
