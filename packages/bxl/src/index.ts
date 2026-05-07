@@ -213,17 +213,51 @@ export type {
   BxlSafeResult,
 };
 
+/**
+ * Shared options for the BXL surface. Every entry-point function
+ * (`evaluateBxl`, `compileBxl`, `prepareBxl`, `bxl`, …) accepts this
+ * shape and forwards the relevant fields to the underlying compiler /
+ * runtime.
+ */
 export interface BxlOptions {
+  /**
+   * Field metadata used by the readable-syntax compiler to resolve
+   * label paths (e.g. `"Line Item"` → `.lineItems`). When omitted, the
+   * compiler falls back to a single-word PascalCase → camelCase rule
+   * for bare identifiers — see JQXL_PORT_CHANGES.md §12.
+   */
   schema?: ReadableSchema;
+  /**
+   * Which builtin formula libraries to load into the runtime. Defaults
+   * to `DEFAULT_BUILTIN_LIBRARIES`. Pass an empty array to use jq + the
+   * native filters only, no spreadsheet helpers.
+   */
   libraries?: BuiltinLibraryName[];
+  /**
+   * Whether to run the readable-syntax compiler before evaluation.
+   * - `true` — accept `Severity == "High"`, `ROUND(x, 2)`, etc.
+   * - `false` — pass the source straight to the jq parser.
+   *
+   * Default depends on the caller: `evaluateBxl` and plain-string
+   * `bxl()` default to `true`; `bxl(jq\`…\`)` defaults to `false`.
+   */
   readableSyntax?: boolean;
+  /** Per-call runtime caps (output count, wall-clock, …). */
   runtimeLimits?: NativeRuntimeLimits;
   /**
-   * When the expression's raw output is structured (object or array of
-   * objects), instantiate the given class and copy fields onto it. Mirrors
-   * jqxl's `{ as: SomeFieldDef }` so Boxel `contains(...)` /
-   * `containsMany(...)` computeds receive a real Field instance rather than
-   * a plain object (which Boxel's serializer can't identify).
+   * Materialize the raw output as an instance of `Class`. When the
+   * expression yields:
+   * - a plain object → `new Class(); Object.assign(instance, raw)`
+   *   — or, if Boxel's `getFields` is reachable, a recursive
+   *   `field.fieldType` walk that materializes nested
+   *   `contains` / `containsMany` shapes.
+   * - an array → each entry gets the same treatment.
+   * - `null` / a scalar → returned as-is.
+   *
+   * Mirrors jqxl's `{ as: SomeFieldDef }` so a Boxel
+   * `contains(BaseField, { computeVia: bxl(..., { as: SubField }) })`
+   * gets back a real subclass instance the serializer can identify,
+   * rather than a plain object that hits "could not identify card".
    */
   as?: new () => unknown;
 }
@@ -252,11 +286,20 @@ export function compileBxl(
   return compileReadableSyntax(expression, options);
 }
 
+/** Result shape returned by {@link evaluateBxl} and `prepared.evaluate(...)`. */
 export interface BxlEvaluation {
+  /** The original source as passed in (post-tag-extraction). */
   source: string;
+  /** Canonical jq source the compiler produced. */
   compiledSource: string;
+  /** Lint-style warnings raised during readable-syntax compilation. */
   warnings: ReadableSyntaxWarning[];
+  /** Every value the program emitted. jq programs are streams, not single values. */
   outputs: unknown[];
+  /**
+   * Convenience: `outputs[0]` if there was one output, the array if
+   * there were several, `null` for an empty stream.
+   */
   value: unknown;
 }
 
@@ -278,6 +321,33 @@ function normalizeBxlOutputs(outputs: unknown[]): unknown {
   return outputs;
 }
 
+/**
+ * Compile and evaluate a BXL expression against a single input.
+ *
+ * - `expression` — readable BXL or plain jq, depending on
+ *   `options.readableSyntax` (default `true`).
+ * - `input` — the JSON value bound to `.` (the jq root). Plain JS
+ *   objects, arrays, primitives, and `null` are all valid.
+ * - `options` — see {@link BxlOptions}.
+ *
+ * Returns a {@link BxlEvaluation} with the canonical jq source the
+ * compiler produced, the array of all output values, and a normalized
+ * `value` (the single output, the array if there were several, or
+ * `null` for an empty stream).
+ *
+ * Throws on parse, compile, or evaluation errors. Use
+ * {@link evaluateBxlSafe} for a result-shaped variant.
+ *
+ * @example
+ * ```ts
+ * evaluateBxl(
+ *   'ROUND(Subtotal * "Tax Rate" / 100, 2)',
+ *   { subtotal: 50, taxRate: 8.25 },
+ *   { schema: invoiceSchema },
+ * );
+ * // → { value: 4.13, … }
+ * ```
+ */
 export function evaluateBxl(
   expression: string,
   input: unknown,
@@ -299,6 +369,19 @@ export function evaluateBxl(
   };
 }
 
+/**
+ * {@link evaluateBxl} variant that returns a discriminated union
+ * instead of throwing. Use when the caller is iterating over
+ * user-authored expressions and a single bad apple shouldn't tear
+ * down the loop.
+ *
+ * @example
+ * ```ts
+ * const r = evaluateBxlSafe('totally bogus', {});
+ * if (r.ok) doSomething(r.value);
+ * else logger.warn(r.error.phase, r.error.message);
+ * ```
+ */
 export function evaluateBxlSafe(
   expression: string,
   input: unknown,
@@ -317,6 +400,16 @@ export function evaluateBxlSafe(
   }
 }
 
+/**
+ * Compile a BXL expression once, then evaluate it against many
+ * inputs. Returns a {@link PreparedBxl} whose `evaluate(input)` is
+ * cheaper than re-running `evaluateBxl` because parse + compile
+ * happens up front.
+ *
+ * `prepared.deps` lists the root-input field keys the expression
+ * actually reads — handy for invalidation-tracking inside a reactive
+ * runtime.
+ */
 export function prepareBxl(
   expression: string,
   options: BxlOptions = {},
@@ -349,6 +442,12 @@ export function prepareBxl(
   };
 }
 
+/**
+ * {@link prepareBxl} variant that returns a discriminated union
+ * instead of throwing on parse / compile errors. Run-time errors
+ * still propagate from the returned `prepared.evaluate(...)` call —
+ * use {@link evaluateBxlSafe} for evaluation-time safety as well.
+ */
 export function prepareBxlSafe(
   expression: string,
   options: BxlOptions = {},
@@ -370,8 +469,15 @@ export function prepareBxlSafe(
  *  on the user's chosen mode. */
 const BXL_MODE = Symbol.for('@cardstack/bxl.mode');
 
+/**
+ * Branded source produced by the {@link jq} and {@link fx} tagged
+ * templates. Carries the chosen mode alongside the raw source so
+ * {@link bxl} can dispatch without a `typeof input === 'function'`
+ * check at the call site.
+ */
 export interface BxlTaggedSource {
   readonly [BXL_MODE]: 'jq' | 'fx';
+  /** Raw source with `String.raw`-style escape handling. */
   readonly source: string;
   toString(): string;
 }
@@ -510,6 +616,43 @@ function materializeAs(
   return materializeShape(raw, ShapeClass);
 }
 
+/**
+ * Factory that compiles a BXL expression into a function bound to
+ * `this` (the value of `.` at evaluation time). The returned
+ * `computeViaBxl` is shaped for Boxel's `computeVia` contract — call
+ * it via `compute.call(card)` (or let the realm runtime do the
+ * binding inside `@field decorator { computeVia: bxl(...) }`).
+ *
+ * `input` may be:
+ * - a plain string — readable BXL syntax, compiled before evaluation.
+ * - `` jq`…` `` — plain jq; readable-syntax compilation is skipped.
+ * - `` fx`…` `` — Excel-like readable BXL; identical to a plain
+ *   string today, explicit at the call site for cross-tag clarity.
+ *
+ * Beyond plain `evaluateBxl`, the factory adds three behaviors that
+ * Boxel realms need:
+ * 1. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
+ *    etc. is captured at the boundary and surfaced as `null` so the
+ *    indexer doesn't tear down the card mid-render.
+ * 2. **`as: SomeFieldDef`** — the raw output is materialized as an
+ *    instance of the given class via {@link BxlOptions.as}.
+ * 3. **Tag-aware `readableSyntax` default** — `jq` tag → false,
+ *    everything else → true. Explicit `options.readableSyntax` always
+ *    wins.
+ *
+ * @example
+ * ```ts
+ * @field statusPanel = contains(RegularStatusField, {
+ *   computeVia: bxl(
+ *     jq`if .severity == "Critical" then { label: "ICU CARE", tone: "red" } else { label: "Stable", tone: "blue" } end`,
+ *     { as: IcuStatusField },
+ *   ),
+ * });
+ * ```
+ *
+ * Aliased as {@link expression} and {@link expr} — pick whichever
+ * reads best at the call site.
+ */
 export function bxl(
   input: string | BxlTaggedSource,
   options: BxlOptions = {},
@@ -571,47 +714,40 @@ function isExcelErrorMessage(error: unknown): boolean {
 }
 
 /**
- * `expression` / `expr` — aliases of `bxl`.
+ * Alias of {@link bxl}. Reads more naturally than `bxl(...)` inside
+ * Boxel `@field` decorators where the surrounding code talks about
+ * "expressions".
  *
- * Reads beautifully inside @field decorators:
- *
- *   @field total = contains(NumberField, {
- *     computeVia: expression('ROUND(.subtotal * (1 + .taxRate), 2)'),
- *   });
- *
- *   @field isActive = contains(BooleanField, {
- *     computeVia: expr('Status = "active"'),
- *   });
- *
- * Identical semantics to `bxl(...)`. Pick whichever reads best in context.
+ * @example
+ * ```ts
+ * @field total = contains(NumberField, {
+ *   computeVia: expression('ROUND(.subtotal * (1 + .taxRate), 2)'),
+ * });
+ * ```
  */
 export const expression = bxl;
+/** Shorthand alias of {@link bxl}. */
 export const expr = bxl;
 
 /**
- * `jq` — tagged template literal that returns a raw jq string.
+ * Tagged template marking the expression as plain jq. Two purposes:
  *
- * Sidesteps the JS string-escape gotcha for jq's `\(...)` interpolation:
- * in a regular JS string literal, `\(` is unrecognized so JS silently drops
- * the backslash, and the runtime never sees the interpolation.
+ * 1. Tells {@link bxl} / {@link expression} to skip readable-syntax
+ *    compilation and hand the source straight to the jq parser.
+ * 2. Backticks preserve `\(...)` interpolation verbatim — a regular
+ *    JS string literal silently drops the backslash before `(`, and
+ *    the runtime never sees the interpolation.
  *
- *   // Without — the leading backslash gets stripped by JS:
- *   expression('"\(.bpSystolic)/\(.bpDiastolic)"')
+ * Reach for `` jq`…` `` when the expression uses `\(...)` or any
+ * character JS string-escaping would mangle. Plain prose paths stay
+ * simple as a string:
  *
- *   // With — backticks preserve everything verbatim:
- *   expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`)
- *
- * Reach for `jq\`…\`` only when the expression contains `\(...)` or any
- * other character JS would mangle. Plain expressions stay simple:
- *   expression('.firstName + " " + .lastName')
- */
-/**
- * `jq\`…\`` — tagged template marking the expression as plain jq. The
- * caller of `bxl()` / `expression()` will skip the readable-syntax
- * compilation step and pass the source straight to the jq parser.
- *
- * Also sidesteps JS's silent-escape gotcha: backslashes in `\(.foo)`
- * survive untouched.
+ * @example
+ * ```ts
+ * expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`)        // ✓
+ * expression('"\(.bpSystolic)/\(.bpDiastolic)"')          // ✗ — backslashes stripped
+ * expression('.firstName + " " + .lastName')              // ✓ — no escape needed
+ * ```
  */
 export function jq(
   strings: TemplateStringsArray,
@@ -621,11 +757,19 @@ export function jq(
 }
 
 /**
- * `fx\`…\`` — tagged template marking the expression as Excel-like
- * readable BXL syntax. Mirrors the spreadsheet `fx` button. The caller of
- * `bxl()` / `expression()` will run the readable-syntax compiler before
- * evaluation. Same as passing a plain string today, but explicit at the
- * call site.
+ * Tagged template marking the expression as Excel-like readable BXL
+ * syntax. Identical to passing a plain string today (the readable-
+ * syntax compiler runs in both cases), but the `fx` tag is explicit
+ * at the call site — useful when a file mixes `jq` and `fx` sources
+ * and you want the casing/PascalCase intent to be obvious.
+ *
+ * The name mirrors a spreadsheet's `fx` button.
+ *
+ * @example
+ * ```ts
+ * expression(fx`ROUND(Salary / 2080, 2)`)
+ * expression(fx`PatientId & " — " & FirstName & " " & LastName`)
+ * ```
  */
 export function fx(
   strings: TemplateStringsArray,

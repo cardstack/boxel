@@ -90,6 +90,7 @@
     "test:size": "node scripts/size-report.mjs --check",
     "realm": "node scripts/build-realm-bundle.mjs",
     "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
+    "docs:api": "typedoc",
     "prepack": "npm run clean && npm run build",
     "release:dry": "npm pack --dry-run"
   },
@@ -100,6 +101,7 @@
     "eslint": "^9.0.0",
     "happy-dom": "^14.0.0",
     "tsx": "^4.7.0",
+    "typedoc": "^0.25.0",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.59.0"
   }

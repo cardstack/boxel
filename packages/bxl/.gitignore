@@ -20,3 +20,6 @@ coverage/
 # Local realm sandbox written by boxel-cli sync — scratch instances +
 # .boxel-history not meant for the repo.
 stack.cards/
+
+# TypeDoc-generated API reference (regenerate with `npm run docs:api`).
+docs/api-reference/
