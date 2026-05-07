@@ -17,11 +17,17 @@ import {
   readSupportMetadata,
   startHarnessPrerenderServer,
 } from '@cardstack/realm-test-harness';
+import { logger } from '../src/logger';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 import {
   allocateTestWorkerPortSet,
   type TestWorkerPortReservation,
 } from './helpers/port-allocator';
+
+// Same name `playwright.global-setup.ts` already uses, and already
+// configured at `info` in `playwright.config.ts` so heartbeat lines
+// surface in CI without a log-level override.
+let log = logger('software-factory:playwright');
 
 type StartedFactoryRealm = {
   realmDir: string;
@@ -136,13 +142,33 @@ async function waitForPortFree(
   throw new Error(`Port ${port} still in use after ${timeoutMs}ms`);
 }
 
+// 240s default leaves a 60s margin under Playwright's 300s setup-realm
+// timeout. Without that margin Playwright's blanket "Test timeout
+// exceeded while setting up "realm"" message wins the race and the
+// child's last 20K of stdout/stderr — captured below — never make it
+// into the failure log. With the margin our `timed out waiting for
+// software-factory metadata file …` error surfaces first, carrying
+// the realm child's actual startup logs.
+const DEFAULT_METADATA_FILE_TIMEOUT_MS = 240_000;
+// How often to print a heartbeat while we're still waiting on the
+// metadata file. Useful in CI where the stdout stream is the only
+// real-time signal — without these lines a 5-minute hang looks
+// identical to a slow-but-progressing setup.
+const METADATA_FILE_HEARTBEAT_MS = 30_000;
+
+function tailLogs(buffer: string, bytes: number): string {
+  if (buffer.length <= bytes) return buffer;
+  return `…(truncated, last ${bytes} bytes)…\n${buffer.slice(-bytes)}`;
+}
+
 async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
   getLogs: () => string,
-  timeoutMs = 300_000,
+  timeoutMs = DEFAULT_METADATA_FILE_TIMEOUT_MS,
 ): Promise<T> {
   let startedAt = Date.now();
+  let nextHeartbeat = startedAt + METADATA_FILE_HEARTBEAT_MS;
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
@@ -155,11 +181,22 @@ async function waitForMetadataFile<T>(
       );
     }
 
+    if (Date.now() >= nextHeartbeat) {
+      let elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      log.warn(
+        `realm-fixture: still waiting for ${metadataFile} after ${elapsedSec}s ` +
+          `(child pid=${child.pid ?? '?'} exitCode=${child.exitCode ?? 'null'}). ` +
+          `Last child log tail:\n${tailLogs(getLogs(), 2_000)}`,
+      );
+      nextHeartbeat = Date.now() + METADATA_FILE_HEARTBEAT_MS;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   throw new Error(
-    `timed out waiting for software-factory metadata file ${metadataFile}\n${getLogs()}`,
+    `timed out waiting for software-factory metadata file ${metadataFile} ` +
+      `after ${Math.round((Date.now() - startedAt) / 1000)}s\n${getLogs()}`,
   );
 }
 
@@ -268,11 +305,25 @@ async function startRealmProcess(
       },
     );
 
+    // Opt-in real-time forwarding of the realm child's stdio. Default
+    // off so CI logs stay readable; flip on
+    // (`TEST_HARNESS_FORWARD_REALM_LOGS=1`) when reproducing a hang
+    // locally and you want to watch the child's startup unfold instead
+    // of waiting for the heartbeat tail in `waitForMetadataFile`.
+    let forwardRealmLogs = process.env.TEST_HARNESS_FORWARD_REALM_LOGS === '1';
     child.stdout?.on('data', (chunk) => {
-      logs = appendLog(logs, String(chunk));
+      let str = String(chunk);
+      logs = appendLog(logs, str);
+      if (forwardRealmLogs) {
+        log.info(`realm-child stdout: ${str.replace(/\s+$/, '')}`);
+      }
     });
     child.stderr?.on('data', (chunk) => {
-      logs = appendLog(logs, String(chunk));
+      let str = String(chunk);
+      logs = appendLog(logs, str);
+      if (forwardRealmLogs) {
+        log.info(`realm-child stderr: ${str.replace(/\s+$/, '')}`);
+      }
     });
 
     // Race the metadata-file poll against an early `'error'` from the

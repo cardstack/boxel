@@ -643,6 +643,17 @@ export async function startIsolatedRealmStack({
         createProcessExitPromise(workerManager, 'worker manager'),
       ]);
 
+      // Realm URLs whose prerender affinity must be evicted at teardown
+      // so leaked pages from this realm don't dirty the next test's setup.
+      // Public-facing URLs (compat-proxy port) — that's how the prerender
+      // keys its `realm:<url>` affinity (see page-pool.ts).
+      let realmURLsToEvict: URL[] = [
+        ...resolvedRealms.map((r) => r.realmURL),
+        publicBaseRealmURL,
+      ];
+      if (INCLUDE_SKILLS) {
+        realmURLsToEvict.push(skillsRealmURL);
+      }
       return {
         compatProxy,
         prerender,
@@ -655,6 +666,8 @@ export async function startIsolatedRealmStack({
         },
         workerManager,
         rootDir,
+        prerenderURL,
+        realmURLsToEvict,
       };
     } catch (error) {
       try {
@@ -690,10 +703,86 @@ export async function startIsolatedRealmStack({
   }
 }
 
+/**
+ * POST `/dispose-affinity` for each realm URL hosted by this stack.
+ * Best-effort and bounded: a slow / unreachable prerender must never
+ * block teardown for long, so each call has its own short timeout and
+ * failures only emit a warn. Returns once every dispose call has settled.
+ */
+async function disposePrerenderAffinities(
+  prerenderURL: string,
+  realmURLs: URL[],
+): Promise<void> {
+  let perCallTimeoutMs = Number(
+    process.env.TEST_HARNESS_PRERENDER_DISPOSE_TIMEOUT_MS ?? 5_000,
+  );
+  await Promise.allSettled(
+    realmURLs.map(async (realmURL) => {
+      let endpoint = new URL('/dispose-affinity', prerenderURL).href;
+      let controller = new AbortController();
+      let timer: NodeJS.Timeout = setTimeout(
+        () => controller.abort(),
+        perCallTimeoutMs,
+      );
+      try {
+        let response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: {
+              attributes: {
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
+              },
+            },
+          }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          let body = await response.text().catch(() => '');
+          realmLog.warn(
+            `dispose-affinity for ${realmURL.href} returned ${response.status}${
+              body ? `: ${body.slice(0, 200)}` : ''
+            }`,
+          );
+        }
+      } catch (error) {
+        realmLog.warn(
+          `dispose-affinity for ${realmURL.href} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+}
+
 export async function stopIsolatedRealmStack(
   stack: RunningFactoryStack,
 ): Promise<void> {
   let cleanupError: unknown;
+
+  // Drain any prerender pages tied to this stack's realms BEFORE the
+  // realm-server stops. If we stop the realm-server first, in-flight
+  // renders fail with ECONNREFUSED 502s when their compat-proxy fetches
+  // hit the now-dead realm-server, and the shared BrowserContext for
+  // each realm affinity lingers in the testWorker-scoped prerender —
+  // the next test then trips the "Shared-context invariant violated"
+  // leak warning and waits behind those zombie pages, which has shown
+  // up as 5-minute "Test timeout exceeded while setting up realm"
+  // failures in the eval-validation suite. Cheap when no affinity is
+  // warm (the prerender just no-ops).
+  if (stack.prerenderURL && stack.realmURLsToEvict?.length) {
+    await disposePrerenderAffinities(
+      stack.prerenderURL,
+      stack.realmURLsToEvict,
+    );
+  }
 
   try {
     await stack.prerender?.stop();

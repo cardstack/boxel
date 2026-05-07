@@ -139,6 +139,22 @@ export type RunningFactoryStack = {
     workerManagerPort: number;
   };
   rootDir: string;
+  /**
+   * URL of the prerender server this stack is talking to (own-process when
+   * `prerender` is set, else the testWorker-scoped one passed in via
+   * `prerenderURL`). Stored here so teardown can post `/dispose-affinity`
+   * for each realm URL hosted by this stack — without it, in-flight
+   * renders outlive the realm and dirty the next test's setup.
+   */
+  prerenderURL?: string;
+  /**
+   * Realm URLs (public-facing, i.e. routed through the compat proxy) that
+   * the harness must evict from the prerender pool when this stack is
+   * torn down. Includes the primary test realm, additional realms, the
+   * SF source realm, the base realm, and (when enabled) the skills
+   * realm — anything the realm-server mounted whose affinity may be warm.
+   */
+  realmURLsToEvict?: URL[];
 };
 
 export const packageRoot = resolve(process.cwd());
