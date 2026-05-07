@@ -77,30 +77,12 @@ export const DEFAULT_WARMUP = 5;
 // depends only on packages it explicitly tests (runtime-common,
 // realm-server, host, realm-test-harness, base) — not on
 // software-factory. SF can change freely without affecting bench medians.
-
+//
+// `fixtures/source-realm/` is pre-trimmed to only the card-definition files
+// the bench's instance JSONs `adoptsFrom`. No runtime fileFilter — the
+// glob is materialized in the snapshot itself, so the bench mounts the
+// realm with the default copy-everything semantics.
 const benchSourceRealmDir = pathResolve(__dirname, 'fixtures', 'source-realm');
-
-// Card definitions only — instance data isn't needed by bench scenarios.
-// Format: space-separated patterns; prefix with `!` to exclude. Last
-// matching pattern wins.
-const BENCH_CARD_DEFINITIONS_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
-
-function cardDefinitionsOnly(relativePath: string): boolean {
-  let filename = relativePath.split('/').pop() ?? relativePath;
-  let included = false;
-  for (let pattern of BENCH_CARD_DEFINITIONS_GLOB.split(/\s+/)) {
-    let negate = pattern.startsWith('!');
-    let glob = negate ? pattern.slice(1) : pattern;
-    let hit = glob.startsWith('*')
-      ? filename.endsWith(glob.slice(1))
-      : filename === glob;
-    if (hit) {
-      included = !negate;
-    }
-  }
-  return included;
-}
 
 export interface Scenario {
   name: string;
@@ -303,11 +285,7 @@ export async function runBench(
   const realm = await startFactoryRealmServer({
     realms: [
       { dir: realmSnapshotDir, path: 'test/' },
-      {
-        dir: benchSourceRealmDir,
-        path: 'software-factory/',
-        fileFilter: cardDefinitionsOnly,
-      },
+      { dir: benchSourceRealmDir, path: 'software-factory/' },
     ],
   });
 
