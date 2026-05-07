@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "GameResult",
+        "module": "../blackjack/game-result/game-result"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "BlackjackGame",
+        "module": "http://localhost:4201/experiments/blackjack/blackjack"
+      },
+      "outcome": {
+        "outcome": {
+          "label": "Win"
+        }
+      },
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../BlackjackGame/33e6b74d-e285-4204-86ca-6e7322d8b0f7"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "outcome.player": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "outcome": {
+        "outcome": {
+          "label": "Draw"
+        }
+      },
+      "ref": {
+        "module": "http://localhost:4201/experiments/blackjack/blackjack",
+        "name": "BlackjackGame"
+      },
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "game": {
+        "links": {
+          "self": "../BlackjackGame/33e6b74d-e285-4204-86ca-6e7322d8b0f7"
+        }
+      },
+      "outcome.player": {
+        "links": {
+          "self": "../Player/764f601f-3196-4b3c-a52c-d33032ad1009"
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blackjack/game-result/game-result",
+        "name": "GameResult"
+      }
+    }
+  }
+}

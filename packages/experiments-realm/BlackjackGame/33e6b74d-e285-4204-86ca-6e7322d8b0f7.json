@@ -1,0 +1,55 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "BlackjackGame",
+        "module": "../blackjack/blackjack"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Royal Palace Blackjack",
+        "notes": null,
+        "summary": "A classic game of Blackjack at the Royal Palace Casino",
+        "cardThumbnailURL": null
+      },
+      "gameState": "",
+      "casinoName": "Royal Palace",
+      "currentBet": null,
+      "dealerHand": [],
+      "playerHand": [],
+      "statistics": {
+        "wins": null,
+        "losses": null,
+        "earnings": null
+      },
+      "dealerScore": null,
+      "gameMessage": "",
+      "playerChips": 5000,
+      "playerScore": null
+    },
+    "relationships": {
+      "dealer": {
+        "links": {
+          "self": "../Player/9d60b2f3-ac99-4719-9fc7-3b6cb5f5bae2"
+        }
+      },
+      "player": {
+        "links": {
+          "self": "../Player/764f601f-3196-4b3c-a52c-d33032ad1009"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
