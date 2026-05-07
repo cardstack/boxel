@@ -6,9 +6,28 @@
 #
 # Usage:
 #   ./scripts/diff.sh [--env local|staging|production]
+#                     [--only-changed-since <git-ref>]
+#
+# Flags:
+#   --env                  Target Grafana environment to compare against
+#                          (default: staging).
+#   --only-changed-since   Restrict the diff to dashboards / folders whose
+#                          files changed in
+#                          `git diff --name-only <ref>...HEAD --diff-filter=ACMRT`
+#                          under `packages/observability/grafanactl/resources/`.
+#                          Used by the PR comment workflow so the diff
+#                          reflects what the PR actually changes (vs total
+#                          drift between staging and main). Deletions are
+#                          excluded since `grafanactl push` is upsert-only —
+#                          deletion-only PRs short-circuit to empty stdout.
+#                          When the filter set is empty (no PR-relevant
+#                          changes) the script exits 0 with no output before
+#                          calling `grafanactl pull`.
 #
 # Output: human-readable diff on stdout. Empty output (and exit 0) means
-# the committed state matches the live state.
+# the committed state matches the live state, or — when
+# --only-changed-since is set — that the PR didn't change any
+# grafanactl-managed resources.
 #
 # Scope: this only diffs the resources grafanactl manages — dashboards
 # and folders. The `provisioning/` tree (data sources, alert rules) is
@@ -72,7 +91,25 @@ cd "$(dirname "$0")/.."
 # so it matches `git diff --name-only` output directly.
 filter_paths=""
 if [[ -n "$only_changed_since" ]]; then
-  filter_paths="$(git diff --name-only "${only_changed_since}...HEAD" -- packages/observability/grafanactl/resources/)"
+  # Validate the ref up front so a missing/invalid ref produces a clear
+  # error rather than a noisy `git diff` failure further down. CI usually
+  # passes `origin/<base-ref>` and we'd rather surface "this ref isn't
+  # available locally" with actionable guidance than git's bare
+  # "fatal: bad revision" exiting under set -e.
+  if ! git rev-parse --verify --quiet "${only_changed_since}^{commit}" >/dev/null; then
+    echo "error: --only-changed-since=$only_changed_since does not resolve to a commit." \
+         "In CI, ensure the workflow does \`git fetch origin <base-ref>\` (or" \
+         "\`actions/checkout\` with \`fetch-depth: 0\`) before invoking diff.sh." >&2
+    exit 1
+  fi
+  # `--diff-filter=ACMRT` — Added / Copied / Modified / Renamed / Type-changed.
+  # Exclude Deleted because `grafanactl push` is upsert-only and never
+  # deletes; a deletion in the PR is a no-op for live state. Without
+  # this, a PR that only deletes a dashboard would skip the empty-set
+  # short-circuit below and trigger a needless `grafanactl pull`.
+  filter_paths="$(git diff --name-only --diff-filter=ACMRT \
+    "${only_changed_since}...HEAD" \
+    -- packages/observability/grafanactl/resources/)"
   if [[ -z "$filter_paths" ]]; then
     # Empty stdout signals "no diff" to the workflow's comment step,
     # which renders the "No dashboard / folder changes detected"

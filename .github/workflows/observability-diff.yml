@@ -76,11 +76,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          # Need full history so `diff.sh --only-changed-since=origin/<base>`
-          # can run `git diff --name-only origin/<base>...HEAD` to scope
-          # the diff to files this PR actually changes (vs total drift
-          # between staging and main).
+          # Need history reaching back to the merge-base with the PR's
+          # base branch so `diff.sh --only-changed-since=origin/<base>`
+          # can run `git diff --name-only origin/<base>...HEAD`. Default
+          # fetch-depth: 1 only gives HEAD; 0 = full history.
           fetch-depth: 0
+
+      - name: Fetch PR base ref
+        # Belt-and-suspenders: even with `fetch-depth: 0`, ensure the
+        # PR base ref is available as `origin/<base>` so diff.sh's
+        # `git rev-parse --verify` succeeds. Cheap on already-fetched
+        # history; idempotent if the ref is already up to date.
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags --depth=1 origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
