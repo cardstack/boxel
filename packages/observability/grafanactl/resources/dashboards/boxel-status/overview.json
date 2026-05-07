@@ -136,7 +136,16 @@
           }
         ],
         "title": "Web Requests",
-        "type": "timeseries"
+        "type": "timeseries",
+        "links": [
+          {
+            "title": "Open Realm Server dashboard",
+            "url": "/d/boxel-svc-realm-server",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ]
       },
       {
         "datasource": {
@@ -277,7 +286,16 @@
           }
         ],
         "title": "Job Queue",
-        "type": "timeseries"
+        "type": "timeseries",
+        "links": [
+          {
+            "title": "Open Worker dashboard",
+            "url": "/d/boxel-svc-worker",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ]
       },
       {
         "datasource": {
@@ -347,6 +365,15 @@
           "y": 0
         },
         "id": 5,
+        "links": [
+          {
+            "title": "Open Synapse dashboard",
+            "url": "/d/000000012",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
         "options": {
           "legend": {
             "calcs": [
