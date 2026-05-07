@@ -88,6 +88,14 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
 
+function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  let platform =
+    (navigator as { userAgentData?: { platform?: string } }).userAgentData
+      ?.platform ?? navigator.platform;
+  return /mac|iphone|ipad|ipod/i.test(platform);
+}
+
 export interface StackItemComponentAPI {
   clearSelections: () => void;
   scrollIntoView: (selector: string) => Promise<void>;
@@ -677,6 +685,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
+  private get keyboardShortcutLabels() {
+    let toggleEdit = isMacPlatform() ? '⌘E' : 'Ctrl+E';
+    return {
+      // Pencil button in view mode → enter edit (Ctrl/Cmd+E).
+      edit: this.isFileCard ? undefined : toggleEdit,
+      // Pencil button in edit mode → exit to view (Esc or Ctrl/Cmd+E).
+      finishEditing: this.isFileCard ? undefined : `Esc or ${toggleEdit}`,
+      // Close button: Esc only closes when not editing — in edit mode
+      // Esc means "exit edit", so don't claim it in the close tooltip.
+      close: this.isEditing ? undefined : 'Esc',
+    };
+  }
+
   private get cardFormat() {
     return this.isFileCard ? 'isolated' : this.args.item.format;
   }
@@ -819,6 +840,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
               }}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
+              @editShortcutHint={{this.keyboardShortcutLabels.edit}}
+              @finishEditingShortcutHint={{this.keyboardShortcutLabels.finishEditing}}
+              @closeShortcutHint={{this.keyboardShortcutLabels.close}}
               class='stack-item-header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if

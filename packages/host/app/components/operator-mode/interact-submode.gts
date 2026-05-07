@@ -1,7 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
@@ -11,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
@@ -126,12 +126,11 @@ interface CardToDelete {
   title: string;
 }
 
-function isFocusInTextInput(): boolean {
-  let el = document.activeElement as HTMLElement | null;
-  if (!el) return false;
-  let tag = el.tagName;
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  let tag = target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  if (el.isContentEditable) return true;
+  if (target.isContentEditable) return true;
   return false;
 }
 
@@ -157,34 +156,46 @@ export default class InteractSubmode extends Component {
     | ReturnType<getCardCollection>
     | undefined;
 
-  constructor(owner: Owner, args: {}) {
-    super(owner, args);
-    if (typeof window !== 'undefined') {
-      window.addEventListener('keydown', this.onWindowKeydown);
-    }
+  // Skip our shortcut handlers when another part of the UI owns the
+  // keyboard: a modal/dialog is open, or the event came from a text
+  // field (ember-keyboard dispatches at the document level, so we still
+  // need to filter out keystrokes that another component is handling
+  // — e.g. the search sheet's own Escape, which blurs its input
+  // *before* our handler runs).
+  private shouldIgnoreShortcut(event: KeyboardEvent) {
+    if (document.body.classList.contains('has-modal')) return true;
+    if (isInteractiveTarget(event.target)) return true;
+    return false;
   }
 
-  willDestroy() {
-    super.willDestroy();
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', this.onWindowKeydown);
-    }
-  }
-
-  @action private onWindowKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Escape') return;
-    if (event.defaultPrevented) return;
-    // A modal or dialog is open — let it own the Escape key.
-    if (document.body.classList.contains('has-modal')) return;
-    if (this.cardToDelete) return;
-    // The user is typing in a text field (search sheet, inline rename,
-    // contenteditable card content). Let the field handle its own
-    // Escape semantics (blur, cancel) without closing the card under it.
-    if (isFocusInTextInput()) return;
-
+  @action private handleEscape(event: KeyboardEvent) {
+    if (this.shouldIgnoreShortcut(event)) return;
     let item = this.mostRecentlyOpenedStackItem;
     if (!item) return;
+
+    // In edit mode, Escape exits to view mode (one level of "undo open").
+    // In view mode, Escape closes the item.
+    if (item.format === 'edit' && item.type !== 'file') {
+      event.preventDefault();
+      this.operatorModeStateService.setItemFormat(item, 'isolated', {
+        request: new Deferred(),
+      });
+      return;
+    }
+    event.preventDefault();
     this.close(item);
+  }
+
+  @action private handleToggleEdit(event: KeyboardEvent) {
+    if (this.shouldIgnoreShortcut(event)) return;
+    let item = this.mostRecentlyOpenedStackItem;
+    // Files have no edit format; nothing to toggle.
+    if (!item || item.type === 'file') return;
+    event.preventDefault();
+    let nextFormat: Format = item.format === 'edit' ? 'isolated' : 'edit';
+    this.operatorModeStateService.setItemFormat(item, nextFormat, {
+      request: new Deferred(),
+    });
   }
 
   private get mostRecentlyOpenedStackItem(): StackItem | undefined {
@@ -825,7 +836,12 @@ export default class InteractSubmode extends Component {
       data-test-interact-submode
       as |search|
     >
-      <div class='interact-submode' style={{this.backgroundImageStyle}}>
+      <div
+        class='interact-submode'
+        style={{this.backgroundImageStyle}}
+        {{onKeyMod 'Escape' this.handleEscape}}
+        {{onKeyMod 'cmd+KeyE' this.handleToggleEdit}}
+      >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'

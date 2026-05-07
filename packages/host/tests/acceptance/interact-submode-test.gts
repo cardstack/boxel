@@ -561,6 +561,67 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('Escape inside an input did not close the underlying card');
     });
 
+    test('Escape on an edit-mode item exits to view mode instead of closing', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('card starts in edit mode');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is still open — Escape did not close it');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Escape flipped edit mode back to isolated');
+
+      // A second Escape (now in view mode) closes the item.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('a second Escape from view mode closes the item');
+    });
+
+    test('Ctrl+E (or Cmd+E) toggles edit mode on the most recently opened item', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('card starts in isolated/view mode');
+
+      // Cmd+E on Mac…
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        metaKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('Cmd+E flipped the card into edit mode');
+
+      // …Ctrl+E on other platforms — and the toggle is symmetric.
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        ctrlKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Ctrl+E flipped the card back to isolated mode');
+    });
+
     test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [
