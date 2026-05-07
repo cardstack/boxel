@@ -21,7 +21,6 @@ import type {
 import {
   Realm,
   baseRealm,
-  rri,
   VirtualNetwork,
   Worker,
   insertPermissions,
@@ -2350,4 +2349,3 @@ export const cardInfo = {
   summary: null,
   cardThumbnailURL: null,
 };
-

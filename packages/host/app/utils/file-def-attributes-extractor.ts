@@ -337,8 +337,11 @@ export class FileDefAttributesExtractor {
       let result: Record<string, QueryFieldMeta> = {};
       for (let [name, defId] of Object.entries(fields)) {
         let def = fieldDefs[defId];
+        if (!def) {
+          continue;
+        }
         if (
-          def?.query &&
+          def.query &&
           (def.type === 'linksTo' || def.type === 'linksToMany')
         ) {
           result[name] = {

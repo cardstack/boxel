@@ -18,7 +18,7 @@ import {
   type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
-import { isMeta, type CardResource, type Relationship } from './resource-types';
+import type { CardResource, Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
@@ -76,7 +76,6 @@ import {
   type DirectoryMeta,
   type ResolvedCodeRef,
   isResolvedCodeRef,
-  type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
   type LintArgs,
@@ -102,7 +101,6 @@ import isEqual from 'lodash/isEqual';
 import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
-import type { CardFields } from './resource-types';
 import {
   fileContentToText,
   fileContentToBytes,
@@ -5528,102 +5526,12 @@ export class Realm {
       );
     }
 
-    let customFieldDefinitions: Record<string, FieldDefinition> = {};
-    if (doc.data.meta?.fields) {
-      await this.buildCustomFieldDefinitions(
-        doc.data.meta.fields,
-        '',
-        customFieldDefinitions,
-        relativeTo,
-      );
-    }
-
-    return serialize({
+    return await serialize({
       doc,
       definition,
       relativeTo,
-      customFieldDefinitions,
+      definitionLookup: this.#definitionLookup,
     });
-  }
-
-  private async buildCustomFieldDefinitions(
-    fields: CardFields,
-    basePath: string,
-    customFieldDefinitions: Record<string, FieldDefinition>,
-    relativeTo: URL,
-  ): Promise<void> {
-    for (const [fieldName, fieldValue] of Object.entries(fields)) {
-      const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-      if (isMeta(fieldValue) && fieldValue?.fields) {
-        // if we have nested fields, we need to recurse into them
-        await this.buildCustomFieldDefinitions(
-          fieldValue.fields,
-          fieldPath,
-          customFieldDefinitions,
-          relativeTo,
-        );
-        continue;
-      }
-      if (Array.isArray(fieldValue)) {
-        for (const item of fieldValue) {
-          if (item.adoptsFrom) {
-            let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
-              item.adoptsFrom,
-              relativeTo,
-            ) as ResolvedCodeRef;
-            let fieldDefinition =
-              await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
-            if (fieldDefinition) {
-              for (const [subFieldName, defId] of Object.entries(
-                fieldDefinition.fields,
-              )) {
-                let subFieldDefinition = fieldDefinition.fieldDefs[defId];
-                if (!subFieldDefinition) {
-                  continue;
-                }
-                const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-                customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
-              }
-            }
-          }
-          if (item.fields) {
-            await this.buildCustomFieldDefinitions(
-              item.fields,
-              fieldPath,
-              customFieldDefinitions,
-              relativeTo,
-            );
-          }
-        }
-      } else if (fieldValue.adoptsFrom) {
-        let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
-          fieldValue.adoptsFrom,
-          relativeTo,
-        ) as ResolvedCodeRef;
-        let fieldDefinition =
-          await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
-        if (fieldDefinition) {
-          for (const [subFieldName, defId] of Object.entries(
-            fieldDefinition.fields,
-          )) {
-            let subFieldDefinition = fieldDefinition.fieldDefs[defId];
-            if (!subFieldDefinition) {
-              continue;
-            }
-            const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-            customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
-          }
-        }
-        if (fieldValue.fields) {
-          await this.buildCustomFieldDefinitions(
-            fieldValue.fields,
-            fieldPath,
-            customFieldDefinitions,
-            relativeTo,
-          );
-        }
-      }
-    }
   }
 
   private async startFileWatcher() {

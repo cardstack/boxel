@@ -1,5 +1,6 @@
 import {
   getImmediateFieldDef,
+  isResolvedCodeRef,
   type Definition,
   type FieldDefinition,
 } from './index';
@@ -12,20 +13,21 @@ import {
 } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { CardFields, Meta } from './resource-types';
+import type { DefinitionLookup } from './definition-lookup';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
 import { maybeRelativeURL as makeRelativeURL } from './url';
 
-export default function serialize({
+export default async function serialize({
   doc,
   definition,
   relativeTo,
-  customFieldDefinitions,
+  definitionLookup,
 }: {
   doc: LooseSingleCardDocument;
   definition: Definition;
   relativeTo: URL;
-  customFieldDefinitions?: Record<string, FieldDefinition>;
-}): LooseSingleCardDocument {
+  definitionLookup: DefinitionLookup;
+}): Promise<LooseSingleCardDocument> {
   const realmURL = doc.data.meta?.realmURL
     ? new URL(doc.data.meta.realmURL)
     : undefined;
@@ -68,23 +70,23 @@ export default function serialize({
   }
 
   if (doc.data.attributes) {
-    result.data.attributes = processAttributes({
+    result.data.attributes = await processAttributes({
       attributes: doc.data.attributes,
       definition,
       doc,
       relativeTo,
       codeRefOpts: metaCodeRefOpts,
-      customFieldDefinitions,
+      definitionLookup,
     });
   }
 
   if (doc.data.relationships) {
-    const processedRelationships = processRelationships({
+    const processedRelationships = await processRelationships({
       relationships: doc.data.relationships,
       definition,
       relativeTo,
       realmURL,
-      customFieldDefinitions,
+      definitionLookup,
     });
     if (processedRelationships) {
       result.data.relationships = processedRelationships;
@@ -112,18 +114,21 @@ export default function serialize({
   return result;
 }
 
-function processAttributes({
+// Recurse one level at a time, switching to the child `Definition`
+// whenever we descend into a non-primitive field. Each segment of a
+// nested path is resolved via the *current* definition's immediate
+// field map; this matches the new top-level-only `Definition.fields`
+// shape and avoids relying on dotted-path materialization.
+async function processAttributes({
   attributes,
   definition,
-  basePath = '',
   doc,
   relativeTo,
   codeRefOpts,
-  customFieldDefinitions,
+  definitionLookup,
 }: {
   attributes: Record<string, any>;
   definition: Definition;
-  basePath?: string;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
   codeRefOpts: {
@@ -132,17 +137,12 @@ function processAttributes({
     allowRelative?: true;
     maybeRelativeURL?: (url: string) => string;
   };
-  customFieldDefinitions?: Record<string, FieldDefinition>;
-}): Record<string, any> {
+  definitionLookup: DefinitionLookup;
+}): Promise<Record<string, any>> {
   const result: Record<string, any> = {};
 
   for (const [fieldName, fieldValue] of Object.entries(attributes)) {
-    const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-    const fieldDefinition = getFieldDefinition(
-      fieldPath,
-      definition,
-      customFieldDefinitions,
-    );
+    const fieldDefinition = getImmediateFieldDef(definition, fieldName);
 
     if (!fieldDefinition || fieldDefinition.isComputed) {
       continue;
@@ -166,35 +166,43 @@ function processAttributes({
     if (fieldDefinition.type === 'containsMany') {
       if (!Array.isArray(fieldValue)) {
         throw new Error(
-          `Field '${fieldPath}' is containsMany but value is not an array`,
+          `Field '${fieldName}' is containsMany but value is not an array`,
         );
       }
       if (fieldDefinition.isPrimitive) {
         result[fieldName] = fieldValue;
       } else {
-        result[fieldName] = fieldValue.map((item) => {
-          return processAttributes({
-            attributes: item,
-            definition,
-            basePath: fieldPath,
-            doc,
-            relativeTo,
-            codeRefOpts,
-            customFieldDefinitions,
-          });
-        });
+        let childDef = await resolveChildDef(fieldDefinition, definitionLookup);
+        if (!childDef) {
+          continue;
+        }
+        result[fieldName] = await Promise.all(
+          fieldValue.map((item) =>
+            processAttributes({
+              attributes: item,
+              definition: childDef!,
+              doc,
+              relativeTo,
+              codeRefOpts,
+              definitionLookup,
+            }),
+          ),
+        );
       }
     } else if (fieldDefinition.isPrimitive) {
       result[fieldName] = fieldValue;
     } else {
-      result[fieldName] = processAttributes({
+      let childDef = await resolveChildDef(fieldDefinition, definitionLookup);
+      if (!childDef) {
+        continue;
+      }
+      result[fieldName] = await processAttributes({
         attributes: fieldValue,
-        definition,
-        basePath: fieldPath,
+        definition: childDef,
         doc,
         relativeTo,
         codeRefOpts,
-        customFieldDefinitions,
+        definitionLookup,
       });
     }
   }
@@ -202,19 +210,29 @@ function processAttributes({
   return result;
 }
 
-function processRelationships({
+async function resolveChildDef(
+  fieldDefinition: FieldDefinition,
+  definitionLookup: DefinitionLookup,
+): Promise<Definition | undefined> {
+  if (!isResolvedCodeRef(fieldDefinition.fieldOrCard)) {
+    return undefined;
+  }
+  return await definitionLookup.lookupDefinition(fieldDefinition.fieldOrCard);
+}
+
+async function processRelationships({
   relationships,
   definition,
   relativeTo,
   realmURL,
-  customFieldDefinitions,
+  definitionLookup: _definitionLookup,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
   relativeTo: URL;
   realmURL?: URL;
-  customFieldDefinitions?: Record<string, FieldDefinition>;
-}): NonNullable<CardResource['relationships']> | undefined {
+  definitionLookup: DefinitionLookup;
+}): Promise<NonNullable<CardResource['relationships']> | undefined> {
   const result: NonNullable<CardResource['relationships']> = {};
 
   const normalizeRelationship = (relationship: Relationship): Relationship => {
@@ -266,11 +284,17 @@ function processRelationships({
   };
 
   for (const [relationshipKey, value] of Object.entries(relationships)) {
-    const baseFieldPath = parseRelationshipKey(relationshipKey);
-    const fieldDefinition = getFieldDefinition(
-      baseFieldPath,
+    // Relationship paths are emitted by the host with optional `.N`
+    // suffixes for linksToMany entries (e.g. `friends.0`) and
+    // intermediate-card prefixes for nested relationships
+    // (e.g. `inners.0.other`). Strip the numeric indices and resolve
+    // the remaining dotted path through the immediate field maps,
+    // descending into linked card definitions on demand.
+    const cleanedKey = parseRelationshipKey(relationshipKey);
+    const fieldDefinition = await resolveDottedFieldDef(
       definition,
-      customFieldDefinitions,
+      cleanedKey,
+      _definitionLookup,
     );
 
     if (!fieldDefinition || fieldDefinition.isComputed) {
@@ -305,19 +329,34 @@ function processRelationships({
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-function getFieldDefinition(
-  fieldPath: string,
-  definition: Definition,
-  customFieldDefinitions?: Record<string, FieldDefinition>,
-): FieldDefinition | undefined {
-  // customFieldDefinitions covers dotted-path lookups (pre-built per
-  // doc by `Realm.buildCustomFieldDefinitions` from the doc's
-  // `meta.fields`). Top-level field names fall through to the root
-  // `definition`'s immediate fields.
-  return (
-    customFieldDefinitions?.[fieldPath] ??
-    getImmediateFieldDef(definition, fieldPath)
-  );
+// Walk a (possibly-dotted) relationship path from the root definition,
+// descending one immediate field at a time and looking up the linked
+// card's definition between segments.
+async function resolveDottedFieldDef(
+  rootDefinition: Definition,
+  dottedPath: string,
+  definitionLookup: DefinitionLookup,
+): Promise<FieldDefinition | undefined> {
+  let segments = dottedPath.split('.');
+  let current: Pick<Definition, 'fields' | 'fieldDefs'> = rootDefinition;
+  for (let i = 0; i < segments.length; i++) {
+    let fieldDef = getImmediateFieldDef(current, segments[i]);
+    if (!fieldDef) {
+      return undefined;
+    }
+    if (i === segments.length - 1) {
+      return fieldDef;
+    }
+    if (fieldDef.isPrimitive) {
+      return undefined;
+    }
+    let next = await resolveChildDef(fieldDef, definitionLookup);
+    if (!next) {
+      return undefined;
+    }
+    current = next;
+  }
+  return undefined;
 }
 
 function parseRelationshipKey(key: string): string {
