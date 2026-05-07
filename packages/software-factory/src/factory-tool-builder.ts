@@ -94,6 +94,15 @@ export interface ToolBuilderConfig {
   runInstantiateInMemory?: (
     options: RunInstantiateInMemoryOptions,
   ) => Promise<RunInstantiateResult>;
+  /**
+   * Push the local workspace mirror to the target realm. Required for
+   * `run_evaluate` / `run_instantiate` to see files the agent just
+   * wrote — both tools route through the realm-server's prerender
+   * sandbox, which only sees the realm filesystem. Without a sync the
+   * sandbox 404s every newly-written file. The orchestrator passes
+   * `syncWorkspaceToRealm` here; tests can pass a no-op.
+   */
+  syncWorkspace?: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 export interface ToolCallEntry {
@@ -335,9 +344,12 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       'module counts, per-failure error + stackTrace). Without "path", ' +
       'evaluates every non-test evaluable module in the realm. With ' +
       '"path", evaluates only that single realm-relative file — handy ' +
-      'for a quick self-check right after writing one module. Safe to ' +
+      'for a quick self-check right after writing one module. The tool ' +
+      'pushes your workspace to the realm before evaluating so files you ' +
+      'just wrote are visible to the prerender sandbox — the same sync ' +
+      'the orchestrator runs after signal_done, brought forward. Safe to ' +
       'call repeatedly for mid-turn self-validation — this tool does NOT ' +
-      'create an EvalResult card or any other realm artifact. The ' +
+      'create an EvalResult card or any other validation artifact. The ' +
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an EvalResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those ' +
@@ -361,8 +373,25 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      // `run_evaluate` runs in the prerenderer sandbox and reads modules
-      // from the realm, so it doesn't need the workspace.
+      // `run_evaluate` runs in the prerenderer sandbox, which loads
+      // modules from the realm filesystem. Sync the workspace mirror
+      // first so files the agent just wrote are visible — otherwise
+      // the sandbox 404s on every fresh module.
+      if (config.syncWorkspace) {
+        let outcome = await config.syncWorkspace();
+        if (!outcome.ok) {
+          let result: RunEvaluateResult = {
+            status: 'error',
+            modulesChecked: 0,
+            modulesWithErrors: 0,
+            durationMs: 0,
+            evaluableFiles: [],
+            failures: [],
+            errorMessage: `Failed to sync workspace before evaluating: ${outcome.error ?? 'unknown error'}`,
+          };
+          return result;
+        }
+      }
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,
@@ -435,16 +464,19 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'only that single realm-relative `.json` example file — its ' +
       '`meta.adoptsFrom` supplies the module + card name, and spec discovery ' +
       'is skipped entirely so the agent can self-check one instance in ' +
-      'isolation. The path must end in `.json`. Safe to call repeatedly for ' +
+      'isolation. The path must end in `.json`. The tool pushes your ' +
+      'workspace to the realm before instantiating so files you just wrote ' +
+      '(including the .json example and the card definition it adopts from) ' +
+      'are visible to the prerender sandbox. Safe to call repeatedly for ' +
       'mid-turn self-validation — this tool does NOT create an ' +
-      'InstantiateResult card or any other realm artifact. The orchestrator ' +
-      'still runs the full validation pipeline (which writes an ' +
-      'InstantiateResult card) automatically after signal_done, so calling ' +
-      'this is optional. When a failure reports a line/column, those numbers ' +
-      'refer to the transpiled module — use `fetch_transpiled_module` to ' +
-      'locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm server ' +
-      'token.',
+      'InstantiateResult card or any other validation artifact. The ' +
+      'orchestrator still runs the full validation pipeline (which writes ' +
+      'an InstantiateResult card) automatically after signal_done, so ' +
+      'calling this is optional. When a failure reports a line/column, ' +
+      'those numbers refer to the transpiled module — use ' +
+      '`fetch_transpiled_module` to locate the offending source construct, ' +
+      'then fix the .gts source (never copy transpiled patterns back into ' +
+      'source). Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -461,6 +493,26 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
+      // Same sandbox semantics as run_evaluate: instantiate goes through
+      // the realm-server's prerenderer, which only sees realm-filesystem
+      // state. Push the workspace mirror first so newly-written files
+      // (the example .json AND the card definition it adoptsFrom) are
+      // visible.
+      if (config.syncWorkspace) {
+        let outcome = await config.syncWorkspace();
+        if (!outcome.ok) {
+          let result: RunInstantiateResult = {
+            status: 'error',
+            instancesChecked: 0,
+            instancesWithErrors: 0,
+            durationMs: 0,
+            instanceFiles: [],
+            failures: [],
+            errorMessage: `Failed to sync workspace before instantiating: ${outcome.error ?? 'unknown error'}`,
+          };
+          return result;
+        }
+      }
       return execute({
         targetRealmUrl: config.targetRealmUrl,
         realmServerUrl: config.realmServerUrl,

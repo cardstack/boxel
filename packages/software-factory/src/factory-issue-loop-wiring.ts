@@ -169,6 +169,16 @@ export async function runFactoryIssueLoop(
     workspaceDir,
     testResultsModuleUrl,
     hostAppUrl,
+    // run_evaluate / run_instantiate go through the realm-server
+    // prerenderer, which loads from the realm filesystem. Push the
+    // local workspace mirror first so files the agent just wrote
+    // (or just edited) are visible — otherwise the sandbox 404s on
+    // every fresh module. Same sync the orchestrator uses between
+    // iterations and before post-`signal_done` validation; the
+    // boxel-cli sync is mtime-aware, so subsequent calls in the
+    // same iteration are near no-ops.
+    syncWorkspace: () =>
+      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
   };
 
   let tools: FactoryTool[] = buildFactoryTools(

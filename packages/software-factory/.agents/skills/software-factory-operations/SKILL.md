@@ -167,9 +167,11 @@ For host commands beyond the schema fetch, shell out via `Bash` to
 `boxel run-command <specifier> --realm <url> --input '<json>' --json`
 (same single-quoting rules as the search example above).
 
-### Self-Validation (optional, no side effects)
+### Self-Validation (optional)
 
-All five tools are safe to call repeatedly mid-turn; none of them write a realm artifact. The orchestrator still runs the full validation pipeline (which persists the durable `TestRun` / `LintResult` / `ParseResult` / `EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling any of these is optional.
+All five tools are safe to call repeatedly mid-turn; none of them create a validation result card (`TestRun` / `LintResult` / `ParseResult` / `EvalResult` / `InstantiateResult`). The orchestrator still runs the full validation pipeline after `signal_done`, so calling any of these is optional.
+
+**Sync side effect — `run_evaluate` and `run_instantiate` only.** Both tools route through the realm-server's prerender sandbox, which loads from the realm filesystem. To make sure files you just wrote are visible, both tools push your workspace to the realm before running. This is the same sync the orchestrator does after `signal_done`, just brought forward — your local edits become live immediately. `run_lint`, `run_parse`, and `run_tests` read directly from the workspace and do not sync. Calling `run_evaluate` / `run_instantiate` repeatedly is still cheap because boxel-cli's sync is mtime-aware: subsequent calls in the same iteration only push files that actually changed.
 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel` rules) and return an in-memory `RunLintResult` with `status`, `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`, `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line, column, message, severity }`. Without `path`, lints every `.gts` / `.gjs` / `.ts` / `.js` file in the target realm. With `path` (realm-relative file path), lints **only that one file** — prefer this right after writing or editing a single file.
 - `run_tests()` — Run the realm's QUnit suite and receive an in-memory result object `{ status, passedCount, failedCount, skippedCount, durationMs, testFiles, failures, errorMessage? }`. Use it when you want feedback before signalling done.
