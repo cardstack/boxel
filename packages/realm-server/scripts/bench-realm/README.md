@@ -1,4 +1,4 @@
-# Realm Bench
+# Realm Performance Benchmark
 
 Wall-time regression bench for HTTP `GET` of card instances and `_search`
 queries against the realm-server, modeled on `bench-amd`.
@@ -75,7 +75,7 @@ under an isolated postgres + prerender + worker stack at bench time.
 
 ## CI
 
-Defined in `.github/workflows/ci.yaml` as the `Realm Bench` job.
+Defined in `.github/workflows/ci.yaml` as the `Realm Performance Benchmark` job.
 Triggered when changes touch the runtime-common, base, host,
 realm-server, realm-test-harness, software-factory source realm, or the
 bench scripts/fixtures themselves. Concurrent runs on the same head ref

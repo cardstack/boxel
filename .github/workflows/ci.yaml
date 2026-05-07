@@ -762,7 +762,7 @@ jobs:
         working-directory: packages/runtime-common
 
   realm-bench:
-    name: Realm Bench
+    name: Realm Performance Benchmark
     needs: [change-check, test-web-assets]
     # HTTP GET and `_search` regression bench against a fixture realm
     # snapshot. Spins up an ephemeral realm-server stack (postgres +

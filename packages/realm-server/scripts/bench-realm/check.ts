@@ -122,7 +122,7 @@ function appendStepSummary(markdown: string) {
   }
 
   const lines: string[] = [];
-  lines.push('## Realm Bench\n');
+  lines.push('## Realm Performance Benchmark\n');
   lines.push(
     `iterations=${iterations} warmup=${warmup} mode=${
       hasBaseline ? 'enforce' : 'report-only'
