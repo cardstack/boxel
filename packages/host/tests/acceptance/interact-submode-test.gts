@@ -21,6 +21,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
+import type { StackItem } from '@cardstack/host/lib/stack-item';
+
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -560,6 +562,52 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists('Escape inside an input did not close the underlying card');
+    });
+
+    test('Escape targets the card the user is editing, not the last-opened card', async function (assert) {
+      // Open A, then open B on top of A, then click edit on A. Even
+      // though B is the most-recently-opened card, the user's most
+      // recent interaction is "start editing A" — so Escape must flip
+      // A back to view, not close B.
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      // Click edit on A (the buried, non-top card) via its header.
+      // The buried card's header acts as a button to dismiss cards
+      // above it; we instead toggle A directly via the service to
+      // simulate "user enters edit mode on A".
+      let operatorModeStateService = getService('operator-mode-state-service');
+      let stackA = operatorModeStateService.state.stacks[0]!;
+      let itemA = stackA.find(
+        (i: StackItem) => i.id === `${testRealmURL}Person/fadhlan`,
+      )!;
+      operatorModeStateService.setItemFormat(itemA, 'edit');
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('A is now in edit mode');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('B is still on the stack');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('B was NOT closed — Escape did not target the last-opened');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('A flipped back to view mode — the actual recent interaction');
     });
 
     test('Escape on an edit-mode item exits to view mode instead of closing', async function (assert) {

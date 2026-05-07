@@ -174,7 +174,7 @@ export default class InteractSubmode extends Component {
       return;
     }
 
-    let item = this.mostRecentlyOpenedStackItem;
+    let item = this.mostRecentlyInteractedStackItem;
     if (!item) return;
 
     // In edit mode, Escape exits to view mode (one level of "undo open").
@@ -195,7 +195,7 @@ export default class InteractSubmode extends Component {
     // point of the shortcut: flip in/out of edit without first having
     // to click somewhere else. Modals still own the keyboard, though.
     if (document.body.classList.contains('has-modal')) return;
-    let item = this.mostRecentlyOpenedStackItem;
+    let item = this.mostRecentlyInteractedStackItem;
     // Files have no edit format; nothing to toggle.
     if (!item || item.type === 'file') return;
     event.preventDefault();
@@ -205,10 +205,17 @@ export default class InteractSubmode extends Component {
     });
   }
 
-  private get mostRecentlyOpenedStackItem(): StackItem | undefined {
+  // The card the user is currently working with — i.e. the one a
+  // keyboard shortcut should act on. "Last opened" alone is too coarse:
+  // open A, open B, then click edit on A → A is the active card even
+  // though B was opened more recently. Format changes count as
+  // interactions (see StackItem.markInteracted), so this picks A.
+  private get mostRecentlyInteractedStackItem(): StackItem | undefined {
     let topItems = this.operatorModeStateService.topMostStackItems();
     if (topItems.length === 0) return undefined;
-    return topItems.reduce((a, b) => (b.openedAt > a.openedAt ? b : a));
+    return topItems.reduce((a, b) =>
+      b.lastInteractedAt > a.lastInteractedAt ? b : a,
+    );
   }
 
   get stacks() {

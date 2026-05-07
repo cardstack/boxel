@@ -17,7 +17,7 @@ interface Args {
     fieldName?: string;
     fieldType?: 'linksTo' | 'linksToMany';
   };
-  openedAt?: number;
+  lastInteractedAt?: number;
 }
 
 export type StackItemType = 'card' | 'file';
@@ -53,7 +53,7 @@ export function detectStackItemTypeForTarget(
   return fileMetaInstanceOrError ? 'file' : 'card';
 }
 
-let nextOpenedAt = 0;
+let nextInteractionSequence = 0;
 
 export class StackItem {
   // `format`, `request`, `useBaseTemplate` are tracked so that callers
@@ -69,11 +69,13 @@ export class StackItem {
   @tracked useBaseTemplate?: boolean;
   stackIndex: number;
   type: StackItemType;
-  // Monotonic per-construction sequence used to identify the most
-  // recently opened item across multiple stacks (e.g. for Escape-key
-  // close). Construction-time is the right signal: pushing the same id
-  // again creates a new StackItem.
-  readonly openedAt: number;
+  // Monotonic sequence used to identify which item the user most
+  // recently touched, for deciding what Escape / Ctrl+E should target.
+  // Bumped on construction (= a new open) AND on every format change
+  // via `markInteracted()`. The format bump is what makes "open A,
+  // open B, edit A, Escape" target A: clicking edit on A is the most
+  // recent interaction even though B was opened more recently.
+  lastInteractedAt: number;
   #id: string;
   relationshipContext?:
     | {
@@ -91,7 +93,7 @@ export class StackItem {
       type,
       useBaseTemplate,
       relationshipContext,
-      openedAt,
+      lastInteractedAt,
     } = args;
 
     this.#id = id.replace(/\.json$/, '');
@@ -101,11 +103,15 @@ export class StackItem {
     this.type = inferStackItemType(type);
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
-    this.openedAt = openedAt ?? ++nextOpenedAt;
+    this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;
   }
 
   get id() {
     return this.#id;
+  }
+
+  markInteracted() {
+    this.lastInteractedAt = ++nextInteractionSequence;
   }
 
   clone(args: Partial<Args>) {
@@ -117,11 +123,11 @@ export class StackItem {
       relationshipContext,
       type,
       useBaseTemplate,
-      openedAt,
+      lastInteractedAt,
     } = this;
-    // Preserve the original open-time so clones (id swap on persist,
-    // stack shift on left-neighbor drop) don't masquerade as a fresh
-    // open and steal "most recently opened" precedence.
+    // Preserve the original interaction time so clones (id swap on
+    // persist, stack shift on left-neighbor drop) don't masquerade as
+    // a fresh interaction and steal precedence.
     return new StackItem({
       format,
       request,
@@ -130,7 +136,7 @@ export class StackItem {
       stackIndex,
       relationshipContext,
       useBaseTemplate,
-      openedAt,
+      lastInteractedAt,
       ...args,
     });
   }
