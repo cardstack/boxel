@@ -368,7 +368,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"Received request: PUT .*/send/\" [1m]))",
+            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"Received request: PUT .*/send/\" [5m]))",
             "queryType": "range",
             "legendFormat": "Events/min",
             "refId": "A"
