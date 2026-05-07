@@ -37,7 +37,8 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "red", "value": null },
+                { "color": "transparent", "value": null },
+                { "color": "red", "value": 0 },
                 { "color": "green", "value": 1 }
               ]
             },
@@ -75,7 +76,8 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "red", "value": null },
+                { "color": "transparent", "value": null },
+                { "color": "red", "value": 0 },
                 { "color": "green", "value": 1 }
               ]
             },
@@ -112,7 +114,8 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "red", "value": null },
+                { "color": "transparent", "value": null },
+                { "color": "red", "value": 0 },
                 { "color": "green", "value": 1 }
               ]
             },
@@ -149,7 +152,8 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "red", "value": null },
+                { "color": "transparent", "value": null },
+                { "color": "red", "value": 0 },
                 { "color": "green", "value": 1 }
               ]
             },
@@ -186,7 +190,8 @@
             "thresholds": {
               "mode": "absolute",
               "steps": [
-                { "color": "red", "value": null },
+                { "color": "transparent", "value": null },
+                { "color": "red", "value": 0 },
                 { "color": "green", "value": 1 }
               ]
             },
@@ -424,19 +429,19 @@
           {
             "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
             "editorMode": "code", "format": "time_series", "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s') AS time, COUNT(*) AS arrived FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(j.created_at) GROUP BY 1 ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s'), COUNT(*) AS arrived FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(j.created_at) GROUP BY 1 ORDER BY 1;",
             "refId": "A"
           },
           {
             "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
             "editorMode": "code", "format": "time_series", "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s') AS time, COUNT(*) AS started FROM job_reservations jr JOIN jobs j ON j.id = jr.job_id WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(jr.created_at) GROUP BY 1 ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s'), COUNT(*) AS started FROM job_reservations jr JOIN jobs j ON j.id = jr.job_id WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(jr.created_at) GROUP BY 1 ORDER BY 1;",
             "refId": "B"
           },
           {
             "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
             "editorMode": "code", "format": "time_series", "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s') AS time, COUNT(*) AS completed FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND j.finished_at IS NOT NULL AND $__timeFilter(j.finished_at) GROUP BY 1 ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s'), COUNT(*) AS completed FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND j.finished_at IS NOT NULL AND $__timeFilter(j.finished_at) GROUP BY 1 ORDER BY 1;",
             "refId": "C"
           }
         ],
@@ -444,7 +449,7 @@
         "type": "timeseries"
       },
       {
-        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 22 },
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
         "id": 12,
         "options": {
           "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },

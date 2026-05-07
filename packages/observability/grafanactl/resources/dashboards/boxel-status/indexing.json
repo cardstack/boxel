@@ -585,7 +585,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s') AS time,\n       COUNT(*) AS arrived\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(j.created_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s'),\n       COUNT(*) AS arrived\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(j.created_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "A"
           },
           {
@@ -596,7 +596,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s') AS time,\n       COUNT(*) AS started\n  FROM job_reservations jr\n  JOIN jobs j ON j.id = jr.job_id\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(jr.created_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s'),\n       COUNT(*) AS started\n  FROM job_reservations jr\n  JOIN jobs j ON j.id = jr.job_id\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(jr.created_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "B"
           },
           {
@@ -607,7 +607,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s') AS time,\n       COUNT(*) AS completed\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND j.finished_at IS NOT NULL\n   AND $__timeFilter(j.finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s'),\n       COUNT(*) AS completed\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND j.finished_at IS NOT NULL\n   AND $__timeFilter(j.finished_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "C"
           }
         ],
