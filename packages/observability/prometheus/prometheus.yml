@@ -16,9 +16,9 @@ global:
 scrape_configs:
   - job_name: synapse
     static_configs:
-      - targets: ['boxel-synapse:9001']
+      - targets: ["boxel-synapse:9001"]
         labels:
           # Match what `synapse-prometheus` AMP returns in staging/prod so
           # the dashboard's metric labels are consistent across envs.
-          instance: 'boxel-synapse'
-          job: 'synapse'
+          instance: "boxel-synapse"
+          job: "synapse"
