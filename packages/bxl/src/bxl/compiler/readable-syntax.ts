@@ -617,6 +617,42 @@ function resolveField(
   };
 }
 
+/**
+ * No-schema fallback: a single PascalCase identifier maps to a camelCase
+ * field key (`Severity` → `severity`, `BpSystolic` → `bpSystolic`,
+ * `PatientName` → `patientName`). Returns null for anything else —
+ * lowercase tokens, multi-word/quoted labels, identifiers with non-
+ * alphanum chars, or tokens that came from a quoted string literal —
+ * leaving those for schema-driven resolution.
+ *
+ * Restricting to single-word PascalCase keeps function names like
+ * `SUM` and `IFS` from being mistaken for field references — they're
+ * always followed by `(` and the call site short-circuits on that
+ * case before this fallback runs.
+ *
+ * Quoted string tokens (`"Hardware"`) must NOT be camelCased: a
+ * predicate `Category = "Hardware"` is comparing a field to a string
+ * literal, not navigating into a nested `.hardware` field. The
+ * `label.type === 'ident'` check is what keeps RHS string literals
+ * intact.
+ */
+function pascalCaseToCamelKey(label: Token): string | null {
+  if (label.type !== 'ident') return null;
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(label.value)) return null;
+  // Require at least one lowercase letter. All-uppercase tokens are
+  // operators (`AND`, `OR`, `XOR`, `NOT`) or initialisms (`ID`, `URL`,
+  // `API`) — neither should be camelCased silently.
+  if (!/[a-z]/.test(label.value)) return null;
+  // Don't camelCase a jq control keyword or BXL literal. `If`, `Then`,
+  // `Else`, `End`, `True`, `False`, `Null` (and the lowercase forms)
+  // are control flow, not field references — BXL's fuzzy-input mode
+  // accepts these in any case, so the path parser must back out and
+  // let the higher-level expression parser handle them.
+  const lower = label.value.toLowerCase();
+  if (KEYWORDS.has(lower) || LITERALS.has(lower)) return null;
+  return label.value[0]!.toLowerCase() + label.value.slice(1);
+}
+
 function isIdentifierStart(char: string): boolean {
   return /[A-Za-z_]/.test(char);
 }
@@ -1646,6 +1682,16 @@ class Compiler {
         token.type === 'ident' &&
         this.tokens[this.index + 1]?.type === 'punc' &&
         this.tokens[this.index + 1]?.value === '(' &&
+        // jq control keywords (`if`, `try`, `reduce`, `foreach`, etc.) are
+        // sometimes followed by a parenthesized sub-expression — for
+        // example `if (.x // 0) == 0 then …`. Without this guard the
+        // function-call branch would treat `if` as the Excel `IF()`
+        // formula and corrupt the source. The check is case-sensitive
+        // because Excel formulas are conventionally uppercase (`IF(...)`,
+        // `IFS(...)`) while jq keywords are lowercase: `IF` should still
+        // dispatch to the formula branch, only `if` is a jq control
+        // keyword.
+        !KEYWORDS.has(token.value) &&
         !(
           ['and', 'or'].includes(token.value.toLowerCase()) &&
           parts.length > 0
@@ -1978,17 +2024,30 @@ class Compiler {
     // itemScope was threaded, which matches top-level behavior.
     const dotScope = itemScope ?? scope;
 
+    // PascalCase → camelCase fallback only fires when no schema is in
+    // scope. With a schema, every label is the user's deliberate name —
+    // unrecognized PascalCase identifiers (e.g. `@User.Departments` in
+    // a context-variable path) must stay verbatim, not be silently
+    // camelCased. Without a schema (the Boxel realm pattern), the
+    // fallback fills the gap so card .gts files can write `Severity`
+    // and have it resolve to `.severity`.
+    const allowPascalFallback = !scope;
+
     if (first?.type === 'op' && first.value === '.') {
       out = '.';
       this.index++;
       const label = this.readLabelToken(dotScope);
       if (label) {
         const resolved = resolveField(dotScope, label.value);
-        out += resolved?.field.key ?? label.value;
+        const fallbackKey =
+          !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
+        out += resolved?.field.key ?? fallbackKey ?? label.value;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
-        changed = changed || Boolean(resolved && resolved.field.key !== label.value);
+        changed = changed
+          || Boolean(resolved && resolved.field.key !== label.value)
+          || Boolean(fallbackKey);
       }
     } else if (first?.type === 'op' && first.value === '?.') {
       out = '.';
@@ -1999,7 +2058,9 @@ class Compiler {
         return null;
       }
       const resolved = resolveField(dotScope, label.value);
-      out += `${resolved?.field.key ?? label.value}?`;
+      const fallbackKey =
+        !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
+      out += `${resolved?.field.key ?? fallbackKey ?? label.value}?`;
       valueScope = resolved?.valueScope;
       arrayItemScope = resolved?.arrayItemScope;
       pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
@@ -2015,16 +2076,19 @@ class Compiler {
         return null;
       }
       const resolved = resolveField(scope, label.value);
-      if (!resolved) {
+      const fallbackKey =
+        !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
+      if (!resolved && !fallbackKey) {
         this.index = start;
         return null;
       }
+      const key = resolved?.field.key ?? fallbackKey!;
       out = rootPathPrefix
-        ? `${rootPathPrefix}.${resolved.field.key}`
-        : `.${resolved.field.key}`;
-      valueScope = resolved.valueScope;
-      arrayItemScope = resolved.arrayItemScope;
-      pendingImplicitArray = resolved.field.kind === 'array';
+        ? `${rootPathPrefix}.${key}`
+        : `.${key}`;
+      valueScope = resolved?.valueScope;
+      arrayItemScope = resolved?.arrayItemScope;
+      pendingImplicitArray = resolved?.field.kind === 'array';
       changed = true;
     }
 
@@ -2063,7 +2127,9 @@ class Compiler {
           return null;
         }
         const resolved = resolveField(valueScope, label.value);
-        out += `${optional ? '?' : ''}.${resolved?.field.key ?? label.value}`;
+        const fallbackKey =
+          !resolved && allowPascalFallback ? pascalCaseToCamelKey(label) : null;
+        out += `${optional ? '?' : ''}.${resolved?.field.key ?? fallbackKey ?? label.value}`;
         valueScope = resolved?.valueScope;
         arrayItemScope = resolved?.arrayItemScope;
         pendingImplicitArray = Boolean(resolved?.field.kind === 'array');
