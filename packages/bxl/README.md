@@ -584,6 +584,14 @@ import {
   collapseBxl,      // round-trip back to single-line canonical
   bxlToJq,          // strip BXL sugar, emit pure jq
   jqToBxl,          // upgrade jq source to readable BXL
+
+  // Boxel realm authoring — factory + tagged templates that read well
+  // inside @field decorators (see "Authoring inside Boxel" below)
+  expression,       // factory: returns a function bound to `this` (the card)
+  expr,             // alias of expression
+  bxl,              // alias of expression
+  jq,               // tagged template — plain jq (preserves `\(...)`)
+  fx,               // tagged template — Excel-like readable BXL
 } from '@cardstack/bxl';
 ```
 
@@ -599,6 +607,58 @@ Every function takes an optional `{ schema, runtimeLimits }` options object. Sub
 ```
 
 Full API reference in [`docs/api.md`](./docs/api.md).
+
+---
+
+## Authoring inside Boxel
+
+`evaluateBxl` is the right entry for ad-hoc evaluation, but Boxel realms author expressions inside `@field` decorators where each compute runs against a card instance. The `expression` factory binds the source to `this` (the card) and post-processes the raw value:
+
+```ts
+import { expression, fx, jq } from '@cardstack/bxl';
+
+class HospitalPatient extends CardDef {
+  @field severity      = contains(StringField);
+  @field admissionDate = contains(StringField);
+
+  // Plain string — readable BXL syntax. PascalCase identifiers fall
+  // back to camelCase field paths when no schema is provided.
+  @field admissionState = contains(StringField, {
+    computeVia: expression(
+      'if .dischargeDate then "discharged" elif .admissionDate then "admitted" else "pending" end',
+    ),
+  });
+
+  // fx`…` — Excel-like, explicit at the call site.
+  @field annualizedHourly = contains(NumberField, {
+    computeVia: expression(fx`ROUND(Salary / 2080, 2)`),
+  });
+
+  // jq`…` — plain jq with `\(...)` interpolation surviving the
+  // string-escape gotcha.
+  @field bloodPressureLabel = contains(StringField, {
+    computeVia: expression(jq`"\(.bpSystolic)/\(.bpDiastolic)"`),
+  });
+}
+```
+
+### When to use which tag
+
+| Source                     | Use         | Why                                                                                                                                                |
+|----------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| `'.severity'`              | plain jq, but plain string is fine | The compiler runs readable-syntax by default; lowercase paths are inert.                                                                          |
+| `'Severity'`               | plain string | PascalCase fallback resolves bare identifiers to `.camelCase` field paths.                                                                         |
+| `fx\`ROUND(Salary / 2080, 2)\`` | `fx`        | Marks the source as Excel-like at the call site. Same compilation as a plain string today, but explicit when other tags appear in the same file.  |
+| `jq\`"\(.foo)/\(.bar)"\``  | `jq`        | Backticks preserve `\(…)` interpolation — a regular JS string silently drops the backslash, then the runtime never sees the interpolation.        |
+| Pure jq with no PascalCase | `jq`        | Skips the readable-syntax compile step, slightly faster per invocation.                                                                            |
+
+Other authoring helpers worth knowing:
+
+- `expression(source, { as: SomeFieldDef })` — for `contains(BaseField, …)` / `containsMany(BaseField, …)` computeds whose output should materialize as a subclass instance. Mirrors jqxl's `{ as: ... }`.
+- Excel error sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, …) raised inside the compute are caught at the factory boundary and surfaced as `null` instead of crashing the indexer.
+- The runtime tolerates null/undefined operands on `-`, `*`, `/`, `%` — the result propagates as `null` rather than throwing. Iterating null yields an empty stream.
+
+The full set of relaxations is documented in [`JQXL_PORT_CHANGES.md`](./JQXL_PORT_CHANGES.md) §6–17, with one section per rule. The realm-flavored test suite in [`tests/boxel/`](./tests/boxel/) locks each rule to the exact behavior the realm depends on.
 
 ---
 
