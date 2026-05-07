@@ -9,7 +9,6 @@ import {
   query,
   removeRealmPermissions,
   SupportedMimeType,
-  type PublishedRealmTable,
   update,
 } from '@cardstack/runtime-common';
 import { join } from 'path';
@@ -30,8 +29,8 @@ import {
   removeRealmFiles,
 } from './realm-destruction-utils';
 import {
-  deleteFromRegistryByUrl,
-  deletePublishedFromRegistryBySource,
+  deletePublishedRowsBySourceUrl,
+  deleteRegistryRowByUrl,
 } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
@@ -105,10 +104,9 @@ export default function handleDeleteRealm({
       }
       let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
 
-      // Phase 4: existence check on realm_registry (kind='published')
-      // instead of the legacy published_realms table. SELECT 1 is aliased
-      // to AS found rather than relying on Postgres's default `?column?`
-      // unnamed-column label, which isn't portable across SQL adapters.
+      // SELECT 1 is aliased to AS found rather than relying on Postgres's
+      // default `?column?` unnamed-column label, which isn't portable
+      // across SQL adapters.
       let publishedRealmMatch = (await query(dbAdapter, [
         `SELECT 1 AS found FROM realm_registry WHERE kind = 'published' AND url =`,
         param(realmURL),
@@ -150,46 +148,35 @@ export default function handleDeleteRealm({
       // per-URL granularity rather than globally. Pragmatic for this PR;
       // multi-instance hardening could tighten this later.
       await withRealmWriteLock(dbAdapter, realmURL, async () => {
-        // Phase 4: cascade lookup reads realm_registry rather than
-        // published_realms. SQL aliases keep the loop body's field
-        // accessors stable.
         let publishedRealms = (await query(dbAdapter, [
-          `SELECT disk_id AS id, url AS published_realm_url FROM realm_registry WHERE kind = 'published' AND source_url =`,
+          `SELECT disk_id, url FROM realm_registry WHERE kind = 'published' AND source_url =`,
           param(realmURL),
-        ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
+        ])) as { disk_id: string; url: string }[];
 
         for (let publishedRealm of publishedRealms) {
           let publishedRealmPath = join(
             realmsRootPath,
             PUBLISHED_DIRECTORY_NAME,
-            publishedRealm.id,
+            publishedRealm.disk_id,
           );
           try {
             removeRealmFiles(publishedRealmPath);
           } catch (error) {
             Sentry.captureException(error);
           }
-          await removeRealmPermissions(
-            dbAdapter,
-            new URL(publishedRealm.published_realm_url),
-          );
+          await removeRealmPermissions(dbAdapter, new URL(publishedRealm.url));
           await removeRealmDatabaseArtifacts({
             dbAdapter,
-            realmURL: publishedRealm.published_realm_url,
+            realmURL: publishedRealm.url,
           });
         }
-
-        await query(dbAdapter, [
-          `DELETE FROM published_realms WHERE source_realm_url =`,
-          param(realmURL),
-        ]);
 
         // Removes the source realm's registry row plus every published
         // row sourced from it; both DELETEs emit NOTIFY realm_registry
         // so the reconciler unmounts the affected realms on every
         // instance.
-        await deletePublishedFromRegistryBySource(dbAdapter, realmURL);
-        await deleteFromRegistryByUrl(dbAdapter, realmURL);
+        await deletePublishedRowsBySourceUrl(dbAdapter, realmURL);
+        await deleteRegistryRowByUrl(dbAdapter, realmURL);
 
         let { nameExpressions, valueExpressions } = asExpressions({
           removed_at: Math.floor(Date.now() / 1000),
