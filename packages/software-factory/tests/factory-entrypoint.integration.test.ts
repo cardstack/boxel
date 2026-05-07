@@ -195,7 +195,7 @@ module('factory-entrypoint integration', function () {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSONAPI });
         response.end(JSON.stringify({ data: { attributes: { mtimes: {} } } }));
       } else if (
-        request.url === '/hassan/personal/_atomic' &&
+        request.url?.startsWith('/hassan/personal/_atomic') &&
         request.method === 'POST'
       ) {
         // Used by client.sync to atomically push card writes. Parse the
