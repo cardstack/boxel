@@ -2,7 +2,7 @@
 //
 // Validates `expression`, `expr`, `bxl`, `jq`, and `fx` — the public
 // surface that .gts files use inside `computeVia`. Maps to
-// JQXL_PORT_CHANGES.md §10, §11, §11a.
+// docs/internals/port-from-jqxl.md §10, §11, §11a.
 //
 //   §10  — `jq` tagged template preserves backslashes (sidesteps the
 //          JS escape gotcha for `\(...)` interpolation).

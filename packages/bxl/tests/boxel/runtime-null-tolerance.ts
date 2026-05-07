@@ -1,7 +1,7 @@
 // Boxel-flavored runtime null-tolerance suite.
 //
 // Validates the runtime relaxations the realm depends on. Maps to
-// JQXL_PORT_CHANGES.md §6–9 — each case is tagged with the section it
+// docs/internals/port-from-jqxl.md §6–9 — each case is tagged with the section it
 // asserts so a failure trace points straight at the rule that broke.
 //
 // Section mapping:

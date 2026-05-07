@@ -13,27 +13,65 @@ versions may change syntax behavior until `1.0.0`. See
 
 ### Added
 
-- Three-origin `src/` layout: `jqtools/` (derived from alexxander/jq-tools),
-  `formulajs/` (derived from formulajs/formulajs), and `bxl/` (our own
-  readable-syntax compiler, linter, formatter, bridge, registry, and TextMate
-  grammar).
-- Sub-entry source files: `src/compiler.ts`, `src/linter.ts`,
-  `src/runtime.ts`, `src/runtime-bare.ts` wired via `package.json` `exports`.
-- `src/bxl/registry/` composes jq-core + formula libraries; jqtools remains
-  standalone with a core-only registry mechanism.
-- `src/formulajs/errors.ts` defines a standalone `ExcelError` so the
-  formulajs subfolder has zero dependencies on `src/jqtools/`.
-- Attribution: `NOTICE.md`, `src/jqtools/UPSTREAM-DIFFS.md`,
-  `src/formulajs/UPSTREAM-DIFFS.md`, per-folder `README.md`.
-- Test runner `scripts/run-tests.mjs` discovers suites in `tests/unit/` and
-  `tests/smoke/` automatically.
+- **Boxel realm authoring surface.** New public exports `bxl`,
+  `expression`, `expr`, `jq`, and `fx` (the last two as tagged
+  templates). `expression('…')` returns a function bound to `this`
+  for use inside `@field` `computeVia`. The `as: SomeFieldDef`
+  option mirrors jqxl's `{ as: ... }` and uses Boxel's `getFields`
+  when reachable, falling back to `Object.assign`.
+- **Excel-error tolerance at the boundary.** `bxl()` catches Excel
+  sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, `#NUM!`, `#REF!`,
+  `#NAME?`, `#NULL!`, `#ERROR!`, `#GETTING_DATA`) raised inside
+  evaluation and surfaces them as `null` instead of crashing the
+  indexer.
+- **`fx`/`jq` tagged templates.** `` jq`…` `` skips readable-syntax
+  compilation and preserves `\(...)` interpolation through JS's
+  silent-escape gotcha. `` fx`…` `` is explicit-Excel sugar over a
+  plain string (same compilation today).
+- **PascalCase → camelCase fallback** in the readable-syntax
+  compiler when no schema is in scope. Resolves bare `Severity` to
+  `.severity`; skips all-uppercase initialisms, jq keywords, BXL
+  literals, and quoted string literals.
+- **JQ control-keyword guard** in the function-call dispatch:
+  lowercase `if (.x // 0) == 0 then …` no longer collides with the
+  Excel `IF()` formula.
+- **Realm-bundle entry shim.** `src/realm-bundle-entry.ts` performs
+  the `https://cardstack.com/base/card-api` import as the bundle's
+  esbuild entry, registering `getFields` on a `globalThis` hook.
+  `src/index.ts` looks up the hook lazily, so non-realm consumers
+  (Node tests, CLI tooling) load the public API without tripping on
+  the `https:` ESM scheme.
+- **`tests/boxel/` test suite.** New M1 milestone covering the
+  runtime null-tolerance and expression-factory behavior the realm
+  depends on; runnable via `npm run test:boxel` or the full suite.
+  Includes plain-data fixtures mirroring the gigantic-crawdad realm.
+- **Documentation reshuffle.** Migration guide at
+  [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md);
+  full port log moved to
+  [`docs/internals/port-from-jqxl.md`](./docs/internals/port-from-jqxl.md).
+  TypeDoc setup (`typedoc.json`, `npm run docs:api`) generates an
+  API reference from the JSDoc that now annotates every public
+  symbol in `src/index.ts`.
 
-### Test results (post-port)
+### Changed
 
-- 13 / 13 suites pass: bxl-150 (150 cases), formula (121), excel-paste (104),
-  edge (31), smoke (14), context (18), pred-filter (14), fuzzy-input (16),
-  format-conversion, conversion, linter, syntax-highlight, smoke runtime (5).
-- Total: **489+ passing cases** end-to-end through the new layout.
+- **jq runtime tolerates null operands.** Arithmetic operators `-`,
+  `*`, `/`, `%` propagate `null` instead of throwing when either
+  operand is `null` / `undefined`. Division/modulo by zero returns
+  `null`. `+` keeps jq's identity-on-null semantics.
+- **Iterating null is empty.** `null | .[]` (or `[null[]]`) yields
+  an empty stream instead of `null is not iterable`.
+- **`assertString` / `assertNumber` coerce nullish values.** `null`
+  and `undefined` become `''` and `0` respectively; filters like
+  `ascii_upcase`, `startswith/1`, `endswith/1` no longer surface
+  "Got null, string expected".
+- **Three-origin `src/` layout** (carried from the original port):
+  `jqtools/` (derived from alexxander/jq-tools), `formulajs/`
+  (derived from formulajs/formulajs), and `bxl/` (our own
+  readable-syntax compiler, linter, formatter, bridge, registry,
+  and TextMate grammar). Sub-entry source files
+  (`src/compiler.ts`, `src/linter.ts`, `src/runtime.ts`,
+  `src/runtime-bare.ts`) wired via `package.json` `exports`.
 
 ### Infrastructure
 

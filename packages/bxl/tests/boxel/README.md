@@ -14,7 +14,7 @@ instead.
 
 ## Sections
 
-Each test name is tagged with the JQXL_PORT_CHANGES.md section it
+Each test name is tagged with the docs/internals/port-from-jqxl.md section it
 asserts (e.g. `§7 division by zero returns null`). When a case fails,
 look up the matching section in the port doc to see the rule and the
 original incident.

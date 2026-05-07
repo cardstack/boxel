@@ -224,7 +224,7 @@ export interface BxlOptions {
    * Field metadata used by the readable-syntax compiler to resolve
    * label paths (e.g. `"Line Item"` → `.lineItems`). When omitted, the
    * compiler falls back to a single-word PascalCase → camelCase rule
-   * for bare identifiers — see JQXL_PORT_CHANGES.md §12.
+   * for bare identifiers — see docs/internals/port-from-jqxl.md §12.
    */
   schema?: ReadableSchema;
   /**
