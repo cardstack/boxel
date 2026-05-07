@@ -35,11 +35,39 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Realm-server HTTP request rate (lines starting with --> from httpLogging) and error rate (lines matching /error|exception|fatal/i). Smoothed over 5m, scaled to per-minute.",
+        "description": "Realm-server HTTP throughput and error rate. Lines from httpLogging exit (`--> METHOD ACCEPT URL: STATUS`) for total request rate; lines matching `error|exception|fatal` for error rate. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
-              "mode": "thresholds"
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
             },
             "decimals": 1,
             "links": [
@@ -54,73 +82,35 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
-                  "value": null
-                },
-                {
-                  "color": "transparent",
-                  "value": 0
-                },
-                {
                   "color": "green",
-                  "value": 0.001
+                  "value": null
                 }
               ]
             },
             "unit": "short"
           },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Errs/min"
-              },
-              "properties": [
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 0.001
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          ]
+          "overrides": []
         },
         "gridPos": {
-          "h": 5,
-          "w": 5,
+          "h": 8,
+          "w": 8,
           "x": 0,
           "y": 0
         },
         "id": 1,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
-          "reduceOptions": {
+          "legend": {
             "calcs": [
-              "lastNotNull"
+              "mean"
             ],
-            "fields": "",
-            "values": false
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
           },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -129,10 +119,9 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Reqs/min",
+            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [1m]))",
+            "queryType": "range",
+            "legendFormat": "HTTP req/min",
             "refId": "A"
           },
           {
@@ -140,266 +129,53 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Errs/min",
+            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [1m]))",
+            "queryType": "range",
+            "legendFormat": "HTTP err/min",
             "refId": "B"
           }
         ],
         "title": "Realm Server",
-        "type": "stat"
-      },
-      {
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "description": "Prerender-server HTTP request rate (httpLogging exit lines) and error rate. Smoothed over 5m, scaled to per-minute.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "decimals": 1,
-            "links": [
-              {
-                "title": "Open Prerender Server dashboard",
-                "url": "/d/boxel-svc-prerender-server",
-                "targetBlank": false
-              }
-            ],
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "transparent",
-                  "value": null
-                },
-                {
-                  "color": "transparent",
-                  "value": 0
-                },
-                {
-                  "color": "green",
-                  "value": 0.001
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Errs/min"
-              },
-              "properties": [
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 0.001
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 5,
-          "w": 5,
-          "x": 5,
-          "y": 0
-        },
-        "id": 2,
-        "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
-        },
-        "pluginVersion": "12.4.3",
-        "targets": [
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "expr": "60 * sum(rate({service=\"prerender\"} |~ \"^-->\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Reqs/min",
-            "refId": "A"
-          },
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "expr": "60 * sum(rate({service=\"prerender\"} |~ \"(?i)error|exception|fatal\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Errs/min",
-            "refId": "B"
-          }
-        ],
-        "title": "Prerender",
-        "type": "stat"
-      },
-      {
-        "datasource": {
-          "type": "loki",
-          "uid": "loki"
-        },
-        "description": "Prerender-manager request rate (incoming proxy requests) and error rate. The manager logs 'proxying ...' on entry rather than httpLogging exit lines. Smoothed over 5m.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "decimals": 1,
-            "links": [
-              {
-                "title": "Open Prerender Manager dashboard",
-                "url": "/d/boxel-svc-prerender-manager",
-                "targetBlank": false
-              }
-            ],
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "transparent",
-                  "value": null
-                },
-                {
-                  "color": "transparent",
-                  "value": 0
-                },
-                {
-                  "color": "green",
-                  "value": 0.001
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Errs/min"
-              },
-              "properties": [
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 0.001
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 5,
-          "w": 5,
-          "x": 10,
-          "y": 0
-        },
-        "id": 3,
-        "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
-        },
-        "pluginVersion": "12.4.3",
-        "targets": [
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "expr": "60 * sum(rate({service=\"prerender-manager\"} |~ \"^proxying\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Reqs/min",
-            "refId": "A"
-          },
-          {
-            "datasource": {
-              "type": "loki",
-              "uid": "loki"
-            },
-            "expr": "60 * sum(rate({service=\"prerender-manager\"} |~ \"(?i)error|exception|fatal\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
-            "legendFormat": "Errs/min",
-            "refId": "B"
-          }
-        ],
-        "title": "Prerender Mgr",
-        "type": "stat"
+        "type": "timeseries"
       },
       {
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Worker queue health: jobs resolved per minute (last 5m), jobs rejected per minute, and unclaimed queue depth.",
+        "description": "Worker job throughput and failures, bucketed at 1 minute. Resolved jobs (`status='resolved'`) and rejected jobs (`status='rejected'`) stacked. Legend shows the mean over the visible time range. Counts ALL job types, not just indexing \u2014 for indexing-only throughput see the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
-              "mode": "thresholds"
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 0,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "normal"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
             },
             "decimals": 1,
             "links": [
@@ -414,16 +190,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
-                  "value": null
-                },
-                {
-                  "color": "transparent",
-                  "value": 0
-                },
-                {
                   "color": "green",
-                  "value": 0.001
+                  "value": null
                 }
               ]
             },
@@ -433,64 +201,15 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "Failed/min"
+                "options": "Failures/min"
               },
               "properties": [
                 {
-                  "id": "thresholds",
+                  "id": "color",
                   "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "red",
-                        "value": 0.001
-                      }
-                    ]
+                    "mode": "fixed",
+                    "fixedColor": "red"
                   }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Queue"
-              },
-              "properties": [
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 50
-                      },
-                      {
-                        "color": "red",
-                        "value": 500
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "decimals",
-                  "value": 0
                 }
               ]
             },
@@ -501,23 +220,10 @@
               },
               "properties": [
                 {
-                  "id": "thresholds",
+                  "id": "color",
                   "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "transparent",
-                        "value": null
-                      },
-                      {
-                        "color": "transparent",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 0.001
-                      }
-                    ]
+                    "mode": "fixed",
+                    "fixedColor": "green"
                   }
                 }
               ]
@@ -525,26 +231,25 @@
           ]
         },
         "gridPos": {
-          "h": 5,
-          "w": 5,
-          "x": 15,
+          "h": 8,
+          "w": 8,
+          "x": 8,
           "y": 0
         },
         "id": 4,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
-          "reduceOptions": {
+          "legend": {
             "calcs": [
-              "lastNotNull"
+              "mean"
             ],
-            "fields": "",
-            "values": false
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
           },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -554,25 +259,64 @@
               "uid": "cef5v5sl9k7i8f"
             },
             "editorMode": "code",
-            "format": "table",
+            "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT (SELECT COUNT(*)::float / 5.0 FROM jobs WHERE finished_at > NOW() - INTERVAL '5 minutes' AND status = 'resolved') AS \"Jobs/min\", (SELECT COUNT(*)::float / 5.0 FROM jobs WHERE finished_at > NOW() - INTERVAL '5 minutes' AND status = 'rejected') AS \"Failed/min\", (SELECT COUNT(*) FROM jobs j LEFT JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.status = 'unfulfilled' AND jr.id IS NULL) AS \"Queue\";",
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m'),\n       COUNT(*) AS \"Jobs/min\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m'),\n       COUNT(*) AS \"Failures/min\"\n  FROM jobs\n WHERE status = 'rejected'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "B"
           }
         ],
         "title": "Worker",
-        "type": "stat"
+        "type": "timeseries"
       },
       {
         "datasource": {
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Synapse Matrix message send rate \u2014 PUT /_matrix/client/.../send/m.room.message events parsed from the synapse access log. Smoothed over 5m.",
+        "description": "Synapse Matrix message send rate \u2014 `PUT /_matrix/client/.../send/m.room.message` requests parsed from synapse access logs. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
-              "mode": "thresholds"
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 0,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
             },
             "decimals": 1,
             "links": [
@@ -587,16 +331,8 @@
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
-                  "value": null
-                },
-                {
-                  "color": "transparent",
-                  "value": 0
-                },
-                {
                   "color": "green",
-                  "value": 0.001
+                  "value": null
                 }
               ]
             },
@@ -605,26 +341,25 @@
           "overrides": []
         },
         "gridPos": {
-          "h": 5,
-          "w": 4,
-          "x": 20,
+          "h": 8,
+          "w": 8,
+          "x": 16,
           "y": 0
         },
         "id": 5,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
-          "reduceOptions": {
+          "legend": {
             "calcs": [
-              "lastNotNull"
+              "mean"
             ],
-            "fields": "",
-            "values": false
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
           },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -633,15 +368,14 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"PUT-[0-9]+.*\\\\/send\\\\/m\\\\.room\\\\.message\" [5m]))",
-            "instant": true,
-            "queryType": "instant",
+            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"PUT-[0-9]+.*\\\\/send\\\\/m\\\\.room\\\\.message\" [1m]))",
+            "queryType": "range",
             "legendFormat": "Msgs/min",
             "refId": "A"
           }
         ],
         "title": "Synapse",
-        "type": "stat"
+        "type": "timeseries"
       },
       {
         "description": "All firing and pending Grafana alert rules. Drill into a rule for details and silences. Replaces the Worker Status alertlist (which was a single-panel dashboard).",
@@ -649,7 +383,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 5
+          "y": 8
         },
         "id": 6,
         "options": {
@@ -714,7 +448,7 @@
           "h": 4,
           "w": 6,
           "x": 0,
-          "y": 13
+          "y": 16
         },
         "id": 7,
         "options": {
@@ -782,7 +516,7 @@
           "h": 4,
           "w": 6,
           "x": 6,
-          "y": 13
+          "y": 16
         },
         "id": 8,
         "options": {
@@ -859,7 +593,7 @@
           "h": 4,
           "w": 6,
           "x": 12,
-          "y": 13
+          "y": 16
         },
         "id": 9,
         "options": {
@@ -931,7 +665,7 @@
           "h": 4,
           "w": 6,
           "x": 18,
-          "y": 13
+          "y": 16
         },
         "id": 10,
         "options": {
@@ -1028,7 +762,7 @@
           "h": 6,
           "w": 24,
           "x": 0,
-          "y": 17
+          "y": 20
         },
         "id": 11,
         "options": {
@@ -1087,7 +821,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 23
+          "y": 26
         },
         "id": 12,
         "options": {
