@@ -21,6 +21,14 @@ services:
       # Data sources go here because grafanactl does not manage data sources.
       - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./provisioning/alerting:/etc/grafana/provisioning/alerting:ro
+      # Local-only override of the synapse-prometheus datasource — points
+      # at the local Prometheus container instead of AMP. The single-file
+      # bind below is layered ON TOP of the directory mount above, masking
+      # provisioning/datasources/synapse-prometheus.yaml inside the
+      # container only. apply-datasources.sh (staging/prod) iterates the
+      # committed provisioning/datasources/ tree only and never sees this
+      # override. See provisioning/local-only/synapse-prometheus.yaml.
+      - ./provisioning/local-only/synapse-prometheus.yaml:/etc/grafana/provisioning/datasources/synapse-prometheus.yaml:ro
       # Dashboards arrive via grafanactl resources push (Phase 3 / CS-10922).
       # Local file-based dashboard provisioning is also possible — uncomment
       # the next line if a dev wants dashboards baked into the container.
@@ -113,6 +121,39 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Local Prometheus — scrapes the dev Synapse container's `/metrics`
+  # endpoint so the vendored Synapse dashboard works without an AMP
+  # workspace. Joined to the `boxel` Docker network (created by
+  # `mise run start-synapse` / packages/matrix/docker/synapse/index.ts)
+  # so it can resolve `boxel-synapse:9001` directly. Staging and
+  # production scrape via AMP and ignore this service entirely.
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    ports:
+      # Exposed for ad-hoc curl/inspection from the host. Grafana itself
+      # reaches Prometheus via the docker network at `prometheus:9090`.
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - default
+      - boxel
+    restart: unless-stopped
+
+networks:
+  default:
+  # The synapse dev container runs on the `boxel` Docker network (created
+  # by packages/matrix/docker/synapse/index.ts). Marked external so this
+  # compose project doesn't try to manage its lifecycle. If you bring up
+  # the observability stack BEFORE starting synapse, run
+  # `docker network create boxel` first — or just `mise run start-synapse`,
+  # which creates the network as a side-effect.
+  boxel:
+    name: boxel
+    external: true
+
 volumes:
   grafana_data:
   loki_data:
+  prometheus_data:
