@@ -44,7 +44,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,
@@ -90,7 +90,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,
@@ -148,7 +148,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,
@@ -180,7 +180,7 @@ test.describe('runInstantiateInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runInstantiateInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: thrower,
       workspaceDir: createTestWorkspace().dir,
@@ -218,7 +218,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let cleanOnly = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,
@@ -231,7 +231,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       expect(cleanOnly.failures).toEqual([]);
 
       let brokenOnly = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,
@@ -274,7 +274,7 @@ test.describe('runInstantiateInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runInstantiateInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: stubClient,
       workspaceDir: createTestWorkspace().dir,
@@ -309,7 +309,7 @@ test.describe('runInstantiateInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runInstantiateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         workspaceDir: workspace.dir,

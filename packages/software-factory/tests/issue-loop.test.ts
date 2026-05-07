@@ -144,14 +144,14 @@ class MockLoopAgent implements LoopAgent {
 class StubIssueContextBuilder implements IssueContextBuilderLike {
   buildCalls: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
     validationResults?: ValidationResults;
     briefUrl?: string;
   }[] = [];
 
   async buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
     validationResults?: ValidationResults;
     briefUrl?: string;
   }): Promise<AgentContext> {
@@ -161,7 +161,7 @@ class StubIssueContextBuilder implements IssueContextBuilderLike {
       issue: params.issue,
       knowledge: [],
       skills: [],
-      targetRealmUrl: params.targetRealmUrl,
+      targetRealm: params.targetRealm,
       validationResults: params.validationResults,
       briefUrl: params.briefUrl,
     };
@@ -270,7 +270,7 @@ function makeLoopConfig(
     contextBuilder: new StubIssueContextBuilder(),
     tools: DEFAULT_TOOLS,
     createValidator: () => new MockValidator([makePassingValidation()]),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     // Unit tests don't exercise disk — a dummy path is fine because the
     // loop itself never reads or writes the workspace; it only invokes the
     // injected sync callback.

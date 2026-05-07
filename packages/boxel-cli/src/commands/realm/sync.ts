@@ -489,6 +489,12 @@ export interface SyncCommandOptions {
   preferNewest?: boolean;
   delete?: boolean;
   dryRun?: boolean;
+  /**
+   * Append `?waitForIndex=true` to the `_atomic` upload so the
+   * realm-server returns only after the indexer has processed the
+   * batch. See `SyncOptions.waitForIndex` for the rationale.
+   */
+  waitForIndex?: boolean;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -629,6 +635,7 @@ export async function sync(
         preferNewest: options.preferNewest,
         deleteSync: options.delete,
         dryRun: options.dryRun,
+        waitForIndex: options.waitForIndex,
       },
       authenticator,
     );

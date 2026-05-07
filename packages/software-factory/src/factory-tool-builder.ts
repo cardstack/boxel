@@ -8,13 +8,9 @@
  */
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import type {
-  LooseSingleCardDocument,
-  Relationship,
-} from '@cardstack/runtime-common';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
 
-import { buildCardDocument } from './darkfactory-schemas';
+import { fetchCardTypeSchema } from './darkfactory-schemas';
 import {
   runEvaluateInMemory,
   type RunEvaluateInMemoryOptions,
@@ -32,22 +28,14 @@ import {
   type RunLintInMemoryOptions,
   type RunLintResult,
 } from './lint-execution';
-import { logger } from './logger';
 import {
   runParseInMemory,
   type RunParseInMemoryOptions,
   type RunParseResult,
 } from './parse-execution';
-import { ensureJsonExtension, addCommentToIssue } from './realm-operations';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
 import { readCard, writeCard } from './workspace-fs';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-let log = logger('factory-tool-builder');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -74,15 +62,15 @@ export interface FactoryTool {
 }
 
 export interface ToolBuilderConfig {
-  targetRealmUrl: string;
-  /** The darkfactory module URL (lives in the software-factory realm, NOT the target realm). */
-  darkfactoryModuleUrl: string;
+  targetRealm: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
   /**
    * Local workspace directory mirroring the target realm. All target-realm
-   * card reads/writes happen here; sync with the realm is orchestrated
-   * elsewhere in the loop.
+   * card reads/writes happen here. The orchestrator pushes the workspace
+   * to the realm between agent turns; the realm-touching `run_*` tools
+   * also call `syncWorkspace` before invoking the prerenderer so a
+   * mid-turn evaluate/instantiate/test sees the agent's current writes.
    */
   workspaceDir: string;
   /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
@@ -91,14 +79,15 @@ export interface ToolBuilderConfig {
   realmServerUrl: string;
   /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
   hostAppUrl?: string;
-  /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
-  cardTypeSchemas?: Map<
-    string,
-    {
-      attributes: Record<string, unknown>;
-      relationships?: Record<string, unknown>;
-    }
-  >;
+  /**
+   * Push the local workspace to the target realm. The orchestrator only
+   * syncs the workspace between agent turns, so a mid-turn `run_evaluate`
+   * / `run_instantiate` / `run_test` would otherwise hit a realm that
+   * doesn't yet have the agent's writes from the current turn. The
+   * realm-touching `run_*` tools call this before invoking the
+   * prerenderer so the realm reflects the agent's latest source.
+   */
+  syncWorkspace: () => Promise<{ ok: boolean; error?: string }>;
   /** Injected for testing — defaults to runLintInMemory. */
   runLintInMemory?: (options: RunLintInMemoryOptions) => Promise<RunLintResult>;
   /** Injected for testing — defaults to runTestsInMemory. */
@@ -160,6 +149,7 @@ export function buildFactoryTools(
     buildReadFileTool(config),
     buildFetchTranspiledModuleTool(config),
     buildSearchRealmTool(config),
+    buildGetCardSchemaTool(config),
     buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
@@ -170,30 +160,15 @@ export function buildFactoryTools(
     buildRequestClarificationTool(),
   ];
 
-  // add_comment doesn't need runtime schemas — it reads/patches directly.
-  tools.push(buildAddCommentTool(config));
-
-  // Card tools are only available when runtime schemas have been fetched.
-  let schemas = config.cardTypeSchemas;
-  let cardToolEntries: [string, string, () => FactoryTool][] = [
-    ['Project', 'update_project', () => buildUpdateProjectTool(config)],
-    ['Issue', 'update_issue', () => buildUpdateIssueTool(config)],
-    [
-      'KnowledgeArticle',
-      'create_knowledge',
-      () => buildCreateKnowledgeTool(config),
-    ],
-    ['Spec', 'create_catalog_spec', () => buildCreateCatalogSpecTool(config)],
-  ];
-  for (let [cardName, toolName, buildFn] of cardToolEntries) {
-    if (schemas?.has(cardName)) {
-      tools.push(buildFn());
-    } else {
-      log.warn(
-        `[factory-tool-builder] Omitting ${toolName} tool: no schema for ${cardName}`,
-      );
-    }
-  }
+  // Tracker-schema cards (Project / Issue / KnowledgeArticle / Spec /
+  // issue comments) used to have dedicated wrapper tools here that
+  // auto-constructed the JSON:API document, enforced Issue-description
+  // immutability, and so on. CS-10883 retired all five; the agent now
+  // writes those `.json` files directly via `Write` (Claude) /
+  // `write_file` (OpenRouter). The shapes and invariants are taught in
+  // the `software-factory-bootstrap` and `software-factory-operations`
+  // skills, with the live `darkfactoryModuleUrl` named in the system
+  // prompt for `adoptsFrom.module`.
 
   // Add registered realm-api tools as FactoryTool wrappers. After the
   // CS-10883 retirements the registry only contains `realm-create`;
@@ -205,6 +180,23 @@ export function buildFactoryTools(
   }
 
   return tools;
+}
+
+/**
+ * Push the local workspace to the realm before a `run_*` tool invokes the
+ * prerenderer. Native `Write` tool calls only land in the workspace until
+ * the orchestrator's between-turn sync, so a mid-turn realm-touching tool
+ * would otherwise see a realm without the agent's own writes from this
+ * turn. Callers receive a string error message on failure so they can
+ * surface it to the agent through their result shape.
+ */
+async function syncWorkspaceForToolRun(
+  config: ToolBuilderConfig,
+  toolName: string,
+): Promise<string | undefined> {
+  let result = await config.syncWorkspace();
+  if (result.ok) return undefined;
+  return `Failed to sync workspace to realm before ${toolName}: ${result.error ?? 'unknown error'}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +314,7 @@ function buildFetchTranspiledModuleTool(
     },
     execute: async (args) => {
       let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealm(config, args.realm as string | undefined);
       return config.client.readTranspiled(realmUrl, path);
     },
   };
@@ -350,280 +342,61 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
     },
     execute: async (args) => {
       let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
+      let realmUrl = resolveRealm(config, args.realm as string | undefined);
       let result = await config.client.search(realmUrl, query);
       return result.ok ? { data: result.data } : { error: result.error };
     },
   };
 }
 
-/**
- * Read-patch-write helper for card update tools.
- *
- * Reads the existing card source from the local workspace, merges the
- * provided attributes and relationships on top, and returns the merged
- * document ready to write. Falls back to creating a fresh document
- * when the card is missing; other read failures surface as errors.
- */
-async function readPatchDocument(
-  workspaceDir: string,
-  path: string,
-  cardName: string,
-  darkfactoryModuleUrl: string,
-  attributes: Record<string, unknown>,
-  relationships: Record<string, unknown> | undefined,
-): Promise<LooseSingleCardDocument> {
-  let existing = await readCard(workspaceDir, path);
-
-  if (existing.ok && existing.document) {
-    let doc = existing.document as unknown as LooseSingleCardDocument;
-    let existingAttrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
-    doc.data.attributes = { ...existingAttrs, ...attributes };
-    if (relationships && Object.keys(relationships).length > 0) {
-      doc.data.relationships = {
-        ...(doc.data.relationships ?? {}),
-        ...relationships,
-      } as typeof doc.data.relationships;
-    }
-    return doc;
-  }
-
-  // If the read failed for a reason other than "missing", surface it —
-  // we don't want to clobber on a transient I/O error.
-  if (!existing.ok && existing.status !== 404) {
-    throw new Error(
-      `Failed to read existing ${cardName} at "${path}": ${existing.error ?? 'unknown error'}`,
-    );
-  }
-
-  // Missing — create a fresh document for the card type.
-  return buildCardDocument(
-    cardName,
-    darkfactoryModuleUrl,
-    attributes,
-    relationships,
-  );
-}
-
-/**
- * Resolve the schema for a card type from the runtime cache.
- * Only called when the card type is known to exist in cardTypeSchemas
- * (callers check before building the tool).
- */
-function resolveCardSchema(config: ToolBuilderConfig, cardName: string) {
-  let cached = config.cardTypeSchemas!.get(cardName)!;
+function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
   return {
-    attributes: cached.attributes,
-    relationships: cached.relationships,
-  };
-}
-
-function buildCardToolParams(
-  pathDescription: string,
-  schema: {
-    attributes: Record<string, unknown>;
-    relationships?: Record<string, unknown>;
-  },
-) {
-  let properties: Record<string, unknown> = {
-    path: { type: 'string', description: pathDescription },
-    attributes: schema.attributes,
-  };
-  if (schema.relationships) {
-    properties.relationships = schema.relationships;
-  }
-  return { type: 'object', properties, required: ['path', 'attributes'] };
-}
-
-function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'Project');
-  return {
-    name: 'update_project',
+    name: 'get_card_schema',
     description:
-      'Update a project card in the target realm (e.g., update status or success criteria). Auth: per-realm JWT.',
-    parameters: buildCardToolParams(
-      'Realm-relative path to the project card (e.g., "Projects/sticky-note.json")',
-      schema,
-    ),
-    execute: async (args) => {
-      let path = ensureJsonExtension(
-        requireStringArg(args, 'path', 'update_project'),
-      );
-      let attributes = args.attributes as Record<string, unknown>;
-      let relationships = args.relationships as
-        | Record<string, unknown>
-        | undefined;
-
-      // Read-patch-write: preserve attributes the agent didn't include.
-      let doc = await readPatchDocument(
-        config.workspaceDir,
-        path,
-        'Project',
-        config.darkfactoryModuleUrl,
-        attributes,
-        relationships,
-      );
-      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
-    },
-  };
-}
-
-function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'Issue');
-  return {
-    name: 'update_issue',
-    description:
-      'Update an issue card in the target realm. Auth: per-realm JWT.',
-    parameters: buildCardToolParams(
-      'Realm-relative path to the issue card (e.g., "Issues/1.json")',
-      schema,
-    ),
-    execute: async (args) => {
-      let path = ensureJsonExtension(
-        requireStringArg(args, 'path', 'update_issue'),
-      );
-      // Copy to avoid mutating the caller's args object
-      let attributes = { ...(args.attributes as Record<string, unknown>) };
-      // The loop owns issue status transitions (backlog → in_progress → done).
-      // The agent may set status to "blocked" (cannot proceed) or "backlog"
-      // (unblock). The "done" and "in_progress" transitions are managed by
-      // the loop based on signal_done + validation results.
-      let allowedAgentStatuses = ['blocked', 'backlog'];
-      if (
-        attributes.status &&
-        !allowedAgentStatuses.includes(attributes.status as string)
-      ) {
-        delete attributes.status;
-      }
-      // Issue descriptions are immutable after creation. All post-creation
-      // context must go through add_comment instead.
-      delete attributes.description;
-      let relationships = args.relationships as
-        | Record<string, unknown>
-        | undefined;
-
-      let doc = await readPatchDocument(
-        config.workspaceDir,
-        path,
-        'Issue',
-        config.darkfactoryModuleUrl,
-        attributes,
-        relationships,
-      );
-      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
-    },
-  };
-}
-
-function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'add_comment',
-    description:
-      'Append a comment to an existing issue. Use this to record context, feedback, or status updates without modifying the issue description.',
+      'Fetch the live JSON Schema (attributes + relationships) for a card ' +
+      'definition by its CodeRef. Returns `{ attributes, relationships? }` ' +
+      'with field names, types, and enum values introspected from the ' +
+      'actual `CardDef` at runtime — never hard-coded. Use this BEFORE ' +
+      'writing a tracker JSON file (Project, Issue, KnowledgeArticle, ' +
+      'Spec, etc.) so the document you write matches the live schema, ' +
+      'even when the schema evolves. Schemas are fetched via the realm ' +
+      'server prerenderer (the same path the AI Bot uses) and cached ' +
+      'per-process, so repeated calls with the same code ref are cheap.',
     parameters: {
       type: 'object',
       properties: {
-        path: {
+        module: {
           type: 'string',
           description:
-            'Path to the issue card file (e.g., "Issues/bootstrap-seed.json")',
+            'Absolute module URL of the card definition (e.g. the live ' +
+            '`darkfactoryModuleUrl` from the system prompt for tracker ' +
+            'cards, or `https://cardstack.com/base/spec` for catalog Spec).',
         },
-        body: {
-          type: 'string',
-          description: 'The comment text (markdown supported)',
-        },
-        author: {
+        name: {
           type: 'string',
           description:
-            'Who is writing this comment (e.g., "factory-agent", "human")',
+            'Exported card name within the module (e.g. `Project`, ' +
+            '`Issue`, `KnowledgeArticle`, `Spec`).',
         },
       },
-      required: ['path', 'body', 'author'],
+      required: ['module', 'name'],
     },
     execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'add_comment');
-      let body = requireStringArg(args, 'body', 'add_comment');
-      let author = requireStringArg(args, 'author', 'add_comment');
-
-      return addCommentToIssue(config.workspaceDir, path, {
-        body,
-        author,
-      });
-    },
-  };
-}
-
-function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'KnowledgeArticle');
-  return {
-    name: 'create_knowledge',
-    description:
-      'Create or update a knowledge article card in the target realm. Auth: per-realm JWT.',
-    parameters: buildCardToolParams(
-      'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
-      schema,
-    ),
-    execute: async (args) => {
-      let path = ensureJsonExtension(
-        requireStringArg(args, 'path', 'create_knowledge'),
+      let module = requireStringArg(args, 'module', 'get_card_schema');
+      let name = requireStringArg(args, 'name', 'get_card_schema');
+      let schema = await fetchCardTypeSchema(
+        config.client,
+        config.realmServerUrl,
+        config.targetRealm,
+        { module: module as RealmResourceIdentifier, name },
       );
-      let attributes = args.attributes as Record<string, unknown>;
-      let relationships = args.relationships as
-        | Record<string, unknown>
-        | undefined;
-
-      let doc = await readPatchDocument(
-        config.workspaceDir,
-        path,
-        'KnowledgeArticle',
-        config.darkfactoryModuleUrl,
-        attributes,
-        relationships,
-      );
-      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
-    },
-  };
-}
-
-function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'Spec');
-  return {
-    name: 'create_catalog_spec',
-    description:
-      "Create a Catalog Spec card in the target realm's Spec/ folder. " +
-      'This makes a card definition discoverable in the Boxel catalog. ' +
-      'Auth: per-realm JWT.',
-    parameters: buildCardToolParams(
-      'Realm-relative path for the Spec card (e.g., "Spec/sticky-note.json")',
-      schema,
-    ),
-    execute: async (args) => {
-      let path = ensureJsonExtension(
-        requireStringArg(args, 'path', 'create_catalog_spec'),
-      );
-      let attributes = args.attributes as Record<string, unknown>;
-      let relationships = args.relationships as
-        | Record<string, unknown>
-        | undefined;
-      // Spec cards adopt from https://cardstack.com/base/spec, not darkfactory
-      let doc: LooseSingleCardDocument = {
-        data: {
-          type: 'card',
-          attributes,
-          meta: {
-            adoptsFrom: {
-              module: rri('https://cardstack.com/base/spec'),
-              name: 'Spec',
-            },
-          },
-        },
-      };
-      if (relationships && Object.keys(relationships).length > 0) {
-        doc.data.relationships = relationships as {
-          [fieldName: string]: Relationship | Relationship[];
+      if (!schema) {
+        return {
+          ok: false,
+          error: `Failed to fetch schema for ${module}#${name}. Verify the module URL is reachable from the target realm and that the named export is a CardDef.`,
         };
       }
-      return writeCard(config.workspaceDir, path, JSON.stringify(doc, null, 2));
+      return { ok: true, schema };
     },
   };
 }
@@ -643,8 +416,21 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
       'target realm. Auth: per-realm JWT.',
     parameters: { type: 'object', properties: {} },
     execute: async () => {
+      let syncError = await syncWorkspaceForToolRun(config, 'run_tests');
+      if (syncError) {
+        return {
+          status: 'error',
+          passedCount: 0,
+          failedCount: 0,
+          skippedCount: 0,
+          durationMs: 0,
+          testFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
       });
@@ -684,7 +470,7 @@ function buildRunLintTool(config: ToolBuilderConfig): FactoryTool {
           ? rawPath.trim()
           : undefined;
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
@@ -729,10 +515,20 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
-      // `run_evaluate` runs in the prerenderer sandbox and reads modules
-      // from the realm, so it doesn't need the workspace.
+      let syncError = await syncWorkspaceForToolRun(config, 'run_evaluate');
+      if (syncError) {
+        return {
+          status: 'error',
+          modulesChecked: 0,
+          modulesWithErrors: 0,
+          durationMs: 0,
+          evaluableFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         ...(path ? { path } : {}),
@@ -780,7 +576,7 @@ function buildRunParseTool(config: ToolBuilderConfig): FactoryTool {
           ? rawPath.trim()
           : undefined;
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         client: config.client,
         workspaceDir: config.workspaceDir,
         ...(path ? { path } : {}),
@@ -829,8 +625,20 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
         typeof rawPath === 'string' && rawPath.trim() !== ''
           ? rawPath.trim()
           : undefined;
+      let syncError = await syncWorkspaceForToolRun(config, 'run_instantiate');
+      if (syncError) {
+        return {
+          status: 'error',
+          instancesChecked: 0,
+          instancesWithErrors: 0,
+          durationMs: 0,
+          instanceFiles: [],
+          failures: [],
+          errorMessage: syncError,
+        };
+      }
       return execute({
-        targetRealmUrl: config.targetRealmUrl,
+        targetRealm: config.targetRealm,
         realmServerUrl: config.realmServerUrl,
         client: config.client,
         workspaceDir: config.workspaceDir,
@@ -903,7 +711,7 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       return config.client.runCommand(
         config.realmServerUrl,
-        config.targetRealmUrl,
+        config.targetRealm,
         args.command as string,
         args.commandInput as Record<string, unknown> | undefined,
       );
@@ -962,9 +770,9 @@ function buildRegisteredTool(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function resolveRealmUrl(
+function resolveRealm(
   config: ToolBuilderConfig,
   _realm: string | undefined,
 ): string {
-  return config.targetRealmUrl;
+  return config.targetRealm;
 }

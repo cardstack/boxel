@@ -46,17 +46,6 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
-      - name: Install pinned npm for trusted publishing
-        run: npm install -g npm@10.8.2
-
-      - name: Run unit tests
-        working-directory: packages/boxel-cli
-        run: pnpm test:unit
-
-      - name: Run integration tests
-        working-directory: packages/boxel-cli
-        run: pnpm test:integration
-
       - name: Bump version
         id: version
         working-directory: packages/boxel-cli
@@ -91,17 +80,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="boxel-cli-v${VERSION}"
+          NPM_URL="https://www.npmjs.com/package/@cardstack/boxel-cli/v/${VERSION}"
 
-          PREV_TAG=$(git tag --list 'boxel-cli-v*' --sort=-version:refname | grep -vxF "$TAG" | head -n 1)
-
-          ARGS=()
-          ARGS+=(--title "@cardstack/boxel-cli v${{ steps.version.outputs.version }}")
-          ARGS+=(--generate-notes)
-
-          if [ -n "$PREV_TAG" ]; then
-            ARGS+=(--notes-start-tag "$PREV_TAG")
-          fi
+          ARGS=(
+            --title "@cardstack/boxel-cli v${VERSION}"
+            --notes "Published to npm: ${NPM_URL}"
+          )
 
           if [ "${{ inputs.environment }}" = "staging" ]; then
             ARGS+=(--prerelease)

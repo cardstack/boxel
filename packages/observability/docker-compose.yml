@@ -99,6 +99,15 @@ services:
       # Acceptable for local dev only — never replicate this pattern in
       # staging/production.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Native-process logs from the mise dev tasks (CS-10984). The
+      # realm-server / worker / prerender / prerender-manager mise tasks tee
+      # stdout+stderr into ${BOXEL_LOG_DIR:-/tmp/boxel-logs} on the host;
+      # alloy/config.alloy follows the per-service files via loki.source.file.
+      # If you override BOXEL_LOG_DIR for the mise tasks, also export it here
+      # (or in a `.env` file beside this compose file) so both ends agree.
+      # Must be an absolute path: the mise tasks and Compose resolve relative
+      # paths from different base directories. dev-log-tee.sh enforces this.
+      - ${BOXEL_LOG_DIR:-/tmp/boxel-logs}:/var/log/boxel-host:ro
     depends_on:
       loki:
         condition: service_healthy

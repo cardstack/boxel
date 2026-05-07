@@ -949,6 +949,13 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let store = getService('store');
     await store.flushSaves();
     await store.loaded();
+    // Drain any indexing kicked off async by waitForIndex:false writes
+    // (e.g. +source POSTs). Without this drain, async indexing from the
+    // current test can settle into the next test and produce ghost state
+    // / flaky reads from the index.
+    for (let entry of getTestRealmRegistry().values()) {
+      await entry.realm.incrementalIndexing();
+    }
     let context = this as RenderingContextWithPrerender;
     if (context.__cardPrerenderElement) {
       teardownIsolatedRender(
@@ -2032,26 +2039,61 @@ export async function addSkillToAiAssistant(
     skillCardIdsToActivate: [skillCardId],
   });
 
+  // Allow the matrix-service's debounced room-state drain (~100ms) and the
+  // mock client's setTimeout(0) listener fan-out to flush before we poll, so
+  // waitUntil sees a consistent snapshot rather than racing the runloop.
+  await settled();
+
   let matrixService = getService('matrix-service') as {
     getRoomData(roomId: string): {
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
+        disabledSkillCards?: Array<{ sourceUrl?: string }>;
+        commandDefinitions?: Array<{ sourceUrl?: string }>;
       };
     } | null;
   };
 
-  await waitUntil(
-    () =>
-      Boolean(
-        matrixService
-          .getRoomData(resolvedRoomId)
-          ?.skillsConfig.enabledSkillCards?.some(
-            (fileDef) => fileDef.sourceUrl === skillCardId,
-          ),
-      ),
-    {
-      timeout: 5000,
-      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
-    },
-  );
+  try {
+    await waitUntil(
+      () =>
+        Boolean(
+          matrixService
+            .getRoomData(resolvedRoomId)
+            ?.skillsConfig.enabledSkillCards?.some(
+              (fileDef) => fileDef.sourceUrl === skillCardId,
+            ),
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+      },
+    );
+  } catch (err) {
+    // Re-throw with a richer message so the failure report attributes the
+    // flake without us writing to console.* (which can interleave across
+    // parallel runs and trip console-error guards in some setups). The
+    // snapshot describes what the matrix-service believed the room contained
+    // at the moment of timeout.
+    let snapshot = matrixService.getRoomData(resolvedRoomId)?.skillsConfig;
+    let diagnostic = {
+      roomId: resolvedRoomId,
+      skillCardId,
+      skillsConfigPresent: Boolean(snapshot),
+      enabledSkillCards:
+        snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      disabledSkillCards:
+        snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
+    };
+    let originalMessage = err instanceof Error ? err.message : String(err);
+    let enriched = new Error(
+      `${originalMessage} | diagnostics: ${JSON.stringify(diagnostic)}`,
+    );
+    // Preserve the original failure for any tooling that walks .cause without
+    // relying on the es2022 Error constructor option (host targets es2020).
+    (enriched as Error & { cause?: unknown }).cause =
+      err instanceof Error ? err : undefined;
+    throw enriched;
+  }
 }

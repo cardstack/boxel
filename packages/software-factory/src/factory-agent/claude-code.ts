@@ -51,6 +51,7 @@ import {
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
+  requireDarkfactoryModuleUrl,
   type PromptLoader,
 } from '../factory-prompt-loader';
 import {
@@ -201,10 +202,23 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     let workspaceDir = this.config.workspaceDir;
     let nativeFsEnabled = workspaceDir !== undefined;
 
-    let allowedTools = [
-      ...(nativeFsEnabled ? NATIVE_FS_TOOLS : []),
-      ...mcpFactoryTools.map((t) => `mcp__${MCP_SERVER_NAME}__${t.name}`),
-    ];
+    // Critical interaction between `allowedTools` and `canUseTool`
+    // (verified empirically via scripts/canusetool-repro.ts, CS-11033):
+    //
+    //   - A tool listed in `allowedTools` is auto-approved by the SDK
+    //     and `canUseTool` is **never** invoked for it.
+    //   - A tool NOT in `allowedTools` runs `canUseTool` (under
+    //     `permissionMode: 'default'`), and the hook's allow/deny is
+    //     honored.
+    //
+    // So if we put `Write` / `Edit` etc. into `allowedTools`, the
+    // workspace-scoping hook becomes dead code. We keep MCP tools in
+    // `allowedTools` (they're our own in-process implementations and
+    // safe to auto-approve) but deliberately omit native fs tools so
+    // each `Read` / `Write` / `Edit` call is gated by `canUseTool`.
+    let allowedTools = mcpFactoryTools.map(
+      (t) => `mcp__${MCP_SERVER_NAME}__${t.name}`,
+    );
 
     let options: Options = {
       systemPrompt,
@@ -218,22 +232,26 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       // a model takes to *write*, and those are scoped.
       tools: nativeFsEnabled ? NATIVE_FS_TOOLS : [],
       allowedTools,
-      // `dontAsk` (instead of `bypassPermissions`) keeps the auto-
-      // approve semantics for everything in `allowedTools` while still
-      // firing `canUseTool` so we can scope native fs operations.
-      // bypassPermissions skips canUseTool, which let the model write
-      // to absolute paths outside the workspace in early runs.
+      // `default` (not `dontAsk` or `bypassPermissions`) is the only
+      // permission mode that actually invokes `canUseTool` for tools
+      // outside `allowedTools` AND honors its allow/deny. Other modes
+      // either auto-approve everything (`bypassPermissions`,
+      // `acceptEdits`-with-allow) or silently deny without consulting
+      // the hook (`dontAsk`-without-allowedTools-entry). Because we
+      // omit native fs tools from `allowedTools` (see the comment
+      // above), the hook fires on every `Read` / `Write` / `Edit` and
+      // can scope them to the workspace.
       //
       // Scope of the hook: it gates the typed fs tools (`Read`,
       // `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `NotebookRead`)
       // because their `file_path` arg is structured and trivial to
-      // validate. `Bash` is intentionally NOT gated — parsing
-      // arbitrary shell for write side effects (`>`, `tee`, `cp`,
-      // `mv`, …) is its own footgun, and read-only inspection (`ls`,
-      // `find`, `cat`, `boxel status`) needs the broader fs. The
-      // prompt addendum is the contract for Bash; the hook is the
-      // structural guard for the typed tools.
-      permissionMode: 'dontAsk',
+      // validate. `Bash` / `Glob` / `Grep` fall through the hook and
+      // are auto-allowed — parsing arbitrary shell for write side
+      // effects (`>`, `tee`, `cp`, `mv`, …) is its own footgun, and
+      // read-only inspection (`ls`, `find`, `cat`, `boxel status`)
+      // needs the broader fs. The prompt addendum is the contract for
+      // Bash; the hook is the structural guard for the typed tools.
+      permissionMode: 'default',
       ...(workspaceDir
         ? { canUseTool: buildWorkspaceScopedCanUseTool(workspaceDir) }
         : {}),
@@ -318,7 +336,8 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     }));
 
     let base = this.promptLoader.load('system', {
-      targetRealmUrl: context.targetRealmUrl,
+      targetRealm: context.targetRealm,
+      darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
       skills,
     });
 
@@ -346,30 +365,12 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       .map((t) => `- \`${t.name}\` → \`mcp__${MCP_SERVER_NAME}__${t.name}\``)
       .join('\n');
 
-    // Names of the structured update tools that exist in this run. Used
-    // both in the rule (`Write must not be used for these`) and in the
-    // surrounding rationale, so collect them once. The agent only sees
-    // the ones we actually registered.
-    let structuredCardTools = new Set([
-      'update_project',
-      'update_issue',
-      'create_knowledge',
-      'create_catalog_spec',
-      'add_comment',
-    ]);
-    let structuredCardToolList = tools
-      .map((t) => t.name)
-      .filter((n) => structuredCardTools.has(n));
-    let structuredCardToolHumanList = structuredCardToolList
-      .map((n) => `\`${n}\``)
-      .join(' / ');
-
     let toolNamingNote = [
       '',
       '# Tools (Claude Code backend)',
       '',
       'You have two tool surfaces. Pick the right one for the file you are',
-      'about to touch — they are not interchangeable.',
+      'about to touch.',
       '',
       '## Workspace files — use native Claude Code tools',
       '',
@@ -380,11 +381,16 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       '`StickyNote/note-1.json`). The orchestrator syncs your changes back',
       'to the realm between iterations.',
       '',
-      'Use native tools for:',
+      'Use native tools for **every workspace file**, including:',
       '',
       '- Card definitions: `*.gts` files',
       '- Card tests: `*.test.gts` files',
-      '- Card instances under `<CardType>/<id>.json` (the user data the cards represent)',
+      '- Card instances under `<CardType>/<id>.json`',
+      '- **Tracker-schema cards** — `Projects/*.json`, `Issues/*.json`,',
+      '  `Knowledge Articles/*.json`, `Spec/*.json`. These are also workspace',
+      '  JSON files. Hand-write the JSON:API document with the right',
+      '  `meta.adoptsFrom` (see the bootstrap and operations skills for the',
+      '  full shapes and the Issue invariants you must enforce yourself).',
       '- Inspection: `Read`, `Glob`, `Grep`, and read-only `Bash` (`ls`, `find`, `cat`, `boxel status`, `boxel history`)',
       '',
       'Stay inside the workspace directory.',
@@ -401,37 +407,21 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
       '  `cat`, `grep`, read-only `boxel` CLI commands. If you need to',
       '  write a file, use `Write` or `Edit` so the workspace guard fires.',
       '',
-      '## Tracker-schema cards + realm operations — use factory MCP tools',
+      '## Realm validators + control signals — use factory MCP tools',
       '',
       `These are exposed through an in-process MCP server named`,
       `\`${MCP_SERVER_NAME}\` and prefixed with \`mcp__${MCP_SERVER_NAME}__\`.`,
       'Use them by their plain names in your reasoning, but invoke them by',
       'their prefixed names.',
       '',
-      '**Critical rule — do NOT use `Write` or `Edit` for tracker-schema',
-      'cards.** Project, Issue, KnowledgeArticle, Spec, and issue comments',
-      'all have dedicated factory tools that enforce schema and invariants',
-      '(e.g. `update_issue` strips `description` so it stays immutable;',
-      '`create_catalog_spec` sets the correct `adoptsFrom`; all of them do',
-      'read-patch-write merging that preserves attributes you did not pass).',
-      'Going around them via native `Write` produces malformed cards or',
-      'silently violates invariants the orchestrator depends on.',
-      '',
-      structuredCardToolList.length > 0
-        ? `Always use these structured tools for the corresponding files: ${structuredCardToolHumanList}.`
-        : '',
-      '',
       'The complete factory tool catalog is below. **Do not call any tool',
       'whose plain name is not in this list.** Realm reads go through',
       '`Bash` + `boxel search` / `boxel read-transpiled`; realm writes',
-      'happen by editing workspace files (or calling a structured tool',
-      'above) and letting the orchestrator sync.',
+      'happen by editing workspace files and letting the orchestrator sync.',
       '',
       mcpRows,
       '',
-    ]
-      .filter((line) => line !== null && line !== undefined)
-      .join('\n');
+    ].join('\n');
 
     return base + toolNamingNote;
   }

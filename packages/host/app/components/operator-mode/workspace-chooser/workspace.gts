@@ -97,7 +97,7 @@ export default class Workspace extends Component<Signature> {
           data-test-workspace-favorite-btn={{@realmURL}}
         />
         <div class='tile-menu-btn'>
-          <BoxelDropdown @autoClose={{true}}>
+          <BoxelDropdown>
             <:trigger as |bindings|>
               <ContextButton
                 @label='Options'

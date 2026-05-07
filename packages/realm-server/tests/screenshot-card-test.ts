@@ -24,6 +24,7 @@ module(basename(__filename), function () {
     function makeDbAdapter(): DBAdapter {
       return {
         kind: 'pg',
+        async notify() {},
         isClosed: false,
         async execute() {
           return [];

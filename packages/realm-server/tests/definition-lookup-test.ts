@@ -37,6 +37,7 @@ function buildDefinition(
       },
       displayName: name,
       fields: {},
+      fieldDefs: {},
     },
     types: [],
   };
@@ -129,8 +130,9 @@ module(basename(__filename), function () {
                     name: 'Person',
                   },
                   displayName: 'Person',
-                  fields: {
-                    name: {
+                  fields: { name: 'f0' },
+                  fieldDefs: {
+                    f0: {
                       type: 'contains',
                       isPrimitive: true,
                       isComputed: false,
@@ -356,6 +358,7 @@ module(basename(__filename), function () {
                   },
                   displayName: `Person v${version}`,
                   fields: {},
+                  fieldDefs: {},
                 },
                 types: [],
               },
@@ -1560,6 +1563,7 @@ module(basename(__filename), function () {
                   },
                   displayName: `CoalesceInvalidate v${version}`,
                   fields: {},
+                  fieldDefs: {},
                 },
                 types: [],
               },
@@ -2142,6 +2146,7 @@ module(basename(__filename), function () {
                   codeRef: { module: rri(moduleURL.href), name: 'Person' },
                   displayName: 'Person',
                   fields: {},
+                  fieldDefs: {},
                 },
                 types: [],
               },

@@ -126,13 +126,13 @@ export class TestValidationStep implements ValidationStepRunner {
   }
 
   async run(
-    targetRealmUrl: string,
+    targetRealm: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover .test.gts files in the realm
     let testFiles: string[];
     try {
-      testFiles = await this.discoverTestFiles(targetRealmUrl);
+      testFiles = await this.discoverTestFiles(targetRealm);
     } catch (err) {
       return {
         step: 'test',
@@ -162,11 +162,11 @@ export class TestValidationStep implements ValidationStepRunner {
       // Build the issue card URL for the TestRun → Issue linksTo relationship.
       // issueId is a realm-relative path like "Issues/sticky-note-define-core".
       let issueURL = this.config.issueId
-        ? new URL(this.config.issueId, targetRealmUrl).href
+        ? new URL(this.config.issueId, targetRealm).href
         : undefined;
 
       handle = await this.executeTestRunFn({
-        targetRealmUrl,
+        targetRealm,
         testResultsModuleUrl: this.config.testResultsModuleUrl,
         slug,
         testNames: [],
@@ -197,10 +197,7 @@ export class TestValidationStep implements ValidationStepRunner {
     }
 
     // Step 3: Read back the completed TestRun card for detailed results
-    let details = await this.readTestRunDetails(
-      targetRealmUrl,
-      handle.testRunId,
-    );
+    let details = await this.readTestRunDetails(targetRealm, handle.testRunId);
 
     if (handle.status === 'error') {
       log.info(
@@ -292,8 +289,8 @@ export class TestValidationStep implements ValidationStepRunner {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private async discoverTestFiles(targetRealmUrl: string): Promise<string[]> {
-    let result = await this.fetchFilenamesFn(targetRealmUrl);
+  private async discoverTestFiles(targetRealm: string): Promise<string[]> {
+    let result = await this.fetchFilenamesFn(targetRealm);
 
     if (result.error) {
       log.warn(`Failed to fetch realm filenames: ${result.error}`);
@@ -304,11 +301,11 @@ export class TestValidationStep implements ValidationStepRunner {
   }
 
   private async readTestRunDetails(
-    targetRealmUrl: string,
+    targetRealm: string,
     testRunId: string,
   ): Promise<TestValidationDetails | undefined> {
     try {
-      let result = await this.readCardFn(targetRealmUrl, testRunId);
+      let result = await this.readCardFn(targetRealm, testRunId);
 
       if (!result.ok || !result.document) {
         log.warn(

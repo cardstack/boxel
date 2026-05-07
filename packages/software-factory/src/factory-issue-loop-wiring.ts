@@ -15,7 +15,6 @@
 import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
@@ -46,7 +45,6 @@ import {
 } from './issue-loop';
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
-import { fetchCardTypeSchema } from './darkfactory-schemas';
 import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
@@ -59,7 +57,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..');
 
 export interface IssueLoopWiringConfig {
   briefUrl: string;
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
@@ -97,15 +95,15 @@ export interface IssueLoopWiringConfig {
 export async function runFactoryIssueLoop(
   config: IssueLoopWiringConfig,
 ): Promise<IssueLoopResult> {
-  let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
+  let targetRealm = ensureTrailingSlash(config.targetRealm);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
   // 1. Issue store
-  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
@@ -119,7 +117,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
@@ -131,18 +129,10 @@ export async function runFactoryIssueLoop(
   let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
+    targetRealm,
     client,
     debug: config.debug,
   });
-
-  let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;
-  let cardTypeSchemas = await loadDarkFactorySchemas(
-    client,
-    realmServerUrl,
-    targetRealmUrl,
-    darkfactoryModuleBase,
-  );
 
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
@@ -165,15 +155,16 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
+  let syncWorkspace = () =>
+    syncWorkspaceToRealm(client, targetRealm, workspaceDir);
   let toolBuilderConfig: ToolBuilderConfig = {
-    targetRealmUrl,
-    darkfactoryModuleUrl,
+    targetRealm,
     realmServerUrl,
     client,
     workspaceDir,
     testResultsModuleUrl,
-    cardTypeSchemas,
     hostAppUrl,
+    syncWorkspace,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -224,7 +215,7 @@ export async function runFactoryIssueLoop(
     });
 
   // 6. Run issue loop
-  log.info(`Starting issue loop: targetRealm=${targetRealmUrl}`);
+  log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -232,10 +223,10 @@ export async function runFactoryIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealm,
+    darkfactoryModuleUrl,
     workspaceDir,
-    syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace,
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
@@ -351,12 +342,12 @@ export interface WorkspaceSyncOutcome {
 
 export async function syncWorkspaceToRealm(
   client: BoxelCLIClient,
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
 ): Promise<WorkspaceSyncOutcome> {
   try {
     let result = await withStdoutRedirected(() =>
-      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+      client.sync(targetRealm, workspaceDir, { preferLocal: true }),
     );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);
@@ -431,83 +422,4 @@ export async function retryBlockedIssues(
   } else {
     log.info('Retry: no eligible blocked issues found to reset');
   }
-}
-
-// ---------------------------------------------------------------------------
-// DarkFactory schema loading
-// ---------------------------------------------------------------------------
-
-const DARKFACTORY_CARD_TYPES = ['Project', 'Issue', 'KnowledgeArticle'];
-const BASE_CARD_TYPES: { module: string; name: string }[] = [
-  { module: 'https://cardstack.com/base/spec', name: 'Spec' },
-];
-
-async function loadDarkFactorySchemas(
-  client: BoxelCLIClient,
-  realmServerUrl: string,
-  commandRealmUrl: string,
-  darkfactoryModuleBase: string,
-): Promise<
-  | Map<
-      string,
-      {
-        attributes: Record<string, unknown>;
-        relationships?: Record<string, unknown>;
-      }
-    >
-  | undefined
-> {
-  let darkfactoryModule = `${ensureTrailingSlash(darkfactoryModuleBase)}darkfactory`;
-  let schemas = new Map<
-    string,
-    {
-      attributes: Record<string, unknown>;
-      relationships?: Record<string, unknown>;
-    }
-  >();
-
-  for (let cardName of DARKFACTORY_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        {
-          module: rri(darkfactoryModule),
-          name: cardName,
-        },
-      );
-      if (schema) {
-        schemas.set(cardName, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${cardName}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  for (let { module: mod, name } of BASE_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        { module: rri(mod), name },
-      );
-      if (schema) {
-        schemas.set(name, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${name}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  return schemas.size > 0 ? schemas : undefined;
 }

@@ -632,8 +632,17 @@ module('Acceptance | Commands tests', function (hooks) {
       },
     });
 
+    // Open the panel and explicitly enter the room we sent messages to. The
+    // bare data-test-open-ai-assistant click defers room selection to
+    // enterRoomInitially, which prefers a persisted roomId from sessionStorage
+    // and otherwise picks aiSessionRooms[0]. The beforeEach createAndJoinRoom
+    // also marks aibot as a member (mock createRoom auto-invites), so both
+    // rooms qualify — and a stale sessionStorage entry from a prior test
+    // (e.g. OpenAiAssistantRoomCommand racing schedule-meeting and persisting
+    // the beforeEach room) can land us in the wrong one. Be explicit instead.
     await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-room-settled]');
+    getService('ai-assistant-panel-service').enterRoom(roomId);
+    await waitFor(`[data-room-id="${roomId}"][data-room-settled]`);
 
     // Wait for the apply button to appear before clicking. If it never shows
     // up, dump enough state to diagnose: which room is rendered (vs which one

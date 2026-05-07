@@ -232,8 +232,8 @@ async function main(): Promise<void> {
   let safetyClient = makeMockClient(async () => new Response('{}'));
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmUrl: 'https://realms.example.test/user/target/',
-    sourceRealmUrl: 'https://realms.example.test/user/source/',
+    targetRealm: 'https://realms.example.test/user/target/',
+    sourceRealm: 'https://realms.example.test/user/source/',
     allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
     client: safetyClient,
   });
@@ -292,7 +292,7 @@ async function main(): Promise<void> {
   let mockClient = makeMockClient(mockFetch);
   let mockExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client: mockClient,
   });
 
@@ -348,19 +348,18 @@ async function main(): Promise<void> {
   let toolBuilderClient = makeMockClient(toolBuilderFetch);
   let toolBuilderExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client: toolBuilderClient,
   });
 
   let factoryTools = buildFactoryTools(
     {
-      targetRealmUrl: 'https://realms.example.test/user/target/',
-      darkfactoryModuleUrl:
-        'https://realms.example.test/software-factory/darkfactory',
+      targetRealm: 'https://realms.example.test/user/target/',
       realmServerUrl: 'https://realms.example.test/',
       client: toolBuilderClient,
       // Smoke test doesn't exercise fs I/O — any real path is fine.
       workspaceDir: '/tmp/boxel-factory-smoke',
+      syncWorkspace: async () => ({ ok: true }),
     },
     toolBuilderExecutor,
     registry,

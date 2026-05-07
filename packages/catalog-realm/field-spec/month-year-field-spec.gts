@@ -10,7 +10,7 @@ import {
   contains,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import MonthYearField from '../fields/date/month-year';
+import MonthYearField from 'https://cardstack.com/base/date/month-year';
 import CodeSnippet from '../components/code-snippet';
 
 const standardFieldCode = `@field standard = contains(MonthYearField);`;

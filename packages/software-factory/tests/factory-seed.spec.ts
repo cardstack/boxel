@@ -5,6 +5,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import { createSeedIssue } from '../src/factory-seed';
 import type { FactoryBrief } from '../src/factory-brief';
 import { RealmIssueStore } from '../src/issue-scheduler';
+import { retryWithPoll } from '../src/retry-with-poll';
 import { expect, test } from './fixtures';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
@@ -137,7 +138,16 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
       workspaceDir,
     });
 
-    let issues = await issueStore.listIssues();
+    // Realm-side source POST indexing is async, so the seed card may
+    // not be in the search index yet. Bounded-poll until listIssues
+    // sees the seed (or the deadline elapses). 30s allows the seed's
+    // incremental indexing to drain even when it's queued behind the
+    // realm's from-scratch index from test setup.
+    let issues = await retryWithPoll(
+      () => issueStore.listIssues(),
+      (results) => !results.some((i) => i.id.includes('Issues/bootstrap-seed')),
+      { totalWaitMs: 30_000 },
+    );
     let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
     expect(seedIssue).toBeDefined();
     expect(seedIssue!.status).toBe('backlog');
