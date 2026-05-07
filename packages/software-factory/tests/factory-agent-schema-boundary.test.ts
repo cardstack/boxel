@@ -58,7 +58,7 @@ function makeContext(): AgentContext {
     issue: { id: 'Issues/demo', issueType: 'feature' },
     knowledge: [],
     skills: [],
-    targetRealm: 'https://realms.example.test/hassan/personal/',
+    targetRealm: 'https://realms.example.test/testuser/personal/',
     // Required for system-prompt rendering (see requireDarkfactoryModuleUrl).
     darkfactoryModuleUrl:
       'https://realms.example.test/software-factory/darkfactory',
