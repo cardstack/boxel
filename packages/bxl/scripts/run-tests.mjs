@@ -13,14 +13,18 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
 
-const suites = [
-  ...readdirSync(join(repoRoot, 'tests/unit'))
+// Optional filter: `npm run test -- tests/boxel` runs only that
+// subdirectory. With no argument we run every suite under
+// tests/unit, tests/smoke, and tests/boxel.
+const filterArg = process.argv[2];
+const allRoots = ['tests/unit', 'tests/smoke', 'tests/boxel'];
+const roots = filterArg ? [filterArg.replace(/\/$/, '')] : allRoots;
+
+const suites = roots.flatMap((root) =>
+  readdirSync(join(repoRoot, root))
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => join('tests/unit', f)),
-  ...readdirSync(join(repoRoot, 'tests/smoke'))
-    .filter((f) => f.endsWith('.ts'))
-    .map((f) => join('tests/smoke', f)),
-];
+    .map((f) => join(root, f)),
+);
 
 let failures = 0;
 for (const suite of suites) {

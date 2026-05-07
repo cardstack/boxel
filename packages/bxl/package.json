@@ -86,6 +86,7 @@
     "lint": "eslint src tests examples",
     "test": "node scripts/run-tests.mjs",
     "test:smoke": "node scripts/run-ts-entry.mjs tests/smoke/bxl-smoke.ts",
+    "test:boxel": "node scripts/run-tests.mjs tests/boxel",
     "test:size": "node scripts/size-report.mjs --check",
     "realm": "node scripts/build-realm-bundle.mjs",
     "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",
