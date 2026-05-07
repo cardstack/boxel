@@ -51,7 +51,7 @@ import type {
   ViewCardFn,
 } from 'https://cardstack.com/base/card-api';
 
-import PillFormatChooser from '../code-submode/pill-format-chooser';
+import FormatChooser from '../code-submode/format-chooser';
 
 import FittedFormatGallery from './fitted-format-gallery';
 import MarkdownPreview from './markdown-preview';
@@ -321,7 +321,7 @@ export default class PreviewPanel extends Component<Signature> {
       </div>
     </div>
     <div class='card-renderer-format-chooser-container'>
-      <PillFormatChooser
+      <FormatChooser
         class='card-renderer-format-chooser'
         @format={{this.format}}
         @setFormat={{@setFormat}}

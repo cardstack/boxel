@@ -87,7 +87,7 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
-import PillFormatChooser from '../pill-format-chooser';
+import FormatChooser from '../format-chooser';
 
 import FieldPickerModal from './field-chooser-modal';
 
@@ -1127,7 +1127,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     class='format-chooser pill-format-chooser-wrap'
                     data-test-playground-format-chooser
                   >
-                    <PillFormatChooser
+                    <FormatChooser
                       @formats={{if
                         @isFileDef
                         this.fileDefFormats
