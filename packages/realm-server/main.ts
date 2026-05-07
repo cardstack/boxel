@@ -36,6 +36,7 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
+import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
@@ -285,6 +286,9 @@ const getIndexHTML = async () => {
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
+  let moduleCacheInvalidationListener:
+    | ModuleCacheInvalidationListener
+    | undefined;
 
   if (workerManagerUrl) {
     await waitForWorkerManager(workerManagerUrl);
@@ -496,6 +500,7 @@ const getIndexHTML = async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
+          moduleCacheInvalidationListener?.shutDown(),
         ]);
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
@@ -571,6 +576,18 @@ const getIndexHTML = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await fileChangesListener.start();
+
+  // Cross-instance module-cache invalidation (CS-10952). When a peer
+  // realm-server emits NOTIFY module_cache_invalidated, replay the bump on
+  // this instance's CachingDefinitionLookup so its in-flight prerenders
+  // observe the invalidation at persist time and discard stale results.
+  // Self-notify is harmless — the emitter already bumped synchronously
+  // before the DELETE; a second bump from the listener loop is idempotent.
+  moduleCacheInvalidationListener = new ModuleCacheInvalidationListener({
+    dbAdapter,
+    definitionLookup,
+  });
+  await moduleCacheInvalidationListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
