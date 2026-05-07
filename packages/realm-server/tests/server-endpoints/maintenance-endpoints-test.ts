@@ -837,6 +837,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               reindexJob.args.realmUrls.includes(registryOnlyRealmURL),
               'job args include registry-only realm URLs',
             );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(testRealmURL.href),
+              'job args still include mounted realms',
+            );
           }
 
           assert.ok(
@@ -998,6 +1002,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             response.body.realms.includes(registryOnlyRealmURL),
             'response includes registry-only realms',
           );
+          assert.ok(
+            response.body.realms.includes(testRealmURL.href),
+            'response still includes existing mounted realms',
+          );
+          assert.ok(
+            response.body.realms.includes(realmURL),
+            'response includes newly created realms too',
+          );
         }
         let seededRowsAfter = await context.dbAdapter.execute(
           `SELECT * FROM modules WHERE url IN ('${staleModuleForRealmOneURL}', '${staleModuleForRealmTwoURL}')`,
@@ -1031,6 +1043,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(
           jobs[0].args.realmUrls.includes(registryOnlyRealmURL),
           'job args include registry-only realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(testRealmURL.href),
+          'job args still include existing mounted realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(realmURL),
+          'job args include newly created realms too',
         );
       });
 
