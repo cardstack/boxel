@@ -10,7 +10,7 @@
     "relationships": {},
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/darkfactory",
+        "module": "https://test-harness.test/software-factory/darkfactory",
         "name": "AgentProfile"
       }
     }

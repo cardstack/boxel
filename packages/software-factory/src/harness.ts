@@ -7,10 +7,9 @@ export {
   startFactoryRealmServer,
   startFactorySupportServices,
   type CombinedRealmTemplateResult,
-  type CombinedRealmFixture,
   type FactoryRealmOptions,
   type FactoryRealmTemplate,
   type FactoryTestContext,
+  type RealmConfig,
   type StartedFactoryRealm,
-  type AdditionalRealm,
 } from '@cardstack/realm-test-harness';
