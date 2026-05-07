@@ -20,6 +20,7 @@ import {
   baseRealm,
   type LooseSingleCardDocument,
   rri,
+  fileDefFormats,
 } from '@cardstack/runtime-common';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
@@ -1406,6 +1407,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-code-mode-card-renderer-body]');
 
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: fileDefFormats.length });
       // Non-card files should have the metadata format option
       assert.dom('[data-test-format-chooser="metadata"]').exists();
 

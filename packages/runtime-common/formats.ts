@@ -26,6 +26,24 @@ export const formats: Format[] = [
   'markdown',
 ];
 
+export const cardDefFormats: Format[] = formats;
+
+export const fieldDefFormats: Format[] = [
+  'embedded',
+  'fitted',
+  'atom',
+  'edit',
+  'markdown',
+];
+
+export const fileDefFormats: Format[] = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+  'metadata',
+];
+
 export const FITTED_FORMATS = [
   {
     name: 'Badges',

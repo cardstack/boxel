@@ -30,6 +30,9 @@ import {
   type Permissions,
   PermissionsContextName,
   type RealmIdentifier,
+  cardDefFormats,
+  fieldDefFormats,
+  fileDefFormats,
 } from '@cardstack/runtime-common';
 
 import {
@@ -42,7 +45,6 @@ import {
   type getCards,
   chooseCard,
   chooseFile,
-  formats as allFormats,
   loadCardDef,
   specRef,
   trimJsonExtension,
@@ -149,32 +151,28 @@ export default class PlaygroundPanel extends Component<Signature> {
     return moduleId;
   });
 
-  private fieldFormats: Format[] = [
-    'embedded',
-    'fitted',
-    'atom',
-    'edit',
-    'markdown',
-  ];
-  private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
-
-  /* Insert 'form' (toggle standard view) right after 'edit' whenever
+  private get availableFormats(): Format[] | undefined {
+    if (this.args.isFileDef) {
+      return fileDefFormats;
+    }
+    if (this.args.isFieldDef) {
+      return fieldDefFormats;
+    }
+    const ctor = this.card?.constructor as typeof CardDef | undefined;
+    if (!ctor) return undefined;
+    const cardAvailableFormats: Format[] = [];
+    for (const f of cardDefFormats) {
+      cardAvailableFormats.push(f);
+      /* Insert 'form' (toggle standard view) right after 'edit' whenever
      the card defines its own custom edit template — even if that
      custom edit is the SAME component as isolated (e.g. Polymorph).
      The trigger is `hasCustomEditTemplate` (= edit !== CardDef.edit),
      not whether edit === isolated. If no custom edit, omit form. */
-  private get cardAvailableFormats(): Format[] | undefined {
-    if (this.args.isFieldDef || this.args.isFileDef) return undefined;
-    const ctor = this.card?.constructor as typeof CardDef | undefined;
-    if (!ctor) return undefined;
-    const result: Format[] = [];
-    for (const f of allFormats) {
-      result.push(f);
       if (f === 'edit' && ctor.hasCustomEditTemplate) {
-        result.push('form');
+        cardAvailableFormats.push('form');
       }
     }
-    return result;
+    return cardAvailableFormats;
   }
   #creationError = false;
   #currentModuleId: string | undefined;
@@ -1128,15 +1126,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     data-test-playground-format-chooser
                   >
                     <FormatChooser
-                      @formats={{if
-                        @isFileDef
-                        this.fileDefFormats
-                        (if
-                          @isFieldDef
-                          this.fieldFormats
-                          this.cardAvailableFormats
-                        )
-                      }}
+                      @formats={{this.availableFormats}}
                       @format={{this.format}}
                       @setFormat={{this.setFormat}}
                     />

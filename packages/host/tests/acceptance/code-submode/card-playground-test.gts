@@ -769,6 +769,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Jane Doe is the Senior Managing Editor');
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: cardDefFormats.length });
+
       await selectFormat('embedded');
       assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');

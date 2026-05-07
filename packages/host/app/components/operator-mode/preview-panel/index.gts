@@ -21,12 +21,14 @@ import {
   baseCardRef,
   cardTypeDisplayName,
   cardTypeIcon,
-  formats as allFormats,
   getMenuItems,
   identifyCard,
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
+  cardDefFormats,
+  fileDefFormats,
+  fieldDefFormats,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -176,6 +178,9 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get availableFormats() {
+    if (this.isFileDef) {
+      return fileDefFormats;
+    }
     if (this.isCard) {
       const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
       const hasCustomEdit = ctor.hasCustomEditTemplate;
@@ -186,7 +191,7 @@ export default class PreviewPanel extends Component<Signature> {
       // having a custom edit — `hasCustomEditTemplate` is `edit !==
       // CardDef.edit`, regardless of whether it equals isolated.
       const result: Format[] = [];
-      for (const f of allFormats) {
+      for (const f of cardDefFormats) {
         result.push(f);
         if (f === 'edit' && hasCustomEdit) {
           result.push('form' as Format);
@@ -194,11 +199,7 @@ export default class PreviewPanel extends Component<Signature> {
       }
       return result;
     }
-    let formats = allFormats.filter((f) => f !== 'edit');
-    if (this.isFileDef) {
-      return [...formats, 'metadata' as Format];
-    }
-    return formats;
+    return fieldDefFormats;
   }
 
   @provide(CardContextName)

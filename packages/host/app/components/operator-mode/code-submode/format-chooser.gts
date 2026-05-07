@@ -5,17 +5,43 @@ import { htmlSafe, type SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import MetadataIcon from '@cardstack/boxel-icons/clipboard-data';
+import EditIcon from '@cardstack/boxel-icons/pencil';
 import { modifier } from 'ember-modifier';
 
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq, or } from '@cardstack/boxel-ui/helpers';
-import type { Icon } from '@cardstack/boxel-ui/icons';
+import {
+  Isolated as IsolatedIcon,
+  Embedded as EmbeddedIcon,
+  Fitted as FittedIcon,
+  Atom as AtomIcon,
+  Head as HeadIcon,
+  Markdown as MarkdownIcon,
+  Form as FormIcon,
+  type Icon,
+} from '@cardstack/boxel-ui/icons';
 
 import { formats, type Format } from '@cardstack/runtime-common';
 
 import { FormatChooserOrder } from '@cardstack/host/utils/local-storage-keys';
 
-import { formatIcons, type FormatWithIcon } from '../card-formats';
+export type FormatWithIcon = {
+  format: Format;
+  icon?: Icon | null;
+};
+
+export const formatIcons: Partial<Record<Format, Icon>> = {
+  isolated: IsolatedIcon,
+  embedded: EmbeddedIcon,
+  atom: AtomIcon,
+  fitted: FittedIcon,
+  edit: EditIcon,
+  form: FormIcon,
+  head: HeadIcon,
+  markdown: MarkdownIcon,
+  metadata: MetadataIcon,
+};
 
 interface Signature {
   Args: {
