@@ -17,10 +17,15 @@ production runs:
 * a worker-manager + worker process
 * a realm-server child process serving:
   * the **base realm** (`packages/base/`)
-  * the **skills realm** (`packages/skills-realm/contents/`)
   * the **source realm** (configurable via `TEST_HARNESS_SOURCE_REALM_DIR`)
   * the **fixture realm** you passed in (`realmDir`)
+  * any **additional realms** you passed via the multi-realm path (see below)
 * host-dist mounted on the realm-server for static asset serving
+
+The skills realm (`packages/skills-realm/contents/`) is **opt-in** —
+mounted only when `TEST_HARNESS_INCLUDE_SKILLS=1`. Tests and benches
+that don't reach for skill cards leave it off and avoid paying for its
+indexing.
 
 Everything talks over real HTTP on real (loopback) sockets. Indexing
 runs through real queue round-trips. Prerender renders go through real
@@ -105,6 +110,76 @@ When fixture JSON references that source realm by URL, write
 `https://sf.boxel.test/` as the URL placeholder. The harness rewrites
 the placeholder to the ephemeral source-realm URL at copy time.
 
+## Multiple realms in one stack
+
+Two patterns, depending on whether you want one stack to serve many
+realms or many stacks each serving one realm.
+
+### Pattern A — many fixtures, one stack at a time
+
+If different tests target different fixtures (one realm per scenario),
+keep all your fixture realms side-by-side under a `test-fixtures/`
+directory and select per test:
+
+```
+test-fixtures/
+├── darkfactory-adopter/
+│   ├── .realm.json
+│   ├── realm.json
+│   └── *.gts / *.json
+├── test-realm-runner/
+│   └── …
+└── public-software-factory-source/
+    └── …
+```
+
+Each test points the harness at the fixture it needs:
+
+```ts
+test.use({ realmDir: resolve('test-fixtures/test-realm-runner') });
+```
+
+The harness keys its template-DB cache on the fixture's content hash
+(see *Template DB cache* below), so each fixture gets its own template
+on first use and clones in seconds thereafter. This is what
+`packages/software-factory/test-fixtures/` does — multiple independent
+fixture dirs that tests pick from.
+
+### Pattern B — many realms in the same stack
+
+If a single test or bench needs *more than one realm running together*
+— e.g. it linksTo across realms or measures cross-realm search — build
+a **combined template** and reuse it:
+
+```ts
+import {
+  ensureCombinedFactoryRealmTemplate,
+  startFactoryRealmServer,
+} from '@cardstack/realm-test-harness';
+
+let { templateDatabaseName } = await ensureCombinedFactoryRealmTemplate([
+  { realmDir: '/path/to/realm-a', realmPath: 'test/' },        // primary
+  { realmDir: '/path/to/realm-b', realmPath: 'realm-b/' },     // additional
+  { realmDir: '/path/to/realm-c', realmPath: 'realm-c/' },     // additional
+]);
+
+let realm = await startFactoryRealmServer({
+  realmDir: '/path/to/realm-a',
+  templateDatabaseName,
+});
+```
+
+`ensureCombinedFactoryRealmTemplate` builds (or reuses) a single
+template database that has every fixture pre-indexed; subsequent runs
+clone it instead of re-indexing each realm one at a time. The cache key
+is the combined content hash, so any change to any of the fixtures
+invalidates the template and forces a rebuild.
+
+`packages/software-factory/src/cli/cache-realm.ts` is the canonical
+example — it accepts multiple realm dirs on the command line and
+routes them through `ensureCombinedFactoryRealmTemplate` when more than
+one is given.
+
 ## Template DB cache
 
 The harness caches a fully-indexed template database keyed by the
@@ -123,6 +198,7 @@ fresh build.
 | Var | Meaning |
 | --- | --- |
 | `TEST_HARNESS_SOURCE_REALM_DIR` | Path to the source-realm directory whose cards the fixture adopts from. |
+| `TEST_HARNESS_INCLUDE_SKILLS` | Set to `1` to mount the skills realm (`packages/skills-realm/contents/`). Off by default — most tests don't need it. |
 | `TEST_HARNESS_CACHE_SALT` | Mix into the template-DB cache key to force rebuilds when an out-of-band input changes. |
 | `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` | Override the host package directory whose `dist/` the realm-server serves. |
 | `TEST_HARNESS_REALM_LOG_LEVELS` | `@cardstack/logger` levels passed to spawned realm-server / worker / prerender children. |
