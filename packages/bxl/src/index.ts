@@ -520,7 +520,7 @@ function makeTagged(
 type GetFieldsFn = (
   instance: unknown,
   options?: { includeComputeds?: boolean },
-) => Record<string, { fieldType?: string; card?: unknown; computeVia?: Function }>;
+) => Record<string, { fieldType?: string; card?: unknown; computeVia?: (...args: unknown[]) => unknown }>;
 
 const GET_FIELDS_KEY = '__cardstackGetFields' as const;
 

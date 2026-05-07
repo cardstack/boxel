@@ -9,6 +9,10 @@ declare module 'https://cardstack.com/base/card-api' {
     options?: { includeComputeds?: boolean },
   ): Record<
     string,
-    { fieldType?: string; card?: unknown; computeVia?: Function }
+    {
+      fieldType?: string;
+      card?: unknown;
+      computeVia?: (...args: unknown[]) => unknown;
+    }
   >;
 }
