@@ -1,4 +1,8 @@
-import type { Definition, FieldDefinition } from './index';
+import {
+  getImmediateFieldDef,
+  type Definition,
+  type FieldDefinition,
+} from './index';
 import {
   type LooseSingleCardDocument,
   type CardResource,
@@ -306,7 +310,14 @@ function getFieldDefinition(
   definition: Definition,
   customFieldDefinitions?: Record<string, FieldDefinition>,
 ): FieldDefinition | undefined {
-  return customFieldDefinitions?.[fieldPath] ?? definition.fields[fieldPath];
+  // customFieldDefinitions covers dotted-path lookups (pre-built per
+  // doc by `Realm.buildCustomFieldDefinitions` from the doc's
+  // `meta.fields`). Top-level field names fall through to the root
+  // `definition`'s immediate fields.
+  return (
+    customFieldDefinitions?.[fieldPath] ??
+    getImmediateFieldDef(definition, fieldPath)
+  );
 }
 
 function parseRelationshipKey(key: string): string {

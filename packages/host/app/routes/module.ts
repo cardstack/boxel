@@ -372,11 +372,12 @@ async function makeDefinition(
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    let fields = getFieldDefinitions(api, cardOrFieldDef);
+    let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
     let definition: Definition = {
       codeRef,
       fields,
+      fieldDefs,
       type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
       displayName: isCardDef(cardOrFieldDef)
         ? cardOrFieldDef.displayName

@@ -58,7 +58,7 @@ import type {
   QueryFieldMeta,
   Saved,
 } from './resource-types';
-import type { FieldDefinition } from './definitions';
+import { getImmediateFieldDef, type FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
   buildQuerySearchURL,
@@ -292,11 +292,14 @@ export class RealmIndexQueryEngine {
       } else {
         definition = await this.#definitionLookup.lookupDefinition(codeRef);
       }
+      if (!definition) {
+        return false;
+      }
       // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
       let fieldName = fieldKey.includes('.')
         ? fieldKey.slice(0, fieldKey.indexOf('.'))
         : fieldKey;
-      let fieldDefinition = definition.fields[fieldName];
+      let fieldDefinition = getImmediateFieldDef(definition, fieldName);
       if (!fieldDefinition) {
         return false;
       }
@@ -526,9 +529,14 @@ export class RealmIndexQueryEngine {
     } else {
       definition = await this.#definitionLookup.lookupDefinition(codeRef);
     }
-    for (let [fieldName, fieldDefinition] of Object.entries(
-      definition.fields,
-    )) {
+    if (!definition) {
+      return;
+    }
+    for (let [fieldName, defId] of Object.entries(definition.fields)) {
+      let fieldDefinition = definition.fieldDefs[defId];
+      if (!fieldDefinition) {
+        continue;
+      }
       let queryDefinition = this.getQueryDefinition(fieldDefinition);
 
       if (
