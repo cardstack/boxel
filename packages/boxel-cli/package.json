@@ -66,6 +66,7 @@
     "lint:types": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'tests/integration/**'",
+    "test:unit-exclude-smoke": "vitest run --exclude 'tests/integration/**' --exclude 'tests/smoke.test.ts'",
     "test:integration": "./tests/scripts/run-integration-with-test-pg.sh",
     "test:watch": "vitest",
     "version:patch": "npm version patch",

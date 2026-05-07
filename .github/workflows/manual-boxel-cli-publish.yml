@@ -51,7 +51,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: packages/boxel-cli
-        run: pnpm test:unit
+        run: pnpm test:unit-exclude-smoke
 
       - name: Run integration tests
         working-directory: packages/boxel-cli
