@@ -23,7 +23,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/eval-result",
+        "module": "https://test-harness.test/eval-result",
         "name": "EvalResult"
       }
     }

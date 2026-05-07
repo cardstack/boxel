@@ -67,7 +67,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/instantiate-result",
+        "module": "https://test-harness.test/instantiate-result",
         "name": "InstantiateResult"
       }
     }

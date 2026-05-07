@@ -106,7 +106,7 @@ TEST_HARNESS_SOURCE_REALM_DIR=/path/to/source-realm-cards
 
 (Defaults to `<cwd>/realm`.)
 
-## The `https://sf.boxel.test/` placeholder
+## The `https://test-harness.test/` placeholder
 
 Every harness instance binds its realms to dynamic ports, so the
 absolute URL of the source realm is different on every run. To let
@@ -114,7 +114,7 @@ fixture JSON refer to those moving URLs without templating each file
 at runtime, the harness recognises a single well-known placeholder:
 
 ```
-https://sf.boxel.test/
+https://test-harness.test/
 ```
 
 Write this anywhere in your fixture's `*.json` files where you'd
@@ -129,7 +129,7 @@ URL for that stack.
   "data": {
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/eval-result",
+        "module": "https://test-harness.test/eval-result",
         "name": "EvalResult"
       }
     }

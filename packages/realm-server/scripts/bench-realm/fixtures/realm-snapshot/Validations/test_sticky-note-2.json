@@ -92,7 +92,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/test-results",
+        "module": "https://test-harness.test/test-results",
         "name": "TestRun"
       }
     }

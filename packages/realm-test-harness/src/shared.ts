@@ -192,7 +192,8 @@ export const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 export const REALM_SECRET_SEED = "shhh! it's a secret";
 export const REALM_SERVER_SECRET_SEED = "mum's the word";
 export const GRAFANA_SECRET = "shhh! it's a secret";
-export const FIXTURE_SOURCE_REALM_URL_PLACEHOLDER = 'https://sf.boxel.test/';
+export const FIXTURE_SOURCE_REALM_URL_PLACEHOLDER =
+  'https://test-harness.test/';
 export const DEFAULT_MATRIX_SERVER_USERNAME =
   process.env.TEST_HARNESS_MATRIX_SERVER_USERNAME ?? 'realm_server';
 export const DEFAULT_MATRIX_BROWSER_USERNAME =

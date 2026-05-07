@@ -27,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/parse-result",
+        "module": "https://test-harness.test/parse-result",
         "name": "ParseResult"
       }
     }

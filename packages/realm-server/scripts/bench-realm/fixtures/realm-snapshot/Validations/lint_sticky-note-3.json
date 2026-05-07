@@ -27,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/lint-result",
+        "module": "https://test-harness.test/lint-result",
         "name": "LintResult"
       }
     }
