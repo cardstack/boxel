@@ -106,9 +106,47 @@ TEST_HARNESS_SOURCE_REALM_DIR=/path/to/source-realm-cards
 
 (Defaults to `<cwd>/realm`.)
 
-When fixture JSON references that source realm by URL, write
-`https://sf.boxel.test/` as the URL placeholder. The harness rewrites
-the placeholder to the ephemeral source-realm URL at copy time.
+## The `https://sf.boxel.test/` placeholder
+
+Every harness instance binds its realms to dynamic ports, so the
+absolute URL of the source realm is different on every run. To let
+fixture JSON refer to those moving URLs without templating each file
+at runtime, the harness recognises a single well-known placeholder:
+
+```
+https://sf.boxel.test/
+```
+
+Write this anywhere in your fixture's `*.json` files where you'd
+normally write the source realm's absolute URL — `meta.adoptsFrom.module`,
+relationship `links.self`, computed link refs, anything. When the
+harness copies your fixture into the tmpdir, it walks every JSON file
+and replaces every occurrence with the actual ephemeral source-realm
+URL for that stack.
+
+```jsonc
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://sf.boxel.test/eval-result",
+        "name": "EvalResult"
+      }
+    }
+  }
+}
+```
+
+Lands at runtime as `http://localhost:NNNN/source-realm-path/eval-result`
+where `NNNN` is the per-stack realm-server port. Two harnesses running
+side-by-side each rewrite the same placeholder to their own port —
+that's how cross-realm references stay consistent across the
+dynamically-allocated stacks.
+
+The placeholder is purely textual — `String.split` / `join` on the
+literal value, no URL parsing — so anything in the fixture JSON that
+contains the placeholder string gets rewritten, even values nested in
+unusual places.
 
 ## Multiple realms in one stack
 
