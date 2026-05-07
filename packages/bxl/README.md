@@ -660,6 +660,20 @@ Other authoring helpers worth knowing:
 
 For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-modes.md`](./docs/syntax-modes.md). If you're coming from working-loon's jqxl, [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md) walks the user-visible API renames. The full set of runtime relaxations is in [`docs/internals/port-from-jqxl.md`](./docs/internals/port-from-jqxl.md) §6–17, with one section per rule. The realm-flavored test suite in [`tests/boxel/`](./tests/boxel/) locks each rule to the exact behavior the realm depends on.
 
+### Pushing changes to a realm
+
+When BXL's source changes and you want a running realm to pick up the bundle plus a fresh index, the `bxl-sync` script wraps the standard recovery sequence:
+
+```sh
+npm run realm:sync                            # uses .bxl-realm-sync.json defaults
+npm run realm:sync -- --workspace /abs/path   # override target
+npm run realm:sync -- --no-reindex            # build + sync only
+```
+
+It rebuilds the bundle, pushes it via `boxel sync`, then runs `boxel run-command full-reindex-realm`. With the realm URL configured (`realmUrl` in `.bxl-realm-sync.json`), the reindex step fires automatically; without it, the script prints the run-command incantation to copy.
+
+The same script ships as the `bxl-sync` bin so it's reachable as `npx @cardstack/bxl-sync` once published. Pair with `BXL_BUILD_INFO.buildTime` to confirm the served bundle is the one you just pushed.
+
 ---
 
 ## CLI
