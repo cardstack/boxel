@@ -1,8 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
+import { param, query } from '@cardstack/runtime-common';
 import { realmSecretSeed, testRealmInfo } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -72,7 +74,27 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
-      test('can fetch catalog realms', async function (assert) {
+      test('omits realms not opted into the catalog', async function (assert) {
+        let response = await context.request
+          .get('/_catalog-realms')
+          .set('Accept', 'application/json');
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(response.body, { data: [] });
+      });
+
+      test('includes realms with showAsCatalog: true', async function (assert) {
+        await query(context.dbAdapter, [
+          `INSERT INTO realm_metadata (url, show_as_catalog) VALUES (`,
+          param(testRealmURL.href),
+          `, `,
+          param(true),
+          `) ON CONFLICT (url) DO UPDATE SET show_as_catalog = `,
+          param(true),
+        ]);
+        context.testRealm.invalidateCachedRealmInfo();
+        resetCatalogRealms();
+
         let response = await context.request
           .get('/_catalog-realms')
           .set('Accept', 'application/json');
@@ -85,6 +107,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               id: `${testRealmURL}`,
               attributes: {
                 ...testRealmInfo,
+                showAsCatalog: true,
               },
             },
           ],
