@@ -27,7 +27,30 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "links": [],
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "entity:realm"
+        ],
+        "title": "Realms",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "entity:user"
+        ],
+        "title": "Users",
+        "type": "dashboards"
+      }
+    ],
     "panels": [
       {
         "datasource": {
@@ -58,7 +81,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"${realm_url}\"",
+            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"${realm_url}\" |= \"${matrix_user_id}\"",
             "queryType": "range",
             "refId": "A"
           }
@@ -95,7 +118,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: $job_id]\"",
+            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: $job_id]\" |= \"${realm_url}\" |= \"${matrix_user_id}\"",
             "queryType": "range",
             "refId": "A"
           }
@@ -132,7 +155,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=\"worker\", worker_id=\"$worker_id\"}",
+            "expr": "{service=\"worker\", worker_id=\"$worker_id\"} |= \"${realm_url}\" |= \"${matrix_user_id}\"",
             "queryType": "range",
             "refId": "A"
           }
@@ -169,18 +192,66 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "{service=\"realm-server\"}",
+            "expr": "{service=\"realm-server\"} |= \"${realm_url}\" |= \"${matrix_user_id}\"",
             "queryType": "range",
             "refId": "A"
           }
         ],
         "title": "Realm Server Logs",
         "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Logs from realm-server, worker, prerender, and prerender-manager for a specific indexing job. Two query patterns: (A) `[job: J.R]` substring — emitted by all four services after CS-XXXXX wired the `x-boxel-job-id` header through the prerender call chain; (B) `[indexing-progress] ... job=J` events emitted by the worker (file-by-file progress feed). Both vars pre-set by drill-throughs from the Indexing dashboard.",
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 34
+        },
+        "id": 20,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: ${indexing_job_full}]\"",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"job=${indexing_job_short}\"",
+            "queryType": "range",
+            "refId": "B"
+          }
+        ],
+        "title": "Indexing Job Activity",
+        "type": "logs"
       }
     ],
     "refresh": "",
     "schemaVersion": 42,
-    "tags": [],
+    "tags": [
+      "forensics"
+    ],
     "templating": {
       "list": [
         {
@@ -188,10 +259,16 @@
             "type": "grafana-postgresql-datasource",
             "uid": "cef5v5sl9k7i8f"
           },
+          "allValue": "",
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
           "definition": "SELECT DISTINCT realm_url AS __value, REPLACE(REPLACE(realm_url, '${realm_server}', ''), 'https://', '') AS __text FROM boxel_index ORDER BY __text;",
-          "description": "Filter the Indexing Activity Feed to one realm. Drill-throughs from Boxel Jobs prefill this.",
+          "description": "Filter all log panels to lines mentioning this realm. 'All' = no realm filter. Drill-throughs from other dashboards prefill this.",
           "hide": 0,
-          "includeAll": false,
+          "includeAll": true,
           "label": "Realm",
           "multi": false,
           "name": "realm_url",
@@ -209,6 +286,32 @@
           "query": "__REALM_SERVER_URL__",
           "skipUrlSync": false,
           "type": "constant"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "allValue": "",
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "definition": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "description": "Filter all log panels to lines mentioning this user. 'All' = no user filter. Drill-throughs from other dashboards prefill this.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "User",
+          "multi": false,
+          "name": "matrix_user_id",
+          "options": [],
+          "query": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
         },
         {
           "datasource": {
@@ -249,6 +352,36 @@
           "skipUrlSync": false,
           "sort": 0,
           "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Full job.reservation id (e.g., 20678.26619) for the Indexing Job Activity panel. Set automatically by drill-throughs from the Indexing dashboard.",
+          "hide": 0,
+          "label": "Indexing job (full id)",
+          "name": "indexing_job_full",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Short job id (just j.id, no reservation suffix) for matching `[indexing-progress] ... job=J` events.",
+          "hide": 0,
+          "label": "Indexing job (short id)",
+          "name": "indexing_job_short",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
         }
       ]
     },
