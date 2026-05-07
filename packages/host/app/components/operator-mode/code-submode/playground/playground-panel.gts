@@ -1124,7 +1124,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                 <section class='instance-chooser-container'>
                   <InstanceChooser />
                   <div
-                    class='format-chooser pill-format-chooser-wrap'
+                    class='format-chooser-container pill-format-chooser-wrap'
                     data-test-playground-format-chooser
                   >
                     <FormatChooser
@@ -1212,7 +1212,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
       }
-      .format-chooser {
+      .format-chooser-container {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }

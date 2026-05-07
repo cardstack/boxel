@@ -414,7 +414,10 @@ export default class PillFormatChooser extends Component<Signature> {
         --pf-pill-svg-w: 240px; /* PILL_SVG_W */
         --pf-icon-w: 16px; /* ICON_W */
 
-        --pf-height: var(--boxel-form-control-height);
+        --pf-height: var(
+          --container-button-size,
+          var(--boxel-form-control-height)
+        );
         --pf-bg: var(--boxel-dark);
         --pf-color: var(--boxel-light);
         --pf-active-color: var(--boxel-highlight);
@@ -443,7 +446,7 @@ export default class PillFormatChooser extends Component<Signature> {
            tooltips extend freely — compact mode kicks in before overflow occurs. */
         min-width: 0;
         max-width: 100%;
-        overflow: visible;
+        overflow: visible; /* for tooltips */
         background-color: var(--pf-bg);
         color: var(--pf-color);
         border-radius: var(--boxel-border-radius-2xl);

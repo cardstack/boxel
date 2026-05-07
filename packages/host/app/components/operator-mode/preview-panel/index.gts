@@ -366,6 +366,9 @@ export default class PreviewPanel extends Component<Signature> {
       .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;
+        padding-bottom: calc(
+          var(--operator-mode-spacing) * 2 + var(--container-button-size)
+        );
         z-index: 0;
       }
       .card-renderer-content {
@@ -382,12 +385,15 @@ export default class PreviewPanel extends Component<Signature> {
          radius lives on the chooser itself in this layout. */
       .card-renderer-format-chooser-container {
         position: absolute;
-        bottom: var(--boxel-sp-sm);
+        bottom: var(--operator-mode-spacing);
         left: 0;
         right: 0;
         display: flex;
         justify-content: center;
-        padding: 0 var(--boxel-sp-sm);
+        padding: 0 var(--operator-mode-spacing);
+        padding-right: calc(
+          var(--operator-mode-spacing) * 2 + var(--container-button-size)
+        );
       }
       .card-renderer-format-chooser {
         --boxel-format-chooser-border-color: var(--boxel-400);
