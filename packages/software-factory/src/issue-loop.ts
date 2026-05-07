@@ -553,6 +553,18 @@ export async function runIssueLoop(
     if (allRealmIssuesDone) {
       try {
         await issueStore.updateProjectStatus('completed');
+        // updateProjectStatus writes the new status to the workspace
+        // mirror but doesn't push — without this sync the realm-side
+        // Project card keeps its bootstrap "active" status forever
+        // (catalog UI shows it as ACTIVE even after every issue is
+        // marked done). Same syncWorkspace the orchestrator uses
+        // elsewhere; failure logs but doesn't block.
+        let projectSync = await syncWorkspace();
+        if (!projectSync.ok) {
+          log.warn(
+            `Failed to sync project status update: ${projectSync.error ?? 'unknown error'}`,
+          );
+        }
       } catch (err) {
         log.warn(
           `Failed to update project status to completed: ${err instanceof Error ? err.message : String(err)}`,
