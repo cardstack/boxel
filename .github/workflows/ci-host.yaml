@@ -215,6 +215,10 @@ jobs:
             retry_exit_code=${PIPESTATUS[0]}
             if [ $retry_exit_code -eq 0 ]; then
               echo "::notice::Shard ${{ matrix.shardIndex }} recovered on retry — original failure was a transient chunk-fetch flake"
+              # Promote the retry's log so downstream steps (memory-report
+              # extraction, baseline check / update) read from the successful
+              # run, not the failed first attempt.
+              mv /tmp/test-output-retry.log /tmp/test-output.log
               exit_code=0
             else
               echo "::error::Shard ${{ matrix.shardIndex }} failed twice after chunk-fetch retry — investigate as a deterministic failure, not a flake"
