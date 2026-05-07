@@ -1334,10 +1334,10 @@
       },
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "prometheus",
+          "uid": "bes7ustjf8w74b"
         },
-        "description": "ECS resource utilisation for `synapse-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "description": "Synapse process metrics scraped from /\\_synapse/metrics via the synapse-prometheus datasource (local Prometheus locally; AMP in staging/production). CPU is rate over 5m as a percentage of one core; Mem is process_resident_memory_bytes; Up counts healthy scrape targets (analogous to RunningTaskCount).",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1416,7 +1416,7 @@
                 },
                 {
                   "id": "unit",
-                  "value": "percent"
+                  "value": "decbytes"
                 },
                 {
                   "id": "thresholds",
@@ -1430,14 +1430,6 @@
                       {
                         "color": "green",
                         "value": 0
-                      },
-                      {
-                        "color": "yellow",
-                        "value": 70
-                      },
-                      {
-                        "color": "red",
-                        "value": 90
                       }
                     ]
                   }
@@ -1452,7 +1444,7 @@
               "properties": [
                 {
                   "id": "displayName",
-                  "value": "Tasks"
+                  "value": "Up"
                 },
                 {
                   "id": "unit",
@@ -1508,56 +1500,32 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "prometheus",
+              "uid": "bes7ustjf8w74b"
             },
-            "namespace": "AWS/ECS",
-            "metricName": "CPUUtilization",
-            "metricEditorMode": 0,
-            "metricQueryType": 0,
-            "dimensions": {
-              "ClusterName": "${env}",
-              "ServiceName": "synapse-${env}"
-            },
-            "statistic": "Average",
-            "period": "",
-            "region": "default",
+            "expr": "rate(process_cpu_seconds_total{job=\"synapse\"}[5m]) * 100",
+            "legendFormat": "CPU",
+            "instant": true,
             "refId": "A"
           },
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "prometheus",
+              "uid": "bes7ustjf8w74b"
             },
-            "namespace": "AWS/ECS",
-            "metricName": "MemoryUtilization",
-            "metricEditorMode": 0,
-            "metricQueryType": 0,
-            "dimensions": {
-              "ClusterName": "${env}",
-              "ServiceName": "synapse-${env}"
-            },
-            "statistic": "Average",
-            "period": "",
-            "region": "default",
+            "expr": "process_resident_memory_bytes{job=\"synapse\"}",
+            "legendFormat": "Mem",
+            "instant": true,
             "refId": "B"
           },
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "prometheus",
+              "uid": "bes7ustjf8w74b"
             },
-            "namespace": "AWS/ECS",
-            "metricName": "RunningTaskCount",
-            "metricEditorMode": 0,
-            "metricQueryType": 0,
-            "dimensions": {
-              "ClusterName": "${env}",
-              "ServiceName": "synapse-${env}"
-            },
-            "statistic": "Maximum",
-            "period": "",
-            "region": "default",
+            "expr": "count(up{job=\"synapse\"} == 1)",
+            "legendFormat": "Up",
+            "instant": true,
             "refId": "C"
           }
         ],
