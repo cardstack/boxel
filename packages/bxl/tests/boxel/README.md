@@ -27,6 +27,7 @@ original incident.
 | `excel-error-tolerance.ts` | §11a (Excel-error catch — sentinels surface as null at the bxl() boundary) |
 | `materialize.ts` | §11a (`as: Cls` Object.assign fallback path — no Boxel runtime) |
 | `probe-fields.ts` | §15 (probe-field regressions — one assertion per gigantic-crawdad probe field) |
+| `fielddef-threading.ts` | §11a + §18 (multi-stage `{ as: Cls }` threading — the prudent-octopus insurance pipeline pattern) |
 
 ## Running
 

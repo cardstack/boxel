@@ -153,3 +153,12 @@ Both compile fine; the PascalCase fallback runs label-by-label.
 If in doubt: **plain string** is the safest default. Reach for
 `` jq`…` `` only when you need the backslash preserved or you want
 to opt out of readable-syntax compilation.
+
+## Composing FieldDefs
+
+A separate concern from "which tag to use": when a CardDef holds raw
+inputs and threads them into one or more child FieldDefs via
+`{ as: SomeFieldDef }` materialization, see
+[`realm-composition.md`](./realm-composition.md) for the threading
+shape (object literal whose keys match the FieldDef's `@field` names)
+and the multi-stage pipeline pattern.

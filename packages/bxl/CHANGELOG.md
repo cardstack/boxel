@@ -11,6 +11,20 @@ versions may change syntax behavior until `1.0.0`. See
 
 ## [Unreleased]
 
+### Fixed
+
+- **Parser: `A - (B + C)` no longer reassociates to `(A - B) + C`.**
+  Long-standing bug in `Parser.normalizeBinaryAst` — equal-precedence
+  chains were left-associated regardless of whether the right-hand
+  side came from a parenthesized expression. Anything shaped like
+  `Revenue - (Cost1 + Cost2 + …)` silently flipped the signs of
+  every cost past the first. Fix: `BinaryAst` gains a `parenthesized`
+  flag that the normalizer treats as a hard grouping boundary.
+- **`IFS` helper supports up to 8 condition/value pairs** (16 args).
+  Previously capped at 4 pairs, raising `'IFS/10' is not defined`
+  for any spreadsheet that hit a 5+ branch classification. The
+  jq-side `def IFS` now covers /4, /6, /8, /10, /12, /14, /16.
+
 ### Added
 
 - **Boxel realm authoring surface.** New public exports `bxl`,
