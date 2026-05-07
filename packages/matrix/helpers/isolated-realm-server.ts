@@ -110,7 +110,7 @@ function buildStartupFailure(
 ): Error {
   let message =
     reason instanceof Error ? reason.message : `Startup failed: ${String(reason)}`;
-  return new Error(
+  let error = new Error(
     `${message}\nStartup diagnostics:\n${JSON.stringify(
       {
         ...diagnostics,
@@ -119,8 +119,11 @@ function buildStartupFailure(
       null,
       2,
     )}`,
-    reason instanceof Error ? { cause: reason } : undefined,
   );
+  if (reason instanceof Error) {
+    (error as Error & { cause?: unknown }).cause = reason;
+  }
+  return error;
 }
 
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -179,7 +182,8 @@ function stopChildProcess(
       resolve();
       return;
     }
-    if (proc.exitCode !== null || proc.killed) {
+    let child = proc;
+    if (child.exitCode !== null || child.killed) {
       resolve();
       return;
     }
@@ -203,17 +207,17 @@ function stopChildProcess(
       if (timer) {
         clearTimeout(timer);
       }
-      proc.removeListener('exit', onExit);
-      proc.removeListener('error', onError);
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
     }
-    proc.once('exit', onExit);
-    proc.once('error', onError);
+    child.once('exit', onExit);
+    child.once('error', onError);
     timer = setTimeout(() => {
       if (!settled) {
-        proc.kill('SIGTERM');
+        child.kill('SIGTERM');
       }
     }, 5_000);
-    proc.kill(signal);
+    child.kill(signal);
   });
 }
 
@@ -507,13 +511,14 @@ export async function startServer({
   try {
     await Promise.race([
       new Promise<void>((resolve) => {
-        realmServerReadyListener = (message: unknown) => {
+        let onRealmServerReady = (message: unknown) => {
           if (message === 'ready') {
-            realmServer?.off('message', realmServerReadyListener);
+            realmServer.off('message', onRealmServerReady);
             resolve();
           }
         };
-        realmServer.on('message', realmServerReadyListener);
+        realmServerReadyListener = onRealmServerReady;
+        realmServer.on('message', onRealmServerReady);
       }),
       new Promise<never>((_, reject) => {
         realmServerExitListener = (
