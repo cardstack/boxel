@@ -127,18 +127,24 @@ export async function deleteRegistryRowByUrl(
 // even though the schema's CHECK constraint already guarantees that only
 // published rows have non-null source_url — stating the contract in the SQL
 // matches the helper's name and survives any future schema changes.
+//
+// Returns the rows that were actually deleted so the caller can drive
+// per-published cleanup (permissions, DB artifacts, FS) against the
+// authoritative set the tx committed — closes the TOCTOU window where a
+// pre-lock SELECT could miss a row inserted before the tx began.
 export async function deletePublishedRowsBySourceUrl(
   dbAdapter: DBAdapter,
   sourceUrl: string,
   querier?: Querier,
-): Promise<void> {
+): Promise<{ url: string; disk_id: string }[]> {
   let q = querier ?? dbAdapterQuerier(dbAdapter);
-  await q([
+  let deleted = (await q([
     `DELETE FROM realm_registry WHERE source_url =`,
     param(sourceUrl),
-    ` AND kind = 'published'`,
-  ]);
+    ` AND kind = 'published' RETURNING url, disk_id`,
+  ])) as { url: string; disk_id: string }[];
   // Single NOTIFY keyed on the source URL. Reconcilers will re-read and see
   // all deletes; the payload is a hint, not a precise per-row signal.
   await notifyRegistry(q, 'delete', sourceUrl);
+  return deleted;
 }

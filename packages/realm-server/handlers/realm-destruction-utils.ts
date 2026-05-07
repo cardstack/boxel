@@ -1,8 +1,10 @@
-import type { DBAdapter, Querier } from '@cardstack/runtime-common';
+import type { DBAdapter, Expression, Querier } from '@cardstack/runtime-common';
 import {
+  addExplicitParens,
   cancelRunningJobsInConcurrencyGroup,
   dbAdapterQuerier,
   param,
+  separatedByCommas,
 } from '@cardstack/runtime-common';
 import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
 import { join, relative } from 'path';
@@ -73,7 +75,7 @@ export async function removeRealmDatabaseArtifacts(args: {
   await cancelRunningJobsInConcurrencyGroup(
     dbAdapter,
     `indexing:${realmURL}`,
-    querier,
+    q,
   );
 
   let pendingJobs = (await q([
@@ -83,10 +85,10 @@ export async function removeRealmDatabaseArtifacts(args: {
   ])) as { id: number }[];
 
   if (pendingJobs.length > 0) {
+    let jobIdList: Expression[] = pendingJobs.map(({ id }) => [param(id)]);
     await q([
-      `DELETE FROM job_reservations WHERE job_id IN (${pendingJobs
-        .map(({ id }) => id)
-        .join(', ')})`,
+      `DELETE FROM job_reservations WHERE job_id IN`,
+      ...addExplicitParens(separatedByCommas(jobIdList)),
     ]);
   }
 

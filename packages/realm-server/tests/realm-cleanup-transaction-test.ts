@@ -3,6 +3,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   insertPermissions,
+  param,
   permissionsExist,
   query,
   removeRealmPermissions,
@@ -45,7 +46,8 @@ module(basename(__filename), function () {
 
     async function registryRowExists(url: string): Promise<boolean> {
       const rows = (await query(dbAdapter, [
-        `SELECT 1 AS found FROM realm_registry WHERE url = '${url.replace(/'/g, "''")}'`,
+        `SELECT 1 AS found FROM realm_registry WHERE url =`,
+        param(url),
       ])) as { found: number }[];
       return rows.length > 0;
     }
