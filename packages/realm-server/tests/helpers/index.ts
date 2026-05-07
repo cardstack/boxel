@@ -52,7 +52,7 @@ import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler';
-import { mirrorPublishedRealmToRegistry } from '../../lib/realm-registry-writes';
+import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes';
 
 import {
   PgAdapter,
@@ -1795,20 +1795,7 @@ async function startPermissionedRealmFixture(
       publishedRealmId,
     );
 
-    await dbAdapter.execute(
-      `INSERT INTO
-        published_realms
-        (id, owner_username, source_realm_url, published_realm_url, last_published_at)
-        VALUES
-        (
-          '${publishedRealmId}',
-          '${ownerUsername}',
-          '${sourceRealmURL}',
-          '${resolvedRealmURL.href}',
-          '${lastPublishedAt}'
-        )`,
-    );
-    await mirrorPublishedRealmToRegistry(dbAdapter, {
+    await upsertPublishedRealmInRegistry(dbAdapter, {
       publishedRealmURL: resolvedRealmURL.href,
       publishedRealmId,
       ownerUsername,

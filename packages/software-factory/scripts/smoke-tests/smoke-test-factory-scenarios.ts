@@ -331,7 +331,7 @@ function runFactory(
       '--',
       '--brief-url',
       briefUrl,
-      '--target-realm-url',
+      '--target-realm',
       realmUrl,
     ];
     if (debug) {
@@ -696,7 +696,7 @@ async function main(): Promise<void> {
   for (let s of scenarios) {
     let realmEndpoint = `smoke-s${s}`;
     let realmDisplayName = `Smoke Test S${s}`;
-    let targetRealmUrl = `${realmServerUrl}${username}/${realmEndpoint}/`;
+    let targetRealm = `${realmServerUrl}${username}/${realmEndpoint}/`;
 
     log.info('');
     log.info(`--- Creating realm: ${realmEndpoint} ---`);
@@ -711,7 +711,7 @@ async function main(): Promise<void> {
       } else {
         log.info(`Realm already exists: ${createResult.realmUrl}`);
       }
-      targetRealmUrl = createResult.realmUrl;
+      targetRealm = createResult.realmUrl;
     } catch (err) {
       log.error(
         `Failed to create realm: ${err instanceof Error ? err.message : String(err)}`,
@@ -720,12 +720,12 @@ async function main(): Promise<void> {
       continue;
     }
 
-    let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
+    let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
 
     let ok: boolean;
     if (s === '1') {
       ok = await scenario1(
-        targetRealmUrl,
+        targetRealm,
         darkfactoryModuleUrl,
         briefUrl,
         debug,
@@ -733,7 +733,7 @@ async function main(): Promise<void> {
       );
     } else if (s === '2') {
       ok = await scenario2(
-        targetRealmUrl,
+        targetRealm,
         darkfactoryModuleUrl,
         briefUrl,
         debug,
@@ -741,7 +741,7 @@ async function main(): Promise<void> {
       );
     } else if (s === '3') {
       ok = await scenario3(
-        targetRealmUrl,
+        targetRealm,
         darkfactoryModuleUrl,
         briefUrl,
         debug,

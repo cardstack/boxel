@@ -50,6 +50,15 @@ export interface SyncOptions {
   realmUrl: string;
   localDir: string;
   dryRun?: boolean;
+  /**
+   * Append `?waitForIndex=true` to the `_atomic` POST so the realm-server
+   * returns only after the indexer has processed the batch. The
+   * `_atomic` handler hardcoded `waitForIndex: false` after CS-11003
+   * PR 2 (deferred `+source` POST), so callers that read indexed state
+   * (search / list) immediately after a sync race the indexer. Off by
+   * default.
+   */
+  waitForIndex?: boolean;
 }
 
 const REMOTE_CONCURRENCY = 10;
@@ -453,7 +462,9 @@ export abstract class RealmSyncBase {
       }),
     );
 
-    const url = `${this.normalizedRealmUrl}_atomic`;
+    const url = this.options.waitForIndex
+      ? `${this.normalizedRealmUrl}_atomic?waitForIndex=true`
+      : `${this.normalizedRealmUrl}_atomic`;
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
       headers: {

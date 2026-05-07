@@ -20,7 +20,7 @@ function makeConfig(
   let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
   return {
     packageRoot: '/fake/software-factory',
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client:
       client ??
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
@@ -109,7 +109,7 @@ module('factory-tool-executor > source realm protection', function () {
     let sourceUrl = 'https://realms.example.test/source/';
     let executor = new ToolExecutor(
       registry,
-      makeConfig({ sourceRealmUrl: sourceUrl }),
+      makeConfig({ sourceRealm: sourceUrl }),
     );
 
     try {

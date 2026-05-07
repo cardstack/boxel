@@ -386,7 +386,7 @@ export function requireDarkfactoryModuleUrl(context: AgentContext): string {
     throw new Error(
       'AgentContext.darkfactoryModuleUrl is required for system prompt rendering ' +
         '(it becomes `meta.adoptsFrom.module` on every tracker-schema card the agent writes). ' +
-        'This is normally set by factory-issue-loop-wiring via inferDarkfactoryModuleUrl(targetRealmUrl).',
+        'This is normally set by factory-issue-loop-wiring via inferDarkfactoryModuleUrl(targetRealm).',
     );
   }
   return url;
@@ -412,7 +412,7 @@ export function assembleSystemPrompt(
   }));
 
   return loader.load('system', {
-    targetRealmUrl: context.targetRealmUrl,
+    targetRealm: context.targetRealm,
     darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
     skills,
   });

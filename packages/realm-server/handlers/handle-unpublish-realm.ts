@@ -6,7 +6,6 @@ import {
   logger,
   param,
   removeRealmPermissions,
-  type PublishedRealmTable,
   fetchRealmPermissions,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
@@ -27,7 +26,7 @@ import {
   collectAllFilePaths,
   removeRealmFiles,
 } from './realm-destruction-utils';
-import { deleteFromRegistryByUrl } from '../lib/realm-registry-writes';
+import { deleteRegistryRowByUrl } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-unpublish');
@@ -70,20 +69,16 @@ export default function handleUnpublishRealm({
       : `${json.publishedRealmURL}/`;
 
     try {
-      // Phase 4: read from realm_registry; alias the columns so the
-      // downstream field accessors stay the same as when this read
-      // pointed at published_realms.
       let publishedRealmData = (await query(dbAdapter, [
-        `SELECT disk_id AS id, owner_username, source_url AS source_realm_url, url AS published_realm_url, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
+        `SELECT disk_id, owner_username, source_url, url, last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
         param(publishedRealmURL),
-      ])) as Pick<
-        PublishedRealmTable,
-        | 'id'
-        | 'owner_username'
-        | 'source_realm_url'
-        | 'published_realm_url'
-        | 'last_published_at'
-      >[];
+      ])) as {
+        disk_id: string;
+        owner_username: string;
+        source_url: string;
+        url: string;
+        last_published_at: string | number | null;
+      }[];
 
       if (!publishedRealmData.length) {
         await sendResponseForUnprocessableEntity(
@@ -98,7 +93,7 @@ export default function handleUnpublishRealm({
       let { user: ownerUserId } = token;
       let permissions = await fetchRealmPermissions(
         dbAdapter,
-        new URL(publishedRealmInfo.source_realm_url),
+        new URL(publishedRealmInfo.source_url),
       );
       if (!permissions[ownerUserId]?.includes('realm-owner')) {
         await sendResponseForForbiddenRequest(
@@ -111,13 +106,13 @@ export default function handleUnpublishRealm({
       let publishedRealmPath = join(
         realmsRootPath,
         PUBLISHED_DIRECTORY_NAME,
-        publishedRealmInfo.id,
+        publishedRealmInfo.disk_id,
       );
 
       // Mount the published realm on this instance (no-op if already
       // mounted) so we have a Realm instance to drive the tombstone
       // path before deleting files. Phase 3 sibling-instance behavior
-      // is unchanged: those instances see deleteFromRegistryByUrl's
+      // is unchanged: those instances see deleteRegistryRowByUrl's
       // NOTIFY realm_registry and unmount via the reconciler.
       let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
 
@@ -137,15 +132,28 @@ export default function handleUnpublishRealm({
         }
         removeRealmFiles(publishedRealmPath);
 
-        await query(dbAdapter, [
-          `DELETE FROM published_realms WHERE published_realm_url =`,
-          param(publishedRealmURL),
-        ]);
-
-        await deleteFromRegistryByUrl(dbAdapter, publishedRealmURL);
+        await deleteRegistryRowByUrl(dbAdapter, publishedRealmURL);
 
         await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
       });
+
+      // Removing this derivative just changed the source realm's
+      // `RealmInfo.lastPublishedAt` map (rows where `source_url =
+      // sourceRealmURL`). Without invalidating the source's cached
+      // realm info, its card+json ETag (which folds a hash of the
+      // realm info in) would keep matching pre-unpublish If-None-Match
+      // headers and serve a 304 with stale `meta.realmInfo`. (CS-11010)
+      let sourceRealmURL = publishedRealmInfo.source_url;
+      if (sourceRealmURL) {
+        try {
+          let sourceRealm = await reconciler.lookupOrMount(sourceRealmURL);
+          sourceRealm?.invalidateCachedRealmInfo();
+        } catch (err) {
+          log.warn(
+            `Could not invalidate source realm cached realm-info for ${sourceRealmURL} after unpublish: ${err}`,
+          );
+        }
+      }
 
       // Permissions for the published realm were removed inside the
       // write lock above, so fetchRealmPermissions(publishedRealmURL)
@@ -160,10 +168,10 @@ export default function handleUnpublishRealm({
           {
             data: {
               type: 'unpublished_realm',
-              id: publishedRealmInfo.id,
+              id: publishedRealmInfo.disk_id,
               attributes: {
-                sourceRealmURL: publishedRealmInfo.source_realm_url,
-                publishedRealmURL: publishedRealmInfo.published_realm_url,
+                sourceRealmURL: publishedRealmInfo.source_url,
+                publishedRealmURL: publishedRealmInfo.url,
                 lastPublishedAt: publishedRealmInfo.last_published_at,
               },
             },

@@ -165,7 +165,7 @@ class MockValidator implements Validator {
 class StubContextBuilder implements IssueContextBuilderLike {
   async buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
     validationResults?: ValidationResults;
     briefUrl?: string;
   }): Promise<AgentContext> {
@@ -174,7 +174,7 @@ class StubContextBuilder implements IssueContextBuilderLike {
       issue: params.issue,
       knowledge: [],
       skills: [],
-      targetRealmUrl: params.targetRealmUrl,
+      targetRealm: params.targetRealm,
       validationResults: params.validationResults,
       briefUrl: params.briefUrl,
     };
@@ -286,7 +286,7 @@ async function scenarioSingleIssue(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -345,7 +345,7 @@ async function scenarioDependencyCascade(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -418,7 +418,7 @@ async function scenarioPriorityOrdering(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -475,7 +475,7 @@ async function scenarioMaxIterations(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new MockValidator(validations),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
     maxIterationsPerIssue: 3,
@@ -523,7 +523,7 @@ async function scenarioBlockedIssue(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new MockValidator([makePassingValidation()]),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -553,7 +553,7 @@ async function scenarioEmptyProject(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new NoOpValidator(),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -608,7 +608,7 @@ async function scenarioValidationPipeline(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: createPipeline,
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
   });
@@ -748,7 +748,7 @@ async function scenarioBootstrapSeedIssue(): Promise<void> {
     tools: TOOLS,
     issueStore: store,
     createValidator: () => new NoOpValidator(),
-    targetRealmUrl: 'https://example.test/target/',
+    targetRealm: 'https://example.test/target/',
     workspaceDir: '/tmp/boxel-factory-smoke',
     syncWorkspace: async () => ({ ok: true }),
     briefUrl: 'https://example.test/brief/',

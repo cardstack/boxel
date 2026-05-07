@@ -277,8 +277,8 @@ export async function resetRealmState(
           realmURL.href,
         ]);
         await client.query(
-          `DELETE FROM published_realms
-       WHERE source_realm_url = $1 OR published_realm_url = $1`,
+          `DELETE FROM realm_registry
+       WHERE source_url = $1 OR url = $1`,
           [realmURL.href],
         );
 
@@ -410,12 +410,6 @@ export async function rewriteClonedRealmServerUrls(
           `UPDATE realm_meta
            SET realm_url = replace(realm_url, $1, $2),
                value = replace(value::text, $1, $2)::jsonb`,
-          [fromURL, toURL],
-        );
-        await client.query(
-          `UPDATE published_realms
-           SET source_realm_url = replace(source_realm_url, $1, $2),
-               published_realm_url = replace(published_realm_url, $1, $2)`,
           [fromURL, toURL],
         );
         // Without this, lookupDefinition misses every cached module on the

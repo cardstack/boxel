@@ -8,8 +8,18 @@ import type * as BooleanFieldModule from 'https://cardstack.com/base/boolean';
 import type * as CardAPIModule from 'https://cardstack.com/base/card-api';
 import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
 import type * as CodeRefModule from 'https://cardstack.com/base/code-ref';
+import type * as ColorFieldModule from 'https://cardstack.com/base/color';
 import type * as DateFieldModule from 'https://cardstack.com/base/date';
+import type * as DayFieldModule from 'https://cardstack.com/base/date/day';
+import type * as MonthFieldModule from 'https://cardstack.com/base/date/month';
+import type * as MonthDayFieldModule from 'https://cardstack.com/base/date/month-day';
+import type * as MonthYearFieldModule from 'https://cardstack.com/base/date/month-year';
+import type * as QuarterFieldModule from 'https://cardstack.com/base/date/quarter';
+import type * as WeekFieldModule from 'https://cardstack.com/base/date/week';
+import type * as YearFieldModule from 'https://cardstack.com/base/date/year';
+import type * as DateRangeFieldModule from 'https://cardstack.com/base/date-range-field';
 import type * as DateTimeFieldModule from 'https://cardstack.com/base/datetime';
+import type * as DatetimeStampFieldModule from 'https://cardstack.com/base/datetime-stamp';
 import type * as EmailFieldModule from 'https://cardstack.com/base/email';
 import type * as EnumModule from 'https://cardstack.com/base/enum';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
@@ -23,6 +33,10 @@ import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as SystemCardModule from 'https://cardstack.com/base/system-card';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
+import type * as TimeFieldModule from 'https://cardstack.com/base/time';
+import type * as DurationFieldModule from 'https://cardstack.com/base/time/duration';
+import type * as RelativeTimeFieldModule from 'https://cardstack.com/base/time/relative-time';
+import type * as TimeRangeFieldModule from 'https://cardstack.com/base/time/time-range';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;
@@ -35,6 +49,48 @@ let DateField: DateField;
 
 type DateTimeField = (typeof DateTimeFieldModule)['default'];
 let DateTimeField: DateTimeField;
+
+type ColorField = (typeof ColorFieldModule)['default'];
+let ColorField: ColorField;
+
+type DatetimeStampField = (typeof DatetimeStampFieldModule)['default'];
+let DatetimeStampField: DatetimeStampField;
+
+type DateRangeField = (typeof DateRangeFieldModule)['default'];
+let DateRangeField: DateRangeField;
+
+type DayField = (typeof DayFieldModule)['default'];
+let DayField: DayField;
+
+type MonthField = (typeof MonthFieldModule)['default'];
+let MonthField: MonthField;
+
+type MonthDayField = (typeof MonthDayFieldModule)['default'];
+let MonthDayField: MonthDayField;
+
+type MonthYearField = (typeof MonthYearFieldModule)['default'];
+let MonthYearField: MonthYearField;
+
+type YearField = (typeof YearFieldModule)['default'];
+let YearField: YearField;
+
+type WeekField = (typeof WeekFieldModule)['default'];
+let WeekField: WeekField;
+
+type QuarterField = (typeof QuarterFieldModule)['default'];
+let QuarterField: QuarterField;
+
+type TimeField = (typeof TimeFieldModule)['default'];
+let TimeField: TimeField;
+
+type TimeRangeField = (typeof TimeRangeFieldModule)['default'];
+let TimeRangeField: TimeRangeField;
+
+type DurationField = (typeof DurationFieldModule)['default'];
+let DurationField: DurationField;
+
+type RelativeTimeField = (typeof RelativeTimeFieldModule)['default'];
+let RelativeTimeField: RelativeTimeField;
 
 type EmailField = (typeof EmailFieldModule)['default'];
 let EmailField: EmailField;
@@ -138,6 +194,78 @@ async function initialize() {
 
   DateTimeField = (
     await loader.import<typeof DateTimeFieldModule>(`${baseRealm.url}datetime`)
+  ).default;
+
+  ColorField = (
+    await loader.import<typeof ColorFieldModule>(`${baseRealm.url}color`)
+  ).default;
+
+  DatetimeStampField = (
+    await loader.import<typeof DatetimeStampFieldModule>(
+      `${baseRealm.url}datetime-stamp`,
+    )
+  ).default;
+
+  DateRangeField = (
+    await loader.import<typeof DateRangeFieldModule>(
+      `${baseRealm.url}date-range-field`,
+    )
+  ).default;
+
+  DayField = (
+    await loader.import<typeof DayFieldModule>(`${baseRealm.url}date/day`)
+  ).default;
+
+  MonthField = (
+    await loader.import<typeof MonthFieldModule>(`${baseRealm.url}date/month`)
+  ).default;
+
+  MonthDayField = (
+    await loader.import<typeof MonthDayFieldModule>(
+      `${baseRealm.url}date/month-day`,
+    )
+  ).default;
+
+  MonthYearField = (
+    await loader.import<typeof MonthYearFieldModule>(
+      `${baseRealm.url}date/month-year`,
+    )
+  ).default;
+
+  YearField = (
+    await loader.import<typeof YearFieldModule>(`${baseRealm.url}date/year`)
+  ).default;
+
+  WeekField = (
+    await loader.import<typeof WeekFieldModule>(`${baseRealm.url}date/week`)
+  ).default;
+
+  QuarterField = (
+    await loader.import<typeof QuarterFieldModule>(
+      `${baseRealm.url}date/quarter`,
+    )
+  ).default;
+
+  TimeField = (
+    await loader.import<typeof TimeFieldModule>(`${baseRealm.url}time`)
+  ).default;
+
+  TimeRangeField = (
+    await loader.import<typeof TimeRangeFieldModule>(
+      `${baseRealm.url}time/time-range`,
+    )
+  ).default;
+
+  DurationField = (
+    await loader.import<typeof DurationFieldModule>(
+      `${baseRealm.url}time/duration`,
+    )
+  ).default;
+
+  RelativeTimeField = (
+    await loader.import<typeof RelativeTimeFieldModule>(
+      `${baseRealm.url}time/relative-time`,
+    )
   ).default;
 
   EmailField = (
@@ -270,6 +398,20 @@ export {
   NumberField,
   DateField,
   DateTimeField,
+  ColorField,
+  DatetimeStampField,
+  DateRangeField,
+  DayField,
+  MonthField,
+  MonthDayField,
+  MonthYearField,
+  YearField,
+  WeekField,
+  QuarterField,
+  TimeField,
+  TimeRangeField,
+  DurationField,
+  RelativeTimeField,
   EmailField,
   Base64ImageField,
   CodeRefField,

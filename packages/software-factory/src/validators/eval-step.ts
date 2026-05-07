@@ -63,7 +63,7 @@ export interface EvalValidationStepConfig {
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
     slug: string,
-    targetRealmUrl: string,
+    targetRealm: string,
   ) => Promise<number>;
 }
 
@@ -85,35 +85,32 @@ export class EvalValidationStep implements ValidationStepRunner {
   private config: EvalValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private getNextSeqFn: (
-    slug: string,
-    targetRealmUrl: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: EvalValidationStepConfig) {
     this.config = config;
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
-      ((slug: string, targetRealmUrl: string) =>
+      ((slug: string, targetRealm: string) =>
         getNextValidationSequenceNumber(
           config.client,
           slug,
           'Validations/eval_',
           config.evalResultsModuleUrl,
           'EvalResult',
-          targetRealmUrl,
+          targetRealm,
         ));
   }
 
   async run(
-    targetRealmUrl: string,
+    targetRealm: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover evaluable files (shared engine)
     let evaluableFiles: string[];
     try {
       evaluableFiles = await discoverEvaluableFiles({
-        targetRealmUrl,
+        targetRealm,
         client: this.config.client,
         fetchFilenames: this.config.fetchFilenames,
       });
@@ -144,7 +141,7 @@ export class EvalValidationStep implements ValidationStepRunner {
       : 'validation';
 
     let issueURL = this.config.issueId
-      ? new URL(this.config.issueId, targetRealmUrl).href
+      ? new URL(this.config.issueId, targetRealm).href
       : undefined;
 
     let seq: number;
@@ -152,7 +149,7 @@ export class EvalValidationStep implements ValidationStepRunner {
       seq = iteration;
     } else {
       try {
-        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        let realmSeq = await this.getNextSeqFn(slug, targetRealm);
         seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
       } catch (err) {
         log.warn(
@@ -169,7 +166,7 @@ export class EvalValidationStep implements ValidationStepRunner {
         slug,
         this.config.evalResultsModuleUrl,
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
@@ -199,7 +196,7 @@ export class EvalValidationStep implements ValidationStepRunner {
       durationMs,
     } = await evaluateRealmModules(
       {
-        targetRealmUrl,
+        targetRealm,
         client: this.config.client,
         realmServerUrl: this.config.realmServerUrl,
         evaluateModuleFn: this.config.evaluateModuleFn,
@@ -222,7 +219,7 @@ export class EvalValidationStep implements ValidationStepRunner {
           moduleResults: moduleResultsForCard,
         },
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
         },

@@ -98,9 +98,9 @@ export async function getNextValidationSequenceNumber(
   prefix: string,
   moduleUrl: string,
   cardName: string,
-  targetRealmUrl: string,
+  targetRealm: string,
 ): Promise<number> {
-  let result = await client.search(targetRealmUrl, {
+  let result = await client.search(targetRealm, {
     filter: {
       on: { module: moduleUrl, name: cardName },
     },
@@ -111,7 +111,7 @@ export async function getNextValidationSequenceNumber(
     return 1;
   }
 
-  let normalizedRealmUrl = ensureTrailingSlash(targetRealmUrl);
+  let normalizedRealmUrl = ensureTrailingSlash(targetRealm);
   let fullPrefix = `${prefix}${slug}-`;
   let maxSeq = 0;
 

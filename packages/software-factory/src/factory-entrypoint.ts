@@ -32,7 +32,7 @@ let log = logger('factory-entrypoint');
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
-  targetRealmUrl: string | null;
+  targetRealm: string | null;
   realmServerUrl: string | null;
   agent: FactoryAgentProvider;
   /** Only set when agent === 'openrouter' and the flag carried a `=<id>` suffix. */
@@ -117,8 +117,9 @@ export interface RunFactoryEntrypointDependencies {
     workspaceDir: string,
   ) => Promise<void>;
   /**
-   * Push the workspace to the target realm (prefer-local). Tests stub
-   * this out. Defaults to `client.sync({ preferLocal: true })`.
+   * Push the workspace to the target realm (prefer-local) and wait for
+   * the realm's indexer to settle before returning. Tests stub this
+   * out. Defaults to `client.sync({ preferLocal: true, waitForIndex: true })`.
    */
   syncWorkspaceToRealm?: (
     client: BoxelCLIClient,
@@ -131,11 +132,11 @@ export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go --brief-url <url> --target-realm-url <url> [options]',
+    '  pnpm factory:go --brief-url <url> --target-realm <realm> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',
-    '  --target-realm-url <url>    Absolute URL for the target realm',
+    '  --target-realm <realm>      Target realm (URL form, e.g. http://localhost:4201/me/realm/)',
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: from active Boxel profile)',
@@ -160,7 +161,7 @@ export function getFactoryEntrypointUsage(): string {
     '  For public briefs, no further auth setup is needed.',
     '  For private briefs, factory:go authenticates via the active Boxel profile.',
     '  The realm server URL comes from --realm-server-url, or the active Boxel profile.',
-    '  It is never inferred from --target-realm-url.',
+    '  It is never inferred from --target-realm.',
   ].join('\n');
 }
 
@@ -179,7 +180,7 @@ export function parseFactoryEntrypointArgs(
         'brief-url': {
           type: 'string',
         },
-        'target-realm-url': {
+        'target-realm': {
           type: 'string',
         },
         'realm-server-url': {
@@ -214,9 +215,9 @@ export function parseFactoryEntrypointArgs(
   }
 
   let briefUrl = requireStringValue(parsed.values['brief-url'], '--brief-url');
-  let targetRealmUrl = requireStringValue(
-    parsed.values['target-realm-url'],
-    '--target-realm-url',
+  let targetRealm = requireStringValue(
+    parsed.values['target-realm'],
+    '--target-realm',
   );
   let realmServerUrl =
     typeof parsed.values['realm-server-url'] === 'string'
@@ -245,7 +246,7 @@ export function parseFactoryEntrypointArgs(
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
-    targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
+    targetRealm: normalizeUrl(targetRealm, '--target-realm'),
     realmServerUrl,
     agent: parsedAgent.provider,
     openRouterModel: parsedAgent.openRouterModel,
@@ -273,7 +274,7 @@ export async function runFactoryEntrypoint(
   let targetRealmResolution = (
     dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
   )({
-    targetRealmUrl: options.targetRealmUrl,
+    targetRealm: options.targetRealm,
     realmServerUrl: options.realmServerUrl,
   });
 
@@ -319,7 +320,11 @@ export async function runFactoryEntrypoint(
   });
 
   // Push the freshly-written seed (and any other pre-existing workspace
-  // state) to the realm so the scheduler's `listIssues()` query sees it.
+  // state) to the realm. `defaultSyncWorkspaceToRealm` uses
+  // `waitForIndex: true` so the realm-server only responds after the
+  // indexer has processed the batch — the next step is `listIssues()`,
+  // which hits the index, and CS-11003 PR 2 made `+source` POSTs
+  // fire-and-forget by default.
   let syncWorkspaceToRealm =
     dependencies?.syncWorkspaceToRealm ?? defaultSyncWorkspaceToRealm;
   await syncWorkspaceToRealm(client, targetRealm.url, workspaceDir);
@@ -335,7 +340,7 @@ export async function runFactoryEntrypoint(
   let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
   let loopResult = await loopFn({
     briefUrl: options.briefUrl,
-    targetRealmUrl: targetRealm.url,
+    targetRealm: targetRealm.url,
     realmServerUrl: targetRealm.serverUrl,
     ownerUsername: targetRealm.ownerUsername,
     client,
@@ -458,8 +463,17 @@ async function defaultSyncWorkspaceToRealm(
   realmUrl: string,
   workspaceDir: string,
 ): Promise<void> {
+  // `waitForIndex: true` makes the realm-server's `_atomic` handler block
+  // on indexing before responding (`?waitForIndex=true` query param).
+  // Required here because the next step is `runFactoryIssueLoop` →
+  // `listIssues()`, which hits the realm's index. Without this the loop
+  // would race CS-11003 PR 2's deferred `+source` POST and exit with
+  // `outcome=all_issues_done, issues=0` despite a freshly-synced seed.
   let result = await withStdoutRedirected(() =>
-    client.sync(realmUrl, workspaceDir, { preferLocal: true }),
+    client.sync(realmUrl, workspaceDir, {
+      preferLocal: true,
+      waitForIndex: true,
+    }),
   );
   if (result.error) {
     throw new Error(`Failed to sync workspace to realm: ${result.error}`);

@@ -74,12 +74,12 @@ export class ContextBuilder {
     project: ProjectData;
     issue: IssueData;
     knowledge: KnowledgeArticleData[];
-    targetRealmUrl: string;
+    targetRealm: string;
     darkfactoryModuleUrl?: string;
     /** @deprecated Use validationResults/validationContext via buildForIssue() instead. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
-    let { project, issue, knowledge, targetRealmUrl, darkfactoryModuleUrl } =
+    let { project, issue, knowledge, targetRealm, darkfactoryModuleUrl } =
       params;
 
     // Step 1: Resolve which skills are needed for this issue
@@ -100,7 +100,7 @@ export class ContextBuilder {
       issue,
       knowledge,
       skills,
-      targetRealmUrl,
+      targetRealm,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -125,7 +125,7 @@ export class ContextBuilder {
    */
   async buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
     darkfactoryModuleUrl?: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context string from Validator.formatForContext(). */
@@ -138,7 +138,7 @@ export class ContextBuilder {
       );
     }
 
-    let { issue, targetRealmUrl, darkfactoryModuleUrl } = params;
+    let { issue, targetRealm, darkfactoryModuleUrl } = params;
 
     // Step 1: Traverse issue relationships
     let [project, knowledge] = await Promise.all([
@@ -175,7 +175,7 @@ export class ContextBuilder {
       issue,
       knowledge,
       skills,
-      targetRealmUrl,
+      targetRealm,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 

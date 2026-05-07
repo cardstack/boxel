@@ -542,6 +542,10 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assert.dom('[data-test-fitted-comment]').containsText('by Marco');
 
       await selectFormat('markdown');
+      // The markdown fallback renders a hidden CardRenderer + DefaultMarkdownFallbackTemplate
+      // whose MutationObserver schedules afterRender capture passes; without an
+      // explicit settle the test can finish before the capture chain quiesces.
+      await settled();
       assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
       assert
         .dom('[data-test-markdown-preview]')

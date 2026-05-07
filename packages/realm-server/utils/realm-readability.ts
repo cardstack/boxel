@@ -16,7 +16,6 @@ export async function getPublishedRealmURLs(
     return new Set();
   }
 
-  // Phase 4: read from realm_registry instead of published_realms.
   let publishedRealms = (await query(dbAdapter, [
     "SELECT url FROM realm_registry WHERE kind = 'published' AND url IN (",
     ...separatedByCommas(realmList.map((realmURL) => [param(realmURL)])),

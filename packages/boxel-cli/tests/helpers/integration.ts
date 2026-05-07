@@ -14,6 +14,12 @@ import {
 } from '#realm-server/tests/helpers/index';
 import { createJWT as createRealmServerJWT } from '#realm-server/utils/jwt';
 import { registerUser } from '#realm-server/synapse';
+
+export { registerUser } from '#realm-server/synapse';
+export {
+  matrixURL,
+  matrixRegistrationSecret,
+} from '#realm-server/tests/helpers/index';
 import {
   PgQueuePublisher,
   PgQueueRunner,

@@ -233,7 +233,7 @@ export interface AgentContext {
   previousActions?: AgentAction[];
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
-  targetRealmUrl: string;
+  targetRealm: string;
   /**
    * Module URL where the tracker schema (Project / Issue / KnowledgeArticle)
    * is published. Surfaced in the system prompt so the agent can hand-write

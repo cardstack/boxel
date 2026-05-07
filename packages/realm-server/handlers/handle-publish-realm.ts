@@ -6,8 +6,6 @@ import {
   SupportedMimeType,
   logger,
   insertPermissions,
-  insert,
-  asExpressions,
   param,
   PUBLISHED_DIRECTORY_NAME,
   ensureTrailingSlash,
@@ -42,7 +40,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt';
 import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
-import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
@@ -307,7 +305,7 @@ export default function handlePublishRealm({
       // two concurrent publishes for the same publishedRealmURL cannot
       // race through those pre-lock steps (which would otherwise orphan a
       // Matrix user / permissions row when one of them fails on the
-      // published_realms insert).
+      // realm_registry upsert).
       //
       // Phase 3 PR 2: handler is stateless. After the FS swap + DB write +
       // NOTIFY realm_registry, the reconciler on every instance lazily
@@ -318,9 +316,6 @@ export default function handlePublishRealm({
         dbAdapter,
         publishedRealmURL,
         async () => {
-          // Phase 4: read existence + identity from realm_registry. The
-          // legacy published_realms table is still dual-written below
-          // until Phase 4 PR 2 drops the writes.
           let existingRows = (await query(dbAdapter, [
             `SELECT disk_id, owner_username FROM realm_registry WHERE kind = 'published' AND url =`,
             param(publishedRealmURL),
@@ -442,26 +437,13 @@ export default function handlePublishRealm({
 
           let lastPublishedAt = Date.now().toString();
           try {
-            if (isNewRealm) {
-              let { valueExpressions, nameExpressions } = asExpressions({
-                id: publishedRealmId,
-                owner_username: realmUsername,
-                source_realm_url: sourceRealmURL,
-                published_realm_url: publishedRealmURL,
-                last_published_at: lastPublishedAt,
-              });
-              await query(
-                dbAdapter,
-                insert('published_realms', nameExpressions, valueExpressions),
-              );
-            } else {
-              await query(dbAdapter, [
-                `UPDATE published_realms SET last_published_at =`,
-                param(lastPublishedAt),
-                `WHERE published_realm_url =`,
-                param(publishedRealmURL),
-              ]);
-            }
+            await upsertPublishedRealmInRegistry(dbAdapter, {
+              publishedRealmURL,
+              publishedRealmId,
+              ownerUsername: realmUsername,
+              sourceRealmURL,
+              lastPublishedAt: Number(lastPublishedAt),
+            });
           } catch (dbError: any) {
             // Phase 3 PR 2 rollback simplification: no in-memory
             // realms[]/virtualNetwork state to unwind. Just remove the
@@ -469,18 +451,6 @@ export default function handlePublishRealm({
             removeSync(publishedRealmPath);
             throw dbError;
           }
-
-          // Mirror the published realm into realm_registry. The DELETE +
-          // INSERT inside this helper emits NOTIFY realm_registry; the
-          // reconciler on every instance reacts by populating
-          // knownByUrl. The realm itself is lazy-mounted on first request.
-          await mirrorPublishedRealmToRegistry(dbAdapter, {
-            publishedRealmURL,
-            publishedRealmId,
-            ownerUsername: realmUsername,
-            sourceRealmURL,
-            lastPublishedAt: Number(lastPublishedAt),
-          });
 
           // Refresh the index. For a new publish this is redundant
           // (lazy-mount's first start() does its own fullIndex on a
@@ -542,6 +512,17 @@ export default function handlePublishRealm({
       await publishedRealm.fullIndex(userInitiatedPriority, {
         clearLastModified: true,
       });
+
+      // The source realm's `RealmInfo.lastPublishedAt` map is built
+      // from `realm_registry` rows joined on `source_url = sourceRealmURL`,
+      // so publishing this derivative just changed it. Without
+      // invalidating the cache, the source's `getRealmInfo()` keeps
+      // returning the pre-publish snapshot — and the card+json ETag,
+      // which folds a hash of that snapshot in, would still match a
+      // stale `If-None-Match` and serve a 304 with the old
+      // `meta.realmInfo.lastPublishedAt`. (CS-11010)
+      sourceRealm.invalidateCachedRealmInfo();
+
       let publishedPermissions = await fetchRealmPermissions(
         dbAdapter,
         new URL(publishedRealmURL),

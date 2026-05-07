@@ -471,7 +471,7 @@ export class OpencodeFactoryAgent implements LoopAgent {
       references: s.references ?? [],
     }));
     return this.promptLoader.load('system', {
-      targetRealmUrl: context.targetRealmUrl,
+      targetRealm: context.targetRealm,
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
       skills,
     });

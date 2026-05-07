@@ -90,6 +90,16 @@ export interface SyncOptions {
   delete?: boolean;
   /** Preview without making changes. */
   dryRun?: boolean;
+  /**
+   * Block on the realm-server until uploaded cards have been indexed,
+   * not just durably written. Appends `?waitForIndex=true` to the
+   * `_atomic` POST. Trades upload latency for read-after-write
+   * consistency — useful when the next step queries the realm's index
+   * (search / list) and can't tolerate the indexer lag introduced by
+   * CS-11003 PR 2's deferred `+source` POST. Off by default; flip on
+   * for hand-off boundaries like the factory's post-seed sync.
+   */
+  waitForIndex?: boolean;
 }
 
 export type { DeleteResult };
@@ -479,6 +489,7 @@ export class BoxelCLIClient {
       preferNewest: options?.preferNewest,
       delete: options?.delete,
       dryRun: options?.dryRun,
+      waitForIndex: options?.waitForIndex,
       profileManager: this.pm,
     });
   }

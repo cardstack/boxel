@@ -196,17 +196,35 @@ export class RealmIndexUpdater {
     }
   }
 
-  async update(
+  // Two-phase incremental update. Returns once the job is durably enqueued
+  // (the queue insert into Postgres has landed), with `settled` exposing the
+  // promise that resolves when the worker finishes and the optional
+  // onInvalidation/onSettled hooks run. Pre-enqueue failures
+  // (getRealmOwnerUsername, queue.publish) reject from this method so the
+  // caller knows the work was never queued and the realm is still
+  // consistent. Worker-time and post-worker failures reject from `settled`
+  // and surface via error_doc inside the worker.
+  //
+  // `onSettled` is part of the deferred lifecycle: it runs after the worker
+  // and onInvalidation finish, but before the indexing deferred is
+  // fulfilled and removed from #incrementalIndexingDeferreds. This is the
+  // hook callers use for work that must happen before `realm.incrementalIndexing()`
+  // resolves — for example, the post-worker invalidation broadcast on the
+  // deferred-indexing path. Without this, an outer `.then()` would fire
+  // after the drain returns and could race with test teardown.
+  async enqueueUpdate(
     urls: URL[],
     opts?: {
       delete?: true;
       onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      onSettled?: () => Promise<void> | void;
       clientRequestId?: string | null;
     },
-  ): Promise<void> {
+  ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.add(indexingDeferred);
     let snapshotVersion = this.#ignoreDataVersion;
+    let job: Job<IncrementalDoneResult>;
     try {
       let args: IncrementalIndexEnqueueArgs = {
         changes: urls.map((url) => ({
@@ -218,7 +236,7 @@ export class RealmIndexUpdater {
         ignoreData: { ...this.#ignoreData },
       };
       let clientRequestId = opts?.clientRequestId ?? null;
-      let job = await this.#queue.publish<IncrementalDoneResult>({
+      job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
         concurrencyGroup: `indexing:${this.#realm.url}`,
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
@@ -226,26 +244,53 @@ export class RealmIndexUpdater {
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
-      let { invalidations, ignoreData, stats } = await job.done;
-      this.#stats = stats;
-      // Drop the result if a from-scratch index landed since we snapshotted.
-      // Its ignoreData was computed from a stale snapshot and would clobber
-      // the fresher full-index data.
-      if (snapshotVersion === this.#ignoreDataVersion) {
-        this.#ignoreData = ignoreData;
-      }
-      if (opts?.onInvalidation) {
-        await opts.onInvalidation(
-          invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
-        );
-      }
     } catch (e: any) {
       indexingDeferred.reject(e);
-      throw e;
-    } finally {
-      indexingDeferred.fulfill();
       this.#incrementalIndexingDeferreds.delete(indexingDeferred);
+      throw e;
     }
+    // Past the durable-enqueue boundary. Build the settle promise that the
+    // caller can either await (synchronous-indexing path) or fire-and-forget
+    // (deferred-indexing path).
+    let settled = (async () => {
+      try {
+        let { invalidations, ignoreData, stats } = await job.done;
+        this.#stats = stats;
+        // Drop the result if a from-scratch index landed since we snapshotted.
+        // Its ignoreData was computed from a stale snapshot and would clobber
+        // the fresher full-index data.
+        if (snapshotVersion === this.#ignoreDataVersion) {
+          this.#ignoreData = ignoreData;
+        }
+        if (opts?.onInvalidation) {
+          await opts.onInvalidation(
+            invalidations.map((href) => new URL(href.replace(/\.json$/, ''))),
+          );
+        }
+        if (opts?.onSettled) {
+          await opts.onSettled();
+        }
+      } catch (e: any) {
+        indexingDeferred.reject(e);
+        throw e;
+      } finally {
+        indexingDeferred.fulfill();
+        this.#incrementalIndexingDeferreds.delete(indexingDeferred);
+      }
+    })();
+    return { settled };
+  }
+
+  async update(
+    urls: URL[],
+    opts?: {
+      delete?: true;
+      onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>;
+      clientRequestId?: string | null;
+    },
+  ): Promise<void> {
+    let { settled } = await this.enqueueUpdate(urls, opts);
+    await settled;
   }
 
   async copy(

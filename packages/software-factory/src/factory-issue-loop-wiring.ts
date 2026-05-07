@@ -7,7 +7,7 @@
  * - RealmIssueRelationshipLoader for context building
  * - ContextBuilder with issue-aware mode
  * - ToolRegistry, ToolExecutor, FactoryTool[] via buildFactoryTools
- * - OpenRouterFactoryAgent as the LoopAgent
+ * - ClaudeCodeFactoryAgent or OpencodeFactoryAgent as the LoopAgent
  * - ValidationPipeline as the Validator
  * - runIssueLoop() invocation
  */
@@ -56,7 +56,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..');
 
 export interface IssueLoopWiringConfig {
   briefUrl: string;
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
@@ -102,15 +102,15 @@ export interface IssueLoopWiringConfig {
 export async function runFactoryIssueLoop(
   config: IssueLoopWiringConfig,
 ): Promise<IssueLoopResult> {
-  let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
+  let targetRealm = ensureTrailingSlash(config.targetRealm);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
   // 1. Issue store
-  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
@@ -124,7 +124,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
@@ -136,7 +136,7 @@ export async function runFactoryIssueLoop(
   let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
+    targetRealm,
     client,
     debug: config.debug,
   });
@@ -162,23 +162,16 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
+  let syncWorkspace = () =>
+    syncWorkspaceToRealm(client, targetRealm, workspaceDir);
   let toolBuilderConfig: ToolBuilderConfig = {
-    targetRealmUrl,
+    targetRealm,
     realmServerUrl,
     client,
     workspaceDir,
     testResultsModuleUrl,
     hostAppUrl,
-    // run_evaluate / run_instantiate go through the realm-server
-    // prerenderer, which loads from the realm filesystem. Push the
-    // local workspace mirror first so files the agent just wrote
-    // (or just edited) are visible — otherwise the sandbox 404s on
-    // every fresh module. Same sync the orchestrator uses between
-    // iterations and before post-`signal_done` validation; the
-    // boxel-cli sync is mtime-aware, so subsequent calls in the
-    // same iteration are near no-ops.
-    syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -230,7 +223,7 @@ export async function runFactoryIssueLoop(
     });
 
   // 6. Run issue loop
-  log.info(`Starting issue loop: targetRealm=${targetRealmUrl}`);
+  log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -238,11 +231,10 @@ export async function runFactoryIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealm,
     darkfactoryModuleUrl,
     workspaceDir,
-    syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace,
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
@@ -392,12 +384,12 @@ export interface WorkspaceSyncOutcome {
 
 export async function syncWorkspaceToRealm(
   client: BoxelCLIClient,
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
 ): Promise<WorkspaceSyncOutcome> {
   try {
     let result = await withStdoutRedirected(() =>
-      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+      client.sync(targetRealm, workspaceDir, { preferLocal: true }),
     );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);

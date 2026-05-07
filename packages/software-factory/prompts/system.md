@@ -69,7 +69,7 @@ Inspect existing state before making changes; do not guess.
 
 # Realms
 
-- Target realm: {{targetRealmUrl}}
+- Target realm: {{targetRealm}}
 
 # Tracker schema module URL
 
