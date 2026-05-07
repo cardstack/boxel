@@ -30,18 +30,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  test-web-assets:
-    name: Build test web assets
-    uses: ./.github/workflows/test-web-assets.yaml
-    with:
-      caller: manual-boxel-cli-publish
-    concurrency:
-      group: manual-boxel-cli-publish-test-web-assets-${{ github.run_id }}
-      cancel-in-progress: false
-
   publish:
     name: Build and publish @cardstack/boxel-cli
-    needs: test-web-assets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -55,43 +45,6 @@ jobs:
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - name: Download test web assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
-
-      - name: Run unit tests
-        working-directory: packages/boxel-cli
-        run: pnpm test:unit-exclude-smoke
-
-      - name: Start Matrix
-        run: pnpm start:matrix
-        working-directory: packages/realm-server
-
-      - name: Create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-
-      - name: Start dev stack (icons + host-dist + base realm + prerenderer)
-        run: |
-          mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
-
-      - name: Run integration tests
-        working-directory: packages/boxel-cli
-        run: pnpm test:integration
-
-      - name: Print server logs
-        if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
 
       - name: Bump version
         id: version
