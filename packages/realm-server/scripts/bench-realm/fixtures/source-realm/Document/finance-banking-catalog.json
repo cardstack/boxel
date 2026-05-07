@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Finance & Banking Card Catalog\n\nCondensed stubs for Finance & Banking card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Expense Report\n**Priority:** P2\n\n- **Core idea:** Collection of expenses with receipts, categories, approval workflow, and reimbursement status.\n\n---\n\n### Bill\n**Priority:** P2\n\n- **Core idea:** Payable document from a vendor with amount, due date, payment status.\n\n---\n\n### Budget\n**Priority:** P2\n\n- **Core idea:** Financial plan with categories, allocated amounts, actual spend tracking, and variance.\n\n---\n\n### Crypto Wallet\n**Priority:** P3\n\n- **Core idea:** Cryptocurrency wallet reference with address, chain, balance display, and transaction history link.\n\n---\n\n### Investment / Market Position\n**Priority:** P2\n\n- **Core idea:** A financial position: asset, quantity, cost basis, current value, gain/loss. Aggregates into Portfolio.\n\n---\n\n### Portfolio\n**Priority:** P2\n\n- **Core idea:** Collection of market positions with total value, allocation breakdown, and performance metrics.\n",
+      "cardInfo": {
+        "name": "Finance & Banking Card Catalog",
+        "notes": null,
+        "title": "Finance & Banking Card Catalog",
+        "summary": "Condensed stubs for Finance & Banking card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

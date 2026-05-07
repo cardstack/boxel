@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["design-creativity", "image"],
+      "content": "## Overview\n\nThe Image card gives the workspace a structured home for static image card with URL, alt text, dimensions, format metadata. Base image type without AI generation.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nImage usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[AI Image]]** -- Image can incorporate generated visuals or treat image output as a linked asset.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Image into a reusable AI-assisted workflow.\n- **[[Project]]** -- Image can be grouped under a larger initiative so its work stays visible in context.\n- **[[Task]]** -- Image often creates follow-up work or is itself tracked through task execution.\n- **[[Document]]** -- Image can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Brand Guide]]** -- Brand Guide can provide adjacent context, downstream output, or grouped navigation around Image.\n\n## Example Use Cases\n\n- **System of record:** Teams create Image as the structured home for static image card with URL, alt text, dimensions, format metadata. Base image type without AI generation and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Image when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Image stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Image",
+        "notes": null,
+        "summary": "Static image card with URL, alt text, dimensions, format metadata. Base image type without AI generation.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

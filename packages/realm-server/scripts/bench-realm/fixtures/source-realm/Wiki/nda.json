@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["legal-compliance", "nda"],
+      "content": "## Overview\n\nThe NDA card gives the workspace a structured home for non-disclosure agreement: parties, scope, duration, and effective date.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nNDA acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- NDA can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Workflow Playbook]]** -- NDA can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Signature]]** -- Signature can provide adjacent context, downstream output, or grouped navigation around NDA.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around NDA.\n- **[[Report]]** -- NDA can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Legal Contract]]** -- Legal Contract can provide adjacent context, downstream output, or grouped navigation around NDA.\n\n## Example Use Cases\n\n- **System of record:** Teams create NDA as the structured home for non-disclosure agreement: parties, scope, duration, and effective date and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates NDA when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** NDA stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "NDA",
+        "notes": null,
+        "summary": "Non-disclosure agreement: parties, scope, duration, and effective date.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

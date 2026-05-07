@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["tools", "api", "agents", "schema"],
+      "content": "## Overview\n\nA Tool Definition describes an external function or service that an AI agent can invoke during execution. It provides the schema, parameters, authentication requirements, and behavioral hints needed for the agent to correctly call the tool and interpret its results. Tool Definitions bridge the gap between natural language intent and structured API calls.\n\nEvery tool is registered with a unique identifier, a human-readable description, and a JSON Schema that specifies required and optional parameters. The agent uses this metadata to decide when a tool is appropriate and how to construct valid invocations.\n\n## Core Mechanics\n\nA Tool Definition operates at three layers. The **interface layer** specifies the function signature: name, description, parameter schema, and return type. The **execution layer** defines where and how the function runs, whether it is a REST endpoint, a serverless function, a local script, or a message queue consumer. The **security layer** links to a [[Credential]] entry that provides the authentication token, API key, or OAuth grant needed to call the tool.\n\nWhen an agent encounters a task that requires external data or side effects, it searches available Tool Definitions for a match. The selection process considers the tool description, parameter compatibility, and any constraints specified by the active [[Skill Card]]. Once selected, the agent formats the call, dispatches it, and parses the response.\n\nTool Definitions support **retry policies** and **fallback chains**. If a primary tool fails, the agent can attempt an alternative tool or degrade gracefully. This resilience is configured within the definition itself, keeping failure handling close to the tool rather than scattering it across workflows.\n\n## Integration Points\n\nTool Definitions are referenced by [[Skill Card]] entries that need external capabilities. A skill might declare that it requires a \"web search\" tool and a \"database query\" tool, and the platform resolves these to concrete Tool Definitions at runtime.\n\n[[Prompt Template]] content can include tool-use examples that show the agent how to call a specific tool in context. This few-shot guidance improves invocation accuracy, especially for tools with complex parameter schemas.\n\nAuthentication flows through the [[Credential]] system. Each Tool Definition declares which credential type it needs, and the platform injects the resolved secret at call time. Credential rotation is handled transparently by the [[Integration]] layer, so tool authors do not need to manage token refresh logic.\n\n[[Trigger]] rules can fire based on tool execution results. For example, a trigger might activate when a tool returns an error code above a threshold, automatically escalating to a human operator or switching to a fallback [[Skill Card]].\n\n## Example Use Cases\n\n- **CRM lookup tool**: Accepts a contact email, returns account details from Salesforce via [[Integration]], used by sales [[Skill Card]] agents\n- **Code execution sandbox**: Runs user-provided code snippets safely, returns stdout/stderr, referenced by coding assistant skills\n- **Calendar scheduling tool**: Checks availability and books meetings, authenticated through [[Credential]] OAuth tokens, triggered by [[Prompt Template]] scheduling intents\n- **Document search tool**: Queries a vector index of company documents, returns relevant chunks with citations, composed into knowledge-base [[Skill Card]] workflows",
+      "cardInfo": {
+        "name": "Tool Definition",
+        "notes": null,
+        "summary": "External tool or function schema that agents can invoke during task execution",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

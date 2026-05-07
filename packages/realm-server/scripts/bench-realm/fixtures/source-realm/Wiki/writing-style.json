@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["standards-guidelines", "writing", "style"],
+      "content": "## Overview\n\nThe Writing Style card gives the workspace a structured home for writing style guide: grammar rules, preferred terms, formatting standards.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nWriting Style usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- Writing Style can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Writing Style into a reusable AI-assisted workflow.\n- **[[Skill Card]]** -- Skills can define how agents classify, write, or transform Writing Style in repeatable ways.\n- **[[Design System]]** -- Design System can provide adjacent context, downstream output, or grouped navigation around Writing Style.\n- **[[Coding Standard]]** -- Coding Standard can provide adjacent context, downstream output, or grouped navigation around Writing Style.\n- **[[Brand Voice]]** -- Brand Voice can provide adjacent context, downstream output, or grouped navigation around Writing Style.\n\n## Example Use Cases\n\n- **System of record:** Teams create Writing Style as the structured home for writing style guide: grammar rules, preferred terms, formatting standards and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Writing Style when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Writing Style stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Writing Style",
+        "notes": null,
+        "summary": "Writing style guide: grammar rules, preferred terms, formatting standards.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

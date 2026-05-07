@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["integrations", "api", "sync", "connectivity"],
+      "content": "## Overview\n\nAn Integration card defines the connection configuration between the platform and an external service. It specifies the service endpoint, authentication method, data mapping rules, sync direction, and error handling behavior. Integrations enable bidirectional data flow with CRMs, payment processors, communication platforms, cloud storage, and any service that exposes an API.\n\nIntegrations abstract away the complexity of external service communication. Rather than embedding API details into every [[Tool Definition]] or [[Workflow Playbook]], the Integration card centralizes connection management, making it easy to update endpoints, swap credentials, or modify data mappings in one place.\n\n## How It Works\n\nEach Integration card defines three core components. The **connection layer** specifies the base URL, protocol (REST, GraphQL, SOAP, WebSocket), and rate limiting parameters. The **authentication layer** references one or more [[Credential]] cards that provide the tokens or keys needed to authenticate requests. The **data layer** defines field mappings between platform cards and external service objects.\n\nField mappings are bidirectional transformation rules. An outbound mapping might convert a [[Contact]] card's `fullName` field into Salesforce's `Name` field, while an inbound mapping transforms Stripe's `customer.email` into the platform's contact email. Mappings support type coercion, default values, and conditional logic for handling edge cases.\n\n### Sync Modes\n\nIntegrations operate in one of four sync modes. **Push** sends platform data to the external service when changes occur. **Pull** fetches external data on a schedule or trigger. **Bidirectional** keeps both systems in sync, with conflict resolution rules for simultaneous changes. **Event-driven** responds to webhooks from the external service, processing inbound events in real time.\n\nSync status is monitored continuously. The Integration card displays last sync time, record counts, error rates, and latency metrics. When errors exceed a configurable threshold, the integration enters a **degraded** state that alerts administrators and optionally pauses sync to prevent data corruption.\n\n## Integration Points\n\n[[Tool Definition]] cards reference Integrations as their execution backend. When an agent needs to call an external API, the Tool Definition specifies which Integration to use, and the Integration provides the connection details, authentication, and data transformation. This separation allows the same tool interface to work with different external services by swapping the underlying Integration.\n\n[[Credential]] management is handled entirely through the Integration card's authentication layer. When credentials rotate, the Integration automatically picks up the new version without requiring changes to any [[Tool Definition]] or [[Skill Card]] that depends on it.\n\n[[Trigger]] rules can monitor Integration health and fire automations in response to events. A trigger might detect that the CRM sync has failed three times in a row and automatically create a [[Case]] for the operations team, escalating if the failure persists beyond an SLA threshold.\n\nData flowing through Integrations populates [[Organization]] and [[Contact]] records from external CRM systems, syncs [[Product]] catalogs from e-commerce platforms, and pushes [[Order]] data to fulfillment services. Each data flow is logged for audit purposes, creating a complete provenance trail from external source to platform card.\n\n[[Trigger]] events from external webhooks are validated against the Integration's webhook secret (stored as a [[Credential]]) before processing. This prevents spoofed events from triggering platform actions and ensures data integrity.\n\n## Example Use Cases\n\n- **CRM sync**: Bidirectional integration with Salesforce keeps [[Contact]] and [[Organization]] records current across both systems, with field mapping handling schema differences\n- **Payment processing**: Event-driven integration with Stripe processes payment webhooks, updates [[Invoice]] status, and creates [[Order]] fulfillment tasks via [[Trigger]] rules\n- **Communication platform**: Push integration with Slack sends notifications when [[Case]] severity changes or [[Deal]] stages advance, using [[Credential]] bot tokens for authentication\n- **Cloud storage**: Pull integration with Google Drive syncs shared documents into the platform, linking files to relevant [[Project]] and [[Task]] cards",
+      "cardInfo": {
+        "name": "Integration",
+        "notes": null,
+        "summary": "External service connection configuration with data mapping and sync management",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["automation", "events", "webhooks", "scheduling"],
+      "content": "## Overview\n\nThe Trigger card defines an event-driven automation rule within a Boxel workspace. Triggers listen for specific events -- a card being created, a field being updated, a scheduled time arriving, or a webhook payload landing -- and respond by executing an action. That action might start a [[Workflow Playbook]], invoke a [[Tool Definition]], create a [[Task]], or call an external API through an [[Integration]].\n\nTriggers are the glue that turns a static workspace into a reactive system. Without them, every process step would require manual intervention. With them, routine responses happen automatically while humans focus on judgment calls.\n\n## Core Mechanics\n\n### Event Types\n\nTriggers support four event sources:\n\n- **On-Create** -- Fires when a new card instance of a specified type is created. For example, creating a new [[Deal]] could trigger an onboarding [[Workflow Playbook]].\n- **On-Update** -- Fires when a specified field changes. Moving a [[Task]] to \"Done\" could trigger a notification or start the next playbook step.\n- **Schedule** -- Fires at a recurring interval defined by a cron expression. Useful for daily digest emails, weekly report generation, or periodic inventory checks on [[Product]] cards.\n- **Webhook** -- Fires when an external system sends an HTTP POST to the trigger's endpoint. This connects Boxel to Stripe payment events, GitHub commits, or any external service.\n\n### Conditions and Filters\n\nEach trigger can specify conditions that must be true for the action to execute. Conditions are field-level predicates: \"priority equals Critical,\" \"deal value greater than 10000,\" or \"contact email domain is acme.com.\" This prevents triggers from firing on every event and keeps automation targeted.\n\n### Actions\n\nWhen a trigger fires and conditions pass, it executes one or more actions in sequence:\n\n- Start a [[Workflow Playbook]] with parameters extracted from the triggering card.\n- Call a [[Tool Definition]] and pass the result to a downstream card.\n- Create or update a card (e.g., generate a [[Task]] or update a [[Deal]] stage).\n- Send a notification or invoke a [[Skill Card]] for AI-assisted processing.\n\n## Integration Points\n\n- **[[Workflow Playbook]]** -- The most common action. Triggers start playbooks, passing context from the triggering event.\n- **[[Skill Card]]** -- AI skills can be invoked as trigger actions for classification, summarization, or routing decisions.\n- **[[Tool Definition]]** -- Triggers can call tools directly for simple automations that do not need a full playbook.\n- **[[Integration]]** -- Webhook triggers connect external systems to Boxel. Outbound actions can call external APIs via integration cards.\n- **[[Task]]** -- Triggers frequently create or update tasks as their primary side effect.\n\n## Example Use Cases\n\n1. **Lead qualification**: An on-create trigger fires when a new [[Contact]] is added. A [[Skill Card]] scores the lead based on title, company size, and industry. If the score exceeds a threshold, a [[Deal]] is auto-created and a [[Task]] is assigned to the sales rep.\n2. **SLA enforcement**: A schedule trigger runs hourly, scanning open [[Case]] cards. Any case older than the SLA window gets escalated: its priority is bumped and a [[Task]] is created for the on-call engineer.\n3. **Payment processing**: A webhook trigger receives Stripe payment-success events. It marks the corresponding [[Invoice]] as paid, updates the [[Deal]] stage, and sends a receipt email to the billing [[Contact]] via [[Email Template]].",
+      "cardInfo": {
+        "name": "Trigger",
+        "notes": null,
+        "summary": "Event-driven automation rules responding to card changes, schedules, and webhooks to execute workflows.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

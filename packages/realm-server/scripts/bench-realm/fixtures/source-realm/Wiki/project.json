@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["project-management", "planning", "milestones"],
+      "content": "## Overview\n\nThe Project card is the top-level container for organizing related work. It groups [[Task]] cards, milestones, team members, and deliverables into a coherent unit with its own timeline and goals. Projects provide the context that individual tasks lack on their own: why the work matters, who is responsible, and when it should be finished.\n\nProjects also serve as the scope boundary for [[Workflow Playbook]] execution and [[Kanban Board]] views. When a user opens a Kanban board, they see only the tasks that belong to the selected project.\n\n## Core Mechanics\n\n### Structure\n\nA project contains a flat or hierarchical list of [[Task]] cards. Tasks can be grouped into milestones, each with a target date. The project dashboard shows overall progress by aggregating task completion across all milestones. Team members are assigned roles (owner, contributor, reviewer) that determine their default permissions and notification preferences.\n\n### Timeline and Milestones\n\nEach project has a start date, a target end date, and zero or more intermediate milestones. Milestones act as checkpoints. When all tasks in a milestone are complete, the milestone is marked done and a [[Trigger]] can fire to notify stakeholders or start the next phase's [[Workflow Playbook]].\n\n### Metrics\n\nProjects track velocity (tasks completed per week), burn-down (remaining effort over time), and health indicators (overdue tasks, blocked tasks). These metrics feed into [[OKR Goal]] dashboards so that leadership can see how project-level execution maps to strategic objectives.\n\n## Integration Points\n\n- **[[Task]]** -- The primary child entity. All tasks are scoped to exactly one project.\n- **[[Kanban Board]]** -- Provides the visual interface for moving project tasks through status columns.\n- **[[OKR Goal]]** -- Projects can be linked to one or more goals. Task completion in the project advances the goal's key results.\n- **[[Workflow Playbook]]** -- Playbooks run within a project's scope, inheriting its team roster and parameters.\n- **[[Deal]]** -- Sales-related projects track the implementation or delivery work that follows a closed deal.\n\n## Example Use Cases\n\n1. **Product launch**: A project groups design tasks, engineering tasks, and marketing tasks under milestones for Alpha, Beta, and GA. Each milestone completion fires a [[Trigger]] that notifies leadership.\n2. **Client delivery**: After a [[Deal]] closes, a delivery project is created with a [[Workflow Playbook]] that generates onboarding tasks, assigns them to the implementation team, and tracks progress on the [[Kanban Board]].\n3. **Strategic initiative**: An [[OKR Goal]] to increase monthly active users links to three projects: a growth engineering project, a content marketing project, and a partnerships project. Each project's task velocity feeds into the goal's progress dashboard.",
+      "cardInfo": {
+        "name": "Project",
+        "notes": null,
+        "summary": "Top-level container for tasks, milestones, and team members with timeline tracking and goal alignment.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

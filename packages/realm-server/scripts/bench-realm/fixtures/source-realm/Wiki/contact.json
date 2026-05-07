@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["crm", "contacts", "people"],
+      "content": "## Overview\n\nThe Contact card represents an individual person within the Boxel ecosystem. It stores structured identity data -- name, email, phone number, job title, and social profile links -- and serves as the connective tissue between people and the cards they interact with. Contacts appear on [[Deal]] cards as prospects, on [[Case]] cards as requesters, and on [[Invoice]] cards as billing recipients.\n\nBecause contacts are first-class cards, they benefit from the same linking, search, and automation capabilities as every other entity. A [[Trigger]] can fire when a contact's email bounces. A [[Workflow Playbook]] can personalize outreach steps based on contact fields.\n\n## Core Mechanics\n\n### Identity Fields\n\nEvery contact has a primary email, an optional phone number, a job title, and a link to an [[Organization]]. Names are split into first and last for flexible display and sorting. Social profiles (LinkedIn, Twitter/X, GitHub) are stored as URL fields so that workspace members can quickly navigate to external profiles.\n\n### Deduplication\n\nWhen a new contact is created, the system checks for existing contacts with the same email address. If a match is found, the user is prompted to merge rather than create a duplicate. This keeps the contact graph clean and ensures that relationship history is consolidated.\n\n### Activity Timeline\n\nEach contact maintains an automatically generated timeline of interactions: emails sent via [[Email Template]], deals advanced, cases opened, invoices issued. The timeline is read-only and assembled from relationship data across the workspace.\n\n## Integration Points\n\n- **[[Organization]]** -- A contact belongs to an organization. Changing a contact's org updates the org's member list.\n- **[[Deal]]** -- Contacts are linked as the primary buyer, champion, or decision-maker on a deal. Multiple contacts can be associated with a single deal.\n- **[[Email Template]]** -- Personalized emails pull the contact's name, title, and company from the Contact card to fill template variables.\n- **[[Case]]** -- Support cases reference the contact who reported the issue. The contact's activity timeline shows all related cases.\n- **[[Invoice]]** -- Invoices are addressed to a contact with a billing email and mailing address.\n\n## Example Use Cases\n\n1. **Sales outreach**: A sales rep creates a Contact, links it to an [[Organization]], and starts a [[Deal]]. An [[Email Template]] pulls the contact's first name and company into a personalized intro message.\n2. **Support routing**: A customer opens a [[Case]]. The system matches the requester's email to an existing Contact, pulls up their history, and routes the case to the right support tier.\n3. **Event invitations**: A marketing team filters contacts by job title and [[Organization]] size, then uses a [[Workflow Playbook]] to send invitations via [[Email Template]] and track RSVPs as [[Task]] cards.",
+      "cardInfo": {
+        "name": "Contact",
+        "notes": null,
+        "summary": "Person record with identity data, social profiles, and relationship links to deals, cases, and invoices.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

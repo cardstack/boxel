@@ -73,12 +73,18 @@ process.env.TEST_HARNESS_CACHE_SALT ??= hostDistFingerprint();
 export const DEFAULT_ITERATIONS = 50;
 export const DEFAULT_WARMUP = 5;
 
-// `TEST_HARNESS_SOURCE_REALM_DIR=../software-factory/realm` is set in
-// the parent `bench:realm` / `bench:realm:check` scripts. The harness's
-// `shared.ts` reads this at module load to point its source-realm at the
-// SF realm dir (so the snapshot's `adoptsFrom` references resolve). It
-// has to be set before any import below pulls `shared.ts` in, hence the
-// invocation env-var rather than a top-level assignment here.
+// `TEST_HARNESS_SOURCE_REALM_DIR=./scripts/bench-realm/fixtures/source-realm`
+// is set in the parent `bench:realm` / `bench:realm:check` scripts. The
+// harness's `shared.ts` reads this at module load to point its
+// source-realm at the bench's own committed snapshot (so the fixture's
+// `adoptsFrom` references resolve). It has to be set before any import
+// below pulls `shared.ts` in, hence the invocation env-var rather than
+// a top-level assignment here.
+//
+// The snapshot is intentionally self-contained: the bench depends only
+// on packages it explicitly tests (runtime-common, realm-server, host,
+// realm-test-harness, base) — not on software-factory. SF can change
+// freely without affecting bench medians.
 
 export interface Scenario {
   name: string;

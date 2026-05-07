@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Travel & Logistics Card Catalog\n\nCondensed stubs for Travel & Logistics card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Itinerary / Trip\n**Priority:** P1\n\n- **Core idea:** Trip plan linking flights, hotels, excursions in chronological order with dates and locations.\n\n---\n\n### Flight\n**Priority:** P2\n\n- **Core idea:** Flight booking with airline, flight number, departure/arrival, seat, confirmation code.\n\n---\n\n### Hotel Reservation\n**Priority:** P2\n\n- **Core idea:** Hotel booking with property, dates, room type, confirmation number, and check-in details.\n\n---\n\n### Excursion\n**Priority:** P3\n\n- **Core idea:** Activity/tour booking with time, location, provider, and notes.\n\n---\n\n### Shipment\n**Priority:** P2\n\n- **Core idea:** Package shipment with carrier, tracking number, status, origin/destination, and estimated delivery.\n",
+      "cardInfo": {
+        "name": "Travel & Logistics Card Catalog",
+        "notes": null,
+        "title": "Travel & Logistics Card Catalog",
+        "summary": "Condensed stubs for Travel & Logistics card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

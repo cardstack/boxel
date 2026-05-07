@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["media-production", "layout", "board"],
+      "content": "## Overview\n\nThe Layout Board card gives the workspace a structured home for visual layout/mood board: arranged images, text blocks, and design elements.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nLayout Board coordinates creative production state across assets, collaborators, and downstream publishing steps. The card should remain easy to preview while still carrying the metadata needed for workflow, reuse, and automation.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Project]]** -- Layout Board can be grouped under a larger initiative so its work stays visible in context.\n- **[[Task]]** -- Layout Board often creates follow-up work or is itself tracked through task execution.\n- **[[Playlist]]** -- Playlist can provide adjacent context, downstream output, or grouped navigation around Layout Board.\n- **[[Stream]]** -- Stream can provide adjacent context, downstream output, or grouped navigation around Layout Board.\n- **[[AI Image]]** -- Layout Board can incorporate generated visuals or treat image output as a linked asset.\n- **[[Drum Machine]]** -- Drum Machine can provide adjacent context, downstream output, or grouped navigation around Layout Board.\n\n## Example Use Cases\n\n- **System of record:** Teams create Layout Board as the structured home for visual layout/mood board: arranged images, text blocks, and design elements and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Layout Board when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Layout Board stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Layout Board",
+        "notes": null,
+        "summary": "Visual layout/mood board: arranged images, text blocks, and design elements.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

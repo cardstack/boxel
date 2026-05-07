@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["reports", "presentation"],
+      "content": "## Overview\n\nThe Presentation card gives the workspace a structured home for full presentation context: slide deck + metadata (event, audience, duration, abstract).\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nPresentation usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Report]]** -- Presentation can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Metrics (KPI)]]** -- Metrics (KPI) can provide adjacent context, downstream output, or grouped navigation around Presentation.\n- **[[Workflow Playbook]]** -- Presentation can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Presentation into a reusable AI-assisted workflow.\n- **[[Task]]** -- Presentation often creates follow-up work or is itself tracked through task execution.\n- **[[Project]]** -- Presentation can be grouped under a larger initiative so its work stays visible in context.\n\n## Example Use Cases\n\n- **System of record:** Teams create Presentation as the structured home for full presentation context: slide deck + metadata (event, audience, duration, abstract) and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Presentation when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Presentation stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Presentation",
+        "notes": null,
+        "summary": "Full presentation context: slide deck + metadata (event, audience, duration, abstract).",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

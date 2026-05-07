@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["crm", "companies", "accounts"],
+      "content": "## Overview\n\nThe Organization card represents a company, team, or group entity within a Boxel workspace. It aggregates [[Contact]] records into a single entity with shared attributes like company name, industry, website, address, and size tier. Organizations provide the commercial context that individual contacts lack, enabling workspace users to reason about accounts rather than isolated people.\n\nOrganizations sit at the center of the CRM data model. Every [[Deal]] is ultimately with an organization. Every [[Invoice]] is billed to an organization's address. And every [[Product]] adoption decision traces back to an organizational buyer.\n\n## Core Mechanics\n\n### Company Profile\n\nAn organization's profile includes firmographic data: legal name, industry vertical, employee count range, annual revenue range, and headquarters location. These fields drive segmentation filters so that sales teams can target accounts by size or sector. The profile also stores a logo URL and a website link for quick reference.\n\n### Contact Roster\n\nOrganizations maintain a roster of associated [[Contact]] records. Each contact's role within the org (CEO, VP Engineering, Procurement Lead) is stored on the relationship, not on the contact itself, so that a single person can hold different roles at different organizations over time.\n\n### Account Health\n\nA computed health score aggregates signals from related cards: open [[Deal]] value, outstanding [[Invoice]] balance, unresolved [[Case]] count, and product engagement metrics. The health score helps customer-success teams prioritize outreach. When health drops below a threshold, a [[Trigger]] can auto-generate a check-in [[Task]].\n\n## Integration Points\n\n- **[[Contact]]** -- The people who belong to this organization. Adding a contact to an org automatically updates the roster.\n- **[[Deal]]** -- Deals reference the buying organization. Pipeline dashboards group deals by org for account-level forecasting.\n- **[[Product]]** -- Organizations can be linked to the products they have purchased or are evaluating, creating an adoption map.\n- **[[Invoice]]** -- Billing documents are addressed to the organization with attention routed to a specific [[Contact]].\n- **[[Integration]]** -- Organizations can have connected external systems (Salesforce, HubSpot, Stripe) that sync data bidirectionally.\n\n## Example Use Cases\n\n1. **Account-based sales**: A sales rep views an Organization card to see all associated [[Contact]] records, open [[Deal]] stages, and past [[Invoice]] history before a meeting.\n2. **Churn prevention**: A [[Trigger]] monitors organization health scores. When a score drops, it fires a [[Workflow Playbook]] that creates a check-in [[Task]] for the customer-success manager and drafts a re-engagement email via [[Email Template]].\n3. **Partner management**: A partnerships team uses Organization cards to track channel partners, linking each partner to co-sell [[Deal]] cards and shared [[Product]] catalogs.",
+      "cardInfo": {
+        "name": "Organization",
+        "notes": null,
+        "summary": "Company or group entity aggregating contacts, deals, invoices, and account-health signals.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

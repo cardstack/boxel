@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["ai", "skills", "automation", "agents"],
+      "content": "## Overview\n\nA Skill Card is a self-contained AI instruction set that encapsulates domain expertise, behavioral directives, and contextual guidance into a portable, composable unit. Skills can be enabled, disabled, versioned, and combined to shape how an AI agent operates within a given workspace or workflow.\n\nUnlike static configuration, a Skill Card carries both the **what** (instructions) and the **why** (context about when and how to apply them). This makes skills the primary building block for customizing AI behavior across different use cases, from customer support to code generation to data analysis.\n\n## How It Works\n\nEach Skill Card contains a structured [[Prompt Template]] that defines the agent's behavior when the skill is active. The template may reference external resources, include few-shot examples, or specify output format constraints. Skills declare their activation conditions through associated [[Trigger]] rules, which determine when the skill should automatically engage.\n\nSkills compose hierarchically. A parent skill can include child skills, allowing complex behaviors to be assembled from simpler primitives. For example, a \"Sales Assistant\" skill might compose a \"Tone: Professional\" skill with a \"Product Knowledge\" skill and a \"CRM Lookup\" [[Tool Definition]] skill.\n\nThe lifecycle of a Skill Card follows a clear pattern: **author** the instructions and test them, **publish** the skill to make it available, **enable** it in the relevant workspace, and **iterate** based on observed agent performance. Skills maintain version history so you can roll back if a change degrades quality.\n\n## Integration Points\n\nSkill Cards connect deeply with the broader platform. A [[Workflow Playbook]] can reference specific skills that should be active during each phase of a process. When a skill needs to invoke external capabilities, it delegates to a [[Tool Definition]] that provides the function schema and execution endpoint.\n\nVisual assets referenced by skills, such as diagram overlays or annotated screenshots, are managed as [[AI Image]] resources. These images provide visual context that helps the agent understand spatial layouts, UI components, or design patterns that are difficult to convey through text alone.\n\nSkills also interact with [[Credential]] management when they need access to authenticated services. Rather than embedding secrets directly, skills reference credential entries that are resolved at runtime.\n\n## Example Use Cases\n\n- **Customer onboarding skill**: Guides new users through setup, referencing a [[Workflow Playbook]] for the step-by-step process and a [[Prompt Template]] for personalized welcome messages\n- **Code review skill**: Applies team coding standards, invokes linting [[Tool Definition]] integrations, and flags patterns that violate architectural guidelines\n- **Content writing skill**: Enforces brand voice using a tone [[Prompt Template]], suggests relevant [[AI Image]] assets, and checks grammar via external tool calls\n- **Incident response skill**: Activates on [[Trigger]] rules tied to alert severity, escalates through the appropriate [[Workflow Playbook]], and logs actions for audit",
+      "cardInfo": {
+        "name": "Skill Card",
+        "notes": null,
+        "summary": "AI instruction set that can be enabled, disabled, and composed to customize agent behavior",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

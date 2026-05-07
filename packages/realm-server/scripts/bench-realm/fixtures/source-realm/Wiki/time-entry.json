@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["career-hr", "time", "entry"],
+      "content": "## Overview\n\nThe Time Entry card gives the workspace a structured home for clock in/out record with timestamp pair, calculated duration, and project/task link.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nTime Entry acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Contact]]** -- Time Entry often needs a person-level reference for ownership, communication, or accountability.\n- **[[Organization]]** -- Time Entry frequently sits inside an account, company, or team-level relationship context.\n- **[[Task]]** -- Time Entry often creates follow-up work or is itself tracked through task execution.\n- **[[Workflow Playbook]]** -- Time Entry can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Document]]** -- Time Entry can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Interview Feedback]]** -- Interview Feedback can provide adjacent context, downstream output, or grouped navigation around Time Entry.\n\n## Example Use Cases\n\n- **System of record:** Teams create Time Entry as the structured home for clock in/out record with timestamp pair, calculated duration, and project/task link and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Time Entry when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Time Entry stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Time Entry",
+        "notes": null,
+        "summary": "Clock in/out record with timestamp pair, calculated duration, and project/task link.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

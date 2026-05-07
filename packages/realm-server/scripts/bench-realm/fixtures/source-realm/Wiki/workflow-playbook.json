@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["automation", "workflows", "task-templates"],
+      "content": "## Overview\n\nA Workflow Playbook is a reusable, ordered sequence of steps that an agent or human can execute against a workspace. Inspired by Basecamp-style task templates, playbooks capture institutional knowledge so that recurring processes run the same way every time. Each step can reference a [[Task]], invoke a [[Skill Card]], call a [[Tool Definition]], or wait for an external event from a [[Trigger]].\n\nPlaybooks bridge the gap between ad-hoc task lists and fully automated pipelines. They are lightweight enough to draft in minutes yet powerful enough to orchestrate multi-card workflows across an entire [[Project]].\n\n## Core Mechanics\n\n### Step Types\n\nA playbook contains an ordered list of steps. Each step has a type that determines its behavior:\n\n- **Manual** -- Creates a [[Task]] assigned to a person. The playbook pauses until the task is marked complete.\n- **Automated** -- Invokes a [[Tool Definition]] or [[Skill Card]] and proceeds when the tool returns a result.\n- **Gate** -- Requires explicit approval before the playbook continues. Useful for review checkpoints.\n- **Branch** -- Evaluates a condition and jumps to a different step depending on the outcome.\n\n### Execution Model\n\nWhen a playbook is started, the system creates a runtime instance that tracks progress through each step. Steps execute sequentially by default, though branch steps can skip ahead or loop back. The runtime records start and end timestamps, outputs, and error states for every step, producing a full audit log.\n\n### Parameterization\n\nPlaybooks accept input parameters so a single template can serve many contexts. For example, an onboarding playbook might accept `new_hire_name` and `department`. Parameters are injected into step descriptions, task titles, and tool arguments using `{{variable}}` syntax, similar to [[Prompt Template]] resolution.\n\n## Integration Points\n\n- **[[Task]]** -- Manual steps generate Task cards that appear on the assignee's [[Kanban Board]].\n- **[[Trigger]]** -- A trigger can start a playbook automatically when a card is created or updated.\n- **[[AI Image]]** -- An automated step can call the image generation tool and attach results to downstream cards.\n- **[[Skill Card]]** -- Skills provide the AI instructions that automated steps follow.\n- **[[Project]]** -- Playbooks are scoped to projects, inheriting the project's team members as potential assignees.\n\n## Example Use Cases\n\n1. **Client onboarding**: When a new [[Deal]] closes, a [[Trigger]] fires the onboarding playbook. It creates welcome-email tasks, provisions workspace access, generates branded assets via [[AI Image]], and notifies the account manager on the [[Kanban Board]].\n2. **Content pipeline**: A weekly publishing playbook drafts articles from a [[Prompt Template]], routes them through editorial review gates, generates header images, and schedules publication.\n3. **Incident response**: An ops playbook triages alerts, assigns investigation tasks, escalates through gate steps, and records resolution in a post-mortem [[Task]].",
+      "cardInfo": {
+        "name": "Workflow Playbook",
+        "notes": null,
+        "summary": "Reusable step-by-step process templates for agent and human execution, inspired by Basecamp-style task lists.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

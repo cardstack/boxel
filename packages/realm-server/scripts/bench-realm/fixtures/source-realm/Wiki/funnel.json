@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["analytics-data", "funnel"],
+      "content": "## Overview\n\nThe Funnel card gives the workspace a structured home for conversion funnel: stages, counts, conversion rates, and drop-off visualization.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nFunnel turns raw activity into structured measurement. The card needs to stay queryable, filterable, and composable so that summaries, dashboards, and automations can build on top of it instead of recreating calculations downstream.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Report]]** -- Funnel can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Metrics (KPI)]]** -- Metrics (KPI) can provide adjacent context, downstream output, or grouped navigation around Funnel.\n- **[[Workflow Playbook]]** -- Funnel can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Trigger]]** -- Changes to Funnel can fire automation, and automation can also create or update Funnel.\n- **[[Project]]** -- Funnel can be grouped under a larger initiative so its work stays visible in context.\n- **[[Survey]]** -- Survey can provide adjacent context, downstream output, or grouped navigation around Funnel.\n\n## Example Use Cases\n\n- **System of record:** Teams create Funnel as the structured home for conversion funnel: stages, counts, conversion rates, and drop-off visualization and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Funnel when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Funnel stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Funnel",
+        "notes": null,
+        "summary": "Conversion funnel: stages, counts, conversion rates, and drop-off visualization.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

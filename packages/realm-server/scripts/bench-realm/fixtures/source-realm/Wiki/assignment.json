@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["learning-education", "assignment"],
+      "content": "## Overview\n\nThe Assignment card gives the workspace a structured home for student assignment with description, due date, rubric, submission, and grading.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nAssignment organizes instructional or learning-specific structure in a way that remains reusable across planning, delivery, and review. The card should support both direct authoring and automation-assisted generation while keeping its context intact.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Course]]** -- Course can provide adjacent context, downstream output, or grouped navigation around Assignment.\n- **[[Quiz]]** -- Quiz can provide adjacent context, downstream output, or grouped navigation around Assignment.\n- **[[Lesson Plan]]** -- Lesson Plan can provide adjacent context, downstream output, or grouped navigation around Assignment.\n- **[[Report]]** -- Assignment can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Workflow Playbook]]** -- Assignment can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Certificate]]** -- Certificate can provide adjacent context, downstream output, or grouped navigation around Assignment.\n\n## Example Use Cases\n\n- **System of record:** Teams create Assignment as the structured home for student assignment with description, due date, rubric, submission, and grading and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Assignment when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Assignment stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Assignment",
+        "notes": null,
+        "summary": "Student assignment with description, due date, rubric, submission, and grading.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

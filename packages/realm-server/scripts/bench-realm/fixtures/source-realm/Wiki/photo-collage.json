@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["design-creativity", "photo", "collage"],
+      "content": "## Overview\n\nThe Photo Collage card gives the workspace a structured home for arrangement of multiple images in a configurable grid/layout with optional captions.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nPhoto Collage usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[AI Image]]** -- Photo Collage can incorporate generated visuals or treat image output as a linked asset.\n- **[[Prompt Template]]** -- Prompt-driven drafting or summarization can turn Photo Collage into a reusable AI-assisted workflow.\n- **[[Project]]** -- Photo Collage can be grouped under a larger initiative so its work stays visible in context.\n- **[[Task]]** -- Photo Collage often creates follow-up work or is itself tracked through task execution.\n- **[[Document]]** -- Photo Collage can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Brand Guide]]** -- Brand Guide can provide adjacent context, downstream output, or grouped navigation around Photo Collage.\n\n## Example Use Cases\n\n- **System of record:** Teams create Photo Collage as the structured home for arrangement of multiple images in a configurable grid/layout with optional captions and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Photo Collage when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Photo Collage stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Photo Collage",
+        "notes": null,
+        "summary": "Arrangement of multiple images in a configurable grid/layout with optional captions.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

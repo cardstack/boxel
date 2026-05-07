@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["support", "service", "customer-success"],
+      "content": "## Overview\n\nA Case represents a support or service request submitted by a customer or internal stakeholder. Cases track the full lifecycle of an issue from initial report through investigation, resolution, and follow-up. Each case carries severity classification, SLA commitments, ownership assignment, and a complete audit trail of all interactions and status changes.\n\nCases are the fundamental unit of customer service operations. They ensure that every reported issue receives structured attention, measurable response times, and documented outcomes. Whether handling a billing dispute, a technical bug report, or a feature request, the Case card provides consistent process and visibility.\n\n## Core Mechanics\n\nEvery Case is created with an initial severity level: **Critical** (service down, data loss), **High** (major feature broken), **Medium** (degraded functionality), and **Low** (minor inconvenience or question). Severity determines the SLA clock, which starts at case creation and defines target times for first response, status update, and resolution.\n\nThe case lifecycle follows defined states: **New** (just created, awaiting triage), **Assigned** (owner designated), **In Progress** (actively being worked), **Waiting on Customer** (pending external input, SLA paused), **Escalated** (raised to senior team), **Resolved** (fix applied), and **Closed** (confirmed complete). Each transition is timestamped and attributed to the actor who made the change.\n\n### Escalation Paths\n\nWhen a case exceeds its SLA threshold or the assigned agent cannot resolve it, escalation rules activate automatically. The case moves to a senior support tier, notifications fire to the team lead, and the SLA clock adjusts for the new severity expectations. Escalation history is preserved so that managers can identify systemic issues and training opportunities.\n\nCases can also be linked to other cases when multiple customers report the same underlying issue. This parent-child relationship allows a single root cause fix to resolve all related cases simultaneously, with each affected [[Contact]] receiving appropriate notification.\n\n## Integration Points\n\nThe reporting [[Contact]] is the primary stakeholder on every case. Their communication preferences, account tier, and interaction history inform how the case is handled. Premium [[Contact]] records may carry enhanced SLA terms that override default thresholds.\n\nCases generate [[Task]] items for the assigned agent. Investigation steps, reproduction attempts, fix verification, and customer follow-up each become trackable tasks with their own deadlines and completion criteria. These tasks appear on the agent's [[Kanban Board]] alongside their other work.\n\nThe [[Organization]] associated with the contact provides account-level context. Is this a high-value enterprise customer? Are there other open cases for the same organization? This context helps agents prioritize and personalize their response.\n\nResolution communications use [[Email Template]] cards to ensure professional, consistent messaging. Templates for acknowledgment, status updates, resolution summaries, and satisfaction surveys are pre-configured and auto-populated with case details.\n\nComplex cases that follow repeatable resolution patterns are documented as [[Workflow Playbook]] entries. When a new case matches a known pattern, the playbook provides step-by-step guidance, reducing resolution time and ensuring best practices are followed.\n\n## Example Use Cases\n\n- **Billing dispute**: Customer [[Contact]] reports incorrect charge, case triggers review [[Task]], agent references [[Invoice]] records, resolution sent via [[Email Template]]\n- **Technical outage**: Critical severity case auto-escalates, generates urgent [[Task]] items on the engineering [[Kanban Board]], status updates broadcast to affected [[Organization]] contacts\n- **Feature request**: Low severity case captured, linked to [[OKR Goal]] for product roadmap tracking, customer notified when the feature ships\n- **Onboarding issue**: New customer stuck during setup, case references the onboarding [[Workflow Playbook]], agent walks through steps with the [[Contact]]",
+      "cardInfo": {
+        "name": "Case",
+        "notes": null,
+        "summary": "Support or service case with severity classification and SLA tracking",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

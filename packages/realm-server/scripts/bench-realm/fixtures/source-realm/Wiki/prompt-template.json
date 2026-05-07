@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["ai", "prompts", "templates", "content-generation"],
+      "content": "## Overview\n\nThe Prompt Template card stores a reusable AI prompt with variable slots that are filled at execution time. Rather than writing one-off instructions each time an AI action is needed, teams author templates once and reuse them across [[Workflow Playbook]] steps, [[Tool Definition]] invocations, and [[AI Image]] generation requests. This ensures consistency, allows iteration on prompt quality, and keeps prompt engineering separate from workflow logic.\n\nPrompt Templates bring the same version-control mindset to AI instructions that code templates bring to software. When a template is updated, every future invocation uses the improved version while past executions retain their original resolved text in the audit log.\n\n## Core Mechanics\n\n### Variable Slots\n\nTemplates contain `{{variable}}` placeholders that are resolved at execution time. Variables can reference fields on the triggering card, parameters from a [[Workflow Playbook]], or static defaults. For example, an email-drafting template might include `{{contact.firstName}}`, `{{deal.productName}}`, and `{{tone}}` where tone defaults to \"professional\" but can be overridden.\n\n### Template Sections\n\nA prompt template is structured into sections: System (sets the AI's role and constraints), Context (provides background information), Task (describes what the AI should do), and Format (specifies the expected output structure). Each section is optional, allowing templates to range from simple one-liners to detailed multi-section instructions.\n\n### Versioning\n\nEvery edit to a template creates a new version. Past executions reference the version they used, so audit trails remain accurate. A/B testing is supported by creating variant templates and routing traffic between them via a [[Trigger]] condition or [[Workflow Playbook]] branch step.\n\n## Integration Points\n\n- **[[AI Image]]** -- Image generation requests resolve a prompt template to produce the text prompt sent to the model. Variables like `{{product.name}}` and `{{style}}` customize each generation.\n- **[[Skill Card]]** -- Skills reference prompt templates as their core instruction set. When a skill is invoked, the template is resolved with the current context.\n- **[[Tool Definition]]** -- Tools that wrap AI calls use prompt templates to construct their input payload. The tool's parameters map to the template's variable slots.\n- **[[Email Template]]** -- While email templates handle message formatting, prompt templates can be used upstream to generate the email's body text before it is placed into the email layout.\n- **[[Workflow Playbook]]** -- Playbook steps that involve AI processing reference a prompt template and supply the variable values from the playbook's parameters and the triggering card's fields.\n\n## Example Use Cases\n\n1. **Content generation**: A marketing team creates a prompt template for blog intros with slots for `{{topic}}`, `{{audience}}`, and `{{wordCount}}`. A [[Workflow Playbook]] feeds different topics through the template weekly, producing drafts that go to an editorial review [[Task]].\n2. **Image prompt library**: A design team maintains prompt templates for product photography styles -- flat lay, lifestyle, technical diagram. Each [[AI Image]] request selects a template and injects the [[Product]] name and color palette.\n3. **Customer communication**: A support [[Skill Card]] uses a prompt template to draft empathetic responses to [[Case]] updates. The template includes `{{customer.firstName}}`, `{{issue.summary}}`, and `{{resolutionSteps}}`, ensuring consistent tone across all agents.\n4. **Data extraction**: A [[Tool Definition]] for invoice parsing uses a prompt template that instructs the AI to extract line items, totals, and dates from uploaded documents, outputting structured JSON.",
+      "cardInfo": {
+        "name": "Prompt Template",
+        "notes": null,
+        "summary": "Reusable AI prompt with variable slots for consistent, versionable AI instructions across workflows.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

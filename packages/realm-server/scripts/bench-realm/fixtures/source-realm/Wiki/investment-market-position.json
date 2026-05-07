@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["finance-banking", "investment", "market", "position"],
+      "content": "## Overview\n\nThe Investment / Market Position card gives the workspace a structured home for a financial position: asset, quantity, cost basis, current value, gain/loss. Aggregates into Portfolio.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nInvestment / Market Position acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Invoice]]** -- Invoice can provide adjacent context, downstream output, or grouped navigation around Investment / Market Position.\n- **[[Order]]** -- Order can provide adjacent context, downstream output, or grouped navigation around Investment / Market Position.\n- **[[Deal]]** -- Deal can provide adjacent context, downstream output, or grouped navigation around Investment / Market Position.\n- **[[Report]]** -- Investment / Market Position can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Metrics (KPI)]]** -- Metrics (KPI) can provide adjacent context, downstream output, or grouped navigation around Investment / Market Position.\n- **[[Workflow Playbook]]** -- Investment / Market Position can be created, reviewed, or progressed as one step inside a repeatable workflow.\n\n## Example Use Cases\n\n- **System of record:** Teams create Investment / Market Position as the structured home for a financial position: asset, quantity, cost basis, current value, gain/loss. Aggregates into Portfolio and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Investment / Market Position when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Investment / Market Position stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Investment / Market Position",
+        "notes": null,
+        "summary": "A financial position: asset, quantity, cost basis, current value, gain/loss. Aggregates into Portfolio.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

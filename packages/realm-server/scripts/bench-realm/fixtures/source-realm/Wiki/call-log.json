@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["communication", "call", "log"],
+      "content": "## Overview\n\nThe Call Log card gives the workspace a structured home for records a phone call, meeting, or in-person interaction. Links to contacts, captures notes, follow-up actions, and duration.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nCall Log usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Contact]]** -- Call Log often needs a person-level reference for ownership, communication, or accountability.\n- **[[Organization]]** -- Call Log frequently sits inside an account, company, or team-level relationship context.\n- **[[Workflow Playbook]]** -- Call Log can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Trigger]]** -- Changes to Call Log can fire automation, and automation can also create or update Call Log.\n- **[[Task]]** -- Call Log often creates follow-up work or is itself tracked through task execution.\n- **[[Email Template]]** -- Email Template can provide adjacent context, downstream output, or grouped navigation around Call Log.\n\n## Example Use Cases\n\n- **System of record:** Teams create Call Log as the structured home for records a phone call, meeting, or in-person interaction. Links to contacts, captures notes, follow-up actions, and duration and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Call Log when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Call Log stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Call Log",
+        "notes": null,
+        "summary": "Records a phone call, meeting, or in-person interaction. Links to contacts, captures notes, follow-up actions, and duration.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
