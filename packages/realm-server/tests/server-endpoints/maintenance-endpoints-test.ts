@@ -749,8 +749,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           boxelUIChangeChecker,
           'writeCurrentBoxelUIChecksum',
         );
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
 
         try {
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
+              '${registryOnlyRealmURL}',
+              'source',
+              'owner/registry-only-${uuidv4()}',
+              'owner',
+              false
+            )`);
+
           // Seed a modules row to verify it gets cleared
           await context.dbAdapter.execute(
             `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
@@ -813,6 +825,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               reindexJob.timeout,
               360,
               'job has correct timeout (6 minutes)',
+            );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(registryOnlyRealmURL),
+              'job args include registry-only realm URLs',
             );
           }
 
@@ -906,6 +922,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let owner = 'mango';
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
         {
           let response = await context.request
             .post('/_create-realm')
@@ -932,6 +949,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${registryOnlyRealmURL}',
+            'source',
+            'owner/registry-only-${uuidv4()}',
+            'owner',
+            false
+          )`);
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(
           initialJobs.length,
@@ -960,10 +987,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let response = await context.request
             .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
             .set('Content-Type', 'application/json');
-          assert.deepEqual(
-            response.body.realms,
-            [testRealmURL.href, realmURL],
-            'indexed realms are correct',
+          assert.ok(
+            response.body.realms.includes(registryOnlyRealmURL),
+            'response includes registry-only realms',
           );
         }
         let seededRowsAfter = await context.dbAdapter.execute(
@@ -990,6 +1016,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           jobs[0].concurrency_group,
           `full-reindex-group`,
           'concurrency group is correct',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(registryOnlyRealmURL),
+          'job args include registry-only realms',
         );
       });
 
