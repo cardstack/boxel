@@ -11,7 +11,6 @@ import {
   resolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
-  rri,
   unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
@@ -1216,7 +1215,7 @@ export class RealmIndexQueryEngine {
           // so relationship data.id stays portable across environments.
           let relationshipIdStr = unresolveCardReference(relationshipId.href);
 
-          let inRealm = realmPath.inRealm(rri(linkURL.href));
+          let inRealm = realmPath.inRealm(linkURL);
           if (inRealm) {
             if (expectsCard || (!relationshipType && !expectsFileMeta)) {
               inRealmCardURLs.add(linkURL.href);

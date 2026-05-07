@@ -1,7 +1,7 @@
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { realmURL } from './constants';
-import { cardIdToURL, rri } from './card-reference-resolver';
+import { cardIdToURL } from './card-reference-resolver';
 import { RealmPaths } from './paths';
 
 export function isRealmIndexCardId(
@@ -17,7 +17,7 @@ export function isRealmIndexCardId(
     );
     let cardURL = cardIdToURL(cardId);
     return (
-      realmPaths.inRealm(rri(cardURL.href)) &&
+      realmPaths.inRealm(cardURL) &&
       realmPaths.local(cardURL) === 'index'
     );
   } catch {
