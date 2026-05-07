@@ -19,6 +19,19 @@ common:
       store: inmemory
   replication_factor: 1
   path_prefix: /loki
+  # Without these, Loki 3.x's filesystem object store calls `mkdir
+  # <tenant>` against its CWD (`/`), which is owned by root and
+  # unwritable by the loki user. Symptom: per-tenant chunk flush fails
+  # with "mkdir fake: permission denied" (the default tenant id is
+  # "fake"), the ingester ring marks itself unhealthy, and Alloy's
+  # writes start returning 500 "empty ring" — silently stalling
+  # ingest of host-process logs while in-memory queries still serve
+  # recent data so it's not obviously broken. See
+  # project_local_loki_chunks_dir.md.
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
 
 schema_config:
   configs:
@@ -29,6 +42,15 @@ schema_config:
       index:
         prefix: index_
         period: 24h
+
+# Loki 3.4 reads the chunks-store path from `storage_config.filesystem.directory`
+# (NOT `common.storage.filesystem.chunks_directory` — that key only feeds a few
+# subsystems). When this is empty, the chunks store falls back to a relative
+# `mkdir <tenant>` against Loki's CWD (`/`), which is unwritable. Confirmed
+# via /config endpoint that this is the field the chunk flusher actually uses.
+storage_config:
+  filesystem:
+    directory: /loki/chunks
 
 limits_config:
   # Accept Docker logs of any age — local containers may have months of
