@@ -21,6 +21,10 @@ const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
 const DEFAULT_PRERENDER_PORT = 4231;
+const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;
+const DEFAULT_WORKER_START_TIMEOUT_MS = 90_000;
+const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 120_000;
+const STARTUP_LOG_TAIL_LINES = 80;
 
 export interface PrerenderServerConfig {
   port?: number;
@@ -39,6 +43,63 @@ export interface StartRealmServerOptions {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseTimeoutMs(
+  rawValue: string | undefined,
+  fallbackMs: number,
+): number {
+  let parsed = Number.parseInt(rawValue ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
+function pushOutputTail(
+  output: string[],
+  prefix: string,
+  data: Buffer,
+): void {
+  for (let line of data.toString().split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    output.push(`${prefix}${line}`);
+  }
+  if (output.length > STARTUP_LOG_TAIL_LINES) {
+    output.splice(0, output.length - STARTUP_LOG_TAIL_LINES);
+  }
+}
+
+function readMetadataFile(filePath: string): unknown | undefined {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function describeChildProcess(proc: ChildProcess | undefined) {
+  if (!proc) {
+    return { started: false };
+  }
+  return {
+    started: true,
+    pid: proc.pid ?? null,
+    exitCode: proc.exitCode,
+    signalCode: proc.signalCode,
+    killed: proc.killed,
+    connected: 'connected' in proc ? proc.connected : undefined,
+  };
+}
+
+function buildStartupFailure(
+  reason: unknown,
+  diagnostics: Record<string, unknown>,
+): Error {
+  let message =
+    reason instanceof Error ? reason.message : `Startup failed: ${String(reason)}`;
+  return new Error(
+    `${message}\nStartup diagnostics:\n${JSON.stringify(diagnostics, null, 2)}`,
+  );
 }
 
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -216,6 +277,23 @@ export async function startServer({
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
   let workerManagerPort = await findAvailablePort(4232);
+  let workerManagerReadyTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_WORKER_MANAGER_READY_TIMEOUT_MS,
+    DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS,
+  );
+  let workerStartTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_WORKER_START_TIMEOUT_MS,
+    DEFAULT_WORKER_START_TIMEOUT_MS,
+  );
+  let realmServerStartTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_REALM_SERVER_START_TIMEOUT_MS,
+    DEFAULT_REALM_SERVER_START_TIMEOUT_MS,
+  );
+  let workerManagerMetadataFile = join(dir.name, 'worker-manager-metadata.json');
+  let realmServerMetadataFile = join(dir.name, 'realm-server-metadata.json');
+  let workerManagerOutput: string[] = [];
+  let realmServerOutput: string[] = [];
+  let realmServer: ReturnType<typeof spawn> | undefined;
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
@@ -252,16 +330,60 @@ export async function startServer({
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    env: {
+      ...process.env,
+      TEST_HARNESS_WORKER_START_TIMEOUT_MS: String(workerStartTimeoutMs),
+      TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
+    },
   });
   if (workerManager.stdout) {
-    workerManager.stdout.on('data', (data: Buffer) =>
-      console.log(`worker: ${data.toString()}`),
-    );
+    workerManager.stdout.on('data', (data: Buffer) => {
+      pushOutputTail(workerManagerOutput, 'stdout: ', data);
+      console.log(`worker: ${data.toString()}`);
+    });
   }
   if (workerManager.stderr) {
-    workerManager.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
-    );
+    workerManager.stderr.on('data', (data: Buffer) => {
+      pushOutputTail(workerManagerOutput, 'stderr: ', data);
+      console.error(`worker: ${data.toString()}`);
+    });
+  }
+
+  let workerManagerExitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
+  let workerManagerErrorListener: ((err: Error) => void) | undefined;
+  let workerManagerExitPromise = new Promise<never>((_, reject) => {
+    workerManagerExitListener = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ) => {
+      reject(
+        new Error(
+          `worker manager exited before it became ready (code: ${code}, signal: ${signal})`,
+        ),
+      );
+    };
+    workerManagerErrorListener = (err: Error) => reject(err);
+    workerManager.once('exit', workerManagerExitListener);
+    workerManager.once('error', workerManagerErrorListener);
+  });
+
+  try {
+    await Promise.race([
+      waitForHttpReady(
+        `http://localhost:${workerManagerPort}`,
+        workerManagerReadyTimeoutMs,
+      ),
+      workerManagerExitPromise,
+    ]);
+  } finally {
+    if (workerManagerExitListener) {
+      workerManager.removeListener('exit', workerManagerExitListener);
+    }
+    if (workerManagerErrorListener) {
+      workerManager.removeListener('error', workerManagerErrorListener);
+    }
   }
 
   let serverArgs = [
@@ -294,7 +416,7 @@ export async function startServer({
 
   console.log(`realm server database: ${testDBName}`);
 
-  let realmServer = spawn('ts-node', serverArgs, {
+  realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
@@ -304,18 +426,21 @@ export async function startServer({
       DISABLE_GITHUB_PR_ROUTE: 'true',
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
     },
   });
   realmServer.unref();
   if (realmServer.stdout) {
-    realmServer.stdout.on('data', (data: Buffer) =>
-      console.log(`realm server: ${data.toString()}`),
-    );
+    realmServer.stdout.on('data', (data: Buffer) => {
+      pushOutputTail(realmServerOutput, 'stdout: ', data);
+      console.log(`realm server: ${data.toString()}`);
+    });
   }
   if (realmServer.stderr) {
-    realmServer.stderr.on('data', (data: Buffer) =>
-      console.error(`realm server: ${data.toString()}`),
-    );
+    realmServer.stderr.on('data', (data: Buffer) => {
+      pushOutputTail(realmServerOutput, 'stderr: ', data);
+      console.error(`realm server: ${data.toString()}`);
+    });
   }
   realmServer.on('message', (message) => {
     if (message === 'get-registration-secret' && realmServer.send) {
@@ -327,26 +452,73 @@ export async function startServer({
     }
   });
 
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      if (!realmServer) {
-        r();
-        return;
-      }
-      const onMessage = (message: unknown) => {
-        if (message === 'ready') {
-          realmServer?.off('message', onMessage);
-          r();
-        }
-      };
-      realmServer.on('message', onMessage);
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 1500_000)),
-  ]);
-  if (timeout) {
-    throw new Error(
-      `timed-out waiting for realm server to start. Stopping server`,
-    );
+  let realmServerExitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
+  let realmServerErrorListener: ((err: Error) => void) | undefined;
+
+  try {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        const onMessage = (message: unknown) => {
+          if (message === 'ready') {
+            realmServer?.off('message', onMessage);
+            resolve();
+          }
+        };
+        realmServer.on('message', onMessage);
+      }),
+      new Promise<never>((_, reject) => {
+        realmServerExitListener = (
+          code: number | null,
+          signal: NodeJS.Signals | null,
+        ) => {
+          reject(
+            new Error(
+              `realm server exited before it became ready (code: ${code}, signal: ${signal})`,
+            ),
+          );
+        };
+        realmServerErrorListener = (err: Error) => reject(err);
+        realmServer.once('exit', realmServerExitListener);
+        realmServer.once('error', realmServerErrorListener);
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(
+            new Error(
+              `timed-out waiting for realm server to start after ${realmServerStartTimeoutMs}ms. Stopping server`,
+            ),
+          );
+        }, realmServerStartTimeoutMs).unref();
+      }),
+    ]);
+  } catch (error) {
+    await Promise.all([
+      stopChildProcess(realmServer),
+      stopChildProcess(workerManager),
+    ]);
+    throw buildStartupFailure(error, {
+      realmPath: testRealmDir,
+      database: testDBName,
+      workerManagerPort,
+      workerManagerReadyTimeoutMs,
+      workerStartTimeoutMs,
+      realmServerStartTimeoutMs,
+      workerManagerState: describeChildProcess(workerManager),
+      realmServerState: describeChildProcess(realmServer),
+      workerManagerMetadata: readMetadataFile(workerManagerMetadataFile),
+      realmServerMetadata: readMetadataFile(realmServerMetadataFile),
+      workerManagerOutputTail: workerManagerOutput,
+      realmServerOutputTail: realmServerOutput,
+    });
+  } finally {
+    if (realmServerExitListener) {
+      realmServer.removeListener('exit', realmServerExitListener);
+    }
+    if (realmServerErrorListener) {
+      realmServer.removeListener('error', realmServerErrorListener);
+    }
   }
 
   return new IsolatedRealmServer(

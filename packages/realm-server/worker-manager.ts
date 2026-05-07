@@ -52,6 +52,14 @@ function writeRuntimeMetadata(payload: unknown): void {
   writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);
 }
 
+const WORKER_START_TIMEOUT_MS = (() => {
+  let parsed = Number.parseInt(
+    process.env.TEST_HARNESS_WORKER_START_TIMEOUT_MS ?? '',
+    10,
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+})();
+
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
 // last segment is the "container runtime ID", where the value on the left of
@@ -889,11 +897,13 @@ async function startWorker(
         }
       });
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000).unref()),
+    new Promise<true>((r) =>
+      setTimeout(() => r(true), WORKER_START_TIMEOUT_MS).unref(),
+    ),
   ]);
   if (timeout) {
     console.error(
-      `timed-out waiting for worker ${name} to start. Stopping worker manager`,
+      `timed-out waiting for worker ${name} to start after ${WORKER_START_TIMEOUT_MS}ms. Stopping worker manager`,
     );
     process.exit(-2);
   }
