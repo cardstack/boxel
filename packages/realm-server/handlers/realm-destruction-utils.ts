@@ -1,8 +1,8 @@
-import type { DBAdapter } from '@cardstack/runtime-common';
+import type { DBAdapter, Querier } from '@cardstack/runtime-common';
 import {
   cancelRunningJobsInConcurrencyGroup,
+  dbAdapterQuerier,
   param,
-  query,
 } from '@cardstack/runtime-common';
 import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
 import { join, relative } from 'path';
@@ -66,55 +66,43 @@ export function removeRealmFiles(realmPath: string): void {
 export async function removeRealmDatabaseArtifacts(args: {
   dbAdapter: DBAdapter;
   realmURL: string;
+  querier?: Querier;
 }) {
-  let { dbAdapter, realmURL } = args;
-  await cancelRunningJobsInConcurrencyGroup(dbAdapter, `indexing:${realmURL}`);
+  let { dbAdapter, realmURL, querier } = args;
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await cancelRunningJobsInConcurrencyGroup(
+    dbAdapter,
+    `indexing:${realmURL}`,
+    querier,
+  );
 
-  let pendingJobs = (await query(dbAdapter, [
+  let pendingJobs = (await q([
     `SELECT id FROM jobs WHERE concurrency_group =`,
     param(`indexing:${realmURL}`),
     ` AND status = 'unfulfilled'`,
   ])) as { id: number }[];
 
   if (pendingJobs.length > 0) {
-    await query(dbAdapter, [
+    await q([
       `DELETE FROM job_reservations WHERE job_id IN (${pendingJobs
         .map(({ id }) => id)
         .join(', ')})`,
     ]);
   }
 
-  await query(dbAdapter, [
+  await q([
     `DELETE FROM jobs WHERE concurrency_group =`,
     param(`indexing:${realmURL}`),
     ` AND status = 'unfulfilled'`,
   ]);
-  await query(dbAdapter, [
-    `DELETE FROM modules WHERE resolved_realm_url =`,
-    param(realmURL),
-  ]);
-  await query(dbAdapter, [
+  await q([`DELETE FROM modules WHERE resolved_realm_url =`, param(realmURL)]);
+  await q([
     `DELETE FROM boxel_index_working WHERE realm_url =`,
     param(realmURL),
   ]);
-  await query(dbAdapter, [
-    `DELETE FROM boxel_index WHERE realm_url =`,
-    param(realmURL),
-  ]);
-  await query(dbAdapter, [
-    `DELETE FROM realm_meta WHERE realm_url =`,
-    param(realmURL),
-  ]);
-  await query(dbAdapter, [
-    `DELETE FROM realm_versions WHERE realm_url =`,
-    param(realmURL),
-  ]);
-  await query(dbAdapter, [
-    `DELETE FROM realm_file_meta WHERE realm_url =`,
-    param(realmURL),
-  ]);
-  await query(dbAdapter, [
-    `DELETE FROM realm_metadata WHERE url =`,
-    param(realmURL),
-  ]);
+  await q([`DELETE FROM boxel_index WHERE realm_url =`, param(realmURL)]);
+  await q([`DELETE FROM realm_meta WHERE realm_url =`, param(realmURL)]);
+  await q([`DELETE FROM realm_versions WHERE realm_url =`, param(realmURL)]);
+  await q([`DELETE FROM realm_file_meta WHERE realm_url =`, param(realmURL)]);
+  await q([`DELETE FROM realm_metadata WHERE url =`, param(realmURL)]);
 }

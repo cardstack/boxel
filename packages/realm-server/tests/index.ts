@@ -190,6 +190,7 @@ import './run-command-task-test';
 import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
 import './realm-advisory-locks-test';
+import './realm-cleanup-transaction-test';
 import './realm-registry-backfill-test';
 import './realm-registry-reconciler-test';
 import './realm-registry-writes-test';
