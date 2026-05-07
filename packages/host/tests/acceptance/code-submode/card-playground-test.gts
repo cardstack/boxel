@@ -194,7 +194,8 @@ async function waitForHeadPreviewText(
 ) {
   try {
     await waitUntil(
-      () => document.querySelector(selector)?.textContent?.trim() === expectedText,
+      () =>
+        document.querySelector(selector)?.textContent?.trim() === expectedText,
       { timeout: 5000 },
     );
   } catch (error) {
@@ -203,13 +204,16 @@ async function waitForHeadPreviewText(
         context,
         selector,
         expectedText,
-        actualText: document.querySelector(selector)?.textContent?.trim() ?? null,
+        actualText:
+          document.querySelector(selector)?.textContent?.trim() ?? null,
         googleTitleText:
           document.querySelector('.google-title')?.textContent?.trim() ?? null,
         googleDescriptionText:
-          document.querySelector('.google-description')?.textContent?.trim() ?? null,
+          document.querySelector('.google-description')?.textContent?.trim() ??
+          null,
         googleSiteNameText:
-          document.querySelector('.google-site-name')?.textContent?.trim() ?? null,
+          document.querySelector('.google-site-name')?.textContent?.trim() ??
+          null,
         playgroundPreviewHtml:
           document
             .querySelector('[data-test-playground-panel]')
