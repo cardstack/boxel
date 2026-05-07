@@ -42,6 +42,12 @@ import { realmSnapshotDir } from './paths';
 // rows from the cached template — defeating the gate's purpose. Mix the
 // host-dist build's index.html hash into the cache salt so any host
 // rebuild forces a fresh template.
+//
+// If host/dist isn't built yet (fresh checkout), the harness will build
+// it on demand via `findHostDistPackageDir` → `buildHostDist`. The salt
+// here uses a stable `no-host-dist` sentinel in that case; the next
+// bench run will see the real fingerprint and invalidate the template,
+// which is correct — a different host produced the cached rows.
 function hostDistFingerprint(): string {
   let indexPath = pathResolve(
     __dirname,
@@ -52,10 +58,17 @@ function hostDistFingerprint(): string {
     'dist',
     'index.html',
   );
-  let bytes = readFileSync(indexPath);
-  return createHash('sha256').update(bytes).digest('hex').slice(0, 16);
+  try {
+    let bytes = readFileSync(indexPath);
+    return `host-dist:${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}`;
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return 'no-host-dist';
+    }
+    throw e;
+  }
 }
-process.env.TEST_HARNESS_CACHE_SALT ??= `host-dist:${hostDistFingerprint()}`;
+process.env.TEST_HARNESS_CACHE_SALT ??= hostDistFingerprint();
 
 export const DEFAULT_ITERATIONS = 50;
 export const DEFAULT_WARMUP = 5;
