@@ -9,6 +9,7 @@ export const SessionLocalStorageKey = 'boxel-session';
 export const AiAssistantMessageDrafts = 'ai-assistant-message-drafts';
 export const PlaygroundSelections = 'playground-selections';
 export const SpecSelection = 'spec-selection';
+export const FormatChooserOrder = 'format-chooser-order';
 export const RecentCards = 'recent-cards';
 export const RecentFiles = 'recent-files';
 export const ScrollPositions = 'scroll-positions';
@@ -21,6 +22,7 @@ export function clearLocalStorage(storage: Storage | undefined) {
   storage?.removeItem(CodeModePanelHeights);
   storage?.removeItem(ModuleInspectorSelections);
   storage?.removeItem(PlaygroundSelections);
+  storage?.removeItem(FormatChooserOrder);
   storage?.removeItem(RecentCards);
   storage?.removeItem(RecentFiles);
   storage?.removeItem(ScrollPositions);

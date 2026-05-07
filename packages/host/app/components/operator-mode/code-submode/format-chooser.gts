@@ -13,6 +13,8 @@ import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { formats, type Format } from '@cardstack/runtime-common';
 
+import { FormatChooserOrder } from '@cardstack/host/utils/local-storage-keys';
+
 import { formatIcons, type FormatWithIcon } from '../card-formats';
 
 interface Signature {
@@ -102,18 +104,84 @@ function pillPath(width: number): string {
 export default class PillFormatChooser extends Component<Signature> {
   @tracked private hoveredFmt: Format | null = null;
   @tracked private isDragging = false;
+  @tracked private reorderedFormats: Format[] | null =
+    this.loadPersistedOrder();
+  @tracked private draggedFmt: Format | null = null;
+  @tracked private dragTargetIndex: number | null = null;
   // Smallest ancestor clientWidth, updated by ResizeObserver.
   // Also reacts to active-format changes, which shift natural width without a resize event.
   @tracked private parentWidth: number = Infinity;
 
   private rowEl: HTMLElement | null = null;
   private buttonEls: Map<Format, HTMLElement> = new Map();
-  // After a drag that changed format, the browser fires a synthetic click
-  // on the press-start button — suppress it to avoid reverting the selection.
+  private activePointerId: number | null = null;
+  private dragSourceEl: HTMLElement | null = null;
+  private dragInput: 'pointer' | 'mouse' | null = null;
+  private dragHasMoved = false;
   private suppressNextClick = false;
 
-  private get availableFormats(): Format[] {
+  private get argFormats(): Format[] {
     return (this.args.formats ?? formats) as Format[];
+  }
+
+  private get orderScopeKey(): string {
+    return this.argFormats.join('|');
+  }
+
+  private loadPersistedOrder(): Format[] | null {
+    try {
+      const serialized = window.localStorage.getItem(FormatChooserOrder);
+      if (!serialized) return null;
+      const parsed = JSON.parse(serialized);
+      const order = parsed?.[this.orderScopeKey];
+      if (Array.isArray(order)) {
+        const available = new Set(this.argFormats);
+        const formatsInOrder = order.filter(
+          (f): f is Format =>
+            typeof f === 'string' && available.has(f as Format),
+        );
+        return formatsInOrder.length > 0 ? formatsInOrder : null;
+      }
+    } catch (_err) {
+      // Ignore malformed or inaccessible localStorage and use default order.
+    }
+    return null;
+  }
+
+  private persistOrder(order: Format[]) {
+    try {
+      const serialized = window.localStorage.getItem(FormatChooserOrder);
+      const persisted = serialized ? JSON.parse(serialized) : {};
+      window.localStorage.setItem(
+        FormatChooserOrder,
+        JSON.stringify({
+          ...persisted,
+          [this.orderScopeKey]: order,
+        }),
+      );
+    } catch (_err) {
+      // Persistence is best-effort; drag behavior should still work.
+    }
+  }
+
+  private get orderedFormats(): Format[] {
+    if (!this.reorderedFormats) return this.argFormats;
+    const available = new Set(this.argFormats);
+    return [
+      ...this.reorderedFormats.filter((f) => available.has(f)),
+      ...this.argFormats.filter((f) => !this.reorderedFormats?.includes(f)),
+    ];
+  }
+
+  private get availableFormats(): Format[] {
+    if (!this.isDragging || !this.draggedFmt || this.dragTargetIndex === null) {
+      return this.orderedFormats;
+    }
+    return this.formatsWithDragPreview(
+      this.orderedFormats,
+      this.draggedFmt,
+      this.dragTargetIndex,
+    );
   }
 
   private get availableFormatsWithIcons(): FormatWithIcon[] {
@@ -133,13 +201,17 @@ export default class PillFormatChooser extends Component<Signature> {
   };
 
   get hasPreview(): boolean {
-    return this.hoveredFmt !== null && this.hoveredFmt !== this.args.format;
+    return this.previewFmt !== null && this.previewFmt !== this.args.format;
+  }
+
+  private get previewFmt(): Format | null {
+    return this.draggedFmt ?? this.hoveredFmt;
   }
 
   /* One column wider at a time: hovered (preview) or active (rest). */
   private colWidthFor(f: Format): number {
     if (this.hasPreview) {
-      return f === this.hoveredFmt ? pillWidthFor(f, this.isCompact) : 32;
+      return f === this.previewFmt ? pillWidthFor(f, this.isCompact) : 32;
     }
     return f === this.args.format ? pillWidthFor(f, this.isCompact) : 32;
   }
@@ -179,7 +251,7 @@ export default class PillFormatChooser extends Component<Signature> {
 
   // Pill tracks hoveredFmt while previewing, active format at rest.
   get pillTargetFmt(): Format {
-    return this.hoveredFmt ?? this.args.format;
+    return this.previewFmt ?? this.args.format;
   }
   get pillStyle(): SafeString {
     const tx = this.centerXFor(this.pillTargetFmt) - PILL_SVG_W / 2;
@@ -235,7 +307,7 @@ export default class PillFormatChooser extends Component<Signature> {
           found = fmt;
         }
       });
-      this.hoveredFmt = found;
+      if (found !== null) this.hoveredFmt = found;
     };
     const onMouseLeave = () => {
       if (this.isDragging) return;
@@ -243,12 +315,12 @@ export default class PillFormatChooser extends Component<Signature> {
     };
     el.addEventListener('mousemove', onMouseMove);
     el.addEventListener('mouseleave', onMouseLeave);
-
     return () => {
       for (const ro of observers) ro.disconnect();
       window.removeEventListener('resize', measure);
       el.removeEventListener('mousemove', onMouseMove);
       el.removeEventListener('mouseleave', onMouseLeave);
+      this.teardownDrag();
       if (this.rowEl === el) this.rowEl = null;
     };
   });
@@ -274,18 +346,18 @@ export default class PillFormatChooser extends Component<Signature> {
   registerBtn = modifier((el: HTMLElement, [fmt]: [Format]) => {
     this.buttonEls.set(fmt, el);
     el.addEventListener('pointerdown', this.onPointerDown);
-    el.addEventListener('pointermove', this.onPointerMove);
-    el.addEventListener('pointerup', this.onPointerUp);
-    el.addEventListener('pointercancel', this.onPointerUp);
+    el.addEventListener('mousedown', this.onMouseDown);
     return () => {
       if (this.buttonEls.get(fmt) === el) this.buttonEls.delete(fmt);
       el.removeEventListener('pointerdown', this.onPointerDown);
-      el.removeEventListener('pointermove', this.onPointerMove);
-      el.removeEventListener('pointerup', this.onPointerUp);
-      el.removeEventListener('pointercancel', this.onPointerUp);
+      el.removeEventListener('mousedown', this.onMouseDown);
     };
   });
 
+  // Keyboard-triggered clicks (Space/Enter on a focused button). Mouse/touch
+  // interactions are handled entirely by pointer events. Some browsers still
+  // fire a trailing click after pointerup, so suppress the next click after a
+  // pointer-driven selection commit.
   onClick = (f: Format) => {
     if (this.suppressNextClick) {
       this.suppressNextClick = false;
@@ -294,53 +366,172 @@ export default class PillFormatChooser extends Component<Signature> {
     this.setActive(f);
   };
 
-  // Press + drag both commit live: setActive runs on pointerdown and
-  // on every move that crosses into a new button. Release does
-  // nothing — active already reflects where the cursor is.
+  // Any format can be dragged to reorder. A press/release without movement
+  // still falls through to the normal click-to-select behavior.
   onPointerDown = (e: Event) => {
     const pe = e as PointerEvent;
+    if (this.isDragging || pe.button !== 0) return;
     const btn = pe.currentTarget as HTMLElement;
     const fmt = btn.dataset.fmt as Format | undefined;
     if (!fmt) return;
-    btn.setPointerCapture(pe.pointerId);
-    this.hoveredFmt = null;
-    this.isDragging = true;
-    this.suppressNextClick = false;
-    this.setActive(fmt);
+    pe.preventDefault();
+    this.startDrag(fmt, btn, 'pointer');
+    this.activePointerId = pe.pointerId;
+    // Pointer capture on the pressed button is a best-effort optimization.
+    // Global listeners below remain the drag source of truth for browsers that
+    // do not reliably honor capture on re-targeted elements.
+    btn.setPointerCapture?.(pe.pointerId);
+    window.addEventListener('pointermove', this.onPointerMove, true);
+    window.addEventListener('pointerup', this.onPointerUp, true);
+    window.addEventListener('pointercancel', this.onPointerUp, true);
+    window.addEventListener('mousemove', this.onMouseMoveDuringDrag, true);
+    window.addEventListener('mouseup', this.onMouseUp, true);
   };
 
+  onMouseDown = (e: Event) => {
+    const me = e as MouseEvent;
+    if (this.isDragging || me.button !== 0) return;
+    const btn = me.currentTarget as HTMLElement;
+    const fmt = btn.dataset.fmt as Format | undefined;
+    if (!fmt) return;
+    me.preventDefault();
+    this.startDrag(fmt, btn, 'mouse');
+    window.addEventListener('mousemove', this.onMouseMoveDuringDrag, true);
+    window.addEventListener('mouseup', this.onMouseUp, true);
+  };
+
+  private startDrag(
+    fmt: Format,
+    sourceEl: HTMLElement,
+    input: 'pointer' | 'mouse',
+  ) {
+    this.teardownDrag();
+    this.suppressNextClick = false;
+    this.dragSourceEl = sourceEl;
+    this.dragInput = input;
+    this.dragHasMoved = false;
+    this.isDragging = true;
+    this.hoveredFmt = null;
+    this.draggedFmt = fmt;
+    this.dragTargetIndex = this.orderedFormats.indexOf(fmt);
+  }
+
+  private get orderWithoutDraggedFmt(): Format[] {
+    return this.draggedFmt
+      ? this.orderedFormats.filter((f) => f !== this.draggedFmt)
+      : this.orderedFormats;
+  }
+
+  private formatsWithDragPreview(
+    source: Format[],
+    draggedFmt: Format,
+    targetIndex: number,
+  ): Format[] {
+    const withoutDragged = source.filter((f) => f !== draggedFmt);
+    const next = [...withoutDragged];
+    next.splice(Math.max(0, Math.min(targetIndex, next.length)), 0, draggedFmt);
+    return next;
+  }
+
+  private targetIndexForClientX(clientX: number): number {
+    const formats = this.orderWithoutDraggedFmt;
+    if (formats.length === 0) return 0;
+    let targetIndex = formats.length;
+    for (let i = 0; i < formats.length; i++) {
+      const btnEl = this.buttonEls.get(formats[i]);
+      if (!btnEl) continue;
+      const r = btnEl.getBoundingClientRect();
+      const centerX = r.left + r.width / 2;
+      if (clientX < centerX) {
+        targetIndex = i;
+        break;
+      }
+    }
+    return targetIndex;
+  }
+
+  // During drag, reorder the button sequence preview only. The selected format
+  // remains selected; no format change is committed while crossing buttons.
   onPointerMove = (e: Event) => {
     const pe = e as PointerEvent;
-    if (!this.isDragging || !this.rowEl) return;
-    const rowRect = this.rowEl.getBoundingClientRect();
-    const x = pe.clientX - rowRect.left;
-    let best: Format = this.args.format;
-    let bestDist = Infinity;
-    this.buttonEls.forEach((btnEl, fmt) => {
-      const r = btnEl.getBoundingClientRect();
-      const cx = r.left + r.width / 2 - rowRect.left;
-      const dist = Math.abs(x - cx);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = fmt;
-      }
-    });
-    if (best !== this.args.format) this.setActive(best);
+    if (
+      !this.isDragging ||
+      this.dragInput !== 'pointer' ||
+      this.activePointerId === null ||
+      pe.pointerId !== this.activePointerId
+    ) {
+      return;
+    }
+    pe.preventDefault();
+    this.dragHasMoved = true;
+    this.dragTargetIndex = this.targetIndexForClientX(pe.clientX);
   };
 
+  onMouseMoveDuringDrag = (e: Event) => {
+    const me = e as MouseEvent;
+    if (!this.isDragging) return;
+    me.preventDefault();
+    this.dragHasMoved = true;
+    this.dragTargetIndex = this.targetIndexForClientX(me.clientX);
+  };
+
+  // Commit the final button order once, on release.
   onPointerUp = (e: Event) => {
     const pe = e as PointerEvent;
-    const btn = pe.currentTarget as HTMLElement;
-    const pressedFmt = btn.dataset.fmt as Format | undefined;
-    if (btn.hasPointerCapture(pe.pointerId)) {
-      btn.releasePointerCapture(pe.pointerId);
+    if (
+      !this.isDragging ||
+      this.dragInput !== 'pointer' ||
+      this.activePointerId === null ||
+      pe.pointerId !== this.activePointerId
+    ) {
+      return;
     }
-    this.isDragging = false;
-    // Suppress the trailing synthetic click that would revert to the press-start format.
-    if (pressedFmt && pressedFmt !== this.args.format) {
-      this.suppressNextClick = true;
-    }
+    pe.preventDefault();
+    this.commitDragOrder(pe.clientX);
+    this.teardownDrag();
   };
+
+  onMouseUp = (e: Event) => {
+    const me = e as MouseEvent;
+    if (!this.isDragging) return;
+    me.preventDefault();
+    this.commitDragOrder(me.clientX);
+    this.teardownDrag();
+  };
+
+  private commitDragOrder(clientX: number) {
+    if (!this.draggedFmt) return;
+    const targetIndex = this.targetIndexForClientX(clientX);
+    this.reorderedFormats = this.formatsWithDragPreview(
+      this.orderedFormats,
+      this.draggedFmt,
+      targetIndex,
+    );
+    this.persistOrder(this.reorderedFormats);
+    this.suppressNextClick = this.dragHasMoved;
+  }
+
+  private teardownDrag() {
+    if (
+      this.dragSourceEl &&
+      this.activePointerId !== null &&
+      this.dragSourceEl.hasPointerCapture?.(this.activePointerId)
+    ) {
+      this.dragSourceEl.releasePointerCapture?.(this.activePointerId);
+    }
+    window.removeEventListener('pointermove', this.onPointerMove, true);
+    window.removeEventListener('pointerup', this.onPointerUp, true);
+    window.removeEventListener('pointercancel', this.onPointerUp, true);
+    window.removeEventListener('mousemove', this.onMouseMoveDuringDrag, true);
+    window.removeEventListener('mouseup', this.onMouseUp, true);
+    this.activePointerId = null;
+    this.dragSourceEl = null;
+    this.dragInput = null;
+    this.dragHasMoved = false;
+    this.draggedFmt = null;
+    this.dragTargetIndex = null;
+    this.isDragging = false;
+  }
 
   <template>
     <div
@@ -375,7 +566,7 @@ export default class PillFormatChooser extends Component<Signature> {
         </div>
       </div>
 
-      {{#each this.availableFormatsWithIcons as |fw i|}}
+      {{#each this.availableFormatsWithIcons key='format' as |fw i|}}
         {{#if (or (eq fw.format 'metadata') (eq fw.format 'edit'))}}
           {{#unless (eq i 0)}}
             <span class='pf-divider'></span>
@@ -386,7 +577,8 @@ export default class PillFormatChooser extends Component<Signature> {
           class={{cn
             'pf-btn'
             active=(eq @format fw.format)
-            is-hover=(eq this.hoveredFmt fw.format)
+            is-hover=(eq this.previewFmt fw.format)
+            pill-visible=(eq fw.format this.pillTargetFmt)
           }}
           type='button'
           data-fmt={{fw.format}}
@@ -475,7 +667,7 @@ export default class PillFormatChooser extends Component<Signature> {
         left: 0;
         width: var(--pf-pill-svg-w);
         height: var(--pf-pill-h);
-        z-index: 1;
+        z-index: 6;
         pointer-events: none;
         transition: transform var(--pf-transition);
         will-change: transform;
@@ -519,6 +711,7 @@ export default class PillFormatChooser extends Component<Signature> {
       /* Buttons — rectangular hit-targets above pill containers (z-index 5).
          Height matches --pf-pill-h so button icons align with pill icon. */
       .pf-btn {
+        touch-action: none;
         --boxel-button-color: transparent;
         --boxel-button-text-color: inherit;
         --boxel-button-padding: 0;
@@ -550,16 +743,8 @@ export default class PillFormatChooser extends Component<Signature> {
          its own icon. While previewing, the hovered button hides its icon and
          the active button shows its icon in green ("currently selected").
          During drag, no green — active changes live, green would flicker. */
-      .pf-btn.active .pf-icon,
-      .pf-btn.is-hover:not(.active) .pf-icon {
-        opacity: 0;
-        transition: opacity var(--pf-transition-icon);
-      }
-      .pill-format-chooser.has-preview:not(.dragging) .pf-btn.active {
+      .pf-btn.active {
         color: var(--pf-active-color);
-        opacity: 1;
-      }
-      .pill-format-chooser.has-preview:not(.dragging) .pf-btn.active .pf-icon {
         opacity: 1;
       }
       .pf-icon {
