@@ -32,6 +32,178 @@
     "panels": [
       {
         "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Total realms (count of distinct realm_url in realm_meta) plus cumulative growth curve. The big number is the current total; the area sparkline shows the full history of when each realm was first indexed (min(indexed_at) per realm_url). Click to drill into the Realms dashboard for per-realm permissions, indexing status, and recent errors.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Realms dashboard",
+                "url": "/d/boxelrealms001",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "id": 21,
+        "links": [
+          {
+            "title": "Open Realms dashboard",
+            "url": "/d/boxelrealms001",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "timeFrom": "5y",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"Realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub ORDER BY min_at;",
+            "refId": "A"
+          }
+        ],
+        "title": "Realms",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Total registered users (count of users table) plus cumulative growth curve. Big number is the current total; sparkline shows the full history of user signups by users.created_at. Click to drill into the Users dashboard for credits, realm permissions, and access management.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Users dashboard",
+                "url": "/d/boxelusers0001",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
+        "id": 22,
+        "links": [
+          {
+            "title": "Open Users dashboard",
+            "url": "/d/boxelusers0001",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "timeFrom": "5y",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"Users\" FROM users ORDER BY created_at;",
+            "refId": "A"
+          }
+        ],
+        "title": "Users",
+        "type": "stat"
+      },
+      {
+        "datasource": {
           "type": "loki",
           "uid": "loki"
         },
@@ -95,7 +267,7 @@
           "h": 8,
           "w": 8,
           "x": 0,
-          "y": 0
+          "y": 8
         },
         "id": 1,
         "options": {
@@ -189,8 +361,8 @@
             "decimals": 1,
             "links": [
               {
-                "title": "Open Worker dashboard",
-                "url": "/d/boxel-svc-worker",
+                "title": "Open Job Queue dashboard",
+                "url": "/d/boxeljobqueue1",
                 "targetBlank": false
               }
             ],
@@ -243,7 +415,7 @@
           "h": 8,
           "w": 8,
           "x": 8,
-          "y": 0
+          "y": 8
         },
         "id": 4,
         "options": {
@@ -289,8 +461,8 @@
         "type": "timeseries",
         "links": [
           {
-            "title": "Open Worker dashboard",
-            "url": "/d/boxel-svc-worker",
+            "title": "Open Job Queue dashboard",
+            "url": "/d/boxeljobqueue1",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -362,7 +534,7 @@
           "h": 8,
           "w": 8,
           "x": 16,
-          "y": 0
+          "y": 8
         },
         "id": 5,
         "links": [
@@ -558,7 +730,7 @@
           "h": 6,
           "w": 4,
           "x": 0,
-          "y": 8
+          "y": 16
         },
         "id": 13,
         "options": {
@@ -790,7 +962,7 @@
           "h": 6,
           "w": 4,
           "x": 4,
-          "y": 8
+          "y": 16
         },
         "id": 14,
         "options": {
@@ -1022,7 +1194,7 @@
           "h": 6,
           "w": 4,
           "x": 8,
-          "y": 8
+          "y": 16
         },
         "id": 15,
         "options": {
@@ -1254,7 +1426,7 @@
           "h": 6,
           "w": 4,
           "x": 12,
-          "y": 8
+          "y": 16
         },
         "id": 16,
         "options": {
@@ -1478,7 +1650,7 @@
           "h": 6,
           "w": 4,
           "x": 16,
-          "y": 8
+          "y": 16
         },
         "id": 17,
         "options": {
@@ -1573,7 +1745,7 @@
           "h": 6,
           "w": 4,
           "x": 20,
-          "y": 8
+          "y": 16
         },
         "id": 18,
         "options": {
@@ -1613,7 +1785,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 14
+          "y": 22
         },
         "id": 6,
         "options": {
@@ -1678,7 +1850,7 @@
           "h": 4,
           "w": 6,
           "x": 0,
-          "y": 22
+          "y": 30
         },
         "id": 7,
         "options": {
@@ -1746,7 +1918,7 @@
           "h": 4,
           "w": 6,
           "x": 6,
-          "y": 22
+          "y": 30
         },
         "id": 8,
         "options": {
@@ -1823,7 +1995,7 @@
           "h": 4,
           "w": 6,
           "x": 12,
-          "y": 22
+          "y": 30
         },
         "id": 9,
         "options": {
@@ -1895,7 +2067,7 @@
           "h": 4,
           "w": 6,
           "x": 18,
-          "y": 22
+          "y": 30
         },
         "id": 10,
         "options": {
@@ -1992,7 +2164,7 @@
           "h": 6,
           "w": 24,
           "x": 0,
-          "y": 26
+          "y": 34
         },
         "id": 11,
         "options": {
@@ -2051,7 +2223,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 32
+          "y": 40
         },
         "id": 12,
         "options": {
