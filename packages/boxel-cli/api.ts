@@ -20,6 +20,8 @@ export {
 } from './src/lib/boxel-cli-client';
 
 export {
+  BOXEL_CLI_CONFIG_DIR_ENV,
+  getDefaultProfileConfigDir,
   resetProfileManager,
   setProfileManager,
 } from './src/lib/profile-manager';
