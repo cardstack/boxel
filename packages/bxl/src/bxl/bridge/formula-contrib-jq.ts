@@ -46,6 +46,14 @@ def IFS(c1; v1; c2; v2; c3; v3):
   . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) else NA end;
 def IFS(c1; v1; c2; v2; c3; v3; c4; v4):
   . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3; c4; v4; c5; v5):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) elif ($in | c5) then ($in | v5) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3; c4; v4; c5; v5; c6; v6):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) elif ($in | c5) then ($in | v5) elif ($in | c6) then ($in | v6) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3; c4; v4; c5; v5; c6; v6; c7; v7):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) elif ($in | c5) then ($in | v5) elif ($in | c6) then ($in | v6) elif ($in | c7) then ($in | v7) else NA end;
+def IFS(c1; v1; c2; v2; c3; v3; c4; v4; c5; v5; c6; v6; c7; v7; c8; v8):
+  . as $in | if ($in | c1) then ($in | v1) elif ($in | c2) then ($in | v2) elif ($in | c3) then ($in | v3) elif ($in | c4) then ($in | v4) elif ($in | c5) then ($in | v5) elif ($in | c6) then ($in | v6) elif ($in | c7) then ($in | v7) elif ($in | c8) then ($in | v8) else NA end;
 
 # BXL-native helpers (lowercase) + Excel helpers not yet expressed in jq.
 # ISBLANK is defined as a native filter elsewhere with Excel-strict

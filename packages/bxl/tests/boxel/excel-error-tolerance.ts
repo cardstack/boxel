@@ -41,6 +41,27 @@ check('IFS with a matching branch returns the branch value', () => {
   strictEqual(compute.call({ bpSystolic: 138 }), 'stage1');
 });
 
+check('IFS/10 (5 condition/value pairs) dispatches correctly', () => {
+  // Five-pair IFS — used in the airline middle-wolverine realm's
+  // ScenarioField for stress-case classification.
+  const compute = expression(
+    fx`IFS(Score >= 100, "a", Score >= 80, "b", Score >= 60, "c", Score >= 40, "d", TRUE, "e")`,
+  );
+  strictEqual(compute.call({ score: 95 }), 'b');
+  strictEqual(compute.call({ score: 30 }), 'e');
+});
+
+check('IFS/16 (8 condition/value pairs) dispatches correctly', () => {
+  // Top arity supported. Anything past this still raises 'IFS/N is
+  // not defined' — extend formula-contrib-jq.ts if a real card needs
+  // more pairs.
+  const compute = expression(
+    fx`IFS(Score >= 8, "h", Score >= 7, "g", Score >= 6, "f", Score >= 5, "e", Score >= 4, "d", Score >= 3, "c", Score >= 2, "b", TRUE, "a")`,
+  );
+  strictEqual(compute.call({ score: 7.5 }), 'g');
+  strictEqual(compute.call({ score: 0 }), 'a');
+});
+
 // Direct sentinel-shaped errors all pass through the catch.
 const sentinels = [
   '#N/A',
