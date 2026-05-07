@@ -294,16 +294,16 @@
               "axisLabel": "",
               "axisPlacement": "auto",
               "barAlignment": 0,
-              "drawStyle": "bars",
-              "fillOpacity": 80,
-              "gradientMode": "none",
+              "drawStyle": "line",
+              "fillOpacity": 50,
+              "gradientMode": "opacity",
               "hideFrom": {
                 "legend": false,
                 "tooltip": false,
                 "viz": false
               },
-              "lineInterpolation": "linear",
-              "lineWidth": 0,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
               "pointSize": 5,
               "scaleDistribution": {
                 "type": "linear"
