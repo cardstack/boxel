@@ -77,14 +77,7 @@ module(basename(__filename), function () {
     });
 
     test('reads routing rules from the indexed RealmConfig card', async function (assert) {
-      // The implementation should read searchDoc.hostRoutingRules via
-      // realmIndexQueryEngine.instance(<realm.json>) and return an array
-      // of { path, id } pairs with absolute target IDs.
-      let map = await (
-        testRealm as unknown as {
-          getHostRoutingMap: () => Promise<{ path: string; id: string }[]>;
-        }
-      ).getHostRoutingMap();
+      let map = await testRealm.getHostRoutingMap();
 
       assert.deepEqual(
         map,

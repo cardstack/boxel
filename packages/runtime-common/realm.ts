@@ -5045,6 +5045,43 @@ export class Realm {
     }
   }
 
+  // CS-10054: read host routing rules from the indexed RealmConfig card.
+  // Reads searchDoc.hostRoutingRules (flat: [{ path, instance: { id } }])
+  // rather than the JSON:API form, since that's already-resolved with
+  // absolute IDs and avoids walking relationships keyed by stringified
+  // index paths.
+  async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+      if (indexEntry?.type !== 'instance') {
+        return [];
+      }
+      let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
+      if (!Array.isArray(rules)) {
+        return [];
+      }
+      return rules.flatMap((rule) => {
+        if (!rule || typeof rule !== 'object') return [];
+        let path = (rule as Record<string, unknown>).path;
+        let instance = (rule as Record<string, unknown>).instance;
+        if (typeof path !== 'string') return [];
+        if (!instance || typeof instance !== 'object') return [];
+        let id = (instance as Record<string, unknown>).id;
+        if (typeof id !== 'string') return [];
+        return [{ path, id }];
+      });
+    } catch (e) {
+      this.#log.warn(
+        `failed to read host routing map from RealmConfig card: ${e}`,
+      );
+      return [];
+    }
+  }
+
   // Upserts the patch into realm_metadata for this realm. Only the
   // provided keys are written; absent keys retain their existing column
   // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit
