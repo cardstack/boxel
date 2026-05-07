@@ -1123,12 +1123,12 @@ export default class PlaygroundPanel extends Component<Signature> {
                   <InstanceChooser />
                   <div
                     class='format-chooser-container pill-format-chooser-wrap'
-                    data-test-playground-format-chooser
                   >
                     <FormatChooser
                       @formats={{this.availableFormats}}
                       @format={{this.format}}
                       @setFormat={{this.setFormat}}
+                      data-test-playground-format-chooser
                     />
                   </div>
                 </section>

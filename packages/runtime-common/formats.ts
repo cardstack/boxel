@@ -41,6 +41,8 @@ export const fileDefFormats: Format[] = [
   'embedded',
   'fitted',
   'atom',
+  'head',
+  'markdown',
   'metadata',
 ];
 

@@ -8,9 +8,10 @@ import { tracked } from '@glimmer/tracking';
 import MetadataIcon from '@cardstack/boxel-icons/clipboard-data';
 import EditIcon from '@cardstack/boxel-icons/pencil';
 import { modifier } from 'ember-modifier';
+import window from 'ember-window-mock';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { cn, eq, or } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import {
   Isolated as IsolatedIcon,
   Embedded as EmbeddedIcon,
@@ -26,9 +27,10 @@ import { formats, type Format } from '@cardstack/runtime-common';
 
 import { FormatChooserOrder } from '@cardstack/host/utils/local-storage-keys';
 
-export type FormatWithIcon = {
+type FormatWithIcon = {
   format: Format;
   icon?: Icon | null;
+  hasDivider?: boolean;
 };
 
 export const formatIcons: Partial<Record<Format, Icon>> = {
@@ -211,10 +213,16 @@ export default class PillFormatChooser extends Component<Signature> {
   }
 
   private get availableFormatsWithIcons(): FormatWithIcon[] {
-    return this.availableFormats.map((f) => ({
-      format: f,
-      icon: formatIcons[f] ?? null,
-    }));
+    return this.availableFormats.map((f) => {
+      let hasDivider =
+        f === 'edit' ||
+        (!this.availableFormats.includes('edit') && f === 'head');
+      return {
+        format: f,
+        icon: formatIcons[f] ?? null,
+        hasDivider,
+      };
+    });
   }
 
   private get pillTargetIcon(): Icon | null {
@@ -244,13 +252,12 @@ export default class PillFormatChooser extends Component<Signature> {
 
   get gridStyle(): SafeString {
     const cols: string[] = [];
-    const fmts = this.availableFormats;
+    const fmts = this.availableFormatsWithIcons;
     for (const f of fmts) {
-      // Insert divider before "edit" or "metadata" — only when not first.
-      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
+      if (f.hasDivider && fmts.indexOf(f) > 0) {
         cols.push(`${DIVIDER_COL_W}px`);
       }
-      cols.push(`${this.colWidthFor(f)}px`);
+      cols.push(`${this.colWidthFor(f.format)}px`);
     }
     return htmlSafe(`grid-template-columns: ${cols.join(' ')};`);
   }
@@ -259,17 +266,17 @@ export default class PillFormatChooser extends Component<Signature> {
   private centerXFor(target: Format): number {
     let x = PAD_LEFT;
     let isFirst = true;
-    const fmts = this.availableFormats;
+    const fmts = this.availableFormatsWithIcons;
     for (const f of fmts) {
-      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
+      if (f.hasDivider && fmts.indexOf(f) > 0) {
         // divider col + btn col separated by two gaps
         x += GAP_PX + DIVIDER_COL_W + GAP_PX;
       } else {
         if (!isFirst) x += GAP_PX;
         isFirst = false;
       }
-      const w = this.colWidthFor(f);
-      if (f === target) return x + w / 2;
+      const w = this.colWidthFor(f.format);
+      if (f.format === target) return x + w / 2;
       x += w;
     }
     return x;
@@ -356,15 +363,16 @@ export default class PillFormatChooser extends Component<Signature> {
   get isCompact(): boolean {
     let natural = 2 * PAD_LEFT;
     let isFirst = true;
-    const fmts = this.availableFormats;
+    const fmts = this.availableFormatsWithIcons;
     for (const f of fmts) {
-      if ((f === 'edit' || f === 'metadata') && fmts.indexOf(f) > 0) {
+      if (f.hasDivider && fmts.indexOf(f) > 0) {
         natural += GAP_PX + DIVIDER_COL_W + GAP_PX;
       } else {
         if (!isFirst) natural += GAP_PX;
         isFirst = false;
       }
-      natural += f === this.args.format ? pillWidthFor(f, false) : 32;
+      natural +=
+        f.format === this.args.format ? pillWidthFor(f.format, false) : 32;
     }
     return this.parentWidth < natural;
   }
@@ -513,7 +521,7 @@ export default class PillFormatChooser extends Component<Signature> {
       return;
     }
     pe.preventDefault();
-    this.commitDragOrder(pe.clientX);
+    if (this.dragHasMoved) this.commitDragOrder(pe.clientX);
     this.teardownDrag();
   };
 
@@ -521,7 +529,7 @@ export default class PillFormatChooser extends Component<Signature> {
     const me = e as MouseEvent;
     if (!this.isDragging) return;
     me.preventDefault();
-    this.commitDragOrder(me.clientX);
+    if (this.dragHasMoved) this.commitDragOrder(me.clientX);
     this.teardownDrag();
   };
 
@@ -593,7 +601,7 @@ export default class PillFormatChooser extends Component<Signature> {
       </div>
 
       {{#each this.availableFormatsWithIcons key='format' as |fw i|}}
-        {{#if (or (eq fw.format 'metadata') (eq fw.format 'edit'))}}
+        {{#if fw.hasDivider}}
           {{#unless (eq i 0)}}
             <span class='pf-divider'></span>
           {{/unless}}
