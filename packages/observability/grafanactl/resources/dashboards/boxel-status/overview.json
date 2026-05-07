@@ -54,7 +54,7 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-          "textMode": "value_and_name"
+          "textMode": "value"
         },
         "pluginVersion": "12.4.3",
         "targets": [{
@@ -92,7 +92,7 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-          "textMode": "value_and_name"
+          "textMode": "value"
         },
         "pluginVersion": "12.4.3",
         "targets": [{
@@ -100,7 +100,7 @@
           "expr": "sum(count_over_time({service=\"prerender\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
-        "title": "Prerender Server",
+        "title": "Prerender",
         "type": "stat"
       },
       {
@@ -130,7 +130,7 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-          "textMode": "value_and_name"
+          "textMode": "value"
         },
         "pluginVersion": "12.4.3",
         "targets": [{
@@ -138,7 +138,7 @@
           "expr": "sum(count_over_time({service=\"prerender-manager\"}[$__range]))",
           "instant": true, "queryType": "instant", "refId": "A"
         }],
-        "title": "Prerender Manager",
+        "title": "Prerender Mgr",
         "type": "stat"
       },
       {
@@ -168,7 +168,7 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-          "textMode": "value_and_name"
+          "textMode": "value"
         },
         "pluginVersion": "12.4.3",
         "targets": [{
@@ -206,7 +206,7 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-          "textMode": "value_and_name"
+          "textMode": "value"
         },
         "pluginVersion": "12.4.3",
         "targets": [{
