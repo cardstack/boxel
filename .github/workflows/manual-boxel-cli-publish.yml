@@ -80,17 +80,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="boxel-cli-v${{ steps.version.outputs.version }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="boxel-cli-v${VERSION}"
+          NPM_URL="https://www.npmjs.com/package/@cardstack/boxel-cli/v/${VERSION}"
 
-          PREV_TAG=$(git tag --list 'boxel-cli-v*' --sort=-version:refname | grep -vxF "$TAG" | head -n 1)
-
-          ARGS=()
-          ARGS+=(--title "@cardstack/boxel-cli v${{ steps.version.outputs.version }}")
-          ARGS+=(--generate-notes)
-
-          if [ -n "$PREV_TAG" ]; then
-            ARGS+=(--notes-start-tag "$PREV_TAG")
-          fi
+          ARGS=(
+            --title "@cardstack/boxel-cli v${VERSION}"
+            --notes "Published to npm: ${NPM_URL}"
+          )
 
           if [ "${{ inputs.environment }}" = "staging" ]; then
             ARGS+=(--prerelease)
