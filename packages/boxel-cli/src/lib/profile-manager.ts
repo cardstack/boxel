@@ -17,7 +17,10 @@ export const BOXEL_CLI_CONFIG_DIR_ENV = 'BOXEL_CLI_CONFIG_DIR';
 const PROFILES_FILENAME = 'profiles.json';
 
 export function getDefaultProfileConfigDir(): string {
-  return process.env[BOXEL_CLI_CONFIG_DIR_ENV] || path.join(os.homedir(), '.boxel-cli');
+  return (
+    process.env[BOXEL_CLI_CONFIG_DIR_ENV] ||
+    path.join(os.homedir(), '.boxel-cli')
+  );
 }
 
 export const NO_ACTIVE_PROFILE_ERROR =
