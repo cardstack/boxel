@@ -1,0 +1,469 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxeloverview1"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+          "enable": true, "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "Top-level health view. Service-health stats use Loki log volume in the last 5m as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "datasource": { "type": "loki", "uid": "loki" },
+        "description": "Log lines from realm-server in the last 5m. Red = no recent activity.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Realm Server dashboard", "url": "/d/boxel-svc-realm-server", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+        "id": 1,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({service=\"realm-server\"}[5m]))",
+          "instant": true, "queryType": "instant", "refId": "A"
+        }],
+        "title": "Realm Server",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "loki", "uid": "loki" },
+        "description": "Log lines from prerender-server in the last 5m.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Prerender Server dashboard", "url": "/d/boxel-svc-prerender-server", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+        "id": 2,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({service=\"prerender\"}[5m]))",
+          "instant": true, "queryType": "instant", "refId": "A"
+        }],
+        "title": "Prerender Server",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "loki", "uid": "loki" },
+        "description": "Log lines from prerender-manager in the last 5m.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Prerender Manager dashboard", "url": "/d/boxel-svc-prerender-manager", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+        "id": 3,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({service=\"prerender-manager\"}[5m]))",
+          "instant": true, "queryType": "instant", "refId": "A"
+        }],
+        "title": "Prerender Manager",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "loki", "uid": "loki" },
+        "description": "Log lines from worker in the last 5m.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Worker dashboard", "url": "/d/boxel-svc-worker", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 4, "w": 5, "x": 15, "y": 0 },
+        "id": 4,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({service=\"worker\"}[5m]))",
+          "instant": true, "queryType": "instant", "refId": "A"
+        }],
+        "title": "Worker",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "loki", "uid": "loki" },
+        "description": "Log lines from synapse in the last 5m.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Synapse dashboard", "url": "/d/000000012", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red", "value": null },
+                { "color": "green", "value": 1 }
+              ]
+            },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+        "id": 5,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "sum(count_over_time({service=\"synapse\"}[5m]))",
+          "instant": true, "queryType": "instant", "refId": "A"
+        }],
+        "title": "Synapse",
+        "type": "stat"
+      },
+      {
+        "description": "All firing and pending Grafana alert rules. Drill into a rule for details and silences. Replaces the Worker Status alertlist (which was a single-panel dashboard).",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+        "id": 6,
+        "options": {
+          "alertInstanceLabelFilter": "",
+          "alertName": "",
+          "dashboardAlerts": false,
+          "groupBy": [],
+          "groupMode": "default",
+          "maxItems": 30,
+          "sortOrder": 1,
+          "stateFilter": {
+            "error": true,
+            "firing": true,
+            "noData": true,
+            "normal": false,
+            "pending": true
+          },
+          "viewMode": "list"
+        },
+        "title": "Active Alerts",
+        "type": "alertlist"
+      },
+      {
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+        "description": "Indexing jobs (from-scratch-index, incremental-index, full-reindex) waiting on a worker. Click to open Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Indexing dashboard", "url": "/d/aetquzjcf2znke", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "red", "value": 50 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 12 },
+        "id": 7,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+          "editorMode": "code", "format": "table", "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS pending FROM jobs j LEFT JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND jr.id IS NULL;",
+          "refId": "A"
+        }],
+        "title": "Pending Indexing Jobs",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+        "description": "Indexing jobs currently being processed by a worker.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Indexing dashboard", "url": "/d/aetquzjcf2znke", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{ "color": "blue", "value": null }]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 12 },
+        "id": 8,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+          "editorMode": "code", "format": "table", "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS in_flight FROM jobs j JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.finished_at IS NULL AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex');",
+          "refId": "A"
+        }],
+        "title": "In-flight",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+        "description": "Age of the oldest pending indexing job. Yellow at 1 minute, red at 5 minutes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Indexing dashboard", "url": "/d/aetquzjcf2znke", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 60 },
+                { "color": "red", "value": 300 }
+              ]
+            },
+            "unit": "s"
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 12 },
+        "id": 9,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+          "editorMode": "code", "format": "table", "rawQuery": true,
+          "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at))) AS oldest_pending_seconds FROM jobs j LEFT JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND jr.id IS NULL;",
+          "refId": "A"
+        }],
+        "title": "Oldest Pending",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+        "description": "Files in boxel_index whose latest index attempt failed (across all realms).",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "links": [{ "title": "Open Realms dashboard", "url": "/d/boxelrealms001", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            }
+          }
+        },
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 12 },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [{
+          "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+          "editorMode": "code", "format": "table", "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE type = 'error' AND is_deleted IS NOT TRUE;",
+          "refId": "A"
+        }],
+        "title": "Indexing Errors",
+        "type": "stat"
+      },
+      {
+        "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+        "description": "Indexing throughput across all realms in the dashboard time window. Drills into the Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "palette-classic" },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": { "type": "linear" },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": { "group": "A", "mode": "none" },
+              "thresholdsStyle": { "mode": "off" }
+            },
+            "links": [{ "title": "Open Indexing dashboard", "url": "/d/aetquzjcf2znke", "targetBlank": false }],
+            "mappings": [],
+            "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+            "unit": "short"
+          }
+        },
+        "gridPos": { "h": 6, "w": 24, "x": 0, "y": 16 },
+        "id": 11,
+        "options": {
+          "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
+          "tooltip": { "mode": "multi", "sort": "none" }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+            "editorMode": "code", "format": "time_series", "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s') AS time, COUNT(*) AS arrived FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(j.created_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "A"
+          },
+          {
+            "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+            "editorMode": "code", "format": "time_series", "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s') AS time, COUNT(*) AS started FROM job_reservations jr JOIN jobs j ON j.id = jr.job_id WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(jr.created_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "B"
+          },
+          {
+            "datasource": { "type": "grafana-postgresql-datasource", "uid": "cef5v5sl9k7i8f" },
+            "editorMode": "code", "format": "time_series", "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s') AS time, COUNT(*) AS completed FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND j.finished_at IS NOT NULL AND $__timeFilter(j.finished_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "C"
+          }
+        ],
+        "title": "Indexing throughput",
+        "type": "timeseries"
+      },
+      {
+        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 22 },
+        "id": 12,
+        "options": {
+          "code": { "language": "plaintext", "showLineNumbers": false, "showMiniMap": false },
+          "content": "### Other dashboards\n\n- **Entity dashboards** — pick a specific entity to inspect:\n  - [Realms](/d/boxelrealms001) — counts, permissions, indexing status, recent errors\n  - [Users](/d/boxelusers0001) — credits, realm permissions, grant access\n- **Workflow dashboards**:\n  - [Indexing](/d/aetquzjcf2znke) — pipeline metrics + operator actions\n  - [Job Queue](/d/boxeljobqueue1) — generic worker queue (all job types)\n- **Forensics**: [Logs](/d/fetquzizsej28b) — filter by service, user, realm\n- **Service deep-dives** (stub — currently filtered logs only): [Realm Server](/d/boxel-svc-realm-server) · [Prerender Server](/d/boxel-svc-prerender-server) · [Prerender Manager](/d/boxel-svc-prerender-manager) · [Worker](/d/boxel-svc-worker) · [Synapse](/d/000000012)",
+          "mode": "markdown"
+        },
+        "pluginVersion": "12.4.3",
+        "title": "Other dashboards",
+        "type": "text"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": ["overview"],
+    "templating": { "list": [] },
+    "time": { "from": "now-1h", "to": "now" },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Overview",
+    "weekStart": ""
+  }
+}
