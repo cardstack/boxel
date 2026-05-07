@@ -24,11 +24,11 @@ function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
     knowledge: [],
     skills: [],
     tools: [],
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     // System-prompt rendering requires this — `assembleSystemPrompt`
     // throws if it's missing or empty (see requireDarkfactoryModuleUrl
     // in factory-prompt-loader.ts). In production the wiring sets it
-    // via inferDarkfactoryModuleUrl(targetRealmUrl); tests use a fixed
+    // via inferDarkfactoryModuleUrl(targetRealm); tests use a fixed
     // value so snapshots stay stable.
     darkfactoryModuleUrl:
       'https://realms.example.test/software-factory/darkfactory',
@@ -197,7 +197,7 @@ module('factory-prompt-loader > FilePromptLoader', function () {
   test('loads and interpolates a template', function (assert) {
     let loader = new FilePromptLoader();
     let result = loader.load('system', {
-      targetRealmUrl: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
       skills: [],
     });
     assert.ok(
@@ -216,7 +216,7 @@ module('factory-prompt-loader > FilePromptLoader', function () {
   test('caches templates on subsequent loads', function (assert) {
     let loader = new FilePromptLoader();
     let vars = {
-      targetRealmUrl: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
       skills: [],
     };
     let first = loader.load('system', vars);
@@ -236,7 +236,7 @@ module('factory-prompt-loader > FilePromptLoader', function () {
   test('clearCache allows reloading', function (assert) {
     let loader = new FilePromptLoader();
     let vars = {
-      targetRealmUrl: 'https://example.test/target/',
+      targetRealm: 'https://example.test/target/',
       skills: [],
     };
     let first = loader.load('system', vars);

@@ -51,7 +51,7 @@ import { createRoutes } from './routes';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
-import { mirrorSourceRealmToRegistry } from './lib/realm-registry-writes';
+import { insertSourceRealmInRegistry } from './lib/realm-registry-writes';
 import { withRealmWriteLock } from './lib/realm-advisory-locks';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 import {
@@ -1093,7 +1093,7 @@ export class RealmServer {
       // Register the source realm in realm_registry. The INSERT emits
       // NOTIFY realm_registry; the reconciler on every instance picks
       // up the row, and the realm is lazy-mounted on first request.
-      await mirrorSourceRealmToRegistry(this.dbAdapter, {
+      await insertSourceRealmInRegistry(this.dbAdapter, {
         url,
         diskId: `${ownerUsername}/${endpoint}`,
         ownerUsername,

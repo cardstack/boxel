@@ -14,7 +14,7 @@ export class NoOpStepRunner implements ValidationStepRunner {
     this.step = step;
   }
 
-  async run(_targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(_targetRealm: string): Promise<ValidationStepResult> {
     return { step: this.step, passed: true, errors: [] };
   }
 

@@ -314,7 +314,7 @@ test.describe('Host mode', () => {
     );
   });
 
-  test('visiting connect route with origin not in published_realms returns 404', async ({
+  test('visiting connect route with origin not in realm_registry returns 404', async ({
     page,
   }) => {
     let response = await page.goto(

@@ -7,6 +7,7 @@ import {
   getRealmServerToken as fetchRealmServerToken,
   getRealmTokens,
   addRealmToMatrixAccountData,
+  removeRealmFromMatrixAccountData,
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth';
@@ -522,6 +523,11 @@ export class ProfileManager implements RealmAuthenticator {
   async addToUserRealms(realmUrl: string): Promise<void> {
     let matrixAuth = await this.loginToMatrix();
     await addRealmToMatrixAccountData(matrixAuth, realmUrl);
+  }
+
+  async removeFromUserRealms(realmUrl: string): Promise<boolean> {
+    let matrixAuth = await this.loginToMatrix();
+    return removeRealmFromMatrixAccountData(matrixAuth, realmUrl);
   }
 
   async getUserRealms(): Promise<string[]> {

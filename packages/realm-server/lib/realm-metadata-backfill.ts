@@ -189,12 +189,12 @@ async function backfillPublishedRealms(
   if (!existsSync(publishedRoot)) {
     return 0;
   }
-  // Map disk uuid → published URL via the published_realms table; disk
-  // alone doesn't carry the URL.
+  // Map disk uuid → published URL via realm_registry; disk alone doesn't
+  // carry the URL.
   const rows = (await query(opts.dbAdapter, [
-    `SELECT id::text AS id, published_realm_url FROM published_realms`,
-  ])) as Array<{ id: string; published_realm_url: string }>;
-  const byId = new Map(rows.map((r) => [r.id, r.published_realm_url]));
+    `SELECT disk_id, url FROM realm_registry WHERE kind = 'published'`,
+  ])) as Array<{ disk_id: string; url: string }>;
+  const byId = new Map(rows.map((r) => [r.disk_id, r.url]));
 
   let count = 0;
   for (const entry of readdirSync(publishedRoot, { withFileTypes: true })) {

@@ -4,15 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
-  asExpressions,
   fetchAllRealmsWithOwners,
   fetchUserPermissions,
-  insert,
   insertPermissions,
-  query,
 } from '@cardstack/runtime-common';
 
-import { mirrorPublishedRealmToRegistry } from '../lib/realm-registry-writes';
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { setupDB } from './helpers';
 
 module(basename(__filename), function () {
@@ -38,25 +35,12 @@ module(basename(__filename), function () {
       publishedRealmURL: string;
       ownerUsername?: string;
     }) {
-      let publishedRealmId = uuidv4();
-      let lastPublishedAt = Date.now();
-      let { nameExpressions, valueExpressions } = asExpressions({
-        id: publishedRealmId,
-        owner_username: ownerUsername,
-        source_realm_url: sourceRealmURL,
-        published_realm_url: publishedRealmURL,
-        last_published_at: lastPublishedAt.toString(),
-      });
-      await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      );
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL,
-        publishedRealmId,
+        publishedRealmId: uuidv4(),
         ownerUsername,
         sourceRealmURL,
-        lastPublishedAt,
+        lastPublishedAt: Date.now(),
       });
     }
 
@@ -176,25 +160,12 @@ module(basename(__filename), function () {
       publishedRealmURL: string;
       ownerUsername?: string;
     }) {
-      let publishedRealmId = uuidv4();
-      let lastPublishedAt = Date.now();
-      let { nameExpressions, valueExpressions } = asExpressions({
-        id: publishedRealmId,
-        owner_username: ownerUsername,
-        source_realm_url: sourceRealmURL,
-        published_realm_url: publishedRealmURL,
-        last_published_at: lastPublishedAt.toString(),
-      });
-      await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      );
-      await mirrorPublishedRealmToRegistry(dbAdapter, {
+      await upsertPublishedRealmInRegistry(dbAdapter, {
         publishedRealmURL,
-        publishedRealmId,
+        publishedRealmId: uuidv4(),
         ownerUsername,
         sourceRealmURL,
-        lastPublishedAt,
+        lastPublishedAt: Date.now(),
       });
     }
 

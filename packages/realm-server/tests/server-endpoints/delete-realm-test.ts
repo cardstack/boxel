@@ -342,7 +342,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     let remainingPublishedRows = await context.dbAdapter.execute(
-      `SELECT * FROM published_realms WHERE source_realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_registry WHERE kind = 'published' AND source_url = '${realmURL}'`,
     );
     assert.strictEqual(
       remainingPublishedRows.length,
@@ -707,7 +707,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     let remainingPublishedRows = await context.dbAdapter.execute(
-      `SELECT * FROM published_realms WHERE source_realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_registry WHERE kind = 'published' AND source_url = '${realmURL}'`,
     );
     assert.strictEqual(
       remainingPublishedRows.length,

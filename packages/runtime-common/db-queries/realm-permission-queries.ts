@@ -195,11 +195,15 @@ export async function fetchUserPermissions(
 }
 
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
+  // Catalog realms are publicly-readable realms that aren't themselves
+  // published snapshots — published rows live in realm_registry with
+  // kind='published'.
   let results = (await query(dbAdapter, [
     `SELECT rup.realm_url
      FROM realm_user_permissions rup
-     LEFT JOIN published_realms pr ON rup.realm_url = pr.published_realm_url
-     WHERE rup.username = '*' AND rup.read = true AND pr.published_realm_url IS NULL`,
+     LEFT JOIN realm_registry rr
+       ON rup.realm_url = rr.url AND rr.kind = 'published'
+     WHERE rup.username = '*' AND rup.read = true AND rr.url IS NULL`,
   ])) as {
     realm_url: string;
   }[];

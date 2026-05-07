@@ -2,10 +2,16 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { tmpdir } from 'os';
-import { module, test } from 'qunit';
+import QUnit, { module, test } from 'qunit';
 import { realmPassword } from '../../matrix/helpers/realm-credentials';
 import type { TestRealmServer } from './helpers/start-test-realm';
 import { startTestRealmServer } from './helpers/start-test-realm';
+
+// Ceiling for any single test. The realm server's own 60s startup budget
+// lives inside `startTestRealmServer`; the test bodies are short CLI
+// invocations. Without this, a hung fetch would keep qunit alive until
+// the workflow timeout fires.
+QUnit.config.testTimeout = 60_000;
 
 const REALM_PORT = 4205; // Using isolated realm server port
 const MATRIX_URL = 'http://localhost:8008';

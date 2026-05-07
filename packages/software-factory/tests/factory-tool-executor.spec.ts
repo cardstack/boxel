@@ -37,7 +37,7 @@ test('unregistered tool is rejected without reaching the server', async ({
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
-      targetRealmUrl: realm.realmURL.href,
+      targetRealm: realm.realmURL.href,
       client,
     });
 
