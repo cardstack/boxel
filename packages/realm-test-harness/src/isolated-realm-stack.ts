@@ -709,13 +709,21 @@ export async function startIsolatedRealmStack({
  * block teardown for long, so each call has its own short timeout and
  * failures only emit a warn. Returns once every dispose call has settled.
  */
+const DEFAULT_PRERENDER_DISPOSE_TIMEOUT_MS = 5_000;
+
 async function disposePrerenderAffinities(
   prerenderURL: string,
   realmURLs: URL[],
 ): Promise<void> {
-  let perCallTimeoutMs = Number(
-    process.env.TEST_HARNESS_PRERENDER_DISPOSE_TIMEOUT_MS ?? 5_000,
-  );
+  // Guard against `NaN` (non-numeric env value) and non-positive values
+  // (`0` / negative would make `setTimeout` fire on the next tick and
+  // abort every dispose call before its fetch can issue). Fall back to
+  // the default in either case.
+  let parsed = Number(process.env.TEST_HARNESS_PRERENDER_DISPOSE_TIMEOUT_MS);
+  let perCallTimeoutMs =
+    Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_PRERENDER_DISPOSE_TIMEOUT_MS;
   await Promise.allSettled(
     realmURLs.map(async (realmURL) => {
       let endpoint = new URL('/dispose-affinity', prerenderURL).href;

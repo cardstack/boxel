@@ -156,9 +156,13 @@ const DEFAULT_METADATA_FILE_TIMEOUT_MS = 240_000;
 // identical to a slow-but-progressing setup.
 const METADATA_FILE_HEARTBEAT_MS = 30_000;
 
-function tailLogs(buffer: string, bytes: number): string {
-  if (buffer.length <= bytes) return buffer;
-  return `…(truncated, last ${bytes} bytes)…\n${buffer.slice(-bytes)}`;
+// `chars` not `bytes` because `string.length` / `slice()` operate on
+// UTF-16 code units. The realm child's logs are ASCII in practice, but
+// labeling this as bytes would be misleading if a non-ASCII glyph ever
+// landed in the tail window.
+function tailLogs(buffer: string, chars: number): string {
+  if (buffer.length <= chars) return buffer;
+  return `…(truncated, last ${chars} chars)…\n${buffer.slice(-chars)}`;
 }
 
 async function waitForMetadataFile<T>(
