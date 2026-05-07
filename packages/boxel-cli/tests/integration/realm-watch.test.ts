@@ -1,5 +1,13 @@
 import '../helpers/setup-realm-server';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -11,7 +19,7 @@ import {
   startTestRealmServer,
   stopTestRealmServer,
   createTestProfileDir,
-  setupTestProfile,
+  setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
 
@@ -19,6 +27,9 @@ let profileManager: ProfileManager;
 let cleanupProfile: () => void;
 let realmUrl: string;
 const localDirs: string[] = [];
+const REMOTE_REQUEST_TIMEOUT_MS = 30_000;
+const REMOTE_VISIBILITY_TIMEOUT_MS = 5_000;
+const JWT_TEST_USER = '@cli-watch-test:localhost';
 
 function makeLocalDir(): string {
   let dir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-watch-int-'));
@@ -31,42 +42,153 @@ function buildFileUrl(realm: string, relPath: string): string {
   return `${base}${relPath.replace(/^\/+/, '')}`;
 }
 
+function watchFixture(name: string): string {
+  return `${name}.txt`;
+}
+
+function formatFetchError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  let details = [`${error.name}: ${error.message}`];
+  let cause = (error as Error & { cause?: unknown }).cause;
+  if (cause && typeof cause === 'object') {
+    let code = 'code' in cause ? (cause as { code?: unknown }).code : undefined;
+    if (typeof code === 'string') {
+      details.push(`code=${code}`);
+    }
+    let socket =
+      'socket' in cause
+        ? (
+            cause as {
+              socket?: {
+                localPort?: number;
+                remotePort?: number;
+                bytesRead?: number;
+                bytesWritten?: number;
+              };
+            }
+          ).socket
+        : undefined;
+    if (socket) {
+      details.push(
+        `socket(localPort=${socket.localPort ?? 'n/a'}, remotePort=${socket.remotePort ?? 'n/a'}, bytesRead=${socket.bytesRead ?? 'n/a'}, bytesWritten=${socket.bytesWritten ?? 'n/a'})`,
+      );
+    }
+  }
+
+  return details.join(' | ');
+}
+
+async function remoteMutation(
+  realm: string,
+  relPath: string,
+  init: RequestInit,
+): Promise<Response> {
+  let controller = new AbortController();
+  let timedOut = false;
+  let timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REMOTE_REQUEST_TIMEOUT_MS);
+  let startedAt = Date.now();
+  let currentTestName = expect.getState().currentTestName ?? 'unknown test';
+  let url = buildFileUrl(realm, relPath);
+
+  try {
+    return await profileManager.authedRealmFetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    let elapsedMs = Date.now() - startedAt;
+    let detail = timedOut
+      ? `timed out after ${REMOTE_REQUEST_TIMEOUT_MS}ms`
+      : formatFetchError(error);
+    throw new Error(
+      `remote ${init.method ?? 'GET'} ${relPath} failed during "${currentTestName}" after ${elapsedMs}ms: ${detail}`,
+      { cause: error instanceof Error ? error : undefined },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchRemoteMtimes(
+  realm: string,
+): Promise<Record<string, number>> {
+  let response = await remoteMutation(realm, '_mtimes', {
+    method: 'GET',
+    headers: { Accept: 'application/vnd.api+json' },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `_mtimes fetch failed: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  let data = (await response.json()) as {
+    data?: { attributes?: { mtimes?: Record<string, number> } };
+  };
+  return data.data?.attributes?.mtimes ?? {};
+}
+
+async function waitForRemoteVisibility(
+  realm: string,
+  relPath: string,
+  mode: 'present' | 'absent',
+): Promise<void> {
+  let targetUrl = buildFileUrl(realm, relPath);
+  let deadline = Date.now() + REMOTE_VISIBILITY_TIMEOUT_MS;
+  let lastSeen: number | undefined;
+
+  while (Date.now() < deadline) {
+    let mtimes = await fetchRemoteMtimes(realm);
+    lastSeen = mtimes[targetUrl];
+    if (mode === 'present' ? lastSeen !== undefined : lastSeen === undefined) {
+      return;
+    }
+    await sleep(50);
+  }
+
+  throw new Error(
+    `remote ${relPath} did not become ${mode} in _mtimes within ${REMOTE_VISIBILITY_TIMEOUT_MS}ms (lastSeen=${lastSeen ?? 'missing'})`,
+  );
+}
+
 async function writeRemoteFile(
   realm: string,
   relPath: string,
   content: string,
 ): Promise<void> {
-  let response = await profileManager.authedRealmFetch(
-    buildFileUrl(realm, relPath),
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=UTF-8',
-        Accept: 'application/vnd.card+source',
-      },
-      body: content,
+  let response = await remoteMutation(realm, relPath, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=UTF-8',
+      Accept: 'application/vnd.card+source',
     },
-  );
+    body: content,
+  });
   if (!response.ok) {
     throw new Error(
       `writeRemoteFile ${relPath} failed: ${response.status} ${response.statusText}`,
     );
   }
+  await waitForRemoteVisibility(realm, relPath, 'present');
 }
 
 async function deleteRemoteFile(realm: string, relPath: string): Promise<void> {
-  let response = await profileManager.authedRealmFetch(
-    buildFileUrl(realm, relPath),
-    {
-      method: 'DELETE',
-      headers: { Accept: 'application/vnd.card+source' },
-    },
-  );
+  let response = await remoteMutation(realm, relPath, {
+    method: 'DELETE',
+    headers: { Accept: 'application/vnd.card+source' },
+  });
   if (!response.ok && response.status !== 404) {
     throw new Error(
       `deleteRemoteFile ${relPath} failed: ${response.status} ${response.statusText}`,
     );
   }
+  await waitForRemoteVisibility(realm, relPath, 'absent');
 }
 
 function sleep(ms: number): Promise<void> {
@@ -76,27 +198,51 @@ function sleep(ms: number): Promise<void> {
 beforeAll(async () => {
   // Realm starts empty; tests seed remote files via authedRealmFetch so they
   // produce realistic mtimes that change between writes.
-  await startTestRealmServer();
+  await startTestRealmServer({
+    registerMatrixUser: false,
+    realms: [
+      {
+        realmURL: new URL(`${TEST_REALM_SERVER_URL}/test/`),
+        permissions: {
+          '*': ['read', 'write'],
+          [JWT_TEST_USER]: ['read', 'write', 'realm-owner'],
+        },
+      },
+    ],
+  });
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
+});
 
+beforeEach(async () => {
   let testProfile = createTestProfileDir();
   profileManager = testProfile.profileManager;
   cleanupProfile = testProfile.cleanup;
-  await setupTestProfile(profileManager);
+  await setupJwtTestProfile(profileManager, {
+    user: JWT_TEST_USER,
+    realmServerUrl: `${TEST_REALM_SERVER_URL}/`,
+  });
+});
+
+afterEach(() => {
+  cleanupProfile?.();
+  cleanupProfile = undefined as unknown as () => void;
 });
 
 afterAll(async () => {
   for (let dir of localDirs) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  cleanupProfile?.();
   await stopTestRealmServer();
 });
 
 describe('realm watch (integration)', () => {
   it('treats remote files as added on the first poll and pulls them', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'first-poll.gts', 'export const a = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('first-poll'),
+      'export const a = 1;\n',
+    );
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
       debounceMs: 0,
@@ -109,9 +255,9 @@ describe('realm watch (integration)', () => {
     expect(watcher.pendingCount).toBeGreaterThanOrEqual(1);
 
     let result = await watcher.flushPending();
-    expect(result.pulled).toContain('first-poll.gts');
+    expect(result.pulled).toContain(watchFixture('first-poll'));
     expect(
-      fs.readFileSync(path.join(localDir, 'first-poll.gts'), 'utf8'),
+      fs.readFileSync(path.join(localDir, watchFixture('first-poll')), 'utf8'),
     ).toContain('a = 1');
 
     expect(result.checkpoint).not.toBeNull();
@@ -121,12 +267,15 @@ describe('realm watch (integration)', () => {
     expect(checkpoints.length).toBe(1);
 
     watcher.shutdown();
-    await deleteRemoteFile(realmUrl, 'first-poll.gts');
   });
 
   it('detects remote modifications across ticks and pulls them', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'mod.gts', 'export const v = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('mod'),
+      'export const v = 1;\n',
+    );
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
       debounceMs: 0,
@@ -136,33 +285,40 @@ describe('realm watch (integration)', () => {
     await watcher.poll();
     await watcher.flushPending();
 
-    expect(fs.readFileSync(path.join(localDir, 'mod.gts'), 'utf8')).toContain(
-      'v = 1',
-    );
+    expect(
+      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+    ).toContain('v = 1');
 
     // Realm mtimes are second-precision — wait so the next write bumps it.
     await sleep(1100);
-    await writeRemoteFile(realmUrl, 'mod.gts', 'export const v = 2;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('mod'),
+      'export const v = 2;\n',
+    );
 
     let hasChanges = await watcher.poll();
     expect(hasChanges).toBe(true);
     let result = await watcher.flushPending();
-    expect(result.pulled).toContain('mod.gts');
-    expect(fs.readFileSync(path.join(localDir, 'mod.gts'), 'utf8')).toContain(
-      'v = 2',
-    );
+    expect(result.pulled).toContain(watchFixture('mod'));
+    expect(
+      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+    ).toContain('v = 2');
 
     let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
     // One per applied poll.
     expect(checkpoints.length).toBe(2);
 
     watcher.shutdown();
-    await deleteRemoteFile(realmUrl, 'mod.gts');
   });
 
   it('detects remote deletions and removes the local copy', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'doomed.gts', 'export const x = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('doomed'),
+      'export const x = 1;\n',
+    );
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
       debounceMs: 0,
@@ -171,15 +327,19 @@ describe('realm watch (integration)', () => {
     await watcher.initialize();
     await watcher.poll();
     await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, 'doomed.gts'))).toBe(true);
+    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+      true,
+    );
 
-    await deleteRemoteFile(realmUrl, 'doomed.gts');
+    await deleteRemoteFile(realmUrl, watchFixture('doomed'));
 
     let hasChanges = await watcher.poll();
     expect(hasChanges).toBe(true);
     let result = await watcher.flushPending();
-    expect(result.deleted).toContain('doomed.gts');
-    expect(fs.existsSync(path.join(localDir, 'doomed.gts'))).toBe(false);
+    expect(result.deleted).toContain(watchFixture('doomed'));
+    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+      false,
+    );
 
     watcher.shutdown();
   });
@@ -188,46 +348,58 @@ describe('realm watch (integration)', () => {
     let localDir = makeLocalDir();
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
-      debounceMs: 75,
+      debounceMs: 2_000,
       quiet: true,
     });
     await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
 
     let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
+    let resolveFlush!: () => void;
     let flushSettled = new Promise<void>((resolve) => {
-      // Trigger two polls in quick succession; debounce should coalesce.
-      let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
-        flushes.push(result);
-        resolve();
-      };
-
-      (async () => {
-        await writeRemoteFile(realmUrl, 'burst-a.gts', 'export const a = 1;\n');
-        await watcher.poll();
-        watcher.scheduleFlush(onFlush);
-
-        await writeRemoteFile(realmUrl, 'burst-b.gts', 'export const b = 2;\n');
-        await watcher.poll();
-        // Reset the timer — second call within debounceMs.
-        watcher.scheduleFlush(onFlush);
-      })();
+      resolveFlush = resolve;
     });
+    let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
+      flushes.push(result);
+      resolveFlush();
+    };
+
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('burst-a'),
+      'export const a = 1;\n',
+    );
+    await watcher.poll();
+    watcher.scheduleFlush(onFlush);
+
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('burst-b'),
+      'export const b = 2;\n',
+    );
+    await watcher.poll();
+    watcher.scheduleFlush(onFlush);
 
     await flushSettled;
-    // Allow a brief grace period in case a stray timer slipped through.
-    await sleep(40);
+    await sleep(60);
 
     expect(flushes.length).toBe(1);
-    expect(flushes[0].pulled.sort()).toEqual(['burst-a.gts', 'burst-b.gts']);
+    expect(flushes[0].pulled.sort()).toEqual([
+      watchFixture('burst-a'),
+      watchFixture('burst-b'),
+    ]);
 
     watcher.shutdown();
-    await deleteRemoteFile(realmUrl, 'burst-a.gts');
-    await deleteRemoteFile(realmUrl, 'burst-b.gts');
   });
 
   it('runs the watchRealms loop end-to-end and stops on AbortSignal', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'loop.gts', 'export const loop = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('loop'),
+      'export const loop = 1;\n',
+    );
 
     let controller = new AbortController();
     let runPromise = watchRealms([{ realmUrl, localDir }], {
@@ -246,15 +418,13 @@ describe('realm watch (integration)', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.watchers.length).toBe(1);
-    expect(fs.readFileSync(path.join(localDir, 'loop.gts'), 'utf8')).toContain(
-      'loop = 1',
-    );
+    expect(
+      fs.readFileSync(path.join(localDir, watchFixture('loop')), 'utf8'),
+    ).toContain('loop = 1');
 
     let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
     expect(checkpoints.length).toBeGreaterThanOrEqual(1);
     expect(checkpoints[0].source).toBe('remote');
-
-    await deleteRemoteFile(realmUrl, 'loop.gts');
   });
 
   it('returns an error when the realm URL is unreachable', async () => {
@@ -295,7 +465,11 @@ describe('realm watch (integration)', () => {
 
   it('does not delete local files when a poll fails', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'survives.gts', 'export const s = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('survives'),
+      'export const s = 1;\n',
+    );
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
       debounceMs: 0,
@@ -304,7 +478,9 @@ describe('realm watch (integration)', () => {
     await watcher.initialize();
     await watcher.poll();
     await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, 'survives.gts'))).toBe(true);
+    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+      true,
+    );
 
     // Force the next poll to fail (simulating a transient fetch error). The
     // file must remain on disk and `lastKnownMtimes` must be untouched, so a
@@ -314,10 +490,11 @@ describe('realm watch (integration)', () => {
     };
     await expect(watcher.poll()).rejects.toThrow('simulated network failure');
     expect(watcher.pendingCount).toBe(0);
-    expect(fs.existsSync(path.join(localDir, 'survives.gts'))).toBe(true);
+    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+      true,
+    );
 
     watcher.shutdown();
-    await deleteRemoteFile(realmUrl, 'survives.gts');
   });
 
   it('blocks a second concurrent watch against the same localDir', async () => {
@@ -386,7 +563,11 @@ describe('realm watch (integration)', () => {
 
   it('does not arm a debounceTimer after shutdown when a poll resolves post-cleanup', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'race.gts', 'export const r = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('race'),
+      'export const r = 1;\n',
+    );
 
     // Pre-sync so the watch starts in a steady state — initialize() and the
     // initial tickAll find no new changes and no flush is scheduled.
@@ -405,7 +586,11 @@ describe('realm watch (integration)', () => {
     // Bump the remote so the next-tick poll WOULD detect a change and call
     // scheduleFlush() — which is the path the fix gates.
     await sleep(1100); // mtime is second-precision
-    await writeRemoteFile(realmUrl, 'race.gts', 'export const r = 2;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('race'),
+      'export const r = 2;\n',
+    );
 
     // Gate the 3rd _mtimes call (1: initialize, 2: initial tickAll's poll,
     // 3: the next scheduled tick — the one we want in flight at abort time).
@@ -463,17 +648,19 @@ describe('realm watch (integration)', () => {
     expect(checkpoints.length).toBe(baseline.length);
     // The bumped remote content was NOT pulled — the gated scheduleFlush is a
     // no-op after shutdown, so the local file stays at r = 1.
-    expect(fs.readFileSync(path.join(localDir, 'race.gts'), 'utf8')).toContain(
-      'r = 1',
-    );
+    expect(
+      fs.readFileSync(path.join(localDir, watchFixture('race')), 'utf8'),
+    ).toContain('r = 1');
     expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
-
-    await deleteRemoteFile(realmUrl, 'race.gts');
   });
 
   it('removes SIGINT/SIGTERM handlers when the watch is stopped via signal', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'sigint.gts', 'export const x = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('sigint'),
+      'export const x = 1;\n',
+    );
 
     // Snapshot pre-existing listeners so we don't conflate with vitest's own
     // signal handling — just check that watchRealms registers exactly one
@@ -509,13 +696,15 @@ describe('realm watch (integration)', () => {
     expect(process.listeners('SIGINT')).toEqual(originalSigint);
     expect(process.listeners('SIGTERM')).toEqual(originalSigterm);
     expect(fs.existsSync(path.join(localDir, '.boxel-watch.lock'))).toBe(false);
-
-    await deleteRemoteFile(realmUrl, 'sigint.gts');
   });
 
   it('downgrades a pending modify to a delete when the remote file disappears', async () => {
     let localDir = makeLocalDir();
-    await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('flip'),
+      'export const x = 1;\n',
+    );
 
     let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
       debounceMs: 0,
@@ -526,17 +715,23 @@ describe('realm watch (integration)', () => {
     await watcher.flushPending();
 
     await sleep(1100);
-    await writeRemoteFile(realmUrl, 'flip.gts', 'export const x = 2;\n');
+    await writeRemoteFile(
+      realmUrl,
+      watchFixture('flip'),
+      'export const x = 2;\n',
+    );
     await watcher.poll();
     expect(watcher.pendingCount).toBe(1);
 
-    await deleteRemoteFile(realmUrl, 'flip.gts');
+    await deleteRemoteFile(realmUrl, watchFixture('flip'));
     await watcher.poll();
 
     let result = await watcher.flushPending();
-    expect(result.deleted).toContain('flip.gts');
-    expect(result.pulled).not.toContain('flip.gts');
-    expect(fs.existsSync(path.join(localDir, 'flip.gts'))).toBe(false);
+    expect(result.deleted).toContain(watchFixture('flip'));
+    expect(result.pulled).not.toContain(watchFixture('flip'));
+    expect(fs.existsSync(path.join(localDir, watchFixture('flip')))).toBe(
+      false,
+    );
 
     watcher.shutdown();
   });
