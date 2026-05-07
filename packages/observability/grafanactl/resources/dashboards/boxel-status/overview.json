@@ -119,7 +119,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [1m]))",
+            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [1m])) or vector(0)",
             "queryType": "range",
             "legendFormat": "HTTP req/min",
             "refId": "A"
@@ -129,7 +129,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [1m]))",
+            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [1m])) or vector(0)",
             "queryType": "range",
             "legendFormat": "HTTP err/min",
             "refId": "B"
@@ -162,16 +162,16 @@
               "axisLabel": "",
               "axisPlacement": "auto",
               "barAlignment": 0,
-              "drawStyle": "bars",
-              "fillOpacity": 80,
-              "gradientMode": "none",
+              "drawStyle": "line",
+              "fillOpacity": 50,
+              "gradientMode": "opacity",
               "hideFrom": {
                 "legend": false,
                 "tooltip": false,
                 "viz": false
               },
-              "lineInterpolation": "linear",
-              "lineWidth": 0,
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
               "pointSize": 5,
               "scaleDistribution": {
                 "type": "linear"
@@ -180,7 +180,7 @@
               "spanNulls": false,
               "stacking": {
                 "group": "A",
-                "mode": "normal"
+                "mode": "none"
               },
               "thresholdsStyle": {
                 "mode": "off"
@@ -270,7 +270,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m'),\n       COUNT(*) AS \"Jobs/min\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*) AS \"Jobs/min\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "A"
           },
           {
@@ -281,7 +281,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m'),\n       COUNT(*) AS \"Failures/min\"\n  FROM jobs\n WHERE status = 'rejected'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*) AS \"Failures/min\"\n  FROM jobs\n WHERE status = 'rejected'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
             "refId": "B"
           }
         ],
