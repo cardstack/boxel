@@ -42,7 +42,9 @@ async function main(): Promise<void> {
     let active = client.getActiveProfile();
     log.debug(
       `profile config dir=${client.getProfileConfigDir()} source=${
-        process.env[BOXEL_CLI_CONFIG_DIR_ENV] ? BOXEL_CLI_CONFIG_DIR_ENV : 'HOME'
+        process.env[BOXEL_CLI_CONFIG_DIR_ENV] !== undefined
+          ? BOXEL_CLI_CONFIG_DIR_ENV
+          : 'HOME'
       }`,
     );
     log.debug(

@@ -345,42 +345,45 @@ module('factory-entrypoint integration', function () {
         },
       );
 
-      if (result.status !== 0) {
-        assert.strictEqual(result.status, 0, formatCommandDiagnostics(result));
-        return;
-      }
+      assert.strictEqual(result.status, 0, formatCommandDiagnostics(result));
 
-      let summary: FactoryEntrypointIntegrationSummary;
-      try {
-        summary = JSON.parse(result.stdout) as FactoryEntrypointIntegrationSummary;
-      } catch (error) {
-        assert.ok(false, formatJsonDiagnostics(result, error));
-        return;
+      if (result.status === 0) {
+        let summary: FactoryEntrypointIntegrationSummary | undefined;
+        try {
+          summary = JSON.parse(
+            result.stdout,
+          ) as FactoryEntrypointIntegrationSummary;
+        } catch (error) {
+          assert.ok(false, formatJsonDiagnostics(result, error));
+        }
+
+        if (summary) {
+          assert.strictEqual(summary.command, 'factory:go');
+          assert.strictEqual(summary.brief.url, briefUrl);
+          assert.strictEqual(summary.brief.title, 'Sticky Note');
+          assert.strictEqual(
+            summary.brief.contentSummary,
+            'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
+          );
+          assert.deepEqual(summary.brief.tags, [
+            'documents-content',
+            'sticky',
+            'note',
+          ]);
+          assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
+          assert.strictEqual(summary.targetRealm.ownerUsername, 'testuser');
+          assert.strictEqual(
+            summary.seedIssue.seedIssueId,
+            'Issues/bootstrap-seed',
+          );
+          assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
+          // Loop runs and completes immediately (no issues in realm)
+          assert.deepEqual(summary.result, {
+            status: 'completed',
+            nextStep: 'all-issues-completed',
+          });
+        }
       }
-      assert.strictEqual(summary.command, 'factory:go');
-      assert.strictEqual(summary.brief.url, briefUrl);
-      assert.strictEqual(summary.brief.title, 'Sticky Note');
-      assert.strictEqual(
-        summary.brief.contentSummary,
-        'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
-      );
-      assert.deepEqual(summary.brief.tags, [
-        'documents-content',
-        'sticky',
-        'note',
-      ]);
-      assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
-      assert.strictEqual(summary.targetRealm.ownerUsername, 'testuser');
-      assert.strictEqual(
-        summary.seedIssue.seedIssueId,
-        'Issues/bootstrap-seed',
-      );
-      assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
-      // Loop runs and completes immediately (no issues in realm)
-      assert.deepEqual(summary.result, {
-        status: 'completed',
-        nextStep: 'all-issues-completed',
-      });
     } finally {
       rmSync(tempProfile.homeDir, { recursive: true, force: true });
       await new Promise<void>((resolvePromise, reject) =>
@@ -503,8 +506,12 @@ async function runCommand(
 
 function formatCommandDiagnostics(result: RunCommandResult): string {
   return [
-    result.stderr.trim() ? `stderr:\n${result.stderr.trimEnd()}` : 'stderr: <empty>',
-    result.stdout.trim() ? `stdout:\n${result.stdout.trimEnd()}` : 'stdout: <empty>',
+    result.stderr.trim()
+      ? `stderr:\n${result.stderr.trimEnd()}`
+      : 'stderr: <empty>',
+    result.stdout.trim()
+      ? `stdout:\n${result.stdout.trimEnd()}`
+      : 'stdout: <empty>',
   ].join('\n\n');
 }
 
