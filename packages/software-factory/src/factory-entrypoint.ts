@@ -463,7 +463,6 @@ async function defaultSyncWorkspaceToRealm(
   }
 }
 
-
 function requireStringValue(
   value: string | boolean | undefined,
   flagName: string,
