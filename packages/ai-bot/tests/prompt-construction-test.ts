@@ -6587,7 +6587,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: 'user-msg-event-1',
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: 'm.room.message',
         room_id: 'room-id-1',
@@ -6613,7 +6613,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: NEW_EVENT_ID,
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
@@ -6689,7 +6689,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: 'user-msg-event-1',
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: 'm.room.message',
         room_id: 'room-id-1',
@@ -6715,7 +6715,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: BOT_EVENT_ID,
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
@@ -6775,7 +6775,8 @@ module('set model in prompt', (hooks) => {
 
     const TOOL_CALL_SWITCH_SUBMODE = 'toolu_vrtx_01LT9TcvTBDWM9XZM9KazAcK';
     const TOOL_CALL_WRITE_TEXT_FILE = 'toolu_bdrk_01RDgbHDLs5dMUMpTYoqH5Xx';
-    const TOOL_CALL_CHECK_CORRECTNESS = 'check-e891cab5-a9dd-45d1-9ecc-72907e243cf1';
+    const TOOL_CALL_CHECK_CORRECTNESS =
+      'check-e891cab5-a9dd-45d1-9ecc-72907e243cf1';
 
     const history: DiscreteMatrixEvent[] = [
       {
@@ -6792,7 +6793,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: 'user-msg-event-1',
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       // Bot message #1: switch-submode tool_call. event_ids align ✓
       {
         type: 'm.room.message',
@@ -6819,7 +6820,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: BOT1_EVENT_ID,
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
@@ -6871,7 +6872,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: BOT2_EVENT_ID,
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
@@ -6929,7 +6930,7 @@ module('set model in prompt', (hooks) => {
         unsigned: { age: 1 },
         event_id: BOT3_EVENT_ID,
         status: EventStatus.SENT,
-      },
+      } as DiscreteMatrixEvent,
       {
         type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
         room_id: 'room-id-1',
