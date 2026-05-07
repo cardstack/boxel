@@ -756,6 +756,17 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             (url, kind, disk_id, owner_username, pinned)
             VALUES
             (
+              '${testRealmURL.href}',
+              'source',
+              'node-test/pre-mounted-${uuidv4()}',
+              'node-test',
+              false
+            )
+            ON CONFLICT (url) DO NOTHING`);
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
               '${registryOnlyRealmURL}',
               'source',
               'owner/registry-only-${uuidv4()}',
@@ -960,6 +971,17 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${testRealmURL.href}',
+            'source',
+            'node-test/pre-mounted-${uuidv4()}',
+            'node-test',
+            false
+          )
+          ON CONFLICT (url) DO NOTHING`);
         await context.dbAdapter.execute(`INSERT INTO realm_registry
           (url, kind, disk_id, owner_username, pinned)
           VALUES
