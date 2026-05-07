@@ -658,7 +658,7 @@ Other authoring helpers worth knowing:
 - Excel error sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, …) raised inside the compute are caught at the factory boundary and surfaced as `null` instead of crashing the indexer.
 - The runtime tolerates null/undefined operands on `-`, `*`, `/`, `%` — the result propagates as `null` rather than throwing. Iterating null yields an empty stream.
 
-If you're coming from working-loon's jqxl, [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md) walks the user-visible API renames. The full set of runtime relaxations is in [`docs/internals/port-from-jqxl.md`](./docs/internals/port-from-jqxl.md) §6–17, with one section per rule. The realm-flavored test suite in [`tests/boxel/`](./tests/boxel/) locks each rule to the exact behavior the realm depends on.
+For the canonical reference on jq vs fx vs plain-string mode, see [`docs/syntax-modes.md`](./docs/syntax-modes.md). If you're coming from working-loon's jqxl, [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md) walks the user-visible API renames. The full set of runtime relaxations is in [`docs/internals/port-from-jqxl.md`](./docs/internals/port-from-jqxl.md) §6–17, with one section per rule. The realm-flavored test suite in [`tests/boxel/`](./tests/boxel/) locks each rule to the exact behavior the realm depends on.
 
 ---
 
