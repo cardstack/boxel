@@ -55,7 +55,7 @@ function createTempProfileHome(options: {
   matrixUrl: string;
   realmServerUrl: string;
   password: string;
-}): string {
+}): { homeDir: string; configDir: string } {
   let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
   let boxelCliDir = join(tempHome, '.boxel-cli');
   mkdirSync(boxelCliDir, { recursive: true });
@@ -77,7 +77,10 @@ function createTempProfileHome(options: {
     JSON.stringify(config, null, 2),
   );
 
-  return tempHome;
+  return {
+    homeDir: tempHome,
+    configDir: boxelCliDir,
+  };
 }
 
 module('factory-entrypoint integration', function () {
@@ -309,7 +312,7 @@ module('factory-entrypoint integration', function () {
     targetRealm = `${origin}/typed-by-user/personal/`;
     canonicalTargetRealmUrl = `${origin}/testuser/personal/`;
 
-    let tempHome = createTempProfileHome({
+    let tempProfile = createTempProfileHome({
       username: 'testuser',
       matrixUrl: `${origin}/`,
       realmServerUrl: `${origin}/`,
@@ -336,16 +339,24 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
-            HOME: tempHome,
+            HOME: tempProfile.homeDir,
+            BOXEL_CLI_CONFIG_DIR: tempProfile.configDir,
           },
         },
       );
 
-      assert.strictEqual(result.status, 0, result.stderr);
+      if (result.status !== 0) {
+        assert.strictEqual(result.status, 0, formatCommandDiagnostics(result));
+        return;
+      }
 
-      let summary = JSON.parse(
-        result.stdout,
-      ) as FactoryEntrypointIntegrationSummary;
+      let summary: FactoryEntrypointIntegrationSummary;
+      try {
+        summary = JSON.parse(result.stdout) as FactoryEntrypointIntegrationSummary;
+      } catch (error) {
+        assert.ok(false, formatJsonDiagnostics(result, error));
+        return;
+      }
       assert.strictEqual(summary.command, 'factory:go');
       assert.strictEqual(summary.brief.url, briefUrl);
       assert.strictEqual(summary.brief.title, 'Sticky Note');
@@ -371,7 +382,7 @@ module('factory-entrypoint integration', function () {
         nextStep: 'all-issues-completed',
       });
     } finally {
-      rmSync(tempHome, { recursive: true, force: true });
+      rmSync(tempProfile.homeDir, { recursive: true, force: true });
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),
       );
@@ -488,4 +499,22 @@ async function runCommand(
       resolvePromise({ status, stdout, stderr });
     });
   });
+}
+
+function formatCommandDiagnostics(result: RunCommandResult): string {
+  return [
+    result.stderr.trim() ? `stderr:\n${result.stderr.trimEnd()}` : 'stderr: <empty>',
+    result.stdout.trim() ? `stdout:\n${result.stdout.trimEnd()}` : 'stdout: <empty>',
+  ].join('\n\n');
+}
+
+function formatJsonDiagnostics(
+  result: RunCommandResult,
+  error: unknown,
+): string {
+  let message = error instanceof Error ? error.message : String(error);
+  return [
+    `stdout was not valid JSON: ${message}`,
+    formatCommandDiagnostics(result),
+  ].join('\n\n');
 }

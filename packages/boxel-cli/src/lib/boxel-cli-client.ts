@@ -170,6 +170,10 @@ export class BoxelCLIClient {
     };
   }
 
+  getProfileConfigDir(): string {
+    return this.pm.getConfigDir();
+  }
+
   /**
    * Read a file from a realm. Always returns raw text content.
    * Callers should parse the content themselves if needed (e.g. JSON).

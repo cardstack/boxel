@@ -1,7 +1,10 @@
 // This should be first
 import '../setup-logger';
 
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import {
+  BOXEL_CLI_CONFIG_DIR_ENV,
+  BoxelCLIClient,
+} from '@cardstack/boxel-cli/api';
 
 import {
   FactoryEntrypointUsageError,
@@ -33,6 +36,19 @@ async function main(): Promise<void> {
   await BoxelCLIClient.ensureProfile({
     realmServerUrl: options.realmServerUrl ?? undefined,
   });
+
+  if (options.debug) {
+    let client = new BoxelCLIClient();
+    let active = client.getActiveProfile();
+    log.debug(
+      `profile config dir=${client.getProfileConfigDir()} source=${
+        process.env[BOXEL_CLI_CONFIG_DIR_ENV] ? BOXEL_CLI_CONFIG_DIR_ENV : 'HOME'
+      }`,
+    );
+    log.debug(
+      `active profile=${active?.matrixId ?? '(none)'} realmServer=${active?.realmServerUrl ?? '(none)'}`,
+    );
+  }
 
   log.info(`brief=${options.briefUrl}`);
   log.info('Starting seed issue + issue-driven loop...');

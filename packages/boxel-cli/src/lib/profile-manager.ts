@@ -13,8 +13,15 @@ import {
 } from './auth';
 import type { RealmAuthenticator } from './realm-authenticator';
 
-const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
+export const BOXEL_CLI_CONFIG_DIR_ENV = 'BOXEL_CLI_CONFIG_DIR';
 const PROFILES_FILENAME = 'profiles.json';
+
+export function getDefaultProfileConfigDir(): string {
+  return (
+    process.env[BOXEL_CLI_CONFIG_DIR_ENV] ??
+    path.join(os.homedir(), '.boxel-cli')
+  );
+}
 
 export const NO_ACTIVE_PROFILE_ERROR =
   'No active profile. Run `boxel profile add` to create one.';
@@ -97,7 +104,7 @@ export class ProfileManager implements RealmAuthenticator {
   private profilesFile: string;
 
   constructor(configDir?: string) {
-    this.configDir = configDir || DEFAULT_CONFIG_DIR;
+    this.configDir = configDir ?? getDefaultProfileConfigDir();
     this.profilesFile = path.join(this.configDir, PROFILES_FILENAME);
     this.config = this.loadConfig();
   }
@@ -171,6 +178,10 @@ export class ProfileManager implements RealmAuthenticator {
     const profile = this.config.profiles[id];
     if (!profile) return null;
     return { id, profile };
+  }
+
+  getConfigDir(): string {
+    return this.configDir;
   }
 
   async addProfile(
