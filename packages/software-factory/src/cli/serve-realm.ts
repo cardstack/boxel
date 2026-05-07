@@ -1,14 +1,15 @@
 // This should be first
 import '../setup-logger';
 
-import { readSupportContext } from '../runtime-metadata';
+import {
+  readSupportContext,
+  startFactoryRealmServer,
+} from '@cardstack/realm-test-harness';
 import { logger } from '../logger';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { RealmPermissions } from '@cardstack/runtime-common';
-
-import { startFactoryRealmServer } from '../harness';
 
 let log = logger('serve-realm');
 
@@ -38,20 +39,20 @@ async function main(): Promise<void> {
     positional[0] ?? 'test-fixtures/darkfactory-adopter',
   );
 
-  if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
+  if (!process.env.TEST_HARNESS_CONTEXT) {
     let supportContext = readSupportContext();
     if (supportContext) {
-      process.env.SOFTWARE_FACTORY_CONTEXT = JSON.stringify(supportContext);
+      process.env.TEST_HARNESS_CONTEXT = JSON.stringify(supportContext);
     }
   }
 
   let permissions: RealmPermissions | undefined;
-  if (process.env.SOFTWARE_FACTORY_PERMISSIONS) {
+  if (process.env.TEST_HARNESS_PERMISSIONS) {
     try {
-      permissions = JSON.parse(process.env.SOFTWARE_FACTORY_PERMISSIONS);
+      permissions = JSON.parse(process.env.TEST_HARNESS_PERMISSIONS);
     } catch (e) {
       throw new Error(
-        `SOFTWARE_FACTORY_PERMISSIONS is not valid JSON: ${e instanceof Error ? e.message : e}`,
+        `TEST_HARNESS_PERMISSIONS is not valid JSON: ${e instanceof Error ? e.message : e}`,
       );
     }
   }
@@ -59,10 +60,9 @@ async function main(): Promise<void> {
   let runtime = await startFactoryRealmServer({
     realmDir,
     permissions,
-    templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
-    templateRealmServerURL: process.env
-      .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
-      ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
+    templateDatabaseName: process.env.TEST_HARNESS_TEMPLATE_DATABASE_NAME,
+    templateRealmServerURL: process.env.TEST_HARNESS_TEMPLATE_REALM_SERVER_URL
+      ? new URL(process.env.TEST_HARNESS_TEMPLATE_REALM_SERVER_URL)
       : undefined,
     realmServerPort: parseCliNumber('realmServerPort'),
     compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
@@ -79,9 +79,9 @@ async function main(): Promise<void> {
     ownerBearerToken: runtime.createBearerToken(),
   };
 
-  if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
+  if (process.env.TEST_HARNESS_METADATA_FILE) {
     writeFileSync(
-      process.env.SOFTWARE_FACTORY_METADATA_FILE,
+      process.env.TEST_HARNESS_METADATA_FILE,
       JSON.stringify(payload, null, 2),
     );
   }

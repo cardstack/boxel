@@ -34,6 +34,7 @@ jobs:
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
+      bench-realm: ${{ steps.filter.outputs.bench-realm }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -129,6 +130,19 @@ jobs:
               # the committed bench fixtures.
               - 'packages/runtime-common/**'
               - 'bench-fixtures/runtime-common/amd-transpile/**'
+            bench-realm:
+              # HTTP GET + search regression bench. The realm-server's
+              # response time is shaped by every package in the wire path:
+              # runtime-common (definition lookup, query engine, file
+              # serializer), the realm-server itself, the host (FastBoot
+              # prerender), the base realm, and the harness that spins up
+              # the ephemeral stack.
+              - *shared
+              - 'packages/base/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/realm-test-harness/**'
+              - 'packages/software-factory/realm/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -138,7 +152,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || needs.change-check.outputs.bench-realm == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
@@ -746,6 +760,45 @@ jobs:
         # "real gate accepts current code AND failure path still works."
         run: pnpm bench:amd:check:trip-test
         working-directory: packages/runtime-common
+
+  realm-bench:
+    name: Realm Bench
+    needs: [change-check, test-web-assets]
+    # HTTP GET and `_search` regression bench against a fixture realm
+    # snapshot. Spins up an ephemeral realm-server stack (postgres +
+    # prerender + worker + realm-server) via realm-test-harness and times
+    # representative requests. Compares medians against
+    # `packages/realm-server/scripts/bench-realm/baseline.json`. When
+    # baseline.json is absent the script runs in report-only mode and
+    # exits 0 — used to anchor the initial baseline from real CI numbers
+    # before enforcement is turned on. See CS-11082.
+    if: needs.change-check.outputs.bench-realm == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: realm-bench-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # CI default — local default is 50/5. The bench harness amortises
+      # one stack startup across all scenarios, so doubling iterations
+      # only adds ~tens of seconds for tighter medians.
+      ITER: 100
+      WARMUP: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Run bench gate
+        run: pnpm bench:realm:check
+        working-directory: packages/realm-server
 
   post-pr-status:
     name: Update PR status comment

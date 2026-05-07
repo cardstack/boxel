@@ -144,7 +144,7 @@ export async function startPrerenderServer(
     NODE_NO_WARNINGS: '1',
     BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
     LOG_LEVELS:
-      process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
+      process.env.TEST_HARNESS_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
   let prerenderArgs = [
     '--transpileOnly',

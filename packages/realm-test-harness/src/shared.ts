@@ -9,8 +9,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 import jwt from 'jsonwebtoken';
-import '../setup-logger';
-import { logger } from '../logger';
+import './setup-logger';
+import { logger } from './logger';
 
 // Strip ambient env vars that could break the hermetic test seal.
 // The harness always passes port values explicitly through CLI args or
@@ -21,10 +21,10 @@ import { logger } from '../logger';
 // so it's safe to strip unconditionally — NODE_ENV may be 'test' or
 // 'development' depending on how the harness is invoked.
 delete process.env.HOST_URL;
-delete process.env.SOFTWARE_FACTORY_REALM_PORT;
-delete process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT;
-delete process.env.SOFTWARE_FACTORY_PRERENDER_PORT;
-delete process.env.SOFTWARE_FACTORY_PRERENDER_URL;
+delete process.env.TEST_HARNESS_REALM_PORT;
+delete process.env.TEST_HARNESS_COMPAT_REALM_PORT;
+delete process.env.TEST_HARNESS_PRERENDER_PORT;
+delete process.env.TEST_HARNESS_PRERENDER_URL;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
@@ -143,7 +143,7 @@ export const skillsRealmDir = resolve(
 );
 export const sourceRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_SOURCE_REALM_DIR ?? 'realm',
+  process.env.TEST_HARNESS_SOURCE_REALM_DIR ?? 'realm',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
@@ -155,41 +155,38 @@ export const prepareTestPgScript = resolve(
 );
 
 export const CACHE_VERSION = 8;
-export const CONFIGURED_REALM_URL = process.env.SOFTWARE_FACTORY_REALM_URL
-  ? new URL(process.env.SOFTWARE_FACTORY_REALM_URL)
+export const CONFIGURED_REALM_URL = process.env.TEST_HARNESS_REALM_URL
+  ? new URL(process.env.TEST_HARNESS_REALM_URL)
   : undefined;
 export const CONFIGURED_REALM_SERVER_URL = process.env
-  .SOFTWARE_FACTORY_REALM_SERVER_URL
-  ? new URL(process.env.SOFTWARE_FACTORY_REALM_SERVER_URL)
+  .TEST_HARNESS_REALM_SERVER_URL
+  ? new URL(process.env.TEST_HARNESS_REALM_SERVER_URL)
   : undefined;
 export const DEFAULT_REALM_DIR = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
+  process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 export const DEFAULT_ICONS_URL =
   process.env.ICONS_URL ?? 'http://localhost:4206/';
-export const CONFIGURED_HOST_URL = process.env.SOFTWARE_FACTORY_HOST_URL
-  ? new URL(process.env.SOFTWARE_FACTORY_HOST_URL)
+export const CONFIGURED_HOST_URL = process.env.TEST_HARNESS_HOST_URL
+  ? new URL(process.env.TEST_HARNESS_HOST_URL)
   : undefined;
 export const DEFAULT_ICONS_PROBE_URL = new URL(
   '@cardstack/boxel-icons/v1/icons/code.js',
   DEFAULT_ICONS_URL,
 ).href;
-export const DEFAULT_PG_PORT = process.env.SOFTWARE_FACTORY_PGPORT ?? '55436';
-export const DEFAULT_PG_HOST =
-  process.env.SOFTWARE_FACTORY_PGHOST ?? '127.0.0.1';
-export const DEFAULT_PG_USER =
-  process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
+export const DEFAULT_PG_PORT = process.env.TEST_HARNESS_PGPORT ?? '55436';
+export const DEFAULT_PG_HOST = process.env.TEST_HARNESS_PGHOST ?? '127.0.0.1';
+export const DEFAULT_PG_USER = process.env.TEST_HARNESS_PGUSER ?? 'postgres';
 // The seeded test Postgres used by the harness runs with max_connections=50, so
 // isolated workers need a smaller per-process pool cap to keep workers=3 stable.
 export const DEFAULT_PG_POOL_MAX = Number(
-  process.env.SOFTWARE_FACTORY_PG_POOL_MAX ?? 2,
+  process.env.TEST_HARNESS_PG_POOL_MAX ?? 2,
 );
 export const DEFAULT_MIGRATED_TEMPLATE_DB =
-  process.env.SOFTWARE_FACTORY_MIGRATED_TEMPLATE_DB ??
-  'boxel_migrated_template';
+  process.env.TEST_HARNESS_MIGRATED_TEMPLATE_DB ?? 'boxel_migrated_template';
 export const DEFAULT_REALM_LOG_LEVELS =
-  process.env.SOFTWARE_FACTORY_REALM_LOG_LEVELS ??
+  process.env.TEST_HARNESS_REALM_LOG_LEVELS ??
   '*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug,realm=debug,perf=debug';
 export const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 export const REALM_SECRET_SEED = "shhh! it's a secret";
@@ -197,12 +194,11 @@ export const REALM_SERVER_SECRET_SEED = "mum's the word";
 export const GRAFANA_SECRET = "shhh! it's a secret";
 export const FIXTURE_SOURCE_REALM_URL_PLACEHOLDER = 'https://sf.boxel.test/';
 export const DEFAULT_MATRIX_SERVER_USERNAME =
-  process.env.SOFTWARE_FACTORY_MATRIX_SERVER_USERNAME ?? 'realm_server';
+  process.env.TEST_HARNESS_MATRIX_SERVER_USERNAME ?? 'realm_server';
 export const DEFAULT_MATRIX_BROWSER_USERNAME =
-  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_USERNAME ??
+  process.env.TEST_HARNESS_BROWSER_MATRIX_USERNAME ??
   'software-factory-browser';
-export const INCLUDE_SKILLS =
-  process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1';
+export const INCLUDE_SKILLS = process.env.TEST_HARNESS_INCLUDE_SKILLS === '1';
 export const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
@@ -213,14 +209,14 @@ export const DEFAULT_SOURCE_REALM_PERMISSIONS: RealmPermissions = {
 };
 export const DEFAULT_BASE_REALM_PERMISSIONS = DEFAULT_SOURCE_REALM_PERMISSIONS;
 export const managedProcessStdio: StdioOptions =
-  process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
+  process.env.TEST_HARNESS_DEBUG_SERVER === '1'
     ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
     : (['ignore', 'pipe', 'pipe', 'ipc'] as const);
 export const DEFAULT_REALM_STARTUP_TIMEOUT_MS = Number(
-  process.env.SOFTWARE_FACTORY_REALM_STARTUP_TIMEOUT_MS ?? 120_000,
+  process.env.TEST_HARNESS_REALM_STARTUP_TIMEOUT_MS ?? 120_000,
 );
 export const FULL_INDEX_REALM_STARTUP_TIMEOUT_MS = Number(
-  process.env.SOFTWARE_FACTORY_FULL_INDEX_REALM_STARTUP_TIMEOUT_MS ?? 600_000,
+  process.env.TEST_HARNESS_FULL_INDEX_REALM_STARTUP_TIMEOUT_MS ?? 600_000,
 );
 
 export const harnessLog = logger('software-factory:harness');
@@ -428,7 +424,7 @@ export async function resolveFactoryRealmLocation(options: {
     realmURL = new URL('test/', realmServerURL);
   } else if (!realmServerURL) {
     throw new Error(
-      'An explicit realm server URL is required when a realm URL is provided. Set options.realmServerURL or SOFTWARE_FACTORY_REALM_SERVER_URL.',
+      'An explicit realm server URL is required when a realm URL is provided. Set options.realmServerURL or TEST_HARNESS_REALM_SERVER_URL.',
     );
   } else if (!realmURL) {
     realmURL = new URL('test/', realmServerURL);
@@ -705,7 +701,7 @@ export {
   fileExists,
   findRootRepoCheckoutDir,
   findHostDistPackageDir,
-} from '../host-dist';
+} from './host-dist';
 
 export function browserPassword(username: string): string {
   let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
@@ -716,7 +712,7 @@ export function browserPassword(username: string): string {
 }
 
 export function parseFactoryContext(): FactoryTestContext | undefined {
-  let raw = process.env.SOFTWARE_FACTORY_CONTEXT;
+  let raw = process.env.TEST_HARNESS_CONTEXT;
   if (!raw) {
     return undefined;
   }

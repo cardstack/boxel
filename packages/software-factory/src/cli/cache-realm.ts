@@ -7,9 +7,9 @@ import { basename, dirname, resolve } from 'node:path';
 import {
   ensureCombinedFactoryRealmTemplate,
   ensureFactoryRealmTemplate,
-} from '../harness';
-import { isFactorySupportContext } from '../harness/shared';
-import { readSupportContext } from '../runtime-metadata';
+  isFactorySupportContext,
+  readSupportContext,
+} from '@cardstack/realm-test-harness';
 import { logger } from '../logger';
 
 let log = logger('cache-realm');
@@ -32,7 +32,7 @@ async function main(): Promise<void> {
       ),
     ),
   ];
-  let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
+  let serializedSupportContext = process.env.TEST_HARNESS_CONTEXT;
 
   let parsedEnvContext = serializedSupportContext
     ? (JSON.parse(serializedSupportContext) as unknown)
@@ -155,12 +155,12 @@ async function main(): Promise<void> {
     };
   }
 
-  if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
-    mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {
+  if (process.env.TEST_HARNESS_METADATA_FILE) {
+    mkdirSync(dirname(process.env.TEST_HARNESS_METADATA_FILE), {
       recursive: true,
     });
     writeFileSync(
-      process.env.SOFTWARE_FACTORY_METADATA_FILE,
+      process.env.TEST_HARNESS_METADATA_FILE,
       JSON.stringify(payload, null, 2),
     );
   }

@@ -5,8 +5,8 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
-} from '../runtime-metadata';
-import { configureLogger } from '../logger';
+} from './runtime-metadata';
+import { configureLogger } from './logger';
 
 /**
  * Suppress console.log/warn during a callback. Used during template DB builds
@@ -80,7 +80,7 @@ import {
 export function getFactoryTestContext(): FactoryTestContext {
   let context = parseFactoryContext();
   if (!context) {
-    throw new Error('SOFTWARE_FACTORY_CONTEXT is not defined');
+    throw new Error('TEST_HARNESS_CONTEXT is not defined');
   }
   return context;
 }
@@ -158,7 +158,7 @@ export async function ensureFactoryRealmTemplate(
         fixtureHash,
         sourceRealmHash,
         cacheSalt:
-          options.cacheSalt ?? process.env.SOFTWARE_FACTORY_CACHE_SALT ?? null,
+          options.cacheSalt ?? process.env.TEST_HARNESS_CACHE_SALT ?? null,
       }),
     );
     let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
@@ -297,9 +297,7 @@ export async function ensureCombinedFactoryRealmTemplate(
           sourceRealmHash,
           permissions,
           cacheSalt:
-            options.cacheSalt ??
-            process.env.SOFTWARE_FACTORY_CACHE_SALT ??
-            null,
+            options.cacheSalt ?? process.env.TEST_HARNESS_CACHE_SALT ?? null,
         }),
       );
       let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);

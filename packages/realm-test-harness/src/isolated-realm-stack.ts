@@ -116,7 +116,10 @@ function describeCompatProxyError(error: unknown): string {
           ? ` (${current.code})`
           : '';
       parts.push(`${current.message}${code}`);
-      current = current.cause;
+      // Standard Error.cause (ES2022 — typed inline so consumers using an
+      // older `lib` don't need to widen their tsconfig to consume the
+      // harness types).
+      current = (current as Error & { cause?: unknown }).cause;
     } else {
       parts.push(String(current));
       break;
@@ -502,8 +505,8 @@ export async function startIsolatedRealmStack({
       BOXEL_TRUST_FORWARDED_URL: 'true',
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${compatProxy.listenPort}`,
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${compatProxy.listenPort}`,
-      SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
-      SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
+      TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
+      TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
     };
 
     let workerArgs = [

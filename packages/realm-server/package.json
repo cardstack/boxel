@@ -11,6 +11,7 @@
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
+    "@cardstack/realm-test-harness": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@koa/cors": "catalog:",
@@ -93,6 +94,8 @@
   "scripts": {
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
+    "bench:realm": "TEST_HARNESS_SOURCE_REALM_DIR=../software-factory/realm NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-realm/bench.ts",
+    "bench:realm:check": "TEST_HARNESS_SOURCE_REALM_DIR=../software-factory/realm NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-realm/check.ts",
     "migrate": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-migrations.ts",
     "start:matrix": "./scripts/start-matrix.sh",
     "start:smtp": "cd ../matrix && pnpm assert-smtp-running",

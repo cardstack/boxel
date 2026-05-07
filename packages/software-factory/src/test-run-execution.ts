@@ -20,7 +20,7 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
-import { findHostDistPackageDir } from './host-dist';
+import { findHostDistPackageDir } from '@cardstack/realm-test-harness';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 let log = logger('test-run-execution');

@@ -39,8 +39,7 @@ import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
-const runtimeMetadataFile =
-  process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
+const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
   writeRuntimeMetadataFile(runtimeMetadataFile, 'realm-server', payload);

@@ -31,8 +31,8 @@ export interface PreparedTemplateMetadata {
 
 export function getSupportMetadataFile() {
   return (
-    process.env.SOFTWARE_FACTORY_SUPPORT_METADATA_FILE ??
-    process.env.SOFTWARE_FACTORY_METADATA_FILE ??
+    process.env.TEST_HARNESS_SUPPORT_METADATA_FILE ??
+    process.env.TEST_HARNESS_METADATA_FILE ??
     defaultSupportMetadataFile
   );
 }
