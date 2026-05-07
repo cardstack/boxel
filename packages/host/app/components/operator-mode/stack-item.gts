@@ -88,14 +88,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmService from '../../services/realm';
 import type StoreService from '../../services/store';
 
-function isMacPlatform(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  let platform =
-    (navigator as { userAgentData?: { platform?: string } }).userAgentData
-      ?.platform ?? navigator.platform;
-  return /mac|iphone|ipad|ipod/i.test(platform);
-}
-
 export interface StackItemComponentAPI {
   clearSelections: () => void;
   scrollIntoView: (selector: string) => Promise<void>;
@@ -686,12 +678,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get keyboardShortcutLabels() {
-    let toggleEdit = isMacPlatform() ? '⌘E' : 'Ctrl+E';
     return {
-      // Pencil button in view mode → enter edit (Ctrl/Cmd+E).
-      edit: this.isFileCard ? undefined : toggleEdit,
-      // Pencil button in edit mode → exit to view (Esc or Ctrl/Cmd+E).
-      finishEditing: this.isFileCard ? undefined : `Esc or ${toggleEdit}`,
+      // Pencil button in view mode → enter edit (Ctrl+E on every platform;
+      // Cmd+E is reserved by browsers for "Use Selection for Find").
+      edit: this.isFileCard ? undefined : 'Ctrl+E',
+      // Pencil button in edit mode → exit to view (Esc or Ctrl+E).
+      finishEditing: this.isFileCard ? undefined : 'Esc or Ctrl+E',
       // Close button: Esc only closes when not editing — in edit mode
       // Esc means "exit edit", so don't claim it in the close tooltip.
       close: this.isEditing ? undefined : 'Esc',

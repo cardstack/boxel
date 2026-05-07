@@ -590,7 +590,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .doesNotExist('a second Escape from view mode closes the item');
     });
 
-    test('Ctrl+E (or Cmd+E) toggles edit mode on the most recently opened item', async function (assert) {
+    test('Ctrl+E toggles edit mode on the most recently opened item', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       });
@@ -601,17 +601,18 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .exists('card starts in isolated/view mode');
 
-      // Cmd+E on Mac…
+      // Ctrl+E enters edit mode (bound on every platform — Mac too,
+      // because Cmd+E is reserved by browsers).
       await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
-        metaKey: true,
+        ctrlKey: true,
       });
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
         )
-        .exists('Cmd+E flipped the card into edit mode');
+        .exists('Ctrl+E flipped the card into edit mode');
 
-      // …Ctrl+E on other platforms — and the toggle is symmetric.
+      // The toggle is symmetric — pressing again returns to isolated.
       await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
         ctrlKey: true,
       });
@@ -620,6 +621,17 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
         )
         .exists('Ctrl+E flipped the card back to isolated mode');
+
+      // Cmd+E (metaKey) is intentionally NOT bound — it stays free for
+      // the browser's "Use Selection for Find" shortcut on Mac.
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        metaKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Cmd+E (metaKey) does not toggle edit mode');
     });
 
     test('duplicate card in a stack is not allowed', async function (assert) {

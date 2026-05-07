@@ -840,7 +840,9 @@ export default class InteractSubmode extends Component {
         class='interact-submode'
         style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
-        {{onKeyMod 'cmd+KeyE' this.handleToggleEdit}}
+        {{! Bind Ctrl+E on every platform — Mac users get Ctrl+E too,
+           because Cmd+E is taken by browsers ("Use Selection for Find"). }}
+        {{onKeyMod 'ctrl+KeyE' this.handleToggleEdit}}
       >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
