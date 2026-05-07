@@ -187,6 +187,39 @@ const headPreviewCard = `import { contains, field, CardDef, Component } from "ht
   }
 `;
 
+async function waitForHeadPreviewText(
+  selector: string,
+  expectedText: string,
+  context: string,
+) {
+  try {
+    await waitUntil(
+      () => document.querySelector(selector)?.textContent?.trim() === expectedText,
+      { timeout: 5000 },
+    );
+  } catch (error) {
+    console.info(
+      `head preview diagnostics ${JSON.stringify({
+        context,
+        selector,
+        expectedText,
+        actualText: document.querySelector(selector)?.textContent?.trim() ?? null,
+        googleTitleText:
+          document.querySelector('.google-title')?.textContent?.trim() ?? null,
+        googleDescriptionText:
+          document.querySelector('.google-description')?.textContent?.trim() ?? null,
+        googleSiteNameText:
+          document.querySelector('.google-site-name')?.textContent?.trim() ?? null,
+        playgroundPreviewHtml:
+          document
+            .querySelector('[data-test-playground-panel]')
+            ?.innerHTML?.slice(0, 2000) ?? null,
+      })}`,
+    );
+    throw error;
+  }
+}
+
 const localStyleReferenceCard = {
   data: {
     type: 'card',
@@ -575,13 +608,22 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'HeadPreview',
       });
       await selectFormat('head');
+      await waitForHeadPreviewText(
+        '.google-title',
+        'Definition Title',
+        'initial head preview render in card playground',
+      );
 
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');
       assert.dom('.google-site-name').hasText('example.com');
 
       setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
-      await settled();
+      await waitForHeadPreviewText(
+        '.google-title',
+        'Definition Title!!',
+        'updated head preview render in card playground',
+      );
 
       assert.dom('.google-title').hasText('Definition Title!!');
     });
