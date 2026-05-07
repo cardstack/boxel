@@ -11,8 +11,10 @@
 
 import {
   parseNativeJq,
+  prepareNativeJqAsync,
   prepareNativeJq,
   runNativeJq,
+  runNativeJqAsync,
   tokenizeNativeJq,
 } from './bxl/bridge/native.js';
 import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
@@ -207,7 +209,9 @@ export {
   parseBxlAst,
   parseNativeJq,
   prepareNativeJq,
+  prepareNativeJqAsync,
   runNativeJq,
+  runNativeJqAsync,
   solidifyBxlExpression,
   storageToReadableBxlExpression,
   tokenizeNativeJq,

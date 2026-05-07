@@ -106,5 +106,9 @@
     "typedoc": "^0.25.0",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.59.0"
+  },
+  "dependencies": {
+    "bessel": "^1.0.2",
+    "jstat": "^1.9.6"
   }
 }

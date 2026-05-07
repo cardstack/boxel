@@ -30,7 +30,13 @@ export const BXL_REGISTRY: Record<string, BuiltinLibrary> = {
   formula: formulaLibrary,
 };
 
-export type BuiltinLibraryName = 'core' | 'formula';
+export type BuiltinLibraryName =
+  | 'core'
+  | 'formula'
+  | 'formula-statistical'
+  | 'formula-bessel'
+  | 'formula-engineering'
+  | 'formula-financial';
 
 export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'core',
@@ -41,6 +47,13 @@ export function resolveBuiltinRegistry(
   libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
 ): ResolvedBuiltinRegistry {
   return resolveRegistry(BXL_REGISTRY, libraries);
+}
+
+export function registerBuiltinLibrary(
+  name: BuiltinLibraryName,
+  library: BuiltinLibrary,
+) {
+  BXL_REGISTRY[name] = library;
 }
 
 export type { ResolvedBuiltinRegistry, BuiltinLibrary };

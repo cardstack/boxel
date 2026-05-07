@@ -8,6 +8,7 @@ import type {
   ReadableSyntaxWarning,
 } from './bxl/compiler/readable-syntax.js';
 import { prepareNativeJq } from './bxl/bridge/native.js';
+import { resolveLazyBuiltinLibrariesForExpressions } from './bxl/bridge/lazy-formulas.js';
 import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
 import { getPath } from './jqtools/evaluate/utils/getPath.js';
 import { setPath } from './jqtools/evaluate/utils/setPath.js';
@@ -635,6 +636,65 @@ function coerceString(value: unknown): string | undefined {
     return undefined;
   }
   return typeof value === 'string' ? value : String(value);
+}
+
+function collectRuntimeExpressions(definition: BoxelRuntimeDefinition): string[] {
+  const expressions: string[] = [];
+  const add = (value: BoxelGuideExpression | undefined) => {
+    if (value) {
+      expressions.push(normalizeExpressionSlot(value));
+    }
+  };
+  const addLiteralOrExpression = (
+    value: BoxelLiteralOrExpression<string> | undefined,
+  ) => {
+    if (isExpressionValue(value)) {
+      expressions.push(value.expression);
+    }
+  };
+
+  for (const fieldGuide of definition.guide?.fieldGuides ?? []) {
+    add(fieldGuide.visibleWhen);
+    add(fieldGuide.suggestedValue);
+    add(fieldGuide.defaultFrom);
+    add(fieldGuide.computedVia);
+    if (isExpressionValue(fieldGuide.required)) {
+      expressions.push(fieldGuide.required.expression);
+    }
+    for (const constraint of fieldGuide.constraints ?? []) {
+      add(constraint.expression);
+    }
+  }
+
+  for (const constraint of definition.guide?.constraints ?? []) {
+    add(constraint.expression);
+  }
+  for (const formula of definition.formulas ?? []) {
+    add(formula.expression);
+  }
+  for (const annotation of definition.annotations ?? []) {
+    add(annotation.when);
+    addLiteralOrExpression(annotation.cardTitle);
+    addLiteralOrExpression(annotation.summary);
+    addLiteralOrExpression(annotation.details);
+    addLiteralOrExpression(annotation.snippet);
+    addLiteralOrExpression(annotation.previousValue);
+    addLiteralOrExpression(annotation.newValue);
+    addLiteralOrExpression(annotation.createdAt);
+  }
+
+  return expressions;
+}
+
+async function resolveLazyBoxelRuntimeOptions(
+  definition: BoxelRuntimeDefinition,
+  options: BoxelRuntimeOptions,
+): Promise<BoxelRuntimeOptions> {
+  const libraries = await resolveLazyBuiltinLibrariesForExpressions(
+    collectRuntimeExpressions(definition),
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+  return { ...options, libraries };
 }
 
 function resolveLiteralOrExpression(
@@ -2055,10 +2115,13 @@ export function __runBoxelRuntimeWorker() {
   const plans = new Map<string, WorkerPlanEntry>();
   const sessions = new Map<string, BoxelRuntimeSession>();
 
-  const ensurePlan = (payload: PreparePlanPayload): WorkerPlanEntry => {
+  const ensurePlan = async (payload: PreparePlanPayload): Promise<WorkerPlanEntry> => {
     let entry = plans.get(payload.cacheKey);
     if (!entry) {
-      const prepared = prepareBoxelRuntime(payload.definition, payload.options);
+      const prepared = prepareBoxelRuntime(
+        payload.definition,
+        await resolveLazyBoxelRuntimeOptions(payload.definition, payload.options),
+      );
       entry = {
         prepared,
         metadata: {
@@ -2076,13 +2139,13 @@ export function __runBoxelRuntimeWorker() {
     return entry;
   };
 
-  scope.addEventListener('message', (event) => {
+  scope.addEventListener('message', async (event) => {
     const request = event.data;
 
     try {
       switch (request.type) {
         case 'ensure-plan': {
-          const prepared = ensurePlan(request);
+          const prepared = await ensurePlan(request);
           scope.postMessage({
             requestId: request.requestId,
             ok: true,
@@ -2719,10 +2782,13 @@ class WorkerBackedBoxelRuntimeSession extends BaseAsyncBoxelRuntimeSession {
   }
 }
 
-function createLocalAsyncPreparedBoxelRuntime(
+async function createLocalAsyncPreparedBoxelRuntime(
   payload: PreparePlanPayload,
-): PreparedBoxelRuntimeAsync {
-  const prepared = prepareBoxelRuntime(payload.definition, payload.options);
+): Promise<PreparedBoxelRuntimeAsync> {
+  const prepared = prepareBoxelRuntime(
+    payload.definition,
+    await resolveLazyBoxelRuntimeOptions(payload.definition, payload.options),
+  );
   const runtime: LocalAsyncPreparedRuntimeHandle = {
     cacheKey: payload.cacheKey,
     cacheNamespace: payload.cacheNamespace,
@@ -2794,7 +2860,7 @@ export async function prepareBoxelRuntimeAsync(
   };
   const preparedPromise = (async () => {
     const prepared = !useWorkerRuntime
-      ? createLocalAsyncPreparedBoxelRuntime(payload)
+      ? await createLocalAsyncPreparedBoxelRuntime(payload)
       : createWorkerBackedPreparedBoxelRuntime(
           getBoxelRuntimeWorkerManager(),
           await getBoxelRuntimeWorkerManager().ensurePlan(payload),

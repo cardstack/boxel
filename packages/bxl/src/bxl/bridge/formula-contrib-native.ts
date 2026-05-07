@@ -15,112 +15,8 @@ import {
   sumExcelRange,
 } from '../../formulajs/common.js';
 import { createCriteriaMatcher, matchesCriteria } from '../../formulajs/criteria.js';
-import {
-  buildExcelDate,
-  excelDateToSerial,
-  excelDatedif,
-  excelDatevalue,
-  excelDay,
-  excelDays360,
-  excelMonth,
-  excelNetworkdays,
-  excelNetworkdaysIntl,
-  excelWeeknum,
-  excelWorkday,
-  excelWorkdayIntl,
-  excelYear,
-  parseExcelDate,
-  yearFrac,
-} from '../../formulajs/dateSerial.js';
-import {
-  excelBase,
-  excelBin2Dec,
-  excelBin2Hex,
-  excelBin2Oct,
-  excelBitAnd,
-  excelBitLShift,
-  excelBitOr,
-  excelBitRShift,
-  excelBitXor,
-  excelComplex,
-  excelDec2Bin,
-  excelDec2Hex,
-  excelDec2Oct,
-  excelDecimal,
-  excelDelta,
-  excelConvert,
-  excelErf,
-  excelErfc,
-  excelGestep,
-  excelHex2Bin,
-  excelHex2Dec,
-  excelHex2Oct,
-  excelImAbs,
-  excelImArgument,
-  excelImConjugate,
-  excelImCos,
-  excelImCosh,
-  excelImCot,
-  excelImCsc,
-  excelImCsch,
-  excelImDiv,
-  excelImExp,
-  excelImImaginary,
-  excelImLn,
-  excelImLog10,
-  excelImLog2,
-  excelImPower,
-  excelImProduct,
-  excelImReal,
-  excelImSec,
-  excelImSech,
-  excelImSin,
-  excelImSinh,
-  excelImSqrt,
-  excelImSub,
-  excelImSum,
-  excelImTan,
-  excelOct2Bin,
-  excelOct2Dec,
-  excelOct2Hex,
-} from '../../formulajs/engineering.js';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
 import { compare } from '../../jqtools/evaluate/compare.js';
-import {
-  excelAccrint,
-  excelCoupdays,
-  excelCumipmt,
-  excelCumprinc,
-  excelDb,
-  excelDdb,
-  excelDisc,
-  excelDollarde,
-  excelDollarfr,
-  excelEffect,
-  excelFv,
-  excelFvSchedule,
-  excelIpmt,
-  excelIrr,
-  excelIspmt,
-  excelMirr,
-  excelNper,
-  excelNominal,
-  excelNpv,
-  excelPduration,
-  excelPmt,
-  excelPpmt,
-  excelPricedisc,
-  excelPv,
-  excelRate,
-  excelRri,
-  excelSln,
-  excelSyd,
-  excelTbilleq,
-  excelTbillprice,
-  excelTbillyield,
-  excelXirr,
-  excelXnpv,
-} from '../../formulajs/financial.js';
 import { BareNativeFilter, wrapBareNativeFilters } from '../../jqtools/evaluate/filters/lib/nativeFilter.js';
 
 function asRowObject(value: unknown): Record<string, unknown> {
@@ -280,6 +176,14 @@ function sumPairValue(
   );
 }
 
+// Excel serial-date conversion is inlined here so this module doesn't pull
+// in formulajs/dateSerial.ts (now lazy-loaded). The constants mirror that
+// module: 1900-01-01 epoch with the +2 fudge for the documented Excel
+// 1900-leap-year bug. If you change one, change both.
+const NOW_SERIAL_MS_PER_DAY = 86_400_000;
+const NOW_SERIAL_EPOCH_MS = Date.UTC(1900, 0, 1);
+const NOW_SERIAL_LEAP_BUG_BOUNDARY_MS = Date.UTC(1900, 1, 28);
+
 function nowSerial() {
   const now = new Date();
   const day = new Date(Date.UTC(
@@ -292,7 +196,11 @@ function nowSerial() {
     now.getUTCMinutes() * 60 +
     now.getUTCSeconds() +
     now.getUTCMilliseconds() / 1000;
-  return excelDateToSerial(day) + seconds / 86400;
+  const addOn = day.getTime() > NOW_SERIAL_LEAP_BUG_BOUNDARY_MS ? 2 : 1;
+  const daySerial =
+    Math.ceil((day.getTime() - NOW_SERIAL_EPOCH_MS) / NOW_SERIAL_MS_PER_DAY) +
+    addOn;
+  return daySerial + seconds / 86400;
 }
 
 function replaceNth(text: string, oldText: string, newText: string, instance: number) {
@@ -1132,42 +1040,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     const filteredRows = filterRowsByCriteria(rows, criteriaObject);
     yield averageExcelRange(colValues(filteredRows, valueKey));
   },
-  *'BASE/2'(_input, number, radix) {
-    yield excelBase(number, radix);
-  },
-  *'BASE/3'(_input, number, radix, minLength) {
-    yield excelBase(number, radix, minLength);
-  },
-  *'BIN2DEC/1'(_input, number) {
-    yield excelBin2Dec(number);
-  },
-  *'BIN2HEX/1'(_input, number) {
-    yield excelBin2Hex(number);
-  },
-  *'BIN2HEX/2'(_input, number, places) {
-    yield excelBin2Hex(number, places);
-  },
-  *'BIN2OCT/1'(_input, number) {
-    yield excelBin2Oct(number);
-  },
-  *'BIN2OCT/2'(_input, number, places) {
-    yield excelBin2Oct(number, places);
-  },
-  *'BITAND/2'(_input, left, right) {
-    yield excelBitAnd(left, right);
-  },
-  *'BITLSHIFT/2'(_input, number, shift) {
-    yield excelBitLShift(number, shift);
-  },
-  *'BITOR/2'(_input, left, right) {
-    yield excelBitOr(left, right);
-  },
-  *'BITRSHIFT/2'(_input, number, shift) {
-    yield excelBitRShift(number, shift);
-  },
-  *'BITXOR/2'(_input, left, right) {
-    yield excelBitXor(left, right);
-  },
   *'CHAR/1'(_input, value) {
     const number = parseExcelNumber(value);
     if (number === 0) {
@@ -1223,12 +1095,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'COUNTIFS_BY/2'(_input, rows, criteriaObject) {
     yield filterRowsByCriteria(rows, criteriaObject).length;
   },
-  *'COMPLEX/2'(_input, real, imaginary) {
-    yield excelComplex(real, imaginary);
-  },
-  *'COMPLEX/3'(_input, real, imaginary, suffix) {
-    yield excelComplex(real, imaginary, suffix);
-  },
   *'COS/1'(_input, value) {
     yield checkedMathResult(Math.cos(parseExcelNumber(value)));
   },
@@ -1263,63 +1129,11 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     }
     yield checkedMathResult(1 / Math.sinh(number));
   },
-  *'CUMIPMT/6'(_input, rate, nper, pv, startPeriod, endPeriod, type) {
-    yield excelCumipmt(rate, nper, pv, startPeriod, endPeriod, type);
-  },
-  *'CUMPRINC/6'(_input, rate, nper, pv, startPeriod, endPeriod, type) {
-    yield excelCumprinc(rate, nper, pv, startPeriod, endPeriod, type);
-  },
-  *'DATE/3'(_input, year, month, day) {
-    yield buildExcelDate(
-      parseExcelNumber(year),
-      parseExcelNumber(month),
-      parseExcelNumber(day),
-    );
-  },
-  *'DAY/1'(_input, value) {
-    yield excelDay(value);
-  },
-  *'DEC2BIN/1'(_input, number) {
-    yield excelDec2Bin(number);
-  },
-  *'DEC2BIN/2'(_input, number, places) {
-    yield excelDec2Bin(number, places);
-  },
-  *'DEC2HEX/1'(_input, number) {
-    yield excelDec2Hex(number);
-  },
-  *'DEC2HEX/2'(_input, number, places) {
-    yield excelDec2Hex(number, places);
-  },
-  *'DEC2OCT/1'(_input, number) {
-    yield excelDec2Oct(number);
-  },
-  *'DEC2OCT/2'(_input, number, places) {
-    yield excelDec2Oct(number, places);
-  },
-  *'DECIMAL/2'(_input, text, radix) {
-    yield excelDecimal(text, radix);
-  },
-  *'DELTA/1'(_input, left) {
-    yield excelDelta(left);
-  },
-  *'DELTA/2'(_input, left, right) {
-    yield excelDelta(left, right);
-  },
   *'DOLLAR/1'(_input, number) {
     yield dollarValue(number);
   },
   *'DOLLAR/2'(_input, number, decimals) {
     yield dollarValue(number, decimals);
-  },
-  *'GESTEP/1'(_input, number) {
-    yield excelGestep(number);
-  },
-  *'GESTEP/2'(_input, number, step) {
-    yield excelGestep(number, step);
-  },
-  *'EFFECT/2'(_input, nominalRate, npery) {
-    yield excelEffect(nominalRate, npery);
   },
   *'EXACT/2'(_input, left, right) {
     yield parseExcelString(left) === parseExcelString(right);
@@ -1368,33 +1182,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'FLOOR_MATH/2'(_input, number, significance) {
     yield floorValue(number, significance);
   },
-  *'FV/3'(_input, rate, nper, payment) {
-    yield excelFv(rate, nper, payment);
-  },
-  *'FV/4'(_input, rate, nper, payment, value) {
-    yield excelFv(rate, nper, payment, value);
-  },
-  *'FV/5'(_input, rate, nper, payment, value, type) {
-    yield excelFv(rate, nper, payment, value, type);
-  },
-  *'FVSCHEDULE/2'(_input, principal, schedule) {
-    yield excelFvSchedule(principal, schedule);
-  },
-  *'HEX2BIN/1'(_input, number) {
-    yield excelHex2Bin(number);
-  },
-  *'HEX2BIN/2'(_input, number, places) {
-    yield excelHex2Bin(number, places);
-  },
-  *'HEX2DEC/1'(_input, number) {
-    yield excelHex2Dec(number);
-  },
-  *'HEX2OCT/1'(_input, number) {
-    yield excelHex2Oct(number);
-  },
-  *'HEX2OCT/2'(_input, number, places) {
-    yield excelHex2Oct(number, places);
-  },
   *'HLOOKUP/3'(_input, lookupValueLike, table, rowIndex) {
     yield vlookupValue(lookupValueLike, transposeLookupTable(table), rowIndex);
   },
@@ -1409,51 +1196,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'INT/1'(_input, value) {
     yield Math.floor(parseExcelNumber(value));
-  },
-  *'IPMT/4'(_input, rate, per, nper, pv) {
-    yield excelIpmt(rate, per, nper, pv);
-  },
-  *'IPMT/5'(_input, rate, per, nper, pv, fv) {
-    yield excelIpmt(rate, per, nper, pv, fv);
-  },
-  *'IPMT/6'(_input, rate, per, nper, pv, fv, type) {
-    yield excelIpmt(rate, per, nper, pv, fv, type);
-  },
-  *'IRR/1'(_input, values) {
-    yield excelIrr(values);
-  },
-  *'IRR/2'(_input, values, guess) {
-    yield excelIrr(values, guess);
-  },
-  *'IRR_BY/2'(_input, rows, valueKey) {
-    yield excelIrr(colValues(rows, valueKey));
-  },
-  *'IRR_BY/3'(_input, rows, valueKey, guess) {
-    yield excelIrr(colValues(rows, valueKey), guess);
-  },
-  *'IMABS/1'(_input, value) {
-    yield excelImAbs(value);
-  },
-  *'IMAGINARY/1'(_input, value) {
-    yield excelImImaginary(value);
-  },
-  *'IMCONJUGATE/1'(_input, value) {
-    yield excelImConjugate(value);
-  },
-  *'IMREAL/1'(_input, value) {
-    yield excelImReal(value);
-  },
-  *'IMSUB/2'(_input, left, right) {
-    yield excelImSub(left, right);
-  },
-  *'IMSUM/1'(_input, values) {
-    yield excelImSum(values);
-  },
-  *'IMSUM/2'(_input, left, right) {
-    yield excelImSum([left, right]);
-  },
-  *'IMSUM/3'(_input, first, second, third) {
-    yield excelImSum([first, second, third]);
   },
   *'ISBLANK/1'(_input, value) {
     yield value === null || value === undefined;
@@ -1519,9 +1261,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'MIN/1'(_input, value) {
     yield minExcelRange(value);
   },
-  *'MIRR/3'(_input, values, financeRate, reinvestRate) {
-    yield excelMirr(values, financeRate, reinvestRate);
-  },
   *'MOD/2'(_input, left, right) {
     const divisor = parseExcelNumber(right);
     if (divisor === 0) {
@@ -1529,9 +1268,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     }
     const dividend = parseExcelNumber(left);
     yield ((dividend % divisor) + divisor) % divisor;
-  },
-  *'MONTH/1'(_input, value) {
-    yield excelMonth(value);
   },
   *'MULTINOMIAL/1'(_input, values) {
     yield multinomialValue(values);
@@ -1566,59 +1302,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'NUMBERVALUE/3'(_input, text, decimalSeparator, groupSeparator) {
     yield numberValue(text, decimalSeparator, groupSeparator);
   },
-  *'NPER/3'(_input, rate, pmt, pv) {
-    yield excelNper(rate, pmt, pv);
-  },
-  *'NPER/4'(_input, rate, pmt, pv, fv) {
-    yield excelNper(rate, pmt, pv, fv);
-  },
-  *'NPER/5'(_input, rate, pmt, pv, fv, type) {
-    yield excelNper(rate, pmt, pv, fv, type);
-  },
-  *'NOMINAL/2'(_input, effectRate, npery) {
-    yield excelNominal(effectRate, npery);
-  },
-  *'NPV/2'(_input, rate, values) {
-    yield excelNpv(rate, values);
-  },
-  *'NPV_BY/3'(_input, rate, rows, valueKey) {
-    yield excelNpv(rate, colValues(rows, valueKey));
-  },
-  *'OCT2BIN/1'(_input, number) {
-    yield excelOct2Bin(number);
-  },
-  *'OCT2BIN/2'(_input, number, places) {
-    yield excelOct2Bin(number, places);
-  },
-  *'OCT2DEC/1'(_input, number) {
-    yield excelOct2Dec(number);
-  },
-  *'OCT2HEX/1'(_input, number) {
-    yield excelOct2Hex(number);
-  },
-  *'OCT2HEX/2'(_input, number, places) {
-    yield excelOct2Hex(number, places);
-  },
   *'OR/1'(_input, value) {
     yield logicalAnyValue(value);
-  },
-  *'PPMT/4'(_input, rate, per, nper, pv) {
-    yield excelPpmt(rate, per, nper, pv);
-  },
-  *'PPMT/5'(_input, rate, per, nper, pv, fv) {
-    yield excelPpmt(rate, per, nper, pv, fv);
-  },
-  *'PPMT/6'(_input, rate, per, nper, pv, fv, type) {
-    yield excelPpmt(rate, per, nper, pv, fv, type);
-  },
-  *'PMT/3'(_input, rate, nper, pv) {
-    yield excelPmt(rate, nper, pv);
-  },
-  *'PMT/4'(_input, rate, nper, pv, fv) {
-    yield excelPmt(rate, nper, pv, fv);
-  },
-  *'PMT/5'(_input, rate, nper, pv, fv, type) {
-    yield excelPmt(rate, nper, pv, fv, type);
   },
   *'POWER/2'(_input, number, power) {
     yield Math.pow(parseExcelNumber(number), parseExcelNumber(power));
@@ -1631,27 +1316,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
   *'PROPER/1'(_input, value) {
     yield properValue(value);
-  },
-  *'PV/3'(_input, rate, nper, pmt) {
-    yield excelPv(rate, nper, pmt);
-  },
-  *'PV/4'(_input, rate, nper, pmt, fv) {
-    yield excelPv(rate, nper, pmt, fv);
-  },
-  *'PV/5'(_input, rate, nper, pmt, fv, type) {
-    yield excelPv(rate, nper, pmt, fv, type);
-  },
-  *'RATE/3'(_input, nper, pmt, pv) {
-    yield excelRate(nper, pmt, pv);
-  },
-  *'RATE/4'(_input, nper, pmt, pv, fv) {
-    yield excelRate(nper, pmt, pv, fv);
-  },
-  *'RATE/5'(_input, nper, pmt, pv, fv, type) {
-    yield excelRate(nper, pmt, pv, fv, type);
-  },
-  *'RATE/6'(_input, nper, pmt, pv, fv, type, guess) {
-    yield excelRate(nper, pmt, pv, fv, type, guess);
   },
   *'REPLACE/4'(_input, oldText, startNum, length, newText) {
     const text = parseExcelString(oldText);
@@ -1758,9 +1422,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'STDEV_S/1'(_input, value) {
     yield sampleStdDev(value);
   },
-  *'SLN/3'(_input, cost, salvage, life) {
-    yield excelSln(cost, salvage, life);
-  },
   *'SUM/1'(_input, value) {
     yield sumExcelRange(value);
   },
@@ -1793,9 +1454,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       parseExcelString(newText),
       instance,
     );
-  },
-  *'SYD/4'(_input, cost, salvage, life, per) {
-    yield excelSyd(cost, salvage, life, per);
   },
   *'T/1'(_input, value) {
     yield typeof value === 'string' ? value : '';
@@ -1880,58 +1538,8 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
       searchMode,
     );
   },
-  *'XIRR/2'(_input, values, dates) {
-    yield excelXirr(values, dates);
-  },
-  *'XIRR/3'(_input, values, dates, guess) {
-    yield excelXirr(values, dates, guess);
-  },
-  *'XIRR_BY/3'(_input, rows, valueKey, dateKey) {
-    yield excelXirr(colValues(rows, valueKey), colValues(rows, dateKey));
-  },
-  *'XIRR_BY/4'(_input, rows, valueKey, dateKey, guess) {
-    yield excelXirr(colValues(rows, valueKey), colValues(rows, dateKey), guess);
-  },
-  *'XNPV/3'(_input, rate, values, dates) {
-    yield excelXnpv(rate, values, dates);
-  },
-  *'XNPV_BY/4'(_input, rate, rows, valueKey, dateKey) {
-    yield excelXnpv(rate, colValues(rows, valueKey), colValues(rows, dateKey));
-  },
   *'XOR/1'(_input, value) {
     yield logicalXorValue(value);
-  },
-  *'YEAR/1'(_input, value) {
-    yield excelYear(value);
-  },
-  *'YEARFRAC/2'(_input, startDate, endDate) {
-    yield yearFrac(startDate, endDate);
-  },
-  *'YEARFRAC/3'(_input, startDate, endDate, basis) {
-    yield yearFrac(startDate, endDate, parseExcelNumber(basis));
-  },
-  *'ACCRINT/6'(_input, issue, firstInterest, settlement, rate, par, frequency) {
-    yield excelAccrint(issue, firstInterest, settlement, rate, par, frequency);
-  },
-  *'ACCRINT/7'(
-    _input,
-    issue,
-    firstInterest,
-    settlement,
-    rate,
-    par,
-    frequency,
-    basis,
-  ) {
-    yield excelAccrint(
-      issue,
-      firstInterest,
-      settlement,
-      rate,
-      par,
-      frequency,
-      basis,
-    );
   },
   *'CEILING/1'(_input, number) {
     yield ceilingValue(number);
@@ -2508,54 +2116,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   // Additional date/time functions
   // ═══════════════════════════════════════════════════════════════
 
-  *'DATEDIF/3'(_input, start, end, unit) {
-    yield excelDatedif(start, end, unit);
-  },
-  *'DATEVALUE/1'(_input, text) {
-    yield excelDatevalue(text);
-  },
-  *'DAYS360/2'(_input, start, end) {
-    yield excelDays360(start, end);
-  },
-  *'DAYS360/3'(_input, start, end, method) {
-    yield excelDays360(start, end, method);
-  },
-  *'WEEKNUM/1'(_input, serial) {
-    yield excelWeeknum(serial);
-  },
-  *'WEEKNUM/2'(_input, serial, returnType) {
-    yield excelWeeknum(serial, returnType);
-  },
-  *'NETWORKDAYS/2'(_input, start, end) {
-    yield excelNetworkdays(start, end);
-  },
-  *'NETWORKDAYS/3'(_input, start, end, holidays) {
-    yield excelNetworkdays(start, end, holidays);
-  },
-  *'NETWORKDAYS_INTL/2'(_input, start, end) {
-    yield excelNetworkdaysIntl(start, end);
-  },
-  *'NETWORKDAYS_INTL/3'(_input, start, end, weekend) {
-    yield excelNetworkdaysIntl(start, end, weekend);
-  },
-  *'NETWORKDAYS_INTL/4'(_input, start, end, weekend, holidays) {
-    yield excelNetworkdaysIntl(start, end, weekend, holidays);
-  },
-  *'WORKDAY/2'(_input, start, days) {
-    yield excelWorkday(start, days);
-  },
-  *'WORKDAY/3'(_input, start, days, holidays) {
-    yield excelWorkday(start, days, holidays);
-  },
-  *'WORKDAY_INTL/2'(_input, start, days) {
-    yield excelWorkdayIntl(start, days);
-  },
-  *'WORKDAY_INTL/3'(_input, start, days, weekend) {
-    yield excelWorkdayIntl(start, days, weekend);
-  },
-  *'WORKDAY_INTL/4'(_input, start, days, weekend, holidays) {
-    yield excelWorkdayIntl(start, days, weekend, holidays);
-  },
   *'TIME/3'(_input, hour, minute, second) {
     const h = parseExcelNumber(hour);
     const m = parseExcelNumber(minute);
@@ -2664,103 +2224,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     if (denom === 0) throwExcelError(EXCEL_ERROR.div0);
     yield sumXY / denom;
   },
-
-  // ═══════════════════════════════════════════════════════════════
-  // Additional financial functions
-  // ═══════════════════════════════════════════════════════════════
-
-  *'DB/4'(_input, cost, salvage, life, period) {
-    yield excelDb(cost, salvage, life, period);
-  },
-  *'DB/5'(_input, cost, salvage, life, period, month) {
-    yield excelDb(cost, salvage, life, period, month);
-  },
-  *'DDB/4'(_input, cost, salvage, life, period) {
-    yield excelDdb(cost, salvage, life, period);
-  },
-  *'DDB/5'(_input, cost, salvage, life, period, factor) {
-    yield excelDdb(cost, salvage, life, period, factor);
-  },
-  *'ISPMT/4'(_input, rate, per, nper, pv) {
-    yield excelIspmt(rate, per, nper, pv);
-  },
-  *'PDURATION/3'(_input, rate, pv, fv) {
-    yield excelPduration(rate, pv, fv);
-  },
-  *'RRI/3'(_input, nper, pv, fv) {
-    yield excelRri(nper, pv, fv);
-  },
-  *'DOLLARDE/2'(_input, fractional, fraction) {
-    yield excelDollarde(fractional, fraction);
-  },
-  *'DOLLARFR/2'(_input, decimal, fraction) {
-    yield excelDollarfr(decimal, fraction);
-  },
-  *'DISC/4'(_input, settlement, maturity, pr, redemption) {
-    yield excelDisc(settlement, maturity, pr, redemption);
-  },
-  *'DISC/5'(_input, settlement, maturity, pr, redemption, basis) {
-    yield excelDisc(settlement, maturity, pr, redemption, basis);
-  },
-  *'PRICEDISC/4'(_input, settlement, maturity, disc, redemption) {
-    yield excelPricedisc(settlement, maturity, disc, redemption);
-  },
-  *'PRICEDISC/5'(_input, settlement, maturity, disc, redemption, basis) {
-    yield excelPricedisc(settlement, maturity, disc, redemption, basis);
-  },
-  *'COUPDAYS/3'(_input, settlement, maturity, frequency) {
-    yield excelCoupdays(settlement, maturity, frequency);
-  },
-  *'COUPDAYS/4'(_input, settlement, maturity, frequency, basis) {
-    yield excelCoupdays(settlement, maturity, frequency, basis);
-  },
-  *'TBILLEQ/3'(_input, settlement, maturity, discount) {
-    yield excelTbilleq(settlement, maturity, discount);
-  },
-  *'TBILLPRICE/3'(_input, settlement, maturity, discount) {
-    yield excelTbillprice(settlement, maturity, discount);
-  },
-  *'TBILLYIELD/3'(_input, settlement, maturity, price) {
-    yield excelTbillyield(settlement, maturity, price);
-  },
-
-  // ═══════════════════════════════════════════════════════════════
-  // Additional engineering functions
-  // ═══════════════════════════════════════════════════════════════
-
-  *'IMCOS/1'(_input, value) { yield excelImCos(value); },
-  *'IMCOSH/1'(_input, value) { yield excelImCosh(value); },
-  *'IMCOT/1'(_input, value) { yield excelImCot(value); },
-  *'IMCSC/1'(_input, value) { yield excelImCsc(value); },
-  *'IMCSCH/1'(_input, value) { yield excelImCsch(value); },
-  *'IMSIN/1'(_input, value) { yield excelImSin(value); },
-  *'IMSINH/1'(_input, value) { yield excelImSinh(value); },
-  *'IMTAN/1'(_input, value) { yield excelImTan(value); },
-  *'IMSEC/1'(_input, value) { yield excelImSec(value); },
-  *'IMSECH/1'(_input, value) { yield excelImSech(value); },
-  *'IMEXP/1'(_input, value) { yield excelImExp(value); },
-  *'IMLN/1'(_input, value) { yield excelImLn(value); },
-  *'IMLOG10/1'(_input, value) { yield excelImLog10(value); },
-  *'IMLOG2/1'(_input, value) { yield excelImLog2(value); },
-  *'IMDIV/2'(_input, left, right) { yield excelImDiv(left, right); },
-  *'IMPRODUCT/1'(_input, values) { yield excelImProduct(values); },
-  *'IMPOWER/2'(_input, value, power) { yield excelImPower(value, power); },
-  *'IMSQRT/1'(_input, value) { yield excelImSqrt(value); },
-  *'IMARGUMENT/1'(_input, value) { yield excelImArgument(value); },
-  *'ERF/1'(_input, lower) { yield excelErf(lower); },
-  *'ERF/2'(_input, lower, upper) { yield excelErf(lower, upper); },
-  *'ERFC/1'(_input, value) { yield excelErfc(value); },
-  *'CONVERT/3'(_input, number, fromUnit, toUnit) { yield excelConvert(number, fromUnit, toUnit); },
-
-  // ═══════════════════════════════════════════════════════════════
-  // Text functions
-  // ═══════════════════════════════════════════════════════════════
-
-  *'UNICHAR/1'(_input, number) {
-    const n = Math.floor(parseExcelNumber(number));
-    if (n < 1 || n > 0x10FFFF) throwExcelError(EXCEL_ERROR.value);
-    yield String.fromCodePoint(n);
-  },
   *'UNICODE/1'(_input, text) {
     const str = parseExcelString(text);
     if (str.length === 0) throwExcelError(EXCEL_ERROR.value);
@@ -2768,5 +2231,13 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   },
 };
 
-export const formulaContribNativeFilters =
-  wrapBareNativeFilters(bareNativeFilters);
+// Date filters live in their own file (formula-dateSerial-native.ts) but
+// merge into the eager `formula` library — DATE/YEAR/NETWORKDAYS et al
+// are common enough that lazy-loading the 3 KB chunk would cost more in
+// first-call latency than the bytes save.
+import { formulaDateSerialNativeFilters } from './formula-dateSerial-native.js';
+
+export const formulaContribNativeFilters = {
+  ...wrapBareNativeFilters(bareNativeFilters),
+  ...formulaDateSerialNativeFilters,
+};

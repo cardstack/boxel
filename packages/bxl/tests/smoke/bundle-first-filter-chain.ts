@@ -1,5 +1,5 @@
 import { deepStrictEqual } from 'node:assert';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import * as esbuild from 'esbuild';
@@ -7,20 +7,22 @@ import * as esbuild from 'esbuild';
 const tempDir = mkdtempSync(join(tmpdir(), 'bxl-bundle-smoke-'));
 
 try {
-  const result = await esbuild.build({
+  await esbuild.build({
     entryPoints: ['src/index.ts'],
     bundle: true,
     format: 'esm',
     platform: 'neutral',
     target: 'es2022',
+    mainFields: ['module', 'main'],
+    conditions: ['import', 'module', 'default'],
     minify: false,
     sourcemap: false,
-    write: false,
+    splitting: true,
+    outdir: tempDir,
+    entryNames: 'bundle',
   });
 
-  const bundlePath = join(tempDir, 'bundle.mjs');
-  writeFileSync(bundlePath, result.outputFiles[0].text, 'utf8');
-
+  const bundlePath = join(tempDir, 'bundle.js');
   const bundle = await import(`file://${bundlePath}`);
 
   const input = {

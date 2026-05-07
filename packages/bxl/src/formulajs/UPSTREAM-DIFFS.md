@@ -29,12 +29,14 @@ each BXL file to its upstream sources.
 
 | BXL file              | Upstream source modules                    | Purpose |
 | --- | --- | --- |
+| `bessel.ts`           | `engineering.js`                           | Bessel special functions that require upstream's external `bessel` dependency. This module is only imported through BXL's async lazy formula path. |
 | `common.ts`           | `utils/*`, `information.js`, `statistical.js` | Input coercion (`parseExcel*`), type guards, aggregate helpers (`sumExcelRange`, `maxExcelRange`). |
 | `criteria.ts`         | `statistical.js` (criteria matching), `text.js` (wildcards) | `SUMIF` / `COUNTIF` / `AVERAGEIF` predicate matching. |
 | `dateSerial.ts`       | `date-time.js`, `utils/date.js`            | Excel serial-day arithmetic, `DATE`, `YEAR`, `MONTH`, `DAY`, `NOW`, `NETWORKDAYS`, `WORKDAY`, `DATEDIF`, `WEEKNUM`. |
 | `engineering.ts`      | `engineering.js`                           | `BIN2DEC`, `HEX2DEC`, `BITAND`, `BITXOR`, `ROMAN`, `ARABIC`, complex-number ops (`IMSINH`, `IMCOSH`, etc.). |
 | `errors.ts`           | `information.js` (error type checks) + ours | `EXCEL_ERROR` enum, `throwExcelError`, `ExcelError` class. Our adaptation of upstream's return-value sentinels (`#N/A`, `#VALUE!`) to throwable errors. |
 | `financial.ts`        | `financial.js`                             | `PMT`, `FV`, `PV`, `NPV`, `IRR`, `RATE`, `NPER`, `IPMT`, `PPMT`, etc. |
+| `statistical.ts`      | `statistical.js`                           | Distribution/test helpers that require upstream's external `jstat` dependency. This module is only imported through BXL's async lazy formula path. |
 
 ## Our adaptations
 
@@ -78,7 +80,13 @@ When upstream adds a function we want:
 2. Decide which BXL file it belongs in by **role**, not upstream category.
 3. Port the implementation: add types, replace sentinels with
    `throwExcelError`, add coercion if needed.
-4. Register the function in `src/bxl/bridge/formula-contrib-native.ts`.
+4. Register regular formulas in `src/bxl/bridge/formula-contrib-native.ts`.
+   Register `jstat`-backed statistical formulas in
+   `src/bxl/bridge/formula-statistical-native.ts` and add their names to
+   `src/bxl/bridge/formula-statistical-manifest.ts` so async runtimes can
+   lazy-load them only when referenced. Register `bessel`-backed engineering
+   formulas the same way via `src/bxl/bridge/formula-bessel-native.ts` and
+   `src/bxl/bridge/formula-bessel-manifest.ts`.
 5. Add an example to `examples/formula.ts` and a test case.
 6. Update this file with the upstream source + BXL destination.
 

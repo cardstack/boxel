@@ -1,5 +1,5 @@
 import { deepStrictEqual, ok, strictEqual } from 'node:assert';
-import { evaluateBxl } from '../../src/index.js';
+import { runNativeJqAsync } from '../../src/index.js';
 import {
   bxlFormulaExampleInput,
   bxlFormulaExamples,
@@ -16,34 +16,48 @@ interface Failure {
 
 const failures: Failure[] = [];
 
+// The `formula` namespace covers the eager core. Engineering, financial,
+// dateSerial, statistical, and bessel families are lazy chunks loaded on
+// demand by the async runtime — this test goes through `runNativeJqAsync`
+// so each example's auto-loader fires when the expression references one.
 for (const example of bxlFormulaExamples) {
   try {
-    const result = evaluateBxl(example.expression, bxlFormulaExampleInput, {
-      schema: bxlFormulaExampleSchema,
-    });
+    const result = await runNativeJqAsync(
+      example.expression,
+      bxlFormulaExampleInput,
+      { schema: bxlFormulaExampleSchema },
+    );
+    const value =
+      result.outputs.length === 1
+        ? result.outputs[0]
+        : result.outputs.length === 0
+          ? null
+          : result.outputs;
 
     strictEqual(
-      result.warnings.length,
+      result.readableWarnings.length,
       0,
       `example ${example.id} should compile without warnings`,
     );
 
     if (typeof example.expected === 'number' && example.tolerance !== undefined) {
       ok(
-        typeof result.value === 'number' &&
-          Math.abs(result.value - example.expected) <= example.tolerance,
-        `${example.name}: expected ${example.expected} +/- ${example.tolerance}, got ${result.value}`,
+        typeof value === 'number' &&
+          Math.abs(value - example.expected) <= example.tolerance,
+        `${example.name}: expected ${example.expected} +/- ${example.tolerance}, got ${value}`,
       );
     } else {
-      deepStrictEqual(result.value, example.expected, example.name);
+      deepStrictEqual(value, example.expected, example.name);
     }
   } catch (error) {
     let compiledSource: string | undefined;
     try {
-      compiledSource = evaluateBxl(
-        example.expression,
-        bxlFormulaExampleInput,
-        { schema: bxlFormulaExampleSchema },
+      compiledSource = (
+        await runNativeJqAsync(
+          example.expression,
+          bxlFormulaExampleInput,
+          { schema: bxlFormulaExampleSchema },
+        )
       ).compiledSource;
     } catch {
       compiledSource = undefined;

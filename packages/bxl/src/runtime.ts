@@ -11,8 +11,10 @@
 
 export {
   runNativeJq,
+  runNativeJqAsync,
   parseNativeJq,
   prepareNativeJq,
+  prepareNativeJqAsync,
   tokenizeNativeJq,
   extractNativeJqDeps,
 } from './bxl/bridge/native.js';

@@ -16,6 +16,7 @@ import {
   resolveBuiltinRegistry,
   type ResolvedBuiltinRegistry,
 } from '../registry/index.js';
+import { resolveLazyBuiltinLibrariesForAst } from './lazy-formulas.js';
 import {
   NativeRuntimeLimits,
   recordRuntimeOutput,
@@ -188,6 +189,21 @@ export function runNativeJq(
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
+
+  return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
+}
+
+export async function runNativeJqAsync(
+  program: string,
+  input: unknown,
+  options: NativeDialectOptions = {},
+): Promise<NativeDialectRun> {
+  const parsed = parseNativeJq(program, options);
+  const libraries = await resolveLazyBuiltinLibrariesForAst(
+    parsed.ast,
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+  const registry = resolveBuiltinRegistry(libraries);
 
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
@@ -571,6 +587,32 @@ export function prepareNativeJq(
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
+  const deps = extractNativeJqDepsFromAst(parsed.ast);
+
+  return {
+    ...parsed,
+    deps,
+    run(input: unknown, runOptions: PreparedNativeRunOptions = {}) {
+      return runParsedNativeProgram(
+        parsed,
+        input,
+        registry,
+        runOptions.runtimeLimits ?? options.runtimeLimits,
+      );
+    },
+  };
+}
+
+export async function prepareNativeJqAsync(
+  program: string,
+  options: NativeDialectOptions = {},
+): Promise<PreparedNativeJq> {
+  const parsed = parseNativeJq(program, options);
+  const libraries = await resolveLazyBuiltinLibrariesForAst(
+    parsed.ast,
+    options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+  );
+  const registry = resolveBuiltinRegistry(libraries);
   const deps = extractNativeJqDepsFromAst(parsed.ast);
 
   return {

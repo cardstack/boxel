@@ -1278,6 +1278,10 @@ NPV(0.08, [-40000, 8000, 9200, 10000, 12000])
 | `IMARGUMENT(z)` | Angle (argument) of complex number |
 | `ERF(lower, upper)` | Error function (Gauss) |
 | `ERFC(x)` | Complementary error function |
+| `BESSELI(x, n)` | Modified Bessel function In (lazy async) |
+| `BESSELJ(x, n)` | Bessel function Jn (lazy async) |
+| `BESSELK(x, n)` | Modified Bessel function Kn (lazy async) |
+| `BESSELY(x, n)` | Bessel function Yn (lazy async) |
 | `CONVERT(n, from, to)` | Unit conversion (120+ units, SI prefixes) |
 
 _CONVERT examples_
@@ -1598,9 +1602,9 @@ Functions that don't apply to BXL's JSON context, require a spreadsheet grid mod
 | Database | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP` | Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON. |
 | Grid reference | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE` | Require a cell grid model. No equivalent concept in JSON expressions. |
 | Matrix | `MMULT` `MUNIT` | Matrix multiplication and identity. Use jq array operations or dedicated math libraries. |
-| Distributions | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and all their `.INV`, `.RT`, `.TEST` variants | 53 statistical distribution functions. Too specialized for document formulas. Use a statistics library for serious analysis. |
+| Lazy statistical distributions | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and their `.INV`, `.RT`, `.TEST` variants | Loaded only by async runtimes when an expression calls one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted dotted names are accepted in readable syntax. |
+| Lazy Bessel functions | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Loaded only by async runtimes when an expression calls one of these specialized engineering functions. |
 | Regression | `LINEST` `LOGEST` `GROWTH` `TREND` | Array-returning regression functions. Complex output shapes don't map well to single computed fields. |
-| Bessel | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Highly specialized engineering functions. |
 | Other niche | `SERIESSUM` `MULTINOMIAL` `SQRTPI` `SUMX2MY2` `SUMX2PY2` `SUMXMY2` | Specialized math. Expressible via jq pipelines. |
 
 ### Coverage Summary
@@ -1610,4 +1614,4 @@ Functions that don't apply to BXL's JSON context, require a spreadsheet grid mod
 | Implemented | 230+ | All targeted Excel-compatible formula functions |
 | BXL-only extensions | 16 | `_BY` row-object variants, `COL`, `ERROR_TYPE` |
 | Available via jq | 23 | Trig, exp/log, sort, unique, transpose, now (use lowercase) |
-| Won't add | ~80 | Database, distributions, grid-dependent, Bessel, regression arrays |
+| Won't add | ~30 | Database, grid-dependent, regression arrays |

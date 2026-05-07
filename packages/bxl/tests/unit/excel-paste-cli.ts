@@ -21,7 +21,18 @@ import {
   lintBxlExpression,
   solidifyBxlExpression,
 } from '../../src/index.js';
+import { registerBuiltinLibrary } from '../../src/bxl/registry/index.js';
+import { formulaEngineeringLibrary } from '../../src/bxl/registry/formula-engineering.js';
+import { formulaFinancialLibrary } from '../../src/bxl/registry/formula-financial.js';
 import { bxlExampleInput, bxlExampleSchema } from '../../examples/bxl-150-examples.js';
+
+// The 150-example pasted-from-Excel suite was authored before engineering /
+// financial moved into lazy chunks. Force-register them so the sync path
+// used by `evaluateBxl` here resolves all expressions — production realms
+// that want lazy semantics use the async runtime instead. dateSerial stays
+// eager (DATE/YEAR/NETWORKDAYS are common enough to ship with the core).
+registerBuiltinLibrary('formula-engineering', formulaEngineeringLibrary);
+registerBuiltinLibrary('formula-financial', formulaFinancialLibrary);
 
 type Expected = number | string | boolean | null | unknown[];
 type TestCase = {
@@ -294,6 +305,12 @@ function runCase(c: TestCase): string | undefined {
   try {
     const value = evaluateBxl(c.expression, bxlExampleInput, {
       schema: bxlExampleSchema,
+      libraries: [
+        'core',
+        'formula',
+        'formula-engineering',
+        'formula-financial',
+      ],
     }).value;
     if (!valuesMatch(value, c.expected, c.tolerance)) {
       return `value mismatch: expected ${JSON.stringify(c.expected)}, got ${JSON.stringify(value)}`;

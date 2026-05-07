@@ -1,6 +1,11 @@
 // Shared lexical sets live in lexicon.ts — single source of truth for jq
 // keywords and BXL literals, also imported by linter.ts.
 import { JQ_KEYWORDS as KEYWORDS, BXL_LITERALS as LITERALS } from './lexicon.js';
+import {
+  FORMULA_STATISTICAL_FUNCTIONS,
+  rewriteStatisticalDottedFormulaNames,
+} from '../bridge/formula-statistical-manifest.js';
+import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.js';
 
 export type ReadableFieldKind = 'scalar' | 'object' | 'array';
 
@@ -362,6 +367,8 @@ const FORMULA_FUNCTIONS = new Set([
   'XOR',
   'YEAR',
   'YEARFRAC',
+  ...FORMULA_BESSEL_FUNCTIONS,
+  ...FORMULA_STATISTICAL_FUNCTIONS,
 ]);
 
 export const BXL_FORMULA_FUNCTIONS = FORMULA_FUNCTIONS;
@@ -3091,6 +3098,14 @@ export function preprocessReadableSource(
       message: 'Dropped the leading `=` (Excel cell-formula prefix).',
     });
     next = prefix.source;
+  }
+  const statisticalDotted = rewriteStatisticalDottedFormulaNames(next);
+  if (statisticalDotted.changed) {
+    rewrites.push({
+      code: 'statistical-dotted-formula-rewritten',
+      message: 'Rewrote dotted statistical FormulaJS names to BXL underscore names.',
+    });
+    next = statisticalDotted.source;
   }
   const inequality = rewriteInequality(next);
   if (inequality.changed) {
