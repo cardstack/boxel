@@ -73,18 +73,34 @@ process.env.TEST_HARNESS_CACHE_SALT ??= hostDistFingerprint();
 export const DEFAULT_ITERATIONS = 50;
 export const DEFAULT_WARMUP = 5;
 
-// `TEST_HARNESS_SOURCE_REALM_DIR=./scripts/bench-realm/fixtures/source-realm`
-// is set in the parent `bench:realm` / `bench:realm:check` scripts. The
-// harness's `shared.ts` reads this at module load to point its
-// source-realm at the bench's own committed snapshot (so the fixture's
-// `adoptsFrom` references resolve). It has to be set before any import
-// below pulls `shared.ts` in, hence the invocation env-var rather than
-// a top-level assignment here.
-//
-// The snapshot is intentionally self-contained: the bench depends only
-// on packages it explicitly tests (runtime-common, realm-server, host,
-// realm-test-harness, base) — not on software-factory. SF can change
-// freely without affecting bench medians.
+// The bench's snapshot fixture is intentionally self-contained: the bench
+// depends only on packages it explicitly tests (runtime-common,
+// realm-server, host, realm-test-harness, base) — not on
+// software-factory. SF can change freely without affecting bench medians.
+
+const benchSourceRealmDir = pathResolve(__dirname, 'fixtures', 'source-realm');
+
+// Card definitions only — instance data isn't needed by bench scenarios.
+// Format: space-separated patterns; prefix with `!` to exclude. Last
+// matching pattern wins.
+const BENCH_CARD_DEFINITIONS_GLOB =
+  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+
+function cardDefinitionsOnly(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of BENCH_CARD_DEFINITIONS_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
 
 export interface Scenario {
   name: string;
@@ -285,7 +301,14 @@ export async function runBench(
   }
 
   const realm = await startFactoryRealmServer({
-    realmDir: realmSnapshotDir,
+    realms: [
+      { dir: realmSnapshotDir, path: 'test/' },
+      {
+        dir: benchSourceRealmDir,
+        path: 'software-factory/',
+        fileFilter: cardDefinitionsOnly,
+      },
+    ],
   });
 
   try {

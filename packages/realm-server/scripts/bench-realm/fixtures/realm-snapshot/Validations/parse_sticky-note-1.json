@@ -27,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/parse-result",
+        "module": "https://test-harness.test/software-factory/parse-result",
         "name": "ParseResult"
       }
     }

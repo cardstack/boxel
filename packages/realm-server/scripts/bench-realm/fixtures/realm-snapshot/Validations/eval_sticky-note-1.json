@@ -23,7 +23,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/eval-result",
+        "module": "https://test-harness.test/software-factory/eval-result",
         "name": "EvalResult"
       }
     }

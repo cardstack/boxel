@@ -67,7 +67,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/instantiate-result",
+        "module": "https://test-harness.test/software-factory/instantiate-result",
         "name": "InstantiateResult"
       }
     }

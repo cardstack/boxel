@@ -27,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/lint-result",
+        "module": "https://test-harness.test/software-factory/lint-result",
         "name": "LintResult"
       }
     }

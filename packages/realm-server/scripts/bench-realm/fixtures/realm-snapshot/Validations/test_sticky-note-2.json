@@ -92,7 +92,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/test-results",
+        "module": "https://test-harness.test/software-factory/test-results",
         "name": "TestRun"
       }
     }
