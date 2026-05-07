@@ -21,8 +21,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
-import type { StackItem } from '@cardstack/host/lib/stack-item';
-
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -518,9 +516,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       // Make Pet/mango clickable in the search prompt as a recent card.
       let operatorModeStateService = getService('operator-mode-state-service');
       let recentCardsService = getService('recent-cards-service');
-      operatorModeStateService.state.stacks[0].map((item) =>
-        recentCardsService.add(item.id),
-      );
+      for (let item of operatorModeStateService.state.stacks[0]) {
+        recentCardsService.add(item.id);
+      }
       recentCardsService.add(`${testRealmURL}Pet/mango`);
 
       // Drop a card into a NEW LEFT-side stack: stack 0 becomes [Mango],
@@ -565,29 +563,27 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('Escape targets the card the user is editing, not the last-opened card', async function (assert) {
-      // Open A, then open B on top of A, then click edit on A. Even
-      // though B is the most-recently-opened card, the user's most
-      // recent interaction is "start editing A" — so Escape must flip
-      // A back to view, not close B.
+      // Open A in the left stack and B in the right stack — B is the
+      // most-recently-opened card. Then click edit on A. The user's
+      // most recent interaction is "start editing A", so Escape must
+      // flip A back to view, not close B.
       await visitOperatorMode({
         stacks: [
-          [
-            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
-            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
-          ],
+          [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+          [{ id: `${testRealmURL}Pet/mango`, format: 'isolated' }],
         ],
       });
 
-      // Click edit on A (the buried, non-top card) via its header.
-      // The buried card's header acts as a button to dismiss cards
-      // above it; we instead toggle A directly via the service to
-      // simulate "user enters edit mode on A".
-      let operatorModeStateService = getService('operator-mode-state-service');
-      let stackA = operatorModeStateService.state.stacks[0]!;
-      let itemA = stackA.find(
-        (i: StackItem) => i.id === `${testRealmURL}Person/fadhlan`,
-      )!;
-      operatorModeStateService.setItemFormat(itemA, 'edit');
+      assert
+        .dom('[data-test-operator-mode-stack]')
+        .exists({ count: 2 }, 'two side-by-side stacks');
+
+      // Enter edit mode on A via the pencil button — this is the real
+      // user gesture, not a service-level shortcut. (The pencil only
+      // appears on top, non-buried cards, which both A and B are here.)
+      await click(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-edit-button]`,
+      );
 
       assert
         .dom(
@@ -596,7 +592,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('A is now in edit mode');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
-        .exists('B is still on the stack');
+        .exists('B is still on its stack');
 
       await triggerKeyEvent(document.body, 'keydown', 'Escape');
 
