@@ -813,7 +813,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
           let reindexJob = finalJobs.find(
             (job) => job.job_type === 'full-reindex',
-          );
+          ) as
+            | {
+                job_type: string;
+                concurrency_group: string;
+                timeout: number;
+                args: { realmUrls: string[] };
+              }
+            | undefined;
           assert.ok(reindexJob, 'full-reindex job exists');
           if (reindexJob) {
             assert.strictEqual(
@@ -1006,7 +1013,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           3,
           'realm full reindex job was created',
         );
-        let jobs = finalJobs.slice(2);
+        let jobs = finalJobs.slice(2) as {
+          job_type: string;
+          concurrency_group: string;
+          args: { realmUrls: string[] };
+        }[];
         assert.strictEqual(
           jobs[0].job_type,
           'full-reindex',
