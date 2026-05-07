@@ -113,33 +113,6 @@ GrammyAward/              # Instances in PascalCase directory
 }
 ```
 
-## containsMany Attributes (CRITICAL)
-
-**🔴 `containsMany` fields go in `attributes` as a real JSON array,
-not a comma-separated string.**
-
-```json
-{
-  "data": {
-    "attributes": {
-      "tags": ["sticky-note", "brief", "context", "scope"]
-    }
-  }
-}
-```
-
-### ❌ Wrong: comma-separated string (will fail with `Expected array for field value <name>`)
-
-```json
-{
-  "data": {
-    "attributes": {
-      "tags": "sticky-note, brief, context, scope"
-    }
-  }
-}
-```
-
 ## linksToMany Relationships (CRITICAL)
 
 **🔴 For `linksToMany` fields, use numbered keys like `fieldName.0`, `fieldName.1`, etc.**

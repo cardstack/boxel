@@ -126,12 +126,10 @@ get_card_schema({ module: "<darkfactoryModuleUrl from system prompt>", name: "Is
 ```
 
 The returned `{ attributes, relationships? }` JSON Schema names every
-field, its type (`string`, `number`, `boolean`, **array** for
+field, its type (`string`, `number`, `boolean`, `array` for
 `containsMany` / `linksToMany`, etc.), and any enum values
 (`status`, `priority`, `articleType`, `projectStatus`, `issueType`).
-Use those exact names, types, and enum values. **`containsMany`
-fields like `tags` must be JSON arrays in `attributes` — never a
-comma-separated string.**
+Use those exact names, types, and enum values.
 
 Then create the artifacts in order so relationship targets exist
 when referenced:
