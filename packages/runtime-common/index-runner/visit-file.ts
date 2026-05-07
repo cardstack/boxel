@@ -173,6 +173,9 @@ export async function visitFileForIndexingFused({
       renderOptions,
       batchId,
       ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
+      ...(jobInfo
+        ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` }
+        : {}),
     });
   } catch (err) {
     logWarn(

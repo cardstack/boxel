@@ -13,6 +13,10 @@ import {
   AuthenticationErrorMessages,
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
+import {
+  PRERENDER_JOB_ID_HEADER,
+  sanitizePrerenderJobId,
+} from '../prerender/prerender-constants';
 
 const REQUEST_BODY_STATE = 'requestBody';
 
@@ -80,18 +84,24 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
+  // Stamp `[job: J.R]` onto the request log lines when the upstream
+  // caller (typically the worker indexing pipeline) supplied an
+  // `x-boxel-job-id` header. Lets a single substring filter pull
+  // realm-server lines for an indexing job alongside worker lines.
+  let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+  let jobTag = jobId ? ` [job: ${jobId}]` : '';
 
   logger.info(
     `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
       fullRequestURL(ctxt).href
-    }`,
+    }${jobTag}`,
   );
 
   ctxt.res.on('finish', () => {
     logger.info(
       `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}`,
+      }: ${ctxt.status}${jobTag}`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
