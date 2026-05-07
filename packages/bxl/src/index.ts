@@ -142,6 +142,45 @@ export type {
 
 export const VERSION = '0.1.0-dev.0';
 
+/**
+ * Build identity, useful for debugging stale caches in the realm
+ * bundle. The realm-bundle script
+ * (`scripts/build-realm-bundle.mjs`) replaces `buildTime: 'dev'`
+ * with the wall-clock build timestamp at bundling time, so a
+ * served bundle's `BXL_BUILD_INFO.buildTime` reveals when it was
+ * produced.
+ *
+ * `features` is the canonical list of port-doc rules baked into
+ * the bundle. If you suspect a card is hitting a regression, grep
+ * the served bundle for the feature string before tearing the
+ * realm-server stack down — a missing feature means the rebuild
+ * never landed.
+ *
+ * @example
+ * ```ts
+ * import { BXL_BUILD_INFO } from '@cardstack/bxl';
+ *
+ * console.log(BXL_BUILD_INFO);
+ * // {
+ * //   version: '0.1.0-dev.0',
+ * //   buildTime: '2026-05-07T15:42:01.000Z',
+ * //   features: ['null-tolerance', 'jq-fx-tags', 'as-materialize',
+ * //              'pascalcase-fallback', 'jq-keywords-guard'],
+ * // }
+ * ```
+ */
+export const BXL_BUILD_INFO = {
+  version: VERSION,
+  buildTime: 'dev',
+  features: [
+    'null-tolerance',       // port-doc §6–9
+    'jq-fx-tags',           // §10, §11
+    'as-materialize',       // §11a
+    'pascalcase-fallback',  // §12
+    'jq-keywords-guard',    // §13
+  ] as const,
+};
+
 export {
   BXL_AGGREGATE_CALLS,
   BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
