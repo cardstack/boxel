@@ -331,6 +331,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
         `Agent backend: opencode (model=${this.config.model}, mode=${this.config.openRouterApiKey ? 'direct' : 'passthrough'})`,
       );
     }
+    // Always print the opencode subprocess URL + log directory: when
+    // `session.prompt rejected` warnings fire, the next thing the
+    // operator wants is `tail -f ~/.local/share/opencode/log/<latest>`
+    // to see what the subprocess was doing at the moment of failure.
+    let opencodeLogDir = `${process.env.HOME ?? '~'}/.local/share/opencode/log`;
+    log.info(
+      `opencode subprocess at ${this.opencode!.url} | logs: ${opencodeLogDir} (newest = active)`,
+    );
   }
 
   async run(
@@ -380,24 +388,6 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
 
-      if (this.config.debug) {
-        log.info(
-          `--- system prompt (${systemPrompt.length} chars) ---\n${systemPrompt}\n--- end system prompt ---`,
-        );
-        log.info(
-          `--- user prompt (${prompt.length} chars) ---\n${prompt}\n--- end user prompt ---`,
-        );
-        log.info(
-          `enabled opencode tools: ${Object.entries(ENABLED_OPENCODE_TOOLS)
-            .filter(([, v]) => v)
-            .map(([k]) => k)
-            .join(', ')}`,
-        );
-        log.info(
-          `enabled factory MCP tools: ${[...FACTORY_MCP_TOOL_NAMES].join(', ')}`,
-        );
-      }
-
       // The SDK's `session.prompt` HTTP call is *supposed* to block
       // until the model + tool loop completes, but in opencode
       // 1.14.34 the response often isn't flushed once the loop exits
@@ -429,8 +419,11 @@ export class OpencodeFactoryAgent implements LoopAgent {
             parts: [{ type: 'text', text: prompt }],
           },
         })
-        .catch((err) => {
-          log.warn(`session.prompt rejected: ${String(err)}`);
+        .catch(async (err) => {
+          let liveness = await probeOpencode(this.opencode?.url);
+          log.warn(
+            `session.prompt rejected (session=${sessionId} url=${this.opencode?.url ?? '?'}): ${describeFetchError(err)} | opencode probe: ${liveness}`,
+          );
         });
 
       try {
@@ -783,7 +776,7 @@ async function waitForSessionIdle(
       consecutiveFailures++;
       if (consecutiveFailures >= MAX_CONSECUTIVE_LIST_FAILURES) {
         log.warn(
-          `opencode session.list failed ${consecutiveFailures}× in a row (${String(err)}); treating session as ended`,
+          `opencode session.list failed ${consecutiveFailures}× in a row (${describeFetchError(err)}); treating session as ended`,
         );
         return;
       }
@@ -948,4 +941,62 @@ async function isPortFree(port: number): Promise<boolean> {
       probe.close(() => resolve(true));
     });
   });
+}
+
+/**
+ * Render an Error in a way that surfaces the underlying cause.
+ *
+ * Node's undici `fetch` wraps every network failure in
+ * `TypeError: fetch failed` and stashes the real reason — `ECONNREFUSED`,
+ * `ECONNRESET`, `UND_ERR_HEADERS_TIMEOUT`, `AbortError`, etc. — on
+ * `err.cause`. The default `String(err)` throws all of that away. Use
+ * this helper anywhere we log a fetch rejection so we can actually tell
+ * what happened (subprocess died vs. socket timeout vs. user abort).
+ */
+export function describeFetchError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  let parts = [err.message];
+  let cause: unknown = (err as { cause?: unknown }).cause;
+  let depth = 0;
+  while (cause && depth < 4) {
+    if (cause instanceof Error) {
+      let causeCode =
+        (cause as { code?: string }).code ??
+        (cause as { name?: string }).name ??
+        'Error';
+      parts.push(`cause: ${causeCode}: ${cause.message}`);
+      cause = (cause as { cause?: unknown }).cause;
+    } else {
+      parts.push(`cause: ${String(cause)}`);
+      break;
+    }
+    depth++;
+  }
+  return parts.join(' / ');
+}
+
+/**
+ * Best-effort liveness probe for the opencode subprocess. Hits
+ * `${url}/app` (a cheap built-in endpoint) with a short timeout and
+ * reports either "alive (status N)", "dead (cause)", or "unknown" if
+ * the URL can't even be parsed.
+ *
+ * Logged alongside every `session.prompt` / `session.list` rejection so
+ * we can immediately distinguish "subprocess crashed" from "transient
+ * socket hiccup".
+ */
+export async function probeOpencode(url: string | undefined): Promise<string> {
+  if (!url) return 'unknown (no url)';
+  let controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(), 1500);
+  try {
+    let res = await fetch(`${url.replace(/\/+$/, '')}/app`, {
+      signal: controller.signal,
+    });
+    return `alive (HTTP ${res.status})`;
+  } catch (err) {
+    return `dead (${describeFetchError(err)})`;
+  } finally {
+    clearTimeout(timer);
+  }
 }
