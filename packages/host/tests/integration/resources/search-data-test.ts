@@ -131,6 +131,11 @@ module(`Integration | search data resource`, function (hooks) {
     ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        // PersonField is the type of `Book.author`; expose it in its
+        // own shim so lookupDefinition can resolve nested paths like
+        // `author.firstName` when traversing the new top-level-only
+        // Definition.fields shape.
+        'person-field.gts': { PersonField },
         'book.gts': { Book },
         ...sampleCards,
         'files/hello.txt': 'Hello world',

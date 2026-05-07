@@ -330,12 +330,16 @@ export class FileDefAttributesExtractor {
       let cardApiModule = await this.#loaderService.loader.import<
         typeof CardAPI
       >('https://cardstack.com/base/card-api');
-      let fields = getFieldDefinitions(
+      let { fields, fieldDefs } = getFieldDefinitions(
         cardApiModule,
         klass as unknown as typeof BaseDef,
       );
       let result: Record<string, QueryFieldMeta> = {};
-      for (let [name, def] of Object.entries(fields)) {
+      for (let [name, defId] of Object.entries(fields)) {
+        let def = fieldDefs[defId];
+        if (!def) {
+          continue;
+        }
         if (
           def.query &&
           (def.type === 'linksTo' || def.type === 'linksToMany')

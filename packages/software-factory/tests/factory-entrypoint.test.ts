@@ -17,7 +17,7 @@ import { installTestProfile } from './helpers/test-profile';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
-const targetRealm = 'https://realms.example.test/hassan/personal/';
+const targetRealm = 'https://realms.example.test/testuser/personal/';
 const normalizedBrief: FactoryBrief = {
   title: 'Sticky Note',
   sourceUrl: briefUrl,
@@ -30,7 +30,7 @@ const normalizedBrief: FactoryBrief = {
 const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   url: targetRealm,
   serverUrl: 'https://realms.example.test/',
-  ownerUsername: 'hassan',
+  ownerUsername: 'testuser',
   createdRealm: true,
 };
 const mockSeedResult: SeedIssueResult = {
@@ -48,7 +48,7 @@ module('factory-entrypoint', function (hooks) {
 
   function useTestProfile() {
     cleanupProfile = installTestProfile({
-      username: 'hassan',
+      username: 'testuser',
       matrixUrl: 'https://matrix.example.test/',
       realmServerUrl: 'https://realms.example.test/',
       password: 'secret',
@@ -237,7 +237,7 @@ module('factory-entrypoint', function (hooks) {
       'note',
     ]);
     assert.strictEqual(summary.targetRealm.url, targetRealm);
-    assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
+    assert.strictEqual(summary.targetRealm.ownerUsername, 'testuser');
     assert.deepEqual(
       summary.actions.map((action) => action.name),
       [
@@ -396,7 +396,7 @@ module('factory-entrypoint', function (hooks) {
 
     assert.strictEqual(summary.brief.title, 'Sticky Note');
     assert.strictEqual(summary.brief.sourceUrl, briefUrl);
-    assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
+    assert.strictEqual(summary.targetRealm.ownerUsername, 'testuser');
     assert.strictEqual(summary.seedIssue.seedIssueId, 'Issues/bootstrap-seed');
     assert.strictEqual(summary.issueLoop?.outcome, 'all_issues_done');
     assert.strictEqual(summary.result.status, 'completed');
