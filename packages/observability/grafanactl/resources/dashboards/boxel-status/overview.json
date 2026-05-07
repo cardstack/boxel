@@ -1598,11 +1598,11 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT 60.0 * (xact_commit + xact_rollback) / NULLIF(EXTRACT(EPOCH FROM (NOW() - pg_postmaster_start_time())), 0) AS \"Req/min\" FROM pg_stat_database WHERE datname = 'boxel';",
+            "rawSql": "SELECT 60.0 * (xact_commit + xact_rollback) / NULLIF(EXTRACT(EPOCH FROM (NOW() - pg_postmaster_start_time())), 0) AS \"txn/min\" FROM pg_stat_database WHERE datname = 'boxel';",
             "refId": "A"
           }
         ],
-        "title": "DB",
+        "title": "Postgres DB",
         "type": "stat"
       },
       {
