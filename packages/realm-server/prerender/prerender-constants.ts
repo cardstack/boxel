@@ -37,7 +37,8 @@ export function sanitizePrerenderRequestId(
 export const PRERENDER_JOB_ID_HEADER = 'x-boxel-job-id';
 
 // Sanitize the inbound job-id header. Format is `<digits>.<digits>`
-// (job.id + reservation.id, both bigint-shaped); accept up to 64 chars
+// (job.id + reservation.id, both bigint-shaped); accept up to 32
+// digits per side (so up to 65 chars total including the separator)
 // to be defensive without admitting newlines or other log-injection.
 const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
 export function sanitizePrerenderJobId(
