@@ -42,16 +42,27 @@ export type SynapseInstance = {
   registrationSecret: string;
 };
 
+export interface RealmConfig {
+  /** Directory containing the realm fixture (`.realm.json`, cards, etc). */
+  dir: string;
+  /** Path under the realm-server URL the realm mounts at, e.g. 'test/'. */
+  path: string;
+  /** Permissions to seed for this realm. Defaults to `DEFAULT_PERMISSIONS`. */
+  permissions?: RealmPermissions;
+  /** Optional filter narrowing which fixture files are copied / hashed. */
+  fileFilter?: (relativePath: string) => boolean;
+  /** Username passed to realm-server `--username`; defaults to `test_realm_${i}`. */
+  username?: string;
+}
+
 export interface FactoryRealmOptions {
-  realmDir?: string;
-  realmURL?: URL;
+  /** Required list of realms to mount. The first entry is treated as primary. */
+  realms: RealmConfig[];
   realmServerURL?: URL;
   templateRealmServerURL?: URL;
-  permissions?: RealmPermissions;
-  useCache?: boolean;
-  cacheSalt?: string;
   templateDatabaseName?: string;
   context?: FactoryTestContext | FactorySupportContext;
+  cacheSalt?: string;
   /** Explicit compat realm-server port (the public-facing proxy port). */
   compatRealmServerPort?: number;
   /** Explicit realm-server port (the internal realm-server listen port). */
@@ -141,10 +152,6 @@ export const skillsRealmDir = resolve(
   'skills-realm',
   'contents',
 );
-export const sourceRealmDir = resolve(
-  packageRoot,
-  process.env.TEST_HARNESS_SOURCE_REALM_DIR ?? 'realm',
-);
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
 export const prepareTestPgScript = resolve(
@@ -154,18 +161,11 @@ export const prepareTestPgScript = resolve(
   'prepare-test-pg.sh',
 );
 
-export const CACHE_VERSION = 8;
-export const CONFIGURED_REALM_URL = process.env.TEST_HARNESS_REALM_URL
-  ? new URL(process.env.TEST_HARNESS_REALM_URL)
-  : undefined;
+export const CACHE_VERSION = 9;
 export const CONFIGURED_REALM_SERVER_URL = process.env
   .TEST_HARNESS_REALM_SERVER_URL
   ? new URL(process.env.TEST_HARNESS_REALM_SERVER_URL)
   : undefined;
-export const DEFAULT_REALM_DIR = resolve(
-  packageRoot,
-  process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
-);
 export const DEFAULT_ICONS_URL =
   process.env.ICONS_URL ?? 'http://localhost:4206/';
 export const CONFIGURED_HOST_URL = process.env.TEST_HARNESS_HOST_URL
@@ -192,7 +192,7 @@ export const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 export const REALM_SECRET_SEED = "shhh! it's a secret";
 export const REALM_SERVER_SECRET_SEED = "mum's the word";
 export const GRAFANA_SECRET = "shhh! it's a secret";
-export const FIXTURE_SOURCE_REALM_URL_PLACEHOLDER =
+export const FIXTURE_REALM_SERVER_URL_PLACEHOLDER =
   'https://test-harness.test/';
 export const DEFAULT_MATRIX_SERVER_USERNAME =
   process.env.TEST_HARNESS_MATRIX_SERVER_USERNAME ?? 'realm_server';
@@ -204,11 +204,7 @@ export const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
-export const DEFAULT_SOURCE_REALM_PERMISSIONS: RealmPermissions = {
-  '*': ['read'],
-  [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
-};
-export const DEFAULT_BASE_REALM_PERMISSIONS = DEFAULT_SOURCE_REALM_PERMISSIONS;
+export const DEFAULT_BASE_REALM_PERMISSIONS = DEFAULT_PERMISSIONS;
 export const managedProcessStdio: StdioOptions =
   process.env.TEST_HARNESS_DEBUG_SERVER === '1'
     ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
@@ -224,30 +220,6 @@ export const harnessLog = logger('software-factory:harness');
 export const supportLog = logger('software-factory:harness:support');
 export const templateLog = logger('software-factory:harness:template');
 export const realmLog = logger('software-factory:harness:realm');
-
-/**
- * Space-separated glob controlling which source realm files are copied into
- * the isolated realm stack. Only core card definitions are needed for tests.
- * Prefix a pattern with ! to exclude. Last matching pattern wins.
- */
-export const SOURCE_REALM_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
-
-export function matchesSourceRealmGlob(relativePath: string): boolean {
-  let filename = relativePath.split('/').pop() ?? relativePath;
-  let included = false;
-  for (let pattern of SOURCE_REALM_GLOB.split(/\s+/)) {
-    let negate = pattern.startsWith('!');
-    let glob = negate ? pattern.slice(1) : pattern;
-    let hit = glob.startsWith('*')
-      ? filename.endsWith(glob.slice(1))
-      : filename === glob;
-    if (hit) {
-      included = !negate;
-    }
-  }
-  return included;
-}
 
 export function formatElapsedMs(elapsedMs: number): string {
   return `${(elapsedMs / 1000).toFixed(1)}s`;
@@ -398,45 +370,6 @@ export async function resolveFactoryRealmServerURL(
   return new URL(`http://localhost:${port}/`);
 }
 
-export async function resolveFactoryRealmLocation(options: {
-  realmURL?: URL;
-  realmServerURL?: URL;
-  compatRealmServerPort?: number;
-}): Promise<{
-  realmURL: URL;
-  realmServerURL: URL;
-}> {
-  let realmURL = options.realmURL
-    ? new URL(options.realmURL.href)
-    : CONFIGURED_REALM_URL
-      ? new URL(CONFIGURED_REALM_URL.href)
-      : undefined;
-  let realmServerURL = options.realmServerURL
-    ? new URL(options.realmServerURL.href)
-    : CONFIGURED_REALM_SERVER_URL
-      ? new URL(CONFIGURED_REALM_SERVER_URL.href)
-      : undefined;
-
-  if (!realmURL && !realmServerURL) {
-    realmServerURL = await resolveFactoryRealmServerURL(
-      undefined,
-      options.compatRealmServerPort,
-    );
-    realmURL = new URL('test/', realmServerURL);
-  } else if (!realmServerURL) {
-    throw new Error(
-      'An explicit realm server URL is required when a realm URL is provided. Set options.realmServerURL or TEST_HARNESS_REALM_SERVER_URL.',
-    );
-  } else if (!realmURL) {
-    realmURL = new URL('test/', realmServerURL);
-  }
-
-  return {
-    realmURL,
-    realmServerURL,
-  };
-}
-
 export function baseRealmURLFor(realmServerURL: URL): URL {
   return new URL('base/', realmServerURL);
 }
@@ -445,33 +378,10 @@ export function skillsRealmURLFor(realmServerURL: URL): URL {
   return new URL('skills/', realmServerURL);
 }
 
-export function sourceRealmURLFor(realmServerURL: URL): URL {
-  return new URL('software-factory/', realmServerURL);
-}
-
 export function withPort(url: URL, port: number): URL {
   let next = new URL(url.href);
   next.port = String(port);
   return next;
-}
-
-export function realmRelativePath(realmURL: URL, realmServerURL: URL): string {
-  if (realmURL.origin !== realmServerURL.origin) {
-    throw new Error(
-      `Realm URL ${realmURL.href} does not share an origin with realm server URL ${realmServerURL.href}`,
-    );
-  }
-
-  let serverPath = realmServerURL.pathname.endsWith('/')
-    ? realmServerURL.pathname
-    : `${realmServerURL.pathname}/`;
-  if (!realmURL.pathname.startsWith(serverPath)) {
-    throw new Error(
-      `Realm URL ${realmURL.href} is not mounted under realm server URL ${realmServerURL.href}`,
-    );
-  }
-
-  return realmURL.pathname.slice(serverPath.length);
 }
 
 export function realmURLWithinServer(
@@ -534,22 +444,25 @@ export function hashRealmFixture(
   return hashString(entries.join('|'));
 }
 
-export interface CombinedRealmFixture {
-  realmDir: string;
-  realmPath: string;
-}
-
 /**
- * Compute a combined hash for multiple realm fixtures, suitable for a
- * combined template database cache key.
+ * Stable cache-key fragment describing the on-disk fixtures plus per-realm
+ * permissions for a set of realms. Used by the harness API to build a
+ * template-DB cache key — any change to a fixture's contents, mount path,
+ * or permissions invalidates the cached template.
  */
-export function hashCombinedRealmFixtures(
-  fixtures: CombinedRealmFixture[],
-): string {
-  let entries = fixtures
+export function hashRealms(realms: RealmConfig[]): string {
+  let entries = realms
     .slice()
-    .sort((a, b) => a.realmPath.localeCompare(b.realmPath))
-    .map((f) => `${f.realmPath}:${hashRealmFixture(f.realmDir)}`);
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((realm) =>
+      stableStringify({
+        path: realm.path,
+        fixtureHash: hashRealmFixture(realm.dir, {
+          fileFilter: realm.fileFilter,
+        }),
+        permissions: realm.permissions ?? null,
+      }),
+    );
   return hashString(entries.join('||'));
 }
 

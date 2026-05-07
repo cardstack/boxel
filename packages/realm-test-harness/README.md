@@ -1,10 +1,10 @@
 # @cardstack/realm-test-harness
 
 Spin up a complete, hermetic Boxel stack — Synapse, Postgres, prerender,
-worker-manager, realm-server, and host-dist — against a fixture realm
-directory, with every port dynamically allocated. Returns a handle for
-making authenticated requests against the running realm and tearing it
-all down again.
+worker-manager, realm-server, and host-dist — against one or more fixture
+realm directories, with every port dynamically allocated. Returns a handle
+for making authenticated requests against the running realms and tearing
+it all down again.
 
 ## What it gives you
 
@@ -16,16 +16,19 @@ production runs:
 * a prerender server (real FastBoot, real Chrome workers)
 * a worker-manager + worker process
 * a realm-server child process serving:
-  * the **base realm** (`packages/base/`)
-  * the **source realm** (configurable via `TEST_HARNESS_SOURCE_REALM_DIR`)
-  * the **fixture realm** you passed in (`realmDir`)
-  * any **additional realms** you passed via the multi-realm path (see below)
+  * the **base realm** (`packages/base/`) — always mounted by the harness
+  * each realm in your `realms[]` array
 * host-dist mounted on the realm-server for static asset serving
 
 The skills realm (`packages/skills-realm/contents/`) is **opt-in** —
 mounted only when `TEST_HARNESS_INCLUDE_SKILLS=1`. Tests and benches
 that don't reach for skill cards leave it off and avoid paying for its
 indexing.
+
+The harness also exposes a stable `http://localhost:4205/<path>/` legacy
+alias for every user realm so JSON fixtures or external code that still
+hardcodes the legacy port keep resolving even though every stack actually
+binds to a dynamic port.
 
 Everything talks over real HTTP on real (loopback) sockets. Indexing
 runs through real queue round-trips. Prerender renders go through real
@@ -63,7 +66,9 @@ Reach for `realm-test-harness` instead when:
 import { startFactoryRealmServer } from '@cardstack/realm-test-harness';
 
 let realm = await startFactoryRealmServer({
-  realmDir: '/path/to/your/fixture/realm',
+  realms: [
+    { dir: '/path/to/your/fixture/realm', path: 'test/' },
+  ],
 });
 
 let token = realm.createBearerToken();
@@ -74,11 +79,17 @@ let response = await fetch(new URL('SomeCard/instance-1', realm.realmURL), {
 await realm.stop();
 ```
 
+The first entry in `realms[]` is the **primary** realm: the returned
+`StartedFactoryRealm.realmURL` and `cardURL(...)` resolve relative to it,
+and `createBearerToken()` issues a token for it. Subsequent entries are
+mounted on the same realm-server and reachable at their respective
+`path` values via `realm.realmServerURL`.
+
 The returned handle:
 
 ```ts
 interface StartedFactoryRealm {
-  realmDir: string;             // your fixture dir
+  realmDir: string;             // primary realm fixture dir
   realmURL: URL;                // e.g. http://localhost:NNNN/test/
   realmServerURL: URL;          // e.g. http://localhost:NNNN/
   databaseName: string;
@@ -91,45 +102,47 @@ interface StartedFactoryRealm {
 }
 ```
 
-## Fixture realm
+## RealmConfig
 
-Your `realmDir` is a regular Boxel realm directory (`.realm.json` +
-`realm.json` + cards). The harness copies it into a tmpdir before
-mounting so concurrent stacks don't fight over the source files.
+Each entry in `realms[]` is a `RealmConfig`:
 
-If your fixture's cards adopt from a separate "source" realm
-(card definitions live in another package), point the harness at it via:
-
-```bash
-TEST_HARNESS_SOURCE_REALM_DIR=/path/to/source-realm-cards
+```ts
+interface RealmConfig {
+  dir: string;                                    // fixture realm directory
+  path: string;                                   // mount path, e.g. 'test/'
+  permissions?: RealmPermissions;                 // defaults to public-read + owner-write
+  fileFilter?: (relativePath: string) => boolean; // narrow which fixture files copy
+  username?: string;                              // realm-server --username; default 'test_realm_${i}'
+}
 ```
 
-(Defaults to `<cwd>/realm`.)
+Use `fileFilter` when you want a realm to expose only its card
+definitions (for example, when a "platform" realm provides `.gts` modules
+that other realms adopt from but the platform's own instance data isn't
+relevant to the test).
 
 ## The `https://test-harness.test/` placeholder
 
-Every harness instance binds its realms to dynamic ports, so the
-absolute URL of the source realm is different on every run. To let
-fixture JSON refer to those moving URLs without templating each file
-at runtime, the harness recognises a single well-known placeholder:
+Every harness instance binds its realm-server to a dynamic port, so the
+absolute URL of every realm is different on every run. To let fixture
+JSON refer to those moving URLs without templating each file at runtime,
+the harness recognises a single well-known placeholder:
 
 ```
 https://test-harness.test/
 ```
 
-Write this anywhere in your fixture's `*.json` files where you'd
-normally write the source realm's absolute URL — `meta.adoptsFrom.module`,
-relationship `links.self`, computed link refs, anything. When the
-harness copies your fixture into the tmpdir, it walks every JSON file
-and replaces every occurrence with the actual ephemeral source-realm
-URL for that stack.
+When the harness copies your fixture into the tmpdir, it walks every
+JSON file and replaces every occurrence with the actual ephemeral
+**realm-server** URL for that stack. So a fixture that adopts a card
+from the realm mounted at `software-factory/` writes:
 
 ```jsonc
 {
   "data": {
     "meta": {
       "adoptsFrom": {
-        "module": "https://test-harness.test/eval-result",
+        "module": "https://test-harness.test/software-factory/eval-result",
         "name": "EvalResult"
       }
     }
@@ -137,7 +150,7 @@ URL for that stack.
 }
 ```
 
-Lands at runtime as `http://localhost:NNNN/source-realm-path/eval-result`
+Lands at runtime as `http://localhost:NNNN/software-factory/eval-result`
 where `NNNN` is the per-stack realm-server port. Two harnesses running
 side-by-side each rewrite the same placeholder to their own port —
 that's how cross-realm references stay consistent across the
@@ -150,44 +163,7 @@ unusual places.
 
 ## Multiple realms in one stack
 
-Two patterns, depending on whether you want one stack to serve many
-realms or many stacks each serving one realm.
-
-### Pattern A — many fixtures, one stack at a time
-
-If different tests target different fixtures (one realm per scenario),
-keep all your fixture realms side-by-side under a `test-fixtures/`
-directory and select per test:
-
-```
-test-fixtures/
-├── darkfactory-adopter/
-│   ├── .realm.json
-│   ├── realm.json
-│   └── *.gts / *.json
-├── test-realm-runner/
-│   └── …
-└── public-software-factory-source/
-    └── …
-```
-
-Each test points the harness at the fixture it needs:
-
-```ts
-test.use({ realmDir: resolve('test-fixtures/test-realm-runner') });
-```
-
-The harness keys its template-DB cache on the fixture's content hash
-(see *Template DB cache* below), so each fixture gets its own template
-on first use and clones in seconds thereafter. This is what
-`packages/software-factory/test-fixtures/` does — multiple independent
-fixture dirs that tests pick from.
-
-### Pattern B — many realms in the same stack
-
-If a single test or bench needs *more than one realm running together*
-— e.g. it linksTo across realms or measures cross-realm search — build
-a **combined template** and reuse it:
+Pass them all in the `realms[]` array:
 
 ```ts
 import {
@@ -195,14 +171,16 @@ import {
   startFactoryRealmServer,
 } from '@cardstack/realm-test-harness';
 
-let { templateDatabaseName } = await ensureCombinedFactoryRealmTemplate([
-  { realmDir: '/path/to/realm-a', realmPath: 'test/' },        // primary
-  { realmDir: '/path/to/realm-b', realmPath: 'realm-b/' },     // additional
-  { realmDir: '/path/to/realm-c', realmPath: 'realm-c/' },     // additional
-]);
+let realms = [
+  { dir: '/path/to/realm-a', path: 'test/' },                  // primary
+  { dir: '/path/to/realm-b', path: 'realm-b/' },
+  { dir: '/path/to/realm-c', path: 'realm-c/', fileFilter: cardDefinitionsOnly },
+];
+
+let { templateDatabaseName } = await ensureCombinedFactoryRealmTemplate(realms);
 
 let realm = await startFactoryRealmServer({
-  realmDir: '/path/to/realm-a',
+  realms,
   templateDatabaseName,
 });
 ```
@@ -210,20 +188,20 @@ let realm = await startFactoryRealmServer({
 `ensureCombinedFactoryRealmTemplate` builds (or reuses) a single
 template database that has every fixture pre-indexed; subsequent runs
 clone it instead of re-indexing each realm one at a time. The cache key
-is the combined content hash, so any change to any of the fixtures
-invalidates the template and forces a rebuild.
+is the combined content hash plus per-realm permissions, so any change
+to any of the fixtures invalidates the template and forces a rebuild.
 
 `packages/software-factory/src/cli/cache-realm.ts` is the canonical
-example — it accepts multiple realm dirs on the command line and
-routes them through `ensureCombinedFactoryRealmTemplate` when more than
-one is given.
+example — it routes its incoming list of realm dirs through
+`ensureCombinedFactoryRealmTemplate`.
 
 ## Template DB cache
 
 The harness caches a fully-indexed template database keyed by the
-content hash of `realmDir` and the source realm. Subsequent runs against
-the same fixture clone the template and skip re-indexing — cold-start
-goes from minutes to seconds.
+content hash of every realm in `realms[]`, plus per-realm permissions,
+plus `CACHE_VERSION`. Subsequent runs against the same set of fixtures
+clone the template and skip re-indexing — cold-start goes from minutes
+to seconds.
 
 If your test depends on something *outside* the cache key (e.g. host
 code that produces the schema in `Definition.fieldDefs`), set
@@ -235,7 +213,6 @@ fresh build.
 
 | Var | Meaning |
 | --- | --- |
-| `TEST_HARNESS_SOURCE_REALM_DIR` | Path to the source-realm directory whose cards the fixture adopts from. |
 | `TEST_HARNESS_INCLUDE_SKILLS` | Set to `1` to mount the skills realm (`packages/skills-realm/contents/`). Off by default — most tests don't need it. |
 | `TEST_HARNESS_CACHE_SALT` | Mix into the template-DB cache key to force rebuilds when an out-of-band input changes. |
 | `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` | Override the host package directory whose `dist/` the realm-server serves. |

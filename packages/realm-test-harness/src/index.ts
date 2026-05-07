@@ -10,10 +10,10 @@ export {
 } from './api';
 
 export type {
-  CombinedRealmFixture,
   FactoryRealmOptions,
   FactoryRealmTemplate,
   FactoryTestContext,
+  RealmConfig,
   StartedFactoryRealm,
 } from './shared';
 
@@ -22,11 +22,8 @@ export {
   buildServerToken,
   findAndHoldAvailablePort,
   isFactorySupportContext,
-  sourceRealmURLFor,
   type PortReservation,
 } from './shared';
-
-export type { AdditionalRealm } from './isolated-realm-stack';
 
 export { startHarnessPrerenderServer } from './support-services';
 

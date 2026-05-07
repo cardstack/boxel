@@ -30,26 +30,19 @@ import {
   buildRealmToken,
   CACHE_VERSION,
   DEFAULT_BASE_REALM_PERMISSIONS,
-  DEFAULT_PERMISSIONS,
-  DEFAULT_REALM_DIR,
   DEFAULT_REALM_OWNER,
-  DEFAULT_SOURCE_REALM_PERMISSIONS,
-  hashRealmFixture,
-  sourceRealmDir,
   harnessLog,
+  hashRealms,
   hasTemplateDatabaseName,
   logTimed,
   parseFactoryContext,
-  resolveFactoryRealmLocation,
+  resolveFactoryRealmServerURL,
+  realmURLWithinServer,
   runtimeDatabaseName,
   stableStringify,
   templateDatabaseNameForCacheKey,
   hashString,
-  hashCombinedRealmFixtures,
   baseRealmURLFor,
-  realmRelativePath,
-  sourceRealmURLFor,
-  type CombinedRealmFixture,
   realmLog,
   type FactoryGlobalContextHandle,
   type FactoryRealmOptions,
@@ -57,11 +50,11 @@ import {
   type FactorySupportContext,
   type FactoryTestContext,
   type RealmAction,
+  type RealmConfig,
   type StartedFactoryRealm,
 } from './shared';
 import {
   buildCombinedTemplateDatabase,
-  buildTemplateDatabase,
   clearRealmPermissions,
   cloneDatabaseFromTemplate,
   databaseExists,
@@ -88,21 +81,20 @@ export function getFactoryTestContext(): FactoryTestContext {
 export { startFactorySupportServices };
 
 export async function startFactoryGlobalContext(
-  options: FactoryRealmOptions = {},
+  options: FactoryRealmOptions,
 ): Promise<FactoryGlobalContextHandle> {
   return await logTimed(harnessLog, 'startFactoryGlobalContext', async () => {
-    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
-      realmURL: options.realmURL,
-      realmServerURL: options.realmServerURL,
-      compatRealmServerPort: options.compatRealmServerPort,
-    });
+    let realms = resolveRealms(options.realms);
+    let realmServerURL = await resolveFactoryRealmServerURL(
+      options.realmServerURL,
+      options.compatRealmServerPort,
+    );
+    let primaryRealmURL = realmURLWithinServer(realmServerURL, realms[0].path);
     let support = await startFactorySupportServices();
     try {
       let template = await ensureFactoryRealmTemplate({
         ...options,
-        realmDir,
-        realmURL,
+        realms,
         realmServerURL,
         context: support.context,
       });
@@ -111,8 +103,8 @@ export async function startFactoryGlobalContext(
         ...support.context,
         cacheKey: template.cacheKey,
         fixtureHash: template.fixtureHash,
-        realmDir,
-        realmURL: realmURL.href,
+        realmDir: realms[0].dir,
+        realmURL: primaryRealmURL.href,
         realmServerURL: realmServerURL.href,
         templateDatabaseName: template.templateDatabaseName,
       };
@@ -128,35 +120,35 @@ export async function startFactoryGlobalContext(
   });
 }
 
+function resolveRealms(realms: RealmConfig[]): RealmConfig[] {
+  if (!realms || realms.length === 0) {
+    throw new Error('FactoryRealmOptions.realms is required and non-empty');
+  }
+  return realms.map((realm) => ({
+    ...realm,
+    dir: resolve(realm.dir),
+  }));
+}
+
 export async function ensureFactoryRealmTemplate(
-  options: FactoryRealmOptions & { forceRebuild?: boolean } = {},
+  options: FactoryRealmOptions & { forceRebuild?: boolean },
 ): Promise<FactoryRealmTemplate> {
   return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
-    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-    let contextRealmURL =
-      options.context && hasTemplateDatabaseName(options.context)
-        ? new URL(options.context.realmURL)
-        : undefined;
+    let realms = resolveRealms(options.realms);
     let contextRealmServerURL =
       options.context && hasTemplateDatabaseName(options.context)
         ? new URL(options.context.realmServerURL)
         : undefined;
-    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
-      realmURL: options.realmURL ?? contextRealmURL,
-      realmServerURL: options.realmServerURL ?? contextRealmServerURL,
-      compatRealmServerPort: options.compatRealmServerPort,
-    });
-    let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
-    let fixtureHash = hashRealmFixture(realmDir);
-    let sourceRealmHash = hashRealmFixture(sourceRealmDir);
-    let realmPath = realmRelativePath(realmURL, realmServerURL);
+    let realmServerURL = await resolveFactoryRealmServerURL(
+      options.realmServerURL ?? contextRealmServerURL,
+      options.compatRealmServerPort,
+    );
+    let primaryRealmURL = realmURLWithinServer(realmServerURL, realms[0].path);
+    let realmsHash = hashRealms(realms);
     let cacheKey = hashString(
       stableStringify({
         version: CACHE_VERSION,
-        realmPath,
-        permissions,
-        fixtureHash,
-        sourceRealmHash,
+        realmsHash,
         cacheSalt:
           options.cacheSalt ?? process.env.TEST_HARNESS_CACHE_SALT ?? null,
       }),
@@ -174,7 +166,7 @@ export async function ensureFactoryRealmTemplate(
       return {
         cacheKey,
         templateDatabaseName,
-        fixtureHash,
+        fixtureHash: realmsHash,
         cacheHit: true,
         realmURL: new URL(cachedTemplateMetadata.templateRealmURL),
         realmServerURL: new URL(cachedTemplateMetadata.templateRealmServerURL),
@@ -213,29 +205,27 @@ export async function ensureFactoryRealmTemplate(
         context = ownedSupport.context;
       }
 
-      await buildTemplateDatabase({
-        realmDir,
-        realmURL,
+      await buildCombinedTemplateDatabase({
+        realms,
         realmServerURL,
-        permissions,
         context,
         cacheKey,
         templateDatabaseName,
       });
       writePreparedTemplateMetadata({
-        realmDir,
+        realmDir: realms[0].dir,
         templateDatabaseName,
-        templateRealmURL: realmURL.href,
+        templateRealmURL: primaryRealmURL.href,
         templateRealmServerURL: realmServerURL.href,
       });
 
       return {
         cacheKey,
         templateDatabaseName,
-        fixtureHash,
+        fixtureHash: realmsHash,
         cacheHit: false,
         cacheMissReason,
-        realmURL,
+        realmURL: primaryRealmURL,
         realmServerURL,
       };
     } finally {
@@ -256,166 +246,65 @@ export interface CombinedRealmTemplateResult {
 }
 
 /**
- * Ensure a combined template database exists for multiple realm fixtures.
- * All fixture realms are pre-indexed in a single DB, so any test requesting
- * any of the covered realms gets a cache hit from the same template.
+ * Ensure a template database exists for the given realms. All realms are
+ * pre-indexed in a single DB, so any test cloning the template gets every
+ * realm ready to serve.
  */
 export async function ensureCombinedFactoryRealmTemplate(
-  fixtures: CombinedRealmFixture[],
+  realms: RealmConfig[],
   options: {
     context?: FactorySupportContext;
-    permissions?: Record<string, RealmAction[]>;
     cacheSalt?: string;
     forceRebuild?: boolean;
+    realmServerURL?: URL;
+    compatRealmServerPort?: number;
   } = {},
 ): Promise<CombinedRealmTemplateResult> {
   return await logTimed(
     harnessLog,
-    `ensureCombinedFactoryRealmTemplate (${fixtures.length} realms)`,
+    `ensureCombinedFactoryRealmTemplate (${realms.length} realms)`,
     async () => {
-      if (fixtures.length === 0) {
-        throw new Error('At least one realm fixture is required');
-      }
-
-      // Resolve realm server URL from context or default.
-      let contextRealmServerURL =
-        options.context && hasTemplateDatabaseName(options.context)
-          ? new URL(options.context.realmServerURL)
-          : undefined;
-      let { realmServerURL } = await resolveFactoryRealmLocation({
-        realmServerURL: contextRealmServerURL,
+      let resolvedRealms = resolveRealms(realms);
+      let template = await ensureFactoryRealmTemplate({
+        realms: resolvedRealms,
+        context: options.context,
+        cacheSalt: options.cacheSalt,
+        forceRebuild: options.forceRebuild,
+        realmServerURL: options.realmServerURL,
+        compatRealmServerPort: options.compatRealmServerPort,
       });
-
-      let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
-      let sourceRealmHash = hashRealmFixture(sourceRealmDir);
-      let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
-
-      let cacheKey = hashString(
-        stableStringify({
-          version: CACHE_VERSION,
-          combinedFixtureHash,
-          sourceRealmHash,
-          permissions,
-          cacheSalt:
-            options.cacheSalt ?? process.env.TEST_HARNESS_CACHE_SALT ?? null,
-        }),
-      );
-      let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
-      let hasTemplateDatabase = await databaseExists(templateDatabaseName);
-      let cachedTemplateMetadata =
-        readPreparedTemplateMetadata(templateDatabaseName);
-
-      if (
-        !options.forceRebuild &&
-        hasTemplateDatabase &&
-        cachedTemplateMetadata
-      ) {
-        return {
-          cacheKey,
-          templateDatabaseName,
-          combinedFixtureHash,
-          cacheHit: true,
-          coveredRealmDirs: fixtures.map((f) => resolve(f.realmDir)),
-          realmServerURL: new URL(
-            cachedTemplateMetadata.templateRealmServerURL,
-          ),
-        };
-      }
-
-      let cacheMissReason = options.forceRebuild
-        ? 'forced rebuild'
-        : !cachedTemplateMetadata
-          ? hasTemplateDatabase
-            ? 'template metadata is missing'
-            : 'template database has not been prepared yet'
-          : 'template database is missing';
-
-      let resolvedFixtures: CombinedRealmFixture[] = fixtures.map((f) => ({
-        realmDir: resolve(f.realmDir),
-        realmPath: f.realmPath,
-      }));
-
-      // Full build from scratch.
-      // Suppress noisy support-service logging during the build.
-      let originalLogLevels = process.env.LOG_LEVELS || '*=info';
-      configureLogger(
-        originalLogLevels +
-          ',software-factory:harness:support=none,support-services=none',
-      );
-
-      let ownedSupport:
-        | { context: FactorySupportContext; stop(): Promise<void> }
-        | undefined;
-      let context = options.context;
-
-      try {
-        if (!context) {
-          ownedSupport = await withSilentConsole(() =>
-            startFactorySupportServices(),
-          );
-          context = ownedSupport.context;
-        }
-
-        let realmFixtures = resolvedFixtures.map((f) => {
-          let realmURL = new URL(f.realmPath, realmServerURL);
-          return {
-            realmDir: f.realmDir,
-            realmURL,
-          };
-        });
-
-        await buildCombinedTemplateDatabase({
-          realmFixtures,
-          realmServerURL,
-          permissions,
-          context,
-          cacheKey,
-          templateDatabaseName,
-        });
-
-        writePreparedTemplateMetadata({
-          realmDir: realmFixtures[0].realmDir,
-          templateDatabaseName,
-          templateRealmURL: realmFixtures[0].realmURL.href,
-          templateRealmServerURL: realmServerURL.href,
-        });
-
-        return {
-          cacheKey,
-          templateDatabaseName,
-          combinedFixtureHash,
-          cacheHit: false,
-          cacheMissReason,
-          coveredRealmDirs: realmFixtures.map((f) => f.realmDir),
-          realmServerURL,
-        };
-      } finally {
-        configureLogger(originalLogLevels);
-        await withSilentConsole(async () => ownedSupport?.stop());
-      }
+      return {
+        cacheKey: template.cacheKey,
+        templateDatabaseName: template.templateDatabaseName,
+        combinedFixtureHash: template.fixtureHash,
+        cacheHit: template.cacheHit,
+        cacheMissReason: template.cacheMissReason,
+        coveredRealmDirs: resolvedRealms.map((r) => r.dir),
+        realmServerURL: template.realmServerURL,
+      };
     },
   );
 }
 
 export async function startFactoryRealmServer(
-  options: FactoryRealmOptions = {},
+  options: FactoryRealmOptions,
 ): Promise<StartedFactoryRealm> {
   return await logTimed(harnessLog, 'startFactoryRealmServer', async () => {
-    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
+    let realms = resolveRealms(options.realms);
+    let primaryRealm = realms[0];
     let existingContext = options.context ?? parseFactoryContext();
-    let contextRealmURL =
-      existingContext && hasTemplateDatabaseName(existingContext)
-        ? new URL(existingContext.realmURL)
-        : undefined;
     let contextRealmServerURL =
       existingContext && hasTemplateDatabaseName(existingContext)
         ? new URL(existingContext.realmServerURL)
         : undefined;
-    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
-      realmURL: options.realmURL ?? contextRealmURL,
-      realmServerURL: options.realmServerURL ?? contextRealmServerURL,
-      compatRealmServerPort: options.compatRealmServerPort,
-    });
+    let realmServerURL = await resolveFactoryRealmServerURL(
+      options.realmServerURL ?? contextRealmServerURL,
+      options.compatRealmServerPort,
+    );
+    let primaryRealmURL = realmURLWithinServer(
+      realmServerURL,
+      primaryRealm.path,
+    );
     let templateDatabaseName = options.templateDatabaseName;
     let databaseName = runtimeDatabaseName();
 
@@ -424,8 +313,7 @@ export async function startFactoryRealmServer(
     if (!context) {
       ownedGlobalContext = await startFactoryGlobalContext({
         ...options,
-        realmDir,
-        realmURL,
+        realms,
         realmServerURL,
       });
       context = ownedGlobalContext.context;
@@ -437,8 +325,7 @@ export async function startFactoryRealmServer(
         : (
             await ensureFactoryRealmTemplate({
               ...options,
-              realmDir,
-              realmURL,
+              realms,
               realmServerURL,
               context,
             })
@@ -448,7 +335,6 @@ export async function startFactoryRealmServer(
     let stack;
     try {
       let baseRealmURL = baseRealmURLFor(realmServerURL);
-      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
       await dropDatabase(databaseName);
       await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
 
@@ -478,24 +364,24 @@ export async function startFactoryRealmServer(
         baseRealmURL,
         DEFAULT_BASE_REALM_PERMISSIONS,
       );
-      await seedRealmPermissions(
-        databaseName,
-        sourceRealmURL,
-        DEFAULT_SOURCE_REALM_PERMISSIONS,
-      );
 
-      // Apply custom test-realm permissions if provided. We clear the
-      // template's permissions first so leftover rows (e.g. the default
-      // '*' public-read grant) don't leak into the private realm.
-      let permissions = options.permissions;
-      if (permissions) {
-        await clearRealmPermissions(databaseName, realmURL);
-        await seedRealmPermissions(databaseName, realmURL, permissions);
+      // When the caller passes an explicit `templateDatabaseName` (the
+      // typical flow in CI / Playwright with a pre-built combined template),
+      // realms whose RealmConfig.permissions differ from the template's
+      // need their permissions re-seeded at runtime. Without this, a test
+      // that requested e.g. private permissions on `realms[0]` would
+      // inherit the template's '*': read grant. We clear first so the
+      // template's row set is fully replaced.
+      for (let realm of realms) {
+        if (realm.permissions) {
+          let realmURL = realmURLWithinServer(realmServerURL, realm.path);
+          await clearRealmPermissions(databaseName, realmURL);
+          await seedRealmPermissions(databaseName, realmURL, realm.permissions);
+        }
       }
 
       stack = await startIsolatedRealmStack({
-        realmDir,
-        realmURL,
+        realms,
         realmServerURL,
         databaseName,
         context,
@@ -527,8 +413,8 @@ export async function startFactoryRealmServer(
     }
 
     return {
-      realmDir,
-      realmURL,
+      realmDir: primaryRealm.dir,
+      realmURL: primaryRealmURL,
       realmServerURL,
       databaseName,
       ports: stack.ports,
@@ -536,18 +422,23 @@ export async function startFactoryRealmServer(
         (pid): pid is number => pid != null,
       ),
       cardURL(path: string) {
-        return new URL(path, realmURL).href;
+        return new URL(path, primaryRealmURL).href;
       },
       createBearerToken(
         user = DEFAULT_REALM_OWNER,
         permissions?: RealmAction[],
       ) {
-        return buildRealmToken(realmURL, realmServerURL, user, permissions);
+        return buildRealmToken(
+          primaryRealmURL,
+          realmServerURL,
+          user,
+          permissions,
+        );
       },
       authorizationHeaders(user?: string, permissions?: RealmAction[]) {
         return {
           Authorization: `Bearer ${buildRealmToken(
-            realmURL,
+            primaryRealmURL,
             realmServerURL,
             user,
             permissions,
@@ -591,7 +482,7 @@ export async function startFactoryRealmServer(
 
 export async function fetchRealmCardJson(
   path: string,
-  options: FactoryRealmOptions = {},
+  options: FactoryRealmOptions,
 ) {
   return await logTimed(harnessLog, `fetchRealmCardJson ${path}`, async () => {
     let runtime = await startFactoryRealmServer(options);

@@ -15,7 +15,6 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import fsExtra from 'fs-extra';
 import { spawn } from 'node:child_process';
-import { matchesSourceRealmGlob } from './shared';
 
 import {
   baseRealmDir,
@@ -29,12 +28,11 @@ import {
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
   findAndHoldAvailablePort,
-  FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
+  FIXTURE_REALM_SERVER_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
   INCLUDE_SKILLS,
   managedProcessStdio,
   realmLog,
-  realmRelativePath,
   realmServerDir,
   realmURLWithinServer,
   REALM_SECRET_SEED,
@@ -42,8 +40,6 @@ import {
   shouldIgnoreFixturePath,
   skillsRealmDir,
   skillsRealmURLFor,
-  sourceRealmDir,
-  sourceRealmURLFor,
   GRAFANA_SECRET,
   waitForJsonFile,
   waitForReady,
@@ -52,6 +48,7 @@ import {
   stopManagedProcess,
   type FactorySupportContext,
   type PortReservation,
+  type RealmConfig,
   type RunningFactoryStack,
   type SpawnedProcess,
   type StartedCompatRealmProxy,
@@ -243,7 +240,7 @@ async function startCompatRealmProxy({
 
 function rewriteFixtureSourceModuleUrls(
   destination: string,
-  sourceRealmURL: URL,
+  realmServerURL: URL,
 ): void {
   let rewrittenFiles = 0;
 
@@ -259,15 +256,15 @@ function rewriteFixtureSourceModuleUrls(
       }
 
       let contents = readFileSync(absolutePath, 'utf8');
-      if (!contents.includes(FIXTURE_SOURCE_REALM_URL_PLACEHOLDER)) {
+      if (!contents.includes(FIXTURE_REALM_SERVER_URL_PLACEHOLDER)) {
         continue;
       }
 
       writeFileSync(
         absolutePath,
         contents
-          .split(FIXTURE_SOURCE_REALM_URL_PLACEHOLDER)
-          .join(sourceRealmURL.href),
+          .split(FIXTURE_REALM_SERVER_URL_PLACEHOLDER)
+          .join(realmServerURL.href),
       );
       rewrittenFiles++;
     }
@@ -276,7 +273,7 @@ function rewriteFixtureSourceModuleUrls(
   visit(destination);
   if (rewrittenFiles > 0) {
     realmLog.debug(
-      `rewriteFixtureSourceModuleUrls: rewrote ${rewrittenFiles} files to ${sourceRealmURL.href}`,
+      `rewriteFixtureSourceModuleUrls: rewrote ${rewrittenFiles} files to ${realmServerURL.href}`,
     );
   }
 }
@@ -284,7 +281,7 @@ function rewriteFixtureSourceModuleUrls(
 function copyRealmFixture(
   realmDir: string,
   destination: string,
-  sourceRealmURL: URL,
+  realmServerURL: URL,
   options?: { fileFilter?: (relativePath: string) => boolean },
 ): void {
   // Resolve symlinks so copySync sees the real directory, not the symlink itself.
@@ -306,36 +303,26 @@ function copyRealmFixture(
       return true;
     },
   });
-  rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
-}
-
-export interface AdditionalRealm {
-  realmDir: string;
-  realmURL: URL;
-  username?: string;
+  rewriteFixtureSourceModuleUrls(destination, realmServerURL);
 }
 
 export async function startIsolatedRealmStack({
-  realmDir,
-  realmURL,
+  realms,
   realmServerURL,
   databaseName,
   context,
   migrateDB,
   fullIndexOnStartup,
-  additionalRealms,
   workerManagerPort: explicitWorkerManagerPort,
   realmServerPort: explicitRealmServerPort,
   prerenderURL: explicitPrerenderURL,
 }: {
-  realmDir: string;
-  realmURL: URL;
+  realms: RealmConfig[];
   realmServerURL: URL;
   databaseName: string;
   context: FactorySupportContext;
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
-  additionalRealms?: AdditionalRealm[];
   /** When provided, the worker-manager will listen on this port instead of
    *  picking one dynamically. This lets callers know the port upfront (e.g.
    *  for progress monitoring via /_indexing-status). Pass a `PortReservation`
@@ -351,17 +338,10 @@ export async function startIsolatedRealmStack({
    *  the lifetime of a testWorker and passes its URL here. */
   prerenderURL?: string;
 }): Promise<RunningFactoryStack> {
+  if (realms.length === 0) {
+    throw new Error('startIsolatedRealmStack requires at least one realm');
+  }
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
-  // Create a filtered copy of the source realm — only card definitions
-  // (via SOURCE_REALM_GLOB), not instance data like wiki briefs or documents.
-  let filteredSourceRealmDir = join(rootDir, 'source-realm');
-  copyRealmFixture(
-    sourceRealmDir,
-    filteredSourceRealmDir,
-    new URL('https://placeholder/'),
-    { fileFilter: matchesSourceRealmGlob },
-  );
-  let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
 
@@ -401,57 +381,52 @@ export async function startIsolatedRealmStack({
   };
   try {
     let actualRealmServerURL = withPort(realmServerURL, actualRealmServerPort);
-    let actualRealmPath = realmRelativePath(realmURL, realmServerURL);
-    let actualRealmURL = realmURLWithinServer(
-      actualRealmServerURL,
-      actualRealmPath,
-    );
+    // The legacy realm-server URL is a stable backward-compat origin that
+    // the harness exposes as a `--fromUrl`/`--toUrl` alias for each realm
+    // it mounts. JSON fixtures or external code that still hardcodes
+    // `http://localhost:4205/<path>/` keeps resolving even though every
+    // stack actually binds to a dynamic port.
     let legacyRealmServerURL = new URL('http://localhost:4205/');
-    let legacyRealmURL = new URL('test/', legacyRealmServerURL);
     let publicBaseRealmURL = baseRealmURLFor(realmServerURL);
     let actualBaseRealmURL = baseRealmURLFor(actualRealmServerURL);
-    let sourceRealmURL = sourceRealmURLFor(realmServerURL);
-    let actualSourceRealmURL = sourceRealmURLFor(actualRealmServerURL);
-    let legacySourceRealmURL = sourceRealmURLFor(legacyRealmServerURL);
     let skillsRealmURL = skillsRealmURLFor(realmServerURL);
     let actualSkillsRealmURL = skillsRealmURLFor(actualRealmServerURL);
     let legacySkillsRealmURL = skillsRealmURLFor(legacyRealmServerURL);
-    ensureDirSync(testRealmDir);
-    copyRealmFixture(realmDir, testRealmDir, sourceRealmURL);
-    realmLog.debug(
-      `startIsolatedRealmStack: copied fixture ${realmDir} -> ${testRealmDir}`,
-    );
 
-    // Copy and resolve additional realm fixtures.
-    let resolvedAdditionalRealms: {
-      realmDir: string;
+    let resolvedRealms: {
+      config: RealmConfig;
       localDir: string;
       realmURL: URL;
       actualRealmURL: URL;
+      legacyRealmURL: URL;
       username: string;
     }[] = [];
-    for (let i = 0; i < (additionalRealms ?? []).length; i++) {
-      let additional = additionalRealms![i];
-      let additionalLocalDir = join(rootDir, `additional-${i}`);
-      let additionalPath = realmRelativePath(
-        additional.realmURL,
-        realmServerURL,
-      );
-      let additionalActualURL = realmURLWithinServer(
+    for (let i = 0; i < realms.length; i++) {
+      let config = realms[i];
+      let localDir = join(rootDir, `realm-${i}`);
+      let realmURL = realmURLWithinServer(realmServerURL, config.path);
+      let actualRealmURL = realmURLWithinServer(
         actualRealmServerURL,
-        additionalPath,
+        config.path,
       );
-      let username = additional.username ?? `additional_realm_${i}`;
-      ensureDirSync(additionalLocalDir);
-      copyRealmFixture(additional.realmDir, additionalLocalDir, sourceRealmURL);
+      let legacyRealmURL = realmURLWithinServer(
+        legacyRealmServerURL,
+        config.path,
+      );
+      let username = config.username ?? `test_realm_${i}`;
+      ensureDirSync(localDir);
+      copyRealmFixture(config.dir, localDir, realmServerURL, {
+        fileFilter: config.fileFilter,
+      });
       realmLog.debug(
-        `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}`,
+        `startIsolatedRealmStack: copied fixture ${config.dir} -> ${localDir}`,
       );
-      resolvedAdditionalRealms.push({
-        realmDir: additional.realmDir,
-        localDir: additionalLocalDir,
-        realmURL: additional.realmURL,
-        actualRealmURL: additionalActualURL,
+      resolvedRealms.push({
+        config,
+        localDir,
+        realmURL,
+        actualRealmURL,
+        legacyRealmURL,
         username,
       });
     }
@@ -515,37 +490,33 @@ export async function startIsolatedRealmStack({
       `--port=${actualWorkerManagerPort}`,
       `--matrixURL=${context.matrixURL}`,
       `--prerendererUrl=${prerenderURL}`,
-      `--fromUrl=${realmURL.href}`,
-      `--toUrl=${actualRealmURL.href}`,
       `--fromUrl=${publicBaseRealmURL.href}`,
       `--toUrl=${actualBaseRealmURL.href}`,
       '--fromUrl=https://cardstack.com/base/',
       `--toUrl=${publicBaseRealmURL.href}`,
-      `--fromUrl=${sourceRealmURL.href}`,
-      `--toUrl=${actualSourceRealmURL.href}`,
     ];
+    for (let resolved of resolvedRealms) {
+      workerArgs.push(
+        `--fromUrl=${resolved.realmURL.href}`,
+        `--toUrl=${resolved.actualRealmURL.href}`,
+      );
+    }
     if (INCLUDE_SKILLS) {
       workerArgs.push(
         `--fromUrl=${skillsRealmURL.href}`,
         `--toUrl=${actualSkillsRealmURL.href}`,
       );
     }
-    workerArgs.push(
-      `--fromUrl=${legacyRealmURL.href}`,
-      `--toUrl=${actualRealmURL.href}`,
-      `--fromUrl=${legacySourceRealmURL.href}`,
-      `--toUrl=${actualSourceRealmURL.href}`,
-    );
+    for (let resolved of resolvedRealms) {
+      workerArgs.push(
+        `--fromUrl=${resolved.legacyRealmURL.href}`,
+        `--toUrl=${resolved.actualRealmURL.href}`,
+      );
+    }
     if (INCLUDE_SKILLS) {
       workerArgs.push(
         `--fromUrl=${legacySkillsRealmURL.href}`,
         `--toUrl=${actualSkillsRealmURL.href}`,
-      );
-    }
-    for (let additional of resolvedAdditionalRealms) {
-      workerArgs.push(
-        `--fromUrl=${additional.realmURL.href}`,
-        `--toUrl=${additional.actualRealmURL.href}`,
       );
     }
     if (migrateDB) {
@@ -590,39 +561,29 @@ export async function startIsolatedRealmStack({
       `--path=${baseRealmDir}`,
       `--fromUrl=${publicBaseRealmURL.href}`,
       `--toUrl=${actualBaseRealmURL.href}`,
-      '--username=software_factory_realm',
-      `--path=${filteredSourceRealmDir}`,
-      `--fromUrl=${sourceRealmURL.href}`,
-      `--toUrl=${actualSourceRealmURL.href}`,
-      '--username=test_realm',
-      `--path=${testRealmDir}`,
-      `--fromUrl=${realmURL.href}`,
-      `--toUrl=${actualRealmURL.href}`,
     ];
-    for (let additional of resolvedAdditionalRealms) {
-      serverArgs.push(
-        `--username=${additional.username}`,
-        `--path=${additional.localDir}`,
-        `--fromUrl=${additional.realmURL.href}`,
-        `--toUrl=${additional.actualRealmURL.href}`,
-      );
-    }
     if (INCLUDE_SKILLS) {
-      serverArgs.splice(
-        16,
-        0,
+      serverArgs.push(
         '--username=skills_realm',
         `--path=${skillsRealmDir}`,
         `--fromUrl=${skillsRealmURL.href}`,
         `--toUrl=${actualSkillsRealmURL.href}`,
       );
     }
-    serverArgs.push(
-      `--fromUrl=${legacyRealmURL.href}`,
-      `--toUrl=${actualRealmURL.href}`,
-      `--fromUrl=${legacySourceRealmURL.href}`,
-      `--toUrl=${actualSourceRealmURL.href}`,
-    );
+    for (let resolved of resolvedRealms) {
+      serverArgs.push(
+        `--username=${resolved.username}`,
+        `--path=${resolved.localDir}`,
+        `--fromUrl=${resolved.realmURL.href}`,
+        `--toUrl=${resolved.actualRealmURL.href}`,
+      );
+    }
+    for (let resolved of resolvedRealms) {
+      serverArgs.push(
+        `--fromUrl=${resolved.legacyRealmURL.href}`,
+        `--toUrl=${resolved.actualRealmURL.href}`,
+      );
+    }
     if (INCLUDE_SKILLS) {
       serverArgs.push(
         `--fromUrl=${legacySkillsRealmURL.href}`,
