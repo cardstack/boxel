@@ -54,11 +54,6 @@ export function trackCostDeduction(
  * each `data:` line so we can capture the OpenRouter generation id / inline
  * cost and schedule a credit deduction at `[DONE]`.
  */
-export interface StreamingInstrumentation {
-  onSSEData: (data: string) => void;
-  onDone: () => void;
-}
-
 export async function handleStreamingRequest(
   ctxt: Koa.Context,
   url: string,
@@ -68,7 +63,6 @@ export async function handleStreamingRequest(
   endpointConfig: AllowedProxyDestination,
   dbAdapter: DBAdapter,
   matrixUserId: string,
-  instrument?: StreamingInstrumentation,
 ): Promise<void> {
   try {
     setupSSEHeaders(ctxt);
@@ -120,15 +114,6 @@ export async function handleStreamingRequest(
             );
           }
 
-          if (instrument) {
-            try {
-              instrument.onSSEData(data);
-              instrument.onDone();
-            } catch (err) {
-              log.warn(`instrument hook failed on [DONE]: ${String(err)}`);
-            }
-          }
-
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
         }
@@ -145,14 +130,6 @@ export async function handleStreamingRequest(
           log.warn('Invalid JSON in streaming response:', data);
         }
 
-        if (instrument) {
-          try {
-            instrument.onSSEData(data);
-          } catch (err) {
-            log.warn(`instrument hook failed on data: ${String(err)}`);
-          }
-        }
-
         ctxt.res.write(`data: ${data}\n\n`);
         return;
       },
@@ -167,13 +144,6 @@ export async function handleStreamingRequest(
   } catch (error) {
     log.error('Error in streaming request:', error);
     Sentry.captureException(error);
-    if (instrument) {
-      try {
-        instrument.onDone();
-      } catch (err) {
-        log.warn(`instrument hook failed during stream error: ${String(err)}`);
-      }
-    }
     ctxt.res.write(
       `data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`,
     );
