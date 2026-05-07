@@ -91,6 +91,19 @@ function describeChildProcess(proc: ChildProcess | undefined) {
   };
 }
 
+function describeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    value: String(error),
+  };
+}
+
 function buildStartupFailure(
   reason: unknown,
   diagnostics: Record<string, unknown>,
@@ -98,7 +111,15 @@ function buildStartupFailure(
   let message =
     reason instanceof Error ? reason.message : `Startup failed: ${String(reason)}`;
   return new Error(
-    `${message}\nStartup diagnostics:\n${JSON.stringify(diagnostics, null, 2)}`,
+    `${message}\nStartup diagnostics:\n${JSON.stringify(
+      {
+        ...diagnostics,
+        startupFailure: describeError(reason),
+      },
+      null,
+      2,
+    )}`,
+    reason instanceof Error ? { cause: reason } : undefined,
   );
 }
 
@@ -150,37 +171,43 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
 }
 
 function stopChildProcess(
-  proc: ChildProcess,
+  proc: ChildProcess | undefined,
   signal: NodeJS.Signals = 'SIGINT',
 ) {
   return new Promise<void>((resolve) => {
+    if (!proc) {
+      resolve();
+      return;
+    }
     if (proc.exitCode !== null || proc.killed) {
       resolve();
       return;
     }
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
+    let onExit = () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    };
+    let onError = () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    };
     function cleanup() {
       if (timer) {
         clearTimeout(timer);
       }
-      proc.removeAllListeners('exit');
-      proc.removeAllListeners('error');
+      proc.removeListener('exit', onExit);
+      proc.removeListener('error', onError);
     }
-    proc.once('exit', () => {
-      if (!settled) {
-        settled = true;
-        cleanup();
-        resolve();
-      }
-    });
-    proc.once('error', () => {
-      if (!settled) {
-        settled = true;
-        cleanup();
-        resolve();
-      }
-    });
+    proc.once('exit', onExit);
+    proc.once('error', onError);
     timer = setTimeout(() => {
       if (!settled) {
         proc.kill('SIGTERM');
@@ -369,6 +396,21 @@ export async function startServer({
     workerManager.once('error', workerManagerErrorListener);
   });
 
+  let startupDiagnostics = () => ({
+    realmPath: testRealmDir,
+    database: testDBName,
+    workerManagerPort,
+    workerManagerReadyTimeoutMs,
+    workerStartTimeoutMs,
+    realmServerStartTimeoutMs,
+    workerManagerState: describeChildProcess(workerManager),
+    realmServerState: describeChildProcess(realmServer),
+    workerManagerMetadata: readMetadataFile(workerManagerMetadataFile),
+    realmServerMetadata: readMetadataFile(realmServerMetadataFile),
+    workerManagerOutputTail: workerManagerOutput,
+    realmServerOutputTail: realmServerOutput,
+  });
+
   try {
     await Promise.race([
       waitForHttpReady(
@@ -377,6 +419,9 @@ export async function startServer({
       ),
       workerManagerExitPromise,
     ]);
+  } catch (error) {
+    await stopChildProcess(workerManager);
+    throw buildStartupFailure(error, startupDiagnostics());
   } finally {
     if (workerManagerExitListener) {
       workerManager.removeListener('exit', workerManagerExitListener);
@@ -456,17 +501,19 @@ export async function startServer({
     | ((code: number | null, signal: NodeJS.Signals | null) => void)
     | undefined;
   let realmServerErrorListener: ((err: Error) => void) | undefined;
+  let realmServerReadyListener: ((message: unknown) => void) | undefined;
+  let realmServerStartTimeout: NodeJS.Timeout | undefined;
 
   try {
     await Promise.race([
       new Promise<void>((resolve) => {
-        const onMessage = (message: unknown) => {
+        realmServerReadyListener = (message: unknown) => {
           if (message === 'ready') {
-            realmServer?.off('message', onMessage);
+            realmServer?.off('message', realmServerReadyListener);
             resolve();
           }
         };
-        realmServer.on('message', onMessage);
+        realmServer.on('message', realmServerReadyListener);
       }),
       new Promise<never>((_, reject) => {
         realmServerExitListener = (
@@ -484,13 +531,14 @@ export async function startServer({
         realmServer.once('error', realmServerErrorListener);
       }),
       new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        realmServerStartTimeout = setTimeout(() => {
           reject(
             new Error(
               `timed-out waiting for realm server to start after ${realmServerStartTimeoutMs}ms. Stopping server`,
             ),
           );
-        }, realmServerStartTimeoutMs).unref();
+        }, realmServerStartTimeoutMs);
+        realmServerStartTimeout.unref();
       }),
     ]);
   } catch (error) {
@@ -498,26 +546,19 @@ export async function startServer({
       stopChildProcess(realmServer),
       stopChildProcess(workerManager),
     ]);
-    throw buildStartupFailure(error, {
-      realmPath: testRealmDir,
-      database: testDBName,
-      workerManagerPort,
-      workerManagerReadyTimeoutMs,
-      workerStartTimeoutMs,
-      realmServerStartTimeoutMs,
-      workerManagerState: describeChildProcess(workerManager),
-      realmServerState: describeChildProcess(realmServer),
-      workerManagerMetadata: readMetadataFile(workerManagerMetadataFile),
-      realmServerMetadata: readMetadataFile(realmServerMetadataFile),
-      workerManagerOutputTail: workerManagerOutput,
-      realmServerOutputTail: realmServerOutput,
-    });
+    throw buildStartupFailure(error, startupDiagnostics());
   } finally {
     if (realmServerExitListener) {
       realmServer.removeListener('exit', realmServerExitListener);
     }
     if (realmServerErrorListener) {
       realmServer.removeListener('error', realmServerErrorListener);
+    }
+    if (realmServerReadyListener) {
+      realmServer.removeListener('message', realmServerReadyListener);
+    }
+    if (realmServerStartTimeout) {
+      clearTimeout(realmServerStartTimeout);
     }
   }
 
