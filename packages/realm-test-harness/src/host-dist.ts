@@ -52,7 +52,7 @@ export function findHostDistPackageDir(): string | undefined {
       : undefined;
 
   let candidates = [
-    process.env.SOFTWARE_FACTORY_HOST_DIST_PACKAGE_DIR,
+    process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR,
     hostDir,
     rootRepoHostDir,
   ]

@@ -177,6 +177,6 @@ Key modules:
   (`software-factory-browser`) so they do not depend on a human-managed profile.
 - Host requests for the base realm URL are redirected to the isolated realm
   server. Skills redirects are only enabled when
-  `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
+  `TEST_HARNESS_INCLUDE_SKILLS=1`.
 - The test fixtures should point at the isolated `4205` software-factory source
   realm directly, so they do not depend on any ambient external realm server.

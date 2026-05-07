@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import { buildServerToken } from '../src/harness/shared';
+import { buildServerToken } from '@cardstack/realm-test-harness';
 import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
