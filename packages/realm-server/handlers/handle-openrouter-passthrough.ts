@@ -27,10 +27,9 @@ const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
  * Unlike `/_request-forward` (which expects a `{ url, method, requestBody }`
  * envelope and exists to proxy arbitrary whitelisted destinations), this
  * endpoint accepts a verbatim OpenAI chat-completions body and pins the
- * upstream destination to `OPENROUTER_CHAT_URL` server-side. It exists so
- * software-factory's opencode backend (and any other OpenAI-compatible
- * client) can point its `baseURL` straight at the realm server, without an
- * in-process relay translating between the two shapes.
+ * upstream destination to `OPENROUTER_CHAT_URL` server-side, so an
+ * OpenAI-compatible client (e.g. software-factory's opencode backend)
+ * can point its `baseURL` straight at the realm server.
  *
  * Auth: the realm-server JWT (via `jwtMiddleware`). The static
  * `Authorization` header AI-SDK clients stamp onto every request goes

@@ -119,17 +119,11 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     context: AgentContext,
     tools: FactoryTool[],
   ): Promise<AgentRunResult> {
-    // Filter out tools whose source is `'registered'` — these come
-    // from the ToolRegistry's `realm-api` manifests. After CS-10883
-    // the registry only contains `realm-create`, which the
-    // entrypoint drives before the agent runs; nothing on the
-    // agent's hot path needs it. The filter remains so any future
-    // re-additions to the registry stay off the Claude path by
-    // default. The OpenRouter-only fs wrappers (read_file /
-    // write_file / search_realm / fetch_transpiled_module /
-    // run_command) used to be filtered here too — they're now
-    // retired entirely (CS-11034) since both backends use native
-    // tools.
+    // `'registered'` tools come from the ToolRegistry's `realm-api`
+    // manifests (currently just `realm-create`, which the entrypoint
+    // drives before the agent runs). Keep them off the agent's hot
+    // path so future registry additions don't accidentally surface
+    // here.
     let mcpFactoryTools = tools.filter((t) => t.source !== 'registered');
 
     let systemPrompt = this.buildSystemPrompt(context, mcpFactoryTools);

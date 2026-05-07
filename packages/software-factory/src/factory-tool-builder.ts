@@ -47,15 +47,12 @@ export interface FactoryTool {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
   /**
    * Origin marker. `'core'` is for tools defined directly in this
-   * builder (read_file, search_realm, run_lint, the structured update
-   * tools, signals, …). `'registered'` is for tools wrapped from the
-   * `ToolRegistry`'s script + realm-api manifests (realm-read,
-   * search-realm, boxel-sync, …).
-   *
-   * The Claude backend filters out `'registered'` tools because they
-   * shadow the core ones with kebab-case duplicates the model picks at
-   * random — and most of them are reachable through native fs / Bash +
-   * boxel CLI anyway. OpenRouter still gets every tool.
+   * builder (`get_card_schema`, `run_*`, `signal_done`,
+   * `request_clarification`). `'registered'` is for tools wrapped
+   * from the `ToolRegistry`'s realm-api manifests (currently just
+   * `realm-create`); these are filtered out of the agent's hot path
+   * since the entrypoint drives the realm-create flow before the
+   * agent runs.
    */
   source?: 'core' | 'registered';
 }
@@ -143,17 +140,16 @@ export function buildFactoryTools(
   toolExecutor: ToolExecutor,
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
-  // Native fs / Bash / Glob / Grep are owned by the agent backend
-  // (Claude Agent SDK or opencode) — both surface them as native
-  // tools. We used to ship `read_file` / `write_file` /
-  // `fetch_transpiled_module` / `search_realm` / `run_command` as
-  // MCP wrappers because the prior direct-HTTP OpenRouter agent had
-  // no fs / shell. Those wrappers are retired now that opencode
-  // backs the OpenRouter path (CS-11034) — both backends use native
-  // tools for fs and `boxel read-transpiled` / `boxel search` (via
-  // Bash) for realm reads. `get_card_schema` stays because it
-  // introspects the live `CardDef` via the realm-server prerenderer
-  // (no Bash equivalent).
+  // Filesystem and shell are owned by the agent backend (Claude Agent
+  // SDK or opencode) via native tools. The factory contributes
+  // `get_card_schema` (introspects a live `CardDef` via the
+  // realm-server prerenderer — no Bash equivalent), the validation
+  // run_* tools, and the two control signals. Tracker-schema cards
+  // (Project / Issue / KnowledgeArticle / Spec / issue comments) are
+  // written as plain JSON via the backend's native `Write` after
+  // schema introspection; the shapes and invariants live in the
+  // `software-factory-bootstrap` and `software-factory-operations`
+  // skills.
   let tools: FactoryTool[] = [
     buildGetCardSchemaTool(config),
     buildRunLintTool(config),
@@ -165,20 +161,7 @@ export function buildFactoryTools(
     buildRequestClarificationTool(),
   ];
 
-  // Tracker-schema cards (Project / Issue / KnowledgeArticle / Spec /
-  // issue comments) used to have dedicated wrapper tools here that
-  // auto-constructed the JSON:API document, enforced Issue-description
-  // immutability, and so on. CS-10883 retired all five; the agent now
-  // writes those `.json` files directly via the backend's native
-  // `Write` tool, after introspecting field shape with
-  // `get_card_schema`. The shapes and invariants are taught in the
-  // `software-factory-bootstrap` and `software-factory-operations`
-  // skills, with the live `darkfactoryModuleUrl` named in the system
-  // prompt for `adoptsFrom.module`.
-
-  // Add registered realm-api tools as FactoryTool wrappers. After the
-  // CS-10883 retirements the registry only contains `realm-create`;
-  // anything else added later goes through the same build path.
+  // Wrap registered realm-api manifests (currently just `realm-create`).
   for (let manifest of toolRegistry.getManifests()) {
     if (manifest.category === 'realm-api') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));

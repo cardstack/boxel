@@ -1,13 +1,9 @@
 /**
  * OpencodeFactoryAgent — LoopAgent backed by the opencode SDK.
  *
- * Replaces `OpenRouterFactoryAgent`'s direct-HTTP-to-OpenRouter loop
- * with an opencode-driven session so `--agent openrouter` runs benefit
- * from the same native fs / Bash / Glob / Grep tools the Claude path
- * already uses. The five MCP wrappers that exist purely for the
- * fs-less OpenRouter path (`read_file` / `write_file` / `search_realm`
- * / `fetch_transpiled_module` / `run_command`) get retired in the
- * same change.
+ * Drives a session against an `opencode` subprocess so `--agent
+ * openrouter` runs get native fs / Bash / Glob / Grep, with our 7
+ * factory tools surfaced over MCP for validation + control signals.
  *
  * Architecture
  * ============
@@ -19,38 +15,32 @@
  *        env). Configure opencode with a custom OpenAI-compatible
  *        provider whose baseURL is OpenRouter and Authorization is
  *        the user's bearer.
- *      - **Passthrough** — no key. Point opencode's provider straight
- *        at the realm server's `_openrouter/chat/completions`
- *        endpoint and stamp a freshly-fetched server JWT into the
- *        provider's static `Authorization` header. The realm server
- *        validates the JWT, looks up the OpenRouter API key
- *        server-side, forwards verbatim, and bills credits to the
- *        operator's boxel account — same model the previous
- *        `_request-forward`-based relay used, just without the
- *        in-process HTTP hop. The JWT is fetched once per `run()` and
- *        not refreshed mid-session, but the realm-server JWT lives
- *        for 7 days so a single ticket run is in no danger of
- *        outlasting it.
+ *      - **Passthrough** — no key. Point opencode's provider at the
+ *        realm server's `_openrouter/chat/completions` endpoint and
+ *        stamp a freshly-fetched server JWT into the provider's
+ *        static `Authorization` header. The realm server validates
+ *        the JWT, applies the server-side OpenRouter key, forwards
+ *        verbatim, and bills credits to the operator's boxel
+ *        account. The 7-day JWT TTL is comfortably longer than any
+ *        single ticket run.
  *
  *   2. **Build MCP server for factory tools.** Spin up an in-process
  *      HTTP MCP server (`@modelcontextprotocol/sdk` Streamable HTTP
- *      transport) that exposes the surviving 7 factory tools (5
- *      validators + `signal_done` + `request_clarification`). opencode
- *      connects via `McpRemoteConfig`.
+ *      transport) that exposes the 7 factory tools (5 validators +
+ *      `signal_done` + `request_clarification`). opencode connects
+ *      via `McpRemoteConfig`.
  *
  *   3. **Spawn opencode subprocess.** `createOpencodeServer({
  *      config })` starts the binary on a random local port and
  *      returns `{ url, close }`. `config.permission
  *      .external_directory: 'deny'` plus the workspace `cwd` give us
- *      built-in path scoping — replaces the
- *      `buildWorkspaceScopedCanUseTool` callback the Claude path
- *      uses.
+ *      path-scoped writes for free.
  *
- *   4. **Drive a session.** `client.session.create` then `client
- *      .session.prompt` with the assembled prompt. We consume the
- *      `client.event` SSE stream to log tool calls and capture the
- *      DONE / CLARIFICATION signals the factory tools emit. (Symbols
- *      don't survive JSON-RPC, so the MCP server tags them
+ *   4. **Drive a session.** `client.session.create` then
+ *      `client.session.prompt` with the assembled prompt. We consume
+ *      the `client.event` SSE stream to log tool calls and capture
+ *      the DONE / CLARIFICATION signals the factory tools emit.
+ *      (Symbols don't survive JSON-RPC, so the MCP server tags them
  *      `"factory:done"` / `"factory:clarification"` and we match on
  *      the tag.)
  *
@@ -114,9 +104,9 @@ const SIGNAL_DONE_TAG = 'factory:done';
 const SIGNAL_CLARIFICATION_TAG = 'factory:clarification';
 
 /**
- * The 7 factory tools we still expose to the agent over MCP. Native
- * fs / Bash / Glob / Grep are owned by opencode; the 5 OpenRouter-only
- * fs wrappers are retired alongside this agent.
+ * The 7 factory tools exposed to the agent over MCP. Filesystem and
+ * shell are owned by opencode's native `Read` / `Write` / `Edit` /
+ * `Glob` / `Grep` / `Bash`.
  */
 const FACTORY_MCP_TOOL_NAMES = new Set([
   'run_tests',
@@ -537,8 +527,7 @@ function buildDirectProviderConfig(
  *
  * The realm server validates the JWT (via `jwtMiddleware`), applies
  * the server-side OpenRouter API key, forwards verbatim, and bills
- * the operator's credits — same auth + billing model as the previous
- * relay-based proxy mode, just without the in-process HTTP hop.
+ * the operator's boxel credits.
  */
 function buildPassthroughProviderConfig(
   model: string,

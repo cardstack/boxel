@@ -79,8 +79,7 @@ first, change only the attributes you intend to update, then write the
 merged document back. Don't overwrite the whole file with only your
 new fields — you'll silently drop the existing attributes.
 
-**Issue invariants you must enforce yourself** (these used to be
-enforced by a wrapper tool; they aren't anymore):
+**Issue invariants you must enforce yourself:**
 
 - **`description` is immutable** after the issue is created. If you
   need to add context — blocked reasons, progress notes, validation
