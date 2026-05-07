@@ -1,6 +1,8 @@
 import {
+  codeRefWithAbsoluteIdentifier,
   getImmediateFieldDef,
   isResolvedCodeRef,
+  type CodeRef,
   type Definition,
   type FieldDefinition,
 } from './index';
@@ -12,7 +14,7 @@ import {
   isCodeRef,
 } from './index';
 import { resolveCardReference } from './card-reference-resolver';
-import type { CardFields, Meta } from './resource-types';
+import { isMeta, type CardFields, type Meta } from './resource-types';
 import type { DefinitionLookup } from './definition-lookup';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
 import { maybeRelativeURL as makeRelativeURL } from './url';
@@ -73,6 +75,7 @@ export default async function serialize({
     result.data.attributes = await processAttributes({
       attributes: doc.data.attributes,
       definition,
+      metaFields: doc.data.meta?.fields,
       doc,
       relativeTo,
       codeRefOpts: metaCodeRefOpts,
@@ -84,6 +87,7 @@ export default async function serialize({
     const processedRelationships = await processRelationships({
       relationships: doc.data.relationships,
       definition,
+      metaFields: doc.data.meta?.fields,
       relativeTo,
       realmURL,
       definitionLookup,
@@ -119,9 +123,20 @@ export default async function serialize({
 // nested path is resolved via the *current* definition's immediate
 // field map; this matches the new top-level-only `Definition.fields`
 // shape and avoids relying on dotted-path materialization.
+//
+// `metaFields` carries the doc's `meta.fields` sub-tree at the current
+// recursion level. For fields whose stored value is a polymorphic
+// override (a `FieldDef` subclass that's not the field's declared
+// type — common for `containsMany(FieldDef)` / `contains(FieldDef)`
+// holders), the per-item meta entry's `adoptsFrom` names the actual
+// type. We use that override in preference to the field's declared
+// `fieldOrCard` when fetching the child definition; otherwise nested
+// fields on the polymorphic subtype would be missing from the child
+// definition lookup and the values would silently drop.
 async function processAttributes({
   attributes,
   definition,
+  metaFields,
   doc,
   relativeTo,
   codeRefOpts,
@@ -129,6 +144,7 @@ async function processAttributes({
 }: {
   attributes: Record<string, any>;
   definition: Definition;
+  metaFields: CardFields | undefined;
   doc: LooseSingleCardDocument;
   relativeTo: URL;
   codeRefOpts: {
@@ -163,6 +179,8 @@ async function processAttributes({
       continue;
     }
 
+    let metaForField = metaFields?.[fieldName];
+
     if (fieldDefinition.type === 'containsMany') {
       if (!Array.isArray(fieldValue)) {
         throw new Error(
@@ -172,33 +190,59 @@ async function processAttributes({
       if (fieldDefinition.isPrimitive) {
         result[fieldName] = fieldValue;
       } else {
-        let childDef = await resolveChildDef(fieldDefinition, definitionLookup);
-        if (!childDef) {
-          continue;
-        }
+        let metaArray = Array.isArray(metaForField) ? metaForField : undefined;
         result[fieldName] = await Promise.all(
-          fieldValue.map((item) =>
-            processAttributes({
+          fieldValue.map(async (item, index) => {
+            let itemMeta = metaArray?.[index];
+            let itemAdoptsFrom = isMeta(itemMeta)
+              ? itemMeta.adoptsFrom
+              : undefined;
+            let itemNestedFields = isMeta(itemMeta)
+              ? itemMeta.fields
+              : undefined;
+            let childDef = await resolveChildDef(
+              fieldDefinition,
+              itemAdoptsFrom,
+              relativeTo,
+              definitionLookup,
+            );
+            if (!childDef) {
+              return {};
+            }
+            return await processAttributes({
               attributes: item,
-              definition: childDef!,
+              definition: childDef,
+              metaFields: itemNestedFields,
               doc,
               relativeTo,
               codeRefOpts,
               definitionLookup,
-            }),
-          ),
+            });
+          }),
         );
       }
     } else if (fieldDefinition.isPrimitive) {
       result[fieldName] = fieldValue;
     } else {
-      let childDef = await resolveChildDef(fieldDefinition, definitionLookup);
+      let polymorphicAdoptsFrom = isMeta(metaForField)
+        ? metaForField.adoptsFrom
+        : undefined;
+      let nestedMetaFields = isMeta(metaForField)
+        ? metaForField.fields
+        : undefined;
+      let childDef = await resolveChildDef(
+        fieldDefinition,
+        polymorphicAdoptsFrom,
+        relativeTo,
+        definitionLookup,
+      );
       if (!childDef) {
         continue;
       }
       result[fieldName] = await processAttributes({
         attributes: fieldValue,
         definition: childDef,
+        metaFields: nestedMetaFields,
         doc,
         relativeTo,
         codeRefOpts,
@@ -210,25 +254,37 @@ async function processAttributes({
   return result;
 }
 
+// Pick the child Definition for a non-primitive field. If the doc
+// supplies a polymorphic `adoptsFrom` (per-instance override), use
+// that. Otherwise fall back to the field's declared `fieldOrCard`
+// type. Either source's CodeRef may be relative; resolve to absolute
+// before looking up.
 async function resolveChildDef(
   fieldDefinition: FieldDefinition,
+  polymorphicAdoptsFrom: CodeRef | undefined,
+  relativeTo: URL,
   definitionLookup: DefinitionLookup,
 ): Promise<Definition | undefined> {
-  if (!isResolvedCodeRef(fieldDefinition.fieldOrCard)) {
+  let codeRef = polymorphicAdoptsFrom
+    ? codeRefWithAbsoluteIdentifier(polymorphicAdoptsFrom, relativeTo)
+    : fieldDefinition.fieldOrCard;
+  if (!isResolvedCodeRef(codeRef)) {
     return undefined;
   }
-  return await definitionLookup.lookupDefinition(fieldDefinition.fieldOrCard);
+  return await definitionLookup.lookupDefinition(codeRef);
 }
 
 async function processRelationships({
   relationships,
   definition,
+  metaFields,
   relativeTo,
   realmURL,
-  definitionLookup: _definitionLookup,
+  definitionLookup,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
+  metaFields: CardFields | undefined;
   relativeTo: URL;
   realmURL?: URL;
   definitionLookup: DefinitionLookup;
@@ -289,12 +345,16 @@ async function processRelationships({
     // intermediate-card prefixes for nested relationships
     // (e.g. `inners.0.other`). Strip the numeric indices and resolve
     // the remaining dotted path through the immediate field maps,
-    // descending into linked card definitions on demand.
+    // descending into linked card definitions on demand. Polymorphic
+    // overrides live in `metaFields[fieldName].adoptsFrom`; when a
+    // segment has one, the traversal uses it for the next lookup.
     const cleanedKey = parseRelationshipKey(relationshipKey);
     const fieldDefinition = await resolveDottedFieldDef(
       definition,
       cleanedKey,
-      _definitionLookup,
+      metaFields,
+      relativeTo,
+      definitionLookup,
     );
 
     if (!fieldDefinition || fieldDefinition.isComputed) {
@@ -331,14 +391,20 @@ async function processRelationships({
 
 // Walk a (possibly-dotted) relationship path from the root definition,
 // descending one immediate field at a time and looking up the linked
-// card's definition between segments.
+// card's definition between segments. `metaFields` is the doc's
+// `meta.fields` sub-tree at the root; we walk it in parallel with the
+// path segments so polymorphic per-segment overrides drive the
+// definition lookup.
 async function resolveDottedFieldDef(
   rootDefinition: Definition,
   dottedPath: string,
+  metaFields: CardFields | undefined,
+  relativeTo: URL,
   definitionLookup: DefinitionLookup,
 ): Promise<FieldDefinition | undefined> {
   let segments = dottedPath.split('.');
   let current: Pick<Definition, 'fields' | 'fieldDefs'> = rootDefinition;
+  let currentMeta = metaFields;
   for (let i = 0; i < segments.length; i++) {
     let fieldDef = getImmediateFieldDef(current, segments[i]);
     if (!fieldDef) {
@@ -350,11 +416,21 @@ async function resolveDottedFieldDef(
     if (fieldDef.isPrimitive) {
       return undefined;
     }
-    let next = await resolveChildDef(fieldDef, definitionLookup);
+    let metaForSeg = currentMeta?.[segments[i]];
+    let polymorphicAdoptsFrom = isMeta(metaForSeg)
+      ? metaForSeg.adoptsFrom
+      : undefined;
+    let next = await resolveChildDef(
+      fieldDef,
+      polymorphicAdoptsFrom,
+      relativeTo,
+      definitionLookup,
+    );
     if (!next) {
       return undefined;
     }
     current = next;
+    currentMeta = isMeta(metaForSeg) ? metaForSeg.fields : undefined;
   }
   return undefined;
 }
