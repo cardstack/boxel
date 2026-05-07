@@ -284,7 +284,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Synapse Matrix message send rate \u2014 `PUT /_matrix/client/.../send/m.room.message` requests parsed from synapse access logs. Legend shows the mean over the visible time range.",
+        "description": "Synapse send-event rate \u2014 `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse access logs. Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -368,9 +368,9 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"PUT-[0-9]+.*\\\\/send\\\\/m\\\\.room\\\\.message\" [1m]))",
+            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"Received request: PUT .*/send/\" [1m]))",
             "queryType": "range",
-            "legendFormat": "Msgs/min",
+            "legendFormat": "Events/min",
             "refId": "A"
           }
         ],
