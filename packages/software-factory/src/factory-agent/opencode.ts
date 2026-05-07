@@ -26,9 +26,9 @@
  *
  *   2. **Build MCP server for factory tools.** Spin up an in-process
  *      HTTP MCP server (`@modelcontextprotocol/sdk` Streamable HTTP
- *      transport) that exposes the 7 factory tools (5 validators +
- *      `signal_done` + `request_clarification`). opencode connects
- *      via `McpRemoteConfig`.
+ *      transport) that exposes the 8 factory tools (`get_card_schema`,
+ *      5 validators, `signal_done`, `request_clarification`). opencode
+ *      connects via `McpRemoteConfig`.
  *
  *   3. **Spawn opencode subprocess.** `createOpencodeServer({
  *      config })` starts the binary on a random local port and
@@ -104,11 +104,12 @@ const SIGNAL_DONE_TAG = 'factory:done';
 const SIGNAL_CLARIFICATION_TAG = 'factory:clarification';
 
 /**
- * The 7 factory tools exposed to the agent over MCP. Filesystem and
+ * The 8 factory tools exposed to the agent over MCP. Filesystem and
  * shell are owned by opencode's native `Read` / `Write` / `Edit` /
  * `Glob` / `Grep` / `Bash`.
  */
 const FACTORY_MCP_TOOL_NAMES = new Set([
+  'get_card_schema',
   'run_tests',
   'run_lint',
   'run_evaluate',
@@ -217,14 +218,23 @@ export class OpencodeFactoryAgent implements LoopAgent {
     this.currentHooks = undefined;
 
     if (opencode) {
+      // Parse the actual port from the SDK-returned URL rather than
+      // assuming the SDK's default — `port: 0` would give us a random
+      // port and a hardcoded 4096 would then SIGKILL whatever
+      // unrelated process happens to be there. Falls back to no
+      // escalation when parsing fails.
+      let port = parseOpencodePort(opencode.url);
       try {
         opencode.close();
       } catch {
         // best-effort
       }
       // `opencode.close()` only sends SIGTERM, which the 1.14.34
-      // binary ignores. waitForPortFree escalates to SIGKILL.
-      await waitForPortFree(4096, 1000);
+      // binary ignores. waitForPortFree escalates to SIGKILL on the
+      // process listening on this specific port.
+      if (port !== undefined) {
+        await waitForPortFree(port, 1000);
+      }
     }
     if (mcp) {
       await mcp.close().catch(() => undefined);
@@ -556,8 +566,9 @@ function buildPassthroughProviderConfig(
 }
 
 /**
- * Spin up a localhost HTTP MCP server exposing the 7 factory tools
- * (5 validators + 2 control signals) so opencode can call them.
+ * Spin up a localhost HTTP MCP server exposing the 8 factory tools
+ * (`get_card_schema`, 5 validators, 2 control signals) so opencode
+ * can call them.
  *
  * Tool calls are forwarded to the supplied `FactoryTool.execute()`,
  * results are JSON-serialized back. DONE / CLARIFICATION signals
@@ -871,6 +882,22 @@ function summarizeArgs(args: Record<string, unknown>): string {
     return `${k}=${s}`;
   });
   return entries.join(', ');
+}
+
+/**
+ * Extract the listening TCP port from the URL the opencode SDK
+ * returns from `createOpencodeServer({ ... })`. Returns undefined for
+ * malformed URLs or non-numeric ports so the caller can skip the
+ * SIGKILL escalation safely (better than killing port 4096 blindly
+ * when the SDK changed defaults or we passed `port: 0`).
+ */
+function parseOpencodePort(url: string): number | undefined {
+  try {
+    let port = Number.parseInt(new URL(url).port, 10);
+    return Number.isFinite(port) ? port : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

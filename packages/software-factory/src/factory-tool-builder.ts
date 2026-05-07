@@ -368,10 +368,11 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an EvalResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those ' +
-      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
-      'to locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm ' +
-      'server token.',
+      'numbers refer to the transpiled module — fetch the transpiled ' +
+      'output via Bash + `boxel read-transpiled <path> --realm <url>` ' +
+      'to locate the offending source construct, then fix the .gts ' +
+      'source (never copy transpiled patterns back into source). ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -481,9 +482,10 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an InstantiateResult card) automatically after signal_done, so ' +
       'calling this is optional. When a failure reports a line/column, ' +
-      'those numbers refer to the transpiled module — use ' +
-      '`fetch_transpiled_module` to locate the offending source construct, ' +
-      'then fix the .gts source (never copy transpiled patterns back into ' +
+      'those numbers refer to the transpiled module — fetch the ' +
+      'transpiled output via Bash + `boxel read-transpiled <path> ' +
+      '--realm <url>` to locate the offending source construct, then ' +
+      'fix the .gts source (never copy transpiled patterns back into ' +
       'source). Auth: realm server token.',
     parameters: {
       type: 'object',

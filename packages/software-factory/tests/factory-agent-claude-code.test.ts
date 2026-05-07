@@ -494,13 +494,10 @@ module('factory-agent-claude-code', function () {
     });
 
     test('filters out registry-sourced shadow tools from the MCP catalog', async function (assert) {
-      // The 5 OpenRouter-only fs wrappers (read_file / write_file /
-      // search_realm / fetch_transpiled_module / run_command) used
-      // to be filtered here too — they're now retired entirely
-      // (CS-11034). The remaining filter just keeps `'registered'`
-      // tools (kebab-case shadows from the realm-api ToolRegistry)
-      // off the Claude MCP catalog. Verify both halves: registered
-      // shadows are filtered, core tools pass through.
+      // The filter keeps `'registered'` tools (kebab-case shadows
+      // from the realm-api ToolRegistry) off the Claude MCP catalog.
+      // Verify both halves: registered shadows are filtered, core
+      // tools pass through.
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
         { workspaceDir: '/tmp/factory-workspace-test' },

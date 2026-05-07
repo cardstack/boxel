@@ -74,8 +74,6 @@ export async function handleStreamingRequest(
 
     const externalResponse = await fetch(url, fetchInit);
 
-    ctxt.res.write(': connected\n\n');
-
     if (!externalResponse.ok) {
       const errorData = await externalResponse.text();
       log.error(
@@ -86,6 +84,11 @@ export async function handleStreamingRequest(
       ctxt.res.write('data: [DONE]\n\n');
       return;
     }
+
+    // First write commits headers + status to the wire, so do this
+    // only after the upstream-OK check above has had a chance to
+    // override the status.
+    ctxt.res.write(': connected\n\n');
 
     const reader = externalResponse.body?.getReader();
     if (!reader) throw new Error('No readable stream available');
@@ -152,6 +155,11 @@ export async function handleStreamingRequest(
 }
 
 function setupSSEHeaders(ctx: Koa.Context) {
+  // Headers and status are set here but NOT flushed — `flushHeaders`
+  // commits the wire status, which would mask any later
+  // `ctx.status = upstream.status` on upstream failure. Caller flushes
+  // (implicitly, via the first `ctx.res.write`) only after confirming
+  // the upstream response was OK.
   ctx.set('Content-Type', 'text/event-stream');
   ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   ctx.set('Connection', 'keep-alive');
@@ -161,7 +169,6 @@ function setupSSEHeaders(ctx: Koa.Context) {
   ctx.set('Transfer-Encoding', 'chunked');
   ctx.body = null;
   ctx.status = 200;
-  ctx.res.flushHeaders();
 }
 
 async function proxySSE(
