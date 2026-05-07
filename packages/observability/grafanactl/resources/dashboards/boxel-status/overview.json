@@ -46,14 +46,14 @@
               "axisPlacement": "auto",
               "barAlignment": 0,
               "drawStyle": "line",
-              "fillOpacity": 10,
-              "gradientMode": "none",
+              "fillOpacity": 50,
+              "gradientMode": "opacity",
               "hideFrom": {
                 "legend": false,
                 "tooltip": false,
                 "viz": false
               },
-              "lineInterpolation": "linear",
+              "lineInterpolation": "smooth",
               "lineWidth": 2,
               "pointSize": 5,
               "scaleDistribution": {
