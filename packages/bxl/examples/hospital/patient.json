@@ -1,0 +1,30 @@
+{
+  "patientId": "PT-1001",
+  "firstName": "Margaret",
+  "lastName": "Okonkwo",
+  "dob": "1962-03-14",
+  "gender": "F",
+  "bloodType": "A+",
+  "admissionDate": "2024-11-01",
+  "dischargeDate": "2024-11-08",
+  "ward": "Cardiology",
+  "diagnosis": "Atrial Fibrillation",
+  "severity": "Moderate",
+  "today": "2024-11-15",
+  "vitals": {
+    "bpSystolic": 138,
+    "bpDiastolic": 88,
+    "heartRate": 94,
+    "tempC": 37.1,
+    "weightKg": 72.4
+  },
+  "billing": {
+    "roomCharge": 6300,
+    "procedures": 4200,
+    "pharmacy": 310
+  },
+  "medications": [
+    { "name": "Metoprolol", "doseMg": 50, "frequency": "twice daily", "startDate": "2024-11-01" },
+    { "name": "Warfarin",   "doseMg": 5,  "frequency": "once daily",  "startDate": "2024-11-02" }
+  ]
+}
