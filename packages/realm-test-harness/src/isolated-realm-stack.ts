@@ -783,9 +783,18 @@ export async function stopIsolatedRealmStack(
   // the next test then trips the "Shared-context invariant violated"
   // leak warning and waits behind those zombie pages, which has shown
   // up as 5-minute "Test timeout exceeded while setting up realm"
-  // failures in the eval-validation suite. Cheap when no affinity is
-  // warm (the prerender just no-ops).
-  if (stack.prerenderURL && stack.realmURLsToEvict?.length) {
+  // failures in the eval-validation suite.
+  //
+  // Behind an env-var gate while we A/B test the fix in CI: the dispose
+  // call can also trigger a standby-pool refill whose navigation may
+  // hang during the teardown window when the compat proxy is going
+  // away. Default OFF so we can ship the diagnostics half of this
+  // change in isolation and validate the dispose behaviour separately.
+  if (
+    process.env.TEST_HARNESS_DISPOSE_PRERENDER_AFFINITY_ON_TEARDOWN === '1' &&
+    stack.prerenderURL &&
+    stack.realmURLsToEvict?.length
+  ) {
     await disposePrerenderAffinities(
       stack.prerenderURL,
       stack.realmURLsToEvict,

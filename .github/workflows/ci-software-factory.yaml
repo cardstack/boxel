@@ -87,6 +87,14 @@ jobs:
       - name: Run Playwright tests
         run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
         working-directory: packages/software-factory
+        env:
+          # TEMPORARY (cs-11082-eval-validation-flake-diagnostics): crank
+          # logging in CI while diagnosing the eval-validation flake.
+          # Revert before merging or once the flake is understood — these
+          # produce a lot of output and slow CI log downloads.
+          TEST_HARNESS_FORWARD_REALM_LOGS: "1"
+          TEST_HARNESS_DEBUG_SERVER: "1"
+          LOG_LEVELS: "*=info,prerenderer-chrome=none,software-factory:playwright=debug,support-services=debug,prerender-server=debug,realm:prerender=debug"
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
