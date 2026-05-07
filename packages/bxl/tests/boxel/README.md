@@ -26,6 +26,7 @@ original incident.
 | `compiler-readable.ts` | §11 (readableSyntax dispatch) · §12 (PascalCase fallback) · §13 (JQ_KEYWORDS guard) · §16 (mixed-syntax) |
 | `excel-error-tolerance.ts` | §11a (Excel-error catch — sentinels surface as null at the bxl() boundary) |
 | `materialize.ts` | §11a (`as: Cls` Object.assign fallback path — no Boxel runtime) |
+| `probe-fields.ts` | §15 (probe-field regressions — one assertion per gigantic-crawdad probe field) |
 
 ## Running
 
