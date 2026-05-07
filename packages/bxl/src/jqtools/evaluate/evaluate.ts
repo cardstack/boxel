@@ -560,6 +560,8 @@ class Environment {
                   yield createItem(value, [...val.path, key]);
                 }
                 break;
+              case 'null':
+                break;
               default:
                 throw cannotIterateError(val.value);
             }

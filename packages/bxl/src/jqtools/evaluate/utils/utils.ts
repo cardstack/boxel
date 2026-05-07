@@ -456,6 +456,9 @@ export function* range(
 }
 
 export function assertNumber(value: any): number {
+  if (value === null || value === undefined) {
+    return 0;
+  }
   if (typeOf(value) !== Type.number) {
     throw new JqEvaluateError(`Got ${typeOf(value)}, number expected`);
   }
@@ -463,6 +466,9 @@ export function assertNumber(value: any): number {
 }
 
 export function assertString(value: any): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
   if (typeOf(value) !== Type.string) {
     throw new JqEvaluateError(`Got ${typeOf(value)}, string expected`);
   }

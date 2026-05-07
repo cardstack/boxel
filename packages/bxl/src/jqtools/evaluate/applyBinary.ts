@@ -65,11 +65,17 @@ function coerceOne(val: any): number | null {
   return null;
 }
 
+// bxl-null-tolerant arithmetic: null/undefined → propagate null on -,*,/,%; identity on +
 export function applyNormalBinaryOperator(
   op: NormalBinaryOperator,
   left: any,
   right: any
 ): any {
+  if (op === '/' || op === '*' || op === '-' || op === '%') {
+    if (left == null || right == null) {
+      return null;
+    }
+  }
   switch (op) {
     case '==':
       return compare(left, right) === 0;
@@ -84,9 +90,11 @@ export function applyNormalBinaryOperator(
     case '>=':
       return compare(left, right) >= 0;
     case '+':
-      if (someOfType(Type.null, left, right)) {
-        return typeOf(left) === Type.null ? right : left;
+      if (left == null && right == null) {
+        return null;
       }
+      if (left == null) return right;
+      if (right == null) return left;
 
       if (!typesEqual(left, right)) {
         // Excel-style coercion: try numeric arithmetic before failing
@@ -144,7 +152,7 @@ export function applyNormalBinaryOperator(
       throw cannotApplyOperatorToError(op, left, right);
     case '/':
       if (typesMatch(left, right, Type.number)) {
-        if (right === 0) throw divisionByZeroError();
+        if (right === 0) return null;
         return left / right;
       } else if (typesMatch(left, right, Type.string)) {
         return left.split(right);
@@ -153,21 +161,21 @@ export function applyNormalBinaryOperator(
         // Excel-style coercion: try numeric division before failing
         const nums = coerceToNumbers(left, right);
         if (nums) {
-          if (nums[1] === 0) throw divisionByZeroError();
+          if (nums[1] === 0) return null;
           return nums[0] / nums[1];
         }
       }
       throw cannotApplyOperatorToError(op, left, right);
     case '%':
       if (typesMatch(left, right, Type.number)) {
-        if (Math.floor(right) === 0) throw divisionByZeroError();
+        if (Math.floor(right) === 0) return null;
         return Math.floor(left) % Math.floor(right);
       }
       {
         // Excel-style coercion: try numeric modulo before failing
         const nums = coerceToNumbers(left, right);
         if (nums) {
-          if (Math.floor(nums[1]) === 0) throw divisionByZeroError();
+          if (Math.floor(nums[1]) === 0) return null;
           return Math.floor(nums[0]) % Math.floor(nums[1]);
         }
       }

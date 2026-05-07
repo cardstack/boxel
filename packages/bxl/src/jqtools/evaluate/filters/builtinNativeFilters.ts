@@ -315,11 +315,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       throw notImplementedError('drem/2');
     },
     *'empty/0'() {},
-    *'endswith/1'(input: string, str: string) {
-      assertString(input);
-      assertString(str);
+    *'endswith/1'(input: unknown, str: unknown) {
+      const i = assertString(input);
+      const s = assertString(str);
 
-      yield input.endsWith(str);
+      yield i.endsWith(s);
     },
     *'env/0'() {
       throw new JqEvaluateError('env is not available in the public BXL sandbox');
@@ -658,11 +658,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'sqrt/0'(input: unknown) {
       yield applyUnaryMath(input, 'sqrt', Math.sqrt);
     },
-    *'startswith/1'(input: string, str: string) {
-      assertString(input);
-      assertString(str);
+    *'startswith/1'(input: unknown, str: unknown) {
+      const i = assertString(input);
+      const s = assertString(str);
 
-      yield input.startsWith(str);
+      yield i.startsWith(s);
     },
     *'stderr/0'(input: unknown) {
       emitStderrChunk(rawCompactString(input));
