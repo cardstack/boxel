@@ -131,7 +131,11 @@ module(`Integration | search data resource`, function (hooks) {
     ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        'book.gts': { Book },
+        // Expose PersonField alongside Book so the host can resolve
+        // `Book.author.firstName` queries — the new top-level-only
+        // Definition.fields shape requires lookupDefinition to find
+        // PersonField when traversing the dotted path.
+        'book.gts': { Book, PersonField },
         ...sampleCards,
         'files/hello.txt': 'Hello world',
         'files/notes.txt': 'Some notes',
