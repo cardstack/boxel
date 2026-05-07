@@ -93,6 +93,10 @@ cfg="$(./scripts/render-config.sh "$env_name")"
 #                                              `Authorization: Bearer
 #                                              ${grafana_secret}` in
 #                                              operator-action button panels)
+#   __ENV__               → env_name          (local|staging|production;
+#                                              used in CloudWatch
+#                                              dimension values like
+#                                              "boxel-realm-server-${env}")
 # Local mode uses hardcoded defaults so devs don't need any extra setup.
 rendered="$(mktemp -d -t grafanactl-render.XXXXXX)"
 trap 'rm -f "$cfg"; rm -rf "$rendered"' EXIT
@@ -132,7 +136,7 @@ while IFS= read -r -d '' f; do
   # this is a no-op for any other constant template variable that happens to
   # share a name. Lint enforces grafana_secret == REPLACE_AT_APPLY_TIME on
   # committed JSON, so the guard never spuriously skips a real secret.
-  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" '
+  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" --arg envname "$env_name" '
     walk(
       if type == "object"
          and .name? == "realm_server"
@@ -148,6 +152,13 @@ while IFS= read -r -d '' f; do
       then
         .query = $secret
         | (if .current then .current.value = $secret | .current.text = $secret else . end)
+      elif type == "object"
+         and .name? == "env"
+         and .type? == "constant"
+         and .query? == "__ENV__"
+      then
+        .query = $envname
+        | (if .current then .current.value = $envname | .current.text = $envname else . end)
       else . end
     )
   ' "$f" > "$f.tmp"

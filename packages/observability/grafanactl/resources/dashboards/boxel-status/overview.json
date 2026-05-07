@@ -378,12 +378,1240 @@
         "type": "timeseries"
       },
       {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS resource utilisation for `boxel-realm-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Realm Server dashboard",
+                "url": "/d/boxel-svc-realm-server",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Tasks"
+                },
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 0,
+          "y": 8
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "C"
+          }
+        ],
+        "title": "Realm Server",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS resource utilisation for `boxel-prerender-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Prerender Server dashboard",
+                "url": "/d/boxel-svc-prerender-server",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Tasks"
+                },
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 4,
+          "y": 8
+        },
+        "id": 14,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "C"
+          }
+        ],
+        "title": "Prerender",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS resource utilisation for `boxel-prerender-manager-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Prerender Manager dashboard",
+                "url": "/d/boxel-svc-prerender-manager",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Tasks"
+                },
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 8,
+          "y": 8
+        },
+        "id": 15,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "C"
+          }
+        ],
+        "title": "Prerender Mgr",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS resource utilisation for `boxel-worker-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Worker dashboard",
+                "url": "/d/boxel-svc-worker",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Tasks"
+                },
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 12,
+          "y": 8
+        },
+        "id": 16,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "C"
+          }
+        ],
+        "title": "Worker",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS resource utilisation for `synapse-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Synapse dashboard",
+                "url": "/d/000000012",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "C"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Tasks"
+                },
+                {
+                  "id": "unit",
+                  "value": "short"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 16,
+          "y": 8
+        },
+        "id": 17,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "synapse-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "synapse-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "synapse-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "C"
+          }
+        ],
+        "title": "Synapse",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Boxel application database transaction rate (xact_commit + xact_rollback) averaged since the postmaster started. Not a rolling window \u2014 recent spikes will be smoothed. Drill into the DB-specific dashboard for detail.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 4,
+          "x": 20,
+          "y": 8
+        },
+        "id": 18,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 60.0 * (xact_commit + xact_rollback) / NULLIF(EXTRACT(EPOCH FROM (NOW() - pg_postmaster_start_time())), 0) AS \"Req/min\" FROM pg_stat_database WHERE datname = 'boxel';",
+            "refId": "A"
+          }
+        ],
+        "title": "DB",
+        "type": "stat"
+      },
+      {
         "description": "All firing and pending Grafana alert rules. Drill into a rule for details and silences. Replaces the Worker Status alertlist (which was a single-panel dashboard).",
         "gridPos": {
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 8
+          "y": 14
         },
         "id": 6,
         "options": {
@@ -448,7 +1676,7 @@
           "h": 4,
           "w": 6,
           "x": 0,
-          "y": 16
+          "y": 22
         },
         "id": 7,
         "options": {
@@ -516,7 +1744,7 @@
           "h": 4,
           "w": 6,
           "x": 6,
-          "y": 16
+          "y": 22
         },
         "id": 8,
         "options": {
@@ -593,7 +1821,7 @@
           "h": 4,
           "w": 6,
           "x": 12,
-          "y": 16
+          "y": 22
         },
         "id": 9,
         "options": {
@@ -665,7 +1893,7 @@
           "h": 4,
           "w": 6,
           "x": 18,
-          "y": 16
+          "y": 22
         },
         "id": 10,
         "options": {
@@ -762,7 +1990,7 @@
           "h": 6,
           "w": 24,
           "x": 0,
-          "y": 20
+          "y": 26
         },
         "id": 11,
         "options": {
@@ -821,7 +2049,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 26
+          "y": 32
         },
         "id": 12,
         "options": {
@@ -844,7 +2072,15 @@
       "overview"
     ],
     "templating": {
-      "list": []
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
     },
     "time": {
       "from": "now-1h",
