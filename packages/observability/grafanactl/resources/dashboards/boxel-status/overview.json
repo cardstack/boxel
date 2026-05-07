@@ -1563,7 +1563,14 @@
                 }
               ]
             },
-            "unit": "short"
+            "unit": "short",
+            "links": [
+              {
+                "title": "Open Database dashboard",
+                "url": "/d/boxeldatabase1",
+                "targetBlank": false
+              }
+            ]
           },
           "overrides": []
         },
