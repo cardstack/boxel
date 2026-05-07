@@ -16,3 +16,7 @@ coverage/
 # Personal realm-sync config — points at your local Boxel workspace
 .bxl-realm-sync.json
 .gstack/
+
+# Local realm sandbox written by boxel-cli sync — scratch instances +
+# .boxel-history not meant for the repo.
+stack.cards/
