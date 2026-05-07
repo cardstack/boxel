@@ -163,6 +163,43 @@ while IFS= read -r -d '' f; do
     )
   ' "$f" > "$f.tmp"
   mv "$f.tmp" "$f"
+
+  # Local-only: swap CloudWatch panels for a markdown placeholder. The
+  # committed JSON keeps real CloudWatch queries (so staging/production
+  # apply pushes them unchanged); locally there are no AWS creds, so the
+  # panels would otherwise show "No data" + a query-error triangle that's
+  # indistinguishable from a real broken panel.
+  #
+  # Match by gridPos+datasource.type so we only rewrite top-level panels
+  # (panel targets also carry a `datasource.type: cloudwatch` field but
+  # don't have gridPos). Preserve id, title, and gridPos so layout is
+  # unchanged; replace everything else with a `text` markdown panel.
+  if [[ "$env_name" == "local" ]]; then
+    jq '
+      walk(
+        if type == "object"
+           and (.datasource? | type == "object")
+           and .datasource.type? == "cloudwatch"
+           and (.gridPos? | type == "object")
+        then
+          {
+            id: .id,
+            type: "text",
+            title: .title,
+            gridPos: .gridPos,
+            options: {
+              code: { language: "plaintext", showLineNumbers: false, showMiniMap: false },
+              content: "**☁️ AWS CloudWatch — staging/production only**\n\nThe `boxel-cloudwatch` datasource has no AWS credentials in local dev. ECS resource utilisation (CPU / Memory / Tasks) renders correctly when this dashboard is applied to a hosted Grafana.",
+              mode: "markdown"
+            },
+            pluginVersion: "12.4.3",
+            transparent: false
+          }
+        else . end
+      )
+    ' "$f" > "$f.tmp"
+    mv "$f.tmp" "$f"
+  fi
 done < <(find "$rendered/dashboards" -type f -name '*.json' -print0)
 
 grafanactl \
