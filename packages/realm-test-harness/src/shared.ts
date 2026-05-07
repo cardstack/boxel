@@ -758,7 +758,12 @@ export async function waitForReady(
       proc.on('message', onMessage);
     }),
     createProcessExitPromise(proc, label),
-    new Promise<true>((resolve) => setTimeout(() => resolve(true), timeoutMs)),
+    new Promise<true>((resolve) => {
+      // unref so the losing racer (the timeout) doesn't keep the event
+      // loop alive after a successful "ready" message.
+      let t = setTimeout(() => resolve(true), timeoutMs);
+      t.unref();
+    }),
   ]);
 
   if (timedOut) {
@@ -793,11 +798,23 @@ export async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
     proc.on('exit', onExit);
     proc.on('error', onExit);
   });
+  // .unref() each timeout so the losing racers don't keep the event
+  // loop alive after the winning racer resolves. Without this, a child
+  // that exits in 100ms still pins the parent process for ~15s × N
+  // pending grace timers, and post-bench teardown stalls for minutes.
+  let unrefTimeout = (
+    cb: (...args: unknown[]) => void,
+    ms: number,
+  ): NodeJS.Timeout => {
+    let t = setTimeout(cb, ms);
+    t.unref();
+    return t;
+  };
   proc.send('stop');
   let stopResult = await Promise.race([
     stopped,
     exited,
-    new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000)),
+    new Promise<false>((resolve) => unrefTimeout(() => resolve(false), 15_000)),
   ]);
   if (stopResult === false && proc.exitCode === null) {
     proc.send('kill');
@@ -805,7 +822,9 @@ export async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
   if (proc.exitCode === null) {
     let exitResult = await Promise.race([
       exited,
-      new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000)),
+      new Promise<false>((resolve) =>
+        unrefTimeout(() => resolve(false), 15_000),
+      ),
     ]);
     if (exitResult === false && proc.exitCode === null) {
       try {
@@ -816,7 +835,7 @@ export async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
       exitResult = await Promise.race([
         exited,
         new Promise<false>((resolve) =>
-          setTimeout(() => resolve(false), 5_000),
+          unrefTimeout(() => resolve(false), 5_000),
         ),
       ]);
       if (exitResult === false && proc.exitCode === null) {
