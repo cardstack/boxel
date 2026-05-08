@@ -2,6 +2,7 @@ import {
   click,
   waitFor,
   fillIn,
+  triggerEvent,
   triggerKeyEvent,
   waitUntil,
   scrollTo,
@@ -1429,7 +1430,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-resource-loaded]');
 
       assert
-        .dom('[data-test-format-chooser="form"]')
+        .dom('[data-test-format-chooser]')
         .exists({ count: cardDefFormats.length + 1 });
       assert
         .dom('[data-test-format-chooser="form"]')
@@ -1578,6 +1579,131 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-format-chooser="isolated"]')
         .hasClass('active', 'isolated button is active after switching');
+    });
+
+    test('format chooser flips to compact mode in a narrow preview panel and restores on widen', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      let chooser = document.querySelector(
+        '[data-test-format-chooser-root]',
+      ) as HTMLElement | null;
+      assert.ok(chooser, 'format chooser is rendered');
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'full',
+          'chooser starts in full icon+text mode',
+        );
+
+      let handles = Array.from(
+        document.querySelectorAll(
+          '[data-test-code-mode] .separator-horizontal[data-boxel-panel-resize-handle-id]',
+        ),
+      ) as HTMLElement[];
+      let previewResizeHandle = handles.at(-1);
+      assert.ok(previewResizeHandle, 'preview panel resize handle exists');
+
+      let shrinkRect = previewResizeHandle!.getBoundingClientRect();
+      await triggerEvent(previewResizeHandle!, 'pointerdown', {
+        button: 0,
+        pointerId: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointermove', {
+        pointerId: 1,
+        buttons: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointerup', {
+        pointerId: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+
+      await waitUntil(
+        () =>
+          chooser?.getAttribute('data-test-format-chooser-mode') === 'compact',
+      );
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'compact',
+          'chooser switches to compact icon-only mode',
+        );
+
+      let embeddedButton = document.querySelector(
+        '[data-test-format-chooser="embedded"]',
+      ) as HTMLElement | null;
+      assert.ok(embeddedButton, 'embedded format button exists');
+      let embeddedRect = embeddedButton!.getBoundingClientRect();
+      await triggerEvent(embeddedButton!, 'mouseenter', {
+        clientX: embeddedRect.x + embeddedRect.width / 2,
+        clientY: embeddedRect.y + embeddedRect.height / 2,
+      });
+      await triggerEvent(embeddedButton!, 'mousemove', {
+        clientX: embeddedRect.x + embeddedRect.width / 2,
+        clientY: embeddedRect.y + embeddedRect.height / 2,
+      });
+
+      await waitFor('[data-test-tooltip-content]');
+      assert
+        .dom('[data-test-tooltip-content]')
+        .hasText('embedded', 'compact chooser shows an instant hover tooltip');
+
+      let widenRect = previewResizeHandle!.getBoundingClientRect();
+      await triggerEvent(previewResizeHandle!, 'pointerdown', {
+        button: 0,
+        pointerId: 2,
+        clientX: widenRect.x + widenRect.width / 2,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointermove', {
+        pointerId: 2,
+        buttons: 1,
+        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointerup', {
+        pointerId: 2,
+        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+
+      await waitUntil(
+        () => chooser?.getAttribute('data-test-format-chooser-mode') === 'full',
+      );
+      await triggerEvent(chooser!, 'mouseleave');
+
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'full',
+          'chooser returns to full icon+text mode after widening',
+        );
+      assert
+        .dom('[data-test-tooltip-content]')
+        .doesNotExist('compact tooltip does not stick after widening');
+      assert
+        .dom('[data-test-format-chooser-pill-label]')
+        .hasText('isolated', 'full chooser label is restored');
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {

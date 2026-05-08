@@ -179,7 +179,16 @@ export default class PillFormatChooser extends Component<Signature> {
   private persistOrder(order: Format[]) {
     try {
       const serialized = window.localStorage.getItem(FormatChooserOrder);
-      const persisted = serialized ? JSON.parse(serialized) : {};
+      let persisted = {};
+      if (serialized) {
+        try {
+          persisted = JSON.parse(serialized);
+        } catch (_err) {
+          // Replace malformed persisted data with a fresh object so drag
+          // reordering can recover storage state.
+          persisted = {};
+        }
+      }
       window.localStorage.setItem(
         FormatChooserOrder,
         JSON.stringify({

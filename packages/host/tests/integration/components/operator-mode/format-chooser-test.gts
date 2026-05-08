@@ -13,6 +13,10 @@ import { setupRenderingTest } from '../../../helpers/setup';
 module('Integration | Component | FormatChooser', function (hooks) {
   setupRenderingTest(hooks);
 
+  hooks.beforeEach(function () {
+    window.localStorage.removeItem(FormatChooserOrder);
+  });
+
   function buttonOrder(): Format[] {
     return Array.from(
       document.querySelectorAll('[data-test-format-chooser]'),
@@ -134,16 +138,63 @@ module('Integration | Component | FormatChooser', function (hooks) {
   // ── drag and drop ─────────────────────────────────────────────────────────
 
   module('drag and drop', function () {
-    // In the test environment, getBoundingClientRect() returns zeros for all
-    // buttons (no layout). targetIndexForClientX therefore treats every button
-    // center as 0, so:
-    //   clientX >= 0  →  clientX < 0 is never true  →  targetIndex = end
-    //   clientX < 0   →  clientX < 0 is always true for the first button
-    //                    →  targetIndex = 0 (beginning)
-    async function drag(btnSelector: string, clientX: number) {
-      await triggerEvent(btnSelector, 'mousedown', { button: 0, clientX: 0 });
-      await triggerEvent(window, 'mousemove', { clientX });
-      await triggerEvent(window, 'mouseup', { clientX });
+    function targetClientX(
+      btnSelector: string,
+      position: 'beginning' | 'end',
+    ): number {
+      let draggedButton = document.querySelector(btnSelector);
+
+      if (!draggedButton) {
+        throw new Error(`Button not found for selector: ${btnSelector}`);
+      }
+
+      let otherButtons = Array.from(
+        document.querySelectorAll('[data-test-format-chooser]'),
+      ).filter((button) => button !== draggedButton);
+
+      if (otherButtons.length === 0) {
+        return 0;
+      }
+
+      let centers = otherButtons.map((button) => {
+        let rect = button.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      });
+
+      return position === 'beginning'
+        ? Math.min(...centers) - 1
+        : Math.max(...centers) + 1;
+    }
+
+    async function drag(btnSelector: string, position: 'beginning' | 'end') {
+      let button = document.querySelector(btnSelector);
+
+      if (!button) {
+        throw new Error(`Button not found for selector: ${btnSelector}`);
+      }
+
+      let rect = button.getBoundingClientRect();
+      let startX = rect.left + rect.width / 2;
+      let startY = rect.top + rect.height / 2;
+      let endX = targetClientX(btnSelector, position);
+
+      await triggerEvent(button, 'mousedown', {
+        button: 0,
+        clientX: startX,
+        clientY: startY,
+      });
+      await triggerEvent(document, 'mousemove', {
+        clientX: startX + 1,
+        clientY: startY,
+      });
+      await triggerEvent(document, 'mousemove', {
+        clientX: endX,
+        clientY: startY,
+      });
+      await triggerEvent(button, 'mouseup', {
+        clientX: endX,
+        clientY: startY,
+      });
     }
 
     test('moves first button to end and persists new order to localStorage', async function (assert) {
@@ -158,9 +209,7 @@ module('Integration | Component | FormatChooser', function (hooks) {
           />
         </template>,
       );
-
-      await drag('[data-test-format-chooser="isolated"]', 400);
-
+      await drag('[data-test-format-chooser="isolated"]', 'end');
       assert.deepEqual(
         buttonOrder(),
         ['embedded', 'atom', 'isolated'],
@@ -189,7 +238,7 @@ module('Integration | Component | FormatChooser', function (hooks) {
         </template>,
       );
 
-      await drag('[data-test-format-chooser="atom"]', -1);
+      await drag('[data-test-format-chooser="atom"]', 'beginning');
 
       assert.deepEqual(
         buttonOrder(),
@@ -217,7 +266,7 @@ module('Integration | Component | FormatChooser', function (hooks) {
         </template>,
       );
 
-      await drag('[data-test-format-chooser="isolated"]', 400);
+      await drag('[data-test-format-chooser="isolated"]', 'end');
 
       const stored = JSON.parse(
         window.localStorage.getItem(FormatChooserOrder) ?? '{}',
