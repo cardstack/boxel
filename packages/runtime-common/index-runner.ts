@@ -40,6 +40,7 @@ import {
   type DiscoverInvalidationsResult,
 } from './index-runner/discover-invalidations';
 import { visitFileForIndexingFused } from './index-runner/visit-file';
+import { ClearCacheTracker } from './index-runner/clear-cache-tracker';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
@@ -83,7 +84,14 @@ export class IndexRunner {
     fileErrors: 0,
     totalIndexEntries: 0,
   };
-  #shouldClearCacheForNextRender = true;
+  // CS-11043. Tracks whether the next prerender visit should carry
+  // `renderOptions.clearCache: true`. Initialized to consume-once so the
+  // first render after constructing a fresh IndexRunner primes its
+  // loader (matches the historical behavior). When the batch's
+  // invalidations include an executable file, we upgrade to
+  // sticky-for-batch so every fanned-out puppeteer page gets its own
+  // loader reset — see clear-cache-tracker.ts for the rationale.
+  #clearCacheTracker = new ClearCacheTracker();
   // Identifier for this runner's indexing batch (CS-10758 step 3).
   // Threaded into PrerenderVisitArgs and released from the fromScratch /
   // incremental finally blocks. One runner = one batch: if fromScratch
@@ -199,6 +207,20 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    // CS-11043. Mirror the incremental path: when the batch's
+    // invalidations include an executable file, every render in the
+    // fan-out needs to land on a freshly-cleared loader, not just the
+    // first. Without this, multi-page affinities serve stale module
+    // bytes after a republish — see clear-cache-tracker.ts.
+    let hasExecutableInvalidation = invalidations.some((url) =>
+      hasExecutableExtension(url.href),
+    );
+    if (hasExecutableInvalidation) {
+      current.#log.debug(
+        `${jobIdentity(current.#jobInfo)} detected executable invalidation, upgrading loader-reset to sticky for the batch (CS-11043)`,
+      );
+      current.#upgradeClearCacheForBatch();
+    }
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -342,12 +364,10 @@ export class IndexRunner {
       hasExecutableExtension(url.href),
     );
     if (hasExecutableInvalidation) {
-      if (!current.#shouldClearCacheForNextRender) {
-        current.#log.debug(
-          `${jobIdentity(current.#jobInfo)} detected executable invalidation, scheduling loader reset`,
-        );
-      }
-      current.#scheduleClearCacheForNextRender();
+      current.#log.debug(
+        `${jobIdentity(current.#jobInfo)} detected executable invalidation, upgrading loader-reset to sticky for the batch (CS-11043)`,
+      );
+      current.#upgradeClearCacheForBatch();
     }
 
     let hrefs = urls.map((u) => u.href);
@@ -527,16 +547,12 @@ export class IndexRunner {
     return this.#moduleCacheContext;
   }
 
-  #scheduleClearCacheForNextRender() {
-    this.#shouldClearCacheForNextRender = true;
+  #upgradeClearCacheForBatch() {
+    this.#clearCacheTracker.upgradeToStickyForBatch();
   }
 
   #consumeClearCacheForRender(): boolean {
-    if (!this.#shouldClearCacheForNextRender) {
-      return false;
-    }
-    this.#shouldClearCacheForNextRender = false;
-    return true;
+    return this.#clearCacheTracker.consume();
   }
 
   @Memoize()
