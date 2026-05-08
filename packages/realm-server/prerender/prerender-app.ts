@@ -871,68 +871,6 @@ export function buildPrerenderApp(options: {
     }
   });
 
-  // Tear down all pages and the shared BrowserContext for an affinity.
-  // The harness's per-test realm cleanup posts here so prerender state
-  // tied to the now-dead realm doesn't bleed into the next test (in-flight
-  // pages outliving the realm hit ECONNREFUSED 502s, the shared context
-  // lingers as a "Shared-context invariant violated" leak the next test
-  // trips on, and saturated affinity slots block fresh realm startup
-  // indexing). Best-effort from the caller's side; this just exposes
-  // the existing Prerenderer.disposeAffinity over HTTP.
-  router.post('/dispose-affinity', async (ctxt: Koa.Context) => {
-    try {
-      let request = await fetchRequestFromContext(ctxt);
-      let raw = await request.text();
-      let body: any;
-      try {
-        body = raw ? JSON.parse(raw) : {};
-      } catch (e) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [{ status: 400, message: 'Invalid JSON body' }],
-        };
-        return;
-      }
-      let attrs = body?.data?.attributes ?? {};
-      let affinityType = attrs.affinityType;
-      let affinityValue = attrs.affinityValue;
-      let missing: string[] = [];
-      if (affinityType !== 'realm' && affinityType !== 'user') {
-        missing.push('affinityType');
-      }
-      if (
-        typeof affinityValue !== 'string' ||
-        affinityValue.trim().length === 0
-      ) {
-        missing.push('affinityValue');
-      }
-      if (missing.length > 0) {
-        ctxt.status = 400;
-        ctxt.body = {
-          errors: [
-            {
-              status: 400,
-              message: `Missing or invalid attributes: ${missing.join(', ')}`,
-            },
-          ],
-        };
-        return;
-      }
-      await prerenderer.disposeAffinity({
-        affinityType: affinityType as AffinityType,
-        affinityValue,
-      });
-      ctxt.status = 204;
-    } catch (err: any) {
-      Sentry.captureException(err);
-      log.error('Unhandled error in /dispose-affinity:', err);
-      ctxt.status = 500;
-      ctxt.body = {
-        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
-      };
-    }
-  });
-
   // Release an indexing batch's ownership of an affinity's warm loader
   // (CS-10758 step 3). Called by the indexer's `finally` block via the
   // manager's broadcast proxy. No-op if this server isn't the current
