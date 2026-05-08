@@ -1293,7 +1293,7 @@ export class IssueTrackerBoard extends KanbanBoard {
               {{#let (get @fields.cards placement.index) as |CardField|}}
                 {{#if CardField}}
                   <div class='card-wrap'>
-                    <CardField @format='fitted' @displayContainer={{false}} />
+                    <CardField @format='fitted' />
                   </div>
                 {{/if}}
               {{/let}}
@@ -1302,7 +1302,7 @@ export class IssueTrackerBoard extends KanbanBoard {
               {{#let (get @fields.cards dragIdx) as |CardField|}}
                 {{#if CardField}}
                   <div class='card-wrap'>
-                    <CardField @format='fitted' @displayContainer={{false}} />
+                    <CardField @format='fitted' />
                   </div>
                 {{/if}}
               {{/let}}

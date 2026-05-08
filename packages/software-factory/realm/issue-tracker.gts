@@ -513,7 +513,7 @@ export class Issue extends CardDef {
     <template>
       <div class='issue-card'>
         <div class='meta-row'>
-          <span class='issue-id'>{{if
+          <span class='issue-id' data-test-issue-id>{{if
               @model.issueId
               @model.issueId
               'ISSUE'
@@ -622,10 +622,15 @@ export class Issue extends CardDef {
 
   static edit = class Edit extends Component<typeof Issue> {
     <template>
-      <div class='issue-edit'>
+      <div class='issue-edit' data-test-issue-edit>
         <section class='edit-section'>
           <h2 class='section-heading'>Basic Info</h2>
-          <FieldContainer @label='Summary' @tag='label' @vertical={{true}}>
+          <FieldContainer
+            @label='Summary'
+            @tag='label'
+            @vertical={{true}}
+            data-test-summary-field
+          >
             <@fields.summary />
           </FieldContainer>
           <div class='field-row'>
@@ -637,7 +642,12 @@ export class Issue extends CardDef {
             </FieldContainer>
           </div>
           <div class='field-row'>
-            <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+            <FieldContainer
+              @label='Status'
+              @tag='label'
+              @vertical={{true}}
+              data-test-issue-edit-status
+            >
               <@fields.status />
             </FieldContainer>
             <FieldContainer @label='Priority' @tag='label' @vertical={{true}}>
@@ -1082,6 +1092,13 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
     this.args.model.hideEmptyColumns = !this.args.model?.hideEmptyColumns;
   };
 
+  openCard = (index: number): void => {
+    let card = this.args.model.cards?.[index];
+    if (card) {
+      this.args.viewCard?.(card, 'isolated');
+    }
+  };
+
   addCardTask = dropTask(async (columnKey: string | null) => {
     if (!columnKey) return;
     let model = this.args.model as any;
@@ -1203,7 +1220,7 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
             {{/if}}
           </div>
           <div>
-            <span class='card-count'>
+            <span class='card-count' data-test-issue-tracker-card-count>
               {{#if (eq this.cardCount 1)}}
                 1 card
               {{else}}
@@ -1244,13 +1261,17 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
           @placements={{this.placements}}
           @hideEmpty={{@model.hideEmptyColumns}}
           @onChange={{this.handleChange}}
+          @onOpen={{this.openCard}}
           @onAddCard={{this.addCardTask.perform}}
         >
           <:card as |placement|>
             {{#let (get @fields.cards placement.index) as |CardField|}}
               {{#if CardField}}
-                <div class='card-wrap'>
-                  <CardField @format='fitted' @displayContainer={{false}} />
+                <div
+                  class='card-wrap'
+                  data-test-issue-tracker-card={{placement.index}}
+                >
+                  <CardField @format='fitted' />
                 </div>
               {{/if}}
             {{/let}}
@@ -1259,7 +1280,7 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
             {{#let (get @fields.cards dragIdx) as |CardField|}}
               {{#if CardField}}
                 <div class='card-wrap'>
-                  <CardField @format='fitted' @displayContainer={{false}} />
+                  <CardField @format='fitted' />
                 </div>
               {{/if}}
             {{/let}}
