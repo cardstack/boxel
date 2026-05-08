@@ -487,10 +487,18 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
+    let formatChanged = item.format !== format;
     item.format = format;
     if (opts && 'request' in opts) item.request = opts.request;
     if (opts && 'useBaseTemplate' in opts)
       item.useBaseTemplate = opts.useBaseTemplate;
+    // A format flip is a deliberate user action ("edit this one") —
+    // mark it as the most recently interacted item so subsequent
+    // keyboard shortcuts target this card, not whatever happened to
+    // be opened most recently.
+    if (formatChanged) {
+      item.markInteracted();
+    }
     this.schedulePersist();
   }
 

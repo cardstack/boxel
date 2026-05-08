@@ -135,12 +135,14 @@ export default class ScreenshotCardCommand extends HostBaseCommand<
       useNonConflictingFilename: true,
     });
 
-    if (!writeResult?.fileUrl) {
+    if (!writeResult?.fileIdentifier) {
       throw new Error('Failed to write screenshot PNG to realm.');
     }
 
     let commandModule = await this.loadCommandModule();
     const { ScreenshotCardOutput } = commandModule;
-    return new ScreenshotCardOutput({ imageDefUrl: writeResult.fileUrl });
+    return new ScreenshotCardOutput({
+      imageDefUrl: writeResult.fileIdentifier,
+    });
   }
 }

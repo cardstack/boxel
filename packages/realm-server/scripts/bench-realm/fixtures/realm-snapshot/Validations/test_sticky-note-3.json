@@ -1,0 +1,100 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sequenceNumber": 3,
+      "runAt": "2026-05-06T20:15:28.940Z",
+      "status": "passed",
+      "moduleResults": [
+        {
+          "moduleRef": {
+            "module": "default",
+            "name": "default"
+          },
+          "results": [
+            {
+              "testName": "renders body in isolated view",
+              "status": "passed",
+              "durationMs": 2487
+            },
+            {
+              "testName": "renders title in isolated view when provided",
+              "status": "passed",
+              "durationMs": 1283
+            },
+            {
+              "testName": "defaults to yellow color when no color is set",
+              "status": "passed",
+              "durationMs": 1084
+            },
+            {
+              "testName": "renders pink color when specified",
+              "status": "passed",
+              "durationMs": 880
+            },
+            {
+              "testName": "renders blue, green, orange and purple",
+              "status": "passed",
+              "durationMs": 1090
+            },
+            {
+              "testName": "falls back to yellow when an unknown color is supplied",
+              "status": "passed",
+              "durationMs": 1002
+            },
+            {
+              "testName": "renders body in embedded view",
+              "status": "passed",
+              "durationMs": 923
+            },
+            {
+              "testName": "renders body in fitted view",
+              "status": "passed",
+              "durationMs": 916
+            },
+            {
+              "testName": "cardTitle prefers title over body snippet",
+              "status": "passed",
+              "durationMs": 867
+            },
+            {
+              "testName": "cardTitle falls back to body snippet when no title",
+              "status": "passed",
+              "durationMs": 849
+            },
+            {
+              "testName": "cardTitle falls back to Untitled when no title or body",
+              "status": "passed",
+              "durationMs": 874
+            },
+            {
+              "testName": "stores spatial position fields",
+              "status": "passed",
+              "durationMs": 865
+            },
+            {
+              "testName": "renders author in isolated view footer",
+              "status": "passed",
+              "durationMs": 995
+            }
+          ]
+        }
+      ],
+      "completedAt": "2026-05-06T20:15:46.749Z",
+      "durationMs": 17720
+    },
+    "relationships": {
+      "issue": {
+        "links": {
+          "self": "../Issues/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/test-results",
+        "name": "TestRun"
+      }
+    }
+  }
+}

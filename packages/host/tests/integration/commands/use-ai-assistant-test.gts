@@ -526,7 +526,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     }
   });
 
-  test('sends message with attachedFileURLs', async function (assert) {
+  test('sends message with attachedFileIdentifiers', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-with-attached-files',
@@ -540,7 +540,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     await aiAssistantCommand.execute({
       prompt: 'Hello with attached files!',
       roomId,
-      attachedFileURLs: fileURLs,
+      attachedFileIdentifiers: fileURLs,
     });
 
     // Check that message with file URLs was sent

@@ -602,7 +602,7 @@ async function persistRotationImage({
     let uploadCommand = new UploadImageCommand(commandContext);
     let result = await uploadCommand.execute({
       sourceImageUrl: ensuredDataUrl,
-      targetRealmUrl: realmHref,
+      targetRealmIdentifier: realmHref,
     });
 
     if (result?.cardId) {

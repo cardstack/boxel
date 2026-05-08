@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
@@ -125,6 +126,14 @@ interface CardToDelete {
   title: string;
 }
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  let tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return false;
+}
+
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -146,6 +155,68 @@ export default class InteractSubmode extends Component {
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
     | undefined;
+
+  @action private handleEscape(event: KeyboardEvent) {
+    // A modal owns Escape regardless of where focus is.
+    if (document.body.classList.contains('has-modal')) return;
+
+    if (isInteractiveTarget(event.target)) {
+      let el = event.target as HTMLElement;
+      // Field inside a stack card: peel the focus off first so a
+      // second Escape can fall through to exit edit / close.
+      if (el.closest('[data-stack-card]')) {
+        event.preventDefault();
+        el.blur();
+        return;
+      }
+      // Field outside any stack card (search sheet, AI assistant, etc.):
+      // defer to that field's own Escape handler.
+      return;
+    }
+
+    let item = this.mostRecentlyInteractedStackItem;
+    if (!item) return;
+
+    // In edit mode, Escape exits to view mode (one level of "undo open").
+    // In view mode, Escape closes the item.
+    if (item.format === 'edit' && item.type !== 'file') {
+      event.preventDefault();
+      this.operatorModeStateService.setItemFormat(item, 'isolated', {
+        request: new Deferred(),
+      });
+      return;
+    }
+    event.preventDefault();
+    this.close(item);
+  }
+
+  @action private handleToggleEdit(event: KeyboardEvent) {
+    // Ctrl+E works even when focus is in an input — that's the whole
+    // point of the shortcut: flip in/out of edit without first having
+    // to click somewhere else. Modals still own the keyboard, though.
+    if (document.body.classList.contains('has-modal')) return;
+    let item = this.mostRecentlyInteractedStackItem;
+    // Files have no edit format; nothing to toggle.
+    if (!item || item.type === 'file') return;
+    event.preventDefault();
+    let nextFormat: Format = item.format === 'edit' ? 'isolated' : 'edit';
+    this.operatorModeStateService.setItemFormat(item, nextFormat, {
+      request: new Deferred(),
+    });
+  }
+
+  // The card the user is currently working with — i.e. the one a
+  // keyboard shortcut should act on. "Last opened" alone is too coarse:
+  // open A, open B, then click edit on A → A is the active card even
+  // though B was opened more recently. Format changes count as
+  // interactions (see StackItem.markInteracted), so this picks A.
+  private get mostRecentlyInteractedStackItem(): StackItem | undefined {
+    let topItems = this.operatorModeStateService.topMostStackItems();
+    if (topItems.length === 0) return undefined;
+    return topItems.reduce((a, b) =>
+      b.lastInteractedAt > a.lastInteractedAt ? b : a,
+    );
+  }
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -779,7 +850,14 @@ export default class InteractSubmode extends Component {
       data-test-interact-submode
       as |search|
     >
-      <div class='interact-submode' style={{this.backgroundImageStyle}}>
+      <div
+        class='interact-submode'
+        style={{this.backgroundImageStyle}}
+        {{onKeyMod 'Escape' this.handleEscape}}
+        {{! Bind Ctrl+E on every platform — Mac users get Ctrl+E too,
+           because Cmd+E is taken by browsers ("Use Selection for Find"). }}
+        {{onKeyMod 'ctrl+KeyE' this.handleToggleEdit}}
+      >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'

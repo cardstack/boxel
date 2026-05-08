@@ -22,7 +22,7 @@ export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
     return ExecuteAtomicOperationsInput;
   }
 
-  requireInputFields = ['realmUrl', 'operations'];
+  requireInputFields = ['realmIdentifier', 'operations'];
 
   protected async run(
     input: BaseCommandModule.ExecuteAtomicOperationsInput,
@@ -31,7 +31,7 @@ export default class ExecuteAtomicOperationsCommand extends HostBaseCommand<
     const { ExecuteAtomicOperationsResult } = commandModule;
     const results = await this.cardService.executeAtomicOperations(
       input.operations as AtomicOperation[],
-      new URL(input.realmUrl),
+      new URL(input.realmIdentifier),
     );
     const atomicResults = results['atomic:results'];
     if (!Array.isArray(atomicResults)) {

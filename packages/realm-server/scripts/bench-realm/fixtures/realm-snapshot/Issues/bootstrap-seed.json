@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "issueId": "BOOT-1",
+      "summary": "Process brief and create project artifacts",
+      "description": "## Brief\n\n**URL:** https://test-harness.test/software-factory/Wiki/sticky-note\n**Title:** Sticky Note\n\nColorful, short-form note designed for spatial arrangement on boards and artboards.\n\n## Instructions\n\nRead the brief and create the following project artifacts:\n\n1. **Project card** — in `Projects/` with fields populated from the brief\n2. **Knowledge Articles** — in `Knowledge Articles/`, at least Brief Context + Agent Onboarding, plus more as the brief warrants\n3. **Implementation Issues** — one per entry-point card, each covering:\n   - Card definition (.gts) and any interior/support cards\n   - QUnit tests (.test.gts) for entry-point and support cards\n   - Catalog Spec (Spec/<card>.json) with example instances\n\nEach implementation issue must have:\n- `project` relationship pointing to the Project card\n- `relatedKnowledge` relationships pointing to the Knowledge Article cards\n- `blockedBy` relationships to any prior issues it depends on\n\nWhen all artifacts are created, mark this issue as done via `update_issue`.",
+      "issueType": "bootstrap",
+      "status": "done",
+      "priority": "critical",
+      "order": 0,
+      "acceptanceCriteria": "- [ ] Project card created with objective, scope, and success criteria from the brief\n- [ ] Knowledge Article for brief context created\n- [ ] Knowledge Article for agent onboarding created\n- [ ] Additional knowledge articles if the brief warrants them\n- [ ] One implementation issue per entry-point card (with tests, spec, and examples)\n- [ ] Implementation issues have project and relatedKnowledge relationships\n- [ ] Implementation issues have blockedBy relationships where appropriate\n- [ ] This bootstrap issue marked as done",
+      "createdAt": "2026-05-06T20:01:30.568Z",
+      "updatedAt": "2026-05-06T20:04:53.773Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "Issue"
+      }
+    }
+  }
+}

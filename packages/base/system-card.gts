@@ -156,7 +156,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
           .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
-            url: realmMeta.url,
+            url: realmMeta.realmIdentifier,
             iconURL: realmMeta.info.iconURL ?? undefined,
           }));
       }

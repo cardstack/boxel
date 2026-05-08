@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   find,
+  focus,
   typeIn,
   triggerKeyEvent,
   settled,
@@ -459,6 +460,277 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       assert.dom('[data-test-search-sheet]').hasClass('closed');
+    });
+
+    test('Escape closes the most recently opened stack item', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('top item is rendered before Escape');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist('Escape closed the topmost item');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the underlying item remains open');
+    });
+
+    test('Escape does not close a stack item while a modal is open', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Open the delete-confirmation modal via the card's more-options menu.
+      await click(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-more-options-button]`,
+      );
+      await click('[data-test-boxel-menu-item-text="Delete"]');
+
+      assert
+        .dom('[data-test-delete-modal-container]')
+        .exists('delete modal is open');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the card under the modal stays open');
+    });
+
+    test('Escape closes the most recently opened item when it lives in a non-rightmost stack (left-neighbor drop)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Make Pet/mango clickable in the search prompt as a recent card.
+      let operatorModeStateService = getService('operator-mode-state-service');
+      let recentCardsService = getService('recent-cards-service');
+      for (let item of operatorModeStateService.state.stacks[0]) {
+        recentCardsService.add(item.id);
+      }
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+
+      // Drop a card into a NEW LEFT-side stack: stack 0 becomes [Mango],
+      // the original stack shifts to index 1 with [Fadhlan]. Mango is
+      // now the most recently opened item, even though it sits in the
+      // leftmost (non-rightmost) stack.
+      await click('[data-test-add-card-left-stack]');
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango');
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .doesNotExist(
+          'Escape closed the leftmost item because it was opened most recently',
+        );
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('the right-side stack item remains open');
+    });
+
+    test('Escape does not close a stack item while focus is in a text input', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Opening the search sheet focuses its input.
+      await click('[data-test-open-search-field]');
+      assert.dom('[data-test-search-field]').isFocused();
+
+      // Escape from inside the input should dismiss the search sheet
+      // (its own handler) WITHOUT also closing the card beneath it.
+      await triggerKeyEvent('[data-test-search-field]', 'keydown', 'Escape');
+
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('Escape inside an input did not close the underlying card');
+    });
+
+    test('Escape targets the card the user is editing, not the last-opened card', async function (assert) {
+      // Open A in the left stack and B in the right stack — B is the
+      // most-recently-opened card. Then click edit on A. The user's
+      // most recent interaction is "start editing A", so Escape must
+      // flip A back to view, not close B.
+      await visitOperatorMode({
+        stacks: [
+          [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+          [{ id: `${testRealmURL}Pet/mango`, format: 'isolated' }],
+        ],
+      });
+
+      assert
+        .dom('[data-test-operator-mode-stack]')
+        .exists({ count: 2 }, 'two side-by-side stacks');
+
+      // Enter edit mode on A via the pencil button — this is the real
+      // user gesture, not a service-level shortcut. (The pencil only
+      // appears on top, non-buried cards, which both A and B are here.)
+      await click(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-edit-button]`,
+      );
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('A is now in edit mode');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('B is still on its stack');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('B was NOT closed — Escape did not target the last-opened');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('A flipped back to view mode — the actual recent interaction');
+    });
+
+    test('Escape on an edit-mode item exits to view mode instead of closing', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('card starts in edit mode');
+
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is still open — Escape did not close it');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Escape flipped edit mode back to isolated');
+
+      // A second Escape (now in view mode) closes the item.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('a second Escape from view mode closes the item');
+    });
+
+    test('Escape from a focused field in an edit-mode card blurs first, then exits edit, then closes', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      let fieldInput = '[data-test-field="firstName"] input';
+      await focus(fieldInput);
+      assert.dom(fieldInput).isFocused('field is focused at the start');
+
+      // Step 1: Escape from inside the field blurs it (edit mode preserved).
+      await triggerKeyEvent(fieldInput, 'keydown', 'Escape');
+      assert
+        .dom(fieldInput)
+        .isNotFocused('first Escape blurred the field but kept edit mode');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('card is still in edit mode after the field blur');
+
+      // Step 2: With nothing focused, Escape exits edit mode.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('second Escape returned the card to view mode');
+
+      // Step 3: A third Escape closes the item.
+      await triggerKeyEvent(document.body, 'keydown', 'Escape');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .doesNotExist('third Escape closed the item');
+    });
+
+    test('Ctrl+E toggles edit mode even while focus is in a field', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+
+      let fieldInput = '[data-test-field="firstName"] input';
+      await focus(fieldInput);
+      assert.dom(fieldInput).isFocused();
+
+      // Ctrl+E from inside the input flips edit→isolated without
+      // requiring the user to click out first.
+      await triggerKeyEvent(fieldInput, 'keydown', 'KeyE', { ctrlKey: true });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Ctrl+E exited edit mode despite the field being focused');
+    });
+
+    test('Ctrl+E toggles edit mode on the most recently opened item', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('card starts in isolated/view mode');
+
+      // Ctrl+E enters edit mode (bound on every platform — Mac too,
+      // because Cmd+E is reserved by browsers).
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        ctrlKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('Ctrl+E flipped the card into edit mode');
+
+      // The toggle is symmetric — pressing again returns to isolated.
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        ctrlKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Ctrl+E flipped the card back to isolated mode');
+
+      // Cmd+E (metaKey) is intentionally NOT bound — it stays free for
+      // the browser's "Use Selection for Find" shortcut on Mac.
+      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+        metaKey: true,
+      });
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+        )
+        .exists('Cmd+E (metaKey) does not toggle edit mode');
     });
 
     test('duplicate card in a stack is not allowed', async function (assert) {

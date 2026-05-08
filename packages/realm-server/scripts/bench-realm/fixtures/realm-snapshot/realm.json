@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "cs-11003-e2e-1"
+      },
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-c.png",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-crescent-lake.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

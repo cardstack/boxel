@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sequenceNumber": 3,
+      "runAt": "2026-05-06T20:15:28.931Z",
+      "status": "passed",
+      "completedAt": "2026-05-06T20:15:36.926Z",
+      "durationMs": 7991,
+      "fileResults": [
+        {
+          "file": "sticky-note.gts",
+          "violations": []
+        },
+        {
+          "file": "sticky-note.test.gts",
+          "violations": []
+        }
+      ]
+    },
+    "relationships": {
+      "issue": {
+        "links": {
+          "self": "../Issues/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/lint-result",
+        "name": "LintResult"
+      }
+    }
+  }
+}

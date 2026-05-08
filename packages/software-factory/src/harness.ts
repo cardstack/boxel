@@ -7,14 +7,9 @@ export {
   startFactoryRealmServer,
   startFactorySupportServices,
   type CombinedRealmTemplateResult,
-} from './harness/api';
-
-export type {
-  CombinedRealmFixture,
-  FactoryRealmOptions,
-  FactoryRealmTemplate,
-  FactoryTestContext,
-  StartedFactoryRealm,
-} from './harness/shared';
-
-export type { AdditionalRealm } from './harness/isolated-realm-stack';
+  type FactoryRealmOptions,
+  type FactoryRealmTemplate,
+  type FactoryTestContext,
+  type RealmConfig,
+  type StartedFactoryRealm,
+} from '@cardstack/realm-test-harness';

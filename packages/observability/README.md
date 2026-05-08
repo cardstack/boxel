@@ -35,12 +35,19 @@ grafanactl/
 provisioning/          # mounted into Grafana at /etc/grafana/provisioning/
   datasources/         # data sources (Loki, Postgres, CloudWatch, Prometheus)
   alerting/            # alert rule groups, contact points, notification policies
+  local-only/          # local-dev overrides — bind-mounted file-by-file over
+                       # `datasources/`. apply-datasources.sh ignores this dir.
 alloy/
   config.alloy         # local log scraper config — discovers Docker containers
                        # and ships their stdout into Loki
 loki/
   config.yaml          # local Loki config (single-node, filesystem, accepts
                        # historical Docker logs)
+prometheus/
+  prometheus.yml       # local Prometheus config — scrapes the dev synapse
+                       # container's /metrics endpoint so the vendored Synapse
+                       # dashboard works locally. Staging/prod use AMP via
+                       # sigV4 and ignore this service.
 scripts/
   apply.sh             # ./scripts/apply.sh --env <local|staging|production>
   apply-datasources.sh # internal — pushes provisioning/datasources/* via HTTP API
@@ -55,6 +62,7 @@ scripts/
 templates/
   env-vars.env.example
 docker-compose.yml     # local Grafana 12.4.3 + Loki 3.4.4 + Alloy 1.10.0
+                       #               + Prometheus 3.0.0 (scrapes synapse)
 ```
 
 ## Local workflow
@@ -72,11 +80,18 @@ brew install --formula grafanactl
 #   sudo install -m 0755 /tmp/grafanactl /usr/local/bin/grafanactl
 # (swap `Linux_x86_64` for `Linux_arm64` on aarch64.)
 
-# Bring up local Grafana + Loki + Alloy (log scraper)
+# Bring up local Grafana + Loki + Alloy (log scraper) + Prometheus
 docker compose up -d
-# Grafana: http://localhost:3001  (admin / admin)
-# Loki:    http://localhost:3100
-# Alloy:   http://localhost:12345  (target / pipeline debug UI)
+# Grafana:    http://localhost:3001    (admin / admin)
+# Loki:       http://localhost:3100
+# Alloy:      http://localhost:12345   (target / pipeline debug UI)
+# Prometheus: http://localhost:9090    (Synapse scrape targets)
+#
+# The Prometheus container joins the `boxel` Docker network so it can
+# reach `boxel-synapse:9001`. That network is created as a side-effect
+# of `mise run start-synapse`. If you bring up the observability stack
+# BEFORE starting synapse for the first time, run
+# `docker network create boxel` first.
 
 # Verify connectivity
 ./scripts/check.sh --env local

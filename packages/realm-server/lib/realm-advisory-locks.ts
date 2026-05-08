@@ -1,5 +1,10 @@
 import { createHash } from 'crypto';
-import { logger, param, type DBAdapter } from '@cardstack/runtime-common';
+import {
+  logger,
+  param,
+  type DBAdapter,
+  type Querier,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 
 const log = logger('realm-server:advisory-locks');
@@ -36,29 +41,37 @@ export function hashRealmUrlForAdvisoryLock(url: string): string {
 // through in-memory caches on the realm-server) without acquiring it.
 // Read-heavy paths should never call this helper.
 //
-// Note on the enclosing transaction: `fn` runs inside BEGIN/COMMIT here
-// only so the advisory lock is correctly scoped. Queries that `fn` issues
-// through the shared `dbAdapter` (not the pinned `queryFn`) go via
-// separate pool connections and are NOT part of this transaction — that's
-// unchanged from the session-scoped version. The realm-server's mutation
-// handlers (Phase 1) are not yet transactional across FS + DB; making
-// them so is CS-10898's territory. The xact-lock pattern here buys correct
-// lock release without requiring the handler bodies themselves to be
-// transactional.
+// Note on the enclosing transaction: `fn` runs inside BEGIN/COMMIT here so
+// the advisory lock is correctly scoped, AND so any DELETEs `fn` runs via
+// the pinned `txQuerier` argument share that transaction's atomicity. CS-10898
+// (this PR) plumbed the pinned querier through the realm-destruction helpers
+// (`removeRealmDatabaseArtifacts`, `removeRealmPermissions`,
+// `deleteRegistryRowByUrl`, `deletePublishedRowsBySourceUrl`,
+// `cancelRunningJobsInConcurrencyGroup`); when callers pass `txQuerier` to
+// those helpers, all their writes commit or roll back together with the
+// advisory lock's own transaction. Queries `fn` issues through the shared
+// `dbAdapter` still go via separate pool connections and are NOT part of
+// this transaction — that's the pre-CS-10898 behavior preserved as the
+// default for callers that don't opt in.
 //
-// Pool-exhaustion caveat: the callback continues to perform DB work via
-// the shared `dbAdapter`, each call of which checks out its own pool
-// client. `withRealmWriteLock` pins one extra client for the lock-holder
-// transaction. Under N concurrent same-URL writers, N-1 block on the
-// advisory lock before doing anything — so this helper does not itself
-// amplify pool pressure. Under N concurrent different-URL writers, each
-// pins one client; if the pool ceiling is less than the realistic write
-// concurrency, callbacks that need additional pool clients could deadlock
-// waiting on the pool. The full fix is threading the pinned `queryFn`
-// through every helper so a single connection serves the whole critical
-// section; that's a larger refactor deferred alongside CS-10898. For
-// current scope (low realistic write concurrency, pool size >= concurrent
-// writers + headroom) this is acceptable.
+// In the SQLite branch (test environments only) `txQuerier` is `undefined`,
+// so helpers fall back to the shared `dbAdapter`. SQLite has no cross-
+// connection concurrency, so neither the lock nor the tx semantics matter
+// there.
+//
+// Pool-exhaustion caveat: when the callback opts into the pinned querier
+// for all of its DB work, only one client is checked out for the entire
+// critical section — both the lock and the destruction queries share that
+// connection. If the callback also issues queries through the shared
+// `dbAdapter` (e.g. existence-check SELECTs that don't need to be inside
+// the tx), each of those checks out an additional pool client briefly.
+// Under N concurrent same-URL writers, N-1 block on the advisory lock
+// before doing anything — so this helper does not itself amplify pool
+// pressure. Under N concurrent different-URL writers, each pins one
+// client; if the pool ceiling is less than realistic write concurrency,
+// callbacks that need additional pool clients could deadlock waiting on
+// the pool. For current scope (low realistic write concurrency, pool size
+// >= concurrent writers + headroom) this is acceptable.
 //
 // Deadlock note: callers should never acquire a second write lock for a
 // different URL while holding one — that's the only way a cycle could
@@ -66,14 +79,14 @@ export function hashRealmUrlForAdvisoryLock(url: string): string {
 export async function withRealmWriteLock<T>(
   dbAdapter: DBAdapter,
   realmUrl: string,
-  fn: () => Promise<T>,
+  fn: (txQuerier: Querier | undefined) => Promise<T>,
 ): Promise<T> {
   // Advisory locks are Postgres-specific. In test environments backed by
   // SQLite (no cross-connection concurrency to worry about anyway) we
   // short-circuit and run fn directly. The PgAdapter branch is the one
   // that does real work.
   if (dbAdapter.kind !== 'pg') {
-    return await fn();
+    return await fn(undefined);
   }
   const pg = dbAdapter as unknown as PgAdapter;
   const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
@@ -85,7 +98,7 @@ export async function withRealmWriteLock<T>(
         param(lockKey),
         `::bigint)`,
       ]);
-      const result = await fn();
+      const result = await fn(queryFn);
       await queryFn(['COMMIT']);
       return result;
     } catch (err: unknown) {
