@@ -10,6 +10,7 @@
 
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 
 const ALIASES = [
@@ -31,7 +32,7 @@ const ALIASES = [
   ],
 ];
 
-const ROOT = new URL('../contents', import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL('../contents', import.meta.url));
 
 if (!existsSync(ROOT)) {
   console.log(`[rewrite-legacy-aliases] ${ROOT} not found, skipping.`);
