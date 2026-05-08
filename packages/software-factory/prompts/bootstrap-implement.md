@@ -45,7 +45,7 @@ adoptsFrom: the darkfactory `Project` type.
 
 ### 2. Issue Tracker Board
 
-Create one IssueTrackerBoard card at `Boards/<slug>.json`.
+Create one IssueTracker card at `Boards/<slug>.json`.
 
 Required attributes:
 
@@ -56,12 +56,12 @@ Relationships:
 
 - `project` → `../Projects/<slug>`
 
-adoptsFrom: the darkfactory `IssueTrackerBoard` type.
+adoptsFrom: the darkfactory `IssueTracker` type.
 
-The Project card and the IssueTrackerBoard card must be linked both ways:
+The Project card and the IssueTracker card must be linked both ways:
 
 - Project `board` → the board card
-- IssueTrackerBoard `project` → the project card
+- IssueTracker `project` → the project card
 
 ### 3. Knowledge Articles
 
@@ -139,11 +139,11 @@ dependency cards are implemented before cards that consume them.
 1. Use `read_file` to read the brief at the URL above (if it is in a realm) or use the brief content in the description
 2. Derive the slug and project code from the brief title
 3. Create the Project card
-4. Create the IssueTrackerBoard card and link it to the Project card
+4. Create the IssueTracker card and link it to the Project card
 5. Create Knowledge Article cards (at least brief context + agent onboarding)
 6. Identify entry-point cards from the brief — these are the top-level cards users interact with
 7. Create one implementation Issue per entry-point card, with all relationships wired
 8. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
 
-Create artifacts in the order listed — Project first, then IssueTrackerBoard, then Knowledge Articles,
+Create artifacts in the order listed — Project first, then IssueTracker, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.

@@ -2,7 +2,7 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "IssueTrackerBoard",
+        "name": "IssueTracker",
         "module": "/software-factory/issue-tracker"
       }
     },

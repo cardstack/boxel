@@ -73,7 +73,7 @@ function makeBoard(): Record<string, Record<string, unknown>> {
         attributes: { boardTitle: 'Test Board' },
         relationships: { project: { links: { self: projectId } } },
         meta: {
-          adoptsFrom: { module: issueTrackerModule, name: 'IssueTrackerBoard' },
+          adoptsFrom: { module: issueTrackerModule, name: 'IssueTracker' },
         },
       },
     },

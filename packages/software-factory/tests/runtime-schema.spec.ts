@@ -107,7 +107,7 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
   }
 });
 
-test('fetches IssueTrackerBoard schema', async ({ realm }) => {
+test('fetches IssueTracker schema', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
   let sourceRealm = ensureTrailingSlash(
     new URL('software-factory/', realm.realmServerURL).href,
@@ -127,7 +127,7 @@ test('fetches IssueTrackerBoard schema', async ({ realm }) => {
       sourceRealm,
       {
         module: rri(`${sourceRealm}issue-tracker`),
-        name: 'IssueTrackerBoard',
+        name: 'IssueTracker',
       },
     );
 

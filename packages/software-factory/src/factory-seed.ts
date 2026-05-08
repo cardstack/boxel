@@ -4,7 +4,7 @@
  * Writes a single "bootstrap" issue to the local factory workspace that
  * the agent picks up as its first task once the orchestrator syncs the
  * workspace into the target realm. The agent reads the brief, creates
- * Project, IssueTrackerBoard, KnowledgeArticle, and implementation Issue
+ * Project, IssueTracker, KnowledgeArticle, and implementation Issue
  * cards, then marks the seed issue as done.
  */
 
@@ -142,7 +142,7 @@ function buildSeedIssueDocument(
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
-    '- [ ] IssueTrackerBoard card created and linked to the Project card',
+    '- [ ] IssueTracker card created and linked to the Project card',
     '- [ ] Knowledge Article for brief context created',
     '- [ ] Knowledge Article for agent onboarding created',
     '- [ ] Additional knowledge articles if the brief warrants them',

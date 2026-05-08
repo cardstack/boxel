@@ -11,7 +11,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import {
   Issue as _Issue,
   Project as _Project,
-  IssueTrackerBoard as _Board,
+  IssueTracker as _Board,
 } from './issue-tracker';
 export { AgentProfile } from './agent-profile';
 export { Comment } from './comment';
@@ -21,7 +21,7 @@ export class Issue extends _Issue {}
 
 export class Project extends _Project {}
 
-export class IssueTrackerBoard extends _Board {}
+export class IssueTracker extends _Board {}
 
 export class DarkFactory extends CardDef {
   static displayName = 'Dark Factory';

@@ -62,12 +62,6 @@ const issueCodeRef: ResolvedCodeRef = {
   name: 'Issue',
 };
 
-// const boardCodeRef: ResolvedCodeRef = {
-//   // @ts-expect-error this is not a CJS file, import.meta is allowed
-//   module: new URL('./issue-tracker', import.meta.url).href,
-//   name: 'IssueTrackerBoard',
-// };
-
 // ── Issue ──────────────────────────────────────────────────────────────────
 type IssueStatusProject = {
   issueStatusOptions?: IssueOptionField[];
@@ -1053,9 +1047,9 @@ export class Project extends CardDef {
   };
 }
 
-// ── IssueTrackerBoardIsolated ──────────────────────────────────────────────
+// ── IssueTrackerIsolated ──────────────────────────────────────────────
 
-class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
+class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   get columns(): KanbanColumnConfig[] {
     return buildColumnsFromStatusOptions(
       getProjectIssueStatusOptions(this.args.model?.project),
@@ -1360,21 +1354,21 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
   </template>
 }
 
-// ── IssueTrackerBoard ──────────────────────────────────────────────────────
+// ── IssueTracker ──────────────────────────────────────────────────────
 
-export class IssueTrackerBoard extends KanbanBoard {
+export class IssueTracker extends KanbanBoard {
   static displayName = 'Issue Tracker Board';
 
   @field project = linksTo(() => Project);
 
   @field cards = linksToMany(() => Issue, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return this.project?.issues;
     },
   });
 
   @field columns = containsMany(KanbanColumnField, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return buildColumnsFromStatusOptions(
         getProjectIssueStatusOptions(this.project),
       );
@@ -1384,14 +1378,14 @@ export class IssueTrackerBoard extends KanbanBoard {
   @field placements = containsMany(KanbanBoardPlacement);
 
   @field cardTitle = contains(StringField, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
         : (this.boardTitle ?? this.project?.cardTitle ?? 'Issue Tracker Board');
     },
   });
 
-  static edit = class Edit extends Component<typeof IssueTrackerBoard> {
+  static edit = class Edit extends Component<typeof IssueTracker> {
     <template>
       <div class='board-edit'>
         <FieldContainer @label='Project' @vertical={{true}}>
@@ -1420,5 +1414,5 @@ export class IssueTrackerBoard extends KanbanBoard {
     </template>
   };
 
-  static isolated = IssueTrackerBoardIsolated;
+  static isolated = IssueTrackerIsolated;
 }
