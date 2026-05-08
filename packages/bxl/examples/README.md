@@ -33,11 +33,20 @@ Plus a browser harness:
 - `browser.html`     — minimal v0.1 demo that loads the min bundle and runs
                        one compile + eval round-trip.
 
+And a package-level formula bundle export:
+
+- `@cardstack/bxl/examples` — source-level bundles extracted from the
+  `middle-wolverine` and `prudent-octopus` Boxel realms. These preserve
+  the realm business formulas as runnable data: airline profitability,
+  acoustic resonance/Bessel screening, and insurance tracking formulas
+  covering financial, statistical, and engineering lazy FormulaJS helpers.
+
 ## Running
 
 ```sh
 tsx examples/bxl-150.ts
 tsx examples/formula.ts
+node scripts/run-ts-entry.mjs tests/unit/bxl-realm-formula-bundles-cli.ts
 ```
 
 Each script prints a pass/fail summary and exits non-zero on failure.

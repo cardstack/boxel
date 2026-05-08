@@ -184,6 +184,12 @@ When workers are available, it:
 
 When workers are unavailable, it falls back to a local async wrapper.
 
+The async path also auto-loads lazy FormulaJS extension libraries only when a
+definition references them. This covers statistical distributions/tests,
+Bessel functions, financial formulas, and the larger engineering helpers.
+Synchronous browser/runtime APIs keep the eager formula core unless those lazy
+libraries are explicitly registered.
+
 ```ts
 import { prepareBoxelRuntimeAsync } from 'bxl';
 

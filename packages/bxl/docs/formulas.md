@@ -34,6 +34,25 @@ communicating *intent* to the reader:
 | `ISBLANK`   | "This is Excel. I could paste it into a cell."   |
 | `present`   | "This is BXL-native. Not portable to Excel."     |
 
+## Lazy FormulaJS extensions
+
+Most formula helpers are eager and available to both sync and async
+evaluators. Large or specialized FormulaJS families are split into lazy
+extension libraries so Boxel only loads them when an expression actually
+calls one of their functions.
+
+| Library | Examples | Runtime behavior |
+| ------- | -------- | ---------------- |
+| `formula-statistical` | `NORM_DIST`, `T_TEST`, `BETA_INV`, `POISSON_DIST` | Loaded by async runtimes when referenced. Dotted Excel names such as `NORM.DIST` are accepted in readable syntax and rewritten to underscores. |
+| `formula-bessel` | `BESSELI`, `BESSELJ`, `BESSELK`, `BESSELY` | Loaded by async runtimes when referenced. |
+| `formula-engineering` | `BIN2DEC`, `BITAND`, `COMPLEX`, `IM*`, `ERF`, `CONVERT`, `UNICHAR` | Loaded by async runtimes when referenced. `ROMAN` and `ARABIC` remain eager. |
+| `formula-financial` | `PMT`, `NPV`, `IRR`, `XIRR`, `FV`, `PV`, `RATE`, `COUPDAYS` | Loaded by async runtimes when referenced; shares the `formula-extras` bundle with lazy engineering. |
+
+Use `runNativeJqAsync`, `prepareNativeJqAsync`, or
+`prepareBoxelRuntimeAsync` when expressions may call a lazy helper. The sync
+APIs (`evaluateBxl`, `runNativeJq`) use the eager core unless the caller has
+explicitly registered the lazy library.
+
 ## Built-in helper inventory (as of v0.1.0-dev)
 
 ### Presence & emptiness
@@ -111,7 +130,9 @@ Email | contains("@")          -- lowercase jq pipe form
 | `add`         | lowercase | jq     | Sum of array.                       |
 
 For the full catalog, see the in-repo registry
-(`src/bxl/registry/index.ts`) — it is the authoritative source.
+(`src/bxl/registry/index.ts`) plus the lazy manifests in
+`src/bxl/bridge/formula-*-manifest.ts` — those files are the authoritative
+source.
 
 ## Adding new helpers
 
@@ -119,11 +140,18 @@ When you want a helper that doesn't exist:
 
 1. **Check Excel first.** Run `EXCELFORMULA()` in a spreadsheet. If Excel
    has it under that name, add it UPPERCASE to BXL with matching semantics.
-2. **If Excel doesn't have it,** pick a lowercase name. Add it to
+2. **If it is small and broadly useful,** add it to the eager formula bridge
+   in `src/bxl/bridge/formula-contrib-native.ts`.
+3. **If it pulls a heavier FormulaJS dependency or belongs to a specialized
+   family,** add it as a lazy extension instead: define the manifest in
+   `src/bxl/bridge/formula-*-manifest.ts`, implement the native bridge in
+   `src/bxl/bridge/formula-*-native.ts`, expose it from `src/bxl/registry/`,
+   and wire auto-loading through `src/bxl/bridge/lazy-formulas.ts`.
+4. **If Excel doesn't have it,** pick a lowercase name. Add it to
    `CASE_INSENSITIVE_JQ_FUNCTIONS` and define it in
    `src/bxl/bridge/formula-contrib-jq.ts` (jq source) or
    `src/bxl/bridge/formula-contrib-native.ts` (JS impl).
-3. **Never invent a new UPPERCASE name.** If you catch yourself doing
+5. **Never invent a new UPPERCASE name.** If you catch yourself doing
    this, you're probably missing an existing Excel function, or you
    should be using lowercase.
 

@@ -63,7 +63,7 @@ If you only remember ten things about BXL, remember these. Every other section e
 
 BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and positional selectors compile to the same AST shape the jq evaluator already understands.
 
-> **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins.
+> **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins. Async runtimes (`runNativeJqAsync`, `prepareNativeJqAsync`, `prepareBoxelRuntimeAsync`) also inspect expressions and lazy-load large FormulaJS extension libraries only when referenced. Sync evaluators use the eager formula core unless a lazy library is explicitly registered.
 
 ### Labels, rows, and implicit iteration
 
@@ -160,7 +160,7 @@ BXL absorbs five Excel-specific idioms so a formula from a spreadsheet works ver
 | `&` string concat | Rewrite to `((a\|tostring) + (b\|tostring))` — Excel-style coercion. | `"Invoice-" & "Invoice Number"` |
 | Unknown characters | Caught by the linter as `untokenizable-character`; never crashes solidify. | — |
 
-> **Paste test:** 98 of 101 sampled formulajs test cases (across math/trig, text, logical, statistical, engineering, information, date/time) work unchanged. Gaps: variadic `AND` / `OR` / `XOR`, `GCD` / `LCM` / `MODE` not yet implemented, `DEC2HEX` returns lowercase.
+> **Paste test:** Sampled FormulaJS cases across math/trig, text, logical, statistical, engineering, information, date/time, and financial formulas work unchanged in the async compatibility runtime. Known paste gap: `MODE` is not implemented. `AND` / `OR` / `XOR` use array-style arguments, and `DEC2HEX` returns lowercase.
 
 ## Interesting Patterns
 
@@ -904,6 +904,12 @@ Helpers are **scoped to the expression**. There is no module system, and that's 
 | `RANDBETWEEN(lo, hi)` | Random integer in range | `RANDBETWEEN(1, 100)` |
 | `SUMPRODUCT(arrays)` | Sum of element-wise products | `SUMPRODUCT([[1,2],[3,4]])` → `11` |
 | `SUMSQ(arr)` | Sum of squares | `SUMSQ([3, 4])` → `25` |
+| `MULTINOMIAL(arr)` | Multinomial coefficient | `MULTINOMIAL([2, 3, 4])` |
+| `SERIESSUM(x, n, m, coeffs)` | Power series sum | `SERIESSUM(2, 1, 1, [1,2,3])` |
+| `SQRTPI(n)` | Square root of `n * PI` | `SQRTPI(2)` |
+| `SUMX2MY2(x, y)` | Sum of `x^2 - y^2` pairs | `SUMX2MY2([1,2], [3,4])` |
+| `SUMX2PY2(x, y)` | Sum of `x^2 + y^2` pairs | `SUMX2PY2([1,2], [3,4])` |
+| `SUMXMY2(x, y)` | Sum of squared differences | `SUMXMY2([1,2], [3,4])` |
 
 ## Statistics
 
@@ -947,6 +953,18 @@ Helpers are **scoped to the expression**. There is no module system, and that's 
 | `PEARSON(x, y)` | Pearson correlation (alias for CORREL) | `PEARSON([1,2,3], [2,4,6])` → `1` |
 
 > `SUM` and `AVERAGE` automatically skip nulls and non-numeric values, just like their spreadsheet counterparts.
+
+### Lazy Distribution & Test Functions
+
+FormulaJS statistical distributions, inverse distributions, confidence intervals, and tests live in the lazy `formula-statistical` extension. Async runtimes load it only when an expression references one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted Excel dotted names such as `NORM.DIST(...)` and `T.TEST(...)` are accepted in readable syntax and rewritten to the underscore form.
+
+| Family | Functions |
+| --- | --- |
+| Beta / binomial | `BETA_DIST`, `BETA_INV`, `BINOM_DIST`, `BINOM_DIST_RANGE`, `BINOM_INV`, `NEGBINOM_DIST` |
+| Chi-square / F / T tests | `CHISQ_DIST`, `CHISQ_DIST_RT`, `CHISQ_INV`, `CHISQ_INV_RT`, `CHISQ_TEST`, `F_DIST`, `F_DIST_RT`, `F_INV`, `F_INV_RT`, `F_TEST`, `T_DIST`, `T_DIST_2T`, `T_DIST_RT`, `T_INV`, `T_INV_2T`, `T_TEST` |
+| Normal / lognormal / exponential / Poisson / Weibull | `NORM_DIST`, `NORM_INV`, `NORM_S_DIST`, `NORM_S_INV`, `LOGNORM_DIST`, `LOGNORM_INV`, `EXPON_DIST`, `POISSON_DIST`, `WEIBULL_DIST` |
+| Gamma / hypergeometric | `GAMMA`, `GAMMA_DIST`, `GAMMA_INV`, `GAMMALN`, `GAMMALN_PRECISE`, `HYPGEOM_DIST` |
+| Confidence / standardization | `CONFIDENCE_NORM`, `CONFIDENCE_T`, `GAUSS`, `PHI`, `STANDARDIZE`, `Z_TEST` |
 
 ## Conditional Aggregation
 
@@ -1026,7 +1044,7 @@ INDEX(.names, MATCH("target", .ids, 0))
 | `FIND(find, within)` | Case-sensitive position (1-based) | `FIND("lo", "Hello")` → `4` |
 | `SEARCH(find, within)` | Case-insensitive position | `SEARCH("LO", "Hello")` → `4` |
 | `EXACT(a, b)` | Case-sensitive equality | `EXACT("Hi", "hi")` → `false` |
-| `CHAR(n)` | Code point to character (alias: `UNICHAR`) | `CHAR(65)` → `"A"` |
+| `CHAR(n)` | Code point to character (`UNICHAR` is the lazy FormulaJS spelling) | `CHAR(65)` → `"A"` |
 | `CODE(text)` | First char to code point (alias: `UNICODE`) | `CODE("A")` → `65` |
 | `CLEAN(text)` | Remove control chars | Strips 0x00-0x1F |
 | `VALUE(text)` | Parse string as number | `VALUE("42")` → `42` |
@@ -1153,6 +1171,8 @@ _Date difference in days_
 
 ## Financial
 
+> Financial functions are a lazy FormulaJS extension. Async runtimes (`runNativeJqAsync`, `prepareNativeJqAsync`, `prepareBoxelRuntimeAsync`) auto-load `formula-financial` when an expression references one of these functions. Sync `evaluateBxl` / `runNativeJq` does not load them unless the lazy library has been explicitly registered.
+
 ### Time Value of Money
 
 | Function | Description |
@@ -1219,6 +1239,8 @@ NPV(0.08, [-40000, 8000, 9200, 10000, 12000])
 
 ## Engineering
 
+> Most engineering helpers below are lazy FormulaJS extensions: base conversion, bitwise operations, complex numbers, `ERF` / `ERFC`, `CONVERT`, and `UNICHAR`. `ROMAN` and `ARABIC` remain eager formula helpers. Bessel functions are lazy too, but live in the smaller `formula-bessel` extension rather than the shared engineering/financial bundle.
+
 ### Base Conversion
 
 | Function | Description |
@@ -1265,8 +1287,15 @@ NPV(0.08, [-40000, 8000, 9200, 10000, 12000])
 | `DELTA(a, b)` | 1 if equal, 0 otherwise |
 | `GESTEP(n, step)` | 1 if ≥ step, 0 otherwise |
 | `IMCOS(z)` | Complex cosine |
+| `IMCOSH(z)` | Complex hyperbolic cosine |
+| `IMCOT(z)` | Complex cotangent |
+| `IMCSC(z)` | Complex cosecant |
+| `IMCSCH(z)` | Complex hyperbolic cosecant |
 | `IMSIN(z)` | Complex sine |
+| `IMSINH(z)` | Complex hyperbolic sine |
 | `IMTAN(z)` | Complex tangent |
+| `IMSEC(z)` | Complex secant |
+| `IMSECH(z)` | Complex hyperbolic secant |
 | `IMEXP(z)` | Complex exponential |
 | `IMLN(z)` | Complex natural log |
 | `IMLOG10(z)` | Complex log base 10 |
@@ -1283,6 +1312,7 @@ NPV(0.08, [-40000, 8000, 9200, 10000, 12000])
 | `BESSELK(x, n)` | Modified Bessel function Kn (lazy async) |
 | `BESSELY(x, n)` | Bessel function Yn (lazy async) |
 | `CONVERT(n, from, to)` | Unit conversion (120+ units, SI prefixes) |
+| `UNICHAR(n)` | Code point to character (lazy FormulaJS spelling; `CHAR` is eager) |
 
 _CONVERT examples_
 
@@ -1571,7 +1601,7 @@ IF(ISERROR(.lookup), "fallback", .lookup)
 
 ## Excel Function Coverage
 
-BXL implements 230+ functions from the Excel/Google Sheets function set, plus 16 BXL-only extensions (the `_BY` row-object variants). This section maps coverage against the [formulajs](https://formulajs.info/) library.
+BXL implements 300+ functions from the Excel/Google Sheets function set, plus 16 BXL-only extensions (the `_BY` row-object variants). This section maps coverage against the [FormulaJS](https://formulajs.info/) library.
 
 ### Available via jq (use lowercase)
 
@@ -1593,25 +1623,27 @@ These Excel functions are not implemented as uppercase helpers because jq alread
 
 > Range-based multi-criteria functions (`SUMIFS`, `COUNTIFS`, `AVERAGEIFS`) are not implemented as uppercase helpers because BXL's `_BY` variants (`SUMIFS_BY`, `COUNTIFS_BY`, `AVERAGEIFS_BY`) are more natural for JSON data. Use those instead.
 
-### Won't Add
+### Lazy Extensions and Exclusions
 
-Functions that don't apply to BXL's JSON context, require a spreadsheet grid model, or are too niche for document formulas.
+Some FormulaJS families are implemented but intentionally lazy because they pull heavier optional dependencies or are rarely needed. Others still do not apply to BXL's JSON context or require a spreadsheet grid model.
 
-| Category | Functions | Reason |
+| Category | Functions | Status |
 | --- | --- | --- |
+| Lazy statistical distributions and tests | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and their `.INV`, `.RT`, `.TEST` variants | Loaded only by async runtimes when an expression calls one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted dotted names are accepted in readable syntax. |
+| Lazy financial formulas | `PMT` `NPV` `IRR` `XIRR` `FV` `PV` `RATE` `COUPDAYS` `TBILLPRICE` and the rest of the Financial section | Loaded by async runtimes as `formula-financial`. Shares the `formula-extras` bundle with lazy engineering. |
+| Lazy engineering formulas | `BIN2DEC` `BITAND` `COMPLEX` `IM*` `ERF` `ERFC` `CONVERT` `UNICHAR` and related helpers | Loaded by async runtimes as `formula-engineering`. `ROMAN` and `ARABIC` remain eager. |
+| Lazy Bessel functions | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Loaded by async runtimes as `formula-bessel` when an expression calls one of these specialized engineering functions. |
 | Database | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP` | Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON. |
 | Grid reference | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE` | Require a cell grid model. No equivalent concept in JSON expressions. |
 | Matrix | `MMULT` `MUNIT` | Matrix multiplication and identity. Use jq array operations or dedicated math libraries. |
-| Lazy statistical distributions | `BETA.DIST` `BINOM.DIST` `CHISQ.DIST` `F.DIST` `GAMMA.DIST` `NORM.DIST` `POISSON.DIST` `T.DIST` `WEIBULL.DIST` and their `.INV`, `.RT`, `.TEST` variants | Loaded only by async runtimes when an expression calls one of these functions. Canonical BXL uses underscore names such as `NORM_DIST(...)`; pasted dotted names are accepted in readable syntax. |
-| Lazy Bessel functions | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Loaded only by async runtimes when an expression calls one of these specialized engineering functions. |
 | Regression | `LINEST` `LOGEST` `GROWTH` `TREND` | Array-returning regression functions. Complex output shapes don't map well to single computed fields. |
-| Other niche | `SERIESSUM` `MULTINOMIAL` `SQRTPI` `SUMX2MY2` `SUMX2PY2` `SUMXMY2` | Specialized math. Expressible via jq pipelines. |
 
 ### Coverage Summary
 
 | Status | Count | Notes |
 | --- | --- | --- |
-| Implemented | 230+ | All targeted Excel-compatible formula functions |
+| Implemented | 300+ | All targeted Excel-compatible formula functions; large FormulaJS extension families load lazily in async runtimes |
+| Lazy extension libraries | 4 | `formula-statistical`, `formula-bessel`, `formula-engineering`, `formula-financial` |
 | BXL-only extensions | 16 | `_BY` row-object variants, `COL`, `ERROR_TYPE` |
 | Available via jq | 23 | Trig, exp/log, sort, unique, transpose, now (use lowercase) |
 | Won't add | ~30 | Database, grid-dependent, regression arrays |

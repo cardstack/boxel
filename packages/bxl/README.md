@@ -56,7 +56,7 @@ If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, 
 npm install @cardstack/bxl
 ```
 
-Requires Node `>=18.17`. Zero runtime dependencies in the default bundle; the linter-only bundle strips formula helpers for editor tooling.
+Requires Node `>=18.17`. The default entry keeps heavyweight Formula.js dependencies in lazy chunks; the linter-only bundle strips formula helpers for editor tooling.
 
 ---
 
@@ -282,14 +282,14 @@ Credit and attribution below; pick whichever section describes the language you 
 
 ### 1 · Excel · paste-compatible where it matters
 
-The "XL" in BXL is earned. 300+ Excel helpers — sourced from [Formula.js](https://github.com/formulajs/formulajs) (MIT) and wired into the jq runtime as native functions — ship with matching Microsoft Excel semantics. Paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is the bare `.` (a lone dot, same as jq) instead of `A1`; columns are field names instead of column letters.
+The "XL" in BXL is earned. 300+ Excel helpers — sourced from [Formula.js](https://github.com/formulajs/formulajs) (MIT) and wired into the jq runtime as native functions — ship with matching Microsoft Excel semantics. Paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is the bare `.` (a lone dot, same as jq) instead of `A1`; columns are field names instead of column letters. Larger FormulaJS families, including statistical distributions, Bessel functions, financial formulas, and engineering helpers, lazy-load in async runtimes only when an expression references them.
 
 ```
 Excel:  =ROUND(B2 * C2 / 100, 2)
 BXL:    ROUND(Subtotal * "Tax Rate" / 100, 2)
 ```
 
-BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`), most statistical distributions, and Bessel / regression array functions — they don't translate onto JSON. Everything that does translate is in.
+BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`) and regression array functions that don't translate cleanly onto JSON. Everything that does translate is either eager or available as a lazy async extension.
 
 ### 2 · jq · every valid jq is valid BXL
 
@@ -414,7 +414,7 @@ BXL:      SUM("Line Item"[* ."Taxable"]."Line Total")
 
 The differences, honestly:
 
-- **JSONata** has its own evaluator, its own path grammar, and its own function library. BXL has jq underneath and Formula.js wired in, which means `VLOOKUP`, `XIRR`, `ROMAN`, and 300+ other Excel helpers work out of the box with Excel semantics.
+- **JSONata** has its own evaluator, its own path grammar, and its own function library. BXL has jq underneath and Formula.js wired in, which means `VLOOKUP`, `XIRR`, `ROMAN`, and 300+ other Excel helpers use Excel semantics; heavier FormulaJS families auto-load on async runtime paths.
 - **JSONata** uses raw key paths (`lineItems.lineTotal`); BXL resolves quoted display-name labels (`"Line Item"."Line Total"`) against a schema.
 - **JSONata** doesn't accept pasted Excel formulas; BXL does.
 
@@ -518,10 +518,10 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 
 | Profile | Intent | Typical use | What the subset protects |
 | --- | --- | --- | --- |
-| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers. |
-| `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic, fail-closed, and cheap to run. |
-| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms and runtime-only helpers. |
-| `derive` | Headless write/index-time computation | `computedVia`, denormalized fields, search facets | Allows record-local Excel/jq computation, including aggregation, while rejecting request context and volatile runtime behavior. |
+| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers, including lazy FormulaJS extensions on async runtime paths. |
+| `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
+| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, and non-lowerable FormulaJS calls. |
+| `derive` | Headless write/index-time computation | `computedVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
 `computedVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata.
 
@@ -565,7 +565,7 @@ This is how BXL avoids becoming "one language that does too much." The language 
 BXL is a thin, opinionated layer on proven foundations.
 
 - **[jq-tools](https://github.com/alexxander/jq-tools)** (MIT) — the complete jq interpreter in TypeScript. Lives in `src/jqtools/` — tokenizer, parser, evaluator, filter registry. We've added deterministic ordering and a budget-aware runtime state.
-- **[Formula.js](https://github.com/formulajs/formulajs)** (MIT) — Excel formulas in JavaScript. Curated subset in `src/formulajs/`, narrowed to the 300+ helpers that make sense on JSON (we dropped cell-grid, distribution, regression, and Bessel families — see `docs/formulas.md`).
+- **[Formula.js](https://github.com/formulajs/formulajs)** (MIT) — Excel formulas in JavaScript. Curated subset in `src/formulajs/`, narrowed to the 300+ helpers that make sense on JSON. Cell-grid and regression array families stay out; statistical, Bessel, financial, and heavier engineering families are lazy async extensions (see `docs/formulas.md`).
 
 Our own work — the readable-syntax compiler, linter, formatter, sandbox, and registry — lives in `src/bxl/`. Full attribution in [NOTICE.md](./NOTICE.md).
 

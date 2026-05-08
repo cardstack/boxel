@@ -170,6 +170,18 @@ expectProfileIssue(
   'policy-aggregate-banned',
   { messageIncludes: 'request-time authorization decisions' },
 );
+expectProfileIssue('NPV(0.1, [100, 200]) > 0', 'policy', 'policy-aggregate-banned', {
+  messageIncludes: 'aggregate calls',
+});
+expectProfileIssue(
+  'T_TEST([1, 2, 3], [2, 3, 4]) < 0.05',
+  'policy',
+  'policy-aggregate-banned',
+  { messageIncludes: 'aggregate calls' },
+);
+expectProfileIssue('IMSUM(["1+i", "2+i"]) = "3+2i"', 'policy', 'policy-aggregate-banned', {
+  messageIncludes: 'aggregate calls',
+});
 expectProfileIssue('IFERROR(Amount, 0) > 10', 'policy', 'policy-call-banned', {
   messageIncludes: 'error-masking calls',
 });
@@ -181,6 +193,9 @@ expectProfileIssue('debug', 'policy', 'policy-call-banned', {
   messageIncludes: 'control/side-effect calls',
 });
 expectProfileIssue('words(Description) > 10', 'predicate', 'predicate-call-banned', {
+  messageIncludes: 'query-time boolean predicate',
+});
+expectProfileIssue('PMT(0.08 / 12, 60, 25000, 0, 0) < 0', 'predicate', 'predicate-call-banned', {
   messageIncludes: 'query-time boolean predicate',
 });
 strictEqual(
@@ -220,6 +235,11 @@ strictEqual(
   0,
   'derive profile allows deterministic Excel error fallback helpers',
 );
+strictEqual(
+  parseBxlAst('NPV(0.1, [100, 200])', { schema, profile: 'derive' }).profileIssues.length,
+  0,
+  'derive profile allows deterministic lazy aggregate formula helpers',
+);
 expectProfileIssue('RAND() > 0.5', 'derive', 'derive-call-banned', {
   messageIncludes: 'volatile calls',
 });
@@ -248,6 +268,31 @@ strictEqual(
   'aggregate',
   'function safety registry classifies aggregate calls in one source module',
 );
+strictEqual(
+  categoryForBxlFunction('NPV'),
+  'aggregate',
+  'function safety registry classifies lazy financial collection calls as aggregate',
+);
+strictEqual(
+  categoryForBxlFunction('T_TEST'),
+  'aggregate',
+  'function safety registry classifies lazy statistical tests as aggregate',
+);
+strictEqual(
+  categoryForBxlFunction('PMT'),
+  'boundedScalar',
+  'function safety registry classifies scalar financial calls as bounded',
+);
+strictEqual(
+  categoryForBxlFunction('NORM_DIST'),
+  'boundedScalar',
+  'function safety registry classifies scalar statistical distributions as bounded',
+);
+strictEqual(
+  categoryForBxlFunction('BESSELI'),
+  'boundedScalar',
+  'function safety registry classifies scalar Bessel calls as bounded',
+);
 deepStrictEqual(
   classifyBxlProfileFunction('predicate', 'like'),
   {
@@ -256,6 +301,25 @@ deepStrictEqual(
     category: 'predicateLowerable',
   },
   'function safety registry exposes predicate lowerable calls',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('policy', 'PMT'),
+  {
+    safety: 'allow',
+    normalizedName: 'PMT',
+    category: 'boundedScalar',
+  },
+  'function safety registry allows bounded scalar lazy calls in policy',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('policy', 'NPV'),
+  {
+    safety: 'deny',
+    normalizedName: 'NPV',
+    category: 'aggregate',
+    message: 'aggregate calls can pull work across collections',
+  },
+  'function safety registry denies collection-scanning lazy calls in policy',
 );
 deepStrictEqual(
   classifyBxlProfileFunction('derive', 'RAND'),

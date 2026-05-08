@@ -14,6 +14,11 @@ Function safety categories and profile call allow/deny lists live in one source 
 
 `compute` is the full browser/local BXL profile. It preserves the README contract: readable labels compile to canonical jq, Excel-compatible functions are available, jq paths and pipes remain valid, and the expression computes a value from the current JSON input.
 
+Lazy FormulaJS extension functions are part of `compute` when the caller uses
+an async runtime path (`runNativeJqAsync`, `prepareNativeJqAsync`, or
+`prepareBoxelRuntimeAsync`). Sync evaluators only have the eager formula core
+unless the host explicitly registers the lazy library.
+
 Use it for:
 
 - formula fields
@@ -110,10 +115,14 @@ Restrictions:
 - no jq `try` / `catch`
 - no jq `label` / `break`
 - no jq format filters such as `@csv`
-- no aggregate calls such as `SUM`, `COUNT`, or `AVERAGE`
+- no aggregate or collection-scanning calls such as `SUM`, `COUNT`,
+  `AVERAGE`, `NPV`, `IRR`, `T_TEST`, `Z_TEST`, `IMSUM`, or `IMPRODUCT`
 - no error-masking calls such as `IFERROR` or `ISERROR`
 - no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
 - no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
+
+Bounded scalar FormulaJS helpers remain allowed in `policy`, including lazy
+extension functions such as `PMT`, `NORM_DIST`, `BESSELI`, and `BIN2DEC`.
 
 Representative diagnostic:
 
@@ -140,6 +149,13 @@ try @User.Role catch "Guest"
 ```
 
 Invalid because request-time authorization should fail closed instead of masking expression errors with jq `try` / `catch`.
+
+```bxl
+NPV(0.1, [100, 200]) > 0
+```
+
+Invalid because `NPV` scans a collection of cash flows, so it is classified as
+an aggregate call for request-time authorization.
 
 ## `predicate`
 
@@ -210,6 +226,10 @@ Restrictions:
 - only allowlisted calls such as `IN`, `overlaps`, `age`, `present`, `matches`, `between`, `like`, and `not`
 - no mutation state contexts such as `$new` or `$old`
 
+Excel and FormulaJS helpers, including lazy extension helpers such as `PMT`,
+`NORM_DIST`, `BESSELI`, and `BIN2DEC`, are not valid in `predicate` unless a
+future host-specific query planner explicitly adds a lowerable form for them.
+
 Representative diagnostic:
 
 ```text
@@ -235,6 +255,13 @@ Description | contains("Carl")
 ```
 
 Invalid in `predicate` because lowercase jq string helpers are compute-time functions, not guaranteed indexed query predicates. Use `Description LIKE "%Carl%"` for a field-scoped boolean string pattern, or `matches("Carl")` for corpus-level full-text search when the host planner supports it.
+
+```bxl
+PMT(0.08 / 12, 60, 25000, 0, 0) < 0
+```
+
+Invalid in `predicate` because FormulaJS financial math is not a query-shaped
+operator that the portable SQL compiler can lower.
 
 ### SQL compilation
 
@@ -266,6 +293,11 @@ See [`predicate-sql.md`](./predicate-sql.md) for the detailed SQL compiler contr
 `derive` is for deterministic headless write/index-time computation. It is the right profile for Boxel `computedVia` and other derived values that the platform may store, index, cache, or reuse on a later read path.
 
 Unlike `predicate`, `derive` is allowed to compute values. Record-local aggregation is a primary use case. The important boundary is determinism: a derived value should come from the record snapshot, not from the current user, request, wall clock, runtime metadata, or an unbounded custom program.
+
+Deterministic lazy FormulaJS helpers are allowed in `derive`, including
+collection-scanning helpers such as `NPV` when the derived value is based only
+on the record snapshot. Use an async runtime path if the expression may need a
+lazy extension library.
 
 Use it for:
 
@@ -307,6 +339,10 @@ LET(total, SUM("Line Item"."Line Total"), total > 10000)
 
 ```bxl
 IFERROR(Amount, 0)
+```
+
+```bxl
+NPV(0.1, CashFlows)
 ```
 
 Restrictions:
