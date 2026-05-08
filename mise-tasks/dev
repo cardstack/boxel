@@ -1,12 +1,32 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start full dev stack (realm server, workers, test realms)"
 #MISE dir="packages/realm-server"
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+
+# Enable job control so backgrounded subprocesses run in their own process
+# group. Without this, Ctrl-C is delivered to the whole foreground group;
+# npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
+# `npm run` children, which then reparent to init and leak ports — most
+# visibly the worker-manager listening on 4210, which blocks the next
+# dev run from binding the port.
+set -m
+
+cleanup() {
+  trap - EXIT INT TERM
+  if [ -n "${SAT_PID:-}" ]; then
+    kill_tree "$SAT_PID"
+  fi
+  sweep_orphaned_services
+}
+trap cleanup EXIT INT TERM
 
 WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$PHASE1_URLS" \
   'run-p -ln start:worker-test start:test-realms' \
   "$NODE_TEST_REALM_READY" \
-  'wait'
+  'wait' &
+SAT_PID=$!
+wait "$SAT_PID"
+exit $?
