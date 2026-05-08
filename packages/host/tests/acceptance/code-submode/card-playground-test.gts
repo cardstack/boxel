@@ -187,77 +187,6 @@ const headPreviewCard = `import { contains, field, CardDef, Component } from "ht
   }
 `;
 
-async function waitForHeadPreviewText(
-  selector: string,
-  expectedText: string,
-  context: string,
-) {
-  let safeQuerySelector = (selector: string) => {
-    try {
-      return { element: document.querySelector(selector), error: null };
-    } catch (error) {
-      if (error instanceof Error) {
-        return {
-          element: null,
-          error: {
-            name: error.name,
-            message: error.message,
-          },
-        };
-      }
-      return {
-        element: null,
-        error: {
-          name: 'UnknownError',
-          message: String(error),
-        },
-      };
-    }
-  };
-
-  let readSelectorText = (selector: string) => {
-    let { element, error } = safeQuerySelector(selector);
-    return {
-      text: element?.textContent?.trim() ?? null,
-      error,
-    };
-  };
-
-  try {
-    await waitUntil(() => readSelectorText(selector).text === expectedText, {
-      timeout: 5000,
-    });
-  } catch (error) {
-    let actual = readSelectorText(selector);
-    let googleTitle = readSelectorText('.google-title');
-    let googleDescription = readSelectorText('.google-description');
-    let googleSiteName = readSelectorText('.google-site-name');
-    let previewPanel = safeQuerySelector('[data-test-playground-panel]');
-
-    console.info(
-      'head preview diagnostics',
-      {
-        context,
-        selector,
-        expectedText,
-        actualText: actual.text,
-        selectorError: actual.error,
-        googleTitleText: googleTitle.text,
-        googleTitleError: googleTitle.error,
-        googleDescriptionText: googleDescription.text,
-        googleDescriptionError: googleDescription.error,
-        googleSiteNameText: googleSiteName.text,
-        googleSiteNameError: googleSiteName.error,
-        playgroundPreviewHtml:
-          previewPanel.element?.innerHTML?.slice(0, 2000) ?? null,
-        playgroundPreviewError: previewPanel.error,
-      },
-      error,
-    );
-    throw error;
-  }
-}
-
 const localStyleReferenceCard = {
   data: {
     type: 'card',
@@ -646,22 +575,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'HeadPreview',
       });
       await selectFormat('head');
-      await waitForHeadPreviewText(
-        '.google-title',
-        'Definition Title',
-        'initial head preview render in card playground',
-      );
 
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');
       assert.dom('.google-site-name').hasText('example.com');
 
       setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
-      await waitForHeadPreviewText(
-        '.google-title',
-        'Definition Title!!',
-        'updated head preview render in card playground',
-      );
+      await settled();
 
       assert.dom('.google-title').hasText('Definition Title!!');
     });
