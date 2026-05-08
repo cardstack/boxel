@@ -858,6 +858,7 @@ export class RealmServer {
             config.resolvedOpenRouterRealmURL,
           ),
           defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
+          defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
           cardSizeLimitBytes: this.cardSizeLimitBytes,
           fileSizeLimitBytes: this.fileSizeLimitBytes,
           publishedRealmDomainOverrides:

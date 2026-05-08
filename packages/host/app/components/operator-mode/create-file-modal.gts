@@ -53,6 +53,7 @@ import {
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
+import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -524,17 +525,28 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private get isReady() {
-    if (this.definitionClass) {
-      return true;
-    }
-    if (this.maybeFileType?.id === 'text-file') {
-      return true;
-    }
-    return Boolean(this.defaultSpecResource?.isLoaded);
+    return (
+      !this.defaultSpecResource || Boolean(this.defaultSpecResource.isLoaded)
+    );
   }
 
   private get selectedSpecResource() {
     return this.chosenSpecResource || this.defaultSpecResource;
+  }
+
+  // URL of the spec to preselect when opening the modal. `default` covers
+  // card-definition, card-instance, duplicate-instance, and spec-instance —
+  // all of which start from a Card spec.
+  private getDefaultSpecId(): string | undefined {
+    switch (this.fileType.id) {
+      case 'text-file':
+      case 'file-definition':
+        return undefined;
+      case 'field-definition':
+        return config.defaultFieldSpecId;
+      default:
+        return `${baseRealm.url}types/card`;
+    }
   }
 
   private makeCreateFileRequest = enqueueTask(
@@ -556,18 +568,9 @@ export default class CreateFileModal extends Component<Signature> {
         sourceInstance,
       };
       if (!this.definitionClass) {
-        if (
-          this.fileType.id !== 'text-file' &&
-          this.fileType.id !== 'file-definition'
-        ) {
-          let specEntryPath =
-            this.fileType.id === 'field-definition'
-              ? 'fields/field'
-              : 'types/card';
-          this.defaultSpecResource = this.getCard(
-            this,
-            () => `${baseRealm.url}${specEntryPath}`,
-          );
+        let defaultSpecId = this.getDefaultSpecId();
+        if (defaultSpecId) {
+          this.defaultSpecResource = this.getCard(this, () => defaultSpecId);
         }
       }
       let url = await this.currentRequest.newFileDeferred.promise;
