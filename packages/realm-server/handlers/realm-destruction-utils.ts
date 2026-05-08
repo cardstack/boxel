@@ -86,9 +86,12 @@ export async function removeRealmDatabaseArtifacts(args: {
 
   if (pendingJobs.length > 0) {
     let jobIdList: Expression[] = pendingJobs.map(({ id }) => [param(id)]);
+    // separatedByCommas/addExplicitParens overload resolution picks the wider
+    // CardExpression overload first, so we cast back to Expression for the
+    // Querier (which only accepts Expression).
     await q([
       `DELETE FROM job_reservations WHERE job_id IN`,
-      ...addExplicitParens(separatedByCommas(jobIdList)),
+      ...(addExplicitParens(separatedByCommas(jobIdList)) as Expression),
     ]);
   }
 
