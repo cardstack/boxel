@@ -3237,6 +3237,9 @@ importers:
       decorator-transforms:
         specifier: 'catalog:'
         version: 2.3.1(@babel/core@7.28.6)
+      ember-concurrency:
+        specifier: 'catalog:'
+        version: 5.2.0(@babel/core@7.28.6)(@glint/template@1.7.7)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))

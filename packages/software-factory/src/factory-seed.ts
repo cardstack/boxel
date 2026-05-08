@@ -4,8 +4,8 @@
  * Writes a single "bootstrap" issue to the local factory workspace that
  * the agent picks up as its first task once the orchestrator syncs the
  * workspace into the target realm. The agent reads the brief, creates
- * Project, KnowledgeArticle, and implementation Issue cards, then marks
- * the seed issue as done.
+ * Project, IssueTrackerBoard, KnowledgeArticle, and implementation Issue
+ * cards, then marks the seed issue as done.
  */
 
 import type { FactoryBrief } from './factory-brief';
@@ -125,8 +125,9 @@ function buildSeedIssueDocument(
     `Read the brief and create the following project artifacts:`,
     ``,
     `1. **Project card** — in \`Projects/\` with fields populated from the brief`,
-    `2. **Knowledge Articles** — in \`Knowledge Articles/\`, at least Brief Context + Agent Onboarding, plus more as the brief warrants`,
-    `3. **Implementation Issues** — one per entry-point card, each covering:`,
+    `2. **Issue Tracker Board** — in \`Boards/\`, linked both ways with the Project card`,
+    `3. **Knowledge Articles** — in \`Knowledge Articles/\`, at least Brief Context + Agent Onboarding, plus more as the brief warrants`,
+    `4. **Implementation Issues** — one per entry-point card, each covering:`,
     `   - Card definition (.gts) and any interior/support cards`,
     `   - QUnit tests (.test.gts) for entry-point and support cards`,
     `   - Catalog Spec (Spec/<card>.json) with example instances`,
@@ -141,6 +142,7 @@ function buildSeedIssueDocument(
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
+    '- [ ] IssueTrackerBoard card created and linked to the Project card',
     '- [ ] Knowledge Article for brief context created',
     '- [ ] Knowledge Article for agent onboarding created',
     '- [ ] Additional knowledge articles if the brief warrants them',

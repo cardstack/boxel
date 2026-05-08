@@ -1,6 +1,6 @@
 ---
 name: software-factory-bootstrap
-description: Use when processing a bootstrap issue — covers how to create Project, KnowledgeArticle, and implementation Issue cards from a brief.
+description: Use when processing a bootstrap issue — covers how to create Project, IssueTrackerBoard, KnowledgeArticle, and implementation Issue cards from a brief.
 ---
 
 # Software Factory Bootstrap
@@ -17,14 +17,15 @@ the workspace. Use the workspace fs surface to write them — `Write`
 JSON:API document envelope shown below.
 
 **The system prompt names the live tracker module URL** (the value you
-should put in `data.meta.adoptsFrom.module` for Project / Issue /
+should put in `data.meta.adoptsFrom.module` for Project / Board / Issue /
 KnowledgeArticle cards). Use that URL verbatim — do not try to derive it.
 
-| File                               | adoptsFrom.name    |
-| ---------------------------------- | ------------------ |
-| `Projects/<slug>.json`             | `Project`          |
-| `Knowledge Articles/<slug>-*.json` | `KnowledgeArticle` |
-| `Issues/<slug>-<card-slug>.json`   | `Issue`            |
+| File                               | adoptsFrom.name     |
+| ---------------------------------- | ------------------- |
+| `Projects/<slug>.json`             | `Project`           |
+| `Boards/<slug>.json`               | `IssueTrackerBoard` |
+| `Knowledge Articles/<slug>-*.json` | `KnowledgeArticle`  |
+| `Issues/<slug>-<card-slug>.json`   | `Issue`             |
 
 For each card, the document is:
 
@@ -102,6 +103,26 @@ Fetch the schema, then populate the attributes from the brief:
 **Relationships:** the schema names the array relationship that links a
 project to its knowledge articles. Populate one entry per article you
 create (paths like `../Knowledge Articles/<slug>-<article-slug>`).
+
+- `board` → `{ links: { self: "../Boards/<slug>" } }`
+- `knowledgeBase.0` → `{ links: { self: "../Knowledge Articles/<slug>-<article-slug>" } }` (one entry per article)
+
+### IssueTrackerBoard Card
+
+**Path:** `Boards/<slug>.json`
+**adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "IssueTrackerBoard" }`
+
+Create one board per bootstrapped project. It is the canonical board for that
+project's issues and should be linked both ways with the Project card.
+
+| Field              | Type    | Example           |
+| ------------------ | ------- | ----------------- |
+| `boardTitle`       | String  | `"<title> Board"` |
+| `hideEmptyColumns` | Boolean | `false`           |
+
+**Relationships:**
+
+- `project` → `{ links: { self: "../Projects/<slug>" } }`
 
 ### KnowledgeArticle Card
 

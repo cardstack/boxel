@@ -22,7 +22,8 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../../base/*"]
+      "https://cardstack.com/base/*": ["../../base/*"],
+      "@cardstack/boxel-ui/*": ["../../boxel-ui/addon/declarations/*"]
     },
     "types": ["@cardstack/local-types"]
   },
