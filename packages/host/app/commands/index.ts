@@ -103,10 +103,12 @@ import * as WriteTextFileCommandModule from './write-text-file';
 // Remove this block (imports + shimModule calls below + the .ts files
 // themselves) once downstream consumers have been on the renamed paths
 // for at least one release. Tracked by CS-11046.
+/* eslint-disable import/order */
 import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
 import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
 import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
+/* eslint-enable import/order */
 
 import type HostBaseCommand from '../lib/host-base-command';
 
