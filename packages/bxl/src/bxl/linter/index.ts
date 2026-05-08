@@ -334,6 +334,62 @@ function isPredicateSelector(tokens: ReadableSyntaxToken[]): boolean {
   );
 }
 
+/**
+ * Excel function names whose lowercase spelling case-folds to a registered
+ * Excel formula AND whose lowercase form ALSO exists as a jq idiom (so a user
+ * porting from vanilla jq might naturally type the lowercase version).
+ *
+ * The runtime is case-insensitive so both spellings work — but at a call site
+ * (`name(...)`) the lookup resolves to the Excel function. We nudge authors to
+ * spell the Excel intent UPPERCASE so the paste-from-spreadsheet contract is
+ * obvious to the next reader.
+ *
+ * NOT included: lowercase jq names with NO Excel counterpart (`map`,
+ * `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.) — those are honest
+ * BXL-native idioms and stay lowercase.
+ *
+ * Documented in docs/syntax-reference.md, section "Linter style nudges".
+ */
+const EXCEL_NAME_UPPERCASE_PREFERRED = new Set<string>([
+  // Trig
+  'sin', 'cos', 'tan',
+  'asin', 'acos', 'atan', 'atan2',
+  // Hyperbolic
+  'sinh', 'cosh', 'tanh',
+  'asinh', 'acosh', 'atanh',
+  // Exp / Log
+  'exp', 'log10', 'log2', 'sqrt',
+  // Special
+  'gamma', 'erf', 'erfc',
+  // Rounding
+  'floor', 'round', 'trunc',
+  // Array (Excel SORT/UNIQUE/TRANSPOSE — single-arg call sites only)
+  'sort', 'unique', 'transpose',
+]);
+
+function lintExcelNameCasing(
+  issues: BxlLintIssue[],
+  tokens: ReadableSyntaxToken[],
+) {
+  for (let index = 0; index < tokens.length - 1; index++) {
+    const ident = tokens[index];
+    if (ident.type !== 'ident') continue;
+    const next = tokens[index + 1];
+    if (next.type !== 'punc' || next.value !== '(') continue;
+    const name = ident.value;
+    const lower = name.toLowerCase();
+    if (!EXCEL_NAME_UPPERCASE_PREFERRED.has(lower)) continue;
+    if (name === name.toUpperCase()) continue; // already canonical
+    const upper = name.toUpperCase();
+    addIssue(issues, {
+      code: 'excel-name-uppercase-preferred',
+      severity: 'info',
+      message: `${upper} is an Excel formula — spell it UPPERCASE.`,
+      suggestion: `Use ${upper}(...) instead of ${name}(...). The lookup is case-insensitive, but UPPERCASE makes the paste-from-spreadsheet contract obvious to readers.`,
+    });
+  }
+}
+
 function lintSelectors(issues: BxlLintIssue[], tokens: ReadableSyntaxToken[]) {
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
@@ -397,6 +453,7 @@ export function lintBxlExpression(
     lintMissingQuotedLabels(issues, tokens, labels);
     lintTopLevelEquals(issues, tokens);
     lintSelectors(issues, tokens);
+    lintExcelNameCasing(issues, tokens);
   } catch (error) {
     addIssue(issues, {
       code: 'tokenize-error',

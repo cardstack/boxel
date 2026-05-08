@@ -40,6 +40,103 @@ Every helper name in BXL follows one of two conventions. The compiler is case-in
 
 > **If a helper name is UPPERCASE, you can paste it into an Excel cell and expect the same answer.** If it's lowercase, it's BXL's own vocabulary. The convention is enforced socially in review, not by the compiler — but keep it honest in authored expressions so reviewers can trust the promise.
 
+### How `ROUND` and `round` resolve to the same function — and when they don't
+
+BXL is case-insensitive at lookup time, so `ROUND`, `round`, `Round`, `rOUNd` all hit the same registry entry. But Excel and jq sometimes disagree on **what a function with a given name should do** — different argument order, different sign semantics, even different definitions. BXL resolves these conflicts **once, at registration time**, with a single canonical answer per name. **There is no runtime "dialect" flag.** This section spells out the rules.
+
+#### The dispatch rule
+
+The runtime resolves a function call by **case-folded name + arity**:
+
+1. **Names are case-folded for lookup.** `pow` and `POW` are the same name. `gamma` and `GAMMA` are the same name.
+2. **Each `(case-folded-name, arity)` pair is a distinct registry entry.** `sin/0` (jq, takes pipe input — `x | sin`) and `SIN/1` (Excel, takes explicit arg — `SIN(x)`) are different functions. Both are registered. Both work.
+3. **When jq and Excel use *different names* for the same idea, both names are registered independently.** They do not clash.
+
+The third rule covers most jq/Excel pairs you'll encounter. Examples:
+
+| jq form | Excel form | How they coexist |
+| --- | --- | --- |
+| `x \| pow(y)` | `POWER(x, y)` | rule 3 — different names, both registered |
+| `pow(b; e)` (binary) | `POWER(b, e)` | rule 3 — different names, same param order |
+| `fmod(a; b)` | `MOD(a, b)` | rule 3 — different names, **different sign semantics**: `fmod(-7; 3) = -1` (dividend-signed, C/POSIX); `MOD(-7, 3) = 2` (divisor-signed, Excel). Pick the name that matches the math you want. |
+| `fmax(a; b)` / `fmin(a; b)` | `MAX(arr)` / `MIN(arr)` | rule 3 — different names, **different NaN handling**: `fmax`/`fmin` skip NaN (C/POSIX); `MAX`/`MIN` propagate errors (Excel). |
+| `jn(n; x)` / `yn(n; x)` | `BESSELJ(x, n)` / `BESSELY(x, n)` | rule 3 — different names, **different arg order**: jq follows C (order first), Excel follows Microsoft (value first). Use whichever name matches the convention you have in your head. |
+| `x \| log` | `LN(x)` | rule 2 — different arity. Both compute natural log. |
+| `x \| log` | `LOG(x)` | rule 2 — different arity, **different math**: `log/0` is natural log (jq tradition); `LOG/1` is base-10 log (Excel tradition). The arity makes them unambiguous. |
+| `x \| sin`, `x \| cos`, `x \| sqrt`, `x \| exp` | `SIN(x)`, `COS(x)`, `SQRT(x)`, `EXP(x)` | rule 2 — different arity, same math |
+
+#### The lone same-name-same-arity collision: `ATAN2`
+
+`ATAN2/2` is the **only** function in BXL where the case-folded name **and** arity match across jq and Excel, but the conventions disagree:
+
+| Source | Calling convention | Returns |
+| --- | --- | --- |
+| C / POSIX / vanilla jq | `atan2(y; x)` — y first | `Math.atan2(y, x)` |
+| Excel | `ATAN2(x, y)` — x first | `Math.atan2(y, x)` |
+
+Both call the same underlying math, but the **argument order is reversed**. Because case-insensitive lookup means `atan2` and `ATAN2` resolve to a single registry entry, BXL must pick one canonical signature.
+
+> **`ATAN2` canonicalizes to Excel order: `ATAN2(x, y)`. Spell it UPPERCASE.** The runtime is case-insensitive, so a lowercase `atan2(...)` at a call site still works — but the linter flags it as an info-level nudge to use `ATAN2`. Vanilla-jq ports must also swap arguments: `atan2(y; x)` → `ATAN2(x, y)`.
+
+```text
+ATAN2(1, 2)          -- Preferred: Excel argument order makes the convention obvious.
+                     -- atan2(y=2, x=1) = 1.1071  (≈ 63.4°)
+
+atan2(1, 2)          -- Lowercase resolves to the same function (linter: info-level nudge).
+                     -- Same answer: 1.1071. Excel-canonical, NOT vanilla-jq order.
+                     -- Vanilla jq would compute atan2(y=1, x=2) = 0.4636 — port carefully.
+```
+
+Edge case: **`ATAN2(0, 0)` returns `0` in BXL**, not `#DIV/0!`. Excel's `ATAN2(0, 0)` returns `#DIV/0!`; BXL deviates from Excel here for POSIX compatibility, because `ATAN2(0, 0)` is reachable from generic geometry code where a `0` answer is safer than an error.
+
+#### `GAMMA` — different definitions, resolved to true Γ
+
+`GAMMA` is a known minefield across libraries:
+
+- **C / POSIX `gamma()`**: deprecated; historically log-Γ on Linux, true Γ on BSD. Implementation-defined. Vanilla jq inherits whatever libm it was linked against — there is no portable "jq-correct" answer.
+- **Excel `GAMMA(x)`**: true Γ, unambiguously.
+
+BXL canonicalizes both `GAMMA/1` (Excel) and `gamma/0` (jq) to **true Γ**. Spell it `GAMMA` — same linter nudge as `ATAN2`.
+
+If you need log-Γ, use the unambiguous spellings — they compute the same thing in either dialect:
+
+| Want | jq spelling | Excel spelling |
+| --- | --- | --- |
+| true Γ(x) | `x \| gamma` (== `tgamma`) | `GAMMA(x)` |
+| log Γ(x) | `x \| lgamma` | `GAMMALN(x)` |
+
+#### Quick reference: collisions and resolutions
+
+> Spelling reminder: prefer the **UPPERCASE** form for any name that ends up at an Excel function. Lowercase still resolves but the linter emits an info-level `excel-name-uppercase-preferred` nudge — see [Linter style nudges](#linter-style-nudges).
+
+| Function | BXL behaviour | Notes |
+| --- | --- | --- |
+| `ATAN2(a, b)` | Excel order: `a` is x, `b` is y | Vanilla-jq porters: swap. `(0, 0)` returns `0`, not `#DIV/0!`. Lowercase `atan2(...)` lints. |
+| `GAMMA(x)` | true Γ | For log-Γ use `lgamma` or `GAMMALN`. Lowercase `gamma(...)` lints. |
+| `LOG(x)` (one-arg call) | base-10 log (`LOG/1`) | Different from `x \| log` (natural log, `log/0`) — arity decides |
+| `fmod` vs `MOD` | independent functions | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel) |
+| `fmax`/`fmin` vs `MAX`/`MIN` | independent functions | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors |
+| `jn`/`yn` vs `BESSELJ`/`BESSELY` | independent functions | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order) |
+| `pow` vs `POWER` | independent functions | Same param order in both, no impedance |
+
+> **Why no runtime dialect flag?** Earlier drafts considered an `expression(jq\`…\`)` mode that would flip semantics for the conflict set. We rejected it because (a) only one function (`ATAN2/2`) genuinely needs it after applying the rules above, (b) a runtime flag adds plumbing complexity and propagation gotchas, and (c) every other apparent collision turns out to fall under rule 2 (different arity) or rule 3 (different name). Single-canonical-signature with documented edge cases — plus the linter nudge for the spelling — is simpler and just as correct.
+
+#### Linter style nudges
+
+The runtime is case-insensitive: `atan2`, `Atan2`, `ATAN2` all resolve to the same function. But when an expression is being **edited or saved through the BXL parser** (the realm UI, the `bxl --lint` CLI, or any caller of `lintBxlExpression`), function-call sites whose case-folded name matches a registered Excel function are flagged at info severity if the spelling isn't already all-uppercase:
+
+```
+✕  atan2(.x, .y)          info  excel-name-uppercase-preferred
+                                ATAN2 is an Excel formula — spell it UPPERCASE.
+                                The lookup is case-insensitive, but UPPERCASE makes
+                                the paste-from-spreadsheet contract obvious to readers.
+                                Suggestion: ATAN2(.x, .y)
+```
+
+The rule applies to every Excel formula whose name has a lowercase jq counterpart that resolves to the same registry entry — `ATAN`, `ATAN2`, `SIN`, `COS`, `TAN`, `SQRT`, `EXP`, `LOG`, `FLOOR`, `ROUND`, `TRUNC`, `GAMMA`, `ERF`, `ERFC`, and the rest of the case-fold-collision set listed in the rule source. **It does NOT fire on lowercase names that are jq-only** (`map`, `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.) — those are honest BXL-native idioms and stay lowercase per the convention.
+
+Severity is `info`, never `error` — your code still compiles and runs.
+
 ## Top 10 things to remember
 
 If you only remember ten things about BXL, remember these. Every other section expands on one of them.
@@ -1328,7 +1425,7 @@ CONVERT(1024, "byte", "kibyte") // 1 (binary prefix)
 
 ## Computed Fields
 
-In Boxel, BXL expressions live inside `computeVia` on a field definition. The field type acts as the output contract.
+In Boxel, BXL expressions live inside `computeVia` on a field definition. The field type acts as the output contract. `expression()` validates the source against the `derive` profile when it is constructed, so volatile calls, request/mutation context, authored jq `try` / `catch`, jq `def` / `error`, and runtime metadata helpers are rejected before the field runs.
 
 _Basic pattern_
 
@@ -1490,13 +1587,23 @@ Complete index of core jq functions available in BXL.
 
 ### Math (jq native)
 
+The jq math library is available in BXL with C/IEEE semantics. Both unary (pipe-input) and binary forms are supported where C provides them — write `x | pow(y)` or `pow(x; y)`, both work.
+
 | Category | Functions |
 | --- | --- |
-| Trig | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(y)` |
+| Trig | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(y)` `atan2(x; y)` |
 | Hyperbolic | `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` |
-| Exp/Log | `exp` `exp2` `exp10` `log` `log2` `log10` `pow(y)` `sqrt` `cbrt` |
-| Rounding | `floor` `ceil` `round` `trunc` `fabs` |
-| Other | `hypot(y)` `fmax(y)` `fmin(y)` |
+| Exp/Log | `exp` `exp2` `exp10` `expm1` `log` `log2` `log10` `pow(y)` `pow(b; e)` `pow10` `sqrt` `cbrt` |
+| Rounding | `floor` `ceil` `round` `trunc` `nearbyint` `rint` `fabs` |
+| Binary math | `hypot(y)` `hypot(x; y)` `fmax(y)` `fmax(x; y)` `fmin(y)` `fmin(x; y)` `fdim(x; y)` `copysign(x; y)` `fmod(x; y)` `drem(x; y)` `remainder(x; y)` |
+| Bessel | `j0` `j1` `jn(n; x)` `y0` `y1` `yn(n; x)` |
+| Special | `gamma` `lgamma` `lgamma_r` `tgamma` `erf` `erfc` |
+| IEEE float | `frexp` `ldexp(x; n)` `scalb(x; n)` `scalbln(x; n)` `logb` `significand` `modf` `fma(a; b; c)` `nextafter(x; y)` `nexttoward(x; y)` |
+| Misc | `scalars_or_empty` |
+
+> **Collision warning — `atan2`.** The binary form `atan2(x; y)` follows **Excel argument order** (x first), not C/POSIX (y first). Vanilla-jq code must swap arguments. See [_How `ROUND` and `round` resolve to the same function_](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont) for the full story. Every other entry in this table follows C/IEEE semantics with no impedance.
+
+> **Sandbox-blocked.** `input/0`, `input_filename/0`, `input_line_number/0`, and `modulemeta/0` raise `#NAME?` because BXL has no input stream or module loader to back them. These are the only jq math/IO builtins that intentionally remain unimplemented.
 
 ## String Formats
 
@@ -1603,29 +1710,56 @@ IF(ISERROR(.lookup), "fallback", .lookup)
 
 BXL implements 300+ functions from the Excel/Google Sheets function set, plus 16 BXL-only extensions (the `_BY` row-object variants). This section maps coverage against the [FormulaJS](https://formulajs.info/) library.
 
-### Available via jq (use lowercase)
+### jq-only idioms (lowercase, no Excel counterpart)
 
-These Excel functions are not implemented as uppercase helpers because jq already provides them natively. Use the lowercase jq version.
+These functions exist only in jq's vocabulary — there's no Excel paste-equivalent, so the lowercase form is the canonical spelling:
 
-| Excel | jq equivalent | Category |
+| jq idiom | Category | Notes |
 | --- | --- | --- |
-| `SIN` `COS` `TAN` | `sin` `cos` `tan` | Trig |
-| `ASIN` `ACOS` `ATAN` `ATAN2` | `asin` `acos` `atan` `atan2` | Trig |
-| `SINH` `COSH` `TANH` | `sinh` `cosh` `tanh` | Hyperbolic |
-| `ASINH` `ACOSH` `ATANH` | `asinh` `acosh` `atanh` | Hyperbolic |
-| `EXP` `LOG` `LOG10` | `exp` `log` `log10` | Exp/Log |
-| `LN` | `log` (jq's `log` is natural log) | Exp/Log |
-| `TRUNC` | `trunc` | Rounding |
-| `SORT` | `sort` / `sort_by(f)` | Array |
-| `UNIQUE` | `unique` / `unique_by(f)` | Array |
-| `TRANSPOSE` | `transpose` | Array |
-| `NOW` | `now` (Unix timestamp) | Date |
+| `map(f)` `select(f)` `sort_by(f)` `unique_by(f)` `group_by(f)` | Array | Pure jq pipe transforms |
+| `add` | Array | Sum of pipe input (`[1,2,3] \| add` → `6`) |
+| `transpose` | Array | Transpose a 2-D array |
+| `to_entries` `from_entries` `with_entries(f)` | Object | Object↔key/value-array conversion |
+| `keys` `keys_unsorted` `values` `has(k)` `del(p)` | Object | Structural |
+| `range(n)` `range(a; b)` `range(a; b; step)` | Iter | Numeric generator |
+| `recurse(f)` `walk(f)` | Iter | Tree walks |
+| `paths` `leaf_paths` `getpath(p)` `setpath(p; v)` | Path | JSONPath access |
+| `length` `type` `tostring` `tonumber` `tojson` `fromjson` | Type | Coercion + introspection |
+| `now` | Date | Unix timestamp |
+| `pow(b; e)` `pow(e)` (unary) | Math | C-style exponent. Different name from `POWER`, no collision. |
+| `fmod(a; b)` | Math | Dividend-signed modulo. Different name (and semantics) from `MOD`. |
+| `fmax(a; b)` `fmin(a; b)` | Math | NaN-skipping. Different name from `MAX`/`MIN`. |
+| `hypot(a; b)` `copysign(a; b)` `fdim(a; b)` `expm1` `pow10` `ldexp` | Math | C-only; no Excel counterpart |
+| `jn(n; x)` `yn(n; x)` `j0` `j1` `y0` `y1` | Bessel | C order. `BESSELJ`/`BESSELY` use Excel order. |
+
+These are all **honest jq-native idioms** — the linter does NOT flag the lowercase spelling, because no Excel counterpart exists (or the names differ).
+
+### Excel functions with case-folded jq counterparts
+
+Functions where the lowercase jq spelling case-folds to a registered Excel name. **UPPERCASE is the preferred spelling** at call sites — both work, but lowercase triggers an info-level lint nudge:
+
+| Preferred (Excel) | Also accepted (lowercase) | Notes |
+| --- | --- | --- |
+| `SIN(x)` `COS(x)` `TAN(x)` `ASIN(x)` `ACOS(x)` `ATAN(x)` | `sin(x)` … `atan(x)` | Lint: prefer UPPERCASE |
+| `ATAN2(x, y)` | `atan2(x, y)` | **Excel argument order**, NOT vanilla-jq `(y; x)`. See [collision rules](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont). |
+| `SINH(x)` `COSH(x)` `TANH(x)` `ASINH(x)` `ACOSH(x)` `ATANH(x)` | `sinh(x)` … `atanh(x)` | Lint: prefer UPPERCASE |
+| `EXP(x)` `LOG10(x)` `SQRT(x)` | `exp(x)` `log10(x)` `sqrt(x)` | Lint: prefer UPPERCASE |
+| `LN(x)` | (use `LN`, not lowercase `log`) | jq's `log/0` is natural log (no explicit arg); Excel `LOG/1` is base-10. Different math at one-arg arity — arity decides. |
+| `LOG(x)` | (no lowercase form lints here — different math) | Excel `LOG(x)` = base-10. To get natural log via jq pipe form: `x \| log`. |
+| `POWER(b, e)` | (use `POWER` for Excel-flavoured code; `pow(b; e)` is the jq idiom and stays lowercase) | Different names — no lint either way. Pick by intent. |
+| `GAMMA(x)` | `gamma(x)` | True Γ. Lint: prefer UPPERCASE. For log-Γ use `GAMMALN` / `lgamma`. |
+| `ERF(x)` `ERFC(x)` | `erf(x)` `erfc(x)` | Lint: prefer UPPERCASE |
+| `FLOOR(x)` `ROUND(x)` `TRUNC(x)` | `floor(x)` `round(x)` `trunc(x)` | Lint: prefer UPPERCASE |
+| `ABS(x)` | (use `ABS`; `fabs` is the jq idiom — different name) | Different names — no lint |
+| `SORT(arr)` `UNIQUE(arr)` `TRANSPOSE(arr)` | `sort(arr)` `unique(arr)` `transpose(arr)` | Lint at one-arg call site: prefer UPPERCASE |
+
+> **Read [_How `ROUND` and `round` resolve to the same function_](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont)** for the full collision rules, the `ATAN2` argument-order story, and the `GAMMA` / log-Γ resolution. The linter rule that backs the "prefer UPPERCASE" advice in this table is documented under [Linter style nudges](#linter-style-nudges).
 
 > Range-based multi-criteria functions (`SUMIFS`, `COUNTIFS`, `AVERAGEIFS`) are not implemented as uppercase helpers because BXL's `_BY` variants (`SUMIFS_BY`, `COUNTIFS_BY`, `AVERAGEIFS_BY`) are more natural for JSON data. Use those instead.
 
-### Lazy Extensions and Exclusions
+### Lazy Extensions and Unsupported Families
 
-Some FormulaJS families are implemented but intentionally lazy because they pull heavier optional dependencies or are rarely needed. Others still do not apply to BXL's JSON context or require a spreadsheet grid model.
+Some FormulaJS families are implemented but intentionally lazy because they pull heavier optional dependencies or are rarely needed. Others are explicitly not supported in BXL because they assume a spreadsheet grid, criteria ranges, or array-returning analysis shapes that do not fit JSON computed fields.
 
 | Category | Functions | Status |
 | --- | --- | --- |
@@ -1633,10 +1767,10 @@ Some FormulaJS families are implemented but intentionally lazy because they pull
 | Lazy financial formulas | `PMT` `NPV` `IRR` `XIRR` `FV` `PV` `RATE` `COUPDAYS` `TBILLPRICE` and the rest of the Financial section | Loaded by async runtimes as `formula-financial`. Shares the `formula-extras` bundle with lazy engineering. |
 | Lazy engineering formulas | `BIN2DEC` `BITAND` `COMPLEX` `IM*` `ERF` `ERFC` `CONVERT` `UNICHAR` and related helpers | Loaded by async runtimes as `formula-engineering`. `ROMAN` and `ARABIC` remain eager. |
 | Lazy Bessel functions | `BESSELI` `BESSELJ` `BESSELK` `BESSELY` | Loaded by async runtimes as `formula-bessel` when an expression calls one of these specialized engineering functions. |
-| Database | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP` | Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON. |
-| Grid reference | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE` | Require a cell grid model. No equivalent concept in JSON expressions. |
-| Matrix | `MMULT` `MUNIT` | Matrix multiplication and identity. Use jq array operations or dedicated math libraries. |
-| Regression | `LINEST` `LOGEST` `GROWTH` `TREND` | Array-returning regression functions. Complex output shapes don't map well to single computed fields. |
+| Database | `DAVERAGE` `DCOUNT` `DCOUNTA` `DGET` `DMAX` `DMIN` `DPRODUCT` `DSTDEV` `DSTDEVP` `DSUM` `DVAR` `DVARP` | **Unsupported in BXL.** Excel database functions assume a flat cell range with criteria ranges. BXL uses `map`/`select`/`_BY` variants instead -- more powerful on JSON. |
+| Grid reference | `COLUMN` `ROW` `SUBTOTAL` `AGGREGATE` | **Unsupported in BXL.** These require a cell grid model. No equivalent concept exists in JSON expressions. Note: `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
+| Matrix | `MMULT` `MUNIT` | **Unsupported in BXL.** Matrix multiplication and identity belong in jq array pipelines or dedicated math libraries. |
+| Regression | `LINEST` `LOGEST` `GROWTH` `TREND` | **Unsupported in BXL.** These return regression arrays / projections whose shapes don't map cleanly to single computed fields. |
 
 ### Coverage Summary
 
@@ -1645,5 +1779,6 @@ Some FormulaJS families are implemented but intentionally lazy because they pull
 | Implemented | 300+ | All targeted Excel-compatible formula functions; large FormulaJS extension families load lazily in async runtimes |
 | Lazy extension libraries | 4 | `formula-statistical`, `formula-bessel`, `formula-engineering`, `formula-financial` |
 | BXL-only extensions | 16 | `_BY` row-object variants, `COL`, `ERROR_TYPE` |
-| Available via jq | 23 | Trig, exp/log, sort, unique, transpose, now (use lowercase) |
-| Won't add | ~30 | Database, grid-dependent, regression arrays |
+| Excel name with case-folded jq counterpart | ~25 | Trig, exp/log, rounding, gamma, erf — UPPERCASE preferred (lint nudges lowercase) |
+| jq-only idioms (no Excel counterpart) | ~30 | `map`, `select`, `add`, `sort_by`, `pow`, `fmod`, `hypot`, `jn`, etc. — lowercase canonical |
+| Won't add | ~30 | Database functions, grid reference functions, matrix helpers, regression arrays |
