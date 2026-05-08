@@ -184,7 +184,7 @@ class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
       this.currentCommand = command;
       let result = await command.execute({
         sourceImageUrl: this.args.model.sourceImageUrl,
-        targetRealmUrl: this.args.model.targetRealmUrl,
+        targetRealmIdentifier: this.args.model.targetRealmUrl,
       });
 
       // Store the card ID, which will trigger getCard to load it

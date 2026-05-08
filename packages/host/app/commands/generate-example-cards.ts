@@ -84,8 +84,8 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
       roomId: this.matrixService.currentRoomId,
       prompt: userPrompt,
       attachedCards: input.exampleCard ? [input.exampleCard] : [],
-      attachedFileURLs: this.getAttachedFileURLs(input),
-      realmUrl: realm,
+      attachedFileIdentifiers: this.getAttachedFileURLs(input),
+      realmIdentifier: realm,
     });
   }
 }
@@ -158,14 +158,16 @@ export class GenerateExampleCardsOneShotCommand extends HostBaseCommand<
     );
 
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-    const attachedFileURLs = buildAttachedFileURLs(input.codeRef.module);
+    const attachedFileIdentifiers = buildAttachedFileURLs(input.codeRef.module);
     const llmResult = await oneShot.execute({
       codeRef: input.codeRef,
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
       userPrompt,
       llmModel: 'anthropic/claude-3-haiku',
-      attachedFileURLs:
-        attachedFileURLs.length > 0 ? attachedFileURLs : undefined,
+      attachedFileIdentifiers:
+        attachedFileIdentifiers.length > 0
+          ? attachedFileIdentifiers
+          : undefined,
     });
 
     const { payload: examplePayload } = parseExamplePayloadFromOutput(

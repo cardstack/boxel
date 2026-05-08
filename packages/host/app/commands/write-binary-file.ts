@@ -132,7 +132,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
 
     let commandModule = await this.loadCommandModule();
     const { WriteBinaryFileResult } = commandModule;
-    return new WriteBinaryFileResult({ fileUrl: finalUrl.href });
+    return new WriteBinaryFileResult({ fileIdentifier: finalUrl.href });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
