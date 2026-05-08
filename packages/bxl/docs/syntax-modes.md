@@ -24,7 +24,9 @@ import { expression, fx, jq } from '../bxl';
 ```
 
 `expression` is the same compute factory as `bxl` / `expr`; it returns
-a function shaped for `computeVia`.
+a function shaped for `computeVia`. The factory validates the source against
+the `derive` execution profile when it is constructed, so non-deterministic
+or request-scoped expressions are rejected before Boxel runs the field.
 
 ```ts
 @field subtotal = contains(NumberField, {
@@ -60,6 +62,12 @@ when a structured result should be materialized as a more specific
 FieldDef or subclass, such as `contains(RegularStatusField, {
 computeVia: expression(..., { as: IcuStatusField }) })`, so Boxel uses
 the subclass instance for serialization and rendering.
+
+The derive profile applies to all three source forms. It allows deterministic
+record-local computation, including arrays, filters, optional access, Excel
+helpers, and object shaping. It rejects volatile calls (`NOW`, `RAND`, `now`),
+request/mutation context (`@User`, `$new`, `$old`), authored jq `try` /
+`catch`, `def`, `error`, and runtime metadata helpers.
 
 ## The decision tree
 

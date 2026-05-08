@@ -300,6 +300,14 @@ materialized as a more specific FieldDef subclass for Boxel rendering, e.g.
 IcuStatusField }) })`. See [syntax modes](./docs/syntax-modes.md) for the
 short version of the rules.
 
+`expression()` validates the source against the `derive` execution profile
+when the factory is constructed. That keeps Boxel `computeVia` deterministic:
+volatile calls (`NOW`, `RAND`, `now`), request/mutation context (`@User`,
+`$new`, `$old`), authored jq `try` / `catch`, `def`, `error`, and runtime
+metadata helpers are rejected before the field can run. `evaluateBxl` remains
+the full compute surface for ad-hoc tooling unless you explicitly ask for a
+profile.
+
 ---
 
 ## Comparisons & inspirations
@@ -317,7 +325,7 @@ Excel:  =ROUND(B2 * C2 / 100, 2)
 BXL:    ROUND(Subtotal * "Tax Rate" / 100, 2)
 ```
 
-BXL skips Excel's cell-grid functions (`OFFSET`, `INDIRECT`, `DAVERAGE`) and regression array functions that don't translate cleanly onto JSON. Everything that does translate is either eager or available as a lazy async extension.
+BXL intentionally does not implement Excel database functions (`DAVERAGE`, `DCOUNT`, `DSUM`, …), grid-reference functions (`ROW`, `COLUMN`, `SUBTOTAL`, `AGGREGATE`), matrix helpers (`MMULT`, `MUNIT`), or regression array functions (`LINEST`, `LOGEST`, `GROWTH`, `TREND`). Those assume a spreadsheet grid, criteria ranges, or array-returning analysis shapes that don't translate cleanly onto JSON. Everything that does translate is either eager or available as a lazy async extension.
 
 ### 2 · jq · every valid jq is valid BXL
 
@@ -549,9 +557,9 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 | `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers, including lazy FormulaJS extensions on async runtime paths. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
 | `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, and non-lowerable FormulaJS calls. |
-| `derive` | Headless write/index-time computation | `computedVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
+| `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
-`computedVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata.
+Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function.
 
 Profile violations are parser diagnostics:
 

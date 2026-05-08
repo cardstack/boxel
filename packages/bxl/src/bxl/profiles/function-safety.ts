@@ -259,6 +259,18 @@ export const BXL_CONTROL_OR_SIDE_EFFECT_CALLS = names([
   'stderr',
 ]);
 
+const BXL_DERIVE_CONTROL_DENIED_CALLS = names([
+  'debug',
+  'env',
+  'error',
+  'halt',
+  'halt_error',
+  'input',
+  'input_filename',
+  'input_line_number',
+  'stderr',
+]);
+
 export const BXL_METADATA_CALLS = names([
   'builtins',
   'get_jq_origin',
@@ -281,7 +293,7 @@ export const BXL_PREDICATE_LOWERABLE_CALLS = names([
 
 export const BXL_DERIVE_DENIED_CALLS = names([
   ...BXL_VOLATILE_CALLS,
-  ...BXL_CONTROL_OR_SIDE_EFFECT_CALLS,
+  ...BXL_DERIVE_CONTROL_DENIED_CALLS,
   ...BXL_METADATA_CALLS,
 ]);
 

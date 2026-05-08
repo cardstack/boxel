@@ -73,6 +73,29 @@ check('§11 expression is an alias of bxl', () => {
   strictEqual(expr, bxl);
 });
 
+check('§11 expression factory enforces derive profile at construction', () => {
+  let message = '';
+  try {
+    expression(jq`now`);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  ok(message.includes('computeVia expression violates the derive profile'));
+  ok(message.includes('derive-call-banned'));
+  ok(message.includes('now'));
+});
+
+check('§11 expression factory rejects raw jq error()', () => {
+  let message = '';
+  try {
+    expression(jq`error("not a computed field")`);
+  } catch (error) {
+    message = (error as Error).message;
+  }
+  ok(message.includes('derive-call-banned'));
+  ok(message.includes('error'));
+});
+
 // ---------------------------------------------------------------- §11a
 
 check('§11a fx`…` enables readable BXL (Excel-style)', () => {

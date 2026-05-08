@@ -53,6 +53,18 @@ Use `runNativeJqAsync`, `prepareNativeJqAsync`, or
 APIs (`evaluateBxl`, `runNativeJq`) use the eager core unless the caller has
 explicitly registered the lazy library.
 
+## Unsupported FormulaJS / Excel families
+
+These functions exist in Excel or upstream FormulaJS, but are intentionally
+not supported in BXL.
+
+| Family | Functions | Reason |
+| ------ | --------- | ------ |
+| Database | `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`, `DMAX`, `DMIN`, `DPRODUCT`, `DSTDEV`, `DSTDEVP`, `DSUM`, `DVAR`, `DVARP` | Excel database functions assume a flat cell range with criteria ranges. Use `map`, `select`, and `_BY` helpers over JSON rows instead. |
+| Grid reference | `COLUMN`, `ROW`, `SUBTOTAL`, `AGGREGATE` | These require a spreadsheet cell grid. BXL has no equivalent grid model. `ROWS(arr)` and `COLUMNS(arr)` are supported array-shape helpers; singular `ROW` / `COLUMN` are not. |
+| Matrix | `MMULT`, `MUNIT` | Matrix multiplication and identity are better handled by jq array pipelines or dedicated math libraries. |
+| Regression | `LINEST`, `LOGEST`, `GROWTH`, `TREND` | These return regression arrays / projections whose shapes do not map cleanly to single computed fields. |
+
 ## Built-in helper inventory (as of v0.1.0-dev)
 
 ### Presence & emptiness

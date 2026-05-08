@@ -305,6 +305,29 @@ export interface BxlOptions {
   as?: new () => unknown;
 }
 
+function assertComputeViaDeriveProfile(source: string, options: BxlOptions) {
+  const program = parseBxlAst(source, {
+    attachment: 'formula',
+    libraries: options.libraries,
+    profile: 'derive',
+    readableSyntax: options.readableSyntax,
+    schema: options.schema,
+  });
+  const issues = program.profileIssues.filter(
+    (issue) => issue.severity === 'error',
+  );
+  if (issues.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      'computeVia expression violates the derive profile:',
+      ...issues.map((issue) => `${issue.code}: ${issue.message}`),
+    ].join('\n'),
+  );
+}
+
 export interface CompileBxlOptions extends BxlOptions {
   target?: 'jq' | 'ast';
   profile?: BxlProfile;
@@ -672,14 +695,16 @@ function materializeAs(
  * - `` fx`…` `` — Excel-like readable BXL; identical to a plain
  *   string today, explicit at the call site for cross-tag clarity.
  *
- * Beyond plain `evaluateBxl`, the factory adds three behaviors that
+ * Beyond plain `evaluateBxl`, the factory adds four behaviors that
  * Boxel realms need:
- * 1. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
+ * 1. **Derive-profile validation** — the source must be deterministic
+ *    record-local computation before a compute function is returned.
+ * 2. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
  *    etc. is captured at the boundary and surfaced as `null` so the
  *    indexer doesn't tear down the card mid-render.
- * 2. **`as: SomeFieldDef`** — the raw output is materialized as an
+ * 3. **`as: SomeFieldDef`** — the raw output is materialized as an
  *    instance of the given class via {@link BxlOptions.as}.
- * 3. **Tag-aware `readableSyntax` default** — `jq` tag → false,
+ * 4. **Tag-aware `readableSyntax` default** — `jq` tag → false,
  *    everything else → true. Explicit `options.readableSyntax` always
  *    wins.
  *
@@ -712,6 +737,7 @@ export function bxl(
     ...options,
     readableSyntax: options.readableSyntax ?? defaultReadable,
   };
+  assertComputeViaDeriveProfile(source, merged);
   const ShapeClass = options.as;
   return function computeViaBxl(this: object) {
     let raw: unknown;

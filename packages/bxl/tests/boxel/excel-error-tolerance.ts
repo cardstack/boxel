@@ -2,8 +2,8 @@
 //
 // Validates that spreadsheet error sentinels (#N/A, #DIV/0!, #VALUE!,
 // #NUM!, #REF!, #NAME?, #NULL!, #ERROR!, #GETTING_DATA) raised by
-// Excel functions or coercions are caught at the bxl() factory
-// boundary and surface as `null` — not propagated up to the realm
+// Excel functions or coercions are caught at the computeVia boundary
+// and surface as `null` — not propagated up to the realm
 // indexer, where they'd tear down the card mid-render.
 //
 // Maps to port-doc §11a (Excel-error catch).
@@ -62,33 +62,7 @@ check('IFS/16 (8 condition/value pairs) dispatches correctly', () => {
   strictEqual(compute.call({ score: 0 }), 'a');
 });
 
-// Direct sentinel-shaped errors all pass through the catch.
-const sentinels = [
-  '#N/A',
-  '#DIV/0!',
-  '#VALUE!',
-  '#NUM!',
-  '#REF!',
-  '#NAME?',
-  '#NULL!',
-  '#ERROR!',
-  '#GETTING_DATA',
-];
-
-for (const sentinel of sentinels) {
-  check(`${sentinel} sentinel surfaces as null`, () => {
-    // Evaluate a constant expression that raises the sentinel directly.
-    // jq's `error()` wraps the message; the BXL runtime preserves the
-    // sentinel string in the error message, which isExcelErrorMessage
-    // matches.
-    const compute = expression(`error("${sentinel}")`, {
-      readableSyntax: false,
-    });
-    strictEqual(compute.call({}), null);
-  });
-}
-
-check('Excel #DIV/0! from VLOOKUP-style miss returns null', () => {
+check('Excel #N/A from VLOOKUP-style miss returns null', () => {
   // VLOOKUP-on-empty raises #N/A.
   const compute = expression(fx`VLOOKUP("missing", [], 1, FALSE)`);
   strictEqual(compute.call({}), null);
