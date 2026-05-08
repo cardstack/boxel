@@ -320,9 +320,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
     let toolCallLog: ToolCallEntry[] = [];
     let captured: CapturedSignal | undefined;
+    let sessionErrorMessage: string | undefined;
     let resolveSignal: () => void;
     let signalCaptured = new Promise<void>((resolve) => {
       resolveSignal = resolve;
+    });
+    let resolveSessionError: () => void;
+    let sessionErrored = new Promise<void>((resolve) => {
+      resolveSessionError = resolve;
     });
 
     this.currentHooks = {
@@ -345,13 +350,15 @@ export class OpencodeFactoryAgent implements LoopAgent {
       let sessionId = (session.data as { id: string }).id;
       log.info(`session: ${sessionId}`);
 
-      // Subscribe to opencode's per-directory event bus for *logging
-      // only* (completion detection still uses `time.updated` polling
-      // — events were unreliable enough to break that). Best-effort:
-      // any error tearing the SSE stream is swallowed.
-      let stopEventLog = subscribeForLogging(client, sessionId).catch(
-        () => undefined,
-      );
+      // Subscribe to opencode's per-directory event bus. Drives both
+      // visibility (tool calls + step transitions logged) and error
+      // propagation: a `session.error` (e.g. 401 from the model API)
+      // resolves `sessionErrored`, which short-circuits the run below
+      // and returns `blocked` instead of letting the loop spin.
+      let stopEventLog = subscribeForLogging(client, sessionId, (message) => {
+        sessionErrorMessage = message;
+        resolveSessionError();
+      }).catch(() => undefined);
 
       let prompt = this.buildPrompt(context);
       let systemPrompt = this.buildSystemPrompt(context);
@@ -397,12 +404,14 @@ export class OpencodeFactoryAgent implements LoopAgent {
       try {
         // Happy path: the model calls `signal_done` (or
         // `request_clarification`), MCP captures it, and we return
-        // instantly. Fallback for when the model exits the loop
-        // without signaling: poll `time.updated` for a stability
-        // window so we still return rather than hang on the dead
-        // `prompt` HTTP promise.
+        // instantly. Error path: a `session.error` event (model API
+        // 401, etc.) short-circuits and we return `blocked`. Fallback
+        // for when the model exits the loop silently: poll
+        // `time.updated` for a stability window so we still return
+        // rather than hang on the dead `prompt` HTTP promise.
         await Promise.race([
           signalCaptured,
+          sessionErrored,
           waitForSessionIdle(client, sessionId, workspaceDir),
         ]);
       } finally {
@@ -424,6 +433,13 @@ export class OpencodeFactoryAgent implements LoopAgent {
         status: 'blocked',
         toolCalls: toolCallLog,
         message: captured.message ?? '',
+      };
+    }
+    if (sessionErrorMessage) {
+      return {
+        status: 'blocked',
+        toolCalls: toolCallLog,
+        message: `opencode session error: ${sessionErrorMessage}`,
       };
     }
     return {
@@ -745,6 +761,7 @@ async function waitForSessionIdle(
 async function subscribeForLogging(
   client: { event: { subscribe: () => Promise<unknown> } },
   sessionId: string,
+  onError?: (message: string) => void,
 ): Promise<void> {
   let events: { stream: AsyncIterable<unknown> };
   try {
@@ -766,11 +783,12 @@ async function subscribeForLogging(
         case 'session.idle':
           log.info(`opencode session.idle`);
           return;
-        case 'session.error':
-          log.warn(
-            `opencode session.error: ${JSON.stringify(props.error ?? {})}`,
-          );
+        case 'session.error': {
+          let summary = summarizeSessionError(props.error);
+          log.warn(`opencode session.error: ${summary}`);
+          onError?.(summary);
           return;
+        }
         case 'message.part.updated': {
           let part = props.part as
             | { type?: string; tool?: string; state?: { status?: string } }
@@ -792,6 +810,25 @@ async function subscribeForLogging(
   } catch {
     // SSE stream torn down — that's fine, the logging task is done.
   }
+}
+
+/**
+ * opencode's `session.error` event carries an APIError payload with a
+ * useful message + status code buried under nested `data` fields and a
+ * lot of CDN noise. Pull out just the parts a human needs to diagnose.
+ */
+function summarizeSessionError(error: unknown): string {
+  if (!error || typeof error !== 'object') return JSON.stringify(error);
+  let e = error as Record<string, unknown>;
+  let name = (e.name as string | undefined) ?? 'Error';
+  let data = (e.data as Record<string, unknown> | undefined) ?? {};
+  let message = (data.message as string | undefined) ?? 'unknown';
+  let statusCode = data.statusCode as number | undefined;
+  let url = (data.metadata as { url?: string } | undefined)?.url;
+  let parts = [`${name}: ${message}`];
+  if (statusCode !== undefined) parts.push(`status=${statusCode}`);
+  if (url) parts.push(`url=${url}`);
+  return parts.join(' ');
 }
 
 function summarizeArgs(args: Record<string, unknown>): string {
