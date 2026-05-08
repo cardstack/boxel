@@ -752,14 +752,6 @@ export class Project extends CardDef {
   @field knowledgeBase = linksToMany(() => KnowledgeArticle);
   @field successCriteria = contains(MarkdownField);
   @field testArtifactsRealmUrl = contains(StringField);
-  // @field board = linksTo(() => IssueTrackerBoard, {
-  //   query: {
-  //     filter: {
-  //       on: boardCodeRef,
-  //       eq: { 'project.id': '$this.id' },
-  //     },
-  //   },
-  // });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
@@ -1239,20 +1231,6 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
               @label='Hide empty columns'
             />
           </div>
-          {{!-- <div class='group-by-picker'>
-            <SortDropdown
-              @options={{this.groupByOptions}}
-              @selectedOption={{this.selectedGroupByOption}}
-              @onSelect={{this.onGroupByChange}}
-            />
-          </div> --}}
-          {{!-- <ContextButton
-            class='settings-button'
-            @label='Toggle column settings'
-            @icon='context-menu-vertical'
-            @variant='ghost'
-            {{on 'click' this.toggleSettings}}
-          /> --}}
         </div>
       </header>
       <div class='kanban-area'>
@@ -1340,12 +1318,6 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
         align-items: center;
         gap: 0.375rem;
       }
-      .group-by-picker {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-width: 11rem;
-      }
       .column-visibility-toggle {
         display: flex;
         align-items: center;
@@ -1355,13 +1327,6 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
         font-size: 0.75rem;
         color: var(--board-muted-fg);
         white-space: nowrap;
-      }
-      .group-by-picker :deep(.sort-options-label) {
-        color: var(--board-muted-fg);
-        font-size: 0.75rem;
-      }
-      .group-by-picker :deep(.sort-button) {
-        min-width: 8rem;
       }
       .kanban-title {
         display: flex;
@@ -1390,9 +1355,6 @@ class IssueTrackerBoardIsolated extends Component<typeof IssueTrackerBoard> {
         padding: 0.125rem 0.5rem;
         background: var(--board-muted-bg);
         border-radius: 4px;
-      }
-      .settings-button {
-        color: var(--board-muted-fg);
       }
     </style>
   </template>
