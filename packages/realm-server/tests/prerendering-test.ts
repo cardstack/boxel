@@ -81,14 +81,13 @@ interface StubPagePoolOptions {
   disableFileAdmission?: boolean;
 }
 
-const PAGE_POOL_OPTION_OVERRIDE_ENV_KEYS = [
+const PAGE_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
   'PRERENDER_PAGE_POOL_MIN',
   'PRERENDER_PAGE_POOL_MAX',
   'PRERENDER_PAGE_POOL_INITIAL',
   'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
   'PRERENDER_HIGH_PRIORITY_THRESHOLD',
   'PRERENDER_POOL_IDLE_CONTRACTION_MS',
-  'PRERENDER_SHARED_CONTEXT_CAP',
 ] as const;
 
 function withEnvUnset<T>(keys: readonly string[], fn: () => T): T {
@@ -207,9 +206,11 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
   // `options.maxPages` and per-test env setup. Shield construction from
   // repo-wide dev defaults in `mise-tasks/lib/env-vars.sh`, which now
   // exports `PRERENDER_PAGE_POOL_MIN/MAX=4` and would otherwise override
-  // the caller's `maxPages`.
+  // the caller's `maxPages`. Keep other env knobs available so tests that
+  // intentionally set them (for example `PRERENDER_SHARED_CONTEXT_CAP`)
+  // still exercise the requested behavior.
   let pool = withEnvUnset(
-    PAGE_POOL_OPTION_OVERRIDE_ENV_KEYS,
+    PAGE_POOL_CAPACITY_OVERRIDE_ENV_KEYS,
     () =>
       new PagePool({
         maxPages: opts.maxPages,
