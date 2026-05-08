@@ -1603,6 +1603,20 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
     await waitFor('[data-test-command-card-idle]');
 
+    // The host's MessageCommand must reach 'applied' state once the
+    // commandResult is dispatched. _messageCache is keyed by the bot
+    // message's effective/parent id (streamingEventId), but the dispatched
+    // commandResult.m.relates_to.event_id is the latest m.replace
+    // (replacedEventId). updateMessageCommandResult in resources/room.ts has
+    // to derive the cache key from the located bot-message event so the
+    // m.replace id Y still resolves back to the parent X — otherwise the
+    // status flip is silently lost and the UI stays re-applicable.
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(
+        'MessageCommand status should flip to applied even though commandResult.m.relates_to.event_id is the m.replace id, not the streaming id the cache is keyed by',
+      );
+
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&

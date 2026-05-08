@@ -725,9 +725,18 @@ export default class CommandService extends Service {
       }
     }
     if (error) {
+      // CS-11045: Same canonical-event-id resolution as the run task — emit
+      // the invalid commandResult linked to the bot-message event currently
+      // owning the commandRequest in room state, so ai-bot's /messages view
+      // and the host's own m.replace-aware bookkeeping agree on the linkage.
+      let invokedToolFromEventId =
+        this.getCurrentEventIdForCommandRequest(
+          command.message.roomId,
+          command.commandRequest.id,
+        ) ?? command.eventId;
       await this.matrixService.sendCommandResultEvent({
         roomId: command.message.roomId,
-        invokedToolFromEventId: command.eventId,
+        invokedToolFromEventId,
         toolCallId: command.commandRequest.id!,
         status: 'invalid',
         failureReason: error,
