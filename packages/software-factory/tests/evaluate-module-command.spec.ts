@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
-import { buildServerToken } from '../src/harness/shared';
+import { buildServerToken } from '@cardstack/realm-test-harness';
 import { buildTestClient } from './helpers/test-client';
 
 const fixtureRealmDir = resolve(
@@ -238,7 +238,7 @@ test.describe('evaluate-module command', () => {
         realmServerUrl,
         realmUrl,
         '@cardstack/boxel-host/commands/evaluate-module/default',
-        { moduleUrl, realmUrl },
+        { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
       );
 
       expect(response.status).toBe('ready');
@@ -275,7 +275,7 @@ test.describe('evaluate-module command', () => {
         realmServerUrl,
         realmUrl,
         '@cardstack/boxel-host/commands/evaluate-module/default',
-        { moduleUrl, realmUrl },
+        { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
       );
 
       // If the prerender catches the broken import, the command should return passed=false

@@ -1,0 +1,1253 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxelrealms001"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:indexing"
+        ],
+        "title": "Indexing",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Card instance entries in boxel_index for this realm (type='instance').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS cards FROM boxel_index WHERE realm_url = ${realm_url:sqlstring} AND type = 'instance' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Cards",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Module entries in boxel_index for this realm (type='module').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS modules FROM boxel_index WHERE realm_url = ${realm_url:sqlstring} AND type = 'module' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Modules",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Non-card non-module entries in boxel_index for this realm (type='file').",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS files FROM boxel_index WHERE realm_url = ${realm_url:sqlstring} AND type = 'file' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Files",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Error entries in boxel_index for this realm (type='error'). Each row corresponds to one file/module that failed to index.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 4,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE realm_url = ${realm_url:sqlstring} AND type = 'error' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator action: grant the selected permission level to the chosen Matrix user on this realm. POSTs to the realm-server with Authorization: Bearer (token from SSM at apply time, CS-10929).",
+        "fieldConfig": {
+          "defaults": {
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Grant ${permission_label} to ${matrix_username} on ${realm_url}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-upsert-realm-user-permission",
+                  "queryParams": [
+                    [
+                      "realm",
+                      "${realm_url}"
+                    ],
+                    [
+                      "user",
+                      "${matrix_username}"
+                    ],
+                    [
+                      "read",
+                      "${read_flag}"
+                    ],
+                    [
+                      "write",
+                      "${write_flag}"
+                    ]
+                  ],
+                  "headers": [
+                    [
+                      "Authorization",
+                      "Bearer ${grafana_secret}"
+                    ]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Grant ${permission_label} to ${matrix_username} on ${realm_url}?",
+                "oneClick": false
+              }
+            ],
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "from": 0,
+                  "result": {
+                    "index": 0,
+                    "text": "Grant"
+                  },
+                  "to": 9999999999999
+                },
+                "type": "range"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 5,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS click;",
+            "refId": "A"
+          }
+        ],
+        "title": "Grant Permission",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Permissions for this realm. Set the Matrix Username and Permission Level above, then click the Grant Permission button.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "username"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Matrix User"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "permission"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Permission"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_owner"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Realm Owner"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
+        "id": 6,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Realm Owner"
+            },
+            {
+              "desc": true,
+              "displayName": "write"
+            },
+            {
+              "desc": true,
+              "displayName": "read"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  username,\n  read,\n  write,\n  realm_owner,\n  CASE\n    WHEN realm_owner THEN 'owner'\n    WHEN write THEN 'read/write'\n    WHEN read THEN 'read'\n    ELSE 'none'\n  END AS permission\nFROM realm_user_permissions\nWHERE realm_url = ${realm_url:sqlstring}\nORDER BY realm_owner DESC, write DESC, read DESC, username ASC\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Realm Permissions",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing job status for this realm. Pending and in-flight counts come from the jobs/job_reservations tables, scoped to from-scratch-index and incremental-index for this realm. full-reindex is system-wide and not shown here.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": false,
+              "inspect": false,
+              "minWidth": 80
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "oldest_pending_seconds"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Oldest Pending (s)"
+                },
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 60
+                      },
+                      {
+                        "color": "red",
+                        "value": 300
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pending"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Pending"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "in_flight"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "In-flight"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "last_completed_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Last Completed"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 18
+        },
+        "id": 7,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL) AS pending,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NOT NULL) AS in_flight,\n  MAX(j.finished_at) AS last_completed_at,\n  EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL))) AS oldest_pending_seconds\n FROM jobs j\n LEFT JOIN job_reservations jr ON j.id = jr.job_id\n   AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.job_type IN ('from-scratch-index','incremental-index')\n   AND COALESCE(j.args->>'realmURL','') = ${realm_url:sqlstring};",
+            "refId": "A"
+          }
+        ],
+        "title": "Indexing status (this realm)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Files in this realm whose latest index attempt errored. Click a row to open Logs filtered to this realm.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": true,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "url"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "URL"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "error_message"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Error"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 400
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "indexed_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Indexed At"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 22
+        },
+        "id": 8,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Indexed At"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  url,\n  error_doc->>'message' AS error_message,\n  to_timestamp(indexed_at / 1000.0) AS indexed_at\nFROM boxel_index\nWHERE realm_url = ${realm_url:sqlstring}\n  AND type = 'error'\n  AND is_deleted IS NOT TRUE\nORDER BY indexed_at DESC\nLIMIT 200;",
+            "refId": "A"
+          }
+        ],
+        "title": "Recent Indexing Errors",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Most recent index jobs for this realm whose `finished_at` is set. Joined to the latest `job_reservations` row to derive a started_at and the worker-scoped job id `J.R`. Click a row to open Boxel Logs filtered to that job (Indexing Job Activity panel). full-reindex jobs aren\u2019t realm-scoped (no `args.realmURL`) and don\u2019t appear here \u2014 they\u2019re visible on the Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 100
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Job (j.r)"
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "View job logs",
+                      "targetBlank": true,
+                      "url": "/d/fetquzizsej28b?from=${__data.fields.log_window_from_ms}&to=${__data.fields.log_window_to_ms}&var-indexing_job_full=${__data.fields.job_id}&var-indexing_job_short=${__data.fields.job_id_short}&orgId=1&viewPanel=20"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job_id_short"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job_type"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Type"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "status"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Status"
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "resolved": {
+                          "color": "green",
+                          "index": 0,
+                          "text": "completed"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "unfulfilled": {
+                          "color": "yellow",
+                          "index": 1,
+                          "text": "unfulfilled"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "rejected": {
+                          "color": "red",
+                          "index": 2,
+                          "text": "rejected"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "canceled": {
+                          "color": "orange",
+                          "index": 3,
+                          "text": "canceled"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "started_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Started"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "finished_at"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Finished"
+                },
+                {
+                  "id": "unit",
+                  "value": "dateTimeAsIso"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "duration_seconds"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Duration"
+                },
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 30
+                      },
+                      {
+                        "color": "red",
+                        "value": 300
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "files_completed"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Files done"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_files"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Total files"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "log_window_from_ms"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "log_window_to_ms"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 32
+        },
+        "id": 9,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Finished"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id::text || '.' || COALESCE(jr.id::text, '-') AS job_id,\n  j.id::text AS job_id_short,\n  j.job_type,\n  j.status::text AS status,\n  COALESCE(jr.created_at, j.created_at) AS started_at,\n  j.finished_at,\n  (EXTRACT(EPOCH FROM COALESCE(jr.created_at, j.created_at)) * 1000)::bigint - 300000 AS log_window_from_ms,\n  (EXTRACT(EPOCH FROM j.finished_at) * 1000)::bigint + 300000 AS log_window_to_ms,\n  EXTRACT(EPOCH FROM (j.finished_at - COALESCE(jr.created_at, j.created_at))) AS duration_seconds,\n  COALESCE(jp.files_completed, 0) AS files_completed,\n  COALESCE(jp.total_files, 0) AS total_files\nFROM jobs j\nLEFT JOIN LATERAL (\n  SELECT * FROM job_reservations jr2\n   WHERE jr2.job_id = j.id\n   ORDER BY jr2.created_at DESC\n   LIMIT 1\n) jr ON TRUE\nLEFT JOIN job_progress jp ON jp.job_id = j.id\nWHERE j.job_type IN ('from-scratch-index','incremental-index')\n  AND j.finished_at IS NOT NULL\n  AND COALESCE(j.args->>'realmURL', '') = ${realm_url:sqlstring}\nORDER BY j.finished_at DESC\nLIMIT 100;",
+            "refId": "A"
+          }
+        ],
+        "title": "Recently Completed Index Jobs",
+        "type": "table"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "entity:realm"
+    ],
+    "templating": {
+      "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "description": "Realm to inspect. Drill-throughs from other dashboards prefill this.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Realm",
+          "multi": false,
+          "name": "realm_url",
+          "options": [],
+          "query": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "hide": 0,
+          "label": "Matrix Username",
+          "name": "matrix_username",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        },
+        {
+          "current": {
+            "selected": true,
+            "text": "read",
+            "value": "read"
+          },
+          "hide": 0,
+          "includeAll": false,
+          "label": "Permission Level",
+          "multi": false,
+          "name": "permission_level",
+          "options": [],
+          "query": "read,read_write",
+          "skipUrlSync": false,
+          "type": "custom"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "permission_label",
+          "multi": false,
+          "name": "permission_label",
+          "options": [],
+          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT 'true' AS read_flag;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "read_flag",
+          "multi": false,
+          "name": "read_flag",
+          "options": [],
+          "query": "SELECT 'true' AS read_flag;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "write_flag",
+          "multi": false,
+          "name": "write_flag",
+          "options": [],
+          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Realms",
+    "weekStart": ""
+  }
+}

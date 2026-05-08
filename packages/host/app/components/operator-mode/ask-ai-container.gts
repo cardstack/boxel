@@ -66,11 +66,11 @@ export default class AskAiContainer extends Component<Signature> {
           roomId,
           prompt: this.aiPrompt,
           attachedCards: openCards,
-          attachedFileURLs: this.operatorModeStateService.openFileURL
+          attachedFileIdentifiers: this.operatorModeStateService.openFileURL
             ? [this.operatorModeStateService.openFileURL]
             : undefined,
           openCardIds: openCards?.map((c) => c.id),
-          realmUrl: this.operatorModeStateService.realmURL,
+          realmIdentifier: this.operatorModeStateService.realmURL,
         }),
       ]);
 

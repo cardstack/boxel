@@ -487,10 +487,18 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
+    let formatChanged = item.format !== format;
     item.format = format;
     if (opts && 'request' in opts) item.request = opts.request;
     if (opts && 'useBaseTemplate' in opts)
       item.useBaseTemplate = opts.useBaseTemplate;
+    // A format flip is a deliberate user action ("edit this one") —
+    // mark it as the most recently interacted item so subsequent
+    // keyboard shortcuts target this card, not whatever happened to
+    // be opened most recently.
+    if (formatChanged) {
+      item.markInteracted();
+    }
     this.schedulePersist();
   }
 
@@ -739,7 +747,7 @@ export default class OperatorModeStateService extends Service {
     if (this._state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(new URL(this.realmURL));
 
-      if (realmPath.inRealm(rri(this._state.codePath.href))) {
+      if (realmPath.inRealm(this._state.codePath)) {
         try {
           return realmPath.local(this._state.codePath!);
         } catch (err: any) {

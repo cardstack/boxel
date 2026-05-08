@@ -1,7 +1,7 @@
 import { createServer } from 'node:net';
 import { module, test } from 'qunit';
 
-import { findAndHoldAvailablePort } from '../src/harness/shared';
+import { findAndHoldAvailablePort } from '@cardstack/realm-test-harness';
 
 async function bindOn(port: number): Promise<{
   ok: boolean;

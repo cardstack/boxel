@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "articleTitle": "Sticky Note — Agent Onboarding",
+      "articleType": "onboarding",
+      "content": "# Sticky Note — Agent Onboarding\n\nThis article tells the implementing agent how to work in this project.\n\n## Workspace Layout\n\nAll cards live at the workspace root or in `PascalCase/` subdirectories per the boxel-file-structure rules.\n\nExpected files when this project is complete:\n\n```\n/\n├── sticky-note.gts                 # Card definition\n├── sticky-note.test.gts            # QUnit tests (co-located)\n├── StickyNote/                     # Instance directory\n│   ├── idea-yellow.json\n│   ├── blocker-pink.json\n│   └── … (more examples)\n└── Spec/\n    └── sticky-note.json            # Catalog Spec card\n```\n\n## Card Design Principles\n\n1. **Short-form first.** The body is a small piece of text. Don't add long-form fields (no rich-text editor, no nested sections).\n2. **Color is part of the vocabulary.** Provide a finite set of color choices (e.g. yellow, pink, blue, green, orange, purple) and surface that color in every template (background tint or accent).\n3. **Spatial arrangement.** Provide `x`, `y`, and (optional) `rotation` fields so the note can be placed on a board. These are advisory — they don't have to actually drive layout in `isolated`, but they should be queryable.\n4. **Templates matter.** Implement `isolated`, `embedded`, and `fitted` so the card looks correct in cards-grid, dashboards, and board views.\n5. **Sensible defaults.** A new sticky note should default to a yellow color and an empty body so users can drop one onto a board and start typing.\n\n## Suggested Field Shape\n\n```ts\n@field title = contains(StringField);          // optional short label\n@field body = contains(MarkdownField);         // the note content\n@field color = contains(StringField);          // 'yellow' | 'pink' | 'blue' | 'green' | 'orange' | 'purple'\n@field x = contains(NumberField);              // board position\n@field y = contains(NumberField);              // board position\n@field rotation = contains(NumberField);       // optional, in degrees\n@field author = contains(StringField);         // free-form author\n@field createdAt = contains(DatetimeField);\n```\n\nIf MarkdownField is not appropriate, `StringField` is also acceptable for `body` since the brief calls it short-form.\n\n## Testing Expectations\n\nUse the QUnit `module(...)` form. Wrap every `test(...)` inside a module like `module('sticky-note', function (hooks) { … })`. Cover:\n\n- Default values (color defaults to `yellow`, x/y default to 0).\n- Construction from JSON with each color value.\n- That the `embedded` and `fitted` templates render the body and respect the color (smoke test — e.g. assert the rendered output contains the expected text).\n\n## Catalog Spec\n\nCreate `Spec/sticky-note.json` adopting the base Spec card with:\n\n- `specType: \"card\"`\n- `ref: { module: \"../sticky-note\", name: \"StickyNote\" }`\n- `cardTitle`, `cardDescription`, and `readMe` derived from the brief\n- `linkedExamples` referencing at least 3 concrete instances under `StickyNote/`.\n\n## Out of Scope\n\nDo **not** implement Document, Note, Article, Prompt Template, Workflow Playbook, Trigger, or Project cards — they are referenced in the brief but are external integration points. Only the Sticky Note card itself.",
+      "tags": [
+        "sticky-note",
+        "onboarding",
+        "agent-instructions"
+      ],
+      "updatedAt": "2026-05-06T00:00:00Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

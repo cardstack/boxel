@@ -13237,7 +13237,7 @@
     ],
     "refresh": "5s",
     "schemaVersion": 42,
-    "tags": [],
+    "tags": ["service:synapse", "upstream"],
     "templating": {
       "list": [
         {

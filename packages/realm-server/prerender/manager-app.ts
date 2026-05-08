@@ -4,11 +4,13 @@ import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
 import { format } from 'date-fns';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
+  sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
@@ -905,6 +907,13 @@ export function buildPrerenderManagerApp(options?: {
       sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
       randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Optional indexing-job correlator threaded from the worker. When
+    // present, gets stamped onto every proxying/proxied log line as
+    // `[job: J.R]` and forwarded upstream so the prerender-server can
+    // do the same — letting `|= "[job: J.R]"` filters return all four
+    // services' lines for an indexing job.
+    let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+    let jobTag = jobId ? ` [job: ${jobId}]` : '';
     let proxyStart = now();
     // Propagate client-disconnect into the upstream fetch so the
     // prerender server can cancel whatever it was doing and free
@@ -1060,7 +1069,7 @@ export function buildPrerenderManagerApp(options?: {
         let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
         let queueMs = now() - proxyStart;
         log.info(
-          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}`,
+          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}${jobTag}`,
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
@@ -1094,6 +1103,7 @@ export function buildPrerenderManagerApp(options?: {
             'Content-Type': 'application/vnd.api+json',
             Accept: ctxt.get('Accept') || 'application/vnd.api+json',
             [PRERENDER_REQUEST_ID_HEADER]: requestId,
+            ...(jobId ? { [PRERENDER_JOB_ID_HEADER]: jobId } : {}),
           },
           body: raw,
           signal: ac.signal,
@@ -1204,7 +1214,7 @@ export function buildPrerenderManagerApp(options?: {
         ctxt.body = buf;
         let proxyMs = now() - proxyStart;
         log.info(
-          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}`,
+          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}${jobTag}`,
         );
         return;
       }
@@ -1347,15 +1357,17 @@ export function buildPrerenderManagerApp(options?: {
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+      let jobTag = jobId ? ` [job: ${jobId}]` : '';
       if (verboseManagerLogs) {
         log.info(
-          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
+          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}${jobTag}`,
         );
       }
       ctxt.res.on('finish', () => {
         if (verboseManagerLogs) {
           log.info(
-            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
           );
           log.debug(JSON.stringify(ctxt.req.headers));
         }

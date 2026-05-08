@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sequenceNumber": 3,
+      "runAt": "2026-05-06T20:15:28.935Z",
+      "status": "passed",
+      "completedAt": "2026-05-06T20:15:30.677Z",
+      "durationMs": 1739,
+      "moduleResults": [
+        {
+          "path": "sticky-note.gts",
+          "error": ""
+        }
+      ]
+    },
+    "relationships": {
+      "issue": {
+        "links": {
+          "self": "../Issues/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/eval-result",
+        "name": "EvalResult"
+      }
+    }
+  }
+}

@@ -155,7 +155,7 @@ function getReadFileUrl(request?: CommandRequest): string | undefined {
       typeof request?.arguments === 'string'
         ? JSON.parse(request.arguments)
         : request?.arguments;
-    return args?.attributes?.fileUrl;
+    return args?.attributes?.fileIdentifier;
   } catch {
     return undefined;
   }

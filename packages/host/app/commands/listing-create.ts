@@ -27,8 +27,8 @@ import AuthedFetchCommand from './authed-fetch';
 import CreateSpecCommand from './create-specs';
 import GenerateThumbnailCommand from './generate-thumbnail';
 import GetCardCommand from './get-card';
-import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
-import GetRealmOfUrlCommand from './get-realm-of-url';
+import GetCatalogRealmIdentifiersCommand from './get-catalog-realm-identifiers';
+import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SanitizeModuleListCommand from './sanitize-module-list';
 import SearchAndChooseCommand from './search-and-choose';
@@ -55,10 +55,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   private async getCatalogRealm(): Promise<string> {
-    const { urls } = await new GetCatalogRealmUrlsCommand(
+    const { realmIdentifiers } = await new GetCatalogRealmIdentifiersCommand(
       this.commandContext,
     ).execute();
-    let catalogRealm = urls.find((realm: string) =>
+    let catalogRealm = realmIdentifiers.find((realm: string) =>
       realm.endsWith('/catalog/'),
     );
     if (!catalogRealm) {
@@ -80,10 +80,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async sanitizeModuleList(
     modulesToCreate: Iterable<string>,
   ): Promise<string[]> {
-    const { moduleUrls } = await new SanitizeModuleListCommand(
+    const { moduleIdentifiers } = await new SanitizeModuleListCommand(
       this.commandContext,
-    ).execute({ moduleUrls: Array.from(modulesToCreate) });
-    return moduleUrls;
+    ).execute({ moduleIdentifiers: Array.from(modulesToCreate) });
+    return moduleIdentifiers;
   }
 
   protected async run(
@@ -239,10 +239,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
     moduleUrl: string, // the module URL of the card type being listed
     codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
-    const { realmUrl: resourceRealmUrl } = await new GetRealmOfUrlCommand(
-      this.commandContext,
-    ).execute({ url: resourceUrl });
-    const resourceRealm = resourceRealmUrl || targetRealm;
+    const { realmIdentifier: resourceRealmIdentifier } =
+      await new GetRealmOfResourceIdentifierCommand(
+        this.commandContext,
+      ).execute({ resourceIdentifier: resourceUrl });
+    const resourceRealm = resourceRealmIdentifier || targetRealm;
     const depUrl = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
     const { ok, body: jsonApiResponse } = await new AuthedFetchCommand(
       this.commandContext,
@@ -564,7 +565,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     await new GenerateThumbnailCommand(this.commandContext).execute({
       prompt,
-      targetRealmUrl: targetRealm,
+      targetRealmIdentifier: targetRealm,
       targetPath: 'ListingThumbnails', // Wrap all thumbnails in a "ListingThumbnails" folder to keep the realm tidy
       targetCardId: listing.id,
       cardName: codeRef.name,

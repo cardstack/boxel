@@ -7,31 +7,33 @@ import HostBaseCommand from '../lib/host-base-command';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class ShowFileCommand extends HostBaseCommand<
-  typeof BaseCommandModule.FileUrlCard
+  typeof BaseCommandModule.FileIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   description =
-    'Show a file in the code submode. The fileUrl must be a fully qualified URL.';
+    'Show a file in the code submode. The fileIdentifier must be a fully qualified URL.';
 
   static actionVerb = 'Show File';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { FileUrlCard } = commandModule;
-    return FileUrlCard;
+    const { FileIdentifierCard } = commandModule;
+    return FileIdentifierCard;
   }
 
-  requireInputFields = ['fileUrl'];
+  requireInputFields = ['fileIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.FileUrlCard,
+    input: BaseCommandModule.FileIdentifierCard,
   ): Promise<undefined> {
     let { operatorModeStateService } = this;
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
     }
-    await operatorModeStateService.updateCodePath(new URL(input.fileUrl));
+    await operatorModeStateService.updateCodePath(
+      new URL(input.fileIdentifier),
+    );
     await operatorModeStateService.updateSubmode('code');
   }
 }

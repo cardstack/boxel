@@ -41,7 +41,7 @@ interface DirectUploadDetails {
 
 export class UploadImageInput extends CardDef {
   @field sourceImageUrl = contains(UrlField);
-  @field targetRealmUrl = contains(StringField);
+  @field targetRealmIdentifier = contains(StringField);
 }
 
 export class CardIdCard extends CardDef {
@@ -66,8 +66,8 @@ export default class UploadImageCommand extends Command<
     if (!input.sourceImageUrl) {
       throw new Error('sourceImageUrl is required');
     }
-    if (!input.targetRealmUrl) {
-      throw new Error('targetRealm is required');
+    if (!input.targetRealmIdentifier) {
+      throw new Error('targetRealmIdentifier is required');
     }
 
     const sourceImageUrl = input.sourceImageUrl.trim();
@@ -138,7 +138,7 @@ export default class UploadImageCommand extends Command<
       });
       await saveCardCommand.execute({
         card: cloudflareImageCard,
-        realm: input.targetRealmUrl,
+        realm: input.targetRealmIdentifier,
       });
       if (!isCardInstance(cloudflareImageCard)) {
         throw new Error(

@@ -28,6 +28,9 @@ interface Signature {
     cardTitle?: string;
     cardTypeDisplayName?: string;
     cardTypeIcon?: ComponentLike<{ Element: Element }>;
+    closeShortcutHint?: string;
+    editShortcutHint?: string;
+    finishEditingShortcutHint?: string;
     headerColor?: string;
     isSaving?: boolean;
     isTopCard?: boolean;
@@ -154,7 +157,9 @@ export default class CardHeader extends Component<Signature> {
                 />
               </:trigger>
               <:content>
-                Edit
+                Edit{{#if @editShortcutHint}}
+                  ({{@editShortcutHint}})
+                {{/if}}
               </:content>
             </Tooltip>
           {{/if}}
@@ -170,7 +175,9 @@ export default class CardHeader extends Component<Signature> {
                 />
               </:trigger>
               <:content>
-                Finish Editing
+                Finish Editing{{#if @finishEditingShortcutHint}}
+                  ({{@finishEditingShortcutHint}})
+                {{/if}}
               </:content>
             </Tooltip>
           {{/if}}
@@ -218,7 +225,9 @@ export default class CardHeader extends Component<Signature> {
                 />
               </:trigger>
               <:content>
-                Close
+                Close{{#if @closeShortcutHint}}
+                  ({{@closeShortcutHint}})
+                {{/if}}
               </:content>
             </Tooltip>
           {{/if}}
