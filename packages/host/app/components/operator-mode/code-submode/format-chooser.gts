@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
@@ -10,7 +11,7 @@ import EditIcon from '@cardstack/boxel-icons/pencil';
 import { modifier } from 'ember-modifier';
 import window from 'ember-window-mock';
 
-import { Button } from '@cardstack/boxel-ui/components';
+import { Button, Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import {
   Isolated as IsolatedIcon,
@@ -54,6 +55,100 @@ interface Signature {
   Element: HTMLElement;
 }
 
+interface FormatButtonSignature {
+  Args: {
+    activeFormat: Format;
+    format: Format;
+    icon?: Icon | null;
+    isDragging?: boolean;
+    pillTargetFmt: Format;
+    previewFmt: Format | null;
+    registerBtn: unknown;
+    onClick: () => void;
+  };
+  Element: HTMLButtonElement;
+}
+
+const FormatButton: TemplateOnlyComponent<FormatButtonSignature> = <template>
+  <Button
+    @size='auto'
+    class={{cn
+      'pf-btn'
+      active=(eq @activeFormat @format)
+      is-hover=(eq @previewFmt @format)
+      pill-visible=(eq @format @pillTargetFmt)
+      is-dragging=@isDragging
+    }}
+    type='button'
+    data-fmt={{@format}}
+    aria-label={{@format}}
+    aria-pressed={{eq @activeFormat @format}}
+    title={{@format}}
+    data-test-format-chooser={{@format}}
+    {{! @glint-ignore }}
+    {{@registerBtn @format}}
+    {{on 'click' @onClick}}
+  >
+    {{#if @icon}}
+      <@icon class='pf-icon' width={{ICON_W}} height={{ICON_W}} />
+    {{/if}}
+  </Button>
+  <style scoped>
+    /* Buttons — rectangular hit-targets above pill containers (z-index 5).
+       Height matches --pf-pill-h so button icons align with pill icon. */
+    .pf-btn {
+      touch-action: none;
+      --boxel-button-color: transparent;
+      --boxel-button-text-color: inherit;
+      --boxel-button-padding: 0;
+
+      width: 100%;
+      height: var(--pf-pill-h);
+      min-width: var(--pf-pill-h);
+      border-color: transparent;
+      border-radius: var(--boxel-border-radius-sm);
+      position: relative;
+      z-index: 5;
+      pointer-events: auto;
+      cursor: pointer;
+      opacity: var(--pf-btn-opacity);
+      transition:
+        opacity var(--pf-transition-btn),
+        color var(--pf-transition-btn);
+    }
+    .pf-btn.is-dragging {
+      cursor: grabbing;
+      transition:
+        opacity var(--pf-transition-drag),
+        color var(--pf-transition-drag);
+    }
+    .pf-btn:hover {
+      --boxel-button-color: transparent;
+      opacity: 1;
+    }
+    /* The pill carries the icon for its current button, so that button hides
+       its own icon. While previewing, the hovered button hides its icon and
+       the active button shows its icon in green ("currently selected").
+       During drag, no green — active changes live, green would flicker. */
+    .pf-btn.active {
+      color: var(--pf-active-color);
+      opacity: 1;
+    }
+    .pf-icon {
+      flex: 0 0 auto;
+      height: var(--pf-icon-w);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pf-icon :deep(svg) {
+      height: var(--pf-icon-w);
+      width: auto;
+      display: block;
+    }
+  </style>
+</template>;
+
 /* Offscreen canvas measurement — no DOM mutation, no reflow.
    Sizes the pill path to match each label's natural text width. */
 let _measureCtx: CanvasRenderingContext2D | null = null;
@@ -83,6 +178,7 @@ const PILL_R = PILL_H / 2;
 const PILL_SVG_W = 240; // --pf-pill-svg-w
 
 const ICON_W = 16; // --pf-icon-w
+const BTN_COL_W = 32; // fixed width for non-active, non-previewed buttons
 const LABEL_GAP = 5;
 const PAD_LEFT = 9; // --pf-pad-left (var(--boxel-sp-xs))
 const PAD_RIGHT = 11;
@@ -102,7 +198,7 @@ function pillWidthFor(fmt: Format, compact: boolean = false): number {
   if (compact) {
     // Compact pill is icon-only and matches the other buttons' column
     // width exactly (32) so the whole chooser collapses uniformly.
-    return 32;
+    return BTN_COL_W;
   }
   const labelW = measureWord(cap(fmt), PILL_LABEL_FONT);
   return PAD_LEFT + ICON_W + LABEL_GAP + Math.ceil(labelW) + PAD_RIGHT;
@@ -254,9 +350,11 @@ export default class PillFormatChooser extends Component<Signature> {
   /* One column wider at a time: hovered (preview) or active (rest). */
   private colWidthFor(f: Format): number {
     if (this.hasPreview) {
-      return f === this.previewFmt ? pillWidthFor(f, this.isCompact) : 32;
+      return f === this.previewFmt
+        ? pillWidthFor(f, this.isCompact)
+        : BTN_COL_W;
     }
-    return f === this.args.format ? pillWidthFor(f, this.isCompact) : 32;
+    return f === this.args.format ? pillWidthFor(f, this.isCompact) : BTN_COL_W;
   }
 
   get gridStyle(): SafeString {
@@ -381,7 +479,9 @@ export default class PillFormatChooser extends Component<Signature> {
         isFirst = false;
       }
       natural +=
-        f.format === this.args.format ? pillWidthFor(f.format, false) : 32;
+        f.format === this.args.format
+          ? pillWidthFor(f.format, false)
+          : BTN_COL_W;
     }
     return this.parentWidth < natural;
   }
@@ -587,6 +687,8 @@ export default class PillFormatChooser extends Component<Signature> {
       style={{this.gridStyle}}
       role='group'
       aria-label='Card format'
+      data-test-format-chooser-root
+      data-test-format-chooser-mode={{if this.isCompact 'compact' 'full'}}
       {{this.registerRow}}
       ...attributes
     >
@@ -605,7 +707,10 @@ export default class PillFormatChooser extends Component<Signature> {
           {{#if this.pillTargetIcon}}
             <this.pillTargetIcon class='pf-icon' width='16' height='16' />
           {{/if}}
-          <span class='pf-label'>{{this.pillTargetFmt}}</span>
+          <span
+            class='pf-label'
+            data-test-format-chooser-pill-label
+          >{{this.pillTargetFmt}}</span>
         </div>
       </div>
 
@@ -615,27 +720,36 @@ export default class PillFormatChooser extends Component<Signature> {
             <span class='pf-divider'></span>
           {{/unless}}
         {{/if}}
-        <Button
-          @size='auto'
-          class={{cn
-            'pf-btn'
-            active=(eq @format fw.format)
-            is-hover=(eq this.previewFmt fw.format)
-            pill-visible=(eq fw.format this.pillTargetFmt)
-          }}
-          type='button'
-          data-fmt={{fw.format}}
-          aria-label={{fw.format}}
-          aria-pressed={{eq @format fw.format}}
-          title={{fw.format}}
-          data-test-format-chooser={{fw.format}}
-          {{this.registerBtn fw.format}}
-          {{on 'click' (fn this.onClick fw.format)}}
-        >
-          {{#if fw.icon}}
-            <fw.icon class='pf-icon' width='16' height='16' />
-          {{/if}}
-        </Button>
+        {{#if this.isCompact}}
+          <Tooltip @placement='top'>
+            <:trigger>
+              <FormatButton
+                @activeFormat={{@format}}
+                @format={{fw.format}}
+                @icon={{fw.icon}}
+                @isDragging={{this.isDragging}}
+                @pillTargetFmt={{this.pillTargetFmt}}
+                @previewFmt={{this.previewFmt}}
+                @registerBtn={{this.registerBtn}}
+                @onClick={{fn this.onClick fw.format}}
+              />
+            </:trigger>
+            <:content>
+              <span class='pf-tooltip-label'>{{fw.format}}</span>
+            </:content>
+          </Tooltip>
+        {{else}}
+          <FormatButton
+            @activeFormat={{@format}}
+            @format={{fw.format}}
+            @icon={{fw.icon}}
+            @isDragging={{this.isDragging}}
+            @pillTargetFmt={{this.pillTargetFmt}}
+            @previewFmt={{this.previewFmt}}
+            @registerBtn={{this.registerBtn}}
+            @onClick={{fn this.onClick fw.format}}
+          />
+        {{/if}}
       {{/each}}
     </div>
 
@@ -681,7 +795,7 @@ export default class PillFormatChooser extends Component<Signature> {
            tooltips extend freely — compact mode kicks in before overflow occurs. */
         min-width: 0;
         max-width: 100%;
-        overflow: visible; /* for tooltips */
+        overflow: hidden;
         background-color: var(--pf-bg);
         color: var(--pf-color);
         border-radius: var(--boxel-border-radius-2xl);
@@ -751,90 +865,13 @@ export default class PillFormatChooser extends Component<Signature> {
         flex: 0 0 auto;
       }
 
-      /* Buttons — rectangular hit-targets above pill containers (z-index 5).
-         Height matches --pf-pill-h so button icons align with pill icon. */
-      .pf-btn {
-        touch-action: none;
-        --boxel-button-color: transparent;
-        --boxel-button-text-color: inherit;
-        --boxel-button-padding: 0;
-
-        width: 100%;
-        height: var(--pf-pill-h);
-        border-color: transparent;
-        border-radius: var(--boxel-border-radius-sm);
-        position: relative;
-        z-index: 5;
-        pointer-events: auto;
-        cursor: pointer;
-        opacity: var(--pf-btn-opacity);
-        transition:
-          opacity var(--pf-transition-btn),
-          color var(--pf-transition-btn);
-      }
-      .pf-btn:hover {
-        --boxel-button-color: transparent;
-        opacity: 1;
-      }
-      .pill-format-chooser.dragging .pf-btn {
-        cursor: grabbing;
-        transition:
-          opacity var(--pf-transition-drag),
-          color var(--pf-transition-drag);
-      }
-      /* The pill carries the icon for its current button, so that button hides
-         its own icon. While previewing, the hovered button hides its icon and
-         the active button shows its icon in green ("currently selected").
-         During drag, no green — active changes live, green would flicker. */
-      .pf-btn.active {
-        color: var(--pf-active-color);
-        opacity: 1;
-      }
-      .pf-icon {
-        flex: 0 0 auto;
-        height: var(--pf-icon-w);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .pf-icon :deep(svg) {
-        height: var(--pf-icon-w);
-        width: auto;
-        display: block;
-      }
-
       /* Compact mode — parent too narrow for the full pill; collapse to icon-only. */
       .pill-format-chooser.compact .pill-content .pf-label {
         display: none;
       }
-      /* Tooltip above button in compact mode (icons have no visible label).
-         Uses data-fmt so text is unmodified; title= is the a11y fallback. */
-      .pill-format-chooser.compact .pf-btn {
-        position: relative;
-      }
-      .pill-format-chooser.compact .pf-btn::after {
-        content: attr(data-fmt);
-        position: absolute;
-        bottom: calc(100% + 8px);
-        left: 50%;
+
+      .pf-tooltip-label {
         text-transform: capitalize;
-        letter-spacing: var(--boxel-lsp-xs);
-        padding: 5px 9px;
-        background: var(--pf-bg);
-        color: var(--pf-color);
-        border-radius: var(--boxel-border-radius-sm);
-        white-space: nowrap;
-        pointer-events: none;
-        opacity: 0;
-        transform: translateX(-50%);
-        z-index: 10;
-      }
-      /* Show tooltip instantly — it's the only label in compact mode.
-         During drag, pointer-capture kills :hover on neighbors, so show
-         the tooltip on .active instead so it follows the cursor. */
-      .pill-format-chooser.compact .pf-btn:hover::after,
-      .pill-format-chooser.compact.dragging .pf-btn.active::after {
-        opacity: 1;
       }
     </style>
   </template>
