@@ -116,26 +116,47 @@ export default function handleUnpublishRealm({
       // NOTIFY realm_registry and unmount via the reconciler.
       let publishedRealm = await reconciler.lookupOrMount(publishedRealmURL);
 
-      // Serialize concurrent writers for this realm URL via the per-
-      // URL advisory lock, then drive tombstones via realm.deleteAll
-      // (bumps realm_version + marks every boxel_index entry as
-      // deleted, matching the legacy unpublish behavior), then do FS
-      // + DB cleanup. realms[] / virtualNetwork mutation stays in the
-      // reconciler's hands — it reacts to the registry DELETE +
-      // NOTIFY below.
-      await withRealmWriteLock(dbAdapter, publishedRealmURL, async () => {
-        if (publishedRealm) {
-          let allFilePaths = collectAllFilePaths(publishedRealmPath);
-          if (allFilePaths.length > 0) {
-            await publishedRealm.deleteAll(allFilePaths);
-          }
+      // Tombstone *before* the lock: realm.deleteAll enqueues an indexer
+      // job whose execution runs on a worker connection of its own, so it
+      // is not transactional with the lock-holder's DB cleanup either way.
+      // Doing it before the tx keeps the tombstones (which mark every
+      // boxel_index entry as deleted + bump realm_version) in place if
+      // the registry/permissions DELETEs fail — a retry of the same
+      // unpublish will succeed without re-tombstoning the same content.
+      if (publishedRealm) {
+        let allFilePaths = collectAllFilePaths(publishedRealmPath);
+        if (allFilePaths.length > 0) {
+          await publishedRealm.deleteAll(allFilePaths);
         }
-        removeRealmFiles(publishedRealmPath);
+      }
 
-        await deleteRegistryRowByUrl(dbAdapter, publishedRealmURL);
+      // Serialize concurrent writers for this realm URL via the per-
+      // URL advisory lock and group all DB cleanup into one transaction:
+      // CS-10898 routes the registry-row delete and the permissions
+      // delete through the lock-holder's pinned querier, so any failure
+      // mid-cleanup rolls back both DELETEs together. realms[] /
+      // virtualNetwork mutation stays in the reconciler's hands — it
+      // reacts to the registry DELETE + NOTIFY emitted below.
+      await withRealmWriteLock(
+        dbAdapter,
+        publishedRealmURL,
+        async (txQuerier) => {
+          await deleteRegistryRowByUrl(dbAdapter, publishedRealmURL, txQuerier);
+          await removeRealmPermissions(
+            dbAdapter,
+            new URL(publishedRealmURL),
+            txQuerier,
+          );
+        },
+      );
 
-        await removeRealmPermissions(dbAdapter, new URL(publishedRealmURL));
-      });
+      // FS removal happens after the DB transaction commits. If the rm
+      // fails, the realm's row + permissions are already gone and the
+      // user-visible state is "unpublished"; orphan files are
+      // recoverable by an out-of-band sweep (residual gap documented in
+      // CS-10898). Doing it inside the tx would risk the worse failure
+      // mode where we delete files but the registry row sticks around.
+      removeRealmFiles(publishedRealmPath);
 
       // Removing this derivative just changed the source realm's
       // `RealmInfo.lastPublishedAt` map (rows where `source_url =
