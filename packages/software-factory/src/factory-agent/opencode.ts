@@ -2,49 +2,21 @@
  * OpencodeFactoryAgent — LoopAgent backed by the opencode SDK.
  *
  * Drives a session against an `opencode` subprocess so `--agent
- * openrouter` runs get native fs / Bash / Glob / Grep, with our 7
- * factory tools surfaced over MCP for validation + control signals.
+ * openrouter` runs get native fs / Bash / Glob / Grep, with the 8
+ * factory tools surfaced over MCP for schema lookup, validation, and
+ * control signals.
  *
- * Architecture
- * ============
+ * Two auth modes:
+ *   - **Direct** — `openRouterApiKey` set: opencode's provider points
+ *     at openrouter.ai with the user's bearer.
+ *   - **Passthrough** — no key: opencode's provider points at the
+ *     realm server's `_openrouter/chat/completions` with a server JWT;
+ *     the realm applies the server-side OpenRouter key and bills
+ *     credits to the operator.
  *
- * Every `run()` does:
- *
- *   1. **Resolve auth.** Two modes:
- *      - **Direct API key** — `openRouterApiKey` is set (CLI flag or
- *        env). Configure opencode with a custom OpenAI-compatible
- *        provider whose baseURL is OpenRouter and Authorization is
- *        the user's bearer.
- *      - **Passthrough** — no key. Point opencode's provider at the
- *        realm server's `_openrouter/chat/completions` endpoint and
- *        stamp a freshly-fetched server JWT into the provider's
- *        static `Authorization` header. The realm server validates
- *        the JWT, applies the server-side OpenRouter key, forwards
- *        verbatim, and bills credits to the operator's boxel
- *        account. The 7-day JWT TTL is comfortably longer than any
- *        single ticket run.
- *
- *   2. **Build MCP server for factory tools.** Spin up an in-process
- *      HTTP MCP server (`@modelcontextprotocol/sdk` Streamable HTTP
- *      transport) that exposes the 8 factory tools (`get_card_schema`,
- *      5 validators, `signal_done`, `request_clarification`). opencode
- *      connects via `McpRemoteConfig`.
- *
- *   3. **Spawn opencode subprocess.** `createOpencodeServer({
- *      config })` starts the binary on a random local port and
- *      returns `{ url, close }`. `config.permission
- *      .external_directory: 'deny'` plus the workspace `cwd` give us
- *      path-scoped writes for free.
- *
- *   4. **Drive a session.** `client.session.create` then
- *      `client.session.prompt` with the assembled prompt. We consume
- *      the `client.event` SSE stream to log tool calls and capture
- *      the DONE / CLARIFICATION signals the factory tools emit.
- *      (Symbols don't survive JSON-RPC, so the MCP server tags them
- *      `"factory:done"` / `"factory:clarification"` and we match on
- *      the tag.)
- *
- *   5. **Tear down.** Close opencode, stop the MCP HTTP server.
+ * DONE / CLARIFICATION signals carry a Symbol that doesn't survive
+ * JSON-RPC, so the MCP server re-tags them `factory:done` /
+ * `factory:clarification` and the agent matches on the tag.
  */
 
 import { createServer as createHttpServer } from 'node:http';
@@ -256,29 +228,28 @@ export class OpencodeFactoryAgent implements LoopAgent {
 
     let providerConfig: OpencodeConfig['provider'];
     if (this.config.openRouterApiKey) {
-      providerConfig = buildDirectProviderConfig(
+      providerConfig = buildProviderConfig(
         this.config.model,
-        this.config.openRouterApiKey,
+        'https://openrouter.ai/api/v1',
+        `Bearer ${this.config.openRouterApiKey}`,
+        'OpenRouter (direct)',
       );
     } else {
-      // Passthrough mode: fetch a server JWT once and stamp it into
-      // the provider's static headers. The realm server's
-      // `/_openrouter/chat/completions` endpoint validates the JWT,
-      // applies the server-side OpenRouter key, and bills credits to
-      // this user. The 7-day JWT TTL means a single factory:go run
-      // is in no danger of outlasting the cached value.
+      // Passthrough: realm-server validates the server JWT, applies
+      // the server-side OpenRouter key, forwards verbatim, and bills
+      // credits to the operator. The 7-day JWT TTL outlasts any single
+      // factory:go run.
       let serverToken = await this.config.client.getServerToken();
-      providerConfig = buildPassthroughProviderConfig(
+      providerConfig = buildProviderConfig(
         this.config.model,
-        this.config.realmServerUrl,
+        new URL('_openrouter', this.config.realmServerUrl).toString(),
         serverToken,
+        'OpenRouter (boxel passthrough)',
       );
     }
 
     let { createOpencodeServer, createOpencodeClient } =
       await loadOpencodeSdk();
-    // Resolve the workspace's canonical real path now (we'll need it
-    // before the session is created, just to set the subprocess's cwd).
     let resolvedDir = realpathSync(this.config.workspaceDir);
     // CRITICAL: opencode's `createOpencodeServer` spawns the subprocess
     // without a `cwd` option — it inherits the parent's cwd. The model
@@ -314,9 +285,6 @@ export class OpencodeFactoryAgent implements LoopAgent {
         },
       });
     } finally {
-      // Restore the parent process's cwd. The opencode subprocess has
-      // already forked off `resolvedDir`; the parent doesn't need to
-      // stay there.
       process.chdir(originalCwd);
     }
     this.client = createOpencodeClient({ baseUrl: this.opencode.url });
@@ -495,70 +463,28 @@ export class OpencodeFactoryAgent implements LoopAgent {
 }
 
 /**
- * Build the opencode provider config for direct-API-key mode.
+ * Build an opencode provider config for the OpenAI-compatible adapter.
  *
- * Routes the model call straight to OpenRouter using
- * `@ai-sdk/openai-compatible` so we don't need a custom provider
- * package. Authorization is baked into the static `headers` object on
- * the model entry, which is fine for long-lived bearer tokens.
+ * Used in two modes: direct (baseURL → openrouter.ai, auth → user's
+ * bearer) and passthrough (baseURL → realm-server `/_openrouter`,
+ * auth → server JWT). AI-SDK appends `/chat/completions` to baseURL.
  */
-function buildDirectProviderConfig(
+function buildProviderConfig(
   model: string,
-  apiKey: string,
+  baseURL: string,
+  authorization: string,
+  displayName: string,
 ): OpencodeConfig['provider'] {
   return {
     [FACTORY_PROVIDER_ID]: {
       npm: '@ai-sdk/openai-compatible',
-      name: 'OpenRouter (direct)',
-      options: {
-        baseURL: 'https://openrouter.ai/api/v1',
-      },
+      name: displayName,
+      options: { baseURL },
       models: {
         [model]: {
           name: model,
           tool_call: true,
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-        },
-      },
-    },
-  };
-}
-
-/**
- * Build the opencode provider config for passthrough mode.
- *
- * Points opencode at the realm server's
- * `/_openrouter/chat/completions` endpoint and stamps a server JWT
- * into the provider's static `Authorization` header. AI-SDK's
- * OpenAI-compatible provider appends `/chat/completions` to whatever
- * `baseURL` we hand it, so we set `baseURL` to `<realmServerUrl>/_openrouter`.
- *
- * The realm server validates the JWT (via `jwtMiddleware`), applies
- * the server-side OpenRouter API key, forwards verbatim, and bills
- * the operator's boxel credits.
- */
-function buildPassthroughProviderConfig(
-  model: string,
-  realmServerUrl: string,
-  serverToken: string,
-): OpencodeConfig['provider'] {
-  let baseURL = new URL('_openrouter', realmServerUrl).toString();
-  return {
-    [FACTORY_PROVIDER_ID]: {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'OpenRouter (boxel passthrough)',
-      options: {
-        baseURL,
-      },
-      models: {
-        [model]: {
-          name: model,
-          tool_call: true,
-          headers: {
-            Authorization: serverToken,
-          },
+          headers: { Authorization: authorization },
         },
       },
     },
@@ -710,19 +636,12 @@ function serializeSignalResult(result: unknown): unknown {
 }
 
 /**
- * Poll `client.session.list` and watch `session.time.updated` until it
- * stops advancing for `STABILITY_WINDOW_MS`. opencode bumps
- * `time.updated` on every `message.part.delta` (and every step
- * transition), so a few seconds of no change reliably means the model
- * + tool loop has gone idle.
- *
- * This is the third workaround attempt for unreliable opencode 1.14.34
- * completion signals, following the dead `await session.prompt` HTTP
- * response and the empty `/session/status` map (which appears to be
- * unused / always `{}` in this version regardless of canonical
- * directory). The `directory` query has to match the canonical realpath
- * opencode normalized at create time (`/var → /private/var` on macOS),
- * which the caller has already resolved.
+ * Watch `session.time.updated` via `client.session.list` until it stops
+ * advancing for `STABILITY_WINDOW_MS` — opencode bumps it on every step
+ * transition, so a few seconds of no change reliably means the model +
+ * tool loop has gone idle. The `directory` query must match the
+ * canonical realpath opencode normalized at create time (`/var →
+ * /private/var` on macOS), already resolved by the caller.
  */
 async function waitForSessionIdle(
   client: { session: { list: (opts?: any) => Promise<unknown> } },
@@ -969,7 +888,7 @@ async function isPortFree(port: number): Promise<boolean> {
  * this helper anywhere we log a fetch rejection so we can actually tell
  * what happened (subprocess died vs. socket timeout vs. user abort).
  */
-export function describeFetchError(err: unknown): string {
+function describeFetchError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   let parts = [err.message];
   let cause: unknown = (err as { cause?: unknown }).cause;
@@ -1001,7 +920,7 @@ export function describeFetchError(err: unknown): string {
  * we can immediately distinguish "subprocess crashed" from "transient
  * socket hiccup".
  */
-export async function probeOpencode(url: string | undefined): Promise<string> {
+async function probeOpencode(url: string | undefined): Promise<string> {
   if (!url) return 'unknown (no url)';
   let controller = new AbortController();
   let timer = setTimeout(() => controller.abort(), 1500);
