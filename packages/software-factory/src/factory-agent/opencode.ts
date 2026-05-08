@@ -76,6 +76,14 @@ const SIGNAL_DONE_TAG = 'factory:done';
 const SIGNAL_CLARIFICATION_TAG = 'factory:clarification';
 
 /**
+ * Upper bound on the post-race finally drain. If the race above won
+ * via the `waitForSessionIdle` fallback, the prompt + event-log
+ * promises are very likely stuck on the opencode 1.14.34 dead-HTTP
+ * bug; we let them try to settle for a beat, then move on.
+ */
+const POST_RACE_DRAIN_MS = 2000;
+
+/**
  * The 8 factory tools exposed to the agent over MCP. Filesystem and
  * shell are owned by opencode's native `Read` / `Write` / `Edit` /
  * `Glob` / `Grep` / `Bash`.
@@ -415,11 +423,15 @@ export class OpencodeFactoryAgent implements LoopAgent {
           waitForSessionIdle(client, sessionId, workspaceDir),
         ]);
       } finally {
-        // Best-effort: drain any pending prompt resolution + the
-        // event-log subscription before moving on so their sockets
-        // get closed cleanly.
-        await promptPromise;
-        await stopEventLog;
+        // Best-effort drain so sockets close cleanly when they can,
+        // bounded so we never block on the documented opencode 1.14.34
+        // bug where `session.prompt` returns but never flushes the HTTP
+        // response. If the race above won via `waitForSessionIdle`,
+        // both `promptPromise` and `stopEventLog` are likely stuck on
+        // exactly that — letting them go after a short window is the
+        // whole point of having a fallback signal in the first place.
+        await Promise.race([promptPromise, delay(POST_RACE_DRAIN_MS)]);
+        await Promise.race([stopEventLog, delay(POST_RACE_DRAIN_MS)]);
       }
     } finally {
       this.currentHooks = undefined;
@@ -829,6 +841,10 @@ function summarizeSessionError(error: unknown): string {
   if (statusCode !== undefined) parts.push(`status=${statusCode}`);
   if (url) parts.push(`url=${url}`);
   return parts.join(' ');
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function summarizeArgs(args: Record<string, unknown>): string {
