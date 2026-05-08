@@ -10,11 +10,13 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
+  sanitizePrerenderJobId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
 
@@ -70,12 +72,21 @@ export function createRemotePrerenderer(
     validatePrerenderAttributes(type, attributes);
 
     let endpoint = new URL(path, prerenderURL);
+    // jobId is request metadata, not part of the validated body — strip
+    // it out before sending so the prerender-server's payload schema
+    // doesn't need to know about it.
+    let { jobId, ...attributesWithoutJobId } = attributes as Record<
+      string,
+      any
+    >;
     let body = {
       data: {
         type,
-        attributes,
+        attributes: attributesWithoutJobId,
       },
     };
+    let sanitizedJobId =
+      typeof jobId === 'string' ? sanitizePrerenderJobId(jobId) : null;
     // CS-10872: one correlation ID per logical client call, reused on
     // retries so operators can follow the full manager/prerender-server
     // log story for the same intent rather than hunting through N
@@ -97,6 +108,9 @@ export function createRemotePrerenderer(
           headers: {
             ...jsonApiHeaders,
             [PRERENDER_REQUEST_ID_HEADER]: requestId,
+            ...(sanitizedJobId
+              ? { [PRERENDER_JOB_ID_HEADER]: sanitizedJobId }
+              : {}),
           },
           body: JSON.stringify(body),
           signal: ac.signal,
@@ -208,6 +222,7 @@ export function createRemotePrerenderer(
       types,
       batchId,
       priority,
+      jobId,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -223,6 +238,7 @@ export function createRemotePrerenderer(
           ...(types ? { types } : {}),
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
+          ...(jobId ? { jobId } : {}),
         },
       );
     },

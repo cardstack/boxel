@@ -46,7 +46,7 @@ import { finalizeOrphanedReservations } from './lib/finalize-orphan-reservations
 
 let log = logger('worker-manager');
 const runtimeMetadataFile =
-  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE;
+  process.env.TEST_HARNESS_WORKER_MANAGER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
   writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);

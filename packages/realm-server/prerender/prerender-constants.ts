@@ -27,6 +27,29 @@ export function sanitizePrerenderRequestId(
   return REQUEST_ID_PATTERN.test(trimmed) ? trimmed : null;
 }
 
+// Threads the indexing job's `<jobId>.<reservationId>` identifier from
+// the worker through the prerender call chain (worker → manager →
+// prerender-server). Any service that handles the request stamps
+// `[job: J.R]` onto its `<--`/`-->` HTTP-log lines and the manager's
+// `proxying`/`proxied` lines so a single job's prerender activity is
+// greppable across services with the same `[job: J.R]` substring used
+// in worker logs.
+export const PRERENDER_JOB_ID_HEADER = 'x-boxel-job-id';
+
+// Sanitize the inbound job-id header. Format is `<digits>.<digits>`
+// (job.id + reservation.id, both bigint-shaped); accept up to 32
+// digits per side (so up to 65 chars total including the separator)
+// to be defensive without admitting newlines or other log-injection.
+const JOB_ID_PATTERN = /^[0-9]{1,32}\.[0-9]{1,32}$/;
+export function sanitizePrerenderJobId(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return JOB_ID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
 // Base timeout for a single prerender capture on the prerender server
 // (DOM rendering + data loading inside the headless browser).
 const DEFAULT_RENDER_TIMEOUT_MS = 90_000;

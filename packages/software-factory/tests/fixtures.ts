@@ -10,12 +10,13 @@ import { test as base, expect } from '@playwright/test';
 import type { RealmAction, RealmPermissions } from '@cardstack/runtime-common';
 
 import {
+  buildRealmToken,
+  buildServerToken,
   defaultSupportMetadataFile,
   type PreparedTemplateMetadata,
   readSupportMetadata,
-} from '../src/runtime-metadata';
-import { buildRealmToken, buildServerToken } from '../src/harness/shared';
-import { startHarnessPrerenderServer } from '../src/harness/support-services';
+  startHarnessPrerenderServer,
+} from '@cardstack/realm-test-harness';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 import {
   allocateTestWorkerPortSet,
@@ -80,7 +81,7 @@ const packageRoot = resolve(process.cwd());
 const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
 const defaultRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
+  process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
 
@@ -239,29 +240,27 @@ async function startRealmProcess(
         env: {
           ...process.env,
           NODE_NO_WARNINGS: '1',
-          SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+          TEST_HARNESS_METADATA_FILE: metadataFile,
           ...(supportMetadata?.context
             ? {
-                SOFTWARE_FACTORY_CONTEXT: JSON.stringify(
-                  supportMetadata.context,
-                ),
+                TEST_HARNESS_CONTEXT: JSON.stringify(supportMetadata.context),
               }
             : {}),
           ...(preparedTemplate
             ? {
-                SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+                TEST_HARNESS_TEMPLATE_DATABASE_NAME:
                   preparedTemplate.templateDatabaseName,
               }
             : {}),
           ...(preparedTemplate
             ? {
-                SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
+                TEST_HARNESS_TEMPLATE_REALM_SERVER_URL:
                   preparedTemplate.templateRealmServerURL,
               }
             : {}),
           ...(permissions
             ? {
-                SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
+                TEST_HARNESS_PERMISSIONS: JSON.stringify(permissions),
               }
             : {}),
         },

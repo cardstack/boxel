@@ -39,6 +39,7 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/logger": "^0.2.1",
     "@cardstack/postgres": "workspace:*",
+    "@cardstack/realm-test-harness": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/ember-tsc": "catalog:",
     "@glint/template": "catalog:",

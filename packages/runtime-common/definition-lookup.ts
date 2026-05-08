@@ -38,6 +38,21 @@ import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
+// Postgres NOTIFY channel for cross-instance module-cache invalidation
+// (CS-10952). Each invalidation path emits one or more notifications so
+// peer realm-server processes can bump their in-memory generation counters
+// in lockstep with the DB. Payload is JSON; one of:
+//   {"k":"module","r":<resolvedRealmURL>,"m":[<moduleURL>,...]} — invalidate fan-out
+//   {"k":"realm","r":<resolvedRealmURL>}                        — clearRealmCache
+//   {"k":"global"}                                              — clearAllModules
+// Self-notify is idempotent: the emitting process already bumped its
+// counter synchronously before the DB delete, and a second bump on
+// listener receive is observationally equivalent (counters are monotonic
+// and only used for snapshot equality).
+export const MODULE_CACHE_INVALIDATED_CHANNEL = 'module_cache_invalidated';
+// Postgres caps NOTIFY payloads at 8000 bytes; stay well under so JSON
+// encoding overhead and pathological URL lengths don't blow the limit.
+const NOTIFY_PAYLOAD_BUDGET = 7000;
 // Cached module errors expire after this interval. When a stale error entry
 // is encountered, the prerenderer is called again to get a fresh result.
 // This prevents transient prerender failures from being permanently cached.
@@ -459,10 +474,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
   }
 
-  private bumpModuleGeneration(
-    resolvedRealmURL: string,
-    moduleURL: string,
-  ): void {
+  // Public so the cross-instance ModuleCacheInvalidationListener (CS-10952)
+  // can replay an invalidation broadcast from a peer realm-server into this
+  // process's counters. Internal callers in invalidate() / clearRealmCache()
+  // use the same methods. Bumping is idempotent w.r.t. correctness — a
+  // double-bump from the self-notify echo is observationally indistinguishable
+  // from a single bump because in-flight prerenders only test for snapshot
+  // equality, not absolute value.
+  bumpModuleGeneration(resolvedRealmURL: string, moduleURL: string): void {
     let key = moduleGenerationKey(resolvedRealmURL, moduleURL);
     this.#moduleGenerations.set(
       key,
@@ -470,11 +489,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
   }
 
-  private bumpRealmGeneration(resolvedRealmURL: string): void {
+  bumpRealmGeneration(resolvedRealmURL: string): void {
     this.#realmGenerations.set(
       resolvedRealmURL,
       (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
     );
+  }
+
+  bumpGlobalGeneration(): void {
+    this.#globalGeneration += 1;
   }
 
   // Returns true if the cached entry has a top-level error and has exceeded
@@ -627,6 +650,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
+    await this.notifyModuleCacheInvalidations(
+      resolvedRealmURL,
+      uniqueInvalidations,
+    );
     return uniqueInvalidations;
   }
 
@@ -643,12 +670,104 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['resolved_realm_url =', param(resolvedRealmURL)],
       ]) as Expression),
     ]);
+    await this.notifyRealmCacheInvalidation(resolvedRealmURL);
   }
 
   async clearAllModules(): Promise<void> {
-    this.#globalGeneration += 1;
+    this.bumpGlobalGeneration();
     this.#inFlight.clear();
     await this.query(['DELETE FROM', MODULES_TABLE]);
+    await this.notifyGlobalCacheInvalidation();
+  }
+
+  // pg_notify emission helpers. Mirror Realm.#notifyFileChange's best-effort
+  // pattern: the local instance's counters and DB row are already updated
+  // synchronously before this runs, so a notify failure is a bounded
+  // cross-instance staleness window — peers self-heal on their next
+  // prerender of the same key. Sequenced after the DELETE rather than
+  // wrapped in BEGIN/COMMIT because each invalidation path is a single
+  // autocommit DELETE; sequential pg_notify after the DELETE has the same
+  // observable effect (peer sees notify only after delete commits).
+  // Suppressed for sqlite/in-memory DBAdapters where NOTIFY isn't
+  // available; the cross-instance scenario only applies to pg.
+  //
+  // Payloads are JSON-encoded so a single invalidate() fan-out (which can
+  // include the source URL plus its extension variants plus transitive
+  // consumers from calculateInvalidations()) emits one pg_notify carrying
+  // the full URL list instead of one per URL. With M peer processes that
+  // turns M*N listener wakeups into M; the listener does the same N bumps
+  // either way. Postgres caps NOTIFY payloads at 8000 bytes, so the module
+  // emitter chunks the URL list to stay under a 7000-byte budget — common
+  // case is one notify; pathological fan-out becomes a handful.
+  private async notifyModuleCacheInvalidations(
+    resolvedRealmURL: string,
+    moduleURLs: string[],
+  ): Promise<void> {
+    if (this.#dbAdapter.kind !== 'pg' || moduleURLs.length === 0) {
+      return;
+    }
+    const wrapperBytes = JSON.stringify({
+      k: 'module',
+      r: resolvedRealmURL,
+      m: [],
+    }).length;
+    const budget = NOTIFY_PAYLOAD_BUDGET - wrapperBytes;
+    let chunk: string[] = [];
+    let chunkBytes = 0;
+    const flush = async () => {
+      if (chunk.length === 0) return;
+      await this.bestEffortNotify(
+        JSON.stringify({ k: 'module', r: resolvedRealmURL, m: chunk }),
+      );
+      chunk = [];
+      chunkBytes = 0;
+    };
+    for (let moduleURL of moduleURLs) {
+      const encodedLen = JSON.stringify(moduleURL).length;
+      const addedCost = encodedLen + (chunk.length === 0 ? 0 : 1);
+      if (chunkBytes + addedCost > budget && chunk.length > 0) {
+        await flush();
+      }
+      chunk.push(moduleURL);
+      chunkBytes += chunk.length === 1 ? encodedLen : addedCost;
+    }
+    await flush();
+  }
+
+  private async notifyRealmCacheInvalidation(
+    resolvedRealmURL: string,
+  ): Promise<void> {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    await this.bestEffortNotify(
+      JSON.stringify({ k: 'realm', r: resolvedRealmURL }),
+    );
+  }
+
+  private async notifyGlobalCacheInvalidation(): Promise<void> {
+    if (this.#dbAdapter.kind !== 'pg') {
+      return;
+    }
+    await this.bestEffortNotify(JSON.stringify({ k: 'global' }));
+  }
+
+  private async bestEffortNotify(payload: string): Promise<void> {
+    try {
+      await this.query([
+        'SELECT pg_notify(',
+        param(MODULE_CACHE_INVALIDATED_CHANNEL),
+        ',',
+        param(payload),
+        ')',
+      ]);
+    } catch (err: unknown) {
+      // Local state is already consistent; cross-instance staleness is
+      // bounded and self-healing. Don't fail the invalidation.
+      console.warn(
+        `pg_notify ${MODULE_CACHE_INVALIDATED_CHANNEL} failed for "${payload}": ${String(err)}`,
+      );
+    }
   }
 
   // Drops in-flight entries whose pending prerender result would no longer

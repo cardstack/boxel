@@ -399,6 +399,14 @@ export type PrerenderVisitArgs = {
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
+  // `<jobId>.<reservationId>` of the indexing job that triggered this
+  // visit. Threaded through to manager + prerender-server as
+  // `x-boxel-job-id` so all three services tag their logs with
+  // `[job: J.R]` — same substring already emitted by worker code,
+  // making `{service=~"realm-server|worker|prerender|prerender-manager"}
+  // |= "[job: J.R]"` a single reliable filter for "everything that
+  // happened during this indexing job."
+  jobId?: string;
 };
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
