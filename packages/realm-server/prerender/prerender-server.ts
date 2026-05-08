@@ -4,6 +4,10 @@ import { logger } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import type { Server } from 'http';
 import { createPrerenderHttpServer } from './prerender-app';
+import {
+  isEnvironmentMode,
+  registerService,
+} from '../lib/dev-service-registry';
 
 let log = logger('prerender-server');
 
@@ -35,6 +39,13 @@ for (let i = 0; i < count; i++) {
   server.on('listening', () => {
     let actualPort =
       (server.address() as import('net').AddressInfo).port ?? instancePort;
+    // Register the first instance with Traefik in environment mode
+    if (i === 0 && isEnvironmentMode()) {
+      registerService(
+        server,
+        process.env.PRERENDER_SERVICE_NAME || 'prerender',
+      );
+    }
     log.info(
       `prerender server instance ${i + 1}/${count} HTTP listening on port ${actualPort}`,
     );

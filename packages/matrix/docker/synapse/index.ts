@@ -17,7 +17,7 @@ import {
   isEnvironmentMode,
   getSynapseContainerName,
   getSynapseURL,
-  registerSynapseWithTraefik,
+  registerServiceWithTraefik,
 } from '../../helpers/environment-config';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -92,6 +92,7 @@ export async function cfgDirFromTemplate(
     publicBaseUrl?: string;
     host?: string;
     port?: number;
+    smtpHost?: string;
   },
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
@@ -128,6 +129,10 @@ export async function cfgDirFromTemplate(
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
   hsYaml = hsYaml.replace(/{{FORM_SECRET}}/g, formSecret);
   hsYaml = hsYaml.replace(/{{PUBLIC_BASEURL}}/g, baseUrl);
+  hsYaml = hsYaml.replace(
+    /{{SMTP_HOST}}/g,
+    options?.smtpHost ?? 'boxel-smtp',
+  );
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
 
@@ -157,6 +162,8 @@ interface StartOptions {
   dataDir?: string;
   containerName?: string;
   suppressRegistrationSecretFile?: true;
+  traefikServiceName?: string;
+  smtpHost?: string;
   dynamicHostPort?: true;
 }
 
@@ -200,6 +207,7 @@ export async function synapseStart(
       host: useDynamicHostPort ? '127.0.0.1' : SYNAPSE_IP_ADDRESS,
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
+      smtpHost: opts?.smtpHost,
     });
     containerName =
       opts?.containerName ||
@@ -229,6 +237,9 @@ export async function synapseStart(
         '--network=boxel',
       );
     }
+
+    // Clean up stale container from a previous interrupted run
+    await dockerStop({ containerId: containerName }).catch(() => {});
 
     try {
       synapseId = await dockerRun({
@@ -286,7 +297,8 @@ export async function synapseStart(
   }
 
   if (isEnvironmentMode()) {
-    registerSynapseWithTraefik(hostPort);
+    let synapseServiceName = opts?.traefikServiceName || 'matrix';
+    registerServiceWithTraefik(synapseServiceName, hostPort);
   }
 
   const synapse: SynapseInstance = {

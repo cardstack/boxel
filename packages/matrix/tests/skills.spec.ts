@@ -15,7 +15,7 @@ import {
   createSubscribedUserAndLogin,
   createRealm,
 } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL, serverIndexUrl } from '../helpers/isolated-realm-server';
 import { randomUUID } from 'crypto';
 
 test.describe('Skills', () => {
@@ -58,8 +58,6 @@ test.describe('Skills', () => {
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
-  const serverIndexUrl = new URL(appURL).origin;
-
   test(`it can attach skill cards and toggle activation`, async ({ page }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await getRoomId(page);

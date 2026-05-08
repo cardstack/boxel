@@ -824,19 +824,12 @@ export class RealmServer {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
 
-        if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
-        }
-
-        if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSiteDomain = this.serverURL.host;
-        }
+        // Rewrite published realm domains to match this realm server’s host.
+        // The host app’s build-time config may have a different domain (e.g.
+        // realm-server.*.localhost for the dev stack), but the isolated test
+        // realm server uses realm-matrix-test.*.localhost.
+        config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
+        config.publishedRealmBoxelSiteDomain = this.serverURL.host;
 
         config = merge({}, config, {
           hostsOwnAssets: false,

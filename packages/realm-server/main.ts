@@ -26,7 +26,7 @@ import {
   getEnvironmentSlug,
   serviceURL,
   registerService,
-  deregisterEnvironment,
+  deregisterService,
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
@@ -491,7 +491,7 @@ const getIndexHTML = async () => {
       (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
     console.log(`stopping realm server on port ${stopPort}...`);
     if (isEnvironmentMode()) {
-      deregisterEnvironment();
+      deregisterService(serviceName);
     }
     httpServer.closeAllConnections();
     httpServer.close(() => {

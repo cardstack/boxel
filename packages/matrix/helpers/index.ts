@@ -12,12 +12,24 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import type { SQLExecutor } from './isolated-realm-server';
-import { appURL, BasicSQLExecutor } from './isolated-realm-server';
+import {
+  appURL,
+  serverIndexUrl,
+  realmDomain,
+  BasicSQLExecutor,
+} from './isolated-realm-server';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+} from './environment-config';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
-export const testHost = 'http://localhost:4205/test';
-export const mailHost = 'http://localhost:5001';
+export { realmDomain, serverIndexUrl };
+export const testHost = appURL;
+export const mailHost = isEnvironmentMode()
+  ? `http://smtp-test.${getEnvironmentSlug()}.localhost`
+  : 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
 
@@ -107,17 +119,35 @@ async function registerRealmRedirect(
   });
 }
 
+// In env mode, the test Synapse runs under a separate service name
+// (matrix-test) so it doesn't disrupt the dev Synapse. The Ember app's
+// baked-in config points to the dev Matrix URL, so we redirect those
+// calls to the test Synapse via Playwright page routes.
+export function getTestMatrixUrl(): string | undefined {
+  if (!isEnvironmentMode()) {
+    return undefined;
+  }
+  return `http://matrix-test.${getEnvironmentSlug()}.localhost`;
+}
+
 export async function setRealmRedirects(page: Page) {
+  let baseServerUrl = isEnvironmentMode()
+    ? `http://realm-server.${getEnvironmentSlug()}.localhost`
+    : 'http://localhost:4201';
   await registerRealmRedirect(
     page,
-    'http://localhost:4201/skills/',
-    'http://localhost:4205/skills/',
+    `${baseServerUrl}/skills/`,
+    `${serverIndexUrl}/skills/`,
   );
   await registerRealmRedirect(
     page,
-    'http://localhost:4201/base/',
-    'http://localhost:4205/base/',
+    `${baseServerUrl}/base/`,
+    `${serverIndexUrl}/base/`,
   );
+
+  // No Matrix URL rewrite needed here — the isolated realm server's
+  // retrieveIndexHTML() rewrites the Ember config's matrixURL to the
+  // test Synapse URL (from --matrixURL) when serving index.html.
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {
