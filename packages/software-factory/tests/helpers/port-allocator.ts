@@ -21,10 +21,10 @@ import { createServer, type Server } from 'node:net';
 export const TEST_WORKER_PORT_BLOCK_SIZE = 10;
 
 export const TEST_WORKER_PORT_RANGE_START = Number(
-  process.env.SOFTWARE_FACTORY_TEST_WORKER_PORT_RANGE_START ?? 20000,
+  process.env.TEST_HARNESS_TEST_WORKER_PORT_RANGE_START ?? 20000,
 );
 export const TEST_WORKER_PORT_RANGE_END = Number(
-  process.env.SOFTWARE_FACTORY_TEST_WORKER_PORT_RANGE_END ?? 32000,
+  process.env.TEST_HARNESS_TEST_WORKER_PORT_RANGE_END ?? 32000,
 );
 
 function gcd(a: number, b: number): number {
@@ -57,7 +57,7 @@ const TEST_WORKER_PORT_SEARCH_STRIDE =
     : 1;
 
 const TEST_WORKER_RUN_OFFSET = Number(
-  process.env.SOFTWARE_FACTORY_TEST_WORKER_RUN_OFFSET ??
+  process.env.TEST_HARNESS_TEST_WORKER_RUN_OFFSET ??
     (process.pid * 31 + process.ppid) % TEST_WORKER_PORT_NUM_SLOTS,
 );
 

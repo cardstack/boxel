@@ -5,15 +5,16 @@ import {
   builderDatabaseNameForCacheKey,
   DEFAULT_BASE_REALM_PERMISSIONS,
   DEFAULT_MIGRATED_TEMPLATE_DB,
-  DEFAULT_SOURCE_REALM_PERMISSIONS,
+  DEFAULT_PERMISSIONS,
   findAndHoldAvailablePort,
   logTimed,
   pgAdminConnectionConfig,
   quotePgIdentifier,
-  sourceRealmURLFor,
+  realmURLWithinServer,
   templateLog,
   waitUntil,
   type FactorySupportContext,
+  type RealmConfig,
   type RealmPermissions,
 } from './shared';
 import {
@@ -695,34 +696,33 @@ export async function waitForQueueIdle(databaseName: string): Promise<void> {
 }
 
 /**
- * Build a combined template database containing multiple realm fixtures.
- * The primary realm is indexed first, then additional realms are registered
- * and indexed in the same realm server process.
+ * Build a template database containing one or more realm fixtures.
+ * Each realm's permissions come from its own `RealmConfig.permissions`
+ * (or `DEFAULT_PERMISSIONS` if not provided). Base realm permissions are
+ * always seeded; the harness no longer treats any user realm specially.
  */
 export async function buildCombinedTemplateDatabase({
-  realmFixtures,
+  realms,
   realmServerURL,
-  permissions,
   context,
   cacheKey,
   templateDatabaseName,
 }: {
-  realmFixtures: { realmDir: string; realmURL: URL }[];
+  realms: RealmConfig[];
   realmServerURL: URL;
-  permissions: RealmPermissions;
   context: FactorySupportContext;
   cacheKey: string;
   templateDatabaseName: string;
 }): Promise<void> {
-  if (realmFixtures.length === 0) {
+  if (realms.length === 0) {
     throw new Error(
-      'buildCombinedTemplateDatabase requires at least one realm fixture',
+      'buildCombinedTemplateDatabase requires at least one realm',
     );
   }
 
   await logTimed(
     templateLog,
-    `buildCombinedTemplateDatabase ${templateDatabaseName} (${realmFixtures.length} realms)`,
+    `buildCombinedTemplateDatabase ${templateDatabaseName} (${realms.length} realms)`,
     async () => {
       let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
       let hasMigratedTemplate = await databaseExists(
@@ -740,21 +740,21 @@ export async function buildCombinedTemplateDatabase({
       }
 
       let baseRealmURL = baseRealmURLFor(realmServerURL);
-      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
+      let realmURLs = realms.map((realm) =>
+        realmURLWithinServer(realmServerURL, realm.path),
+      );
 
-      let allRealmURLs = [
-        ...realmFixtures.map((f) => f.realmURL),
+      await resetMountedRealmState(builderDatabaseName, [
+        ...realmURLs,
         baseRealmURL,
-        sourceRealmURL,
-      ];
-      await resetMountedRealmState(builderDatabaseName, allRealmURLs);
+      ]);
       await resetQueueState(builderDatabaseName);
 
-      for (let fixture of realmFixtures) {
+      for (let i = 0; i < realms.length; i++) {
         await seedRealmPermissions(
           builderDatabaseName,
-          fixture.realmURL,
-          permissions,
+          realmURLs[i],
+          realms[i].permissions ?? DEFAULT_PERMISSIONS,
         );
       }
       await seedRealmPermissions(
@@ -762,19 +762,6 @@ export async function buildCombinedTemplateDatabase({
         baseRealmURL,
         DEFAULT_BASE_REALM_PERMISSIONS,
       );
-      await seedRealmPermissions(
-        builderDatabaseName,
-        sourceRealmURL,
-        DEFAULT_SOURCE_REALM_PERMISSIONS,
-      );
-
-      // Use the first fixture as the primary realm, rest as additional.
-      let [primary, ...rest] = realmFixtures;
-      let additionalRealms = rest.map((f, i) => ({
-        realmDir: f.realmDir,
-        realmURL: f.realmURL,
-        username: `additional_realm_${i}`,
-      }));
 
       // Hold the worker-manager port across the gap between allocation and
       // the actual child bind inside startIsolatedRealmStack — without the
@@ -784,125 +771,27 @@ export async function buildCombinedTemplateDatabase({
       // startIsolatedRealmStack releases the holder right before spawning
       // the worker-manager child.
       let wmReservation = await findAndHoldAvailablePort();
-      // base + source + each fixture realm
+      // base + each user realm
       let progress = startIndexingProgressReporter(
         wmReservation.port,
-        2 + realmFixtures.length,
+        1 + realms.length,
       );
 
       let stack;
       try {
         stack = await startIsolatedRealmStack({
-          realmDir: primary.realmDir,
-          realmURL: primary.realmURL,
+          realms,
           realmServerURL,
           databaseName: builderDatabaseName,
           context,
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
-          additionalRealms,
           workerManagerPort: wmReservation,
         });
       } catch (error) {
         progress.stop();
         // startIsolatedRealmStack releases its own holders on failure, but
         // be defensive in case the throw happened before it took ownership.
-        await wmReservation.release().catch(() => undefined);
-        throw error;
-      }
-
-      try {
-        await waitForQueueIdle(builderDatabaseName);
-      } finally {
-        progress.stop();
-        await stopIsolatedRealmStack(stack);
-      }
-
-      await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
-      await dropDatabase(builderDatabaseName);
-    },
-  );
-}
-
-export async function buildTemplateDatabase({
-  realmDir,
-  realmURL,
-  realmServerURL,
-  permissions,
-  context,
-  cacheKey,
-  templateDatabaseName,
-}: {
-  realmDir: string;
-  realmURL: URL;
-  realmServerURL: URL;
-  permissions: RealmPermissions;
-  context: FactorySupportContext;
-  cacheKey: string;
-  templateDatabaseName: string;
-}): Promise<void> {
-  await logTimed(
-    templateLog,
-    `buildTemplateDatabase ${templateDatabaseName}`,
-    async () => {
-      let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
-      let hasMigratedTemplate = await databaseExists(
-        DEFAULT_MIGRATED_TEMPLATE_DB,
-      );
-
-      templateLog.debug(
-        `buildTemplateDatabase: builder=${builderDatabaseName} migratedTemplate=${hasMigratedTemplate}`,
-      );
-      await dropDatabase(templateDatabaseName);
-      await dropDatabase(builderDatabaseName);
-
-      if (hasMigratedTemplate) {
-        await cloneDatabaseFromTemplate(
-          DEFAULT_MIGRATED_TEMPLATE_DB,
-          builderDatabaseName,
-        );
-      }
-      let baseRealmURL = baseRealmURLFor(realmServerURL);
-      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
-
-      await resetMountedRealmState(builderDatabaseName, [
-        realmURL,
-        baseRealmURL,
-        sourceRealmURL,
-      ]);
-      await resetQueueState(builderDatabaseName);
-      await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
-      await seedRealmPermissions(
-        builderDatabaseName,
-        baseRealmURL,
-        DEFAULT_BASE_REALM_PERMISSIONS,
-      );
-      await seedRealmPermissions(
-        builderDatabaseName,
-        sourceRealmURL,
-        DEFAULT_SOURCE_REALM_PERMISSIONS,
-      );
-
-      // See buildCombinedTemplateDatabase above for why this is a holder
-      // reservation rather than a bare findAvailablePort.
-      let wmReservation = await findAndHoldAvailablePort();
-      // base + source + test realm
-      let progress = startIndexingProgressReporter(wmReservation.port, 3);
-
-      let stack;
-      try {
-        stack = await startIsolatedRealmStack({
-          realmDir,
-          realmURL,
-          realmServerURL,
-          databaseName: builderDatabaseName,
-          context,
-          migrateDB: !hasMigratedTemplate,
-          fullIndexOnStartup: true,
-          workerManagerPort: wmReservation,
-        });
-      } catch (error) {
-        progress.stop();
         await wmReservation.release().catch(() => undefined);
         throw error;
       }

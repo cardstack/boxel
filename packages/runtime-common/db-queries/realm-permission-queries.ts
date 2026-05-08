@@ -1,7 +1,14 @@
 import type { DBAdapter } from '../db';
 import type { RealmAction } from '../index';
 import type { RealmPermissions } from '../index';
-import { query, asExpressions, param, upsert } from '../expression';
+import {
+  asExpressions,
+  dbAdapterQuerier,
+  param,
+  query,
+  type Querier,
+  upsert,
+} from '../expression';
 import { getMatrixUsername } from '../matrix-client';
 
 async function insertPermission(
@@ -53,8 +60,10 @@ async function removePermissions(
 export async function removeRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
+  querier?: Querier,
 ) {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     'DELETE from realm_user_permissions WHERE realm_url =',
     param(realmURL.href),
   ]);

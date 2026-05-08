@@ -22,10 +22,12 @@ import { Prerenderer } from './index';
 import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
@@ -957,12 +959,14 @@ export function buildPrerenderApp(options: {
       return next();
     })
     .use((ctxt: Koa.Context, next: Koa.Next) => {
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+      let jobTag = jobId ? ` [job: ${jobId}]` : '';
       log.info(
-        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
+        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}${jobTag}`,
       );
       ctxt.res.on('finish', () => {
         log.info(
-          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
         );
         log.debug(JSON.stringify(ctxt.req.headers));
       });

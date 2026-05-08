@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { logger } from '../logger';
+import { logger } from './logger';
 
 import {
   boxelIconsDir,
@@ -179,7 +179,7 @@ function assertUsableHostDist(hostPackageDir: string): void {
 }
 
 async function loadSynapseModule() {
-  let moduleSpecifier = '../../../matrix/docker/synapse/index.ts';
+  let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     registerUser: (
       synapse: SynapseInstance,
@@ -200,7 +200,7 @@ async function loadSynapseModule() {
 }
 
 async function loadMatrixEnvironmentConfigModule() {
-  let moduleSpecifier = '../../../matrix/helpers/environment-config.ts';
+  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
     getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };
@@ -454,7 +454,7 @@ async function attemptStartHarnessPrerenderServer(options: {
         NODE_NO_WARNINGS: '1',
         BOXEL_HOST_URL: options.boxelHostURL,
         LOG_LEVELS:
-          process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
+          process.env.TEST_HARNESS_PRERENDER_LOG_LEVELS ??
           process.env.LOG_LEVELS,
         // Prevent test harness prerender servers from registering with
         // external prerender managers (e.g. the dev-all manager on :4222).
@@ -817,7 +817,7 @@ export async function startFactorySupportServices(): Promise<{
       false,
     );
     let matrixURL =
-      process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL(synapse);
+      process.env.TEST_HARNESS_MATRIX_URL ?? getSynapseURL(synapse);
     let host = await ensureHostReady();
     let icons = await ensureIconsReady();
     await ensureSupportUsers(synapse);

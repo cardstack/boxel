@@ -749,8 +749,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           boxelUIChangeChecker,
           'writeCurrentBoxelUIChecksum',
         );
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
 
         try {
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
+              '${testRealmURL.href}',
+              'source',
+              'node-test/pre-mounted-${uuidv4()}',
+              'node-test',
+              false
+            )
+            ON CONFLICT (url) DO NOTHING`);
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
+              '${registryOnlyRealmURL}',
+              'source',
+              'owner/registry-only-${uuidv4()}',
+              'owner',
+              false
+            )`);
+
           // Seed a modules row to verify it gets cleared
           await context.dbAdapter.execute(
             `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
@@ -801,7 +824,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
           let reindexJob = finalJobs.find(
             (job) => job.job_type === 'full-reindex',
-          );
+          ) as
+            | {
+                job_type: string;
+                concurrency_group: string;
+                timeout: number;
+                args: { realmUrls: string[] };
+              }
+            | undefined;
           assert.ok(reindexJob, 'full-reindex job exists');
           if (reindexJob) {
             assert.strictEqual(
@@ -813,6 +843,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               reindexJob.timeout,
               360,
               'job has correct timeout (6 minutes)',
+            );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(registryOnlyRealmURL),
+              'job args include registry-only realm URLs',
+            );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(testRealmURL.href),
+              'job args still include mounted realms',
             );
           }
 
@@ -906,6 +944,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let owner = 'mango';
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
         {
           let response = await context.request
             .post('/_create-realm')
@@ -932,6 +971,27 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${testRealmURL.href}',
+            'source',
+            'node-test/pre-mounted-${uuidv4()}',
+            'node-test',
+            false
+          )
+          ON CONFLICT (url) DO NOTHING`);
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${registryOnlyRealmURL}',
+            'source',
+            'owner/registry-only-${uuidv4()}',
+            'owner',
+            false
+          )`);
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(
           initialJobs.length,
@@ -960,10 +1020,17 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           let response = await context.request
             .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
             .set('Content-Type', 'application/json');
-          assert.deepEqual(
-            response.body.realms,
-            [testRealmURL.href, realmURL],
-            'indexed realms are correct',
+          assert.ok(
+            response.body.realms.includes(registryOnlyRealmURL),
+            'response includes registry-only realms',
+          );
+          assert.ok(
+            response.body.realms.includes(testRealmURL.href),
+            'response still includes existing mounted realms',
+          );
+          assert.ok(
+            response.body.realms.includes(realmURL),
+            'response includes newly created realms too',
           );
         }
         let seededRowsAfter = await context.dbAdapter.execute(
@@ -980,7 +1047,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           3,
           'realm full reindex job was created',
         );
-        let jobs = finalJobs.slice(2);
+        let jobs = finalJobs.slice(2) as {
+          job_type: string;
+          concurrency_group: string;
+          args: { realmUrls: string[] };
+        }[];
         assert.strictEqual(
           jobs[0].job_type,
           'full-reindex',
@@ -990,6 +1061,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           jobs[0].concurrency_group,
           `full-reindex-group`,
           'concurrency group is correct',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(registryOnlyRealmURL),
+          'job args include registry-only realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(testRealmURL.href),
+          'job args still include existing mounted realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(realmURL),
+          'job args include newly created realms too',
         );
       });
 

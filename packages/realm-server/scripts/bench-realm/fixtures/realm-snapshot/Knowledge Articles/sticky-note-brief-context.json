@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "articleTitle": "Sticky Note — Brief Context",
+      "articleType": "context",
+      "content": "# Sticky Note — Brief Context\n\n## Source\n\nGenerated from the brief at https://test-harness.test/software-factory/Wiki/sticky-note.\n\n## Overview\n\nThe Sticky Note card gives the workspace a structured home for **colorful, short-form notes designed for spatial arrangement on boards and artboards**.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nSticky Note usually evolves through drafting, review, and reuse. The card keeps its core content structured enough to be surfaced in different views, linked from related records, and updated by people or automation without losing provenance.\n\nThe card can be created directly by a user, produced from a Workflow Playbook, or updated in response to a Trigger. When AI is involved, a Prompt Template or Skill Card can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points (External References)\n\nThese are referenced in the brief but are **not** in scope for this project. The Sticky Note card should be designed so it could naturally interoperate with:\n\n- **Document** — longer-form supporting content for deeper context\n- **Note / Article** — adjacent context, downstream output, or grouped navigation\n- **Prompt Template** — AI-assisted drafting or summarization\n- **Workflow Playbook** — repeatable workflows that create/update Sticky Notes\n- **Project** — initiatives that group related Sticky Notes\n\n## Example Use Cases\n\n- **System of record:** structured home for short-form notes, keeping related work linked instead of scattered.\n- **Automation handoff:** Workflow Playbooks or Triggers create/update Sticky Notes when upstream conditions are met.\n- **Search and reporting:** Sticky Notes stay queryable for dashboards, summaries, and downstream actions.\n\n## Implications for Implementation\n\n- The card must feel **visually distinctive** (sticky-note look — color, paper-like styling).\n- Content must be **short-form** — a small body of text, not a long-form document.\n- The card must be **spatially arrangeable** — supports a position concept (x/y) and/or rotation so it can live on a board or artboard layout.\n- Multiple **color variants** should be available, since color is part of the spatial-arrangement vocabulary (e.g. yellow for ideas, pink for blockers).\n- The card must support standard catalog discovery and produce well-formed `embedded` and `fitted` templates because it will appear inside dashboards, board views, and grids.",
+      "tags": [
+        "sticky-note",
+        "context",
+        "brief"
+      ],
+      "updatedAt": "2026-05-06T00:00:00Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

@@ -2,7 +2,6 @@ import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm } from './index';
 import {
   registerCardReferencePrefix,
-  rri,
   type RealmIdentifier,
 } from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
@@ -109,7 +108,7 @@ export class VirtualNetwork {
       let sourcePath = new RealmPaths(
         new URL(direction === 'virtual-to-real' ? virtual : real),
       );
-      if (sourcePath.inRealm(rri(absoluteURL.href))) {
+      if (sourcePath.inRealm(absoluteURL)) {
         let toPath = new RealmPaths(
           new URL(direction === 'virtual-to-real' ? real : virtual),
         );
@@ -286,7 +285,7 @@ function shouldRetryFetch(url: URL) {
     return false;
   }
 
-  if (baseRealm.inRealm(rri(url.href))) {
+  if (baseRealm.inRealm(url)) {
     return true;
   }
 

@@ -195,7 +195,7 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(rri(cardIdToURL(codeRef.module).href))) {
+  if (baseRealmPath.inRealm(codeRef.module)) {
     return codeRef;
   } else {
     let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
@@ -220,7 +220,7 @@ export function planModuleInstall(
     };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(rri(cardIdToURL(sourceCodeRef.module).href))) {
+    if (baseRealmPath.inRealm(sourceCodeRef.module)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -242,10 +242,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(cardIdToURL(instance.id).href);
-    if (baseRealmPath.inRealm(rri(cardIdToURL(instance.id).href))) {
+    if (baseRealmPath.inRealm(rri(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(rri(cardIdToURL(sourceCodeRef.module).href))) {
+    if (!baseRealmPath.inRealm(sourceCodeRef.module)) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

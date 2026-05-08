@@ -30,6 +30,19 @@ schema_config:
         prefix: index_
         period: 24h
 
+# Loki 3.x reads the chunks-store path from `storage_config.filesystem.directory`.
+# When unset, the chunks flusher falls back to a relative `mkdir <tenant>`
+# against Loki's CWD (`/`), which the `loki` user cannot write — producing
+# "mkdir fake: permission denied" errors (the default tenant id is `fake`,
+# not a permission name). The flush failures cascade: chunks pile in memory
+# → ingester ring marks itself unhealthy → Alloy's writes get back 500
+# "empty ring" and silently stall ingest. Verified via the `/config`
+# endpoint that this is the field the chunks flusher actually reads;
+# `common.storage.filesystem.chunks_directory` does NOT propagate here.
+storage_config:
+  filesystem:
+    directory: /loki/chunks
+
 limits_config:
   # Accept Docker logs of any age — local containers may have months of
   # backlog when they're first picked up by Alloy.
