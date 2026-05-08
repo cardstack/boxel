@@ -2,32 +2,15 @@
 #MISE description="Start host app + full dev stack (host must be ready before realm server)"
 #MISE dir="packages/realm-server"
 
-# Add node_modules/.bin to PATH (mise run bypasses pnpm which normally does this)
-# MISE dir is packages/realm-server, so ../.. is repo root
-PATH="$(pwd)/../../node_modules/.bin:$(pwd)/node_modules/.bin:$PATH"
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-. "$SCRIPT_DIR/lib/dev-common.sh"
+. "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
 # Enable job control so backgrounded subprocesses run in their own process
 # group. Without this, Ctrl-C is delivered to the whole foreground group;
 # npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
 # `npm run` children, which then reparent to init and leak ports — most
 # visibly the worker-manager listening on 4210, which blocks the next
-# `mise dev-all` from binding the port.
+# dev run from binding the port.
 set -m
-
-# Recursively SIGTERM a pid and all its descendants. Walks by parent-pid
-# (independent of pgid, which `mise run` rewrites for its tasks) so we catch
-# the whole tree before any layer dies and orphans its children to init.
-kill_tree() {
-  for child in $(pgrep -P "$1" 2>/dev/null); do
-    kill_tree "$child"
-  done
-  kill -TERM "$1" 2>/dev/null || true
-}
 
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we
@@ -40,30 +23,7 @@ cleanup() {
     kill_tree "$SAT_PID"
   fi
   kill_tree "$HOST_PID"
-  # mise's task supervisor reparents long-running task scripts to init, so
-  # kill_tree above can't reach them via PPID. Sweep by absolute paths,
-  # scoped to this checkout (so other worktrees aren't touched). SIGTERM
-  # first for anything that listens, brief grace period, then SIGKILL —
-  # belt-and-suspenders for processes that don't respond to TERM.
-  #
-  # `pkill -f` matches its pattern as ERE, so $REPO_ROOT must be regex-
-  # escaped before interpolating — otherwise a checkout path containing
-  # regex metacharacters (e.g. `boxel.worktrees/...`, where `.` matches
-  # any char) would over-match and signal unrelated processes outside
-  # this checkout. The trailing `node_modules.*--transpileOnly …` is an
-  # INTENTIONAL regex: `node_modules.*` matches whichever subpath the
-  # ts-node binary resolves through, and the alternation lists every
-  # service entrypoint that holds a port (worker/worker-manager → 4210,
-  # main → 4201/4202, prerender/* → 4221/4222). Wrappers that just
-  # invoke ts-node don't `exec` it, so killing the wrapper alone leaves
-  # the ts-node grandchild reparented to init with its port still bound.
-  REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
-  TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
-  pkill -TERM -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
-  pkill -TERM -f "$TSNODE_RE" 2>/dev/null || true
-  sleep 2
-  pkill -KILL -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
-  pkill -KILL -f "$TSNODE_RE" 2>/dev/null || true
+  sweep_orphaned_services
 }
 trap cleanup EXIT INT TERM
 
