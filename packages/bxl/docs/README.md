@@ -5,6 +5,7 @@ This directory holds the v0.1 documentation set.
 | File                        | Purpose                                        |
 | --------------------------- | ---------------------------------------------- |
 | `syntax-reference.md`       | Canonical public BXL syntax                    |
+| `syntax-modes.md`           | Boxel `computeVia`, `jq`, and `fx` call-site modes |
 | `profiles.md`               | Execution profile contracts and use cases      |
 | `predicate-sql.md`           | Predicate-profile SQL compiler contract        |
 | `query-then-process.md`      | Retrieval first, BXL post-query processing     |

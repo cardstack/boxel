@@ -14,6 +14,53 @@ resolution, PascalCase fallback, jq keyword guard, etc.), see
 [`docs/internals/port-from-jqxl.md`](./internals/port-from-jqxl.md)
 §12 / §13.
 
+## Using BXL Inside Boxel
+
+In a Boxel realm, import from the uploaded realm bundle using the
+relative path to that bundle:
+
+```ts
+import { expression, fx, jq } from '../bxl';
+```
+
+`expression` is the same compute factory as `bxl` / `expr`; it returns
+a function shaped for `computeVia`.
+
+```ts
+@field subtotal = contains(NumberField, {
+  computeVia: expression(fx`SUM("Line Item".Amount)`),
+});
+
+@field slug = contains(StringField, {
+  computeVia: expression(jq`.title | ascii_downcase | gsub("[^a-z0-9]+"; "-")`),
+});
+
+@field tax = contains(NumberField, {
+  computeVia: expression('ROUND(Subtotal * TaxRate / 100, 2)'),
+});
+
+@field statusPanel = contains(RegularStatusField, {
+  computeVia: expression(
+    jq`
+      if .severity == "Critical" then { label: "ICU CARE", tone: "red" }
+      elif .severity == "High" then { label: "ICU Watch", tone: "orange" }
+      else { label: "ICU Monitoring", tone: "blue" }
+      end
+    `,
+    { as: IcuStatusField },
+  ),
+});
+```
+
+Use no tag or `fx` for readable BXL: labels, PascalCase fallback, and
+Excel comma-call syntax are enabled. Use `jq` for plain jq: no readable
+rewrite, no label fallback, and jq syntax stays exact. The `as` option
+is optional for scalar values and normal declared field classes. Add it
+when a structured result should be materialized as a more specific
+FieldDef or subclass, such as `contains(RegularStatusField, {
+computeVia: expression(..., { as: IcuStatusField }) })`, so Boxel uses
+the subclass instance for serialization and rendering.
+
 ## The decision tree
 
 ```

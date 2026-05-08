@@ -272,6 +272,34 @@ Every expression above fires at a different point in the form's lifecycle, and e
 
 Same string language everywhere. Each slot in the object is a plain string; the compiler parses them with the same grammar, resolves labels against the same schema, and evaluates them in the same sandbox. The container object's shape (`fields[].validate[]`, `fields[].visibleWhen`, etc.) is up to your framework — BXL is agnostic to that; it only parses the expression strings inside.
 
+### Using BXL inside Boxel
+
+In Boxel realms, import the compute factory and syntax tags from the uploaded
+bundle, then assign the returned function to `computeVia`:
+
+```ts
+import { expression, fx, jq } from '../bxl';
+
+@field subtotal = contains(NumberField, {
+  computeVia: expression(fx`SUM("Line Item".Amount)`),
+});
+
+@field slug = contains(StringField, {
+  computeVia: expression(jq`.title | ascii_downcase`),
+});
+
+@field tax = contains(NumberField, {
+  computeVia: expression('ROUND(Subtotal * TaxRate / 100, 2)'),
+});
+```
+
+No tag and `fx` both mean readable BXL. `jq` means plain jq. `{ as:
+SomeFieldDef }` is optional, but useful when a structured result should be
+materialized as a more specific FieldDef subclass for Boxel rendering, e.g.
+`contains(RegularStatusField, { computeVia: expression(..., { as:
+IcuStatusField }) })`. See [syntax modes](./docs/syntax-modes.md) for the
+short version of the rules.
+
 ---
 
 ## Comparisons & inspirations
