@@ -81,6 +81,34 @@ interface StubPagePoolOptions {
   disableFileAdmission?: boolean;
 }
 
+const PAGE_POOL_OPTION_OVERRIDE_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+  'PRERENDER_HIGH_PRIORITY_THRESHOLD',
+  'PRERENDER_POOL_IDLE_CONTRACTION_MS',
+  'PRERENDER_SHARED_CONTEXT_CAP',
+] as const;
+
+function withEnvUnset<T>(keys: readonly string[], fn: () => T): T {
+  let previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (let key of keys) {
+      delete process.env[key];
+    }
+    return fn();
+  } finally {
+    for (let [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 function makeStubPagePool(opts: StubPagePoolOptions) {
   function makeStorage(): Storage {
     let values: Record<string, string> = {};
@@ -175,16 +203,25 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
       return;
     },
   };
-  let pool = new PagePool({
-    maxPages: opts.maxPages,
-    serverURL: 'http://localhost',
-    browserManager: browserManager as any,
-    boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
-    renderSemaphore: opts.renderSemaphore,
-    disableStandbyRefill: opts.disableStandbyRefill,
-    disableFileAdmission: opts.disableFileAdmission ?? true,
-  });
+  // These stub tests exercise PagePool behavior via explicit
+  // `options.maxPages` and per-test env setup. Shield construction from
+  // repo-wide dev defaults in `mise-tasks/lib/env-vars.sh`, which now
+  // exports `PRERENDER_PAGE_POOL_MIN/MAX=4` and would otherwise override
+  // the caller's `maxPages`.
+  let pool = withEnvUnset(
+    PAGE_POOL_OPTION_OVERRIDE_ENV_KEYS,
+    () =>
+      new PagePool({
+        maxPages: opts.maxPages,
+        serverURL: 'http://localhost',
+        browserManager: browserManager as any,
+        boxelHostURL: 'http://localhost:4200',
+        standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
+        renderSemaphore: opts.renderSemaphore,
+        disableStandbyRefill: opts.disableStandbyRefill,
+        disableFileAdmission: opts.disableFileAdmission ?? true,
+      }),
+  );
   return { pool, contextsCreated, contextsClosed };
 }
 

@@ -252,7 +252,7 @@ Prerender server:
 - PRERENDER_COUNT (optional): Number of prerender server instances to start. Each gets its own headless Chrome. Default 1.
 - PRERENDER_PAGE_POOL_MIN (optional): Idle floor for the dynamic page pool. The pool boots at this size and contracts back to it after sustained idle. Default 4 in dev (set in `mise-tasks/lib/env-vars.sh`).
 - PRERENDER_PAGE_POOL_MAX (optional): Burst ceiling for the dynamic page pool. The pool expands up to this size under saturation. Default 4 in dev. Setting MIN === MAX disables expansion/contraction (fixed-size pool).
-- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to `PRERENDER_PAGE_POOL_MAX` (i.e. a realm can use all available tabs).
+- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to the effective pool max (`PRERENDER_PAGE_POOL_MAX` when set, otherwise the fixed `maxPages` pool size).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
