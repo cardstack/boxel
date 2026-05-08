@@ -534,6 +534,14 @@ interface Options {
   copiedFromRealm?: URL;
   fullIndexOnStartup?: true;
   fromScratchIndexPriority?: number;
+  // Test-only seam for the persist-after-invalidate guard tests
+  // (CS-11028 / CS-11029). Tests inject a gated transpile so they can
+  // hold an in-flight request between the function-entry generation
+  // snapshot and the post-transpile cache.set, then fire `invalidateCache`
+  // mid-flight and assert the cache.set is correctly discarded.
+  // Production callers never set this; the constructor defaults to the
+  // imported `transpileJS`.
+  transpile?: (source: string, debugFilename: string) => Promise<string>;
 }
 
 interface UpdateItem {
@@ -570,6 +578,37 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
+  // CS-11028 persist-after-invalidate guard. `#moduleCache` is filled
+  // by `fallbackHandle` after a `transpileJS` round-trip (50–500 ms for
+  // a `.gts` file). If a writer invalidates the path while the
+  // transpile is in-flight, the existing `AliasCache.invalidate(path)`
+  // is a no-op (no entry yet) and the post-transpile `set()` re-installs
+  // pre-invalidation bytes.
+  //
+  // Fix mirrors CS-10948 in `CachingDefinitionLookup`:
+  //   - per-path generation counter (`#moduleCacheGenerations`) bumped
+  //     by every invalidate path before the AliasCache.invalidate
+  //     call, so the bump is visible to a transpile that resumes after.
+  //   - global generation (`#moduleCacheGlobalGeneration`) for the
+  //     `.clear()` paths (`startReindex` completion, `__testOnlyClearCaches`)
+  //     so a wholesale wipe is also caught.
+  // `fallbackHandle` snapshots both at function entry; if either moved
+  // by the time we'd `set()`, we skip the set and let the next reader
+  // re-transpile against current bytes.
+  //
+  // Cache-key alignment: `#moduleCache` is keyed on the request's
+  // `localPath` (which may be an alias like `foo` for the on-disk
+  // canonical `foo.gts`), and most invalidate paths pass the canonical
+  // path. So `#bumpModuleCacheGenerationForPath` fans out to every
+  // executable-extension variant of the path — bumping `gen[foo]`,
+  // `gen[foo.gts]`, `gen[foo.ts]`, etc. so a request that entered with
+  // any one of them snapshots a counter that the bump touches.
+  // Over-fanning to non-existent variants (e.g. `gen[foo.ts]` when only
+  // `foo.gts` exists) is harmless: the snapshot for an unrelated
+  // request would only ever read its own request path's counter.
+  #moduleCacheGenerations = new Map<LocalPath, number>();
+  #moduleCacheGlobalGeneration = 0;
+  #transpile: (source: string, debugFilename: string) => Promise<string>;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -668,6 +707,7 @@ export class Realm {
     this.#fileSizeLimitBytes =
       fileSizeLimitBytes ?? DEFAULT_FILE_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
+    this.#transpile = opts?.transpile ?? transpileJS;
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
     let _fetch = fetcher(virtualNetwork.fetch, [
@@ -927,7 +967,7 @@ export class Realm {
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
       await this.#definitionLookup.clearRealmCache(this.url);
-      this.#moduleCache.clear();
+      this.#clearModuleCache();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1224,7 +1264,7 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#moduleCache.clear();
+    this.#clearModuleCache();
   }
 
   // Invalidate the in-memory byte caches for a single path. Called by the
@@ -1236,8 +1276,71 @@ export class Realm {
   invalidateCache(path: LocalPath): void {
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
+      this.#invalidateModuleCachePath(path);
     }
+  }
+
+  // Wraps `#moduleCache.invalidate(path)` with the CS-11028 generation bump.
+  // Bump is synchronous and runs before the AliasCache invalidation so an
+  // in-flight transpile that's between snapshot and persist sees the bump
+  // when its persist site re-reads the counter.
+  #invalidateModuleCachePath(path: LocalPath): void {
+    this.#bumpModuleCacheGenerationForPath(path);
+    this.#moduleCache.invalidate(path);
+  }
+
+  // Wraps `#moduleCache.clear()` with a global-generation bump so
+  // wholesale-wipe paths (`startReindex` completion, `__testOnlyClearCaches`)
+  // also discard in-flight transpiles that started before the wipe.
+  #clearModuleCache(): void {
+    this.#moduleCacheGlobalGeneration += 1;
+    this.#moduleCacheGenerations.clear();
+    this.#moduleCache.clear();
+  }
+
+  #bumpModuleCacheGenerationForPath(path: LocalPath): void {
+    let bump = (key: LocalPath) => {
+      this.#moduleCacheGenerations.set(
+        key,
+        (this.#moduleCacheGenerations.get(key) ?? 0) + 1,
+      );
+    };
+    bump(path);
+    // Fan out to every executable-extension variant so a request that
+    // entered as `foo` or `foo.ts` (alias forms of canonical `foo.gts`)
+    // sees the bump on its own snapshot key.
+    for (let ext of executableExtensions) {
+      if (path.endsWith(ext)) {
+        let stripped = path.slice(0, -ext.length);
+        bump(stripped);
+        for (let other of executableExtensions) {
+          if (other !== ext) {
+            bump(stripped + other);
+          }
+        }
+        return;
+      }
+    }
+  }
+
+  #snapshotModuleCacheGeneration(localPath: LocalPath): {
+    path: number;
+    global: number;
+  } {
+    return {
+      path: this.#moduleCacheGenerations.get(localPath) ?? 0,
+      global: this.#moduleCacheGlobalGeneration,
+    };
+  }
+
+  #moduleCacheGenerationChanged(
+    localPath: LocalPath,
+    snapshot: { path: number; global: number },
+  ): boolean {
+    return (
+      (this.#moduleCacheGenerations.get(localPath) ?? 0) !== snapshot.path ||
+      this.#moduleCacheGlobalGeneration !== snapshot.global
+    );
   }
 
   // Broadcast a file-change notification to peer realm-server instances so
@@ -1397,7 +1500,7 @@ export class Realm {
       (isNewFile ? addedFiles : updatedFiles).push(path);
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
+        this.#invalidateModuleCachePath(path);
       }
       await this.#notifyFileChange(path);
       results.push({ path, lastModified });
@@ -1878,7 +1981,7 @@ export class Realm {
     });
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
+      this.#invalidateModuleCachePath(path);
     }
     await this.#notifyFileChange(path);
     // Remove file meta for this path
@@ -1902,7 +2005,7 @@ export class Realm {
       removePromises.push(this.#adapter.remove(path));
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
+        this.#invalidateModuleCachePath(path);
       }
     }
 
@@ -2188,6 +2291,13 @@ export class Realm {
     let moduleCachingDisabled =
       this.#disableModuleCaching ||
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
+    // CS-11028 persist-after-invalidate guard. Snapshot before the first
+    // await so a concurrent `invalidateCache(path)` (local writer or
+    // realm_file_changes NOTIFY listener) bumps the counter while we're
+    // mid-transpile; the cache.set below short-circuits on mismatch.
+    // Captured even on the cache-hit path because it's a couple Map
+    // reads and we don't know yet which path we'll take.
+    let generationSnapshot = this.#snapshotModuleCacheGeneration(localPath);
 
     if (!moduleCachingDisabled) {
       let cached = this.#moduleCache.get(localPath);
@@ -2240,7 +2350,20 @@ export class Realm {
       );
       switch (result.kind) {
         case 'module': {
-          if (!moduleCachingDisabled) {
+          // CS-11028 persist-after-invalidate guard. If `invalidateCache`
+          // ran while we were transpiling, the snapshot we took at entry
+          // no longer matches; the bytes we just produced are derived
+          // from pre-invalidation source. Drop the cache write rather
+          // than re-installing a row the writer just cleared. We still
+          // serve our response — the request was submitted before the
+          // invalidate, and a stale-but-coherent body for one request is
+          // better than the alternative (re-running the transpile inline
+          // here, blocking the response). Same posture as CS-10948 in
+          // CachingDefinitionLookup.
+          if (
+            !moduleCachingDisabled &&
+            !this.#moduleCacheGenerationChanged(localPath, generationSnapshot)
+          ) {
             this.#moduleCache.set(localPath, {
               canonicalPath: result.canonicalPath,
               body: result.body,
@@ -2367,7 +2490,7 @@ export class Realm {
       let debugFilename = fileWithContent.path.startsWith('/')
         ? fileWithContent.path
         : `/${fileWithContent.path}`;
-      transpiled = await transpileJS(source, debugFilename);
+      transpiled = await this.#transpile(source, debugFilename);
     } catch (err: any) {
       let cardError =
         err instanceof CardError
@@ -2894,7 +3017,7 @@ export class Realm {
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         let invalidatedPath = this.paths.local(invalidatedURL);
-        this.#moduleCache.invalidate(invalidatedPath);
+        this.#invalidateModuleCachePath(invalidatedPath);
         changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
@@ -2907,7 +3030,7 @@ export class Realm {
       for (let invalidatedModuleURL of invalidatedModuleURLs) {
         try {
           let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
-          this.#moduleCache.invalidate(invalidatedPath);
+          this.#invalidateModuleCachePath(invalidatedPath);
           changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         } catch (_err) {
           // ignore invalidations outside this realm
@@ -2919,7 +3042,7 @@ export class Realm {
       this.moduleCacheDependencyEntries(),
     );
     for (let invalidatedPath of dependentInvalidations) {
-      this.#moduleCache.invalidate(invalidatedPath);
+      this.#invalidateModuleCachePath(invalidatedPath);
     }
   }
 
@@ -5550,7 +5673,7 @@ export class Realm {
       this.#sourceCache.invalidate(localPath);
 
       if (hasExecutableExtension(localPath)) {
-        this.#moduleCache.invalidate(localPath);
+        this.#invalidateModuleCachePath(localPath);
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
