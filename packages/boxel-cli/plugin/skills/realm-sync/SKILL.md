@@ -1,5 +1,5 @@
 ---
-description: Move files between local disk and a Boxel realm. Use when the user wants to push local changes up, pull a realm down, do a bidirectional sync, create a new realm, or list realms accessible to the active profile.
+description: Move files between local disk and a Boxel realm. Use when the user wants to push local changes up, pull a realm down, do a bidirectional sync, watch a realm for continuous remote-to-local mirroring, create or remove a realm, or list realms accessible to the active profile.
 ---
 
 # Realm sync
@@ -9,7 +9,9 @@ Wraps the `boxel realm` subcommands that move data between a local directory and
 - **`push`** — local → remote. Deploy local edits to the realm.
 - **`pull`** — remote → local. Download a realm into a directory.
 - **`sync`** — bidirectional. Reconcile both sides; needs a `--prefer-*` flag when there are conflicts.
+- **`watch`** — remote → local, continuous. Long-running poller; pulls remote changes into the local directory as they happen.
 - **`create`** — provision a new realm on the realm server.
+- **`remove`** — delete a realm and unlink it from the active profile.
 - **`list`** — see realms the active profile can access.
 
 ## When the user asks to...
@@ -19,7 +21,9 @@ Wraps the `boxel realm` subcommands that move data between a local directory and
 | "push my changes" / "deploy" | `boxel realm push <local-dir> <realm-url>` |
 | "download a realm" / "pull it locally" | `boxel realm pull <realm-url> <local-dir>` |
 | "sync" / "keep them in lockstep" | `boxel realm sync <local-dir> <realm-url> --prefer-newest` (or `--prefer-local` / `--prefer-remote`) |
+| "watch the realm" / "live-mirror remote changes locally" | `boxel realm watch <realm-url> <local-dir>` |
 | "make a new realm" | `boxel realm create <realm-name> <display-name>` |
+| "delete this realm" / "remove a realm" | `boxel realm remove <realm-url>` |
 | "what realms do I have access to" | `boxel realm list` |
 
 ## Prerequisites
@@ -60,6 +64,21 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--prefer-newest` — Resolve conflicts by keeping newest version
 - `--delete` — Sync deletions both ways
 - `--dry-run` — Preview without making changes
+- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+
+### `boxel realm watch <realm-url> <local-dir>`
+
+Watch a Boxel realm for server-side changes and pull them into a local directory
+
+**Arguments:**
+
+- `<realm-url>` — The URL of the realm to watch (e.g., https://app.boxel.ai/demo/)
+- `<local-dir>` — The local directory to write changes into
+
+**Options:**
+
+- `-i, --interval <seconds>` — Polling interval in seconds
+- `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm push <local-dir> <realm-url>`
@@ -106,6 +125,19 @@ Create a new realm on the realm server
 
 - `--background <url>` — background image URL
 - `--icon <url>` — icon image URL
+
+### `boxel realm remove <realm-url>`
+
+Remove a realm — deletes server-side files and unlinks it from your realm list
+
+**Arguments:**
+
+- `<realm-url>` — realm URL to remove
+
+**Options:**
+
+- `-y, --yes` — Skip the interactive confirmation prompt
+- `--dry-run` — Preview the change without writing to Matrix
 
 ### `boxel realm list`
 

@@ -46,7 +46,7 @@ Skills appear under the `/boxel-cli:` namespace.
 | `/boxel-cli:boxel-development` | Authoring `.gts` card definitions and `.json` instances. The high-level Boxel patterns guide. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
 | `/boxel-cli:boxel-design` | Design-discovery prompts for distinctive Boxel UI. Generated from [`cardstack/boxel-skills`](https://github.com/cardstack/boxel-skills). |
 | `/boxel-cli:boxel-file-structure` | File and directory naming rules, `adoptsFrom` module paths, link relationship semantics. |
-| `/boxel-cli:realm-sync` | `boxel realm sync/push/pull/create/list` — moving files between local disk and a realm. |
+| `/boxel-cli:realm-sync` | `boxel realm sync/watch/push/pull/create/remove/list` — moving files between local disk and a realm. |
 | `/boxel-cli:realm-history` | `boxel realm history/wait-for-ready/cancel-indexing` — inspecting and steering realm indexing. |
 | `/boxel-cli:file-ops` | `boxel file read/write/list/delete/lint/touch` — single-file operations against a realm. |
 | `/boxel-cli:search` | `boxel search` — federated search across realms. |
