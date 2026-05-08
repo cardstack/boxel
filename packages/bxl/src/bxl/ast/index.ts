@@ -377,7 +377,19 @@ function validateSandboxProfileNode(
     });
   }
 
-  if (node.type === 'reduce' || node.type === 'foreach') {
+  // `reduce` and `foreach` are banned in `policy` and `predicate` because
+  // those profiles must reduce to bounded request-time decisions / portable
+  // query predicates — folds with arbitrary bodies fall outside that
+  // contract. `derive` allows them: the actual derivation hazards
+  // (non-determinism, env coupling, volatile calls) are addressed by
+  // their own bans, and a deterministic fold over a record-local array is
+  // structurally identical to library aggregates like `add`, `min/0`, and
+  // `max/0` (which are themselves reduces under the hood). Termination is
+  // bounded by the BXL runtime budget.
+  if (
+    (node.type === 'reduce' || node.type === 'foreach') &&
+    profile !== 'derive'
+  ) {
     issues.push({
       code: `${profile}-loop-banned`,
       severity: 'error',
@@ -404,7 +416,7 @@ function validateSandboxProfileNode(
     });
   }
 
-  if (node.type === 'try') {
+  if (node.type === 'try' && !(profile === 'derive' && node.short)) {
     issues.push({
       code: `${profile}-try-banned`,
       severity: 'error',

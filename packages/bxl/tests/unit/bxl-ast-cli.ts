@@ -117,16 +117,6 @@ const boundedProfileCases = [
     suffix: 'def-banned',
   },
   {
-    expression: 'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
-    suffix: 'loop-banned',
-    readableSyntax: false,
-  },
-  {
-    expression: 'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
-    suffix: 'loop-banned',
-    readableSyntax: false,
-  },
-  {
     expression: '..',
     suffix: 'recursive-descent-banned',
     readableSyntax: false,
@@ -160,6 +150,24 @@ for (const profile of boundedProfiles) {
       profile,
       `${profile}-${testCase.suffix}`,
       { readableSyntax: testCase.readableSyntax },
+    );
+  }
+}
+
+// reduce / foreach are banned in `policy` and `predicate` only — `derive`
+// allows them as ergonomic fold primitives for record-local aggregation.
+const loopBoundedProfiles: BxlProfile[] = ['policy', 'predicate'];
+const loopCases = [
+  'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
+  'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
+];
+for (const profile of loopBoundedProfiles) {
+  for (const expression of loopCases) {
+    expectProfileIssue(
+      expression,
+      profile,
+      `${profile}-loop-banned`,
+      { readableSyntax: false },
     );
   }
 }
@@ -240,12 +248,48 @@ strictEqual(
   0,
   'derive profile allows deterministic lazy aggregate formula helpers',
 );
+strictEqual(
+  parseBxlAst(
+    'reduce .lineItems[] as $item (0; . + $item.lineTotal)',
+    { schema, profile: 'derive', readableSyntax: false },
+  ).profileIssues.length,
+  0,
+  'derive profile allows reduce — record-local fold for aggregation',
+);
+strictEqual(
+  parseBxlAst(
+    'foreach .lineItems[] as $item (0; . + $item.lineTotal; .)',
+    { schema, profile: 'derive', readableSyntax: false },
+  ).profileIssues.length,
+  0,
+  'derive profile allows foreach — record-local fold with intermediate state',
+);
+strictEqual(
+  parseBxlAst(
+    '[.policies[] | .coverageFlags // 0] | reduce .[] as $x (0; BITOR(.; $x))',
+    { schema: { fields: [{ key: 'policies', label: 'Policies', kind: 'array' }] }, profile: 'derive', readableSyntax: false },
+  ).profileIssues.length,
+  0,
+  'derive profile allows BITOR-fold for portfolio coverage bitmasks',
+);
+strictEqual(
+  parseBxlAst('[.medications[]?]', {
+    profile: 'derive',
+    readableSyntax: false,
+  }).profileIssues.length,
+  0,
+  'derive profile allows optional stream projection for record-local arrays',
+);
 expectProfileIssue('RAND() > 0.5', 'derive', 'derive-call-banned', {
   messageIncludes: 'volatile calls',
 });
 expectProfileIssue('debug', 'derive', 'derive-call-banned', {
   readableSyntax: false,
   messageIncludes: 'control/side-effect calls',
+});
+expectProfileIssue('try .x catch 0', 'derive', 'derive-try-banned', {
+  readableSyntax: false,
+  messageIncludes: 'try/catch',
 });
 expectProfileIssue('@User.ID', 'derive', 'derive-context-banned', {
   messageIncludes: 'deterministic write/index-time computation',
@@ -330,6 +374,15 @@ deepStrictEqual(
     message: 'volatile calls are not stable write-time derivations',
   },
   'function safety registry exposes derive denied calls',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('derive', 'empty'),
+  {
+    safety: 'allow',
+    normalizedName: 'EMPTY',
+    category: 'controlOrSideEffect',
+  },
+  'function safety registry allows deterministic empty stream control in derive',
 );
 
 for (const testCase of boundedProfileCases) {

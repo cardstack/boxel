@@ -217,7 +217,7 @@ Restrictions:
 - no explicit `reduce` or `foreach`
 - no recursive descent
 - no jq assignment operators
-- no jq `try` / `catch`
+- no authored jq `try` / `catch`; optional access such as `.items[]?` is allowed
 - no jq `label` / `break`
 - no jq format filters such as `@csv`
 - no local `as` bindings
@@ -290,7 +290,7 @@ See [`predicate-sql.md`](./predicate-sql.md) for the detailed SQL compiler contr
 
 ## `derive`
 
-`derive` is for deterministic headless write/index-time computation. It is the right profile for Boxel `computedVia` and other derived values that the platform may store, index, cache, or reuse on a later read path.
+`derive` is for deterministic headless write/index-time computation. It is the right profile for Boxel `computeVia` and other derived values that the platform may store, index, cache, or reuse on a later read path. The Boxel `bxl()` / `expression()` factory enforces this profile when it constructs the compute function.
 
 Unlike `predicate`, `derive` is allowed to compute values. Record-local aggregation is a primary use case. The important boundary is determinism: a derived value should come from the record snapshot, not from the current user, request, wall clock, runtime metadata, or an unbounded custom program.
 
@@ -301,7 +301,7 @@ lazy extension library.
 
 Use it for:
 
-- `computedVia`
+- `computeVia`
 - denormalized fields
 - search facets
 - cached derived fields
@@ -345,10 +345,15 @@ IFERROR(Amount, 0)
 NPV(0.1, CashFlows)
 ```
 
+```bxl
+[.policies[] | .coverageFlags // 0] | reduce .[] as $x (0; BITOR(.; $x))
+```
+
+A `reduce` fold for portfolio coverage bitmasks — record-local data, deterministic fold body, terminates on the materialized array. Allowed in `derive`.
+
 Restrictions:
 
 - no user-defined `def` helpers
-- no explicit `reduce` or `foreach`
 - no recursive descent
 - no jq assignment operators
 - no jq `try` / `catch`
@@ -357,7 +362,9 @@ Restrictions:
 - no request, actor, mutation, or environment contexts such as `@User`, `@Env`, `$new`, or `$old`
 - no volatile calls such as `RAND`, `RANDBETWEEN`, `NOW`, or `TODAY`
 - no control, side-effect, or runtime metadata calls such as `debug`, `stderr`, `halt`, or `builtins`
-- record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, and aggregate calls are allowed
+- record-local arrays, filters, `LET`, Excel helpers, arithmetic, object/array shaping, aggregate calls, **and explicit `reduce`/`foreach` folds** are allowed
+
+> **Why `reduce` and `foreach` are allowed in `derive` (and not in `policy` or `predicate`).** A fold over a record-local array is structurally identical to library aggregates like `add`, `min/0`, and `max/0` — those builtins are themselves reduces under the hood. The actual derivation hazards (non-determinism, environment coupling, volatile calls) are addressed by the bans above and stay in place. Termination is guaranteed by the BXL runtime budget. Banning `reduce` would force a one-off built-in for every fold pattern users care about (BITOR aggregate, custom statistics, etc.); allowing it gives ergonomic record-local aggregation without weakening the determinism contract. `policy` and `predicate` keep the ban because they must reduce to bounded request-time decisions and portable query predicates respectively, where arbitrary fold bodies fall outside the contract.
 
 Representative diagnostic:
 
