@@ -26,10 +26,10 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   }
 
   private async sanitizeDeps(deps: string[]): Promise<string[]> {
-    const { moduleIdentifiers } = await new SanitizeModuleListCommand(
+    const { moduleUrls } = await new SanitizeModuleListCommand(
       this.commandContext,
-    ).execute({ moduleIdentifiers: deps });
-    return moduleIdentifiers;
+    ).execute({ moduleUrls: deps });
+    return moduleUrls;
   }
 
   protected async run(

@@ -282,7 +282,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       let uploadCommand = new UploadImageCommand(commandContext);
       let result = await uploadCommand.execute({
         sourceImageUrl: dataUrl,
-        targetRealmIdentifier: realmHref,
+        targetRealmUrl: realmHref,
       });
 
       if (!result?.cardId) {

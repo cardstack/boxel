@@ -442,7 +442,7 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
         const uploadCommand = new UploadImageCommand(commandContext);
         const result = await uploadCommand.execute({
           sourceImageUrl: entry.preview,
-          targetRealmIdentifier: realmHref,
+          targetRealmUrl: realmHref,
         });
 
         if (!result?.cardId) {

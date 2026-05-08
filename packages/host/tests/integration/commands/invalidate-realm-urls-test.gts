@@ -1,12 +1,10 @@
 import { getOwner } from '@ember/owner';
-import { settled, type RenderingTestContext } from '@ember/test-helpers';
+import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-
-import ReindexRealmCommand from '@cardstack/host/commands/reindex-realm';
+import InvalidateRealmUrlsCommand from '@cardstack/host/commands/invalidate-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -31,7 +29,7 @@ class StubRealmService extends RealmService {
   }
 }
 
-module('Integration | commands | reindex-realm', function (hooks) {
+module('Integration | commands | invalidate-realm-urls', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -41,6 +39,14 @@ module('Integration | commands | reindex-realm', function (hooks) {
   let receivedPathname: string | null = null;
   let responseStatus = 204;
   let responseBody: string | null = null;
+  let receivedBody: {
+    data?: {
+      type?: string;
+      attributes?: {
+        urls?: string[];
+      };
+    };
+  } | null = null;
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -50,11 +56,12 @@ module('Integration | commands | reindex-realm', function (hooks) {
 
   setupRealmServerEndpoints(hooks, [
     {
-      route: 'test/_reindex',
+      route: 'test/_invalidate',
       getResponse: async (req: Request) => {
         receivedAuthorizationHeader = req.headers.get('Authorization');
         receivedMethod = req.method;
         receivedPathname = new URL(req.url).pathname;
+        receivedBody = (await req.json()) as typeof receivedBody;
         return new Response(responseBody, { status: responseStatus });
       },
     },
@@ -67,6 +74,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     receivedAuthorizationHeader = null;
     receivedMethod = null;
     receivedPathname = null;
+    receivedBody = null;
     responseStatus = 204;
     responseBody = null;
 
@@ -79,25 +87,20 @@ module('Integration | commands | reindex-realm', function (hooks) {
     );
   });
 
-  test('calls realm endpoint with expected auth header', async function (assert) {
+  test('calls realm endpoint with expected auth header and payload', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
-    let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let command = new InvalidateRealmUrlsCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
-
-    assert.false(
-      realmService.info(realmURL).isIndexing,
-      'realm is not indexing before the command runs',
-    );
 
     let result = await command.execute({
       realmUrl: realmURL,
+      urls: [`${realmURL}mango`, `${realmURL}mango`, `${realmURL}person.gts`],
     });
 
     assert.strictEqual(result, undefined, 'command has no result card');
     assert.strictEqual(receivedMethod, 'POST', 'uses POST');
-    assert.strictEqual(receivedPathname, '/test/_reindex', 'calls endpoint');
+    assert.strictEqual(receivedPathname, '/test/_invalidate', 'calls endpoint');
     assert.ok(receivedAuthorizationHeader, 'authorization header is present');
     assert.true(
       receivedAuthorizationHeader?.startsWith('Bearer '),
@@ -126,35 +129,25 @@ module('Integration | commands | reindex-realm', function (hooks) {
       `Bearer ${realmServer.token}`,
       'authorization header does not use realm-server session token',
     );
-    assert.true(
-      realmService.info(realmURL).isIndexing,
-      'command starts the realm indexing animation immediately',
-    );
 
-    mockMatrixUtils.simulateRemoteMessage(
-      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
-      testRealmInfo.realmUserId!,
+    assert.deepEqual(
+      receivedBody,
       {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [],
-        realmURL,
+        data: {
+          type: 'invalidation-request',
+          attributes: {
+            urls: [`${realmURL}mango`, `${realmURL}person.gts`],
+          },
+        },
       },
-      { type: APP_BOXEL_REALM_EVENT_TYPE },
-    );
-    await settled();
-
-    assert.false(
-      realmService.info(realmURL).isIndexing,
-      'incremental realm event stops the indexing animation',
+      'sends JSON:API payload with deduped urls',
     );
   });
 
-  test('throws when reindex endpoint returns non-204', async function (assert) {
+  test('throws when realm invalidation endpoint returns non-204', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
-    let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
+    let command = new InvalidateRealmUrlsCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
     responseBody = 'boom';
@@ -162,61 +155,10 @@ module('Integration | commands | reindex-realm', function (hooks) {
     await assert.rejects(
       command.execute({
         realmUrl: realmURL,
+        urls: [`${realmURL}mango`],
       }),
-      /Reindex realm failed: 500 - boom/,
+      /Invalidate urls failed: 500 - boom/,
       'propagates non-204 failure as an error',
-    );
-    assert.false(
-      realmService.info(realmURL).isIndexing,
-      'failed reindex restores the pre-command animation state',
-    );
-  });
-
-  test('full realm event also stops the indexing animation for no-op reindex', async function (assert) {
-    let commandService = getService('command-service');
-    let realmServer = getService('realm-server');
-    let realmService = getService('realm') as RealmService;
-    let command = new ReindexRealmCommand(commandService.commandContext);
-    let realmURL = new URL('test/', realmServer.url).href;
-
-    await command.execute({
-      realmUrl: realmURL,
-    });
-
-    assert.true(
-      realmService.info(realmURL).isIndexing,
-      'command starts the realm indexing animation',
-    );
-
-    mockMatrixUtils.simulateRemoteMessage(
-      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
-      testRealmInfo.realmUserId!,
-      {
-        eventName: 'index',
-        indexType: 'full',
-        realmURL,
-      },
-      { type: APP_BOXEL_REALM_EVENT_TYPE },
-    );
-    await settled();
-
-    assert.false(
-      realmService.info(realmURL).isIndexing,
-      'full realm event stops the indexing animation when no incremental event arrives',
-    );
-  });
-
-  test('description explains lighter reindex semantics', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new ReindexRealmCommand(commandService.commandContext);
-
-    assert.true(
-      command.description.includes('lighter/default mode'),
-      'description identifies this as the lighter option',
-    );
-    assert.true(
-      command.description.includes('mtime'),
-      'description explains mtime-based behavior',
     );
   });
 });

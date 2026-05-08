@@ -52,9 +52,9 @@ export default class ListingInstallCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ListingInstallResult> {
     let { realm, listing: listingInput } = input;
 
-    let { realmIdentifier } = await new ValidateRealmCommand(
+    let { realmUrl } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmIdentifier: realm });
+    ).execute({ realmUrl: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
@@ -69,7 +69,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let selectedCodeRef: ResolvedCodeRef | undefined;
     let skillCardId: string | undefined;
 
-    const builder = new PlanBuilder(realmIdentifier, listing);
+    const builder = new PlanBuilder(realmUrl, listing);
 
     builder
       .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) => {
@@ -80,13 +80,13 @@ export default class ListingInstallCommand extends HostBaseCommand<
       .addIf(examplesToInstall?.length > 0, (resolver: ListingPathResolver) => {
         let r = planInstanceInstall(examplesToInstall, resolver);
         let firstInstance = r.instancesCopy[0];
-        exampleCardId = join(realmIdentifier, firstInstance.lid);
+        exampleCardId = join(realmUrl, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
       .addIf(listing.skills?.length > 0, (resolver: ListingPathResolver) => {
         let r = planInstanceInstall(listing.skills, resolver);
-        skillCardId = join(realmIdentifier, r.instancesCopy[0].lid);
+        skillCardId = join(realmUrl, r.instancesCopy[0].lid);
         return r;
       });
 
@@ -113,7 +113,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
         let { sourceCard } = copyInstanceMeta;
         let { document: doc } = await new FetchCardJsonCommand(
           this.commandContext,
-        ).execute({ cardIdentifier: sourceCard.id });
+        ).execute({ url: sourceCard.id });
         if (!doc || !('data' in doc)) {
           throw new Error('We are only expecting single documents returned');
         }
@@ -121,7 +121,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
         delete (doc as any).included;
         let cardResource: LooseCardResource = (doc as any)
           .data as LooseCardResource;
-        let href = join(realmIdentifier, copyInstanceMeta.lid) + '.json';
+        let href = join(realmUrl, copyInstanceMeta.lid) + '.json';
         return { op: 'add' as const, href, data: cardResource };
       }),
     );
@@ -132,7 +132,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     try {
       ({ results: atomicResults } = await new ExecuteAtomicOperationsCommand(
         this.commandContext,
-      ).execute({ realmIdentifier, operations }));
+      ).execute({ realmUrl, operations }));
     } catch (e: any) {
       if (
         typeof e?.message === 'string' &&

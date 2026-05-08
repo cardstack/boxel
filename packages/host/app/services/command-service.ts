@@ -748,19 +748,19 @@ export default class CommandService extends Service {
     // Give Glimmer one render turn to reflect the "applying" state before we
     // start mutating files and emitting result events.
     await new Promise<void>((resolve) => schedule('afterRender', resolve));
-    let finalFileIdentifier: string | undefined;
+    let finalFileUrl: string | undefined;
 
     try {
       let patchCodeCommand = new PatchCodeCommand(this.commandContext);
 
       let patchCodeResult = await patchCodeCommand.execute({
-        fileIdentifier: fileUrl,
+        fileUrl,
         codeBlocks: codeDataItems.map(
           (codeData) => codeData.searchReplaceBlock!,
         ),
         roomId,
       });
-      finalFileIdentifier = patchCodeResult.finalFileIdentifier;
+      finalFileUrl = patchCodeResult.finalFileUrl;
 
       for (let i = 0; i < codeDataItems.length; i++) {
         const codeData = codeDataItems[i];
@@ -774,7 +774,7 @@ export default class CommandService extends Service {
 
       await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
       let fileDef = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: finalFileIdentifier ?? fileUrl,
+        sourceUrl: finalFileUrl ?? fileUrl,
         name: fileUrl.split('/').pop(),
       });
 

@@ -74,7 +74,7 @@ module('Integration | commands | write-binary-file', function (hooks) {
       base64Content: TINY_PNG_BASE64,
     });
     assert.strictEqual(
-      result.fileIdentifier,
+      result.fileUrl,
       `${testRealmURL}test-image.png`,
       'returns the correct file URL',
     );
@@ -155,7 +155,7 @@ module('Integration | commands | write-binary-file', function (hooks) {
       base64Content: TINY_PNG_BASE64,
     });
     assert.strictEqual(
-      result.fileIdentifier,
+      result.fileUrl,
       `${testRealmURL}test-image.png`,
       'leading slash is stripped from path',
     );

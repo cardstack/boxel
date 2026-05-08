@@ -29,10 +29,10 @@ export class RealmTabs extends GlimmerComponent<RealmTabsSignature> {
       {{#each @realms as |realm|}}
         <Pill
           @kind='button'
-          class='realm-pill {{if (eq @selectedRealm realm.realmIdentifier) "active"}}'
-          aria-pressed={{if (eq @selectedRealm realm.realmIdentifier) 'true' 'false'}}
-          title={{realm.realmIdentifier}}
-          {{on 'click' (fn @onChange realm.realmIdentifier)}}
+          class='realm-pill {{if (eq @selectedRealm realm.url) "active"}}'
+          aria-pressed={{if (eq @selectedRealm realm.url) 'true' 'false'}}
+          title={{realm.url}}
+          {{on 'click' (fn @onChange realm.url)}}
         >
           <:default>{{realm.info.name}}</:default>
         </Pill>

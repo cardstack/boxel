@@ -26,7 +26,7 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
     return CopyFileToRealmInput;
   }
 
-  requireInputFields = ['sourceFileIdentifier', 'targetRealm'];
+  requireInputFields = ['sourceFileUrl', 'targetRealm'];
 
   protected async run(
     input: BaseCommandModule.CopyFileToRealmInput,
@@ -41,7 +41,7 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let sourceUrl = new URL(input.sourceFileIdentifier);
+    let sourceUrl = new URL(input.sourceFileUrl);
     let filename = decodeURIComponent(
       sourceUrl.pathname.split('/').pop() ?? sourceUrl.pathname,
     );
@@ -64,15 +64,13 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
     let result = await this.cardService.copySource(sourceUrl, destinationUrl);
     if (!result.ok) {
       throw new Error(
-        `Failed to copy file from ${input.sourceFileIdentifier} to ${destinationUrl.href}`,
+        `Failed to copy file from ${input.sourceFileUrl} to ${destinationUrl.href}`,
       );
     }
 
     let commandModule = await this.loadCommandModule();
     const { CopyFileToRealmResult } = commandModule;
-    return new CopyFileToRealmResult({
-      newFileIdentifier: destinationUrl.href,
-    });
+    return new CopyFileToRealmResult({ newFileUrl: destinationUrl.href });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

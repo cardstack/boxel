@@ -4,13 +4,14 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import ValidateRealmCommand from '@cardstack/host/commands/validate-realm';
+import { ri } from '@cardstack/runtime-common';
+
+import GetRealmOfUrlCommand from '@cardstack/host/commands/get-realm-of-url';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupRealmServerEndpoints,
   testRealmURL,
   testRealmInfo,
   setupRealmCacheTeardown,
@@ -20,6 +21,8 @@ import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
+let realmOfURLMap: Map<string, URL | undefined>;
+
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
@@ -27,9 +30,18 @@ class StubRealmService extends RealmService {
       info: testRealmInfo,
     };
   }
+  realmOf = (input: URL | string) => {
+    let str = input instanceof URL ? input.href : input;
+    for (const [prefix, realmUrl] of realmOfURLMap) {
+      if (str.startsWith(prefix)) {
+        return realmUrl ? ri(realmUrl.href) : undefined;
+      }
+    }
+    return undefined;
+  };
 }
 
-module('Integration | commands | validate-realm', function (hooks) {
+module('Integration | commands | get-realm-of-url', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -40,40 +52,38 @@ module('Integration | commands | validate-realm', function (hooks) {
     autostart: true,
   });
 
-  setupRealmServerEndpoints(hooks);
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    getOwner(this)!.register('service:realm', StubRealmService);
+  });
 
   setupRealmCacheTeardown(hooks);
 
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    getOwner(this)!.register('service:realm', StubRealmService);
-
+  hooks.beforeEach(async function () {
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
-        realmURL: testRealmURL,
         contents: {},
       }),
     );
   });
 
-  test('returns normalized realm URL for a valid realm', async function (assert) {
+  test('returns the realm URL containing a given URL', async function (assert) {
+    realmOfURLMap = new Map([[testRealmURL, new URL(testRealmURL)]]);
     let commandService = getService('command-service');
-    let command = new ValidateRealmCommand(commandService.commandContext);
-    let result = await command.execute({ realmUrl: testRealmURL });
+    let command = new GetRealmOfUrlCommand(commandService.commandContext);
+    let result = await command.execute({
+      url: `${testRealmURL}some-card`,
+    });
     assert.strictEqual(result.realmUrl, testRealmURL);
   });
 
-  test('throws error for an invalid realm URL', async function (assert) {
+  test('returns empty string when URL is not in any realm', async function (assert) {
+    realmOfURLMap = new Map();
     let commandService = getService('command-service');
-    let command = new ValidateRealmCommand(commandService.commandContext);
-    try {
-      await command.execute({ realmUrl: 'https://invalid.example.com/realm/' });
-      assert.ok(false, 'should have thrown');
-    } catch (e: any) {
-      assert.ok(
-        e.message.includes('Invalid realm'),
-        `Error message includes "Invalid realm": ${e.message}`,
-      );
-    }
+    let command = new GetRealmOfUrlCommand(commandService.commandContext);
+    let result = await command.execute({
+      url: 'https://unknown.example.com/card',
+    });
+    assert.strictEqual(result.realmUrl, '');
   });
 });

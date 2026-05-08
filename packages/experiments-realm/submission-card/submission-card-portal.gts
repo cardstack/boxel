@@ -89,7 +89,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     if (resource?.isSuccess && resource.cardResult) {
       return (
         (resource.cardResult as GetAllRealmMetasResult).results?.map(
-          (r) => r.realmIdentifier,
+          (r) => r.url,
         ) ?? []
       );
     }
@@ -133,9 +133,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     const realmUrlsWithCards = new Set(
       (this.submissionDiscovery?.instancesByRealm ?? []).map((r) => r.realm),
     );
-    return this.allRealmMetas.filter((r) =>
-      realmUrlsWithCards.has(r.realmIdentifier),
-    );
+    return this.allRealmMetas.filter((r) => realmUrlsWithCards.has(r.url));
   }
 
   get isRealmsReady(): boolean {
@@ -150,7 +148,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     if (!this.allRealmsInfoResource?.isSuccess) return fallback;
     if (this.selectedRealm) return [this.selectedRealm];
 
-    const availableUrls = this.availableRealms.map((r) => r.realmIdentifier);
+    const availableUrls = this.availableRealms.map((r) => r.url);
     return availableUrls.length > 0 ? availableUrls : fallback;
   }
 

@@ -30,16 +30,16 @@ import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GenerateThumbnailCommandModule from './generate-thumbnail';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
-import * as GetAvailableRealmIdentifiersCommandModule from './get-available-realm-identifiers';
+import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
 import * as GetCardCommandModule from './get-card';
 import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
-import * as GetCatalogRealmIdentifiersCommandModule from './get-catalog-realm-identifiers';
+import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
-import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
+import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
-import * as InvalidateRealmIdentifiersCommandModule from './invalidate-realm-identifiers';
+import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -193,8 +193,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     InviteUserToRoomCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invalidate-realm-identifiers',
-    InvalidateRealmIdentifiersCommandModule,
+    '@cardstack/boxel-host/commands/invalidate-realm-urls',
+    InvalidateRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -437,12 +437,12 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetAllRealmMetasCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-available-realm-identifiers',
-    GetAvailableRealmIdentifiersCommandModule,
+    '@cardstack/boxel-host/commands/get-available-realm-urls',
+    GetAvailableRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-catalog-realm-identifiers',
-    GetCatalogRealmIdentifiersCommandModule,
+    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
+    GetCatalogRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/can-read-realm',
@@ -453,8 +453,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetDefaultWritableRealmCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-resource-identifier',
-    GetRealmOfResourceIdentifierCommandModule,
+    '@cardstack/boxel-host/commands/get-realm-of-url',
+    GetRealmOfUrlCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/sanitize-module-list',
@@ -514,16 +514,16 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateThumbnailCommandModule.default,
   ScreenshotCardCommandModule.default,
   GetAllRealmMetasCommandModule.default,
-  GetAvailableRealmIdentifiersCommandModule.default,
+  GetAvailableRealmUrlsCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
-  GetCatalogRealmIdentifiersCommandModule.default,
+  GetCatalogRealmUrlsCommandModule.default,
   GetCardCommandModule.default,
-  GetRealmOfResourceIdentifierCommandModule.default,
+  GetRealmOfUrlCommandModule.default,
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
-  InvalidateRealmIdentifiersCommandModule.default,
+  InvalidateRealmUrlsCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,

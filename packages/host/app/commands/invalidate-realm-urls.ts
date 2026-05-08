@@ -6,8 +6,8 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmService from '../services/realm';
 
-export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
-  typeof BaseCommandModule.InvalidateRealmIdentifiersInput,
+export default class InvalidateRealmUrlsCommand extends HostBaseCommand<
+  typeof BaseCommandModule.InvalidateRealmUrlsInput,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -18,16 +18,13 @@ export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { InvalidateRealmIdentifiersInput } = commandModule;
-    return InvalidateRealmIdentifiersInput;
+    const { InvalidateRealmUrlsInput } = commandModule;
+    return InvalidateRealmUrlsInput;
   }
 
   protected async run(
-    input: BaseCommandModule.InvalidateRealmIdentifiersInput,
+    input: BaseCommandModule.InvalidateRealmUrlsInput,
   ): Promise<undefined> {
-    await this.realm.invalidateUrls(
-      input.realmIdentifier,
-      input.resourceIdentifiers,
-    );
+    await this.realm.invalidateUrls(input.realmUrl, input.urls);
   }
 }

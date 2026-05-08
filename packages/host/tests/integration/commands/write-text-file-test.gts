@@ -159,7 +159,7 @@ module('Integration | commands | write-text-file', function (hooks) {
       useNonConflictingFilename: true,
     });
 
-    assert.strictEqual(result.fileIdentifier, `${testRealmURL}test-1.txt`);
+    assert.strictEqual(result.fileUrl, `${testRealmURL}test-1.txt`);
 
     let originalResponse = await fetch(new URL('test.txt', testRealmURL));
     let originalContent = await originalResponse.text();
@@ -189,7 +189,7 @@ module('Integration | commands | write-text-file', function (hooks) {
       useNonConflictingFilename: true,
     });
 
-    assert.strictEqual(result.fileIdentifier, `${testRealmURL}empty.txt`);
+    assert.strictEqual(result.fileUrl, `${testRealmURL}empty.txt`);
 
     let { status, content } = await cardService.getSource(
       new URL('empty.txt', testRealmURL),
@@ -222,7 +222,7 @@ module('Integration | commands | write-text-file', function (hooks) {
       useNonConflictingFilename: true,
     });
 
-    assert.strictEqual(result.fileIdentifier, `${testRealmURL}empty.txt`);
+    assert.strictEqual(result.fileUrl, `${testRealmURL}empty.txt`);
 
     let { status, content } = await cardService.getSource(
       new URL('empty.txt', testRealmURL),

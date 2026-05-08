@@ -54,7 +54,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
     }
     const userPrompt = promptSections.join('\n\n');
     const llmModel = input.llmModel || 'anthropic/claude-3-haiku';
-    const attachedFileIdentifiers = input.codeRef.module
+    const attachedFileURLs = input.codeRef.module
       ? buildAttachedFileURLs(input.codeRef.module)
       : [];
     const skillCardIds = Array.from(
@@ -74,9 +74,7 @@ export default class GenerateThemeExampleCommand extends HostBaseCommand<
       systemPrompt: ONE_SHOT_SYSTEM_PROMPT,
       userPrompt,
       llmModel,
-      attachedFileIdentifiers: attachedFileIdentifiers.length
-        ? attachedFileIdentifiers
-        : undefined,
+      attachedFileURLs: attachedFileURLs.length ? attachedFileURLs : undefined,
       skillCardIds,
     });
 

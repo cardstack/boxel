@@ -75,7 +75,7 @@ async function generateImage({
   let result = await generateCommand.execute({
     prompt,
     sourceImageUrl,
-    targetRealmIdentifier: realmHref,
+    targetRealmUrl: realmHref,
   });
 
   let generatedUrl = result?.url;

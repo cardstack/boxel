@@ -44,12 +44,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return PatchCodeInput;
   }
 
-  requireInputFields = ['fileIdentifier', 'codeBlocks'];
+  requireInputFields = ['fileUrl', 'codeBlocks'];
 
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {
-    let { fileIdentifier: fileUrl, codeBlocks, roomId } = input;
+    let { fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
@@ -58,7 +58,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
       sourceContent,
       codeBlocks,
     );
-    let finalFileIdentifier = fileUrl;
+    let finalFileUrl = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
       if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
@@ -67,7 +67,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         lintIssues = lintResult.lintIssues ?? [];
       }
 
-      finalFileIdentifier = await this.determineFinalFileUrl(
+      finalFileUrl = await this.determineFinalFileUrl(
         fileUrl,
         fileInfo,
         hasEmptySearchPortion,
@@ -76,18 +76,18 @@ export default class PatchCodeCommand extends HostBaseCommand<
       let clientRequestId = this.commandService.trackAiAssistantCardRequest({
         action: 'patch-code',
         roomId,
-        fileUrl: finalFileIdentifier,
+        fileUrl: finalFileUrl,
       });
 
       let savedThroughOpenFile = await this.trySaveThroughOpenFile(
-        finalFileIdentifier,
+        finalFileUrl,
         patchedCode,
         clientRequestId,
       );
       if (!savedThroughOpenFile) {
         this.cardService
-          .saveSource(new URL(finalFileIdentifier), patchedCode, 'bot-patch', {
-            resetLoader: hasExecutableExtension(finalFileIdentifier),
+          .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
+            resetLoader: hasExecutableExtension(finalFileUrl),
             clientRequestId,
           })
           .catch((error: unknown) => {
@@ -101,7 +101,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
 
     return new PatchCodeCommandResult({
       patchedContent: patchedCode,
-      finalFileIdentifier,
+      finalFileUrl,
       lintIssues,
       results: results.map((result) => {
         return new PatchCodeResultField({

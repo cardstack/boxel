@@ -82,7 +82,7 @@ module('Integration | commands | fetch-card-json', function (hooks) {
     let commandService = getService('command-service');
     let command = new FetchCardJsonCommand(commandService.commandContext);
     let result = await command.execute({
-      cardIdentifier: `${testRealmURL}Person/alice`,
+      url: `${testRealmURL}Person/alice`,
     });
     assert.ok(result.document, 'document is returned');
     assert.strictEqual(

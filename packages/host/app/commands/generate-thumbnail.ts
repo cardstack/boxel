@@ -82,7 +82,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
     return GenerateThumbnailInput;
   }
 
-  requireInputFields = ['prompt', 'targetRealmIdentifier'];
+  requireInputFields = ['prompt', 'targetRealmUrl'];
 
   protected async run(
     input: BaseCommandModule.GenerateThumbnailInput,
@@ -90,7 +90,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
     const {
       prompt,
       sourceImageUrl,
-      targetRealmIdentifier,
+      targetRealmUrl,
       targetPath,
       targetCardId,
       cardName,
@@ -209,16 +209,16 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
       this.commandContext,
     ).execute({
       path: filePath,
-      realm: targetRealmIdentifier,
+      realm: targetRealmUrl,
       base64Content,
       contentType: mimeType,
       useNonConflictingFilename: true,
     });
 
-    if (!writeResult?.fileIdentifier) {
+    if (!writeResult?.fileUrl) {
       throw new Error('Failed to write binary file to realm.');
     }
-    const imageDefIdentifier = writeResult.fileIdentifier;
+    const imageDefUrl = writeResult.fileUrl;
 
     // If a targetCardId is provided, patch cardInfo.cardThumbnail to link the ImageDef
     if (targetCardId?.trim()) {
@@ -233,7 +233,7 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
         patch: {
           relationships: {
             'cardInfo.cardThumbnail': {
-              links: { self: imageDefIdentifier },
+              links: { self: imageDefUrl },
             },
           },
         },
@@ -242,6 +242,6 @@ export default class GenerateThumbnailCommand extends HostBaseCommand<
 
     let commandModule = await this.loadCommandModule();
     const { GenerateThumbnailOutput } = commandModule;
-    return new GenerateThumbnailOutput({ imageDefIdentifier });
+    return new GenerateThumbnailOutput({ imageDefUrl });
   }
 }

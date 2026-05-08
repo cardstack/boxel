@@ -8,7 +8,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type MatrixService from '../services/matrix-service';
 
 export default class ReadFileForAssistantCommand extends HostBaseCommand<
-  typeof BaseCommandModule.FileIdentifierCard,
+  typeof BaseCommandModule.FileUrlCard,
   typeof BaseCommandModule.FileForAttachmentCard
 > {
   @service declare private matrixService: MatrixService;
@@ -17,18 +17,18 @@ export default class ReadFileForAssistantCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { FileIdentifierCard } = commandModule;
-    return FileIdentifierCard;
+    const { FileUrlCard } = commandModule;
+    return FileUrlCard;
   }
 
-  requireInputFields = ['fileIdentifier'];
+  requireInputFields = ['fileUrl'];
 
   protected async run(
-    input: BaseCommandModule.FileIdentifierCard,
+    input: BaseCommandModule.FileUrlCard,
   ): Promise<BaseCommandModule.FileForAttachmentCard> {
     let { matrixService } = this;
 
-    let fileUrl = input.fileIdentifier;
+    let fileUrl = input.fileUrl;
 
     await matrixService.ready;
     let file: FileDef | undefined = matrixService.fileAPI.createFileDef({

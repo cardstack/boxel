@@ -4,8 +4,9 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import ValidateRealmCommand from '@cardstack/host/commands/validate-realm';
+import GetAvailableRealmUrlsCommand from '@cardstack/host/commands/get-available-realm-urls';
 import RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupIntegrationTestRealm,
@@ -29,7 +30,7 @@ class StubRealmService extends RealmService {
   }
 }
 
-module('Integration | commands | validate-realm', function (hooks) {
+module('Integration | commands | get-available-realm-urls', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
@@ -54,26 +55,26 @@ module('Integration | commands | validate-realm', function (hooks) {
         contents: {},
       }),
     );
+
+    let realmServer = getService('realm-server') as RealmServerService;
+    Object.defineProperty(realmServer, 'availableRealmURLs', {
+      get: () => [
+        'https://example.com/realm-a/',
+        'https://example.com/realm-b/',
+      ],
+      configurable: true,
+    });
   });
 
-  test('returns normalized realm URL for a valid realm', async function (assert) {
+  test('returns the list of available realm URLs', async function (assert) {
     let commandService = getService('command-service');
-    let command = new ValidateRealmCommand(commandService.commandContext);
-    let result = await command.execute({ realmUrl: testRealmURL });
-    assert.strictEqual(result.realmUrl, testRealmURL);
-  });
-
-  test('throws error for an invalid realm URL', async function (assert) {
-    let commandService = getService('command-service');
-    let command = new ValidateRealmCommand(commandService.commandContext);
-    try {
-      await command.execute({ realmUrl: 'https://invalid.example.com/realm/' });
-      assert.ok(false, 'should have thrown');
-    } catch (e: any) {
-      assert.ok(
-        e.message.includes('Invalid realm'),
-        `Error message includes "Invalid realm": ${e.message}`,
-      );
-    }
+    let command = new GetAvailableRealmUrlsCommand(
+      commandService.commandContext,
+    );
+    let result = await command.execute();
+    assert.deepEqual(result.urls, [
+      'https://example.com/realm-a/',
+      'https://example.com/realm-b/',
+    ]);
   });
 });

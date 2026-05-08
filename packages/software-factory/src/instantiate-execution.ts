@@ -753,9 +753,9 @@ async function attemptInstantiateCard(
   instanceData?: string,
 ): Promise<InstantiateModuleResult> {
   let commandInput: Record<string, unknown> = {
-    moduleIdentifier: moduleUrl,
+    moduleUrl,
     cardName,
-    realmIdentifier: realmUrl,
+    realmUrl,
   };
   if (instanceData) {
     commandInput.instanceData = instanceData;

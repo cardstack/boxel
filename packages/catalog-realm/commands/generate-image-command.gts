@@ -9,7 +9,7 @@ import UploadImageCommand from './upload-image';
 class GenerateImageInput extends CardDef {
   @field prompt = contains(StringField);
   @field sourceImageUrl = contains(StringField);
-  @field targetRealmIdentifier = contains(StringField);
+  @field targetRealmUrl = contains(StringField);
 }
 
 class GenerateImageOutput extends CardDef {
@@ -53,7 +53,7 @@ export class GenerateImageCommand extends Command<
   }
 
   protected async run(input: GenerateImageInput): Promise<GenerateImageOutput> {
-    const { prompt, sourceImageUrl, targetRealmIdentifier } = input;
+    const { prompt, sourceImageUrl, targetRealmUrl } = input;
     const sourceUrlTrimmed = sourceImageUrl?.trim();
 
     if (!sourceUrlTrimmed) {
@@ -146,12 +146,12 @@ export class GenerateImageCommand extends Command<
 
     let uploadedImageUrl: string | undefined;
     let uploadedCardId: string | undefined;
-    if (targetRealmIdentifier) {
+    if (targetRealmUrl) {
       try {
         let uploadCommand = new UploadImageCommand(this.commandContext);
         let uploadResult = await uploadCommand.execute({
           sourceImageUrl: generatedImageUrl,
-          targetRealmIdentifier,
+          targetRealmUrl,
         });
 
         uploadedCardId = uploadResult?.cardId;

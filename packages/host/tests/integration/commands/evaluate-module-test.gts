@@ -61,8 +61,8 @@ module('Integration | commands | evaluate-module', function (hooks) {
 
     let InputType = await command.getInputType();
     let input = new InputType({
-      moduleIdentifier: `${testRealmURL}valid-card`,
-      realmIdentifier: testRealmURL,
+      moduleUrl: `${testRealmURL}valid-card`,
+      realmUrl: testRealmURL,
     });
 
     let result = await command.execute(input);
@@ -77,8 +77,8 @@ module('Integration | commands | evaluate-module', function (hooks) {
 
     let InputType = await command.getInputType();
     let input = new InputType({
-      moduleIdentifier: `${testRealmURL}broken-import-card`,
-      realmIdentifier: testRealmURL,
+      moduleUrl: `${testRealmURL}broken-import-card`,
+      realmUrl: testRealmURL,
     });
 
     let result = await command.execute(input);

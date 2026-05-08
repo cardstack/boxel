@@ -514,7 +514,7 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
         const uploadResult = await uploadCmd.execute({
           sourceImageUrl: dataUrl,
-          targetRealmIdentifier: modelRealmUrl.href,
+          targetRealmUrl: modelRealmUrl.href,
         });
 
         // Step 3: Store the CloudflareImage card ID

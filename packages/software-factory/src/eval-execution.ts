@@ -394,7 +394,7 @@ async function attemptEvaluateModule(
     realmServerUrl,
     realmUrl,
     EVALUATE_MODULE_COMMAND,
-    { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
+    { moduleUrl, realmUrl },
   );
 
   log.debug(

@@ -1382,7 +1382,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           name: 'read-file-for-ai-assistant_a831',
           arguments: JSON.stringify({
             attributes: {
-              fileIdentifier: `${testRealmURL}hello.txt`,
+              fileUrl: `${testRealmURL}hello.txt`,
             },
           }),
         },

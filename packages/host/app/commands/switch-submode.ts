@@ -85,8 +85,8 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
             content: '',
             useNonConflictingFilename: true,
           });
-          if (writeResult.fileIdentifier !== codeRRI) {
-            finalCodePath = rri(writeResult.fileIdentifier);
+          if (writeResult.fileUrl !== codeRRI) {
+            finalCodePath = rri(writeResult.fileUrl);
 
             let commandModule = await this.loadCommandModule();
             const { SwitchSubmodeResult } = commandModule;

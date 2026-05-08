@@ -138,7 +138,7 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     await new SendAiAssistantMessageCommand(this.commandContext).execute({
       roomId: this.matrixService.currentRoomId,
       prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
-      attachedFileIdentifiers: this.args.fileToAttach
+      attachedFileURLs: this.args.fileToAttach
         ? [this.args.fileToAttach.sourceUrl]
         : [],
     });

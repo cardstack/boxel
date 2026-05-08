@@ -6432,8 +6432,7 @@ new
               name: 'read-file-for-ai-assistant_a831',
               arguments: JSON.stringify({
                 attributes: {
-                  fileIdentifier:
-                    'http://test.com/my-realm/not-attached-file.ts',
+                  fileUrl: 'http://test.com/my-realm/not-attached-file.ts',
                 },
                 description: 'Reading a file the user did not attach',
               }),

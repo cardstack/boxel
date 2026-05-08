@@ -20,14 +20,14 @@ export default class FetchCardJsonCommand extends HostBaseCommand<
     return FetchCardJsonInput;
   }
 
-  requireInputFields = ['cardIdentifier'];
+  requireInputFields = ['url'];
 
   protected async run(
     input: BaseCommandModule.FetchCardJsonInput,
   ): Promise<BaseCommandModule.FetchCardJsonResult> {
     let commandModule = await this.loadCommandModule();
     const { FetchCardJsonResult } = commandModule;
-    const doc = await this.cardService.fetchJSON(input.cardIdentifier);
+    const doc = await this.cardService.fetchJSON(input.url);
     return new FetchCardJsonResult({ document: doc });
   }
 }
