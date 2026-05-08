@@ -354,6 +354,28 @@ export async function runIssueLoop(
 
       log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
 
+      // The agent itself reports "I cannot proceed" via two paths:
+      // calling `request_clarification` (clarification.message), or
+      // an unrecoverable backend error (e.g. session.error from
+      // opencode on a 401). Both surface as `result.status === 'blocked'`.
+      // Mark the issue blocked and exit the inner loop — validation and
+      // further iterations would just spin without making progress.
+      if (result.status === 'blocked') {
+        let blockMessage =
+          result.message?.trim() || 'agent reported it could not proceed';
+        log.info(`  Agent reported blocked: ${blockMessage}`);
+        try {
+          await issueStore.updateIssue(issue.id, { status: 'blocked' });
+          await syncWorkspace();
+        } catch (err) {
+          log.warn(
+            `  Failed to mark issue as blocked after agent block: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        exitReason = 'blocked';
+        break;
+      }
+
       // Push the agent's workspace writes to the realm so the prerenderer-
       // backed validators (eval / instantiate / test-step's QUnit run) see
       // the latest source when they execute against the realm.
