@@ -50,16 +50,20 @@ cleanup() {
   # escaped before interpolating — otherwise a checkout path containing
   # regex metacharacters (e.g. `boxel.worktrees/...`, where `.` matches
   # any char) would over-match and signal unrelated processes outside
-  # this checkout. The trailing `node_modules.*--transpileOnly` is an
-  # INTENTIONAL regex (matching whichever node_modules subpath the
-  # worker invocation resolves through), so escaping is applied to the
-  # path prefix only.
+  # this checkout. The trailing `node_modules.*--transpileOnly …` is an
+  # INTENTIONAL regex: `node_modules.*` matches whichever subpath the
+  # ts-node binary resolves through, and the alternation lists every
+  # service entrypoint that holds a port (worker/worker-manager → 4210,
+  # main → 4201/4202, prerender/* → 4221/4222). Wrappers that just
+  # invoke ts-node don't `exec` it, so killing the wrapper alone leaves
+  # the ts-node grandchild reparented to init with its port still bound.
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
+  TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
   pkill -TERM -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
-  pkill -TERM -f "${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly worker" 2>/dev/null || true
+  pkill -TERM -f "$TSNODE_RE" 2>/dev/null || true
   sleep 2
   pkill -KILL -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
-  pkill -KILL -f "${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly worker" 2>/dev/null || true
+  pkill -KILL -f "$TSNODE_RE" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
