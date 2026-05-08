@@ -12,13 +12,24 @@ import type { NotificationSubscription, PgAdapter } from '@cardstack/postgres';
 const log = logger('realm-server:module-cache-coordination');
 
 // Hash a coalesce key to a stable signed int64 string for use as a
-// pg advisory lock key. Same shape as hashRealmUrlForAdvisoryLock — sha256
+// pg advisory lock key AND as the bounded payload we send through
+// pg_notify. Same shape as hashRealmUrlForAdvisoryLock — sha256
 // + readBigInt64BE + toString — so the int64 range is fully utilized and
 // callers don't need BigInt-aware parameter binding. Two separate
 // keyspaces (realm-write locks vs coalesce locks) coexist in pg's single
 // advisory-lock namespace; collision probability is negligible at any
 // realistic scale.
-function hashCoalesceKeyForAdvisoryLock(key: string): string {
+//
+// Using the hashed id as the NOTIFY payload guarantees we stay well
+// under Postgres's ~8000-byte payload cap regardless of how long the
+// raw coalesce key gets (it concatenates realm URL + module URL +
+// scope + user id; pathological URLs could otherwise overflow). The
+// `#waiters` map is keyed off the same hashed id so the dispatch
+// path matches.
+//
+// Exported for tests that manually emit pg_notify and need to address
+// a specific waiter.
+export function hashCoalesceKeyForAdvisoryLock(key: string): string {
   const digest = createHash('sha256').update(key).digest();
   return digest.readBigInt64BE(0).toString();
 }
@@ -169,7 +180,9 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
           'SELECT pg_notify(',
           param(MODULE_CACHE_POPULATED_CHANNEL),
           ',',
-          param(coalesceKey),
+          // Use the bounded int64 hash, not the raw coalesce key —
+          // see hashCoalesceKeyForAdvisoryLock for the cap rationale.
+          param(lockKey),
           ')',
         ]);
         await queryFn(['COMMIT']);
@@ -184,32 +197,38 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
   // PopulateCoordinator — loser path. Resolves on either NOTIFY or
   // timeout; the caller's outer loop re-reads the cache regardless.
   async waitForKey(coalesceKey: string, timeoutMs: number): Promise<void> {
+    // Key the waiter off the same bounded hash we use as the NOTIFY
+    // payload, so #dispatch can match incoming notifications.
+    const waiterKey = hashCoalesceKeyForAdvisoryLock(coalesceKey);
     return await new Promise((resolve) => {
       let resolved = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const settle = () => {
         if (resolved) return;
         resolved = true;
-        clearTimeout(timer);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
         // Best-effort waiter unregister so the dispatch path doesn't
         // leak a stale entry. If we already left via NOTIFY the entry
         // is already gone; if we left via timeout we need to clean up.
-        const set = this.#waiters.get(coalesceKey);
+        const set = this.#waiters.get(waiterKey);
         if (set) {
           set.delete(waiter);
           if (set.size === 0) {
-            this.#waiters.delete(coalesceKey);
+            this.#waiters.delete(waiterKey);
           }
         }
         resolve();
       };
       const waiter: KeyWaiter = { resolve: settle };
-      let set = this.#waiters.get(coalesceKey);
+      let set = this.#waiters.get(waiterKey);
       if (!set) {
         set = new Set();
-        this.#waiters.set(coalesceKey, set);
+        this.#waiters.set(waiterKey, set);
       }
       set.add(waiter);
-      const timer = setTimeout(settle, timeoutMs);
+      timer = setTimeout(settle, timeoutMs);
       // unref so a hung waiter doesn't hold the Node event loop open
       // during shutdown / test teardown. Real workloads won't reach
       // the timeout in healthy operation.
@@ -228,9 +247,9 @@ export class ModuleCacheCoordinator implements PopulateCoordinator {
     if (!payload) {
       return;
     }
-    // Payload is the raw inFlightKey (coalesce key). No structure to
-    // parse — just look it up in the waiter map and resolve everyone
-    // parked on it.
+    // Payload is the bounded int64 hash of the coalesce key (see
+    // hashCoalesceKeyForAdvisoryLock). #waiters is keyed off the same
+    // hash, so we look up directly with no structure to parse.
     const set = this.#waiters.get(payload);
     if (!set) {
       return;

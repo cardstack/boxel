@@ -18,7 +18,10 @@ import {
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
-import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
+import {
+  ModuleCacheCoordinator,
+  hashCoalesceKeyForAdvisoryLock,
+} from '../lib/module-cache-coordination';
 
 // Lightweight helpers — these tests don't need the full
 // setupPermissionedRealmsCached fixture (real realm-server, real
@@ -239,13 +242,14 @@ module(basename(__filename), function () {
         await new Promise((r) => setTimeout(r, 100));
         const start = Date.now();
         const waitPromise = coordinator.waitForKey('notify-key', 5000);
-        // Yield, then send a manual NOTIFY for the key.
+        // Yield, then send a manual NOTIFY for the key. Payload is the
+        // bounded hash, matching what tryAcquireAndRun emits.
         await new Promise((r) => setTimeout(r, 50));
         await query(dbAdapter, [
           'SELECT pg_notify(',
           param(MODULE_CACHE_POPULATED_CHANNEL),
           ',',
-          param('notify-key'),
+          param(hashCoalesceKeyForAdvisoryLock('notify-key')),
           ')',
         ]);
         await waitPromise;
@@ -294,7 +298,7 @@ module(basename(__filename), function () {
           'SELECT pg_notify(',
           param(MODULE_CACHE_POPULATED_CHANNEL),
           ',',
-          param('different-key'),
+          param(hashCoalesceKeyForAdvisoryLock('different-key')),
           ')',
         ]);
         // Give the dispatch a moment to (correctly) NOT match.
