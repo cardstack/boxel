@@ -151,9 +151,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       };
     };
     expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-    // The loop picks up the seed issue and sets it to in_progress before
-    // the agent fails (no OPENROUTER_API_KEY), so the status is in_progress.
-    expect(issueJson.data.attributes.status).toBe('in_progress');
+    // The loop picks up the seed issue and starts it, the agent reports
+    // a hard backend error (401 from openrouter.ai because we passed an
+    // invalid key on purpose), and the loop marks the issue blocked.
+    expect(issueJson.data.attributes.status).toBe('blocked');
     expect(issueJson.data.attributes.summary).toContain(
       'Process brief and create project artifacts',
     );
