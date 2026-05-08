@@ -197,6 +197,7 @@ import './realm-registry-writes-test';
 import './realm-file-changes-listener-test';
 import './module-cache-invalidation-listener-test';
 import './pg-adapter-subscribe-test';
+import './module-cache-coordination-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/invalidate-urls-test';
