@@ -1,27 +1,31 @@
 import { InvalidArgumentError, type Command } from 'commander';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { RealmSyncBase, isProtectedFile } from '../../lib/realm-sync-base';
+import { RealmSyncBase, isProtectedFile } from '../../../lib/realm-sync-base';
 import {
   CheckpointManager,
   type Checkpoint,
   type CheckpointChange,
-} from '../../lib/checkpoint-manager';
+} from '../../../lib/checkpoint-manager';
 import {
   type SyncManifest,
   computeFileHash,
   loadManifest,
   saveManifest,
-} from '../../lib/sync-manifest';
-import type { ProfileManager } from '../../lib/profile-manager';
-import type { RealmAuthenticator } from '../../lib/realm-authenticator';
-import { resolveRealmAuthenticator } from '../../lib/auth-resolver';
-import { resolveRealmSecretSeed } from '../../lib/prompt';
+} from '../../../lib/sync-manifest';
+import type { ProfileManager } from '../../../lib/profile-manager';
+import type { RealmAuthenticator } from '../../../lib/realm-authenticator';
+import { resolveRealmAuthenticator } from '../../../lib/auth-resolver';
+import { resolveRealmSecretSeed } from '../../../lib/prompt';
 import {
   acquireWatchLock,
   releaseWatchLock,
   type WatchLockInfo,
-} from '../../lib/watch-lock';
+} from '../../../lib/watch-lock';
+import {
+  registerProcess,
+  unregisterCurrentProcess,
+} from '../../../lib/watch-process-registry';
 import {
   FG_CYAN,
   FG_GREEN,
@@ -29,7 +33,7 @@ import {
   FG_YELLOW,
   DIM,
   RESET,
-} from '../../lib/colors';
+} from '../../../lib/colors';
 
 export interface WatchRealmSpec {
   realmUrl: string;
@@ -472,6 +476,12 @@ export async function watchRealms(
     }, intervalMs);
   };
 
+  try {
+    await registerProcess(specs.map((s) => s.localDir).join(', '));
+  } catch {
+    // Best effort — registry failures must never block the watch.
+  }
+
   await tickAll();
   scheduleNextTick();
 
@@ -495,6 +505,11 @@ export async function watchRealms(
         } catch {
           // Best effort \u2014 a leftover lock will be detected as stale next run.
         }
+      }
+      try {
+        await unregisterCurrentProcess();
+      } catch {
+        // Best effort \u2014 leftover entries are pruned on next read.
       }
       resolve();
     };
@@ -572,11 +587,11 @@ function parseNonNegativeSeconds(name: string): (value: string) => number {
   };
 }
 
-export function registerWatchCommand(realm: Command): void {
-  realm
-    .command('watch')
+export function registerStartCommand(watch: Command): void {
+  watch
+    .command('start')
     .description(
-      'Watch a Boxel realm for server-side changes and pull them into a local directory',
+      'Start watching a Boxel realm for server-side changes and pull them into a local directory',
     )
     .argument(
       '<realm-url>',
