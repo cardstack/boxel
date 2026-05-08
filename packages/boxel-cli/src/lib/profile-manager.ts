@@ -32,7 +32,11 @@ function isJwtNearExpiry(
   token: string,
   safetyMarginSec = SERVER_TOKEN_EXPIRY_SAFETY_MARGIN_SEC,
 ): boolean {
-  let decoded = jwt.decode(token) as { exp?: number } | null;
+  // Tokens are cached verbatim from the realm server's `Authorization`
+  // response header, so they're prefixed with `Bearer ` — strip it before
+  // decoding or jsonwebtoken returns null and we'd refresh on every call.
+  let raw = token.replace(/^Bearer\s+/i, '');
+  let decoded = jwt.decode(raw) as { exp?: number } | null;
   if (!decoded?.exp) return true; // unparseable / missing exp → treat as expired
   let nowSec = Math.floor(Date.now() / 1000);
   return decoded.exp - nowSec < safetyMarginSec;
