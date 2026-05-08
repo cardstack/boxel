@@ -160,7 +160,7 @@ export function buildFactoryTools(
     buildRequestClarificationTool(),
   ];
 
-  // Tracker-schema cards (Project / Issue / KnowledgeArticle / Spec /
+  // Tracker-schema cards (Project / IssueTrackerBoard / Issue / KnowledgeArticle / Spec /
   // issue comments) used to have dedicated wrapper tools here that
   // auto-constructed the JSON:API document, enforced Issue-description
   // immutability, and so on. CS-10883 retired all five; the agent now
@@ -357,7 +357,7 @@ function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
       'definition by its CodeRef. Returns `{ attributes, relationships? }` ' +
       'with field names, types, and enum values introspected from the ' +
       'actual `CardDef` at runtime — never hard-coded. Use this BEFORE ' +
-      'writing a tracker JSON file (Project, Issue, KnowledgeArticle, ' +
+      'writing a tracker JSON file (Project, IssueTrackerBoard, Issue, KnowledgeArticle, ' +
       'Spec, etc.) so the document you write matches the live schema, ' +
       'even when the schema evolves. Schemas are fetched via the realm ' +
       'server prerenderer (the same path the AI Bot uses) and cached ' +

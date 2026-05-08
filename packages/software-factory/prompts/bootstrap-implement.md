@@ -18,7 +18,7 @@ Description:
 ## What to Create
 
 Create the following artifacts in the target realm using the available tools
-(`write_file`, `update_issue`, `create_knowledge`). Use `search_realm` and
+(`write_file`, `update_project`, `update_board`, `update_issue`, `create_knowledge`). Use `search_realm` and
 `read_file` to inspect existing state before creating anything.
 
 ### 1. Project Card
@@ -27,6 +27,7 @@ Write a Project card to `Projects/<slug>.json` where `<slug>` is derived
 from the brief title (lowercase, hyphens for spaces/punctuation).
 
 Required attributes:
+
 - `projectCode` — 2-4 uppercase letters derived from title initials (e.g., "Sticky Note" → "SN")
 - `projectName` — `"<brief title>"`
 - `projectStatus` — `"active"`
@@ -36,11 +37,33 @@ Required attributes:
 - `successCriteria` — derived from brief section headings
 
 Relationships:
+
+- `board` → `../Boards/<slug>`
 - `knowledgeBase.0` → `../Knowledge Articles/<slug>-<article-slug>` (one per article)
 
 adoptsFrom: the darkfactory `Project` type.
 
-### 2. Knowledge Articles
+### 2. Issue Tracker Board
+
+Create one IssueTrackerBoard card at `Boards/<slug>.json`.
+
+Required attributes:
+
+- `boardTitle` — `"<brief title> Board"`
+- `hideEmptyColumns` — `false`
+
+Relationships:
+
+- `project` → `../Projects/<slug>`
+
+adoptsFrom: the darkfactory `IssueTrackerBoard` type.
+
+The Project card and the IssueTrackerBoard card must be linked both ways:
+
+- Project `board` → the board card
+- IssueTrackerBoard `project` → the project card
+
+### 3. Knowledge Articles
 
 Create Knowledge Article cards in `Knowledge Articles/`. Always create at
 least these two:
@@ -54,6 +77,7 @@ be split out for clarity. Keep each article cohesive with a clear guiding
 principle.
 
 Each article should have:
+
 - `articleTitle` — a descriptive title (e.g., `"<brief title> — Brief Context"`, `"<brief title> — Data Model"`)
 - `articleType` — one of `"context"`, `"onboarding"`, `"reference"`, `"decision"`
 - `content` — the article body in markdown
@@ -65,7 +89,7 @@ adoptsFrom: the darkfactory `KnowledgeArticle` type.
 Link all articles from the Project card's `knowledgeBase` relationship, and
 from the implementation issues' `relatedKnowledge` relationships.
 
-### 3. Implementation Issues
+### 4. Implementation Issues
 
 Organize implementation issues around **entry-point cards** — the top-level
 cards that users interact with directly and that should be discoverable in the
@@ -73,6 +97,7 @@ Boxel catalog. Create **one issue per entry-point card**. Use judgment based on
 the brief to identify which cards are entry points vs interior/support cards.
 
 Each issue should cover the full scope of its entry-point card:
+
 - The card definition (`.gts`) and any interior/support cards it depends on
 - QUnit tests (`.test.gts`) for the entry-point card and all its support cards
 - A Catalog Spec (`Spec/<card-name>.json`) with realistic example instances linked via `linkedExamples`
@@ -88,6 +113,7 @@ before their consumers, and wire `blockedBy` so the consuming card's issue
 cannot start until the dependency card's issue is done.
 
 **Issue format** — for each entry-point card, create an issue named after the card at `Issues/<slug>-<card-name-slug>.json` (e.g., `Issues/sticky-note.json` for a "Sticky Note" card):
+
 - `issueId` — `"<projectCode>-<N>"` (sequential, dependency-first ordering)
 - `summary` — `"Implement <card name> card"` (named after the entry-point card, e.g., "Implement Sticky Note card")
 - `description` — describe the card to create, its fields, any interior/support cards, what tests to write, and what the catalog spec should contain
@@ -113,10 +139,11 @@ dependency cards are implemented before cards that consume them.
 1. Use `read_file` to read the brief at the URL above (if it is in a realm) or use the brief content in the description
 2. Derive the slug and project code from the brief title
 3. Create the Project card
-4. Create Knowledge Article cards (at least brief context + agent onboarding)
-5. Identify entry-point cards from the brief — these are the top-level cards users interact with
-6. Create one implementation Issue per entry-point card, with all relationships wired
-7. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
+4. Create the IssueTrackerBoard card and link it to the Project card
+5. Create Knowledge Article cards (at least brief context + agent onboarding)
+6. Identify entry-point cards from the brief — these are the top-level cards users interact with
+7. Create one implementation Issue per entry-point card, with all relationships wired
+8. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
 
-Create artifacts in the order listed — Project first, then Knowledge Articles,
+Create artifacts in the order listed — Project first, then IssueTrackerBoard, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.
