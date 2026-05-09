@@ -37,6 +37,17 @@ discovery.relabel "containers" {
 		target_label  = "service"
 	}
 
+	// Local docker-compose names the synapse container `boxel-synapse`,
+	// but staging/prod ECS uses task family `synapse`. Rewrite so dashboards
+	// that filter on `service="synapse"` work identically in both places.
+	// Run AFTER the slash-strip rule above and overwrite its `service` value.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/boxel-synapse"
+		target_label  = "service"
+		replacement   = "synapse"
+	}
+
 	// Optional realm label — only set when the container exposes
 	// `boxel.realm`. Without the (.+) match, the rule would always set the
 	// label (to an empty string), so queries like `realm!=""` would behave
