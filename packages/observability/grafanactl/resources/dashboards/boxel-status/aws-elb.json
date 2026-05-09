@@ -32,7 +32,8 @@
     "panels": [
       {
         "datasource": {
-          "uid": "cef5x9o3yzawwf"
+          "uid": "cef5x9o3yzawwf",
+          "type": "cloudwatch"
         },
         "fieldConfig": {
           "defaults": {
@@ -181,7 +182,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -312,7 +314,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -389,7 +392,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -466,7 +470,8 @@
       },
       {
         "datasource": {
-          "uid": "cef5x9o3yzawwf"
+          "uid": "cef5x9o3yzawwf",
+          "type": "cloudwatch"
         },
         "fieldConfig": {
           "defaults": {
@@ -597,7 +602,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -674,7 +680,8 @@
       },
       {
         "datasource": {
-          "uid": "cef5x9o3yzawwf"
+          "uid": "cef5x9o3yzawwf",
+          "type": "cloudwatch"
         },
         "fieldConfig": {
           "defaults": {
@@ -805,7 +812,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -884,7 +892,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1031,7 +1040,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1110,7 +1120,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1241,7 +1252,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1318,7 +1330,8 @@
       },
       {
         "datasource": {
-          "uid": "cef5x9o3yzawwf"
+          "uid": "cef5x9o3yzawwf",
+          "type": "cloudwatch"
         },
         "fieldConfig": {
           "defaults": {
@@ -1465,7 +1478,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1595,7 +1609,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1742,7 +1757,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1819,7 +1835,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
@@ -1896,7 +1913,8 @@
               "filter": ""
             },
             "datasource": {
-              "uid": "cef5x9o3yzawwf"
+              "uid": "cef5x9o3yzawwf",
+              "type": "cloudwatch"
             },
             "dimensions": {
               "LoadBalancer": "$loadbalancername"
