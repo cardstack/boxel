@@ -387,41 +387,13 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Worker job throughput and failures, bucketed at 1 minute. Resolved jobs (`status='resolved'`) and rejected jobs (`status='rejected'`) stacked. Legend shows the mean over the visible time range. Counts ALL job types, not just indexing \u2014 for indexing-only throughput see the Indexing dashboard.",
+        "description": "Priority-pending worker jobs (status='unfulfilled' with no active reservation AND priority < 0). Sparkline shows resolved jobs/min over the dashboard time range, with the trailing point set to the current priority-pending count so `lastNotNull` matches the displayed value. Color thresholds: green \u22643, yellow >3, red >10. Counts ALL job types \u2014 for indexing-only depth see the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
-              "mode": "palette-classic"
+              "mode": "thresholds"
             },
-            "custom": {
-              "axisLabel": "",
-              "axisPlacement": "auto",
-              "barAlignment": 0,
-              "drawStyle": "line",
-              "fillOpacity": 50,
-              "gradientMode": "opacity",
-              "hideFrom": {
-                "legend": false,
-                "tooltip": false,
-                "viz": false
-              },
-              "lineInterpolation": "smooth",
-              "lineWidth": 2,
-              "pointSize": 5,
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "showPoints": "never",
-              "spanNulls": false,
-              "stacking": {
-                "group": "A",
-                "mode": "none"
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "decimals": 1,
+            "decimals": 0,
             "links": [
               {
                 "title": "Open Job Queue dashboard",
@@ -436,43 +408,20 @@
                 {
                   "color": "green",
                   "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 4
+                },
+                {
+                  "color": "red",
+                  "value": 11
                 }
               ]
             },
             "unit": "short"
           },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Failures/min"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#ff5050"
-                  }
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "Jobs/min"
-              },
-              "properties": [
-                {
-                  "id": "color",
-                  "value": {
-                    "mode": "fixed",
-                    "fixedColor": "#37eb77"
-                  }
-                }
-              ]
-            }
-          ]
+          "overrides": []
         },
         "gridPos": {
           "h": 8,
@@ -481,19 +430,29 @@
           "y": 8
         },
         "id": 4,
-        "options": {
-          "legend": {
-            "calcs": [
-              "mean"
-            ],
-            "displayMode": "list",
-            "placement": "bottom",
-            "showLegend": true
-          },
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
+        "links": [
+          {
+            "title": "Open Job Queue dashboard",
+            "url": "/d/boxeljobqueue1",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
           }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -505,32 +464,12 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*) AS \"Jobs/min\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*)::int AS \"Pending priority jobs\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\nUNION ALL\nSELECT EXTRACT(EPOCH FROM NOW()),\n       (SELECT COUNT(*)::int\n          FROM jobs j\n          LEFT JOIN job_reservations jr\n            ON j.id = jr.job_id\n           AND jr.completed_at IS NULL\n           AND jr.locked_until > NOW()\n         WHERE j.status = 'unfulfilled'\n           AND j.priority < 0\n           AND jr.id IS NULL)\n ORDER BY 1;",
             "refId": "A"
-          },
-          {
-            "datasource": {
-              "type": "grafana-postgresql-datasource",
-              "uid": "cef5v5sl9k7i8f"
-            },
-            "editorMode": "code",
-            "format": "time_series",
-            "rawQuery": true,
-            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*) AS \"Failures/min\"\n  FROM jobs\n WHERE status = 'rejected'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
-            "refId": "B"
           }
         ],
         "title": "Job Queue",
-        "type": "timeseries",
-        "links": [
-          {
-            "title": "Open Job Queue dashboard",
-            "url": "/d/boxeljobqueue1",
-            "targetBlank": false,
-            "type": "link",
-            "icon": "external link"
-          }
-        ]
+        "type": "stat"
       },
       {
         "datasource": {
