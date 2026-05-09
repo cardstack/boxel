@@ -870,7 +870,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1102,7 +1102,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1334,7 +1334,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1566,7 +1566,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
