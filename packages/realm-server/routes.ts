@@ -26,6 +26,7 @@ import handleReindex from './handlers/handle-reindex';
 import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
 import handlePostDeployment from './handlers/handle-post-deployment';
@@ -250,6 +251,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
+  registerGrafanaEndpoint(
+    '/_grafana-upsert-realm-user-permission',
+    handleUpsertRealmUserPermission(args),
+  );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',
