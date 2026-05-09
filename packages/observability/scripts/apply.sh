@@ -218,3 +218,10 @@ grafanactl \
 # guaranteed to exist before the rules land. Local skips this (the
 # docker-compose file mount provisions alerts at container startup).
 ./scripts/apply-alerting.sh --env "$env_name"
+
+# Org-wide default home dashboard — Grafana has no file-provisioning shape
+# for org preferences, so PATCH /api/org/preferences directly. Runs in
+# every env (including local — preferences aren't in the file-provisioning
+# tree). Must run AFTER the dashboards push above so the referenced UID
+# exists when Grafana validates the preference.
+./scripts/apply-home-dashboard.sh --env "$env_name"
