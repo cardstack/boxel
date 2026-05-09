@@ -69,7 +69,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "Realms"
+                "options": "realms"
               },
               "properties": [
                 {
@@ -111,11 +111,11 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value",
+          "textMode": "value_and_name",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
-        "timeFrom": "5y",
+        "timeFrom": "1y",
         "targets": [
           {
             "datasource": {
@@ -125,7 +125,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"Realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub ORDER BY min_at;",
+            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub UNION ALL SELECT NOW(), (SELECT COUNT(DISTINCT realm_url) FROM realm_meta) ORDER BY 1;",
             "refId": "A"
           }
         ],
@@ -171,7 +171,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "Users"
+                "options": "users"
               },
               "properties": [
                 {
@@ -213,11 +213,11 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value",
+          "textMode": "value_and_name",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
-        "timeFrom": "5y",
+        "timeFrom": "1y",
         "targets": [
           {
             "datasource": {
@@ -227,7 +227,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"Users\" FROM users ORDER BY created_at;",
+            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"users\" FROM users UNION ALL SELECT NOW(), (SELECT COUNT(*) FROM users) ORDER BY 1;",
             "refId": "A"
           }
         ],
