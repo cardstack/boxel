@@ -42,11 +42,10 @@ export interface FormulaBundleRunResult {
 
 export const realmFormulaBundles: FormulaBundle[] = [
   {
-    id: 'middle-wolverine-airline-profitability',
+    id: 'airline-profitability',
     name: 'Airline flight profitability',
-    sourceRealm: 'ctse/middle-wolverine',
-    sourceUrl:
-      'https://realms-staging.stack.cards/ctse/middle-wolverine/index',
+    sourceRealm: 'airline-demo',
+    sourceUrl: 'local://examples/airline-profitability',
     description:
       'Representative formulas from AirlineFlight and its FieldDefs: scenario classification, fare realization, airport and crew costs, and contribution profit.',
     input: {
@@ -118,7 +117,7 @@ export const realmFormulaBundles: FormulaBundle[] = [
           'IFS(Scenario.FuelPriceUsdGal >= 4, "Fuel shock", Scenario.DemandFactor < 0.95, "Demand down", Scenario.LaborCostFactor > 1.05, "Labor up", Scenario.FleetAvailabilityFactor < 0.95, "Fleet tight", TRUE, "Base case")',
         outputKey: 'scenarioStressLabel',
         expected: 'Base case',
-        illustrates: 'Five-pair IFS fallback from middle-wolverine.',
+        illustrates: 'Five-pair IFS fallback from the airline fixture.',
       },
       {
         id: 'airline-realized-revenue-per-pax',
@@ -221,11 +220,10 @@ export const realmFormulaBundles: FormulaBundle[] = [
     ],
   },
   {
-    id: 'middle-wolverine-acoustic-resonance',
+    id: 'acoustic-resonance',
     name: 'Acoustic resonance screen',
-    sourceRealm: 'ctse/middle-wolverine',
-    sourceUrl:
-      'https://realms-staging.stack.cards/ctse/middle-wolverine/index',
+    sourceRealm: 'acoustic-demo',
+    sourceUrl: 'local://examples/acoustic-resonance',
     description:
       'Representative formulas from PipeResonance: compressor excitation, acoustic mode frequency, Bessel mode shape, amplification, and fatigue classification.',
     input: {
@@ -406,11 +404,10 @@ export const realmFormulaBundles: FormulaBundle[] = [
     ],
   },
   {
-    id: 'prudent-octopus-policy-tracking',
+    id: 'policy-tracking',
     name: 'Insurance policy tracking',
-    sourceRealm: 'ctse/prudent-octopus',
-    sourceUrl:
-      'https://realms-staging.stack.cards/ctse/prudent-octopus/index',
+    sourceRealm: 'insurance-demo',
+    sourceUrl: 'local://examples/policy-tracking',
     description:
       'Representative formulas from Policy and Claim tracking: financing, coverage bitmasks, claim aggregation, severity statistics, and tail-risk simulation.',
     input: {

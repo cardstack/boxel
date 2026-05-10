@@ -129,7 +129,6 @@ for (const lowerCall of [
   'erf(.x)',
   'sin(.x)',
   'cosh(.x)',
-  'sort(.list)',
 ]) {
   const result = lintBxlExpression(lowerCall, { schema: bxlExampleSchema });
   strictEqual(
@@ -150,6 +149,7 @@ for (const lowerJq of [
   'hypot(.a, .b)',
   'jn(2, .x)',
   'fmax(.a, .b)',
+  'sort(.list)',
 ]) {
   const result = lintBxlExpression(lowerJq, { schema: bxlExampleSchema });
   strictEqual(

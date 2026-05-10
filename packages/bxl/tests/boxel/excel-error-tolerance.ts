@@ -42,8 +42,8 @@ check('IFS with a matching branch returns the branch value', () => {
 });
 
 check('IFS/10 (5 condition/value pairs) dispatches correctly', () => {
-  // Five-pair IFS — used in the airline middle-wolverine realm's
-  // ScenarioField for stress-case classification.
+  // Five-pair IFS — used in the airline fixture's ScenarioField for
+  // stress-case classification.
   const compute = expression(
     fx`IFS(Score >= 100, "a", Score >= 80, "b", Score >= 60, "c", Score >= 40, "d", TRUE, "e")`,
   );

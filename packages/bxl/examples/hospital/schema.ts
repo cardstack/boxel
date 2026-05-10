@@ -2,7 +2,7 @@ import type { ReadableSchema } from '../../src/index.js';
 
 /**
  * Schema for the hospital fixture. Mirrors the field layout of the
- * gigantic-crawdad realm's HospitalPatient card. Labels match the
+ * HospitalPatient card. Labels match the
  * PascalCase identifiers used in computeVia expressions so the
  * readable-syntax compiler can resolve them without falling back to
  * the no-schema PascalCase rule.

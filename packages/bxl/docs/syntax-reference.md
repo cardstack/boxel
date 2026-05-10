@@ -40,54 +40,56 @@ Every helper name in BXL follows one of two conventions. The compiler is case-in
 
 > **If a helper name is UPPERCASE, you can paste it into an Excel cell and expect the same answer.** If it's lowercase, it's BXL's own vocabulary. The convention is enforced socially in review, not by the compiler — but keep it honest in authored expressions so reviewers can trust the promise.
 
-### How `ROUND` and `round` resolve to the same function — and when they don't
+### How `MATCH` and `match` dispatch
 
-BXL is case-insensitive at lookup time, so `ROUND`, `round`, `Round`, `rOUNd` all hit the same registry entry. But Excel and jq sometimes disagree on **what a function with a given name should do** — different argument order, different sign semantics, even different definitions. BXL resolves these conflicts **once, at registration time**, with a single canonical answer per name. **There is no runtime "dialect" flag.** This section spells out the rules.
+BXL keeps lookup case-insensitive: `ROUND`, `round`, `Round`, and `rOUNd` are the same spelling for lookup. Casing is style, not semantics. When Excel and jq share a case-folded name, BXL decides the meaning from syntax that survives copy/paste:
 
-#### The dispatch rule
+1. **Arity and call shape first.** Explicit arguments decide most cases: `LOG(x)` is Excel `LOG/1`, while `x | log` is jq `log/0`. Piped input does not count as an explicit argument. For `NOW`, parenthesized `NOW()` / `now()` is Excel; bare `now` / `NOW` is jq.
+2. **Separator second.** If the same explicit arity exists on both sides, comma means Excel/readable BXL and semicolon means jq. `MATCH(value, array)` is Excel lookup; `match(re; flags)` is jq regex matching. `ATAN2(x, y)` is Excel order; `atan2(y; x)` is jq/POSIX order.
+3. **Casing last.** After dispatch, the formatter prefers UPPERCASE for Excel and lowercase for jq. The linter nudges mismatches, but the compiler does not make `NOW` or any other function case-sensitive.
 
-The runtime resolves a function call by **case-folded name + arity**:
+Commas are for Excel formulas and readable BXL helpers: `MATCH(value, array)`, `when(condition, result)`. Semicolons are for jq calls and jq `def` syntax: `match(re; flags)`, `def helper(x): ...;`.
 
-1. **Names are case-folded for lookup.** `pow` and `POW` are the same name. `gamma` and `GAMMA` are the same name.
-2. **Each `(case-folded-name, arity)` pair is a distinct registry entry.** `sin/0` (jq, takes pipe input — `x | sin`) and `SIN/1` (Excel, takes explicit arg — `SIN(x)`) are different functions. Both are registered. Both work.
-3. **When jq and Excel use *different names* for the same idea, both names are registered independently.** They do not clash.
+#### Non-colliding pairs
 
-The third rule covers most jq/Excel pairs you'll encounter. Examples:
+Most jq/Excel pairs use different names, or the same name with different arity:
 
 | jq form | Excel form | How they coexist |
 | --- | --- | --- |
-| `x \| pow(y)` | `POWER(x, y)` | rule 3 — different names, both registered |
-| `pow(b; e)` (binary) | `POWER(b, e)` | rule 3 — different names, same param order |
-| `fmod(a; b)` | `MOD(a, b)` | rule 3 — different names, **different sign semantics**: `fmod(-7; 3) = -1` (dividend-signed, C/POSIX); `MOD(-7, 3) = 2` (divisor-signed, Excel). Pick the name that matches the math you want. |
-| `fmax(a; b)` / `fmin(a; b)` | `MAX(arr)` / `MIN(arr)` | rule 3 — different names, **different NaN handling**: `fmax`/`fmin` skip NaN (C/POSIX); `MAX`/`MIN` propagate errors (Excel). |
-| `jn(n; x)` / `yn(n; x)` | `BESSELJ(x, n)` / `BESSELY(x, n)` | rule 3 — different names, **different arg order**: jq follows C (order first), Excel follows Microsoft (value first). Use whichever name matches the convention you have in your head. |
-| `x \| log` | `LN(x)` | rule 2 — different arity. Both compute natural log. |
-| `x \| log` | `LOG(x)` | rule 2 — different arity, **different math**: `log/0` is natural log (jq tradition); `LOG/1` is base-10 log (Excel tradition). The arity makes them unambiguous. |
-| `x \| sin`, `x \| cos`, `x \| sqrt`, `x \| exp` | `SIN(x)`, `COS(x)`, `SQRT(x)`, `EXP(x)` | rule 2 — different arity, same math |
+| `x \| pow(y)` / `pow(b; e)` | `POWER(b, e)` | Different names, same parameter order. |
+| `fmod(a; b)` | `MOD(a, b)` | Different names, different sign semantics: `fmod(-7; 3) = -1`; `MOD(-7, 3) = 2`. |
+| `fmax(a; b)` / `fmin(a; b)` | `MAX(arr)` / `MIN(arr)` | Different names, different NaN/error handling. |
+| `jn(n; x)` / `yn(n; x)` | `BESSELJ(x, n)` / `BESSELY(x, n)` | Different names and different argument order. |
+| `x \| sin`, `x \| sqrt`, `x \| exp` | `SIN(x)`, `SQRT(x)`, `EXP(x)` | Same case-folded idea, different explicit arity. |
 
-#### The lone same-name-same-arity collision: `ATAN2`
+#### Practical collision table
 
-`ATAN2/2` is the **only** function in BXL where the case-folded name **and** arity match across jq and Excel, but the conventions disagree:
-
-| Source | Calling convention | Returns |
-| --- | --- | --- |
-| C / POSIX / vanilla jq | `atan2(y; x)` — y first | `Math.atan2(y, x)` |
-| Excel | `ATAN2(x, y)` — x first | `Math.atan2(y, x)` |
-
-Both call the same underlying math, but the **argument order is reversed**. Because case-insensitive lookup means `atan2` and `ATAN2` resolve to a single registry entry, BXL must pick one canonical signature.
-
-> **`ATAN2` canonicalizes to Excel order: `ATAN2(x, y)`. Spell it UPPERCASE.** The runtime is case-insensitive, so a lowercase `atan2(...)` at a call site still works — but the linter flags it as an info-level nudge to use `ATAN2`. Vanilla-jq ports must also swap arguments: `atan2(y; x)` → `ATAN2(x, y)`.
+| Name | Excel/readable BXL | jq | Dispatch note |
+| --- | --- | --- | --- |
+| `MATCH` / `match` | `MATCH(value, array)` / `MATCH(value, array, type)` | `text \| match(re)` / `text \| match(re; flags)` | Arity separates `match/1` and `MATCH/3`; separator separates `match/2` from `MATCH/2`. |
+| `INDEX` / `index` | `INDEX(array, row)` / `INDEX(array, row, col)` | `array \| index(value)` / `text \| index(substr)` | Arity separates jq `index/1` from Excel `INDEX/2` and `INDEX/3`. |
+| `TYPE` / `type` | `TYPE(value)` returns Excel numeric type code | `value \| type` returns jq type string | Arity separates jq `type/0` from Excel `TYPE/1`. |
+| `LOG` / `log` | `LOG(value)` is base-10 by default | `value \| log` is natural log | Arity separates jq `log/0` from Excel `LOG/1` and `LOG/2`. |
+| `NOW` / `now` | `NOW()` returns Excel date serial | `now` returns Unix epoch seconds | Call shape separates this: parenthesized call is Excel; bare filter is jq. |
+| `TRIM` / `trim` | `TRIM(text)` trims and collapses internal whitespace | `text \| trim` trims outer whitespace | Arity separates jq `trim/0` from Excel `TRIM/1`. |
+| `ATAN2` / `atan2` | `ATAN2(x, y)` uses Excel order | `atan2(y; x)` uses jq/POSIX order | Arity separates jq `atan2/1`; separator separates Excel `ATAN2/2` from jq `atan2/2`. |
 
 ```text
-ATAN2(1, 2)          -- Preferred: Excel argument order makes the convention obvious.
-                     -- atan2(y=2, x=1) = 1.1071  (≈ 63.4°)
+MATCH("b", ["a", "b"], 0)   -- Excel lookup, returns 2
+"abc123" | match("\\d+")     -- jq regex match object
+"abc123" | match("\\d+"; "i") -- jq regex match with flags
 
-atan2(1, 2)          -- Lowercase resolves to the same function (linter: info-level nudge).
-                     -- Same answer: 1.1071. Excel-canonical, NOT vanilla-jq order.
-                     -- Vanilla jq would compute atan2(y=1, x=2) = 0.4636 — port carefully.
+LOG(100)                    -- Excel base-10 log, returns 2
+100 | log                   -- jq natural log
+
+NOW()                       -- Excel date serial
+now                         -- jq Unix epoch seconds
+
+ATAN2(1, 2)                 -- Excel order: Math.atan2(y=2, x=1)
+atan2(1; 2)                 -- jq/POSIX order: Math.atan2(y=1, x=2)
 ```
 
-Edge case: **`ATAN2(0, 0)` returns `0` in BXL**, not `#DIV/0!`. Excel's `ATAN2(0, 0)` returns `#DIV/0!`; BXL deviates from Excel here for POSIX compatibility, because `ATAN2(0, 0)` is reachable from generic geometry code where a `0` answer is safer than an error.
+Edge case: **jq `atan2(0; 0)` returns `0` in BXL** for POSIX compatibility. Excel `ATAN2(0, 0)` follows Excel and returns `#DIV/0!`.
 
 #### `GAMMA` — different definitions, resolved to true Γ
 
@@ -96,7 +98,7 @@ Edge case: **`ATAN2(0, 0)` returns `0` in BXL**, not `#DIV/0!`. Excel's `ATAN2(0
 - **C / POSIX `gamma()`**: deprecated; historically log-Γ on Linux, true Γ on BSD. Implementation-defined. Vanilla jq inherits whatever libm it was linked against — there is no portable "jq-correct" answer.
 - **Excel `GAMMA(x)`**: true Γ, unambiguously.
 
-BXL canonicalizes both `GAMMA/1` (Excel) and `gamma/0` (jq) to **true Γ**. Spell it `GAMMA` — same linter nudge as `ATAN2`.
+BXL canonicalizes both `GAMMA/1` (Excel) and `gamma/0` (jq) to **true Γ**. Use `GAMMA(x)` for Excel-style explicit calls; use `x | gamma` for jq pipe form.
 
 If you need log-Γ, use the unambiguous spellings — they compute the same thing in either dialect:
 
@@ -111,19 +113,24 @@ If you need log-Γ, use the unambiguous spellings — they compute the same thin
 
 | Function | BXL behaviour | Notes |
 | --- | --- | --- |
-| `ATAN2(a, b)` | Excel order: `a` is x, `b` is y | Vanilla-jq porters: swap. `(0, 0)` returns `0`, not `#DIV/0!`. Lowercase `atan2(...)` lints. |
-| `GAMMA(x)` | true Γ | For log-Γ use `lgamma` or `GAMMALN`. Lowercase `gamma(...)` lints. |
-| `LOG(x)` (one-arg call) | base-10 log (`LOG/1`) | Different from `x \| log` (natural log, `log/0`) — arity decides |
+| `MATCH(value, array)` / `match(re; flags)` | Excel lookup with comma; jq regex with semicolon | `match(re)` is jq by arity; `MATCH(value, array, 0)` is Excel by arity. |
+| `INDEX(array, row)` / `index(value)` | Excel lookup with 2-3 args; jq index-of with 1 arg | Excel rows are one-based; jq index result is zero-based. |
+| `TYPE(value)` / `type` | Excel numeric type code vs jq type string | Parenthesized one-arg call is Excel; bare pipe filter is jq. |
+| `LOG(x)` / `log` | Excel base-10 log vs jq natural log | Arity decides. `LOG(x, base)` is Excel. |
+| `NOW()` / `now` | Excel date serial vs jq epoch seconds | Call shape decides. `now()` is Excel and formats to `NOW()`. Bare `NOW` is jq and formats to `now`. |
+| `TRIM(text)` / `trim` | Excel collapse whitespace vs jq outer trim | Arity decides. |
+| `ATAN2(x, y)` / `atan2(y; x)` | Excel order with comma; jq/POSIX order with semicolon | Separator decides the two-arg collision. |
+| `GAMMA(x)` / `gamma` | true Γ | Same math; use `lgamma` or `GAMMALN` for log-Γ. |
 | `fmod` vs `MOD` | independent functions | `fmod` dividend-signed (C); `MOD` divisor-signed (Excel) |
 | `fmax`/`fmin` vs `MAX`/`MIN` | independent functions | `fmax`/`fmin` skip NaN; `MAX`/`MIN` propagate errors |
 | `jn`/`yn` vs `BESSELJ`/`BESSELY` | independent functions | `jn(n; x)` (C order); `BESSELJ(x, n)` (Excel order) |
 | `pow` vs `POWER` | independent functions | Same param order in both, no impedance |
 
-> **Why no runtime dialect flag?** Earlier drafts considered an `expression(jq\`…\`)` mode that would flip semantics for the conflict set. We rejected it because (a) only one function (`ATAN2/2`) genuinely needs it after applying the rules above, (b) a runtime flag adds plumbing complexity and propagation gotchas, and (c) every other apparent collision turns out to fall under rule 2 (different arity) or rule 3 (different name). Single-canonical-signature with documented edge cases — plus the linter nudge for the spelling — is simpler and just as correct.
+> **Why no runtime dialect flag?** Earlier drafts considered an `expression(jq\`…\`)` mode. BXL does not need it: arity/call shape and separators preserve the intent that users paste from Excel or jq, while casing stays a formatter/linter convention.
 
 #### Linter style nudges
 
-The runtime is case-insensitive: `atan2`, `Atan2`, `ATAN2` all resolve to the same function. But when an expression is being **edited or saved through the BXL parser** (the realm UI, the `bxl --lint` CLI, or any caller of `lintBxlExpression`), function-call sites whose case-folded name matches a registered Excel function are flagged at info severity if the spelling isn't already all-uppercase:
+The runtime is case-insensitive: `atan2`, `Atan2`, `ATAN2` all participate in the same dispatch rules. When an expression is being **edited or saved through the BXL parser** (the realm UI, the `bxl --lint` CLI, or any caller of `lintBxlExpression`), the linter checks the resolved dialect:
 
 ```
 ✕  atan2(.x, .y)          info  excel-name-uppercase-preferred
@@ -131,9 +138,12 @@ The runtime is case-insensitive: `atan2`, `Atan2`, `ATAN2` all resolve to the sa
                                 The lookup is case-insensitive, but UPPERCASE makes
                                 the paste-from-spreadsheet contract obvious to readers.
                                 Suggestion: ATAN2(.x, .y)
+
+✕  MATCH("\\d+"; "i")      info  jq-name-lowercase-preferred
+                                match is a jq filter in this call shape — spell it lowercase.
 ```
 
-The rule applies to every Excel formula whose name has a lowercase jq counterpart that resolves to the same registry entry — `ATAN`, `ATAN2`, `SIN`, `COS`, `TAN`, `SQRT`, `EXP`, `LOG`, `FLOOR`, `ROUND`, `TRUNC`, `GAMMA`, `ERF`, `ERFC`, and the rest of the case-fold-collision set listed in the rule source. **It does NOT fire on lowercase names that are jq-only** (`map`, `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.) — those are honest BXL-native idioms and stay lowercase per the convention.
+The rule applies only after dispatch. `atan2(x, y)` lints to uppercase because comma means Excel; `ATAN2(y; x)` lints to lowercase because semicolon means jq. `now()` lints/formats to `NOW()`, while bare `NOW` lints/formats to `now`. It does not fire on lowercase names that are jq-only (`map`, `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.).
 
 Severity is `info`, never `error` — your code still compiles and runs.
 
@@ -1591,7 +1601,7 @@ The jq math library is available in BXL with C/IEEE semantics. Both unary (pipe-
 
 | Category | Functions |
 | --- | --- |
-| Trig | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(y)` `atan2(x; y)` |
+| Trig | `sin` `cos` `tan` `asin` `acos` `atan` `atan2(x)` `atan2(y; x)` |
 | Hyperbolic | `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` |
 | Exp/Log | `exp` `exp2` `exp10` `expm1` `log` `log2` `log10` `pow(y)` `pow(b; e)` `pow10` `sqrt` `cbrt` |
 | Rounding | `floor` `ceil` `round` `trunc` `nearbyint` `rint` `fabs` |
@@ -1601,7 +1611,7 @@ The jq math library is available in BXL with C/IEEE semantics. Both unary (pipe-
 | IEEE float | `frexp` `ldexp(x; n)` `scalb(x; n)` `scalbln(x; n)` `logb` `significand` `modf` `fma(a; b; c)` `nextafter(x; y)` `nexttoward(x; y)` |
 | Misc | `scalars_or_empty` |
 
-> **Collision warning — `atan2`.** The binary form `atan2(x; y)` follows **Excel argument order** (x first), not C/POSIX (y first). Vanilla-jq code must swap arguments. See [_How `ROUND` and `round` resolve to the same function_](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont) for the full story. Every other entry in this table follows C/IEEE semantics with no impedance.
+> **Collision warning — `atan2`.** The binary jq form is `atan2(y; x)` and follows C/POSIX order. The Excel form is `ATAN2(x, y)` with comma separators. See [_How `MATCH` and `match` dispatch_](#how-match-and-match-dispatch) for the full story.
 
 > **Sandbox-blocked.** `input/0`, `input_filename/0`, `input_line_number/0`, and `modulemeta/0` raise `#NAME?` because BXL has no input stream or module loader to back them. These are the only jq math/IO builtins that intentionally remain unimplemented.
 
@@ -1736,24 +1746,23 @@ These are all **honest jq-native idioms** — the linter does NOT flag the lower
 
 ### Excel functions with case-folded jq counterparts
 
-Functions where the lowercase jq spelling case-folds to a registered Excel name. **UPPERCASE is the preferred spelling** at call sites — both work, but lowercase triggers an info-level lint nudge:
+Functions where a lowercase jq spelling case-folds to an Excel-style name. **UPPERCASE is preferred only when dispatch resolved to Excel**; lowercase is preferred when arity/call shape or semicolon dispatch resolved to jq:
 
 | Preferred (Excel) | Also accepted (lowercase) | Notes |
 | --- | --- | --- |
 | `SIN(x)` `COS(x)` `TAN(x)` `ASIN(x)` `ACOS(x)` `ATAN(x)` | `sin(x)` … `atan(x)` | Lint: prefer UPPERCASE |
-| `ATAN2(x, y)` | `atan2(x, y)` | **Excel argument order**, NOT vanilla-jq `(y; x)`. See [collision rules](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont). |
+| `ATAN2(x, y)` | `atan2(y; x)` | Comma form is Excel order. Semicolon form is jq/POSIX order. See [collision rules](#how-match-and-match-dispatch). |
 | `SINH(x)` `COSH(x)` `TANH(x)` `ASINH(x)` `ACOSH(x)` `ATANH(x)` | `sinh(x)` … `atanh(x)` | Lint: prefer UPPERCASE |
 | `EXP(x)` `LOG10(x)` `SQRT(x)` | `exp(x)` `log10(x)` `sqrt(x)` | Lint: prefer UPPERCASE |
 | `LN(x)` | (use `LN`, not lowercase `log`) | jq's `log/0` is natural log (no explicit arg); Excel `LOG/1` is base-10. Different math at one-arg arity — arity decides. |
-| `LOG(x)` | (no lowercase form lints here — different math) | Excel `LOG(x)` = base-10. To get natural log via jq pipe form: `x \| log`. |
+| `LOG(x)` | `x \| log` | Excel `LOG(x)` = base-10. jq bare filter `log` = natural log. |
 | `POWER(b, e)` | (use `POWER` for Excel-flavoured code; `pow(b; e)` is the jq idiom and stays lowercase) | Different names — no lint either way. Pick by intent. |
 | `GAMMA(x)` | `gamma(x)` | True Γ. Lint: prefer UPPERCASE. For log-Γ use `GAMMALN` / `lgamma`. |
 | `ERF(x)` `ERFC(x)` | `erf(x)` `erfc(x)` | Lint: prefer UPPERCASE |
 | `FLOOR(x)` `ROUND(x)` `TRUNC(x)` | `floor(x)` `round(x)` `trunc(x)` | Lint: prefer UPPERCASE |
 | `ABS(x)` | (use `ABS`; `fabs` is the jq idiom — different name) | Different names — no lint |
-| `SORT(arr)` `UNIQUE(arr)` `TRANSPOSE(arr)` | `sort(arr)` `unique(arr)` `transpose(arr)` | Lint at one-arg call site: prefer UPPERCASE |
 
-> **Read [_How `ROUND` and `round` resolve to the same function_](#how-round-and-round-resolve-to-the-same-function--and-when-they-dont)** for the full collision rules, the `ATAN2` argument-order story, and the `GAMMA` / log-Γ resolution. The linter rule that backs the "prefer UPPERCASE" advice in this table is documented under [Linter style nudges](#linter-style-nudges).
+> **Read [_How `MATCH` and `match` dispatch_](#how-match-and-match-dispatch)** for the full collision rules, the `ATAN2` argument-order story, `NOW` call-shape rule, and `GAMMA` / log-Γ resolution. The linter rule that backs the casing advice in this table is documented under [Linter style nudges](#linter-style-nudges).
 
 > Range-based multi-criteria functions (`SUMIFS`, `COUNTIFS`, `AVERAGEIFS`) are not implemented as uppercase helpers because BXL's `_BY` variants (`SUMIFS_BY`, `COUNTIFS_BY`, `AVERAGEIFS_BY`) are more natural for JSON data. Use those instead.
 

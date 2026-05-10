@@ -200,7 +200,7 @@ bxl/
 ├── docs/password-game-spec.md         — this doc
 └── tests/unit/password-game-cli.ts    — headless regression test
 
-realms/ctse/ideal-frog/
+realm-fixture/password-game/
 ├── bxl.ts                             — the BXL bundle (same as other realms)
 ├── password-game.gts                  — card definition + UI
 └── PasswordGameForm/

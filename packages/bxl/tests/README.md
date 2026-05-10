@@ -22,8 +22,8 @@ Every public BXL syntax and API promise has an executable test here.
 
 ## Ported from staging
 
-The initial test corpus is ported from `jqxlv2/tests/` in the jolly-mackerel
-realm:
+The initial test corpus is ported from the legacy `jqxlv2/tests/`
+staging suite:
 
 | Staging file                  | Target location                                  |
 | ----------------------------- | ------------------------------------------------ |

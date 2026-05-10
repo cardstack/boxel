@@ -1,5 +1,6 @@
 import { parseNativeJq } from '../bridge/native.js';
 import {
+  analyzeReadableFunctionCall,
   compileReadableSyntax,
   type ReadableSchema,
   type ReadableSyntaxOptions,
@@ -334,23 +335,11 @@ function isPredicateSelector(tokens: ReadableSyntaxToken[]): boolean {
   );
 }
 
-/**
- * Excel function names whose lowercase spelling case-folds to a registered
- * Excel formula AND whose lowercase form ALSO exists as a jq idiom (so a user
- * porting from vanilla jq might naturally type the lowercase version).
- *
- * The runtime is case-insensitive so both spellings work — but at a call site
- * (`name(...)`) the lookup resolves to the Excel function. We nudge authors to
- * spell the Excel intent UPPERCASE so the paste-from-spreadsheet contract is
- * obvious to the next reader.
- *
- * NOT included: lowercase jq names with NO Excel counterpart (`map`,
- * `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.) — those are honest
- * BXL-native idioms and stay lowercase.
- *
- * Documented in docs/syntax-reference.md, section "Linter style nudges".
- */
-const EXCEL_NAME_UPPERCASE_PREFERRED = new Set<string>([
+// Names where spelling is style-only but useful: Excel dispatch should read
+// uppercase, jq dispatch should read lowercase. The compiler decides meaning
+// from arity/call shape first, then separator, so the linter must inspect the
+// same call context before suggesting a spelling.
+const COLLISION_STYLE_NAMES = new Set<string>([
   // Trig
   'sin', 'cos', 'tan',
   'asin', 'acos', 'atan', 'atan2',
@@ -358,35 +347,105 @@ const EXCEL_NAME_UPPERCASE_PREFERRED = new Set<string>([
   'sinh', 'cosh', 'tanh',
   'asinh', 'acosh', 'atanh',
   // Exp / Log
-  'exp', 'log10', 'log2', 'sqrt',
+  'exp', 'log', 'log10', 'log2', 'sqrt',
   // Special
   'gamma', 'erf', 'erfc',
   // Rounding
   'floor', 'round', 'trunc',
+  // Practical same-name collisions.
+  'index', 'match', 'now', 'trim', 'type',
   // Array (Excel SORT/UNIQUE/TRANSPOSE — single-arg call sites only)
   'sort', 'unique', 'transpose',
 ]);
 
-function lintExcelNameCasing(
+const JQ_BARE_STYLE_NAMES = new Set<string>([
+  'abs',
+  'acos',
+  'acosh',
+  'asin',
+  'asinh',
+  'atan',
+  'atanh',
+  'cos',
+  'cosh',
+  'erf',
+  'erfc',
+  'exp',
+  'floor',
+  'gamma',
+  'log',
+  'log10',
+  'max',
+  'min',
+  'not',
+  'now',
+  'round',
+  'sin',
+  'sinh',
+  'sqrt',
+  'tan',
+  'tanh',
+  'trim',
+  'trunc',
+  'type',
+]);
+
+function lintFunctionDispatchStyle(
   issues: BxlLintIssue[],
   tokens: ReadableSyntaxToken[],
+  labels: LabelInfo[],
 ) {
-  for (let index = 0; index < tokens.length - 1; index++) {
+  const singleWordLabels = new Set(
+    labels
+      .filter((label) => !label.quoteRequired)
+      .map((label) => label.normalized),
+  );
+  for (let index = 0; index < tokens.length; index++) {
     const ident = tokens[index];
     if (ident.type !== 'ident') continue;
     const next = tokens[index + 1];
-    if (next.type !== 'punc' || next.value !== '(') continue;
     const name = ident.value;
     const lower = name.toLowerCase();
-    if (!EXCEL_NAME_UPPERCASE_PREFERRED.has(lower)) continue;
-    if (name === name.toUpperCase()) continue; // already canonical
-    const upper = name.toUpperCase();
-    addIssue(issues, {
-      code: 'excel-name-uppercase-preferred',
-      severity: 'info',
-      message: `${upper} is an Excel formula — spell it UPPERCASE.`,
-      suggestion: `Use ${upper}(...) instead of ${name}(...). The lookup is case-insensitive, but UPPERCASE makes the paste-from-spreadsheet contract obvious to readers.`,
-    });
+
+    if (next?.type === 'punc' && next.value === '(') {
+      const call = analyzeReadableFunctionCall(tokens, index);
+      if (!call || !COLLISION_STYLE_NAMES.has(lower)) continue;
+      if (call.dispatch.dialect === 'excel') {
+        const upper = call.dispatch.name.toUpperCase();
+        if (name === upper) continue;
+        addIssue(issues, {
+          code: 'excel-name-uppercase-preferred',
+          severity: 'info',
+          message: `${upper} is an Excel formula — spell it UPPERCASE.`,
+          suggestion: `Use ${upper}(...) instead of ${name}(...). The lookup is case-insensitive, but UPPERCASE makes the paste-from-spreadsheet contract obvious to readers.`,
+        });
+      } else if (call.dispatch.dialect === 'jq') {
+        const jqName = call.dispatch.name.toLowerCase();
+        if (name === jqName) continue;
+        addIssue(issues, {
+          code: 'jq-name-lowercase-preferred',
+          severity: 'info',
+          message: `${jqName} is a jq filter in this call shape — spell it lowercase.`,
+          suggestion: `Use ${jqName}(...) instead of ${name}(...). Arity and separators decide semantics; lowercase makes the jq intent obvious.`,
+        });
+      }
+      continue;
+    }
+
+    if (
+      name !== lower &&
+      JQ_BARE_STYLE_NAMES.has(lower) &&
+      !singleWordLabels.has(lower) &&
+      next?.value !== ':' &&
+      tokens[index - 1]?.value !== '.'
+    ) {
+      addIssue(issues, {
+        code: 'jq-name-lowercase-preferred',
+        severity: 'info',
+        message: `${lower} is a jq filter in bare filter shape — spell it lowercase.`,
+        suggestion: `Use ${lower} instead of ${name}. Bare filter shape resolves to jq; parenthesized calls such as NOW() keep Excel semantics where applicable.`,
+      });
+    }
   }
 }
 
@@ -453,7 +512,7 @@ export function lintBxlExpression(
     lintMissingQuotedLabels(issues, tokens, labels);
     lintTopLevelEquals(issues, tokens);
     lintSelectors(issues, tokens);
-    lintExcelNameCasing(issues, tokens);
+    lintFunctionDispatchStyle(issues, tokens, labels);
   } catch (error) {
     addIssue(issues, {
       code: 'tokenize-error',

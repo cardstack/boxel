@@ -1,5 +1,5 @@
-// Regression tests for three compiler bugs fixed after the electric-haddock
-// Guide work surfaced them:
+// Regression tests for three compiler bugs fixed after guide work surfaced
+// them:
 //
 //   1. Removed readable string word operators reject clearly; lowercase jq
 //      pipe forms remain valid.

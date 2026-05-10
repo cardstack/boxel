@@ -1,7 +1,9 @@
 import {
   BXL_COMMA_ARGUMENT_HELPERS,
   BXL_FORMULA_FUNCTIONS,
+  analyzeReadableFunctionCall,
   compileReadableSyntax,
+  canonicalReadableBareFilterName,
   preprocessReadableSource,
   registerCompiledJqFormatter,
   tokenizeReadableSyntax,
@@ -284,6 +286,40 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     const upper = token.value.toUpperCase();
     const lower = token.value.toLowerCase();
 
+    if (next?.value === '(') {
+      const call = analyzeReadableFunctionCall(tokens, index);
+      const raw = tokenRaw(source, token);
+      const replacement =
+        call?.dispatch.dialect === 'excel'
+          ? call.dispatch.name.toUpperCase()
+          : call?.dispatch.dialect === 'jq'
+            ? call.dispatch.name.toLowerCase()
+            : undefined;
+      if (
+        replacement &&
+        raw !== replacement &&
+        token.start !== undefined &&
+        token.end !== undefined
+      ) {
+        edits.push({
+          start: token.start,
+          end: token.end,
+          text: replacement,
+          code:
+            call?.dispatch.dialect === 'excel'
+              ? 'formula-case'
+              : 'jq-function-case',
+          message:
+            call?.dispatch.dialect === 'excel'
+              ? `Normalized formula function ${raw} to ${replacement}.`
+              : `Normalized jq function ${raw} to ${replacement}.`,
+        });
+      }
+      if (replacement) {
+        continue;
+      }
+    }
+
     if (next?.value === '(' && BXL_FORMULA_FUNCTIONS.has(upper)) {
       const raw = tokenRaw(source, token);
       if (raw !== upper && token.start !== undefined && token.end !== undefined) {
@@ -354,6 +390,24 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     }
 
     if (consumedTokenIndexes.has(index)) {
+      continue;
+    }
+
+    const bareFilter = canonicalReadableBareFilterName(token.value);
+    if (
+      bareFilter !== token.value &&
+      next?.value !== '(' &&
+      tokens[index - 1]?.value !== '.' &&
+      token.start !== undefined &&
+      token.end !== undefined
+    ) {
+      edits.push({
+        start: token.start,
+        end: token.end,
+        text: bareFilter,
+        code: 'jq-function-case',
+        message: `Normalized jq function ${token.value} to ${bareFilter}.`,
+      });
       continue;
     }
 
@@ -471,15 +525,19 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
     }
     const upper = token.value.toUpperCase();
     const lower = token.value.toLowerCase();
-    const isFormula = BXL_FORMULA_FUNCTIONS.has(upper);
-    const isHelper = BXL_COMMA_ARGUMENT_HELPERS.has(lower);
-    const isAllAny = lower === 'all' || lower === 'any';
-    if (!isFormula && !isHelper && !isAllAny) {
-      continue;
-    }
-
     const open = tokens[index + 1];
     if (!open || open.type !== 'punc' || open.value !== '(') {
+      continue;
+    }
+    const call = analyzeReadableFunctionCall(tokens, index);
+    const isFormula = call?.dispatch.dialect === 'excel';
+    const isHelper =
+      call?.dispatch.dialect === 'bxl-helper' ||
+      (!call &&
+        (BXL_COMMA_ARGUMENT_HELPERS.has(lower) ||
+          lower === 'all' ||
+          lower === 'any'));
+    if (!isFormula && !isHelper) {
       continue;
     }
 
@@ -520,7 +578,7 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
         inner.start !== undefined &&
         inner.end !== undefined
       ) {
-        const displayName = isFormula ? upper : lower;
+        const displayName = isFormula ? call?.dispatch.name ?? upper : lower;
         edits.push({
           start: inner.start,
           end: inner.end,

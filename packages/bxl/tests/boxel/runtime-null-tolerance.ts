@@ -191,8 +191,8 @@ check('§11a empty-vitals card returns null instead of throwing', () => {
 //
 // Pre-fix bug: `A - (B + C)` normalized to `(A - B) + C` because `+`
 // and `-` share precedence and the AST normalizer reassociated across
-// the (parenthesized) RHS. Caught by the airline middle-wolverine
-// realm's contributionProfit computeVia, which has the exact shape
+// the (parenthesized) RHS. Caught by the airline fixture's
+// contributionProfit computeVia, which has the exact shape
 // `Revenue - (FuelCost + CrewCost + ...)`.
 
 check('paren regression: 100 - (50 + 30) === 20', () => {

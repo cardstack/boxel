@@ -1,9 +1,9 @@
 # Hospital example
 
-A miniature Boxel-realm scenario, vendored as plain JS data + schema
-+ expressions. Demonstrates the expression / jq / fx authoring
-patterns the gigantic-crawdad realm uses, but with **no Boxel
-runtime** — runs straight against Node.
+A miniature Boxel-realm scenario, vendored as plain JS data, schema,
+and expressions. Demonstrates the expression / jq / fx authoring
+patterns used by the hospital fixture, but with **no Boxel runtime** —
+runs straight against Node.
 
 ## Files
 

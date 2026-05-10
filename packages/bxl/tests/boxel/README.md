@@ -7,7 +7,7 @@ that would break a hospital card is caught upstream — before the
 realm bundle is shipped.
 
 The fixtures (`fixtures/hospital.ts`) are plain JS objects mirroring
-the gigantic-crawdad realm's serialized cards. **No** Boxel runtime,
+the hospital fixture's serialized cards. **No** Boxel runtime,
 **no** decorators, **no** `https://cardstack.com/base/...` imports —
 adding any of those means the test belongs in the realm-server repo
 instead.
@@ -26,8 +26,8 @@ original incident.
 | `compiler-readable.ts` | §11 (readableSyntax dispatch) · §12 (PascalCase fallback) · §13 (JQ_KEYWORDS guard) · §16 (mixed-syntax) |
 | `excel-error-tolerance.ts` | §11a (Excel-error catch — sentinels surface as null at the bxl() boundary) |
 | `materialize.ts` | §11a (`as: Cls` Object.assign fallback path — no Boxel runtime) |
-| `probe-fields.ts` | §15 (probe-field regressions — one assertion per gigantic-crawdad probe field) |
-| `fielddef-threading.ts` | §11a + §18 (multi-stage `{ as: Cls }` threading — the prudent-octopus insurance pipeline pattern) |
+| `probe-fields.ts` | §15 (probe-field regressions — one assertion per hospital probe field) |
+| `fielddef-threading.ts` | §11a + §18 (multi-stage `{ as: Cls }` threading — the insurance pipeline pattern) |
 
 ## Running
 
@@ -39,9 +39,8 @@ npm run test              # full suite (unit + smoke + boxel)
 ## Adding a fuzz pattern
 
 1. Add a new fixture export to `fixtures/hospital.ts`.
-2. Mirror the data in
-   `realms-staging.stack.cards/ctse/gigantic-crawdad/Hospital/HospitalPatient/fuzz-*.json`
-   so the realm and the unit tests stay in lockstep.
+2. Mirror the data in the matching realm fixture so the realm and the
+   unit tests stay in lockstep.
 3. Add a `check(...)` case asserting the runtime behavior, naming it
    with the relevant port-doc section.
 

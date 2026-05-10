@@ -7,8 +7,8 @@
 //   2. evaluate to true against CANONICAL (the "A" solution)
 //   3. evaluate to false when we break one specific field
 //
-// If you change a rule here, update the spec doc AND realms/.../password-game.gts
-// at the same time. The headless test is the enforcement mechanism.
+// If you change a rule here, update the spec doc and password-game.gts at
+// the same time. The headless test is the enforcement mechanism.
 
 import { strictEqual } from 'node:assert';
 import { evaluateBxl, compileReadableSyntax } from '../../src/index.js';
@@ -237,9 +237,9 @@ const RULES: Rule[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
-// Canonical "A" solution — matches the spec doc and the realm JSON.
+// Canonical "A" solution — matches the spec doc and fixture JSON.
 // Any change here MUST also update docs/password-game-spec.md and the
-// realm's canonical-solution.json.
+// canonical-solution.json.
 // ─────────────────────────────────────────────────────────────────────────
 
 const CANONICAL = {

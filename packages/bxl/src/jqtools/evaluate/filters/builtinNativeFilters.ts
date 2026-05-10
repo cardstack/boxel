@@ -131,7 +131,7 @@ function applyBinaryMath(
 // These fill upstream stubs (`erf`, `gamma`, `j0`, `nextafter`, etc.)
 // per BXL design decisions documented in UPSTREAM-DIFFS.md:
 //   - `gamma/0` and `tgamma/0` both compute true Γ (Excel-canonical)
-//   - `atan2/2` follows Excel argument order (x, y) — see filter below
+//   - `atan2/2` follows jq/POSIX argument order (y; x) — see filter below
 //   - 4 sandbox-only functions (`input/0` etc.) remain notImplementedError
 // ────────────────────────────────────────────────────────────────────
 
@@ -592,15 +592,11 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
     *'atan2/1'(input: unknown, value: unknown) {
       yield applyBinaryMath(input, value, Math.atan2);
     },
-    *'atan2/2'(_input: unknown, x: unknown, y: unknown) {
-      // BXL design: ATAN2 case-folds to one canonical signature, and the
-      // canonical convention is Excel's: ATAN2(x, y) returns angle of (x, y).
-      // Vanilla-jq atan2(y; x) ports must swap arguments. (0,0) returns 0
-      // for POSIX-compat (Excel's ATAN2 returns #DIV/0! — the lowercase
-      // jq spelling here is reachable from generic geometry code where 0
-      // is safer than an error.) See docs/syntax-reference.md collision rules.
-      const xv = assertNumber(x);
+    *'atan2/2'(_input: unknown, y: unknown, x: unknown) {
+      // jq/POSIX order: atan2(y; x). Excel's ATAN2(x, y) lives in the
+      // formula bridge as ATAN2/2. Keep (0,0) at 0 for POSIX compatibility.
       const yv = assertNumber(y);
+      const xv = assertNumber(x);
       if (xv === 0 && yv === 0) {
         yield 0;
         return;
@@ -805,7 +801,7 @@ export const builtinNativeFilters: Record<string, NativeFilter> = {
       yield gammaApprox(assertNumber(input));
     },
     *'get_jq_origin/0'() {
-      yield 'https://realms-staging.stack.cards/ctse/working-loon/jqxl/';
+      yield 'bxl://jq-origin';
     },
     *'get_prog_origin/0'() {
       yield 'native-inline';

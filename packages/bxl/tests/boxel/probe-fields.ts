@@ -1,7 +1,7 @@
 // Boxel-flavored probe-field regression suite (M4).
 //
-// Each gigantic-crawdad probe field gets a corresponding compile +
-// evaluate assertion here. When a probe field stops rendering in
+// Each hospital probe field gets a corresponding compile + evaluate
+// assertion here. When a probe field stops rendering in
 // the realm, the failure should reproduce in this suite — and the
 // fix lands here first, in BXL CI.
 //

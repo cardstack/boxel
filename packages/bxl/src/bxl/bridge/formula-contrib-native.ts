@@ -1194,6 +1194,12 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
   *'INDEX/3'(_input, array, rowNum, columnNum) {
     yield indexValue(array, rowNum, columnNum);
   },
+  *'_EXCEL_INDEX/2'(_input, array, rowNum) {
+    yield indexValue(array, rowNum);
+  },
+  *'_EXCEL_INDEX/3'(_input, array, rowNum, columnNum) {
+    yield indexValue(array, rowNum, columnNum);
+  },
   *'INT/1'(_input, value) {
     yield Math.floor(parseExcelNumber(value));
   },

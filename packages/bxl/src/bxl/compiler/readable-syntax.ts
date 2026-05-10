@@ -69,6 +69,24 @@ interface FieldResolution {
   arrayItemScope?: ReadableSchema;
 }
 
+export type ReadableArgumentSeparator = 'comma' | 'semicolon' | 'none';
+export type ReadableFunctionDialect = 'excel' | 'jq' | 'bxl-helper' | 'unknown';
+
+export interface ReadableFunctionDispatch {
+  name: string;
+  dialect: ReadableFunctionDialect;
+}
+
+export interface ReadableFunctionCallAnalysis {
+  open: number;
+  close: number;
+  separator: ReadableArgumentSeparator;
+  explicitArity: number;
+  commaRanges: Array<[number, number]>;
+  semicolonRanges: Array<[number, number]>;
+  dispatch: ReadableFunctionDispatch;
+}
+
 export class ReadableSyntaxError extends Error {
   constructor(message: string) {
     super(message);
@@ -440,6 +458,7 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'add',
   'all',
   'any',
+  'atan2',
   'contains',
   'endswith',
   'first',
@@ -453,11 +472,14 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'last',
   'length',
   'like',
+  'log',
   'map',
   'map_values',
+  'match',
   'max',
   'min',
   'nonempty',
+  'now',
   'overlaps',
   'present',
   'reverse',
@@ -470,6 +492,7 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'tojson',
   'tonumber',
   'tostring',
+  'trim',
   'type',
   'unique',
   'unique_by',
@@ -477,6 +500,38 @@ const CASE_INSENSITIVE_JQ_FUNCTIONS = new Set([
   'with_entries',
   'words',
   'between',
+]);
+
+const JQ_ZERO_ARG_CASE_FOLD_FILTERS = new Set([
+  'abs',
+  'acos',
+  'acosh',
+  'asin',
+  'asinh',
+  'atan',
+  'atanh',
+  'cos',
+  'cosh',
+  'erf',
+  'erfc',
+  'exp',
+  'floor',
+  'gamma',
+  'log',
+  'log10',
+  'max',
+  'min',
+  'not',
+  'now',
+  'round',
+  'sin',
+  'sinh',
+  'sqrt',
+  'tan',
+  'tanh',
+  'trim',
+  'trunc',
+  'type',
 ]);
 
 const PATH_RESERVED = new Set([
@@ -507,30 +562,115 @@ function isIdent(token: Token | undefined, value: string): boolean {
   return identLower(token) === value.toLowerCase();
 }
 
-function canonicalFunctionName(name: string): string {
+export function dispatchReadableFunctionCall({
+  name,
+  explicitArity,
+  separator,
+  parenthesized,
+}: {
+  name: string;
+  explicitArity?: number;
+  separator: ReadableArgumentSeparator;
+  parenthesized: boolean;
+}): ReadableFunctionDispatch {
   const upper = name.toUpperCase();
   if (isRemovedStringWordOperator(name)) {
     throw new ReadableSyntaxError(removedStringOperatorMessage(upper));
   }
 
-  if (FORMULA_FUNCTIONS.has(upper)) {
-    return upper;
-  }
-
   const lower = name.toLowerCase();
-  if (CASE_INSENSITIVE_JQ_FUNCTIONS.has(lower)) {
-    return lower;
+
+  if (explicitArity !== undefined) {
+    if (lower === 'now' && parenthesized && explicitArity === 0) {
+      return { name: 'NOW', dialect: 'excel' };
+    }
+
+    if (
+      explicitArity === 0 &&
+      JQ_ZERO_ARG_CASE_FOLD_FILTERS.has(lower)
+    ) {
+      return { name: lower, dialect: 'jq' };
+    }
+
+    switch (lower) {
+      case 'match':
+        if (explicitArity === 1) {
+          return { name: 'match', dialect: 'jq' };
+        }
+        if (explicitArity === 2) {
+          return separator === 'semicolon'
+            ? { name: 'match', dialect: 'jq' }
+            : { name: 'MATCH', dialect: 'excel' };
+        }
+        if (explicitArity === 3) {
+          return { name: 'MATCH', dialect: 'excel' };
+        }
+        break;
+      case 'index':
+        if (explicitArity === 1) {
+          return { name: 'index', dialect: 'jq' };
+        }
+        if (explicitArity === 2 || explicitArity === 3) {
+          return { name: 'INDEX', dialect: 'excel' };
+        }
+        break;
+      case 'type':
+        if (explicitArity === 1) {
+          return { name: 'TYPE', dialect: 'excel' };
+        }
+        break;
+      case 'log':
+        if (explicitArity === 1 || explicitArity === 2) {
+          return { name: 'LOG', dialect: 'excel' };
+        }
+        break;
+      case 'trim':
+        if (explicitArity === 1) {
+          return { name: 'TRIM', dialect: 'excel' };
+        }
+        break;
+      case 'atan2':
+        if (explicitArity === 1) {
+          return { name: 'atan2', dialect: 'jq' };
+        }
+        if (explicitArity === 2) {
+          return separator === 'semicolon'
+            ? { name: 'atan2', dialect: 'jq' }
+            : { name: 'ATAN2', dialect: 'excel' };
+        }
+        break;
+    }
   }
 
-  return name;
+  if (FORMULA_FUNCTIONS.has(upper)) {
+    return { name: upper, dialect: 'excel' };
+  }
+
+  if (
+    LOWERCASE_BXL_HELPERS.has(lower) ||
+    lower === 'all' ||
+    lower === 'any'
+  ) {
+    return { name: lower, dialect: 'bxl-helper' };
+  }
+
+  if (CASE_INSENSITIVE_JQ_FUNCTIONS.has(lower)) {
+    return { name: lower, dialect: 'jq' };
+  }
+
+  return { name, dialect: 'unknown' };
 }
 
-function isCommaArgumentFunction(name: string): boolean {
-  return (
-    FORMULA_FUNCTIONS.has(name.toUpperCase()) ||
-    LOWERCASE_BXL_HELPERS.has(name.toLowerCase()) ||
-    ['all', 'any'].includes(name.toLowerCase())
-  );
+function isCommaArgumentFunction(dispatch: ReadableFunctionDispatch): boolean {
+  return dispatch.dialect === 'excel' || dispatch.dialect === 'bxl-helper';
+}
+
+export function canonicalReadableBareFilterName(name: string): string {
+  const lower = name.toLowerCase();
+  if (JQ_ZERO_ARG_CASE_FOLD_FILTERS.has(lower)) {
+    return lower;
+  }
+  return name;
 }
 
 function formatFunctionCallSource(name: string, args: CompileChunk[]): string {
@@ -559,6 +699,10 @@ function canonicalTokenSource(token: Token): string {
     const lower = token.value.toLowerCase();
     if (KEYWORDS.has(lower) || LITERALS.has(lower)) {
       return lower;
+    }
+    const bare = canonicalReadableBareFilterName(token.value);
+    if (bare !== token.value) {
+      return bare;
     }
   }
 
@@ -1107,6 +1251,79 @@ function splitTopLevel(
 
   ranges.push([rangeStart, end]);
   return ranges;
+}
+
+function splitCallArguments(
+  tokens: Token[],
+  start: number,
+  end: number,
+  separator: string,
+): Array<[number, number]> {
+  if (start === end) {
+    return [];
+  }
+  return splitTopLevel(tokens, start, end, separator);
+}
+
+function callArgumentSeparator(
+  commaRanges: Array<[number, number]>,
+  semicolonRanges: Array<[number, number]>,
+): ReadableArgumentSeparator {
+  if (semicolonRanges.length > 1) {
+    return 'semicolon';
+  }
+  if (commaRanges.length > 1) {
+    return 'comma';
+  }
+  return 'none';
+}
+
+export function analyzeReadableFunctionCall(
+  tokens: ReadableSyntaxToken[],
+  index: number,
+): ReadableFunctionCallAnalysis | undefined {
+  const ident = tokens[index];
+  const openToken = tokens[index + 1];
+  if (
+    ident?.type !== 'ident' ||
+    openToken?.type !== 'punc' ||
+    openToken.value !== '('
+  ) {
+    return undefined;
+  }
+
+  const open = index + 1;
+  let close: number;
+  try {
+    close = findMatching(tokens, open);
+  } catch {
+    return undefined;
+  }
+
+  const commaRanges = splitCallArguments(tokens, open + 1, close, ',');
+  const semicolonRanges = splitCallArguments(tokens, open + 1, close, ';');
+  const separator = callArgumentSeparator(commaRanges, semicolonRanges);
+  const explicitArity =
+    separator === 'semicolon'
+      ? semicolonRanges.length
+      : separator === 'comma'
+        ? commaRanges.length
+        : commaRanges.length;
+
+  return {
+    open,
+    close,
+    separator,
+    explicitArity,
+    commaRanges,
+    semicolonRanges,
+    dispatch: dispatchReadableFunctionCall({
+      name: ident.value,
+      explicitArity,
+      separator,
+      parenthesized: true,
+    }),
+  };
 }
 
 function parseSelectorRangeEndpoint(
@@ -1859,15 +2076,18 @@ class Compiler {
     itemScope?: ReadableSchema,
   ): CompileChunk {
     const originalName = this.tokens[this.index].value;
-    const name = canonicalFunctionName(originalName);
-    const open = this.index + 1;
-    const close = findMatching(this.tokens, open);
-    const semicolonRanges = splitTopLevel(this.tokens, open + 1, close, ';');
+    const analysis = analyzeReadableFunctionCall(this.tokens, this.index);
+    if (!analysis) {
+      throw new ReadableSyntaxError('Expected function call');
+    }
+    const name = analysis.dispatch.name;
+    const close = analysis.close;
     const useCommaArgs =
-      semicolonRanges.length === 1 && isCommaArgumentFunction(name);
+      analysis.separator !== 'semicolon' &&
+      isCommaArgumentFunction(analysis.dispatch);
     const ranges = useCommaArgs
-      ? splitTopLevel(this.tokens, open + 1, close, ',')
-      : semicolonRanges;
+      ? analysis.commaRanges
+      : analysis.semicolonRanges;
 
     if (name === 'LET') {
       const compiledLet = this.compileLetFunction(

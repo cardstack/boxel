@@ -1,6 +1,6 @@
-// Multi-stage FieldDef threading — the pattern from the
-// `prudent-octopus` insurance realm where one FieldDef's computeVia
-// output gets materialized into the next FieldDef as an input.
+// Multi-stage FieldDef threading — the insurance fixture pattern where
+// one FieldDef's computeVia output gets materialized into the next
+// FieldDef as an input.
 //
 // What we're locking down: the parent CardDef's `expression(...)
 // computeVia + { as: Cls }` builds an object literal whose keys
@@ -32,7 +32,7 @@ function check(name: string, fn: () => void) {
   }
 }
 
-// Three-stage pipeline mirroring prudent-octopus:
+// Three-stage pipeline mirroring the insurance fixture:
 // Development → Reinsurance → Profit.
 
 class DevelopmentField {

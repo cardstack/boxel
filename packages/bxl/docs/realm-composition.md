@@ -1,8 +1,7 @@
 # Composing FieldDefs across a CardDef
 
-A pattern that emerged from the `gigantic-crawdad`, `middle-wolverine`,
-and `prudent-octopus` realms: the parent CardDef holds raw inputs,
-threads relevant pieces into one or more `FieldDef`s via
+A pattern that emerged from realm integration work: the parent CardDef
+holds raw inputs, threads relevant pieces into one or more `FieldDef`s via
 `{ as: SomeFieldDef }` materialization, and the FieldDefs render
 their own dashboards from the values they receive.
 
@@ -64,8 +63,8 @@ parent's structure — `FlightProfitField` doesn't import `Aircraft`,
 
 ## Multi-stage pipeline
 
-The `prudent-octopus` insurance realm chains multiple FieldDefs —
-each materializes the previous one's output:
+The insurance pipeline example chains multiple FieldDefs, each
+materializing the previous one's output:
 
 ```ts
 @field development = contains(DevelopmentField, {
@@ -124,7 +123,7 @@ For the threading to work cleanly:
 - **Keep input field types ergonomic.** A `BooleanField` with a
   computed `appliesBool = AppliesFlag == "Yes"` is friendlier than
   asking the parent to project a `Yes`/`No` string into a boolean.
-  See `CodeshareField.appliesBool` in `middle-wolverine`.
+  See `CodeshareField.appliesBool` in the airline example.
 - **Don't double-wrap data.** If the parent already has the value at
   the right shape (e.g., `Aircraft.Seats` as a number), pass it
   through as a number. Don't re-roll it into an object unless the
@@ -154,8 +153,7 @@ mechanics:
   non-realm consumers (Node tests, CLI tools) hit when `getFields`
   isn't loaded.
 - `fielddef-threading.ts` — multi-stage pipeline with one FieldDef's
-  output threaded into another's input (mirrors the
-  `prudent-octopus` insurance pipeline).
+  output threaded into another's input (mirrors the insurance pipeline).
 
 Each test names the port-doc section it asserts so a regression
 trace points straight at the rule.

@@ -4,6 +4,8 @@ export const formulaContribJqFilters = parseBuiltinJqFilters(`
 def TRUE: true;
 def FALSE: false;
 def NA: "#N/A" | error;
+def INDEX(array; row): _EXCEL_INDEX(array; row);
+def INDEX(array; row; column): _EXCEL_INDEX(array; row; column);
 def IF(test; value_if_true; value_if_false):
   . as $xl_in
   | if ($xl_in | test)

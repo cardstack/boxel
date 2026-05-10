@@ -35,11 +35,11 @@ Plus a browser harness:
 
 And a package-level formula bundle export:
 
-- `@cardstack/bxl/examples` — source-level bundles extracted from the
-  `middle-wolverine` and `prudent-octopus` Boxel realms. These preserve
-  the realm business formulas as runnable data: airline profitability,
-  acoustic resonance/Bessel screening, and insurance tracking formulas
-  covering financial, statistical, and engineering lazy FormulaJS helpers.
+- `@cardstack/bxl/examples` — source-level bundles extracted from
+  internal Boxel realm fixtures. These preserve the business formulas as
+  runnable data: airline profitability, acoustic resonance/Bessel
+  screening, and insurance tracking formulas covering financial,
+  statistical, and engineering lazy FormulaJS helpers.
 
 ## Running
 

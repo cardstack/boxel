@@ -58,7 +58,7 @@ versions may change syntax behavior until `1.0.0`. See
 - **`tests/boxel/` test suite.** New M1 milestone covering the
   runtime null-tolerance and expression-factory behavior the realm
   depends on; runnable via `npm run test:boxel` or the full suite.
-  Includes plain-data fixtures mirroring the gigantic-crawdad realm.
+  Includes plain-data fixtures mirroring the hospital fixture.
 - **Documentation reshuffle.** Migration guide at
   [`docs/migration-from-jqxl.md`](./docs/migration-from-jqxl.md);
   full port log moved to

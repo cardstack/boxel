@@ -1,7 +1,7 @@
 // Hospital fixtures shared across the Boxel-flavored BXL test suites.
 //
-// These mirror the cards in the gigantic-crawdad realm
-// (`HospitalPatient`, `HospitalStaff`, `HospitalIcuPatient`) but as
+// These mirror the hospital fixture cards (`HospitalPatient`,
+// `HospitalStaff`, `HospitalIcuPatient`) but as
 // plain JS data — no `@field`, no realm runtime, no Boxel imports.
 // Every Boxel test imports from here so a regression that breaks a
 // realm card gets caught upstream in BXL CI before the bundle ships.
