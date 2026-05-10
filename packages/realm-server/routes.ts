@@ -251,8 +251,13 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
-  registerGrafanaEndpoint(
+  // POST-only, Bearer-only — this endpoint is new in CS-10987-era
+  // (Grafana button-panel form) and never had the legacy GET +
+  // `?authHeader=` link form, so skip `registerGrafanaEndpoint`'s dual
+  // GET/POST registration.
+  router.post(
     '/_grafana-upsert-realm-user-permission',
+    grafanaAuthorization(args.grafanaSecret),
     handleUpsertRealmUserPermission(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));

@@ -1,11 +1,31 @@
 import type Koa from 'koa';
 import {
+  ensureTrailingSlash,
   insertPermissions,
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { sendResponseForBadRequest, setContextResponse } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
+
+function parseBoolFlag(
+  raw: string | null,
+  name: string,
+): { ok: true; value: boolean } | { ok: false; error: string } {
+  if (raw === 'true') {
+    return { ok: true, value: true };
+  }
+  if (raw === 'false') {
+    return { ok: true, value: false };
+  }
+  if (raw == null) {
+    return { ok: false, error: `${name} param must be specified` };
+  }
+  return {
+    ok: false,
+    error: `${name} param must be "true" or "false" (got "${raw}")`,
+  };
+}
 
 export default function handleUpsertRealmUserPermission({
   dbAdapter,
@@ -29,9 +49,33 @@ export default function handleUpsertRealmUserPermission({
       await sendResponseForBadRequest(ctxt, `realm "${realm}" is not a URL`);
       return;
     }
+    // realm_user_permissions is keyed by exact `realm_url` string. Normalise
+    // to the canonical realm-root form (no querystring or fragment, single
+    // trailing slash) so a caller passing `https://h/r` and another passing
+    // `https://h/r/?token=...` write to the same row instead of a stray
+    // permission whose URL the realm runtime never consults.
+    realmURL.search = '';
+    realmURL.hash = '';
+    let normalizedRealmHref = ensureTrailingSlash(realmURL.href);
 
-    let read = ctxt.URL.searchParams.get('read') === 'true';
-    let write = ctxt.URL.searchParams.get('write') === 'true';
+    let readResult = parseBoolFlag(
+      ctxt.URL.searchParams.get('read'),
+      'read',
+    );
+    if (!readResult.ok) {
+      await sendResponseForBadRequest(ctxt, readResult.error);
+      return;
+    }
+    let writeResult = parseBoolFlag(
+      ctxt.URL.searchParams.get('write'),
+      'write',
+    );
+    if (!writeResult.ok) {
+      await sendResponseForBadRequest(ctxt, writeResult.error);
+      return;
+    }
+    let read = readResult.value;
+    let write = writeResult.value;
     if (!read && !write) {
       await sendResponseForBadRequest(
         ctxt,
@@ -54,13 +98,15 @@ export default function handleUpsertRealmUserPermission({
     if (write) {
       actions.push('write');
     }
-    await insertPermissions(dbAdapter, realmURL, { [user]: actions });
+    await insertPermissions(dbAdapter, new URL(normalizedRealmHref), {
+      [user]: actions,
+    });
 
     return setContextResponse(
       ctxt,
       new Response(
         JSON.stringify({
-          message: `Set ${actions.join('+')} on ${realmURL.href} for user "${user}"`,
+          message: `Set ${actions.join('+')} on ${normalizedRealmHref} for user "${user}"`,
         }),
         {
           headers: { 'content-type': SupportedMimeType.JSON },
