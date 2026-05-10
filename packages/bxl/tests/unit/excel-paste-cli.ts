@@ -20,6 +20,7 @@ import {
   evaluateBxl,
   lintBxlExpression,
   solidifyBxlExpression,
+  type ReadableSchema,
 } from '../../src/index.js';
 import { registerBuiltinLibrary } from '../../src/bxl/registry/index.js';
 import { formulaEngineeringLibrary } from '../../src/bxl/registry/formula-engineering.js';
@@ -279,6 +280,52 @@ const coverageCases: TestCase[] = [
   { name: 'date: DAYS(end, start)', expression: 'DAYS(DATE(2026, 4, 30), DATE(2026, 4, 22))', expected: 8 },
 ];
 
+const documentedLookupSchema: ReadableSchema = {
+  fields: [
+    { key: 'targetSku', label: 'Target SKU' },
+    {
+      key: 'lineItems',
+      label: 'Line Item',
+      kind: 'array',
+      item: {
+        fields: [
+          { key: 'sku', label: 'SKU' },
+          { key: 'unitPrice', label: 'Unit Price' },
+        ],
+      },
+    },
+  ],
+};
+
+const documentedLookupInput = {
+  targetSku: 'B',
+  lineItems: [
+    { sku: 'A', unitPrice: 10 },
+    { sku: 'B', unitPrice: 20 },
+  ],
+};
+
+const documentedLookupCases: TestCase[] = [
+  {
+    name: 'lookup docs: predicate path over object rows',
+    expression: '"Line Item"[SKU = "B"]."Unit Price"',
+    expected: 20,
+    expectedJq: 'first(.lineItems[] | select(.sku == "B")).unitPrice',
+  },
+  {
+    name: 'lookup docs: XLOOKUP over aligned BXL projections',
+    expression: 'XLOOKUP("Target SKU", "Line Item".SKU, "Line Item"."Unit Price", null)',
+    expected: 20,
+    expectedJq: 'XLOOKUP(.targetSku; [.lineItems[].sku]; [.lineItems[].unitPrice]; null)',
+  },
+  {
+    name: 'lookup docs: VLOOKUP over explicit projected table',
+    expression: 'VLOOKUP("Target SKU", (["Line Item".SKU, "Line Item"."Unit Price"] | transpose), 2, false)',
+    expected: 20,
+    expectedJq: 'VLOOKUP(.targetSku; ([[.lineItems[].sku], [.lineItems[].unitPrice]] | transpose); 2; false)',
+  },
+];
+
 // Known gaps that formulajs covers but BXL doesn't match today. Kept for
 // visibility; not asserted. Future work to close:
 //   - GCD, LCM not implemented
@@ -354,6 +401,32 @@ for (const test of [...idiomCases, ...coverageCases]) {
   }
 }
 
+for (const test of documentedLookupCases) {
+  try {
+    const value = evaluateBxl(test.expression, documentedLookupInput, {
+      schema: documentedLookupSchema,
+      libraries: [
+        'core',
+        'formula',
+      ],
+    }).value;
+    if (!valuesMatch(value, test.expected, test.tolerance)) {
+      throw new Error(`value mismatch: expected ${JSON.stringify(test.expected)}, got ${JSON.stringify(value)}`);
+    }
+    if (test.expectedJq !== undefined) {
+      const jq = bxlToJqExpression(test.expression, { schema: documentedLookupSchema });
+      if (jq.source !== test.expectedJq) {
+        throw new Error(`jq mismatch: expected ${JSON.stringify(test.expectedJq)}, got ${JSON.stringify(jq.source)}`);
+      }
+    }
+  } catch (error) {
+    failing++;
+    console.error(`  ✗ ${test.name}`);
+    console.error(`    expr: ${test.expression}`);
+    console.error(`    ${(error as Error).message}`);
+  }
+}
+
 // Graceful unknown-character handling — no crashes allowed.
 const hostileInputs = [
   'foo£bar',
@@ -380,11 +453,16 @@ for (const source of hostileInputs) {
 }
 
 if (failing > 0) {
+  const totalCases =
+    idiomCases.length +
+    coverageCases.length +
+    documentedLookupCases.length +
+    hostileInputs.length;
   throw new Error(
-    `Excel paste suite: ${failing} of ${idiomCases.length + coverageCases.length + hostileInputs.length} cases failed`,
+    `Excel paste suite: ${failing} of ${totalCases} cases failed`,
   );
 }
 
 console.log(
-  `BXL Excel paste: ${idiomCases.length} idiom + ${coverageCases.length} formulajs-derived + ${hostileInputs.length} hostile = ${idiomCases.length + coverageCases.length + hostileInputs.length} cases passed`,
+  `BXL Excel paste: ${idiomCases.length} idiom + ${coverageCases.length} formulajs-derived + ${documentedLookupCases.length} documented lookup + ${hostileInputs.length} hostile = ${idiomCases.length + coverageCases.length + documentedLookupCases.length + hostileInputs.length} cases passed`,
 );

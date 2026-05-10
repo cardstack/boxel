@@ -44,7 +44,7 @@ evaluateBxl('ROUND(Subtotal * "Tax Rate" / 100, 2)', invoice, { schema });
 
 Every app has two kinds of logic. There's **code** — arbitrary, Turing-complete, deployed with seat belts loosened — and there's **data** — inert, schematized, shipped in configs and forms. Real applications need a third kind: something in between. Something a domain expert can author, git can diff, a catalog can ship, and a sandbox can trust.
 
-BXL is that third kind, scoped deliberately. It's jq pipes plus Excel helpers — `SUM`, `ROUND`, `IF`, `VLOOKUP`, `XIRR` — evaluated against a JSON snapshot (the bare `.` is the current input, same as jq). It cannot fetch. It cannot write. It cannot call an LLM, open a file, or mutate shared state. Those four "cannots" are what let a platform embed BXL inside validation rules, computed fields, workflow gates, and query transforms without worrying that a schema author just drilled a hole into production.
+BXL is that third kind, scoped deliberately. It's jq pipes plus Excel helpers — `SUM`, `ROUND`, `IF`, `VLOOKUP`, `XIRR` — plus familiar validator.js functions like `isEmail`, all evaluated against a JSON snapshot (the bare `.` is the current input, same as jq). It cannot fetch. It cannot write. It cannot call an LLM, open a file, or mutate shared state. Those four "cannots" are what let a platform embed BXL inside validation rules, computed fields, workflow gates, and query transforms without worrying that a schema author just drilled a hole into production.
 
 If you've been stitching together Ajv + jq + Formula.js + a custom rule engine, BXL is what that stack looks like after it consolidates into a single dependency.
 
@@ -70,7 +70,7 @@ The eight design decisions that make BXL feel the way it does:
 - **Two predicate shapes** — `[pred]` picks the first match (scalar). `[* .pred]` keeps every match (array) with explicit jq item scope. Replaces `VLOOKUP` / `SUMIF` without a separate builtin.
 - **One positional selector family** — `[#1]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. CSS inspired the readability; BXL keeps it all inside `[#...]`.
 - **Paste Excel unchanged** — `=`, `<>`, `^`, `&`, leading `=` all work. `ROUND`, `SUM`, `IF`, `VLOOKUP` match Microsoft Excel exactly.
-- **UPPERCASE is a promise, lowercase is a contribution** — `ROUND("Unit Price", 2)` is paste-compatible with Excel (commas, real Excel function). `present(x)`, `when(p, q)`, `words(s)` are BXL-native.
+- **Source idioms are preserved** — `ROUND("Unit Price", 2)` is paste-compatible with Excel. `present(x)`, `when(p, q)`, `words(s)` are BXL-native. `isEmail(x)` and `isURL(x, options)` keep validator.js's familiar camelCase shape.
 - **One sandbox, many surfaces** — the same language powers computed fields, form validation, visibility rules, workflow gates, access policies, and annotation targets.
 
 The full reference with syntax-highlighted examples is at **[bxl.boxel.site](https://bxl.boxel.site)** (also shipped as [`docs/syntax-reference.html`](./docs/syntax-reference.html) and [`docs/syntax-reference.md`](./docs/syntax-reference.md)); the formal grammar lives in [`docs/grammar.ebnf`](./docs/grammar.ebnf).
@@ -191,17 +191,17 @@ One-line rule: **BXL for logic-as-data · class methods for logic-as-type · app
 An expression can open with its own named helpers — BXL inherits jq's `def`. Because user helpers aren't from Excel, they follow the lowercase convention (`UPPERCASE` stays reserved for paste-compatible Excel functions):
 
 ```bxl
-def emoji(w): ["🐕", "🐈", "🦊", "🐸", "🦉"][w | explode | add % 5];
+def band(n): if n >= 90 then "high" elif n >= 70 then "medium" else "low" end;
 def triple(x): x * 3;
 
 {
-  pet:     emoji(.name),
+  band:    band(.score),
   tripled: triple(.score),
   total:   SUM([.items[].price])
 }
 ```
 
-Call sites are indistinguishable from built-ins — `emoji(.name)` sits next to `SUM(...)` with no syntactic ceremony. Recursion works (`def fact: if . <= 1 then 1 else . * (. - 1 | fact) end`). There's no module system: a BXL expression is a self-contained, serializable piece of data, and helpers are scoped to the expression that defines them. If a helper earns its way into every record, lift it into the built-in library instead of duplicating the `def`.
+Call sites are indistinguishable from built-ins — `band(.score)` sits next to `SUM(...)` with no syntactic ceremony. Recursion works (`def fact: if . <= 1 then 1 else . * (. - 1 | fact) end`). There's no module system: a BXL expression is a self-contained, serializable piece of data, and helpers are scoped to the expression that defines them. If a helper earns its way into every record, lift it into the built-in library instead of duplicating the `def`.
 
 See the [User-defined helpers](docs/syntax-reference.md#user-defined-helpers-def) section of the syntax reference for multi-arg and zero-arg forms.
 
@@ -221,8 +221,20 @@ export const donationForm = {
 
     { key: 'email', label: 'Email',
       validate: [
-        { expr: 'Email | contains("@")',
+        { expr: 'isEmail(Email)',
           message: 'Must be a valid email' },
+      ],
+    },
+    { key: 'phone', label: 'Phone',
+      validate: [
+        { expr: 'isMobilePhone(Phone, "en-US", {strictMode:true})',
+          message: 'Must be a valid US mobile number' },
+      ],
+    },
+    { key: 'website', label: 'Website',
+      validate: [
+        { expr: 'isURL(Website, {require_protocol:true})',
+          message: 'Website must include http:// or https://' },
       ],
     },
 
@@ -264,7 +276,7 @@ export const donationForm = {
 
 Every expression above fires at a different point in the form's lifecycle, and each maps to one row of the 8-position grid:
 
-- `Email | contains("@")` · `"Donation Amount" > 0` → **constraint**, per-field on input
+- `isEmail(Email)` · `isMobilePhone(Phone, "en-US", {strictMode:true})` · `isURL(Website, {require_protocol:true})` · `"Donation Amount" > 0` → **constraint**, per-field on input
 - `"Donation Amount" >= 250` · `present(Employer)` · `Recurring` → **visible-when**, recalculated as other fields change
 - `Employer."Matching Program"` → **autofill / default**, applied on field focus or record load
 - `IF(Recurring, "Donation Amount" * 12, "Donation Amount")` → **formula field**, recomputed on every change
@@ -318,7 +330,7 @@ Credit and attribution below; pick whichever section describes the language you 
 
 ### 1 · Excel · paste-compatible where it matters
 
-The "XL" in BXL is earned. 300+ Excel helpers — sourced from [Formula.js](https://github.com/formulajs/formulajs) (MIT) and wired into the jq runtime as native functions — ship with matching Microsoft Excel semantics. Paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is the bare `.` (a lone dot, same as jq) instead of `A1`; columns are field names instead of column letters. Larger FormulaJS families, including statistical distributions, Bessel functions, financial formulas, and engineering helpers, lazy-load in async runtimes only when an expression references them.
+The "XL" in BXL is earned. 300+ Excel helpers — sourced from [Formula.js](https://github.com/formulajs/formulajs) (MIT) and wired into the jq runtime as native functions — ship with matching Microsoft Excel semantics. Paste `=IF(…)` from a spreadsheet and it runs unchanged. Current row is the bare `.` (a lone dot, same as jq) instead of `A1`; columns are field names instead of column letters. Larger FormulaJS families, including statistical distributions, Bessel functions, financial formulas, and engineering helpers, lazy-load in async runtimes only when an expression references them. Validator.js functions such as `isEmail`, `isURL`, and `isUUID` follow the same lazy-loading model while preserving validator.js's familiar call shape.
 
 ```
 Excel:  =ROUND(B2 * C2 / 100, 2)
@@ -511,7 +523,7 @@ Each language above is strong at one or two of the jobs a typical business app n
 
 🟢 strong &nbsp;·&nbsp; 🟡 ok / partial &nbsp;·&nbsp; ⚪ weak &nbsp;·&nbsp; — none
 
-BXL didn't invent any row. It's the smallest language that covers the everyday-business rows at once — validation, computed fields, data processing, defaults, readability, paste-from-spreadsheet — by composing the wins of the ones that came before. User-defined functions coexist with the Excel layer: `def EMOJI(w): ...; EMOJI("cat")` sits next to `SUM(...)` in the same expression, so custom helpers feel like Excel formulas. The XPath-family specialties (ancestor axes, upward tree walking) stay specialties: BXL traverses *down* into nested data via jq's `..`, but it doesn't carry a `parent::` axis. Streaming over huge inputs inherits what jq offers (lazy enough in practice, but not BXL-level streaming), and there is no module system — BXL is one expression, not a programming environment.
+BXL didn't invent any row. It's the smallest language that covers the everyday-business rows at once — validation, computed fields, data processing, defaults, readability, paste-from-spreadsheet — by composing the wins of the ones that came before. User-defined functions coexist with the Excel layer: `def score_band(n): ...; score_band(91)` sits next to `SUM(...)` in the same expression, so custom helpers feel like first-class BXL calls. The XPath-family specialties (ancestor axes, upward tree walking) stay specialties: BXL traverses *down* into nested data via jq's `..`, but it doesn't carry a `parent::` axis. Streaming over huge inputs inherits what jq offers (lazy enough in practice, but not BXL-level streaming), and there is no module system — BXL is one expression, not a programming environment.
 
 For a typical business record — invoices, offers, contracts, forms, tickets, events, reports — the common rows in that table are real daily requirements. BXL covers them with one parser, one evaluator, and one sandbox.
 
@@ -554,9 +566,9 @@ Profiles are the practical answer. BXL stays one language and one AST, but hosts
 
 | Profile | Intent | Typical use | What the subset protects |
 | --- | --- | --- | --- |
-| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers, including lazy FormulaJS extensions on async runtime paths. |
+| `compute` | Full browser/local value computation | formulas, transforms, UI validation, query transforms | Preserves the current BXL contract: readable jq plus Excel helpers and validator.js functions, including lazy extensions on async runtime paths. |
 | `policy` | Bounded request-time authorization | write gates, field redaction decisions | Keeps request checks deterministic and fail-closed; allows bounded scalar helpers but rejects aggregate and collection-scanning calls. |
-| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, and non-lowerable FormulaJS calls. |
+| `predicate` | Query-time boolean filtering | row-level read filters, search constraints | Requires a query-shaped boolean predicate; rejects transforms, runtime-only helpers, validator.js functions, and non-lowerable FormulaJS calls unless a host explicitly lowers them. |
 | `derive` | Headless write/index-time computation | `computeVia`, denormalized fields, search facets | Allows deterministic record-local Excel/jq computation, including lazy extensions and aggregation, while rejecting request context and volatile runtime behavior. |
 
 Boxel `computeVia` belongs in `derive`, not `compute`: it often needs aggregation over nested record data, but it runs in a headless write/index-time environment where the result should not depend on the current user, request, wall clock, or runtime metadata. The `bxl()` / `expression()` factory enforces this profile when it constructs a compute function.
@@ -596,12 +608,13 @@ This is how BXL avoids becoming "one language that does too much." The language 
 
 ---
 
-## Built on two open-source giants
+## Built on three open-source foundations
 
 BXL is a thin, opinionated layer on proven foundations.
 
 - **[jq-tools](https://github.com/alexxander/jq-tools)** (MIT) — the complete jq interpreter in TypeScript. Lives in `src/jqtools/` — tokenizer, parser, evaluator, filter registry. We've added deterministic ordering and a budget-aware runtime state.
 - **[Formula.js](https://github.com/formulajs/formulajs)** (MIT) — Excel formulas in JavaScript. Curated subset in `src/formulajs/`, narrowed to the 300+ helpers that make sense on JSON. Cell-grid and regression array families stay out; statistical, Bessel, financial, and heavier engineering families are lazy async extensions (see `docs/formulas.md`).
+- **[validator.js](https://github.com/validatorjs/validator.js)** (MIT) — string validator functions. BXL imports it lazily and keeps the upstream function names and option shapes where they make sense for boolean validation.
 
 Our own work — the readable-syntax compiler, linter, formatter, sandbox, and registry — lives in `src/bxl/`. Full attribution in [NOTICE.md](./NOTICE.md).
 
@@ -763,7 +776,7 @@ Strict layering: `jqtools/` and `formulajs/` do not import each other or `bxl/`.
 
 ### Contributing
 
-Issues and PRs welcome. Add a regression test under `tests/unit/` for any parser/compiler change (see `tests/unit/compiler-bug-regressions.ts` for the pattern) and a matching note in `docs/grammar.ebnf` if the public surface shifts. UPPERCASE helper names are reserved for real Excel functions — see [`docs/formulas.md`](./docs/formulas.md#naming-convention).
+Issues and PRs welcome. Add a regression test under `tests/unit/` for any parser/compiler change (see `tests/unit/compiler-bug-regressions.ts` for the pattern) and a matching note in `docs/grammar.ebnf` if the public surface shifts. UPPERCASE helper names are reserved for real Excel functions, lowercase names are for jq/BXL-native helpers, and preserved upstream APIs such as validator.js keep their established casing — see [`docs/formulas.md`](./docs/formulas.md#naming-convention).
 
 Security reports: please email `security@boxel.ai` rather than filing a public issue.
 

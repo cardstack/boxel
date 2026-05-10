@@ -27,6 +27,9 @@
       "include": "#excel-functions"
     },
     {
+      "include": "#validation-functions"
+    },
+    {
       "include": "#jq-functions"
     },
     {
@@ -111,6 +114,14 @@
         {
           "name": "support.function.jq.bxl",
           "match": "\\b(?:add|all|any|ascii_downcase|ascii_upcase|between|builtins|capture|contains|debug|del|endswith|first|flatten|from_entries|fromjson|getpath|group_by|has|inside|join|keys|last|length|like|map|map_values|match|matches|max|max_by|min|min_by|now|overlaps|paths|pick|present|range|reverse|select|setpath|sort|sort_by|split|startswith|stderr|test|to_entries|tojson|tonumber|tostring|type|unique|unique_by|when|with_entries)\\b(?=\\s*(?:\\(|\\||,|\\]|\\}|$))"
+        }
+      ]
+    },
+    "validation-functions": {
+      "patterns": [
+        {
+          "name": "support.function.validation.bxl",
+          "match": "\\b(?:equals|isAbaRouting|isAfter|isAlpha|isAlphanumeric|isAscii|isBase32|isBase58|isBase64|isBefore|isBIC|isBoolean|isBtcAddress|isByteLength|isCreditCard|isCurrency|isDataURI|isDate|isDecimal|isDivisibleBy|isEAN|isEmail|isEmpty|isEthereumAddress|isFloat|isFQDN|isFreightContainerID|isFullWidth|isHalfWidth|isHash|isHexadecimal|isHexColor|isHSL|isIBAN|isIdentityCard|isIMEI|isIn|isInt|isIP|isIPRange|isISBN|isISIN|isISO15924|isISO31661Alpha2|isISO31661Alpha3|isISO31661Numeric|isISO4217|isISO6346|isISO6391|isISO8601|isISRC|isISSN|isJSON|isJWT|isLatLong|isLength|isLicensePlate|isLocale|isLowercase|isLuhnNumber|isMACAddress|isMagnetURI|isMailtoURI|isMD5|isMimeType|isMobilePhone|isMongoId|isMultibyte|isNumeric|isOctal|isPassportNumber|isPort|isPostalCode|isRFC3339|isRgbColor|isSemVer|isSlug|isStrongPassword|isSurrogatePair|isTaxID|isTime|isULID|isURL|isUUID|isUppercase|isVAT|isVariableWidth|isWhitelisted)\\b(?=\\s*\\()"
         }
       ]
     },

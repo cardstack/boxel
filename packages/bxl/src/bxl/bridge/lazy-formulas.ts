@@ -20,20 +20,26 @@ import {
   FORMULA_FINANCIAL_FILTERS,
   sourceUsesFinancialFormula,
 } from './formula-financial-manifest.js';
+import {
+  VALIDATION_FILTERS,
+  sourceUsesValidationFunction,
+} from './validation-manifest.js';
 
-// Three lazy chunks, one per usage persona:
+// Lazy chunks, one per usage persona:
 //   - formula-statistical (~164 KB) — jstat distributions
 //   - formula-bessel      (~11 KB)  — BESSELI/J/K/Y
 //   - formula-extras      (~57 KB)  — engineering + financial co-bundled
+//   - validation          (~TBD)    — validator.js functions
 //
 // Each chunk's loader registers the libraries it owns. Per-library
 // names (formula-statistical, formula-bessel, formula-engineering,
-// formula-financial) stay in BuiltinLibraryName so callers can request
-// a specific family — bundling is purely a packaging detail.
+// formula-financial, validation) stay in BuiltinLibraryName so callers
+// can request a specific family — bundling is purely a packaging detail.
 
 let formulaStatisticalLoad: Promise<void> | undefined;
 let formulaBesselLoad: Promise<void> | undefined;
 let formulaExtrasBundleLoad: Promise<void> | undefined;
+let validationLoad: Promise<void> | undefined;
 
 function astUsesFilterSet(node: unknown, filters: Set<string>): boolean {
   if (!node || typeof node !== 'object') {
@@ -88,6 +94,15 @@ async function ensureExtrasBundleLoaded() {
   await formulaExtrasBundleLoad;
 }
 
+async function ensureValidationLoaded() {
+  validationLoad ??= import('../registry/validation.js').then(
+    ({ validationLibrary }) => {
+      registerBuiltinLibrary('validation', validationLibrary);
+    },
+  );
+  await validationLoad;
+}
+
 const EXTRAS_LIBRARIES: BuiltinLibraryName[] = [
   'formula-engineering',
   'formula-financial',
@@ -97,8 +112,11 @@ function canAutoLoadFormulaExtension(
   libraries: BuiltinLibraryName[],
   extension: BuiltinLibraryName | BuiltinLibraryName[],
 ) {
-  if (libraries.includes('formula')) return true;
   const target = Array.isArray(extension) ? extension : [extension];
+  if (target.includes('validation')) {
+    return libraries.includes('formula') || libraries.includes('validation');
+  }
+  if (libraries.includes('formula')) return true;
   return target.some((name) => libraries.includes(name));
 }
 
@@ -158,6 +176,13 @@ export async function resolveLazyBuiltinLibrariesForAst(
     astUsesFilterSet(ast, FORMULA_ENGINEERING_FILTERS) ||
     astUsesFilterSet(ast, FORMULA_FINANCIAL_FILTERS);
   await maybeLoadBundle(next, EXTRAS_LIBRARIES, extrasNeeded, ensureExtrasBundleLoaded);
+  await maybeLoadSingle(
+    next,
+    'validation',
+    next.includes('validation') ||
+      astUsesFilterSet(ast, VALIDATION_FILTERS),
+    ensureValidationLoaded,
+  );
   return next;
 }
 
@@ -185,5 +210,12 @@ export async function resolveLazyBuiltinLibrariesForExpressions(
     expressions.some((expression) => sourceUsesEngineeringFormula(expression)) ||
     expressions.some((expression) => sourceUsesFinancialFormula(expression));
   await maybeLoadBundle(next, EXTRAS_LIBRARIES, extrasNeeded, ensureExtrasBundleLoaded);
+  await maybeLoadSingle(
+    next,
+    'validation',
+    next.includes('validation') ||
+      expressions.some((expression) => sourceUsesValidationFunction(expression)),
+    ensureValidationLoaded,
+  );
   return next;
 }

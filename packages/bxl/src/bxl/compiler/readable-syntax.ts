@@ -6,6 +6,7 @@ import {
   rewriteStatisticalDottedFormulaNames,
 } from '../bridge/formula-statistical-manifest.js';
 import { FORMULA_BESSEL_FUNCTIONS } from '../bridge/formula-bessel-manifest.js';
+import { canonicalValidationFunctionName } from '../bridge/validation-manifest.js';
 
 export type ReadableFieldKind = 'scalar' | 'object' | 'array';
 
@@ -644,6 +645,11 @@ export function dispatchReadableFunctionCall({
 
   if (FORMULA_FUNCTIONS.has(upper)) {
     return { name: upper, dialect: 'excel' };
+  }
+
+  const validationName = canonicalValidationFunctionName(name, explicitArity);
+  if (validationName) {
+    return { name: validationName, dialect: 'bxl-helper' };
   }
 
   if (

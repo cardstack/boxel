@@ -8,12 +8,12 @@ const cases: Array<{ name: string; src: string; input: unknown; expected: unknow
     expected: 14,
   },
   {
-    name: 'emoji hash — lowercase helper next to Excel SUM',
-    src: `def emoji(w): ["🐕","🐈","🦊","🐸","🦉"][w | explode | add % 5];
+    name: 'lowercase helper next to Excel SUM',
+    src: `def band(n): if n >= 90 then "high" elif n >= 70 then "medium" else "low" end;
 def triple(x): x * 3;
-{ pet: emoji(.name), tripled: triple(.score), total: SUM([.items[].price]) }`,
-    input: { name: 'cat', score: 4, items: [{ price: 3 }, { price: 5 }] },
-    expected: { pet: '🦊', tripled: 12, total: 8 },
+{ band: band(.score), tripled: triple(.score), total: SUM([.items[].price]) }`,
+    input: { score: 84, items: [{ price: 3 }, { price: 5 }] },
+    expected: { band: 'medium', tripled: 252, total: 8 },
   },
   {
     name: 'zero-arg pipeline helper',

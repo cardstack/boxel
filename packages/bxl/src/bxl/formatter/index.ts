@@ -13,6 +13,7 @@ import {
   type ReadableSyntaxOptions,
   type ReadableSyntaxToken,
 } from '../compiler/readable-syntax.js';
+import { validationFunctionDefinition } from '../bridge/validation-manifest.js';
 import {
   lintBxlExpression,
   type BxlLintIssue,
@@ -294,13 +295,18 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
           ? call.dispatch.name.toUpperCase()
           : call?.dispatch.dialect === 'jq'
             ? call.dispatch.name.toLowerCase()
-            : undefined;
+            : call?.dispatch.dialect === 'bxl-helper'
+              ? call.dispatch.name
+              : undefined;
       if (
         replacement &&
         raw !== replacement &&
         token.start !== undefined &&
         token.end !== undefined
       ) {
+        const isValidationFunction = Boolean(
+          validationFunctionDefinition(call!.dispatch.name),
+        );
         edits.push({
           start: token.start,
           end: token.end,
@@ -308,11 +314,17 @@ function normalizationEdits(source: string, options: BxlConversionOptions): Edit
           code:
             call?.dispatch.dialect === 'excel'
               ? 'formula-case'
-              : 'jq-function-case',
+              : call?.dispatch.dialect === 'jq'
+                ? 'jq-function-case'
+                : 'bxl-helper-case',
           message:
             call?.dispatch.dialect === 'excel'
               ? `Normalized formula function ${raw} to ${replacement}.`
-              : `Normalized jq function ${raw} to ${replacement}.`,
+              : call?.dispatch.dialect === 'jq'
+                ? `Normalized jq function ${raw} to ${replacement}.`
+                : isValidationFunction
+                  ? `Normalized validator.js function ${raw} to ${replacement}.`
+                  : `Normalized BXL helper ${raw} to ${replacement}.`,
         });
       }
       if (replacement) {

@@ -337,6 +337,16 @@ strictEqual(
   'boundedScalar',
   'function safety registry classifies scalar Bessel calls as bounded',
 );
+strictEqual(
+  categoryForBxlFunction('isEmail'),
+  'boundedScalar',
+  'function safety registry classifies deterministic validator.js functions as bounded',
+);
+strictEqual(
+  categoryForBxlFunction('isAfter'),
+  'volatile',
+  'function safety registry classifies default-now validator.js functions as volatile',
+);
 deepStrictEqual(
   classifyBxlProfileFunction('predicate', 'like'),
   {
@@ -354,6 +364,34 @@ deepStrictEqual(
     category: 'boundedScalar',
   },
   'function safety registry allows bounded scalar lazy calls in policy',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('policy', 'isEmail'),
+  {
+    safety: 'allow',
+    normalizedName: 'ISEMAIL',
+    category: 'boundedScalar',
+  },
+  'function safety registry allows deterministic validator.js functions in policy',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('predicate', 'isEmail'),
+  {
+    safety: 'deny',
+    normalizedName: 'ISEMAIL',
+    category: 'boundedScalar',
+  },
+  'predicate profile does not treat validator.js functions as SQL-lowerable',
+);
+deepStrictEqual(
+  classifyBxlProfileFunction('policy', 'isAfter'),
+  {
+    safety: 'deny',
+    normalizedName: 'ISAFTER',
+    category: 'volatile',
+    message: 'volatile calls are not stable request-time authorization predicates',
+  },
+  'function safety registry denies volatile validator.js functions in policy',
 );
 deepStrictEqual(
   classifyBxlProfileFunction('policy', 'NPV'),

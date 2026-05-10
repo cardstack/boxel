@@ -1,4 +1,8 @@
 import type { BxlProfile } from '../ast/index.js';
+import {
+  DETERMINISTIC_VALIDATION_FUNCTIONS,
+  VOLATILE_VALIDATION_FUNCTIONS,
+} from '../bridge/validation-manifest.js';
 
 export type BxlProfileFunctionSafety =
   | 'allow'
@@ -226,6 +230,7 @@ export const BXL_BOUNDED_SCALAR_CALLS = names([
   'TBILLYIELD',
   'UNICHAR',
   'WEIBULL_DIST',
+  ...DETERMINISTIC_VALIDATION_FUNCTIONS,
 ]);
 
 export const BXL_ERROR_MASKING_CALLS = names([
@@ -244,6 +249,7 @@ export const BXL_VOLATILE_CALLS = names([
   'RANDBETWEEN',
   'TODAY',
   'now',
+  ...VOLATILE_VALIDATION_FUNCTIONS,
 ]);
 
 export const BXL_CONTROL_OR_SIDE_EFFECT_CALLS = names([

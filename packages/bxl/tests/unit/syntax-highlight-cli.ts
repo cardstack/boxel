@@ -81,6 +81,7 @@ strictEqual(firstMatch('comments', '#3'), undefined);
 strictEqual(firstMatch('variables', '$root'), 'variable.other.dollar.bxl');
 strictEqual(firstMatch('formats', '@json'), 'support.function.format.bxl');
 strictEqual(firstMatch('excel-functions', 'ROUND('), 'support.function.excel.bxl');
+strictEqual(firstMatch('validation-functions', 'isEmail('), 'support.function.validation.bxl');
 strictEqual(firstMatch('jq-functions', 'map('), 'support.function.jq.bxl');
 strictEqual(firstMatch('selectors', 'row 4'), 'keyword.other.selector-row.bxl');
 strictEqual(firstMatch('selectors', '#3'), 'constant.numeric.zero-based-index.bxl');

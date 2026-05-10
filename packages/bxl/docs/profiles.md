@@ -14,10 +14,11 @@ Function safety categories and profile call allow/deny lists live in one source 
 
 `compute` is the full browser/local BXL profile. It preserves the README contract: readable labels compile to canonical jq, Excel-compatible functions are available, jq paths and pipes remain valid, and the expression computes a value from the current JSON input.
 
-Lazy FormulaJS extension functions are part of `compute` when the caller uses
-an async runtime path (`runNativeJqAsync`, `prepareNativeJqAsync`, or
-`prepareBoxelRuntimeAsync`). Sync evaluators only have the eager formula core
-unless the host explicitly registers the lazy library.
+Lazy FormulaJS extension functions and validator.js functions are
+part of `compute` when the caller uses an async runtime path
+(`runNativeJqAsync`, `prepareNativeJqAsync`, or `prepareBoxelRuntimeAsync`).
+Sync evaluators only have the eager formula core unless the host explicitly
+registers the lazy library.
 
 Use it for:
 
@@ -123,6 +124,8 @@ Restrictions:
 
 Bounded scalar FormulaJS helpers remain allowed in `policy`, including lazy
 extension functions such as `PMT`, `NORM_DIST`, `BESSELI`, and `BIN2DEC`.
+Validator.js functions such as `isEmail` and `isUUID` are also
+bounded deterministic predicates and remain allowed.
 
 Representative diagnostic:
 
@@ -296,8 +299,9 @@ Unlike `predicate`, `derive` is allowed to compute values. Record-local aggregat
 
 Deterministic lazy FormulaJS helpers are allowed in `derive`, including
 collection-scanning helpers such as `NPV` when the derived value is based only
-on the record snapshot. Use an async runtime path if the expression may need a
-lazy extension library.
+on the record snapshot. Validator.js functions such as `isEmail` are
+also allowed when the derived value needs a stable boolean fact. Use an async
+runtime path if the expression may need a lazy extension library.
 
 Use it for:
 

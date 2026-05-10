@@ -1,6 +1,6 @@
 # BXL Syntax Reference
 
-The canonical BXL syntax reference. Readable labels, one-based rows, predicates, and positional selectors on top of jq pipes and 300+ Excel formula helpers. Compiles to canonical jq; same evaluator, same AST, one language.
+The canonical BXL syntax reference. Readable labels, one-based rows, predicates, and positional selectors on top of jq pipes, 300+ Excel formula helpers, and validator.js validator functions. Compiles to canonical jq; same evaluator, same AST, one language.
 
 > This is the Markdown mirror of [`docs/syntax-reference.html`](./syntax-reference.html). The HTML version has syntax highlighting and a rendered layout — open it in a browser for the best reading experience.
 
@@ -20,25 +20,26 @@ If you know spreadsheets, you know the core idea. The difference: instead of cel
 | `=SUM(A1:A10)` | `SUM("Line Item".Amount)`  — implicit iteration, no `map` needed |
 | `=IFERROR(A1, 0)` | `IFERROR(Value, 0)` |
 | `=SUMIF(C:C, "Service", B:B)` | `SUM("Line Item"[* ."Category" = "Service"].Amount)` |
-| `=VLOOKUP(E2, A:B, 2, FALSE)` | `"Line Item"[SKU = Target SKU]."Unit Price"`  — first-match predicate |
+| `=VLOOKUP("B", A:B, 2, FALSE)` | `"Line Item"[SKU = "B"]."Unit Price"`  — first-match predicate |
 | `=A1` (first row) | `"Line Item"[#first].Amount` |
 | `=INDEX(A:A, ROWS(A:A))` (last) | `"Line Item"[#last].Amount` |
 | `=ROUND(B1*C1, 2)` | `ROUND(Quantity * "Unit Price", 2)` |
 
 > **Notice what changes between Excel and BXL:** no cell letters (`A1`), no absolute columns (`A:A`), no separate `ROWS()` to get the last position. Every row shows a different piece of sugar in action — labels replace cell references, implicit iteration replaces `map`, `[* .pred]` replaces `SUMIF`, first-match `[pred]` replaces `VLOOKUP`, and positional selectors replace `INDEX`/`ROWS` arithmetic.
 
-> **Commas for Excel, semicolons for `def`.** Built-in Excel formulas take commas to match spreadsheet paste: `ROUND("Unit Price", 2)`, `SUM(a, b, c)`. BXL rewrites the comma-separated argument list to jq's `;` form during compile so the runtime sees valid jq — that rewrite happens under the hood; `ROUND("Unit Price"; 2)` is not paste-compatible with Excel and is not a form authors write. The rewrite applies **only** to built-in Excel formulas: user-defined `def` helpers must use `;` at both the definition (`def clamp(lo; hi; x): …`) and the call (`clamp(0; 100; .score)`). Array literals also use **commas**: `[1, 2, 3]`.
+> **Commas for readable calls, semicolons for jq.** Built-in Excel formulas take commas to match spreadsheet paste: `ROUND("Unit Price", 2)`, `SUM(a, b, c)`. BXL-readable helpers and validator.js functions also take commas: `when(condition, result)`, `isURL(Website, {require_protocol:true})`. BXL rewrites those comma-separated argument lists to jq's `;` form during compile so the runtime sees valid jq — that rewrite happens under the hood; `ROUND("Unit Price"; 2)` is not paste-compatible with Excel and is not a form authors write. User-defined jq `def` helpers use `;` at both the definition (`def clamp(lo; hi; x): …`) and the call (`clamp(0; 100; .score)`). Array literals also use **commas**: `[1, 2, 3]`.
 
-### Naming convention: UPPERCASE is Excel, lowercase is BXL-native
+### Naming convention: preserve source idioms
 
-Every helper name in BXL follows one of two conventions. The compiler is case-insensitive (`ROUND`, `round`, and `Round` all resolve to the same function), but the convention communicates _intent_ to the reader.
+Every helper name in BXL follows a source convention. The compiler is case-insensitive (`ROUND`, `round`, and `Round` all resolve to the same function), but the convention communicates _intent_ to the reader.
 
 | Reader sees | Interpretation | Examples |
 | --- | --- | --- |
 | `UPPERCASE` | Real Microsoft Excel function — paste-compatible, matching semantics. **We never invent new UPPERCASE names.** | `ROUND`, `SUM`, `IFERROR`, `VLOOKUP`, `ISBLANK` |
 | `lowercase` | BXL-native contribution — jq ecosystem primitive or a BXL-specific shortcut. Not portable to Excel. | `present`, `when` / `implies`, `words`, `nonempty`, `map`, `select`, `add` |
+| `camelCase` | Known upstream JavaScript library idiom preserved in BXL. | `isEmail`, `isURL`, `isUUID`, `isPostalCode` |
 
-> **If a helper name is UPPERCASE, you can paste it into an Excel cell and expect the same answer.** If it's lowercase, it's BXL's own vocabulary. The convention is enforced socially in review, not by the compiler — but keep it honest in authored expressions so reviewers can trust the promise.
+> **If a helper name is UPPERCASE, you can paste it into an Excel cell and expect the same answer.** If it's lowercase, it's BXL or jq vocabulary. If it's camelCase, BXL is preserving a well-known JavaScript API shape, currently validator.js functions. The convention is enforced socially in review, not by the compiler — but keep it honest in authored expressions so reviewers can trust the promise.
 
 ### How `MATCH` and `match` dispatch
 
@@ -46,9 +47,9 @@ BXL keeps lookup case-insensitive: `ROUND`, `round`, `Round`, and `rOUNd` are th
 
 1. **Arity and call shape first.** Explicit arguments decide most cases: `LOG(x)` is Excel `LOG/1`, while `x | log` is jq `log/0`. Piped input does not count as an explicit argument. For `NOW`, parenthesized `NOW()` / `now()` is Excel; bare `now` / `NOW` is jq.
 2. **Separator second.** If the same explicit arity exists on both sides, comma means Excel/readable BXL and semicolon means jq. `MATCH(value, array)` is Excel lookup; `match(re; flags)` is jq regex matching. `ATAN2(x, y)` is Excel order; `atan2(y; x)` is jq/POSIX order.
-3. **Casing last.** After dispatch, the formatter prefers UPPERCASE for Excel and lowercase for jq. The linter nudges mismatches, but the compiler does not make `NOW` or any other function case-sensitive.
+3. **Casing last.** After dispatch, the formatter prefers UPPERCASE for Excel, lowercase for jq/BXL-native helpers, and validator.js camelCase for validator.js functions. The linter nudges mismatches, but the compiler does not make `NOW` or any other function case-sensitive.
 
-Commas are for Excel formulas and readable BXL helpers: `MATCH(value, array)`, `when(condition, result)`. Semicolons are for jq calls and jq `def` syntax: `match(re; flags)`, `def helper(x): ...;`.
+Commas are for Excel formulas and readable BXL helpers: `MATCH(value, array)`, `when(condition, result)`, `isEmail(Email)`. Semicolons are for jq calls and jq `def` syntax: `match(re; flags)`, `def helper(x): ...;`.
 
 #### Non-colliding pairs
 
@@ -141,9 +142,12 @@ The runtime is case-insensitive: `atan2`, `Atan2`, `ATAN2` all participate in th
 
 ✕  MATCH("\\d+"; "i")      info  jq-name-lowercase-preferred
                                 match is a jq filter in this call shape — spell it lowercase.
+
+✕  ISEMAIL(Email)          info  bxl-helper-case-preferred
+                                isEmail is the validator.js function spelling.
 ```
 
-The rule applies only after dispatch. `atan2(x, y)` lints to uppercase because comma means Excel; `ATAN2(y; x)` lints to lowercase because semicolon means jq. `now()` lints/formats to `NOW()`, while bare `NOW` lints/formats to `now`. It does not fire on lowercase names that are jq-only (`map`, `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.).
+The rule applies only after dispatch. `atan2(x, y)` lints to uppercase because comma means Excel; `ATAN2(y; x)` lints to lowercase because semicolon means jq. `now()` lints/formats to `NOW()`, while bare `NOW` lints/formats to `now`. Validator.js helpers lint/format back to camelCase. It does not fire on lowercase names that are jq-only (`map`, `select`, `add`, `pow`, `fmod`, `hypot`, `jn`, etc.).
 
 Severity is `info`, never `error` — your code still compiles and runs.
 
@@ -158,7 +162,7 @@ If you only remember ten things about BXL, remember these. Every other section e
 | **3** | **One-based rows use `[#N]`; raw `[N]` is 0-based jq.** They mean different elements. | `[#4]` = 4th row. `[3]` = 4th row but zero-based (escape hatch). Pick one style per expression. |
 | **4** | **Predicates come in two shapes.** `[pred]` returns the first match; `[* .pred]` returns every match. | Scalar vs array result. `[SKU="X"]` finds one; `[* ."Taxable"]` filters all. |
 | **5** | **Excel-style equality works:** `=` and `<>` compile to `==` and `!=`. | Paste `IF(Status="paid", …)` from Excel, no edits needed. |
-| **6** | **UPPERCASE is a promise.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL-native. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL's own vocabulary. |
+| **6** | **Source idioms are preserved.** `ROUND`, `SUM`, `ISBLANK` match Microsoft Excel exactly. lowercase (`present`, `when`, `words`) is BXL/jq-native. camelCase (`isEmail`, `isURL`) keeps validator.js familiar. | UPPERCASE paste-compatible with Excel cells. lowercase is BXL/jq vocabulary. camelCase is known JS-library vocabulary. |
 | **7** | **Positional selectors live in `[#...]` only.** Positive selectors are 1-based; last-relative selectors count backward from the end. | `[#1]`, `[#4]`, `[#first]`, `[#last]`, `[#last-1]`, `[#4..#last-3]`, `[#1, #2, #7..#9, #11]`, `[#odd]`, `[#even]`, `[#only]`. |
 | **8** | **Root auto-binds across pipes.** Readable labels after `\|` resolve against the root card, not the piped-in value. | `"Line Item"."Line Total" \| add = Subtotal` — `Subtotal` reads from the root. |
 | **9** | **Presence is context-dependent.** `ISBLANK` is Excel-strict (null only). `present` is form-friendly (null or `""`). | `present(Email)` for form validation. `NOT ISBLANK(Email)` when you need Excel's semantics. |
@@ -170,7 +174,7 @@ If you only remember ten things about BXL, remember these. Every other section e
 
 BXL keeps canonical jq valid and adds a schema-aware readable layer. Labels, one-based rows, predicates, and positional selectors compile to the same AST shape the jq evaluator already understands.
 
-> **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, and jq builtins. Async runtimes (`runNativeJqAsync`, `prepareNativeJqAsync`, `prepareBoxelRuntimeAsync`) also inspect expressions and lazy-load large FormulaJS extension libraries only when referenced. Sync evaluators use the eager formula core unless a lazy library is explicitly registered.
+> **Runtime shape:** BXL is a compiler front-end for jq. It rewrites readable source to canonical jq, then uses the same tokenizer, parser, evaluator, formula helpers, validator.js functions, and jq builtins. Async runtimes (`runNativeJqAsync`, `prepareNativeJqAsync`, `prepareBoxelRuntimeAsync`) also inspect expressions and lazy-load large FormulaJS extension libraries and validator.js functions only when referenced. Sync evaluators use the eager formula core unless a lazy library is explicitly registered.
 
 ### Labels, rows, and implicit iteration
 
@@ -253,7 +257,7 @@ ROUND(.subtotal * .taxRate / 100; 2) == .taxAmount
 
 > **Lint targets:** missing quotes around multi-word labels, root labels after a top-level pipe, legacy `[row N]` shortcuts, predicate selectors that return only the first match, top-level `==` (info-level `prefer-excel-equality` — BXL canonicalizes to `=`), removed CSS-style pseudo-classes, and helper-dependent predicates such as `IN`.
 
-> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/positional-selector keywords, lowercase or mixed-case formula function names, comma-separated or semicolon-separated formula arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jq.
+> **Forgiving text fields:** BXL accepts extra whitespace, mixed capitalization for readable keywords/selectors/predicates/positional-selector keywords, lowercase or mixed-case known helper names, comma-separated readable helper arguments, semicolon-separated jq arguments, uppercase booleans, and unquoted multi-word labels when the schema resolves them unambiguously. The canonical compiler output still normalizes to jq.
 
 ## Excel Paste Compatibility
 
@@ -926,22 +930,22 @@ _Bind and reuse_
 
 ## User-defined helpers (`def`)
 
-Any BXL expression can open with its own named helpers. Syntax and scoping match jq's `def`. Because user helpers aren't from Excel, they follow the lowercase naming convention — a `def UPPERCASE` would lie about paste-compatibility. (See [UPPERCASE is Excel, lowercase is BXL-native](#naming-convention-uppercase-is-excel-lowercase-is-bxl-native).)
+Any BXL expression can open with its own named helpers. Syntax and scoping match jq's `def`. Because user helpers aren't from Excel or a preserved upstream helper family, they follow the lowercase naming convention — a `def UPPERCASE` would lie about paste-compatibility. (See [Naming convention](#naming-convention-preserve-source-idioms).)
 
 | Form | Meaning |
 | --- | --- |
 | `def name: body;` | Zero-arg helper. Applied as a pipeline filter: `.items \| map(name)`. |
 | `def name(arg): body;` | One-arg helper. Call site: `name(value)`. |
-| `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`.** BXL's comma-to-`;` rewrite is a convenience for Excel built-ins only — paste `ROUND("Unit Price", 2)` from a spreadsheet and BXL handles the translation to jq behind the scenes. User `def` calls don't get that rewrite; `clamp(0, 100, x)` won't resolve. |
+| `def name(a; b; c): body;` | Multi-arg helper. **Definition and call both use `;`.** BXL's comma-to-`;` rewrite is a convenience for known readable built-ins — paste `ROUND("Unit Price", 2)` from a spreadsheet or write `isURL(Website, {require_protocol:true})`, and BXL handles the translation to jq behind the scenes. User `def` calls don't get that rewrite; `clamp(0, 100, x)` won't resolve. |
 
 _Single-arg helper next to a built-in:_
 
 ```
-def emoji(w): ["🐕", "🐈", "🦊", "🐸", "🦉"][w | explode | add % 5];
+def band(n): if n >= 90 then "high" elif n >= 70 then "medium" else "low" end;
 def triple(x): x * 3;
 
 {
-  pet:     emoji(.name),
+  band:    band(.score),
   tripled: triple(.score),
   total:   SUM([.items[].price])
 }
@@ -1117,10 +1121,29 @@ Two flavors: **range-based** (classic Excel) and **\_BY** variants for arrays of
 | `CHOOSE(idx, options)` | Select from list by 1-based index |
 | `COL(rows, key)` | Extract column values from array of objects |
 
+> **Lookup preference for BXL-shaped JSON.** If the data is an array of
+> objects and the lookup reads naturally as a row predicate, the most readable
+> BXL is usually the path form: `"Line Item"[SKU = "B"]."Unit Price"`.
+> Use `XLOOKUP` when the lookup value is another field and you want the Excel
+> mental model over aligned projections:
+> `XLOOKUP("Target SKU", "Line Item".SKU, "Line Item"."Unit Price", null)`.
+> Use `VLOOKUP` mainly for spreadsheet compatibility or an actual
+> two-column table; for object rows that means building the table explicitly:
+> `VLOOKUP("Target SKU", (["Line Item".SKU, "Line Item"."Unit Price"] | transpose), 2, false)`.
+> `XLOOKUP` is less brittle than `VLOOKUP` because the return projection is
+> named directly instead of addressed by column number, but the predicate path
+> is the most BXL-native shape.
+
 _VLOOKUP\_BY example_
 
 ```
 VLOOKUP_BY(., "label", "ventilator", "amount")
+```
+
+_XLOOKUP over BXL projections_
+
+```
+XLOOKUP("Target SKU", "Line Item".SKU, "Line Item"."Unit Price", null)
 ```
 
 _INDEX + MATCH pattern_
@@ -1206,9 +1229,136 @@ _Presence helpers side-by-side_
 ISBLANK(Campaign)            -- true only when Campaign is null (Excel-strict)
 present(Campaign)            -- false for both null and "" (form-friendly)
 NOT ISBLANK(Campaign)        -- Excel-equivalent "filled in" check
-nonempty(split(Donor, " "))  -- drop empty tokens before counting
+nonempty(Donor | split(" ")) -- drop empty tokens before counting
 words(Donor) >= 2            -- same intent, BXL shortcut
 ```
+
+### validator.js Functions
+
+BXL supports validator.js's boolean validator functions with the same function
+names and option-object shape authors already know. Write the call as if it
+were `validator.isEmail(value, options)`, but omit the `validator.` namespace:
+
+```bxl
+isEmail(Email)
+isURL(Website, {require_protocol:true})
+isMobilePhone(Phone, "en-US", {strictMode:true})
+isPostalCode(Zip, "US")
+isCreditCard("Card Number")
+isStrongPassword(Password, {minLength:12})
+isUUID(ID, 4)
+```
+
+Validator.js functions use readable comma arguments like Excel and other BXL
+helpers, then compile to jq's semicolon form internally. The compiler lookup
+is case-insensitive, but the formatter canonicalizes back to validator.js
+casing, so `ISEMAIL(Email)` solidifies to `isEmail(Email)` and compiles to
+`isEmail(.email)`.
+
+Non-string inputs and invalid validator.js option values return `false`
+instead of throwing. `isStrongPassword(value, {returnScore:true})` preserves
+validator.js behavior and returns the score number. `isAfter(value)` and
+`isBefore(value)` use validator.js's default comparison date, which is "now";
+they are therefore treated as volatile in restricted BXL profiles. Pass
+`{comparisonDate:"2026-01-01"}` when you need stable validation.
+
+Use jq `test(re)` for bespoke regex rules; use validator.js functions when the
+rule is one of its familiar predicates. Sanitizers and converters such as
+`trim`, `escape`, `normalizeEmail`, `toInt`, and `toDate` are not part of the
+validation extension.
+
+| Function | validator.js shape | Typical use |
+| --- | --- | --- |
+| `contains` | `contains(value, seed[, options])` | String containment with validator.js options. `value \| contains(seed)` remains jq. |
+| `equals` | `equals(value, comparison)` | Exact string comparison. |
+| `matches` | `matches(value, pattern[, modifiers])` | Regex predicate with validator.js shape. One-arg `matches(query)` remains BXL's predicate-profile full-text hook. |
+| `isEmail` | `isEmail(value[, options])` | Email address. |
+| `isURL` | `isURL(value[, options])` | URL; commonly `isURL(Website, {require_protocol:true})`. |
+| `isFQDN` | `isFQDN(value[, options])` | Domain / host name. |
+| `isIP` | `isIP(value[, version])` | IPv4 or IPv6 address. |
+| `isIPRange` | `isIPRange(value[, version])` | CIDR IP range. |
+| `isMobilePhone` | `isMobilePhone(value[, locale[, options]])` | Locale-aware mobile phone number. |
+| `isPostalCode` | `isPostalCode(value, locale)` | Locale-aware postal / ZIP code. |
+| `isMailtoURI` | `isMailtoURI(value[, options])` | `mailto:` URI. |
+| `isMagnetURI` | `isMagnetURI(value)` | Magnet URI. |
+| `isDataURI` | `isDataURI(value)` | Data URI. |
+| `isJWT` | `isJWT(value)` | JWT token shape. |
+| `isUUID` | `isUUID(value[, version])` | UUID. |
+| `isULID` | `isULID(value)` | ULID. |
+| `isMongoId` | `isMongoId(value)` | MongoDB ObjectId. |
+| `isAbaRouting` | `isAbaRouting(value)` | US ABA routing number. |
+| `isBIC` | `isBIC(value)` | SWIFT/BIC code. |
+| `isIBAN` | `isIBAN(value[, options])` | IBAN. |
+| `isCreditCard` | `isCreditCard(value[, options])` | Credit card number. |
+| `isCurrency` | `isCurrency(value[, options])` | Currency amount string. |
+| `isEthereumAddress` | `isEthereumAddress(value)` | Ethereum address. |
+| `isBtcAddress` | `isBtcAddress(value)` | Bitcoin address. |
+| `isEAN` | `isEAN(value)` | EAN code. |
+| `isIMEI` | `isIMEI(value[, options])` | IMEI. |
+| `isISBN` | `isISBN(value[, version])` | ISBN-10 or ISBN-13. |
+| `isISIN` | `isISIN(value)` | Securities identifier. |
+| `isISRC` | `isISRC(value)` | Recording code. |
+| `isISSN` | `isISSN(value[, options])` | Serial publication code. |
+| `isISO6346` | `isISO6346(value)` | Shipping container ID. |
+| `isFreightContainerID` | `isFreightContainerID(value)` | Alias-style container ID validator. |
+| `isISO6391` | `isISO6391(value)` | ISO 639-1 language code. |
+| `isISO15924` | `isISO15924(value)` | ISO 15924 script code. |
+| `isISO31661Alpha2` | `isISO31661Alpha2(value[, options])` | ISO 3166-1 alpha-2 country code. |
+| `isISO31661Alpha3` | `isISO31661Alpha3(value[, options])` | ISO 3166-1 alpha-3 country code. |
+| `isISO31661Numeric` | `isISO31661Numeric(value)` | ISO 3166-1 numeric country code. |
+| `isISO4217` | `isISO4217(value)` | ISO 4217 currency code. |
+| `isIdentityCard` | `isIdentityCard(value, locale)` | Locale-aware national identity card number; use `"any"` to check all supported locales. |
+| `isLicensePlate` | `isLicensePlate(value, locale)` | Locale-aware license plate. |
+| `isPassportNumber` | `isPassportNumber(value, countryCode)` | Passport number. |
+| `isTaxID` | `isTaxID(value[, locale])` | Tax ID. |
+| `isVAT` | `isVAT(value, countryCode)` | VAT number. |
+| `isAlpha` | `isAlpha(value[, locale[, options]])` | Letters only. |
+| `isAlphanumeric` | `isAlphanumeric(value[, locale[, options]])` | Letters and numbers only. |
+| `isAscii` | `isAscii(value)` | ASCII-only string. |
+| `isBase32` | `isBase32(value[, options])` | Base32 string. |
+| `isBase58` | `isBase58(value)` | Base58 string. |
+| `isBase64` | `isBase64(value[, options])` | Base64 string. |
+| `isBoolean` | `isBoolean(value[, options])` | Boolean string. |
+| `isByteLength` | `isByteLength(value[, options])` | UTF-8 byte length range. |
+| `isDecimal` | `isDecimal(value[, options])` | Decimal number string. |
+| `isDivisibleBy` | `isDivisibleBy(value, number)` | Numeric string divisible by number. |
+| `isEmpty` | `isEmpty(value[, options])` | Empty string. |
+| `isFloat` | `isFloat(value[, options])` | Float string with optional range. |
+| `isFullWidth` | `isFullWidth(value)` | Contains full-width characters. |
+| `isHalfWidth` | `isHalfWidth(value)` | Contains half-width characters. |
+| `isHash` | `isHash(value, algorithm)` | Hash by algorithm. |
+| `isHexadecimal` | `isHexadecimal(value)` | Hexadecimal string. |
+| `isHexColor` | `isHexColor(value[, options])` | CSS hex color. |
+| `isHSL` | `isHSL(value)` | CSS HSL color. |
+| `isIn` | `isIn(value, values)` | Membership in allowed values. |
+| `isInt` | `isInt(value[, options])` | Integer string with optional range. |
+| `isJSON` | `isJSON(value[, options])` | JSON string. |
+| `isLatLong` | `isLatLong(value[, options])` | Latitude/longitude string. |
+| `isLength` | `isLength(value[, options])` | Character length range. |
+| `isLocale` | `isLocale(value)` | Locale string. |
+| `isLowercase` | `isLowercase(value)` | Lowercase string. |
+| `isLuhnNumber` | `isLuhnNumber(value)` | Luhn checksum. |
+| `isMACAddress` | `isMACAddress(value[, options])` | MAC address. |
+| `isMD5` | `isMD5(value)` | MD5 hash. |
+| `isMimeType` | `isMimeType(value)` | MIME type. |
+| `isMultibyte` | `isMultibyte(value)` | Contains multibyte characters. |
+| `isNumeric` | `isNumeric(value[, options])` | Numeric string. |
+| `isOctal` | `isOctal(value)` | Octal string. |
+| `isPort` | `isPort(value)` | Port number string. |
+| `isRgbColor` | `isRgbColor(value[, options])` | CSS RGB/RGBA color. |
+| `isSemVer` | `isSemVer(value)` | Semantic version. |
+| `isSlug` | `isSlug(value)` | Slug string. |
+| `isStrongPassword` | `isStrongPassword(value[, options])` | Password strength boolean or score. |
+| `isSurrogatePair` | `isSurrogatePair(value)` | Contains surrogate-pair characters. |
+| `isTime` | `isTime(value[, options])` | Time string. |
+| `isUppercase` | `isUppercase(value)` | Uppercase string. |
+| `isVariableWidth` | `isVariableWidth(value)` | Mixture of full/half-width characters. |
+| `isWhitelisted` | `isWhitelisted(value, chars)` | Only characters from `chars`. |
+| `isDate` | `isDate(value[, options])` | Date string. |
+| `isAfter` | `isAfter(value[, options])` | Date after comparison date; volatile without `comparisonDate`. |
+| `isBefore` | `isBefore(value[, options])` | Date before comparison date; volatile without `comparisonDate`. |
+| `isRFC3339` | `isRFC3339(value)` | RFC 3339 timestamp. |
+| `isISO8601` | `isISO8601(value[, options])` | ISO 8601 date/time. |
 
 ### Type Checking & Error Detection
 
@@ -1785,7 +1935,7 @@ Some FormulaJS families are implemented but intentionally lazy because they pull
 
 | Status | Count | Notes |
 | --- | --- | --- |
-| Implemented | 300+ | All targeted Excel-compatible formula functions; large FormulaJS extension families load lazily in async runtimes |
+| Implemented | 300+ | All targeted Excel-compatible formula functions plus validator.js functions; large helper families load lazily in async runtimes |
 | Lazy extension libraries | 4 | `formula-statistical`, `formula-bessel`, `formula-engineering`, `formula-financial` |
 | BXL-only extensions | 16 | `_BY` row-object variants, `COL`, `ERROR_TYPE` |
 | Excel name with case-folded jq counterpart | ~25 | Trig, exp/log, rounding, gamma, erf — UPPERCASE preferred (lint nudges lowercase) |

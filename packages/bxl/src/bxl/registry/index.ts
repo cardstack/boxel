@@ -36,7 +36,8 @@ export type BuiltinLibraryName =
   | 'formula-statistical'
   | 'formula-bessel'
   | 'formula-engineering'
-  | 'formula-financial';
+  | 'formula-financial'
+  | 'validation';
 
 export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'core',

@@ -7,6 +7,7 @@ import {
   type ReadableSyntaxToken,
   tokenizeReadableSyntax,
 } from '../compiler/readable-syntax.js';
+import { validationFunctionDefinition } from '../bridge/validation-manifest.js';
 // Shared with readable-syntax.ts — single source of truth in lexicon.ts.
 import { JQ_KEYWORDS as KEYWORDS } from '../compiler/lexicon.js';
 
@@ -409,7 +410,29 @@ function lintFunctionDispatchStyle(
 
     if (next?.type === 'punc' && next.value === '(') {
       const call = analyzeReadableFunctionCall(tokens, index);
-      if (!call || !COLLISION_STYLE_NAMES.has(lower)) continue;
+      if (!call) continue;
+      if (call.dispatch.dialect === 'bxl-helper') {
+        const helperName = call.dispatch.name;
+        if (name !== helperName) {
+          const isValidationFunction = Boolean(
+            validationFunctionDefinition(helperName),
+          );
+          addIssue(issues, {
+            code: isValidationFunction
+              ? 'validator-function-case-preferred'
+              : 'bxl-helper-case-preferred',
+            severity: 'info',
+            message: isValidationFunction
+              ? `${helperName} is the validator.js function spelling.`
+              : `${helperName} is the preferred helper spelling.`,
+            suggestion: isValidationFunction
+              ? `Use ${helperName}(...) instead of ${name}(...). BXL supports validator.js function names case-insensitively, but authored BXL should keep the familiar upstream spelling.`
+              : `Use ${helperName}(...) instead of ${name}(...). Known helper lookup is case-insensitive, but authored BXL should preserve the source library idiom.`,
+          });
+        }
+        continue;
+      }
+      if (!COLLISION_STYLE_NAMES.has(lower)) continue;
       if (call.dispatch.dialect === 'excel') {
         const upper = call.dispatch.name.toUpperCase();
         if (name === upper) continue;
