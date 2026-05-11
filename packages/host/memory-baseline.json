@@ -303,23 +303,14 @@
     "Integration | commands | get-available-realm-identifiers": {
       "delta_mb": 8.7
     },
-    "Integration | commands | get-available-realm-urls": {
-      "delta_mb": -4.3
-    },
     "Integration | commands | get-catalog-realm-identifiers": {
       "delta_mb": -11.3
-    },
-    "Integration | commands | get-catalog-realm-urls": {
-      "delta_mb": -11.9
     },
     "Integration | commands | get-default-writable-realm": {
       "delta_mb": 4.2
     },
     "Integration | commands | get-realm-of-resource-identifier": {
       "delta_mb": 0
-    },
-    "Integration | commands | get-realm-of-url": {
-      "delta_mb": 0.2
     },
     "Integration | commands | get-user-system-card": {
       "delta_mb": 0
@@ -329,9 +320,6 @@
     },
     "Integration | commands | invalidate-realm-identifiers": {
       "delta_mb": 0.1
-    },
-    "Integration | commands | invalidate-realm-urls": {
-      "delta_mb": -9.9
     },
     "Integration | commands | invite-user-to-room": {
       "delta_mb": 6.1
