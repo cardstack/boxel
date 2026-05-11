@@ -20,7 +20,7 @@ SWEEP_GRACE_SECS=3
 PGROUP_GRACE_SECS=2
 
 # Pidfile records the top-level pgroup leaders dev-all/dev spawn so that
-# `mise run kill-dev-all` can recover after an abnormal exit (SIGKILL, OOM,
+# `mise run kill-all` can recover after an abnormal exit (SIGKILL, OOM,
 # parent terminal killed) that prevented the trap from firing. Default
 # location prefers $XDG_RUNTIME_DIR (typically /run/user/$UID, mode 0700,
 # per-user) over /tmp (world-writable sticky) so the file can't be
