@@ -2,10 +2,13 @@
 # Lightweight self-test for kill_tree in dev-common.sh.
 #
 # Spawns a 3-level sleep tree, asks kill_tree to take it down, and asserts
-# that every pid in the tree is gone by the time kill_tree returns. The
-# point is to catch regressions where kill_tree returns while children are
-# still alive (which is what the original SIGTERM-only walk did, causing
-# leaked dev-stack processes after Ctrl-C).
+# every pid is gone shortly after kill_tree returns. The short sleep before
+# the check is for the OS to reap SIGKILL'd descendants — kill_tree itself
+# returns as soon as it has delivered the last signal, not after the kernel
+# has finished tearing down the entries. The point is to catch regressions
+# where kill_tree returns while children are still *running* (which is what
+# the original SIGTERM-only walk did, causing leaked dev-stack processes
+# after Ctrl-C).
 #
 # Not wired into CI — running it touches real signals and would race with
 # any concurrent dev-stack on the same host. Invoke directly:
@@ -45,7 +48,9 @@ sleep 1
 
 EXPECTED_PIDS="$ROOT_PID"
 collect_descendants() {
-  for child in $(pgrep -P "$1" 2>/dev/null); do
+  # `|| true` so the empty-output exit-1 from pgrep doesn't trip set -e
+  # on leaf pids (which is the normal recursion terminator).
+  for child in $(pgrep -P "$1" 2>/dev/null || true); do
     EXPECTED_PIDS="$EXPECTED_PIDS $child"
     collect_descendants "$child"
   done

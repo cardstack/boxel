@@ -30,32 +30,36 @@ SWEEP_GRACE_SECS=3
 # those grandchildren are still alive, the calling script exits, and they
 # reparent to init and keep their ports bound — which is exactly the leak
 # this helper is supposed to prevent.
+# All locals carry an `_kill_tree_` prefix because this file is sourced, so
+# bare names like `pid` / `elapsed` would become globals in the caller's
+# shell and could clobber its variables. `local` would be cleaner but isn't
+# in POSIX sh and this file runs under `#!/bin/sh`.
 kill_tree() {
   _kill_tree_collect_pids "$1"
   _kill_tree_pids="$_kill_tree_collected"
 
-  for pid in $_kill_tree_pids; do
-    kill -TERM "$pid" 2>/dev/null || true
+  for _kill_tree_pid in $_kill_tree_pids; do
+    kill -TERM "$_kill_tree_pid" 2>/dev/null || true
   done
 
-  elapsed=0
-  while [ "$elapsed" -lt "$KILL_TREE_GRACE_SECS" ]; do
-    any_alive=0
-    for pid in $_kill_tree_pids; do
-      if kill -0 "$pid" 2>/dev/null; then
-        any_alive=1
+  _kill_tree_elapsed=0
+  while [ "$_kill_tree_elapsed" -lt "$KILL_TREE_GRACE_SECS" ]; do
+    _kill_tree_any_alive=0
+    for _kill_tree_pid in $_kill_tree_pids; do
+      if kill -0 "$_kill_tree_pid" 2>/dev/null; then
+        _kill_tree_any_alive=1
         break
       fi
     done
-    if [ "$any_alive" -eq 0 ]; then
+    if [ "$_kill_tree_any_alive" -eq 0 ]; then
       return 0
     fi
     sleep 1
-    elapsed=$((elapsed + 1))
+    _kill_tree_elapsed=$((_kill_tree_elapsed + 1))
   done
 
-  for pid in $_kill_tree_pids; do
-    kill -KILL "$pid" 2>/dev/null || true
+  for _kill_tree_pid in $_kill_tree_pids; do
+    kill -KILL "$_kill_tree_pid" 2>/dev/null || true
   done
 }
 
@@ -69,9 +73,12 @@ _kill_tree_collect_pids() {
   _kill_tree_walk "$1"
 }
 
+# `|| true` because pgrep exits 1 when a pid has no children, which would
+# abort callers running under `set -e` even though "no children" is the
+# normal terminating case for the recursion.
 _kill_tree_walk() {
-  for child in $(pgrep -P "$1" 2>/dev/null); do
-    _kill_tree_walk "$child"
+  for _kill_tree_child in $(pgrep -P "$1" 2>/dev/null || true); do
+    _kill_tree_walk "$_kill_tree_child"
   done
   _kill_tree_collected="$_kill_tree_collected $1"
 }
