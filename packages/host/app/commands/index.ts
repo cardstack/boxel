@@ -97,19 +97,6 @@ import * as ValidateRealmCommandModule from './validate-realm';
 import * as WriteBinaryFileCommandModule from './write-binary-file';
 import * as WriteTextFileCommandModule from './write-text-file';
 
-// Deprecated URL-flavored aliases kept for backwards compatibility with
-// boxel-skills/boxel-catalog cards still referencing the old module
-// paths. Each module is a thin re-export of its renamed counterpart.
-// Remove this block (imports + shimModule calls below + the .ts files
-// themselves) once downstream consumers have been on the renamed paths
-// for at least one release. Tracked by CS-11046.
-/* eslint-disable import/order */
-import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
-import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
-import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
-import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
-/* eslint-enable import/order */
-
 import type HostBaseCommand from '../lib/host-base-command';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
@@ -500,25 +487,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/set-user-system-card',
     SetUserSystemCardCommandModule,
-  );
-
-  // Deprecated URL-flavored aliases — see the import-block comment for
-  // these modules above. Tracked by CS-11046.
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-url',
-    GetRealmOfUrlCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-available-realm-urls',
-    GetAvailableRealmUrlsCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
-    GetCatalogRealmUrlsCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invalidate-realm-urls',
-    InvalidateRealmUrlsCommandModule,
   );
 }
 
