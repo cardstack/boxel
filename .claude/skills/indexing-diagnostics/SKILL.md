@@ -1216,7 +1216,7 @@ If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step
 
 ## Prerender capacity tuning knobs
 
-Four env vars control the per-prerender-server shape. The first three are resolved once at `PagePool` construction; the indexer-side cap is resolved per visit-loop entry. All require a process restart to change.
+Four env vars control the per-prerender-server shape. All are read once at module load time and require a process restart to change. The first three are PagePool-side; the indexer-side cap is read by the visit-loop sizing helper.
 
 | Env var | Default | What it controls | When to change it |
 |---|---|---|---|
