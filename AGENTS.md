@@ -128,6 +128,15 @@
   `TEST_MODULE=card-endpoints-test.ts pnpm test-module`
 - Run a list of modules:
   `TEST_MODULES=card-endpoints-test.ts|another-module-test.ts pnpm test`
+- Run only specific test *files* (skip parsing the other ~100):
+  `TEST_FILES=sanitize-head-html-test pnpm test`
+  `TEST_FILES=realm-endpoints/invalidate-urls-test,server-endpoints/queue-status-test pnpm test`
+  Comma-separated paths relative to `tests/`, with or without `./` prefix or `.ts` suffix.
+  Use this — not `TEST_MODULES` — when measuring one file's wall time / peak RSS in isolation:
+  `TEST_MODULES` filters which modules *run*, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
+- Measure per-file wall time + peak RSS (median across N runs):
+  `./scripts/measure-test-file.sh sanitize-head-html-test [runs]`
+  Wraps `TEST_FILES` + `/usr/bin/time -l` with a clean per-file signal. Re-preps test-pg between runs. Used for before/after PR baselines on CS-10009 fixture migrations.
 - Focusing on single test or module:
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
