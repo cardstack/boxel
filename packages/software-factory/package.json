@@ -36,6 +36,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.114",
     "@cardstack/boxel-cli": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/host": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/logger": "^0.2.1",
