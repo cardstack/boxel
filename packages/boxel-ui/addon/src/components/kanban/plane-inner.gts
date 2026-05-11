@@ -211,6 +211,7 @@ export class KanbanPlaneInner extends Component<{
             aria-label={{if column.label column.label 'Untitled'}}
             style={{this.columnStyle}}
             data-kanban-column={{colIdx}}
+            data-test-column-is-over-wip={{this.isOverWip column colIdx}}
           >
             <KanbanColumnHeader
               @column={{column}}
@@ -243,7 +244,11 @@ export class KanbanPlaneInner extends Component<{
               {{/each}}
 
               {{#unless (this.columnCardCount colIdx)}}
-                <div class='empty-col' aria-hidden='true'>No cards</div>
+                <div
+                  class='empty-col'
+                  aria-hidden='true'
+                  data-test-empty-column={{colIdx}}
+                >No cards</div>
               {{/unless}}
             </div>
           </div>
