@@ -1,4 +1,5 @@
 import type { RealmResourceIdentifier } from './card-reference-resolver';
+import { logger } from './log';
 import { ensureTrailingSlash } from './paths';
 import { assertQuery, InvalidQueryError, type Query } from './query';
 import {
@@ -11,6 +12,8 @@ import type {
   PrerenderedCardCollectionDocument,
 } from './document-types';
 import { SupportedMimeType } from './router';
+
+const searchLog = logger('realm:federated-search');
 
 export type SearchRequestErrorCode =
   | 'missing-realms'
@@ -331,9 +334,18 @@ export async function searchRealms(
       realm,
       label: realm.url ? String(realm.url) : undefined,
     }));
-  let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query)),
-  );
+  // Per-realm wall-clock so we can attribute a slow federated call to a
+  // specific realm. Timing wraps Promise.resolve().then(...) so the
+  // realm.search() promise's actual scheduling latency is included.
+  let perRealmMs = new Array<number>(realmEntries.length).fill(0);
+  let searchPromises = realmEntries.map(({ realm }, index) => {
+    let realmStart = Date.now();
+    return Promise.resolve()
+      .then(() => realm.search(query))
+      .finally(() => {
+        perRealmMs[index] = Date.now() - realmStart;
+      });
+  });
   let results = await Promise.allSettled(searchPromises);
   let queryLabel = '[unserializable query]';
   try {
@@ -350,6 +362,22 @@ export async function searchRealms(
       );
     }
   });
+  let slowRealms = perRealmMs
+    .map((ms, index) => ({
+      ms,
+      label: realmEntries[index]?.label ?? `index ${index}`,
+    }))
+    .filter((entry) => entry.ms >= 1000)
+    .sort((a, b) => b.ms - a.ms);
+  if (slowRealms.length > 0) {
+    let summary = slowRealms
+      .slice(0, 4)
+      .map((e) => `${e.label}=${e.ms}ms`)
+      .join(' ');
+    searchLog.info(
+      `slow searchRealms realms=${realmEntries.length} slow=${slowRealms.length} ${summary}`,
+    );
+  }
   let docs = results.flatMap((result) =>
     result.status === 'fulfilled' ? [result.value] : [],
   );

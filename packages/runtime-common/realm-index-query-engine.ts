@@ -172,9 +172,14 @@ export class RealmIndexQueryEngine {
     query: Query,
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {
+    let totalStart = Date.now();
     let doc: LinkableCollectionDocument;
+    let phaseStart = Date.now();
     let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+    let queryTargetsMs = Date.now() - phaseStart;
 
+    phaseStart = Date.now();
+    let primaryRows: number;
     if (isFileMetaQuery) {
       let { files, meta } = await this.#indexQueryEngine.searchFiles(
         new URL(this.#realm.url),
@@ -193,6 +198,7 @@ export class RealmIndexQueryEngine {
         data: resources,
         meta,
       };
+      primaryRows = files.length;
     } else {
       let { cards, meta } = await this.#indexQueryEngine.searchCards(
         new URL(this.#realm.url),
@@ -212,12 +218,17 @@ export class RealmIndexQueryEngine {
         data: cardResources,
         meta,
       };
+      primaryRows = cards.length;
     }
+    let primaryQueryMs = Date.now() - phaseStart;
 
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
+    let loadLinksMs = 0;
+    let includedCount = 0;
     if (opts?.loadLinks) {
+      phaseStart = Date.now();
       let linkFields = isFileMetaQuery
         ? query.fields?.['file-meta']
         : query.fields?.['card'];
@@ -236,9 +247,32 @@ export class RealmIndexQueryEngine {
       );
       if (included.length > 0) {
         doc.included = included;
+        includedCount = included.length;
       }
+      loadLinksMs = Date.now() - phaseStart;
     }
+
+    phaseStart = Date.now();
     await this.attachRealmInfo(doc);
+    let attachRealmInfoMs = Date.now() - phaseStart;
+
+    let totalMs = Date.now() - totalStart;
+    // 1s is the threshold at which a single realm search becomes visible
+    // as a render stall in queryLoadsInFlight; below that it's just normal
+    // overhead. We log at info so a deliberate LOG_LEVELS=realm:index-query-engine=info
+    // can capture every slow path without flooding default-warn pipelines.
+    if (totalMs >= 1000) {
+      let filterDigest = digestQueryFilter(query);
+      this.#log.info(
+        `slow searchCards realm=${this.#realm.url} total=${totalMs}ms ` +
+          `primaryQuery=${primaryQueryMs}ms (rows=${primaryRows}) ` +
+          `loadLinks=${loadLinksMs}ms (included=${includedCount}) ` +
+          `attachRealmInfo=${attachRealmInfoMs}ms ` +
+          `queryTargetsCheck=${queryTargetsMs}ms ` +
+          `loadLinksOpt=${opts?.loadLinks ? 'on' : 'off'} ` +
+          `filter=${filterDigest}`,
+      );
+    }
     return doc;
   }
 
@@ -1437,6 +1471,34 @@ export class RealmIndexQueryEngine {
     );
     return included;
   }
+}
+
+// Compact shape signal for slow-query logs. Returns the high-level type+on
+// codeRefs and the top-level filter operator (every/any/not/eq/...) so a
+// triage reader can tell "Cohort.policies linksToMany" apart from "any-of
+// 12 type filters" without dumping the full JSON. Capped output length so
+// a worst-case filter doesn't bloat the log line.
+function digestQueryFilter(query: Query): string {
+  if (!query.filter) {
+    return 'noFilter';
+  }
+  let refs: CodeRef[] = [];
+  try {
+    collectFilterRefs(query.filter, refs);
+  } catch {
+    // best-effort — fall through with empty refs
+  }
+  let refLabels = refs
+    .map((ref) => {
+      if (ref && typeof ref === 'object' && 'name' in ref && 'module' in ref) {
+        return `${ref.module}/${(ref as { name: string }).name}`;
+      }
+      return '?';
+    })
+    .slice(0, 4);
+  let topKeys = Object.keys(query.filter).slice(0, 4).join('+');
+  let label = `ops=${topKeys || 'leaf'} refs=${refLabels.join(',') || 'none'}`;
+  return label.length > 240 ? `${label.slice(0, 237)}...` : label;
 }
 
 function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
