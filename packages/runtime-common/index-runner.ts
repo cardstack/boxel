@@ -596,11 +596,13 @@ export class IndexRunner {
   //   3. The URL itself — used for NOVEL executable files (`.gts`
   //      etc.); the file IS a module, pre-warm it directly.
   //
-  // Modules that are already in the cache are skipped (the cache
-  // lookup is O(1) by URL). Misses fire `prerenderer.prerenderModule`
-  // in parallel; module sub-renders go through the module queue and
-  // bypass file admission, so they never deadlock against the (yet
-  // to start) file-visit phase.
+  // Modules that are already cached are returned immediately from the
+  // first DB read inside getModuleCacheEntry; cache misses go through
+  // the read-through path (loadModuleCacheEntryUncached →
+  // getModuleDefinitionsViaPrerenderer → persistModuleCacheEntry),
+  // which is the same flow lookupDefinition uses. We never call the
+  // prerenderer directly from here — DefinitionLookup owns the
+  // in-flight dedup, the cross-process coalescer, and the persist.
   private async preWarmModulesTable(invalidations: URL[]): Promise<void> {
     if (invalidations.length === 0) {
       return;
@@ -618,6 +620,10 @@ export class IndexRunner {
       }
     }
 
+    // Resolve the disk-adoptsFrom signal in parallel for any `.json`
+    // URLs missing a prior deps row, so a wide invalidation set
+    // doesn't pay N sequential file reads here.
+    let novelJsonUrls: URL[] = [];
     let toWarm = new Set<string>();
     for (let url of invalidations) {
       let row = bestByUrl.get(url.href);
@@ -631,9 +637,16 @@ export class IndexRunner {
       } else if (hasExecutableExtension(url.href)) {
         toWarm.add(url.href);
       } else if (url.href.endsWith('.json')) {
-        let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
-        if (adoptsFromModule && hasExecutableExtension(adoptsFromModule)) {
-          toWarm.add(adoptsFromModule);
+        novelJsonUrls.push(url);
+      }
+    }
+    if (novelJsonUrls.length > 0) {
+      let adoptsFrom = await Promise.all(
+        novelJsonUrls.map((u) => this.#readAdoptsFromModuleFromDisk(u)),
+      );
+      for (let module of adoptsFrom) {
+        if (module && hasExecutableExtension(module)) {
+          toWarm.add(module);
         }
       }
     }
@@ -642,51 +655,13 @@ export class IndexRunner {
       return;
     }
 
-    let { resolvedRealmURL, cacheScope, authUserId } =
-      await this.getModuleCacheContext();
-    let cached = await this.#definitionLookup.getModuleCacheEntries({
-      moduleUrls: [...toWarm],
-      cacheScope,
-      authUserId,
-      resolvedRealmURL,
-    });
-    let misses: string[] = [];
-    for (let moduleUrl of toWarm) {
-      let entry = cached[moduleUrl];
-      if (!entry || entry.error) {
-        misses.push(moduleUrl);
-      }
-    }
-
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm plan: candidates=${toWarm.size} cached=${toWarm.size - misses.length} misses=${misses.length}`,
-    );
-
-    if (misses.length === 0) {
-      this.#perfLog.debug(
-        `${jobIdentity(this.#jobInfo)} pre-warm complete (all cached) in ${Date.now() - preWarmStart} ms`,
-      );
-      return;
-    }
-
-    // Parallel pre-warm. Module sub-renders go through the module
-    // queue and bypass file admission, so spawning many at once
-    // saturates the module queue (good — we want the modules table
-    // populated before the file-visit phase starts) without
-    // contending against the still-to-come file admissions.
+    // Call definitionLookup.getModuleCacheEntry per URL in parallel.
+    // Each call short-circuits on a DB cache hit (cheap); on a miss
+    // it goes through the full read-through path including the
+    // in-flight dedup map and the cross-process coalescer.
     let results = await Promise.allSettled(
-      misses.map((moduleUrl) =>
-        this.#prerenderer.prerenderModule({
-          affinityType: 'realm',
-          affinityValue: this.#realmURL.href,
-          realm: this.#realmURL.href,
-          url: moduleUrl,
-          auth: this.#auth,
-          renderOptions: {},
-          ...(this.#jobPriority !== undefined
-            ? { priority: this.#jobPriority }
-            : {}),
-        }),
+      [...toWarm].map((moduleUrl) =>
+        this.#definitionLookup.getModuleCacheEntry(moduleUrl),
       ),
     );
 
@@ -698,12 +673,12 @@ export class IndexRunner {
     }
     if (failed > 0) {
       this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} ${failed} of ${misses.length} module pre-warms failed; the visit phase will retry on-demand if needed`,
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
       );
     }
 
     this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (warmed=${misses.length - failed} failed=${failed})`,
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
     );
   }
 
