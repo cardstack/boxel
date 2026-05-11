@@ -21,15 +21,23 @@ PGROUP_GRACE_SECS=2
 
 # Pidfile records the top-level pgroup leaders dev-all/dev spawn so that
 # `mise run kill-dev-all` can recover after an abnormal exit (SIGKILL, OOM,
-# parent terminal killed) that prevented the trap from firing. Override via
-# BOXEL_DEV_ALL_PIDFILE for parallel dev sessions / tests.
-PIDFILE="${BOXEL_DEV_ALL_PIDFILE:-/tmp/boxel-dev-all.pids}"
+# parent terminal killed) that prevented the trap from firing. Default
+# location prefers $XDG_RUNTIME_DIR (typically /run/user/$UID, mode 0700,
+# per-user) over /tmp (world-writable sticky) so the file can't be
+# symlink-targeted by another local user. Override via BOXEL_DEV_ALL_PIDFILE
+# for parallel dev sessions / tests.
+PIDFILE="${BOXEL_DEV_ALL_PIDFILE:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all.pids}"
 
 # Reset the pidfile at script start. Stale pids from a previous run would
-# either be reused by unrelated processes or simply gone, both bad.
+# either be reused by unrelated processes or simply gone, both bad. `rm -f`
+# unlinks any pre-existing symlink (rm targets the link, not its referent),
+# so the subsequent truncate-via-redirect creates a fresh file even if the
+# location was symlink-poisoned. `chmod 600` then narrows the file to the
+# owning user.
 init_pidfile() {
   rm -f "$PIDFILE" 2>/dev/null || true
   : > "$PIDFILE"
+  chmod 600 "$PIDFILE" 2>/dev/null || true
 }
 
 # Append `<label>=<pid>` to the pidfile. The pid passed in must be a pgroup
@@ -90,7 +98,25 @@ kill_tree() {
     kill -TERM "$_kill_tree_pid" 2>/dev/null || true
   done
 
-  sleep "$KILL_TREE_GRACE_SECS"
+  # Poll at 100ms intervals up to KILL_TREE_GRACE_SECS so a fast,
+  # well-behaved SIGTERM shutdown isn't penalized with the full grace
+  # window. Each tick re-checks whether any tracked pid is still alive
+  # via `kill -0`; we exit as soon as the set is empty. Plain integer
+  # tick counter rather than nanosecond-deadline math because `date +%N`
+  # isn't POSIX (BSD date rejects it).
+  _kill_tree_ticks=$(( KILL_TREE_GRACE_SECS * 10 ))
+  while [ "$_kill_tree_ticks" -gt 0 ]; do
+    _kill_tree_alive=0
+    for _kill_tree_pid in $_kill_tree_pids; do
+      if kill -0 "$_kill_tree_pid" 2>/dev/null; then
+        _kill_tree_alive=1
+        break
+      fi
+    done
+    [ "$_kill_tree_alive" -eq 0 ] && break
+    sleep 0.1
+    _kill_tree_ticks=$(( _kill_tree_ticks - 1 ))
+  done
 
   for _kill_tree_pid in $_kill_tree_pids; do
     kill -KILL "$_kill_tree_pid" 2>/dev/null || true
