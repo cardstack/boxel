@@ -1,5 +1,7 @@
 // Dev-only probe: assert the host's `/_standby` route is browser-loadable
-// before the prerender service starts.
+// AND that Ember has booted far enough to render the route's
+// `#standby-ready` marker — the same two-phase check the real prerender's
+// `#loadStandbyPage` in page-pool.ts performs.
 //
 // Without this gate, the prerender launches while vite is still
 // cold-bundling the host's ~1000-package dep graph. Puppeteer's first
@@ -10,6 +12,15 @@
 // follows fails with "No standby page available," and recovery needs an
 // operator to manually restart the service. The hosted environment serves
 // a pre-built bundle with no optimizer phase, so this probe is dev-only.
+//
+// `domcontentloaded` alone is NOT a sufficient signal. Vite serves the
+// `/_standby` HTML shell as soon as its HTTP server is up — long before
+// the optimizer has bundled the Ember runtime + app graph the page tries
+// to import. Puppeteer treats that bare shell as a successful navigation,
+// so a probe that stops there returns "ready" while Ember is still
+// crashing on unresolved imports. We instead wait for `#standby-ready`,
+// which is rendered by the `/_standby` route's template and therefore
+// only present once Ember has booted and the router has resolved.
 //
 // We don't extend the page pool's retry budget to cover this: it's a dev
 // concern and stretching production's failure-detection window would mask
@@ -63,10 +74,24 @@ async function main() {
       attempt++;
       let page = await browser.newPage();
       try {
-        await page.goto(standbyUrl, {
+        // Mirror page-pool.ts's #loadStandbyPage exactly: each phase gets
+        // its own PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only
+        // covers serving the HTML shell; waiting for Ember to boot and
+        // render `#standby-ready` is a separate clock because on a cold
+        // vite cache the script tag's module fetch can spin while the
+        // optimizer is still bundling its dep graph.
+        let response = await page.goto(standbyUrl, {
           waitUntil: 'domcontentloaded',
           timeout: PER_ATTEMPT_TIMEOUT_MS,
         });
+        let status = response?.status();
+        if (status != null && status >= 400) {
+          throw new Error(`HTTP ${status}`);
+        }
+        await page.waitForFunction(
+          () => !!document.querySelector('#standby-ready'),
+          { timeout: PER_ATTEMPT_TIMEOUT_MS },
+        );
         log(`browser-ready after ${elapsedSec(start)}s (attempt ${attempt})`);
         success = true;
         break;
