@@ -36,9 +36,16 @@ These files live in the workspace:
 - Tracker-schema cards: `Projects/<slug>.json`, `Issues/<slug>.json`,
   `Knowledge Articles/<slug>.json`, `Spec/<slug>.json`
 
-`Bash` is also available for read-only `boxel` CLI commands
-(`boxel status`, `boxel history`, `boxel search`, `boxel read-transpiled`,
-`boxel run-command`) — see the **Realm-side reads** section below.
+`Bash` is also available for `boxel` CLI commands:
+
+- Read-only inspection: `boxel status`, `boxel history`, `boxel search`,
+  `boxel read-transpiled`.
+- `boxel run-command` — dispatches to whatever host command you specify.
+  Most specifiers are read-only inspection commands (`get-card-type-schema`,
+  `evaluate-module`, `instantiate-card`), but the surface itself is generic;
+  treat it as "as safe as the named command."
+
+See the **Realm-side reads** section below for the full usage.
 
 **Inspect before writing.** Read or grep the file you plan to change, and
 glob for sibling files (e.g. existing card definitions in the same
@@ -192,16 +199,23 @@ a tracker card (Project / Issue / KnowledgeArticle), a Spec card, or any
 other card whose shape you need to know. Schemas are cached per-process,
 so repeated calls with the same code ref are free.
 
-## Self-Validation (optional, no side effects)
+## Self-Validation (optional, in-memory results)
 
-All five validators are factory tools, safe to call repeatedly mid-turn;
-none of them write a realm artifact. The orchestrator still runs the full
-validation pipeline (which persists the durable `TestRun` / `LintResult`
-/ `ParseResult` / `EvalResult` / `InstantiateResult` cards) after
-`signal_done`, so calling any of these is optional. The realm-touching
-validators (`run_evaluate`, `run_instantiate`, `run_tests`) push your
-workspace to the realm before invoking the prerenderer, so they always
-see the writes you've just made — no manual sync needed.
+All five validators are factory tools, safe to call repeatedly mid-turn.
+They return in-memory result objects and **do not persist any durable
+validation cards** — the orchestrator still runs the full validation
+pipeline (which persists `TestRun` / `LintResult` / `ParseResult` /
+`EvalResult` / `InstantiateResult` cards) after `signal_done`, so calling
+any of these mid-turn is optional.
+
+**Side effect to know about:** the realm-touching validators
+(`run_evaluate`, `run_instantiate`, `run_tests`) sync your workspace to
+the realm before invoking the prerenderer, so they push whatever you've
+just written. That's the same write the orchestrator's between-iteration
+sync would have done — it's not destructive, but it does mean calling
+these tools is the moment your local writes hit the realm. The lighter
+validators (`run_lint`, `run_parse`) run entirely in-process and don't
+touch the realm.
 
 - `run_lint({ path? })` — Run ESLint + Prettier (with `@cardstack/boxel`
   rules) and return an in-memory `RunLintResult` with `status`,

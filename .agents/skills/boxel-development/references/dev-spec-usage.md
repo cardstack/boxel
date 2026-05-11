@@ -2,7 +2,7 @@
 
 For each top-level card definition, write a Catalog Spec card instance in the target realm's `Spec/` folder. This makes the card discoverable in the Boxel catalog.
 
-Specs adopt from `https://cardstack.com/base/spec#Spec` — that module lives in the base realm, not your target realm. Fetch the authoritative schema by calling the `get_card_schema` factory tool:
+Specs adopt from the `Spec` class exported by `https://cardstack.com/base/spec` — that module lives in the base realm, not your target realm. Fetch the authoritative schema by calling the `get_card_schema` factory tool:
 
 ```
 get_card_schema({ module: 'https://cardstack.com/base/spec', name: 'Spec' })

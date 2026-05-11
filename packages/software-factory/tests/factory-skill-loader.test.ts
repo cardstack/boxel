@@ -106,6 +106,8 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       skills.includes('boxel-file-structure'),
       'includes boxel-file-structure',
     );
+    assert.true(skills.includes('boxel-api'), 'includes boxel-api');
+    assert.true(skills.includes('boxel-command'), 'includes boxel-command');
   });
 
   test('includes ember-best-practices when issue mentions .gts', function (assert) {
@@ -168,37 +170,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('excludes CLI-only skills even when issue mentions sync', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Sync the workspace after local edits',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.false(
-      skills.includes('boxel-sync'),
-      'boxel-sync excluded (CLI-only skill)',
-    );
-  });
-
-  test('excludes CLI-only skills even when issue mentions restore', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Restore workspace to a previous checkpoint',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.false(
-      skills.includes('boxel-restore'),
-      'boxel-restore excluded (CLI-only skill)',
-    );
-  });
-
-  test('excludes all CLI-only skills even when issue mentions multiple CLI operations', function (assert) {
+  test('does not auto-load CLI skills from generic issue keywords', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue({
       description: 'Sync the workspace, track changes, and watch for updates',
@@ -207,12 +179,15 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(issue, project);
 
-    assert.false(skills.includes('boxel-sync'), 'boxel-sync excluded');
-    assert.false(skills.includes('boxel-track'), 'boxel-track excluded');
-    assert.false(skills.includes('boxel-watch'), 'boxel-watch excluded');
+    // CLI skills describe interactive flows for humans. They are not in the
+    // auto-load set and a free-text issue mentioning sync/track/watch should
+    // NOT pull them in — only an explicit knowledge-tag opt-in does.
+    assert.false(skills.includes('boxel-sync'), 'boxel-sync not auto-loaded');
+    assert.false(skills.includes('boxel-track'), 'boxel-track not auto-loaded');
+    assert.false(skills.includes('boxel-watch'), 'boxel-watch not auto-loaded');
   });
 
-  test('excludes CLI-only skills even when added via knowledge article tags', function (assert) {
+  test('CLI skills can be opted in via knowledge article tags', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue();
     let project = makeProject({
@@ -226,13 +201,16 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(issue, project);
 
-    assert.false(
+    // After CS-10613 the factory loader can see boxel-cli's skills, and CLI
+    // skills are no longer filter-banned — an explicit knowledge-article
+    // opt-in is the deliberate way to include them.
+    assert.true(
       skills.includes('boxel-sync'),
-      'boxel-sync excluded even from knowledge tags',
+      'boxel-sync included from knowledge tag',
     );
-    assert.false(
+    assert.true(
       skills.includes('boxel-repair'),
-      'boxel-repair excluded even from knowledge tags',
+      'boxel-repair included from knowledge tag',
     );
   });
 

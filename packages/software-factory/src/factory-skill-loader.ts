@@ -13,10 +13,18 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
 
 /**
  * Additional skill search directories, checked in order when a skill is not
- * found in the primary directory. The monorepo root `.agents/skills/` hosts
- * shared skills like `ember-best-practices` that live outside the package.
+ * found in the primary directory.
+ *
+ * - `packages/boxel-cli/.agents/skills/` hosts the CLI + API skills
+ *   (`boxel-api`, `boxel-command`, `boxel-sync`, etc.) — boxel-cli owns the
+ *   entire Boxel API surface, so its skills describe the platform.
+ * - The monorepo root `.agents/skills/` hosts shared domain skills
+ *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
  */
-const DEFAULT_FALLBACK_DIRS = [join(MONOREPO_ROOT, '.agents', 'skills')];
+const DEFAULT_FALLBACK_DIRS = [
+  join(MONOREPO_ROOT, 'packages', 'boxel-cli', '.agents', 'skills'),
+  join(MONOREPO_ROOT, '.agents', 'skills'),
+];
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
@@ -29,6 +37,8 @@ const SKILL_PRIORITY: readonly string[] = [
   'software-factory-bootstrap',
   'boxel-development',
   'boxel-file-structure',
+  'boxel-api',
+  'boxel-command',
   'ember-best-practices',
   'software-factory-operations',
   'boxel-sync',
@@ -61,20 +71,6 @@ const FACTORY_WORKFLOW_KEYWORDS = [
   'workflow',
   'pipeline',
   'orchestrat',
-];
-
-/**
- * CLI skills that depend on boxel CLI commands. Excluded from the factory
- * agent's tool registry — these skills reference commands the agent
- * cannot invoke. They remain valid for human Claude Code sessions.
- */
-const CLI_ONLY_SKILLS: readonly string[] = [
-  'boxel-sync',
-  'boxel-track',
-  'boxel-watch',
-  'boxel-restore',
-  'boxel-repair',
-  'boxel-setup',
 ];
 
 /**
@@ -141,9 +137,10 @@ export class DefaultSkillResolver implements SkillResolver {
    * 1. boxel-development + boxel-file-structure — always loaded
    * 2. ember-best-practices — when issue involves .gts component code
    * 3. software-factory-operations — for factory delivery workflow issues
-   * 4. KnowledgeArticle tags can specify additional skills
-   *
-   * CLI skills are excluded (see `CLI_ONLY_SKILLS`).
+   * 4. boxel-api + boxel-command — always loaded so the agent has the realm
+   *    search query syntax and host-command failure modes inline.
+   * 5. KnowledgeArticle tags can specify additional skills (including CLI
+   *    skills like boxel-sync if an article explicitly opts in).
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);
@@ -154,7 +151,12 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
     }
 
-    let skills: string[] = ['boxel-development', 'boxel-file-structure'];
+    let skills: string[] = [
+      'boxel-development',
+      'boxel-file-structure',
+      'boxel-api',
+      'boxel-command',
+    ];
 
     if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
       skills.push('ember-best-practices');
@@ -173,9 +175,7 @@ export class DefaultSkillResolver implements SkillResolver {
       }
     }
 
-    // Filter out CLI-only skills that reference boxel CLI commands the
-    // factory agent cannot invoke (tool registry excludes boxel-cli tools).
-    return skills.filter((s) => !CLI_ONLY_SKILLS.includes(s));
+    return skills;
   }
 }
 
