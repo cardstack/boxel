@@ -279,7 +279,6 @@ if (testFilesEnv) {
 }
 
 for (const file of filesToLoad) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   require(file);
 }
 
