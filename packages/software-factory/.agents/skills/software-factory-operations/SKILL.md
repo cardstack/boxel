@@ -46,10 +46,10 @@ directory) before creating new ones.
 
 ## Tracker-schema cards — write JSON directly
 
-Project, IssueTracker, Issue, KnowledgeArticle, and Spec cards are plain `.json` files
-in the workspace. Use `Write` to create them and `Read` + `Edit` (or
-`Read` + `Write` of the merged document) to update them — same workspace
-fs surface as `.gts` files.
+Project, IssueTracker, Issue, KnowledgeArticle, and Spec cards are plain
+`.json` files in the workspace. Use `Write` to create them; to update one,
+`Read` it, then either `Edit` the relevant attributes or `Write` the
+merged document back — same workspace fs surface as `.gts` files.
 
 | File path                        | adoptsFrom                                                     |
 | -------------------------------- | -------------------------------------------------------------- |
@@ -207,13 +207,13 @@ see the writes you've just made — no manual sync needed.
   rules) and return an in-memory `RunLintResult` with `status`,
   `filesChecked`, `filesWithErrors`, `errorCount`, `warningCount`,
   `durationMs`, `lintableFiles`, and per-violation `{ rule, file, line,
-  column, message, severity }`. Without `path`, lints every `.gts` /
+column, message, severity }`. Without `path`, lints every `.gts` /
   `.gjs` / `.ts` / `.js` file in the target realm. With `path`
   (realm-relative file path), lints **only that one file** — prefer this
   right after writing or editing a single file.
 - `run_tests()` — Run the realm's QUnit suite and receive an in-memory
   result object `{ status, passedCount, failedCount, skippedCount,
-  durationMs, testFiles, failures, errorMessage? }`. Use it when you
+durationMs, testFiles, failures, errorMessage? }`. Use it when you
   want feedback before signalling done.
 - `run_parse({ path? })` — Parse and type-check files in the target
   realm and return an in-memory `RunParseResult` with `status`,
@@ -247,7 +247,7 @@ see the writes you've just made — no manual sync needed.
 - `run_instantiate({ path? })` — Instantiate card example instances in
   the target realm via the prerenderer sandbox and return a
   `RunInstantiateResult` (status, instance counts, per-failure `{ path,
-  cardName, error, stackTrace? }`). Without `path`, searches the realm
+cardName, error, stackTrace? }`). Without `path`, searches the realm
   for Spec cards and instantiates every `linkedExample` on every
   card/app Spec; specs with no `linkedExamples` still get a bare
   instantiation to exercise the card class. With `path`, instantiates
