@@ -18,7 +18,7 @@ Description:
 ## What to Create
 
 Create the following artifacts in the target realm using the available tools
-(`write_file`, `update_project`, `update_board`, `update_issue`, `create_knowledge`). Use `search_realm` and
+(`write_file`, `update_issue`, `create_knowledge`). Use `search_realm` and
 `read_file` to inspect existing state before creating anything.
 
 ### 1. Project Card
