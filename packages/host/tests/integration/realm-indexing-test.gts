@@ -21,6 +21,7 @@ import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-sc
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
+import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
 
 import {
   testRealmURL,
@@ -5034,6 +5035,151 @@ posts/ignore-me.json
       realmIndexUpdater.stats.instancesIndexed,
       0,
       'no instances were processed',
+    );
+  });
+
+  test('isolated HTML for the default CardsGrid realm-index card is replaced with the boilerplate when realm has not opted in', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.strictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is the boilerplate constant when the realm has not opted in',
+    );
+    let embeddedHtml = entry?.embeddedHtml ?? {};
+    assert.ok(
+      Object.keys(embeddedHtml).length > 0,
+      'embedded HTML map is populated',
+    );
+    assert.ok(
+      Object.values(embeddedHtml).every((html) => html.length > 0),
+      'every embedded HTML entry has real content',
+    );
+    let fittedHtml = entry?.fittedHtml ?? {};
+    assert.ok(
+      Object.keys(fittedHtml).length > 0,
+      'fitted HTML map is populated',
+    );
+    assert.ok(
+      Object.values(fittedHtml).every((html) => html.length > 0),
+      'every fitted HTML entry has real content',
+    );
+  });
+
+  test('isolated HTML for the default CardsGrid realm-index card is rendered normally when realm has opted in', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              includePrerenderedDefaultRealmIndex: true,
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.notStrictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is not the boilerplate when the realm has opted in',
+    );
+    assert.ok(entry?.isolatedHtml, 'isolated_html is set');
+    assert.ok(
+      (entry?.isolatedHtml ?? '').length > 0,
+      'isolated_html has real content',
+    );
+  });
+
+  test('isolated HTML for a non-CardsGrid index card is rendered normally regardless of opt-in', async function (assert) {
+    class PlainHomePage extends CardDef {
+      static displayName = 'Plain Home Page';
+      @field title = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h1 data-test-plain-home><@fields.title /></h1>
+        </template>
+      };
+    }
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'home.gts': { PlainHomePage },
+        'index.json': {
+          data: {
+            type: 'card',
+            attributes: { title: 'Welcome' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}home`,
+                name: 'PlainHomePage',
+              },
+            },
+          },
+        },
+      },
+    });
+    let entry = await getInstance(realm, new URL(`${testRealmURL}index`));
+    assert.ok(entry, 'realm index card is indexed');
+    assert.notStrictEqual(
+      entry?.isolatedHtml,
+      REALM_INDEX_BOILERPLATE_HTML,
+      'isolated_html is not the boilerplate when the index is a non-CardsGrid card',
+    );
+    assertInnerHtmlMatches(
+      assert,
+      entry?.isolatedHtml,
+      `<h1 data-test-plain-home> Welcome </h1>`,
     );
   });
 });
