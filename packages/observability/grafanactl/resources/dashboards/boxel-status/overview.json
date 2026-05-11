@@ -476,7 +476,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Synapse send-event rate \u2014 `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse access logs. Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
+        "description": "Synapse send-event rate — `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse access logs. Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -599,7 +599,7 @@
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-realm-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "description": "ECS resource utilisation for `boxel-realm-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -739,6 +739,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 10
                 }
               ]
             }
@@ -752,19 +756,22 @@
         },
         "id": 13,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
             ],
             "fields": "",
             "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -809,7 +816,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -824,14 +831,14 @@
           }
         ],
         "title": "Realm Server",
-        "type": "stat"
+        "type": "bargauge"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-prerender-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "description": "ECS resource utilisation for `boxel-prerender-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -971,6 +978,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 10
                 }
               ]
             }
@@ -984,19 +995,22 @@
         },
         "id": 14,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
             ],
             "fields": "",
             "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -1041,7 +1055,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1056,14 +1070,14 @@
           }
         ],
         "title": "Prerender",
-        "type": "stat"
+        "type": "bargauge"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-prerender-manager-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "description": "ECS resource utilisation for `boxel-prerender-manager-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1203,6 +1217,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 10
                 }
               ]
             }
@@ -1216,19 +1234,22 @@
         },
         "id": 15,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
             ],
             "fields": "",
             "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -1273,7 +1294,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1288,14 +1309,14 @@
           }
         ],
         "title": "Prerender Mgr",
-        "type": "stat"
+        "type": "bargauge"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-worker-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' \u2014 CloudWatch is staging/production only.",
+        "description": "ECS resource utilisation for `boxel-worker-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1435,6 +1456,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 10
                 }
               ]
             }
@@ -1448,19 +1473,22 @@
         },
         "id": 16,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
             ],
             "fields": "",
             "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -1505,7 +1533,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "namespace": "AWS/ECS",
+            "namespace": "ECS/ContainerInsights",
             "metricName": "RunningTaskCount",
             "metricEditorMode": 0,
             "metricQueryType": 0,
@@ -1520,7 +1548,7 @@
           }
         ],
         "title": "Worker",
-        "type": "stat"
+        "type": "bargauge"
       },
       {
         "datasource": {
@@ -1623,6 +1651,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 8589934592
                 }
               ]
             },
@@ -1659,6 +1691,10 @@
                       }
                     ]
                   }
+                },
+                {
+                  "id": "max",
+                  "value": 1
                 }
               ]
             }
@@ -1672,19 +1708,22 @@
         },
         "id": 17,
         "options": {
-          "colorMode": "background_solid",
-          "graphMode": "none",
-          "justifyMode": "auto",
-          "orientation": "vertical",
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
             ],
             "fields": "",
             "values": false
-          },
-          "textMode": "value_and_name",
-          "wideLayout": true
+          }
         },
         "pluginVersion": "12.4.3",
         "targets": [
@@ -1720,14 +1759,14 @@
           }
         ],
         "title": "Synapse",
-        "type": "stat"
+        "type": "bargauge"
       },
       {
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Boxel application database transaction rate (xact_commit + xact_rollback) averaged since the postmaster started. Not a rolling window \u2014 recent spikes will be smoothed. Drill into the DB-specific dashboard for detail.",
+        "description": "Boxel application database transaction rate (xact_commit + xact_rollback) averaged since the postmaster started. Not a rolling window — recent spikes will be smoothed. Drill into the DB-specific dashboard for detail.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -2297,7 +2336,7 @@
             "showLineNumbers": false,
             "showMiniMap": false
           },
-          "content": "### Other dashboards\n\n- **Entity dashboards** \u2014 pick a specific entity to inspect:\n  - [Realms](/d/boxelrealms001) \u2014 counts, permissions, indexing status, recent errors\n  - [Users](/d/boxelusers0001) \u2014 credits, realm permissions, grant access\n- **Workflow dashboards**:\n  - [Indexing](/d/aetquzjcf2znke) \u2014 pipeline metrics + operator actions\n  - [Job Queue](/d/boxeljobqueue1) \u2014 generic worker queue (all job types)\n- **Forensics**: [Logs](/d/fetquzizsej28b) \u2014 filter by service, user, realm\n- **Service deep-dives** (stub \u2014 currently filtered logs only): [Realm Server](/d/boxel-svc-realm-server) \u00b7 [Prerender Server](/d/boxel-svc-prerender-server) \u00b7 [Prerender Manager](/d/boxel-svc-prerender-manager) \u00b7 [Worker](/d/boxel-svc-worker) \u00b7 [Synapse](/d/000000012)",
+          "content": "### Other dashboards\n\n- **Entity dashboards** — pick a specific entity to inspect:\n  - [Realms](/d/boxelrealms001) — counts, permissions, indexing status, recent errors\n  - [Users](/d/boxelusers0001) — credits, realm permissions, grant access\n- **Workflow dashboards**:\n  - [Indexing](/d/aetquzjcf2znke) — pipeline metrics + operator actions\n  - [Job Queue](/d/boxeljobqueue1) — generic worker queue (all job types)\n- **Forensics**: [Logs](/d/fetquzizsej28b) — filter by service, user, realm\n- **Service deep-dives** (stub — currently filtered logs only): [Realm Server](/d/boxel-svc-realm-server) · [Prerender Server](/d/boxel-svc-prerender-server) · [Prerender Manager](/d/boxel-svc-prerender-manager) · [Worker](/d/boxel-svc-worker) · [Synapse](/d/000000012)",
           "mode": "markdown"
         },
         "pluginVersion": "12.4.3",
