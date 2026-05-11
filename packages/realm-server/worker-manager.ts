@@ -1,5 +1,26 @@
 import './instrument';
 import './setup-logger'; // This should be first
+
+// During `mise dev-all` Ctrl-C, the bash trap walks the process tree
+// deepest-first. The `dev-log-tee` reader on this process's stdout/stderr
+// can die before this process gets SIGTERM, so any subsequent `log.info` /
+// `console.error` write throws EPIPE. Without these listeners, EPIPE
+// surfaces as an uncaughtException; the existing uncaughtException
+// handler then calls `log.error`, which writes to the same dead stream
+// and throws *again*. Node delivers the throw inside an uncaughtException
+// handler as the next pending exception, so V8 hot-loops re-reporting it
+// (uv__run_check → CheckImmediate → InspectorConsoleCall → Error.stack
+// formatting via ts-node) at ~100% CPU until the process is SIGKILLed —
+// CS-11084. Swallowing EPIPE at the stream level breaks the loop and
+// lets normal SIGTERM-driven shutdown finish.
+const swallowEpipe = (err: NodeJS.ErrnoException) => {
+  if (err?.code !== 'EPIPE') {
+    throw err;
+  }
+};
+process.stdout.on('error', swallowEpipe);
+process.stderr.on('error', swallowEpipe);
+
 import {
   logger,
   userInitiatedPriority,
