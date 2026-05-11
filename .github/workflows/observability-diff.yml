@@ -165,10 +165,10 @@ jobs:
           echo "::endgroup::"
 
       - name: Post sticky PR comment
-        # Pinned to SHA (rather than @v7) because this step has
+        # Pinned to SHA (rather than @v9) because this step has
         # pull-requests: write and runs after assuming an AWS role —
         # supply-chain risk is non-negligible.
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DIFF_FILE: ${{ steps.diff.outputs.diff_file }}
         with:
