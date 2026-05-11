@@ -3183,6 +3183,9 @@ importers:
       '@cardstack/boxel-icons':
         specifier: workspace:*
         version: link:../boxel-icons
+      '@cardstack/host':
+        specifier: workspace:*
+        version: link:../host
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
@@ -3198,6 +3201,9 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@ember/test-helpers':
+        specifier: 'catalog:'
+        version: 5.4.1(@babel/core@7.28.6)(@glint/template@1.7.7)
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
@@ -10227,7 +10233,7 @@ packages:
         optional: true
 
   eslint-plugin-qunit-dom@https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b:
-    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c84190b018deb96c715c7f2bde3536a9c704b}
     version: 0.2.0
     engines: {node: 12.* || 14.* || >= 16.*}
     peerDependencies:
