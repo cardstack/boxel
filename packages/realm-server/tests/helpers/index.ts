@@ -2210,6 +2210,20 @@ export function setupPermissionedRealmCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmCachedOptions,
 ) {
+  // Validate before the cache lookup. The cache key canonicalizes
+  // `fixture` to `null` when `fileSystem` is present (see
+  // permissionedRealmTemplateCacheKey), so an invalid call passing
+  // both would hash the same as a valid `fileSystem`-only call and
+  // silently reuse that template — the throw in
+  // startPermissionedRealmFixture only fires later at beforeEach,
+  // after the misleading reuse. Mirror the same check up front so
+  // an invalid combo errors at test-module load time, before any
+  // cache work runs.
+  if (options.fileSystem && options.fixture) {
+    throw new Error(
+      'setupPermissionedRealmCached: pass either `fileSystem` or `fixture`, not both',
+    );
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {
@@ -2361,6 +2375,16 @@ export function setupPermissionedRealmsCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmsCachedOptions,
 ) {
+  // Same up-front validation as setupPermissionedRealmCached so the
+  // per-realm fileSystem/fixture conflict errors at test-module load
+  // time rather than at beforeEach inside startPermissionedRealmsFixture.
+  for (let realm of options.realms) {
+    if (realm.fileSystem && realm.fixture) {
+      throw new Error(
+        `setupPermissionedRealmsCached: realm "${realm.realmURL}" passed both \`fileSystem\` and \`fixture\` — pass one or the other, not both`,
+      );
+    }
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {
