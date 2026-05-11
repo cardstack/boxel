@@ -64,8 +64,8 @@ export class KanbanBoard extends CardDef {
       return raw
         .map((p) => {
           let colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
-          let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
-          if (colIdx === -1 || cardIdx === -1) return null;
+          let cardIdx = p.itemIndex;
+          if (colIdx === -1 || cardIdx == null || cardIdx < 0 || cardIdx >= cards.length) return null;
           return {
             column: colIdx,
             index: cardIdx,
@@ -80,10 +80,9 @@ export class KanbanBoard extends CardDef {
     }
 
     handleChange = (newPlacements: KanbanPlacement[]) => {
-      let cards = this.args.model.cards ?? [];
       this.args.model.placements = newPlacements.map((p) =>
         Object.assign(new KanbanBoardPlacement(), {
-          itemId: (cards[p.index] as any)?.id ?? '',
+          itemIndex: p.index,
           columnKey: this.columns[p.column]?.key ?? '',
           sortOrder: p.sortOrder,
         }),

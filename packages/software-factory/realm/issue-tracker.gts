@@ -1108,6 +1108,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       },
     );
     if (cardId) {
+      let cards = this.args.model?.cards ?? [];
+      let newIndex = cards.length;
       let existing = this.args.model.placements ?? [];
       let nextOrder = existing.length
         ? Math.max(...existing.map((p) => p.sortOrder ?? 0)) + 1
@@ -1115,7 +1117,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       this.args.model.placements = [
         ...existing,
         Object.assign(new KanbanBoardPlacement(), {
-          itemId: cardId,
+          itemIndex: newIndex,
           columnKey,
           sortOrder: nextOrder,
         }),
@@ -1132,7 +1134,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         card.status = columnKey;
       }
       return Object.assign(new KanbanBoardPlacement(), {
-        itemId: card?.id ?? '',
+        itemIndex: p.index,
         columnKey,
         sortOrder: p.sortOrder,
       });
@@ -1143,11 +1145,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     let stored = this.args.model?.placements;
     let cards = this.args.model?.cards ?? [];
     if (stored?.length) {
-      let placedCardIds = new Set(stored.map((p) => p.itemId));
+      let placedIndices = new Set(stored.map((p) => p.itemIndex));
       let resolved = stored
         .map((p) => {
-          let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
-          if (cardIdx === -1) return null;
+          let cardIdx = p.itemIndex;
+          if (cardIdx == null || cardIdx < 0 || cardIdx >= cards.length)
+            return null;
           let card = cards[cardIdx] as any;
           let effectiveKey = card?.status ?? p.columnKey;
           let colIdx = this.columns.findIndex((c) => c.key === effectiveKey);
@@ -1166,7 +1169,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         : -1;
       let unplaced = cards
         .map((card, idx) => ({ card, idx }))
-        .filter(({ card }) => !placedCardIds.has((card as any).id))
+        .filter(({ idx }) => !placedIndices.has(idx))
         .map(({ card, idx }, i) => {
           let status = (card as any).status ?? 'backlog';
           let colIdx = this.columns.findIndex((c) => c.key === status);
