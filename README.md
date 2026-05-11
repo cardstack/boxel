@@ -158,7 +158,8 @@ This sets the following defaults (all individually overridable):
 | Variable                     | Normal | Turbo |
 | ---------------------------- | ------ | ----- |
 | `PRERENDER_COUNT`            | 1      | 3     |
-| `PRERENDER_PAGE_POOL_SIZE`   | 4      | 4     |
+| `PRERENDER_PAGE_POOL_MIN`    | 4      | 4     |
+| `PRERENDER_PAGE_POOL_MAX`    | 4      | 4     |
 | `WORKER_HIGH_PRIORITY_COUNT` | 0      | 4     |
 | `WORKER_ALL_PRIORITY_COUNT`  | 1      | 4     |
 
@@ -221,7 +222,7 @@ In environment mode, this is at `http://worker.environment-name.localhost/_index
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
 - Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
-- Pooling: Each prerender server maintains up to PRERENDER_PAGE_POOL_SIZE pages (default 4). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
+- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
 - Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
@@ -249,8 +250,9 @@ Prerender server:
 - BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
 - PRERENDER_COUNT (optional): Number of prerender server instances to start. Each gets its own headless Chrome. Default 1.
-- PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
-- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to PRERENDER_PAGE_POOL_SIZE (i.e. a realm can use all available tabs).
+- PRERENDER_PAGE_POOL_MIN (optional): Idle floor for the dynamic page pool. The pool boots at this size and contracts back to it after sustained idle. Default 4 in dev (set in `mise-tasks/lib/env-vars.sh`).
+- PRERENDER_PAGE_POOL_MAX (optional): Burst ceiling for the dynamic page pool. The pool expands up to this size under saturation. Default 4 in dev. Setting MIN === MAX disables expansion/contraction (fixed-size pool).
+- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to the effective pool max (`PRERENDER_PAGE_POOL_MAX` when set, otherwise the fixed `maxPages` pool size).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
