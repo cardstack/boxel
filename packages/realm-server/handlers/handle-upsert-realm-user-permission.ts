@@ -58,10 +58,7 @@ export default function handleUpsertRealmUserPermission({
     realmURL.hash = '';
     let normalizedRealmHref = ensureTrailingSlash(realmURL.href);
 
-    let readResult = parseBoolFlag(
-      ctxt.URL.searchParams.get('read'),
-      'read',
-    );
+    let readResult = parseBoolFlag(ctxt.URL.searchParams.get('read'), 'read');
     if (!readResult.ok) {
       await sendResponseForBadRequest(ctxt, readResult.error);
       return;
