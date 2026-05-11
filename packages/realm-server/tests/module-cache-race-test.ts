@@ -845,20 +845,28 @@ module(basename(__filename), function () {
 
       test('in-flight transpile that completes after invalidate cannot resurrect the L2 row (OCC guard)', async function (assert) {
         // Direct exercise of the L2 OCC WHERE clause. We simulate an
-        // in-flight transpile that captured generation 0 (row absent),
-        // race an invalidate that tombstones-and-bumps to generation 1,
-        // then attempt the writer's UPSERT with the captured value.
-        // The WHERE module_transpile_cache.generation <= captured (0)
-        // must reject the UPSERT — otherwise a stale transpile would
+        // in-flight transpile that captured a pre-invalidate generation,
+        // race an invalidate that tombstones-and-bumps the row, then
+        // attempt the writer's UPSERT with the captured value. The
+        // WHERE module_transpile_cache.generation <= captured must
+        // reject the UPSERT — otherwise a stale transpile would
         // resurrect the row.
+        //
+        // Assertions are gen-delta based rather than absolute: realm
+        // setup + write + __testOnlyClearCaches each fire their own
+        // tombstone-and-bump on this path, so the row's starting gen is
+        // unpredictable. What matters is that the explicit tombstone
+        // here bumps it once, and the stale write that follows leaves
+        // it unchanged.
         let modulePath = 'l2-occ-guard.gts';
         let canonicalUrl = new URL(modulePath, realmURL).href;
         await testRealm.write(modulePath, transpilerHeavySource);
         testRealm.__testOnlyClearCaches();
         await new Promise((resolve) => setTimeout(resolve, 50));
 
+        let preTombstoneGen = (await readL2Generation(canonicalUrl)) ?? 0;
         // Tombstone-and-bump (mimics what invalidateCache does post-
-        // capture). After this, generation = 1 on a tombstone row.
+        // capture).
         await query(dbAdapter, [
           'INSERT INTO module_transpile_cache',
           '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
@@ -874,6 +882,11 @@ module(basename(__filename), function () {
           'generation = module_transpile_cache.generation + 1,',
           'created_at = EXCLUDED.created_at',
         ]);
+        let postTombstoneGen = await readL2Generation(canonicalUrl);
+        assert.ok(
+          postTombstoneGen != null && postTombstoneGen > preTombstoneGen,
+          `tombstone bumped generation (${preTombstoneGen} → ${postTombstoneGen})`,
+        );
 
         // Stale write attempt: captures generation 0 (the pre-invalidate
         // value), tries to UPSERT body. The WHERE clause must reject.
@@ -907,11 +920,11 @@ module(basename(__filename), function () {
           'stale write rejected by OCC WHERE clause — row remains a tombstone',
         );
 
-        let gen = await readL2Generation(canonicalUrl);
+        let finalGen = await readL2Generation(canonicalUrl);
         assert.strictEqual(
-          gen,
-          1,
-          'generation column unchanged at the tombstone value',
+          finalGen,
+          postTombstoneGen,
+          'generation unchanged after the rejected stale write — OCC WHERE clause held',
         );
       });
     },
