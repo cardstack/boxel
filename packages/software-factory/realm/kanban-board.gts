@@ -65,7 +65,13 @@ export class KanbanBoard extends CardDef {
         .map((p) => {
           let colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
           let cardIdx = p.itemIndex;
-          if (colIdx === -1 || cardIdx == null || cardIdx < 0 || cardIdx >= cards.length) return null;
+          if (
+            colIdx === -1 ||
+            cardIdx == null ||
+            cardIdx < 0 ||
+            cardIdx >= cards.length
+          )
+            return null;
           return {
             column: colIdx,
             index: cardIdx,

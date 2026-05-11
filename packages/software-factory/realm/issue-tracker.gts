@@ -1110,12 +1110,23 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     if (cardId) {
       let cards = this.args.model?.cards ?? [];
       let newIndex = cards.length;
-      let existing = this.args.model.placements ?? [];
-      let nextOrder = existing.length
-        ? Math.max(...existing.map((p) => p.sortOrder ?? 0)) + 1
-        : 0;
+      // Use the fully-resolved computed placements so that cards without stored
+      // placements have their sortOrders materialized before we append the new one.
+      // Reading only this.args.model.placements would leave those cards unplaced,
+      // causing them to be re-ordered after the new card.
+      let resolved = this.placements;
+      let nextOrder =
+        resolved
+          .filter((p) => this.columns[p.column]?.key === columnKey)
+          .reduce((max, p) => Math.max(max, p.sortOrder), -1) + 1;
       this.args.model.placements = [
-        ...existing,
+        ...resolved.map((p) =>
+          Object.assign(new KanbanBoardPlacement(), {
+            itemIndex: p.index,
+            columnKey: this.columns[p.column]?.key ?? '',
+            sortOrder: p.sortOrder,
+          }),
+        ),
         Object.assign(new KanbanBoardPlacement(), {
           itemIndex: newIndex,
           columnKey,
@@ -1164,30 +1175,41 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           };
         })
         .filter((p): p is KanbanPlacement => p !== null);
-      let maxOrder = resolved.length
-        ? Math.max(...resolved.map((p) => p.sortOrder))
-        : -1;
+      let colMaxOrder = new Map<number, number>();
+      for (let p of resolved) {
+        let cur = colMaxOrder.get(p.column) ?? -1;
+        if (p.sortOrder > cur) colMaxOrder.set(p.column, p.sortOrder);
+      }
+      let colUnplacedCounts = new Map<number, number>();
       let unplaced = cards
         .map((card, idx) => ({ card, idx }))
         .filter(({ idx }) => !placedIndices.has(idx))
-        .map(({ card, idx }, i) => {
+        .map(({ card, idx }) => {
           let status = (card as any).status ?? 'backlog';
           let colIdx = this.columns.findIndex((c) => c.key === status);
+          let effectiveColIdx = colIdx === -1 ? 0 : colIdx;
+          let base = colMaxOrder.get(effectiveColIdx) ?? -1;
+          let offset = colUnplacedCounts.get(effectiveColIdx) ?? 0;
+          colUnplacedCounts.set(effectiveColIdx, offset + 1);
           return {
-            column: colIdx === -1 ? 0 : colIdx,
+            column: effectiveColIdx,
             index: idx,
-            sortOrder: maxOrder + 1 + i,
+            sortOrder: base + 1 + offset,
           };
         });
       return [...resolved, ...unplaced];
     }
+    let colCounts = new Map<number, number>();
     return cards.map((card, idx) => {
       let status = (card as any).status ?? 'backlog';
       let colIdx = this.columns.findIndex((c) => c.key === status);
+      let effectiveColIdx = colIdx === -1 ? 0 : colIdx;
+      let order = colCounts.get(effectiveColIdx) ?? 0;
+      colCounts.set(effectiveColIdx, order + 1);
       return {
-        column: colIdx === -1 ? 0 : colIdx,
+        column: effectiveColIdx,
         index: idx,
-        sortOrder: idx,
+        sortOrder: order,
       };
     });
   }

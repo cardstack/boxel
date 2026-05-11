@@ -158,6 +158,67 @@ export function runTests() {
       });
     });
 
+    // ── initial sortOrder ─────────────────────────────────────────────────────
+    module('initial sortOrder', function (hooks) {
+      hooks.beforeEach(async function () {
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            ...makeProject(),
+            // Two backlog cards (indices 0, 1) and two in_progress cards (indices 2, 3)
+            ...makeIssue('IT-1', 'backlog', 'Issues/issue-1.json'),
+            ...makeIssue('IT-2', 'backlog', 'Issues/issue-2.json'),
+            ...makeIssue('IT-3', 'in_progress', 'Issues/issue-3.json'),
+            ...makeIssue('IT-4', 'in_progress', 'Issues/issue-4.json'),
+            ...makeBoard(),
+          },
+        });
+      });
+
+      test('each column assigns sortOrder starting at 0, preserving declaration order', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        let backlogCards = document.querySelectorAll(
+          `[data-kanban-column="${COL.backlog}"] [data-test-issue-tracker-card]`,
+        );
+        assert.strictEqual(backlogCards.length, 2, 'backlog has 2 cards');
+        assert.strictEqual(
+          backlogCards[0]?.getAttribute('data-test-issue-tracker-card'),
+          '0',
+          'IT-1 (card index 0) is first in backlog',
+        );
+        assert.strictEqual(
+          backlogCards[1]?.getAttribute('data-test-issue-tracker-card'),
+          '1',
+          'IT-2 (card index 1) is second in backlog',
+        );
+
+        let inProgressCards = document.querySelectorAll(
+          `[data-kanban-column="${COL.in_progress}"] [data-test-issue-tracker-card]`,
+        );
+        assert.strictEqual(
+          inProgressCards.length,
+          2,
+          'in_progress has 2 cards',
+        );
+        assert.strictEqual(
+          inProgressCards[0]?.getAttribute('data-test-issue-tracker-card'),
+          '2',
+          'IT-3 (card index 2) is first in in_progress — sortOrder starts at 0 for each column',
+        );
+        assert.strictEqual(
+          inProgressCards[1]?.getAttribute('data-test-issue-tracker-card'),
+          '3',
+          'IT-4 (card index 3) is second in in_progress',
+        );
+      });
+    });
+
     // ── unknown status ────────────────────────────────────────────────────────
     module('unknown status', function (hooks) {
       hooks.beforeEach(async function () {
@@ -327,7 +388,65 @@ export function runTests() {
     });
 
     // ── add card button ───────────────────────────────────────────────────────
-    module('"add card" button', function (hooks) {
+    module('"add card" button | new card after existing', function (hooks) {
+      hooks.beforeEach(async function () {
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            ...makeProject(),
+            ...makeIssue('IT-1', 'in_progress', 'Issues/issue-1.json'),
+            ...makeBoard(),
+          },
+        });
+      });
+
+      test('new card is placed after existing cards in the same column', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        assert
+          .dom(
+            `[data-kanban-column="${COL.in_progress}"] [data-test-issue-tracker-card]`,
+          )
+          .exists({ count: 1 }, 'IT-1 is already in the in_progress column');
+
+        await click(
+          `[data-kanban-column="${COL.in_progress}"] [data-test-column-add-button]`,
+        );
+        await waitFor('[data-test-stack-card-index="1"]');
+        await fillIn('[data-test-summary-field] input', 'New Card');
+        await click('[data-test-close-button]');
+        await settled();
+
+        assert
+          .dom(
+            `[data-kanban-column="${COL.in_progress}"] [data-test-issue-tracker-card]`,
+          )
+          .exists({ count: 2 }, 'both cards are in the in_progress column');
+
+        let column = document.querySelector(
+          `[data-kanban-column="${COL.in_progress}"]`,
+        )!;
+        let cards = column.querySelectorAll('[data-test-issue-tracker-card]');
+
+        assert.strictEqual(
+          cards[0]?.getAttribute('data-test-issue-tracker-card'),
+          '0',
+          'IT-1 (index 0) appears first — existing card keeps its position',
+        );
+        assert.strictEqual(
+          cards[1]?.getAttribute('data-test-issue-tracker-card'),
+          '1',
+          'new card (index 1) appears second — sorted after existing cards',
+        );
+      });
+    });
+
+    module('"add card" button | empty board', function (hooks) {
       hooks.beforeEach(async function () {
         await setupAcceptanceTestRealm({
           realmURL: testRealmURL,
