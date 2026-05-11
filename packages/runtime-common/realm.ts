@@ -160,6 +160,7 @@ import { filterAtomicOperations } from './atomic-document';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
+  type PopulateCoordinator,
 } from './definition-lookup';
 import {
   fetchSessionRoom,
@@ -226,6 +227,14 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+// CS-11030: DB table backing the cross-process transpile cache and
+// the matching budget the loser path waits before re-reading. Same
+// 180 s budget as CachingDefinitionLookup's COALESCE_NOTIFY_WAIT_MS —
+// prerenders + transpiles run on similar timescales; bigger budgets
+// just delay the fallthrough on missed NOTIFY, smaller budgets risk
+// a second transpile before the winner finishes.
+const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
+const COALESCE_NOTIFY_WAIT_MS = 180_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -605,6 +614,15 @@ export class Realm {
   // exactly one transpile call. Reset by __testOnlyClearCaches so each
   // test reasons from a clean baseline.
   #transpileCallCount = 0;
+  // CS-11030: optional cross-process coalesce coordinator. When set, the
+  // first realm-server in the fleet to miss the in-memory cache for a
+  // given (realm_url, canonical_path) acquires an advisory lock, writes
+  // the transpiled bytes to module_transpile_cache, and emits NOTIFY;
+  // peers wait on NOTIFY and re-read the row instead of each running
+  // babel independently. Undefined in deployments without pg (sqlite /
+  // in-memory) — the realm then runs the uncoordinated CS-11029 path
+  // and writes nothing to the DB cache.
+  #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -669,6 +687,7 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      transpileCoordinator,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -681,6 +700,13 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      // CS-11030: when set, the realm coalesces concurrent cross-process
+      // transpiles through an advisory-lock + NOTIFY winner/loser flow
+      // and persists the resulting bytes to `module_transpile_cache` so
+      // peers re-read instead of re-running babel. Optional — sqlite /
+      // in-memory deployments leave this undefined and the uncoordinated
+      // CS-11029 in-process dedup is the only sharing layer.
+      transpileCoordinator?: PopulateCoordinator;
     },
     opts?: Options,
   ) {
@@ -698,6 +724,7 @@ export class Realm {
       this.#matrixClient.matrixURL.href,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
+    this.#transpileCoordinator = transpileCoordinator;
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
@@ -1320,6 +1347,16 @@ export class Realm {
     // about to be discarded by the generation guard); they install
     // their own pending against current source instead.
     this.#inFlightTranspiles.delete(path);
+    // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
+    // because invalidateCache is sync (called from the LISTEN handler
+    // among others). Best-effort by design — every peer's listener
+    // runs the same DELETE for its own copy, so a transient pg
+    // failure on one peer is repaired by the next; and a stale L2
+    // row that survives is corrected on next reader's invalidate
+    // path or by the writer overwriting it via the ON CONFLICT DO
+    // NOTHING (which becomes a no-op once we re-DELETE).
+    let canonicalPath = this.paths.fileURL(path).href;
+    void this.#deleteTranspileCacheRow(canonicalPath);
   }
 
   // Wipes every #moduleCache entry and bumps the global generation so any
@@ -1335,6 +1372,8 @@ export class Realm {
     // CS-11029: same reason as #dropModuleCacheEntry — post-wipe
     // callers must not join a stale transpile.
     this.#inFlightTranspiles.clear();
+    // CS-11030: fire-and-forget bulk DELETE for the realm's L2 rows.
+    void this.#deleteAllTranspileCacheRows();
   }
 
   #bumpModuleCacheGeneration(path: LocalPath): void {
@@ -2540,14 +2579,14 @@ export class Realm {
       return existing;
     }
     // Assign the chained `.finally` to `pending` and store/return THAT
-    // (not the raw `#materializeAndTranspile` promise). If we kept the
-    // raw promise in the map and dangled an unused `.finally(...)`
-    // chain, a rejection from transpileJS would propagate through both
-    // promises but only the raw one has waiters — the chained one would
-    // surface as an unhandled rejection in Node's host hook. Same shape
-    // as CachingDefinitionLookup.#inFlight.
+    // (not the raw layered promise). If we kept the raw promise in the
+    // map and dangled an unused `.finally(...)` chain, a rejection from
+    // transpileJS would propagate through both promises but only the
+    // raw one has waiters — the chained one would surface as an
+    // unhandled rejection in Node's host hook. Same shape as
+    // CachingDefinitionLookup.#inFlight.
     let pending: Promise<ModuleTranspileResult>;
-    let core = this.#materializeAndTranspile(fileRef, etag);
+    let core = this.#transpileWithLayers(fileRef, etag);
     pending = core.finally(() => {
       if (this.#inFlightTranspiles.get(localPath) === pending) {
         this.#inFlightTranspiles.delete(localPath);
@@ -2555,6 +2594,288 @@ export class Realm {
     });
     this.#inFlightTranspiles.set(localPath, pending);
     return pending;
+  }
+
+  // CS-11030: orchestrates the cache layers below the in-process inflight
+  // dedup. Layering:
+  //   1. read module_transpile_cache — a peer (or this process on a
+  //      prior request that fell out of the in-memory cache) may have
+  //      already produced the bytes; just return them.
+  //   2. (with coordinator) tryAcquireAndRun: winner re-reads the DB,
+  //      transpiles on miss, persists to module_transpile_cache, and
+  //      emits NOTIFY before commit; losers waitForKey + re-read.
+  //   3. (no coordinator, or loser fell through) run #materializeAndTranspile
+  //      directly. The L2 DB write still happens — sqlite deployments
+  //      simply skip the cross-process coalesce.
+  //
+  // The L2 write uses an OCC pattern: the writer captures the row's
+  // `generation` at the L2 read step (or 0 if the row is absent) and
+  // UPSERTs with that captured value via `ON CONFLICT DO UPDATE
+  // WHERE existing.generation <= captured`. An invalidate that lands
+  // during the transpile bumps the row's generation past the captured
+  // value, so the writer's UPSERT is rejected by the WHERE clause and
+  // a stale transpile started before the invalidate cannot resurrect
+  // the row. Mirrors CS-11028's L1 generation guard but with a durable
+  // counter visible to every peer.
+  async #transpileWithLayers(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
+    let coordinator = this.#transpileCoordinator;
+
+    // L2 read first — cheap query (UNLOGGED, indexed PK), saves babel.
+    let cached = await this.#readTranspileCacheRow(canonicalPath);
+    if (cached?.result) {
+      return cached.result;
+    }
+    // capturedGeneration is the row's generation observed at this
+    // point in time — 0 if the row was absent, the tombstone's
+    // generation otherwise. The L2 write uses this value as its OCC
+    // token: any invalidate that races the transpile bumps generation
+    // past `capturedGeneration`, so the write's WHERE clause rejects
+    // the UPSERT.
+    let capturedGeneration = cached?.generation ?? 0;
+
+    if (!coordinator) {
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        capturedGeneration,
+      );
+      return result;
+    }
+
+    let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
+    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
+      // Winner path: a peer may have written between our miss and our
+      // lock acquisition; re-read so we don't redo their work AND
+      // refresh our captured generation in case a tombstone landed.
+      let recheck = await this.#readTranspileCacheRow(canonicalPath);
+      if (recheck?.result) {
+        return recheck.result;
+      }
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        recheck?.generation ?? 0,
+      );
+      return result;
+    });
+    if (attempt.acquired) {
+      return attempt.result;
+    }
+
+    // Loser path: park on NOTIFY (resolves on either the populate
+    // signal or a bounded timeout — see CachingDefinitionLookup's
+    // COALESCE_NOTIFY_WAIT_MS for the rationale on the budget). On
+    // wake, re-read; the row should be there if the winner succeeded.
+    await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
+    let postWait = await this.#readTranspileCacheRow(canonicalPath);
+    if (postWait?.result) {
+      return postWait.result;
+    }
+    // Missed NOTIFY, peer crashed, or the winner skipped persist (e.g.
+    // a generation discard upstream). Fall through to a local transpile;
+    // we still persist so the NEXT reader sees a cached row. Use the
+    // freshest generation we've observed for the OCC token.
+    let result = await this.#materializeAndTranspile(fileRef, etag);
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      result,
+      postWait?.generation ?? 0,
+    );
+    return result;
+  }
+
+  async #readTranspileCacheRow(canonicalPath: string): Promise<
+    | {
+        result?: ModuleTranspileResult;
+        generation: number;
+      }
+    | undefined
+  > {
+    let rows = (await query(this.#dbAdapter, [
+      'SELECT body, headers, dependency_keys, generation',
+      'FROM',
+      MODULE_TRANSPILE_CACHE_TABLE,
+      'WHERE realm_url =',
+      param(this.url),
+      'AND canonical_path =',
+      param(canonicalPath),
+    ])) as {
+      body: string | null;
+      headers: Record<string, string> | string | null;
+      dependency_keys: string[] | string | null;
+      generation: string | number;
+    }[];
+    if (!rows.length) {
+      return undefined;
+    }
+    let row = rows[0];
+    let generation =
+      typeof row.generation === 'string'
+        ? Number(row.generation)
+        : row.generation;
+    if (row.body == null || row.headers == null) {
+      // Tombstone — surface only the generation so the writer can
+      // capture it for OCC.
+      return { generation };
+    }
+    let headers =
+      typeof row.headers === 'string'
+        ? (JSON.parse(row.headers) as Record<string, string>)
+        : row.headers;
+    let canonicalFromHeader = headers['X-Boxel-Canonical-Path'];
+    // canonical_path stores the realm-relative + extension form
+    // matching fileRef.path; the header carries the full URL.
+    // Either is sufficient to reconstruct the result, but the
+    // header is what the response uses, so prefer that and parse
+    // back to the local path for the returned `canonicalPath`.
+    let pathFromHeader: string | undefined = undefined;
+    if (canonicalFromHeader) {
+      try {
+        pathFromHeader = this.paths.local(new URL(canonicalFromHeader));
+      } catch {
+        // ignore
+      }
+    }
+    return {
+      result: {
+        kind: 'module',
+        canonicalPath:
+          pathFromHeader ?? this.paths.local(new URL(canonicalPath)),
+        body: row.body,
+        headers,
+      },
+      generation,
+    };
+  }
+
+  async #writeTranspileCacheRow(
+    canonicalPath: string,
+    result: ModuleTranspileResult,
+    capturedGeneration: number,
+  ): Promise<void> {
+    try {
+      // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
+      // if the row's current generation is still <= capturedGeneration.
+      // If an invalidate has tombstoned-and-bumped the row past that
+      // value, the WHERE clause rejects the UPDATE and the stale
+      // transpile is discarded. capturedGeneration may legitimately be
+      // 0 (row absent at read time, tombstone never created) — in
+      // that case the WHERE 0 <= 0 still allows a no-op same-gen
+      // overwrite which is benign because the bytes are deterministic
+      // for the same source.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        param(result.body),
+        ',',
+        param(JSON.stringify(result.headers)),
+        '::jsonb,',
+        // Dependency keys aren't propagated through #materializeAndTranspile
+        // currently (the in-memory entry derives them lazily from the
+        // transpile body via extractModuleDependencyKeys). Persist an
+        // empty array; the L1 write site recomputes them after the
+        // L2-hit return. A future revision can carry the keys forward to
+        // skip the recomputation on cross-process load.
+        param('[]'),
+        '::jsonb,',
+        param(capturedGeneration),
+        ',',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = EXCLUDED.body,',
+        'headers = EXCLUDED.headers,',
+        'dependency_keys = EXCLUDED.dependency_keys,',
+        'generation = EXCLUDED.generation,',
+        'created_at = EXCLUDED.created_at',
+        `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
+      ]);
+    } catch (err: unknown) {
+      // L2 persistence is best-effort. A transient pg failure must not
+      // break the response the caller is about to serve — they already
+      // have the bytes in memory. Log and move on; the next reader will
+      // re-try the write.
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {
+    try {
+      // Tombstone-and-bump rather than physically DELETE: an in-flight
+      // writer that captured this path's generation BEFORE the
+      // invalidate needs to observe the bumped generation when it
+      // tries to UPSERT, so its WHERE existing.generation <= captured
+      // clause fails and the stale bytes are rejected. A physical
+      // DELETE would let the writer's INSERT succeed (no conflict, no
+      // row to compare against) and resurrect the stale transpile.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        'NULL, NULL, NULL, 1,',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = NULL,',
+        'headers = NULL,',
+        'dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at = EXCLUDED.created_at',
+      ]);
+    } catch (err: unknown) {
+      // Same best-effort posture as #writeTranspileCacheRow — the in-memory
+      // L1 cache for this path was already invalidated, so a stale L2 row
+      // is at worst a brief window before the next reader's transpile
+      // overwrites it (or the next invalidate retries the tombstone).
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} tombstone failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #deleteAllTranspileCacheRows(): Promise<void> {
+    try {
+      // Bulk tombstone-and-bump rather than DELETE — same reason as
+      // #deleteTranspileCacheRow: any in-flight writer captured the
+      // pre-wipe generation and must see a bumped row when it tries
+      // to UPSERT so the OCC WHERE clause rejects the stale write.
+      // Note that this bumps existing rows but does not create new
+      // tombstones for paths that didn't yet have a row; a writer
+      // for one of those paths that captured generation 0 would still
+      // succeed post-wipe, but that's a narrow window and currently
+      // limited to the __testOnly bulk-wipe path.
+      await query(this.#dbAdapter, [
+        'UPDATE',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        'SET body = NULL, headers = NULL, dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at =',
+        param(Date.now()),
+        'WHERE realm_url =',
+        param(this.url),
+      ]);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone failed for ${this.url}: ${String(err)}`,
+      );
+    }
   }
 
   async #materializeAndTranspile(

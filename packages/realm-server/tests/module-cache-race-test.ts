@@ -3,7 +3,8 @@ import { basename } from 'path';
 import type { SuperTest, Test } from 'supertest';
 import type { Server } from 'http';
 import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType, param, query } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupPermissionedRealmCached,
   createJWT,
@@ -623,4 +624,283 @@ module(basename(__filename), function () {
       );
     });
   });
+
+  // CS-11030: the L2 cross-process cache lives in module_transpile_cache.
+  // A request that misses L1 (in-memory) writes the transpiled bytes to
+  // L2 after babel finishes; a peer realm-server with its own in-memory
+  // miss can read the row instead of re-running babel. Invalidation
+  // paths drop the L2 row alongside L1. These tests exercise the read /
+  // write / delete paths from one realm — the coordinator's two-instance
+  // coalesce behavior is exercised by module-cache-coordination-test.ts
+  // and reused via the shared MODULE_CACHE_POPULATED_CHANNEL.
+  module(
+    'Realm.#moduleCache L2 module_transpile_cache (DB-backed)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      const transpilerHeavySource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class L2Card extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-l2><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      // Count rows that are NOT tombstones — `body IS NULL` indicates a
+      // tombstone left behind by invalidateCache or the bulk wipe, and
+      // we want the test to reason about "is the L2 entry usable" not
+      // "does any row exist for this path."
+      async function countL2LiveRows(canonicalUrl: string): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND canonical_path =',
+          param(canonicalUrl),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function readL2Generation(
+        canonicalUrl: string,
+      ): Promise<number | undefined> {
+        let rows = (await query(dbAdapter, [
+          'SELECT generation FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND canonical_path =',
+          param(canonicalUrl),
+        ])) as { generation: string | number }[];
+        if (!rows.length) {
+          return undefined;
+        }
+        let g = rows[0].generation;
+        return typeof g === 'string' ? Number(g) : g;
+      }
+
+      test('a fresh transpile populates module_transpile_cache', async function (assert) {
+        let modulePath = 'l2-populate.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        // Best-effort bulk DELETE is fire-and-forget — give it a moment
+        // to land before we count.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'precondition: L2 row absent after __testOnlyClearCaches',
+        );
+
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        assert.strictEqual(response.status, 200);
+
+        // L2 write is awaited inside #transpileWithLayers, so by the
+        // time the response returns the row is already committed.
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'L2 row written by the transpile completion path',
+        );
+      });
+
+      test('L2 row serves a subsequent reader after L1 wipe (without re-transpile)', async function (assert) {
+        let modulePath = 'l2-serve.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+        let authHdr = authHeader();
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let first = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHdr);
+        assert.strictEqual(first.status, 200);
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'first request seeded L2',
+        );
+
+        let countBefore = testRealm.__testOnlyGetTranspileCallCount();
+
+        // X-Boxel-Disable-Module-Cache bypasses L1 — both the read AND
+        // the set are skipped — so the request goes through the
+        // L2-aware #transpileWithLayers path. With the L2 row already
+        // seeded from `first`, the second request should find the row
+        // and return without invoking transpileJS again. This stands in
+        // for the cross-process scenario where peer B's L1 is empty
+        // because peer A produced the row.
+        let second = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHdr)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+        assert.strictEqual(second.status, 200);
+        let countAfter = testRealm.__testOnlyGetTranspileCallCount();
+        assert.strictEqual(
+          countAfter - countBefore,
+          0,
+          'second request was served from L2 — no new transpileJS call',
+        );
+      });
+
+      test('invalidateCache tombstones the L2 row and bumps generation', async function (assert) {
+        let modulePath = 'l2-invalidate.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'L2 row seeded (live, non-tombstone)',
+        );
+        let preInvalidateGen = await readL2Generation(canonicalUrl);
+
+        testRealm.invalidateCache(modulePath);
+        // Tombstone is fire-and-forget — short wait to let it land.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'invalidateCache tombstoned the L2 row — body is NULL so readers miss',
+        );
+        let postInvalidateGen = await readL2Generation(canonicalUrl);
+        assert.notStrictEqual(
+          preInvalidateGen,
+          undefined,
+          'generation populated on the pre-invalidate row',
+        );
+        assert.notStrictEqual(
+          postInvalidateGen,
+          undefined,
+          'generation populated on the post-invalidate tombstone row',
+        );
+        assert.ok(
+          postInvalidateGen! > preInvalidateGen!,
+          `invalidateCache bumped generation from ${preInvalidateGen} to ${postInvalidateGen} — concurrent in-flight writers with the captured pre-invalidate gen will be rejected by the OCC WHERE clause`,
+        );
+      });
+
+      test('in-flight transpile that completes after invalidate cannot resurrect the L2 row (OCC guard)', async function (assert) {
+        // Direct exercise of the L2 OCC WHERE clause. We simulate an
+        // in-flight transpile that captured generation 0 (row absent),
+        // race an invalidate that tombstones-and-bumps to generation 1,
+        // then attempt the writer's UPSERT with the captured value.
+        // The WHERE module_transpile_cache.generation <= captured (0)
+        // must reject the UPSERT — otherwise a stale transpile would
+        // resurrect the row.
+        let modulePath = 'l2-occ-guard.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        // Tombstone-and-bump (mimics what invalidateCache does post-
+        // capture). After this, generation = 1 on a tombstone row.
+        await query(dbAdapter, [
+          'INSERT INTO module_transpile_cache',
+          '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+          'VALUES (',
+          param(realmURL.href),
+          ',',
+          param(canonicalUrl),
+          ',',
+          'NULL, NULL, NULL, 1,',
+          param(Date.now()),
+          ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+          'body = NULL, headers = NULL, dependency_keys = NULL,',
+          'generation = module_transpile_cache.generation + 1,',
+          'created_at = EXCLUDED.created_at',
+        ]);
+
+        // Stale write attempt: captures generation 0 (the pre-invalidate
+        // value), tries to UPSERT body. The WHERE clause must reject.
+        await query(dbAdapter, [
+          'INSERT INTO module_transpile_cache',
+          '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+          'VALUES (',
+          param(realmURL.href),
+          ',',
+          param(canonicalUrl),
+          ',',
+          param('STALE BODY BYTES'),
+          ',',
+          param('{}'),
+          '::jsonb,',
+          param('[]'),
+          '::jsonb,',
+          param(0),
+          ',',
+          param(Date.now()),
+          ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+          'body = EXCLUDED.body, headers = EXCLUDED.headers,',
+          'dependency_keys = EXCLUDED.dependency_keys,',
+          'generation = EXCLUDED.generation, created_at = EXCLUDED.created_at',
+          'WHERE module_transpile_cache.generation <= EXCLUDED.generation',
+        ]);
+
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'stale write rejected by OCC WHERE clause — row remains a tombstone',
+        );
+
+        let gen = await readL2Generation(canonicalUrl);
+        assert.strictEqual(
+          gen,
+          1,
+          'generation column unchanged at the tombstone value',
+        );
+      });
+    },
+  );
 });
