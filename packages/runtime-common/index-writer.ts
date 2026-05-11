@@ -965,6 +965,90 @@ export class Batch {
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
   }
 
+  // Returns the minimum projection (url, type, deps) needed to order
+  // invalidations by dependency. Server-side selection picks one row per
+  // (url, type) with priority: working-non-deleted > production > working-deleted,
+  // applied via a window function over UNION ALL of both tables. Avoids the
+  // double client-side merge and the dead-weight `error_doc` payload that
+  // `getDependencyRows` carries for the error fan-out path.
+  async getOrderingDependencyRows(
+    urls: string[],
+  ): Promise<Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[]> {
+    await this.ready;
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let uniqueUrls = [...new Set(urls)];
+    // SQLite has a lower parameter limit than Postgres. Each batch binds
+    // `realm_url` and the URL list once per source table, so the per-batch
+    // param count is roughly 2 * (urlBatchSize + 1). Keep the per-call total
+    // within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
+    let selected: Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[] = [];
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      let batchRows = await this.queryOrderingDependencyRows(urlBatch);
+      selected.push(...batchRows);
+    }
+    return selected;
+  }
+
+  private async queryOrderingDependencyRows(
+    urls: string[],
+  ): Promise<Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[]> {
+    if (urls.length === 0) {
+      return [];
+    }
+    let rows = (await this.#query([
+      'SELECT url, type, deps FROM (',
+      'SELECT url, type, deps,',
+      'ROW_NUMBER() OVER (PARTITION BY url, type ORDER BY source_priority) AS rn',
+      'FROM (',
+      'SELECT url, type, deps,',
+      'CASE WHEN is_deleted THEN 2 ELSE 0 END AS source_priority',
+      'FROM boxel_index_working WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+      'UNION ALL',
+      'SELECT url, type, deps, 1 AS source_priority',
+      'FROM boxel_index WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+      ') candidates',
+      ') ranked',
+      'WHERE rn = 1',
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'deps'>[];
+
+    return rows.map((row) => ({
+      url: row.url,
+      type: row.type,
+      deps: row.deps ?? null,
+    }));
+  }
+
   async getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]> {
     await this.ready;
     if (urls.length === 0) {
