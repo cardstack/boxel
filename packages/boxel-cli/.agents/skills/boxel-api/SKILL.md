@@ -1,6 +1,6 @@
 ---
 name: boxel-api
-description: Use when calling Boxel realm-server APIs from code — federated search across realms, realm creation, and realm readiness. Documents the boxel-cli programmatic surface (`BoxelCLIClient`) and the matching CLI commands. Read this whenever you need to query a realm's index or spin up a new realm.
+description: Use when calling Boxel realm-server APIs from code — primarily federated search across realms. Documents the boxel-cli programmatic surface (`BoxelCLIClient`) and the matching CLI commands. Read this whenever you need to query a realm's index.
 ---
 
 # Boxel API
@@ -32,8 +32,8 @@ boxel search --realm <realm-url> [--realm <realm-url>...] --query '<json>'
 ### Programmatic
 
 ```ts
-let result = await client.search(realmUrl, query);              // single realm
-let result = await client.search([realmA, realmB], query);      // federated
+let result = await client.search(realmUrl, query); // single realm
+let result = await client.search([realmA, realmB], query); // federated
 ```
 
 Returns `{ ok, status, data?, error? }`. `data` is an array of card resources.
@@ -160,56 +160,18 @@ CodeRef fields (e.g. `ref` on a Spec card) are matched against the full `{ modul
 - **Slash separators in dotted paths.** Use `author.firstName`, not `author/firstName`.
 - **Searching relationships that aren't rendered in an embedded/fitted template.** The query engine indexes a linked field only if it appears in an embedded format. Otherwise the filter silently misses.
 
-## Realm creation
-
-Create a new realm on the realm server. Auth and per-realm token acquisition happen automatically (per CS-10642 — the server-session JWT is minted from the active profile, the new realm's per-realm token is fetched after creation and cached).
-
-### CLI
-
-```
-boxel realm create <realm-name> "<display-name>" \
-  [--background <url>] [--icon <url>]
-```
-
-### Programmatic
-
-```ts
-let result = await client.createRealm({
-  realmName: 'sticky-notes',
-  displayName: 'Sticky Notes',
-  backgroundURL: 'https://...',
-  iconURL: 'https://...',
-  waitForReady: true, // default — blocks until /_readiness-check passes
-});
-// → { realmUrl, created }
-```
-
-`waitForReady: true` (the default) polls `/_readiness-check` until the realm is ready before returning. Set to `false` only if you want to do that polling yourself with `client.waitForReady`.
-
-## Realm readiness
-
-Poll `/_readiness-check` until the realm is ready:
-
-```ts
-let result = await client.waitForReady(realmUrl, 30_000);
-// → { ready: true } or { ready: false, error: '...' }
-```
-
-Useful after operations that may leave the realm in a transient state. `createRealm` calls this internally by default.
-
 ## When to use what
 
-| Goal | Use |
-|---|---|
-| Find cards in your local synced workspace | Native `grep` / `find` — files are already on disk |
-| Find cards by type / field across one or more realms | `boxel search` / `client.search` |
-| Read a single card's source from a realm | `client.read(realmUrl, path)` / `boxel file read` |
-| Read the transpiled (browser) version of a `.gts` module | `client.readTranspiled(...)` / `boxel read-transpiled` |
-| List files in a realm | `client.listFiles(realmUrl)` / `boxel file list` |
-| Provision a new realm | `client.createRealm(...)` / `boxel realm create` |
-| Push local changes to a realm | `client.sync(realmUrl, dir, { preferLocal: true })` / `boxel sync` |
-| Pull a realm's state to a local dir | `client.pull(realmUrl, dir)` / `boxel pull` |
-| Run a host command (prerendered) | See the `boxel-command` skill |
+| Goal                                                     | Use                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| Find cards in your local synced workspace                | Native `grep` / `find` — files are already on disk                 |
+| Find cards by type / field across one or more realms     | `boxel search` / `client.search`                                   |
+| Read a single card's source from a realm                 | `client.read(realmUrl, path)` / `boxel file read`                  |
+| Read the transpiled (browser) version of a `.gts` module | `client.readTranspiled(...)` / `boxel read-transpiled`             |
+| List files in a realm                                    | `client.listFiles(realmUrl)` / `boxel file list`                   |
+| Push local changes to a realm                            | `client.sync(realmUrl, dir, { preferLocal: true })` / `boxel sync` |
+| Pull a realm's state to a local dir                      | `client.pull(realmUrl, dir)` / `boxel pull`                        |
+| Run a host command (prerendered)                         | See the `boxel-command` skill                                      |
 
 ## What this skill is **not** for
 
@@ -217,3 +179,4 @@ Useful after operations that may leave the realm in a transient state. `createRe
 - **JSON:API document structure** for card instances — that's `boxel-file-structure`.
 - **Sync / pull / track / watch CLI ergonomics** — those have their own per-command skills (`boxel-sync`, `boxel-track`, `boxel-watch`).
 - **Host commands via the prerenderer** (`/_run-command`) — that's the `boxel-command` skill.
+- **Realm provisioning** (`createRealm` / `boxel realm create`) and **readiness polling** (`client.waitForReady` / `/_readiness-check`) — orchestration concerns. The software-factory creates target realms in `factory-target-realm.ts` before the agent loop starts; consumers needing those APIs should read `boxel-cli/src/api.ts` directly or run `boxel realm create --help`.
