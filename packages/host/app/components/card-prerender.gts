@@ -58,6 +58,8 @@ import {
   withTimersBlocked,
 } from '../utils/render-timer-stub';
 
+import type { Model as HtmlRouteModel } from '../routes/render/html';
+
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type NetworkService from '../services/network';
@@ -609,8 +611,7 @@ export default class CardPrerender extends Component {
       if (
         format === 'isolated' &&
         ancestorLevel === 0 &&
-        (routeInfo.attributes as { useRealmIndexBoilerplate?: boolean })
-          .useRealmIndexBoilerplate
+        (routeInfo.attributes as HtmlRouteModel).useRealmIndexBoilerplate
       ) {
         await this.#ensureRenderReady(routeInfo);
         return REALM_INDEX_BOILERPLATE_HTML;

@@ -4,7 +4,6 @@ import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
 import {
-  baseCardRef,
   internalKeyFor,
   isRealmIndexCardId,
   isValidFormat,
@@ -34,7 +33,6 @@ const CARDS_GRID_REF = {
   name: 'CardsGrid',
 } as ResolvedCodeRef;
 const CARDS_GRID_INTERNAL_KEY = internalKeyFor(CARDS_GRID_REF, undefined);
-const BASE_CARD_INTERNAL_KEY = internalKeyFor(baseCardRef, undefined);
 
 export interface Model {
   instance: CardDef;
@@ -137,12 +135,6 @@ export default class RenderHtmlRoute extends Route<Model> {
     }
     let topKey = internalKeyFor(topType, undefined);
     if (topKey !== CARDS_GRID_INTERNAL_KEY) {
-      return false;
-    }
-    // If the type chain starts at base CardDef directly (i.e. the
-    // card adoptsFrom CardDef rather than CardsGrid) we have a false
-    // positive — guard against it explicitly.
-    if (topKey === BASE_CARD_INTERNAL_KEY) {
       return false;
     }
     let info = this.realm.info(cardRealmURL.href);
