@@ -239,6 +239,170 @@ test.describe('Publish realm', () => {
     ).toBeVisible();
   });
 
+  test('re-publishing reflects updated source content on the published URL (CS-11043)', async ({
+    page,
+  }) => {
+    // CS-11043 regression net. The bug was: a republish reported success
+    // server-side but the published URL kept serving the previous publish's
+    // rendered HTML, sometimes for tens of hours. Every existing
+    // publish-realm test does exactly one publish — this is the gap the
+    // bug slipped through. Here we publish, change content, publish
+    // again, and assert the published URL shows the new content (and not
+    // the old).
+
+    await clearLocalStorage(page, serverIndexUrl);
+    user = await createSubscribedUserAndLogin(
+      page,
+      'publish-realm',
+      serverIndexUrl,
+    );
+
+    let serverURL = new URL(serverIndexUrl);
+    let defaultRealmURL = `${serverURL.protocol}//${serverURL.host}/${user.username}/new-workspace/`;
+
+    await createRealm(page, 'new-workspace', '1New Workspace');
+
+    // Define a card type whose isolated template renders a single
+    // sentinel string we can grep for in the published HTML.
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'sentinel-card.gts',
+      `
+        import { CardDef, Component, field, contains } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class SentinelCard extends CardDef {
+          @field value = contains(StringField);
+
+          static isolated = class extends Component<typeof this> {
+            <template>
+              <div data-test-sentinel-output>{{@model.value}}</div>
+            </template>
+          };
+        }
+      `,
+    );
+
+    // Initial index.json: an instance of SentinelCard carrying the
+    // sentinel that we expect the first publish to render.
+    let initialSentinel = `sentinel-initial-${Date.now()}`;
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'index.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: { value: initialSentinel },
+            meta: {
+              adoptsFrom: { module: './sentinel-card', name: 'SentinelCard' },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Open the publish modal and do the first publish.
+    await page.locator('[data-test-workspace="1New Workspace"]').click();
+    await page.locator('[data-test-submode-switcher] button').click();
+    await page.locator('[data-test-boxel-menu-item-text="Host"]').click();
+    await page.locator('[data-test-publish-realm-button]').click();
+    await page.locator('[data-test-default-domain-checkbox]').click();
+    await page.locator('[data-test-publish-button]').click();
+    await page.waitForSelector('[data-test-unpublish-button]');
+
+    // Open the published URL and verify the initial sentinel renders.
+    let firstTabPromise = page.waitForEvent('popup');
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
+      .click();
+    let firstTab = await firstTabPromise;
+    await firstTab.waitForLoadState();
+    await expect(firstTab.locator('[data-test-sentinel-output]')).toHaveText(
+      initialSentinel,
+      { timeout: 30_000 },
+    );
+    await firstTab.close();
+    await page.bringToFront();
+
+    // Close the modal so we can re-open it cleanly for the second publish.
+    await page.locator('[data-test-close-modal]').click();
+
+    // Change the index card's sentinel value. This is the "user edits
+    // their realm between publishes" step.
+    let updatedSentinel = `sentinel-updated-${Date.now()}`;
+    await postCardSource(
+      page,
+      defaultRealmURL,
+      'index.json',
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: { value: updatedSentinel },
+            meta: {
+              adoptsFrom: { module: './sentinel-card', name: 'SentinelCard' },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Re-open the publish modal. The default-domain checkbox is still
+    // there (the realm appears as already-published in the modal); the
+    // publish button is what we re-click to push the new content.
+    await page.locator('[data-test-publish-realm-button]').click();
+    // The publish handler awaits sourceRealm.indexing() before doing the
+    // copy, so we don't need a manual settle here — the click below
+    // serializes behind any pending incremental indexing on the source.
+    await page.locator('[data-test-default-domain-checkbox]').click();
+    let publishButton = page.locator('[data-test-publish-button]');
+    // Set up the network wait BEFORE clicking — the handler awaits the
+    // full reindex before returning 202, so the response is the
+    // authoritative "publish is done" signal. 60s budget covers the
+    // from-scratch reindex even on slow CI.
+    let publishResponsePromise = page.waitForResponse(
+      (r) =>
+        r.url().endsWith('/_publish-realm') && r.request().method() === 'POST',
+      { timeout: 60_000 },
+    );
+    await publishButton.click();
+    let publishResponse = await publishResponsePromise;
+    expect(
+      publishResponse.status(),
+      'second publish should succeed',
+    ).toBeLessThan(300);
+
+    // Open the published URL again and verify the UPDATED sentinel
+    // renders — and the initial sentinel does NOT. This is the
+    // assertion CS-11043 would have failed: the old test only checked
+    // for "card visible", which stays true even when serving stale
+    // content.
+    let secondTabPromise = page.waitForEvent('popup');
+    await page
+      .locator(
+        '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
+      )
+      .click();
+    let secondTab = await secondTabPromise;
+    await secondTab.waitForLoadState();
+    await expect(secondTab.locator('[data-test-sentinel-output]')).toHaveText(
+      updatedSentinel,
+      { timeout: 30_000 },
+    );
+    await expect(secondTab.locator('body')).not.toContainText(initialSentinel);
+    await secondTab.close();
+    await page.bringToFront();
+  });
+
   test('open site popover opens with shift-click', async ({ page }) => {
     await publishDefaultRealm(page);
 
