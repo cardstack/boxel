@@ -1216,13 +1216,14 @@ If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step
 
 ## Prerender capacity tuning knobs
 
-Three env vars control the per-prerender-server shape. They're resolved once at `PagePool` construction; changes require a process restart.
+Four env vars control the per-prerender-server shape. The first three are resolved once at `PagePool` construction; the indexer-side cap is resolved per visit-loop entry. All require a process restart to change.
 
 | Env var | Default | What it controls | When to change it |
 |---|---|---|---|
 | `PRERENDER_PAGE_POOL_MIN` / `_MAX` | unset → fixed pool of `options.maxPages` (5) | Dynamic-pool envelope. The pool boots at MIN, expands up to MAX under saturation, contracts back to MIN after sustained idle. The live capacity is what the server reports to the manager on each heartbeat, which drives warm-vacancy routing. | Fleet capacity. Raise MAX when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower MAX if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. Setting MIN === MAX disables expansion/contraction. |
 | `PRERENDER_AFFINITY_TAB_MAX` | `5` (clamped to the effective pool max: `PRERENDER_PAGE_POOL_MAX` when set, otherwise fixed `maxPages`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool. | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level. |
 | `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling) | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob. | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant. |
+| `INDEX_RUNNER_MAX_CONCURRENCY` | `4` | Hard cap on the number of in-flight file visits a single IndexRunner will keep open during a batch (`fromScratch` and `incremental` paths). Independent of the prerender pool's envelope: the indexer uses `min(envelope = PRERENDER_AFFINITY_TAB_MAX − 1, maxLayerWidth, this knob)` to size visit concurrency. | Throttling. Lower (e.g. `2` or `1`) to slow a noisy realm's reindex on a shared fleet without changing per-affinity prerender invariants. Raise on a fleet with extra capacity if you've also raised `PRERENDER_AFFINITY_TAB_MAX`. Setting to `1` is effectively the pre-parallelism serial behaviour for batches that would otherwise exceed the threshold gates. |
 
 **Default invariant**: when `PRERENDER_AFFINITY_FILE_CONCURRENCY` is unset, the effective file-admission cap equals the deadlock-safety ceiling — same behavior as before the knob existed. Changing the knob is an explicit operator decision driven by `admissionMs` telemetry; don't adjust it without data.
 
@@ -1233,6 +1234,73 @@ file-queue admission: cap=2 (affinityTabMax=5, deadlock-safety ceiling=4)
 ```
 
 Grep for `file-queue admission: cap=` in prerender-server logs to confirm the effective value in a running fleet.
+
+## Indexer-side visit concurrency
+
+`IndexRunner.fromScratch` and `IndexRunner.incremental` no longer visit files serially — they use a bounded-`Promise.allSettled` queue sized from the topological-layer width of the invalidation graph plus the `INDEX_RUNNER_MAX_CONCURRENCY` ceiling. Understanding the sizing rule matters when triaging "why didn't my reindex go faster?" or "why is one realm starving others on the prerender fleet?".
+
+### The sizing rule
+
+For every batch, the runner computes:
+
+```
+let totalWork    = invalidations.length;
+let envelopeMax  = max(1, PRERENDER_AFFINITY_TAB_MAX - 1);   // reserve one tab for module sub-prerenders
+let hardCap      = parseInt(INDEX_RUNNER_MAX_CONCURRENCY ?? '4', 10);
+
+if (totalWork    < 10)  concurrency = 1;   // tiny batch — overhead-dominated, stays serial
+if (maxLayerWidth ≤ 2)  concurrency = 1;   // near-linear chain — extra workers wait on the head
+otherwise              concurrency = min(envelopeMax, maxLayerWidth, hardCap);
+```
+
+Each component is enforced for a separate reason, and observing which one is binding tells you what changes would actually move the needle.
+
+| Constraint | When it binds | What raising/lowering it does |
+|---|---|---|
+| **`totalWork < 10`** | Small incremental edits (e.g. editing one `.gts` that fans out to 1-2 consumers) | Below the threshold the cold-tab tax (3-5s per fresh tab joining the affinity's shared `BrowserContext` + per-tab cardDoc / store / Glimmer-compile warmup) exceeds the parallelism payoff. Threshold is a hard-coded `10` in `index-runner.ts`; lower it only if you have measured benefit on smaller batches. |
+| **`maxLayerWidth ≤ 2`** | Module edits whose consumer chain is essentially linear (A → B → C → D) | Extra workers would all queue behind whichever node is currently in-degree-0. Width is observed by `dependency-resolver.ts::orderInvalidationsByDependencies` during the Kahn walk and reported back to the runner. |
+| **`envelopeMax = PRERENDER_AFFINITY_TAB_MAX − 1`** | High `tabQueueMs` / `admissionMs` on the row's `timing_diagnostics.waits` | Indicates the prerender pool's per-affinity envelope is the bottleneck. Raise `PRERENDER_AFFINITY_TAB_MAX` (subject to the deadlock-safety floor of 2) AND `PRERENDER_PAGE_POOL_MAX`. |
+| **`maxLayerWidth`** | A wide layer in the dep graph (e.g. all card instances depending on a few base modules) | The widest topological layer is the natural upper bound on useful in-flight visits — spawning more workers just leaves them idle. Lowering this isn't a knob; widening the graph is a content-side change. |
+| **`hardCap = INDEX_RUNNER_MAX_CONCURRENCY`** | A single realm's reindex is monopolising the prerender fleet | Default `4`. Lower for throttling; raise when you've also raised the pool max. Setting to `1` is effectively the pre-parallelism serial behaviour. |
+
+### Reading the sizing decision in logs
+
+Every fromScratch / incremental pass logs the inputs and the chosen concurrency at debug level on the `index-perf` logger:
+
+```
+[job: <id>.<rid>] from-scratch visit plan: files=189 maxLayerWidth=91 topoDepth=2 concurrency=4
+[job: <id>.<rid>] incremental visit plan: files=12 maxLayerWidth=11 topoDepth=2 concurrency=4
+```
+
+Match the `concurrency` value to the table above. If it's lower than you'd expect, the binding constraint is whichever of `files` / `maxLayerWidth` / `envelopeMax` / `hardCap` it equals. Patterns to recognise:
+
+- **`concurrency=1` with `files >= 10`**: `maxLayerWidth ≤ 2`. Dep graph is too linear for parallelism to help. Sometimes this is correct (a tight module chain), sometimes the dep resolver is producing a too-conservative ordering — cross-check by reading deps from `boxel_index` for a sample.
+- **`concurrency=1` with `files < 10`**: the small-batch threshold. Single-file incremental edits will always land here; this is by design.
+- **`concurrency=4` with `maxLayerWidth >> 4`**: hard-cap binding. The dep graph has way more parallelism available than the runner is taking. Raise `INDEX_RUNNER_MAX_CONCURRENCY` if the prerender fleet has spare capacity.
+- **`concurrency=4` with `maxLayerWidth=4`**: layer-width binding. Raising the cap doesn't help; widen the graph or accept the floor.
+
+### Per-row priority is unchanged
+
+Parallel visits inherit the same `priority` (0 system-initiated / 10 user-initiated) as the job that enqueued them; nothing in the runner's parallelism touches priority routing. A `priority=10` user reindex with `concurrency=4` issues four priority-10 prerender requests at a time — they compete against other priority-10 work on the fleet, just N at a time instead of one.
+
+### Order independence — why this is safe
+
+The indexer is order-independent by construction, which is what makes the bounded queue safe to run without explicit layer barriers:
+
+1. `Batch.#invalidations` is fully populated by `batch.invalidate(...)` inside `discoverInvalidations` *before* the visit loop starts. The only cross-visit read — `IndexBackedDependencyErrors.collectDirectRelationshipErrors` — uses this stable snapshot to skip propagating errors for deps that are in the current batch, so its answer doesn't depend on which other visits have completed.
+2. Renderer-side reads from `_card-doc` / `_federated-search` go through `boxel_index` (without `useWorkInProgressIndex`), so every visit sees the pre-batch state of every other URL in the batch — the same state the old serial loop saw too. Whether visit A precedes visit B doesn't change what B reads about A. This is documented in `realm.ts::parseRealmInfo` and `index-runner.ts::sortInvalidations`.
+3. Per-row writes to `boxel_index_working` are keyed on `(url, realm_url, type)` — disjoint across visits, so concurrent upserts never contend at the row level.
+4. Postgres pool gives a fresh client per query, so the per-visit `updateEntry` writes run on independent connections.
+
+The topological sort produced by `orderInvalidationsByDependencies` is preserved because it still has heuristic value under parallelism: modules sort ahead of instances, so the first wave of parallel tabs amortises module-extract work through the cross-tab `modules` table.
+
+### When parallelism is the cause of a regression
+
+Symptoms to look for:
+
+- **All-cold-tab batch**: many rows with `tabReused: false` and `tabStartupMs > 0`. With high concurrency and a cold realm affinity, the indexer can spawn N fresh tabs all at once, each paying the full warmup tax. The headline wall-clock will still be lower than serial, but per-row `launchMs` numbers look surprising. Pre-warm via `PRERENDER_PAGE_POOL_MIN` to keep tabs hot between batches if this is a recurring problem.
+- **Cross-realm fairness collapse**: one realm's reindex is starving renders for others. Compare `prerender-queue-snapshot` log lines across realms — if one affinity's `pending` is consistently the maximum allowed by envelope and others see nothing, lower `INDEX_RUNNER_MAX_CONCURRENCY` for the noisy realm or its environment.
+- **Sudden `tabQueueMs` jumps**: parallel visits within one realm filled the affinity's tab budget faster than expected. Either `PRERENDER_AFFINITY_TAB_MAX` is too low for the workload or the realm has unexpectedly high module sub-prerender fan-out per file.
 
 ## Extending the diagnostics
 

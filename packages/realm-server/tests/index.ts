@@ -293,7 +293,6 @@ function parseTestFiles(value: string): string[] {
     .map((entry) => entry.replace(/\.ts$/, ''))
     .map((entry) => (entry.startsWith('./') ? entry : `./${entry}`));
 }
->>>>>>> 91164b3045 (Parallelize the indexer visit loop with width-aware bounded concurrency)
 
 function parseModules(value: string): string[] {
   return value

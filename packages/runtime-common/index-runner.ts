@@ -381,7 +381,10 @@ export class IndexRunner {
       current.#scheduleClearCacheForNextRender();
     }
 
-    let hrefs = urls.map((u) => u.href);
+    // Set-based membership check so the per-task `delete-and-in-seed`
+    // guard stays O(1). With large fan-outs the inner Array.includes
+    // would otherwise be O(n) per task.
+    let hrefs = new Set(urls.map((u) => u.href));
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -400,7 +403,7 @@ export class IndexRunner {
         async (invalidation) => {
           if (
             operations.get(invalidation.href) === 'delete' &&
-            hrefs.includes(invalidation.href)
+            hrefs.has(invalidation.href)
           ) {
             // file is deleted, there is nothing to visit
           } else if (resumedRows.has(invalidation.href)) {
