@@ -1,6 +1,9 @@
 # Build output
 dist/
 
+# Cached shallow clone of cardstack/boxel-skills used by scripts/build-skills.ts
+.boxel-skills-cache/
+
 # Dependencies
 node_modules/
 

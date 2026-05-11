@@ -1,0 +1,15 @@
+{
+  "name": "cardstack-boxel",
+  "owner": {
+    "name": "Cardstack",
+    "url": "https://boxel.ai"
+  },
+  "description": "Claude Code plugins published from the cardstack/boxel monorepo.",
+  "plugins": [
+    {
+      "name": "boxel-cli",
+      "source": "./packages/boxel-cli/plugin",
+      "description": "Skills for working with Boxel realms via @cardstack/boxel-cli."
+    }
+  ]
+}

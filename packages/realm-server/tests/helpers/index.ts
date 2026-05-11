@@ -236,6 +236,33 @@ export const matrixRegistrationSecret = getMatrixRegistrationSecret();
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
+const PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+  'PRERENDER_HIGH_PRIORITY_THRESHOLD',
+  'PRERENDER_POOL_IDLE_CONTRACTION_MS',
+] as const;
+
+function withEnvUnset<T>(keys: readonly string[], fn: () => T): T {
+  let previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (let key of keys) {
+      delete process.env[key];
+    }
+    return fn();
+  } finally {
+    for (let [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
 const trackedServers = new Set<Server>();
@@ -608,7 +635,12 @@ export function getPrerendererForTesting(options: {
   serverURL: string;
   maxPages?: number;
 }): TestPrerenderer {
-  let prerenderer = new LocalPrerenderer(options);
+  let prerenderer =
+    options.maxPages === undefined
+      ? new LocalPrerenderer(options)
+      : withEnvUnset(PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS, () => {
+          return new LocalPrerenderer(options);
+        });
   trackPrerenderer(prerenderer);
   return prerenderer;
 }

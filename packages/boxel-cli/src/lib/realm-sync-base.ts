@@ -9,6 +9,8 @@ type Ignore = ReturnType<typeof ignoreModule>;
 
 // Files that must never be pushed, deleted, or overwritten on the server via CLI.
 export const PROTECTED_FILES = new Set(['.realm.json']);
+const DELETE_TIMEOUT_MS = 10_000;
+const DELETE_TIMEOUT_PROBE_MS = 3_000;
 
 export function isProtectedFile(relativePath: string): boolean {
   const normalizedPath = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -578,13 +580,45 @@ export abstract class RealmSyncBase {
     }
 
     const url = this.buildFileUrl(relativePath);
+    const startedAt = Date.now();
 
-    const response = await this.authenticator.authedRealmFetch(url, {
-      method: 'DELETE',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.authenticator.authedRealmFetch(url, {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+        signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
+      });
+    } catch (error) {
+      let elapsedMs = Date.now() - startedAt;
+      console.error(
+        `  Delete request failed after ${elapsedMs}ms: ${relativePath}`,
+      );
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      ) {
+        let deleteApplied = await this.verifyDeleteApplied(relativePath);
+        if (deleteApplied === true) {
+          console.warn(
+            `  Delete response timed out after ${DELETE_TIMEOUT_MS}ms, but ${relativePath} is already gone on the realm; continuing`,
+          );
+          return;
+        }
+        throw new Error(
+          `Timed out deleting ${relativePath} after ${DELETE_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+
+    let elapsedMs = Date.now() - startedAt;
+    console.log(
+      `  Delete response for ${relativePath}: ${response.status} ${response.statusText} (${elapsedMs}ms)`,
+    );
 
     if (!response.ok && response.status !== 404) {
       throw new Error(
@@ -593,6 +627,30 @@ export abstract class RealmSyncBase {
     }
 
     console.log(`  Deleted: ${relativePath}`);
+  }
+
+  private async verifyDeleteApplied(
+    relativePath: string,
+  ): Promise<boolean | 'unknown'> {
+    const url = this.buildFileUrl(relativePath);
+    try {
+      const response = await this.authenticator.authedRealmFetch(url, {
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+        signal: AbortSignal.timeout(DELETE_TIMEOUT_PROBE_MS),
+      });
+      console.warn(
+        `  Delete-timeout probe for ${relativePath}: ${response.status} ${response.statusText}`,
+      );
+      return response.status === 404 ? true : false;
+    } catch (probeError) {
+      console.warn(
+        `  Delete-timeout probe failed for ${relativePath}:`,
+        probeError,
+      );
+      return 'unknown';
+    }
   }
 
   protected async deleteLocalFile(localPath: string): Promise<void> {

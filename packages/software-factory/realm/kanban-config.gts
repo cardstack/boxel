@@ -1,7 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import enumField from 'https://cardstack.com/base/enum';
 
-import { IssueOption } from './issue-option';
+import { IssueOptionField } from './issue-option';
 
 export interface Option {
   value: string;
@@ -85,8 +85,8 @@ export function findOptionColor(
   return options?.find((option) => option.value === value)?.color;
 }
 
-export function buildIssueOptionFields(options: Option[]): IssueOption[] {
-  return options.map((option) => new IssueOption(option));
+export function buildIssueOptionFields(options: Option[]): IssueOptionField[] {
+  return options.map((option) => new IssueOptionField(option));
 }
 
 type IssueStatusOptionSource = {
@@ -129,7 +129,7 @@ export function configuredIssueStatusOptions(
 
 export const IssueStatusField = enumField(StringField, {
   options: function (this: {
-    project?: { issueStatusOptions?: IssueOption[] } | null;
+    project?: { issueStatusOptions?: IssueOptionField[] } | null;
   }) {
     return configuredIssueStatusOptions(this);
   },

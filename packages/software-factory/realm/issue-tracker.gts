@@ -37,8 +37,9 @@ import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import { KanbanBoardPlacement, KanbanBoard } from './kanban-board';
+import { KanbanBoard } from './kanban-board';
 import { KanbanColumnField } from './kanban-column';
+import { KanbanBoardPlacement } from './kanban-board-placement';
 import {
   issueStatusOptions,
   projectStatusOptions,
@@ -51,8 +52,9 @@ import {
   ProjectStatusField,
 } from './kanban-config';
 import { Comment } from './comment';
+import { KnowledgeArticle } from './knowledge-article';
 import { StatusPill } from './status-pill';
-import { IssueOption } from './issue-option';
+import { IssueOptionField } from './issue-option';
 
 const issueCodeRef: ResolvedCodeRef = {
   // @ts-expect-error this is not a CJS file, import.meta is allowed
@@ -60,15 +62,9 @@ const issueCodeRef: ResolvedCodeRef = {
   name: 'Issue',
 };
 
-// const boardCodeRef: ResolvedCodeRef = {
-//   // @ts-expect-error this is not a CJS file, import.meta is allowed
-//   module: new URL('./issue-tracker', import.meta.url).href,
-//   name: 'IssueTrackerBoard',
-// };
-
 // ── Issue ──────────────────────────────────────────────────────────────────
 type IssueStatusProject = {
-  issueStatusOptions?: IssueOption[];
+  issueStatusOptions?: IssueOptionField[];
 };
 
 type IssueStatusIssue = {
@@ -245,6 +241,15 @@ class IssueIsolated extends Component<typeof Issue> {
                 <h3 class='sidebar-section-title'>Blocked By</h3>
                 <div class='related-list'>
                   <@fields.blockedBy />
+                </div>
+              </div>
+            {{/if}}
+
+            {{#if @model.relatedKnowledge.length}}
+              <div class='sidebar-section'>
+                <h3 class='sidebar-section-title'>Related Knowledge</h3>
+                <div class='related-list'>
+                  <@fields.relatedKnowledge />
                 </div>
               </div>
             {{/if}}
@@ -469,6 +474,7 @@ export class Issue extends CardDef {
   @field priority = contains(IssuePriorityField);
   @field project = linksTo(() => Project);
   @field blockedBy = linksToMany(() => Issue);
+  @field relatedKnowledge = linksToMany(() => KnowledgeArticle);
   @field acceptanceCriteria = contains(MarkdownField);
   @field order = contains(NumberField);
   @field createdAt = contains(DateTimeField);
@@ -501,7 +507,7 @@ export class Issue extends CardDef {
     <template>
       <div class='issue-card'>
         <div class='meta-row'>
-          <span class='issue-id'>{{if
+          <span class='issue-id' data-test-issue-id>{{if
               @model.issueId
               @model.issueId
               'ISSUE'
@@ -610,10 +616,15 @@ export class Issue extends CardDef {
 
   static edit = class Edit extends Component<typeof Issue> {
     <template>
-      <div class='issue-edit'>
+      <div class='issue-edit' data-test-issue-edit>
         <section class='edit-section'>
           <h2 class='section-heading'>Basic Info</h2>
-          <FieldContainer @label='Summary' @tag='label' @vertical={{true}}>
+          <FieldContainer
+            @label='Summary'
+            @tag='label'
+            @vertical={{true}}
+            data-test-summary-field
+          >
             <@fields.summary />
           </FieldContainer>
           <div class='field-row'>
@@ -625,7 +636,12 @@ export class Issue extends CardDef {
             </FieldContainer>
           </div>
           <div class='field-row'>
-            <FieldContainer @label='Status' @tag='label' @vertical={{true}}>
+            <FieldContainer
+              @label='Status'
+              @tag='label'
+              @vertical={{true}}
+              data-test-issue-edit-status
+            >
               <@fields.status />
             </FieldContainer>
             <FieldContainer @label='Priority' @tag='label' @vertical={{true}}>
@@ -656,6 +672,9 @@ export class Issue extends CardDef {
           </FieldContainer>
           <FieldContainer @label='Blocked By' @vertical={{true}}>
             <@fields.blockedBy />
+          </FieldContainer>
+          <FieldContainer @label='Related Knowledge' @vertical={{true}}>
+            <@fields.relatedKnowledge />
           </FieldContainer>
         </section>
       </div>
@@ -715,7 +734,7 @@ export class Project extends CardDef {
   @field objective = contains(MarkdownField);
   @field scope = contains(MarkdownField);
   @field technicalContext = contains(MarkdownField);
-  @field issueStatusOptions = containsMany(IssueOption);
+  @field issueStatusOptions = containsMany(IssueOptionField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -724,16 +743,9 @@ export class Project extends CardDef {
       },
     },
   });
+  @field knowledgeBase = linksToMany(() => KnowledgeArticle);
   @field successCriteria = contains(MarkdownField);
   @field testArtifactsRealmUrl = contains(StringField);
-  // @field board = linksTo(() => IssueTrackerBoard, {
-  //   query: {
-  //     filter: {
-  //       on: boardCodeRef,
-  //       eq: { 'project.id': '$this.id' },
-  //     },
-  //   },
-  // });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
@@ -1035,20 +1047,328 @@ export class Project extends CardDef {
   };
 }
 
-// ── IssueTrackerBoard ──────────────────────────────────────────────────────
-export class IssueTrackerBoard extends KanbanBoard {
+// ── IssueTrackerIsolated ──────────────────────────────────────────────
+
+class IssueTrackerIsolated extends Component<typeof IssueTracker> {
+  get columns(): KanbanColumnConfig[] {
+    return buildColumnsFromStatusOptions(
+      getProjectIssueStatusOptions(this.args.model?.project),
+    ).map((col) => ({
+      key: col.key ?? null,
+      label: col.label ?? null,
+      color: col.color ?? null,
+      collapsed: col.collapsed ?? null,
+      sortOrder: col.sortOrder ?? null,
+      wipLimit: col.wipLimit ?? null,
+    }));
+  }
+
+  get statusColor(): string | undefined {
+    return findOptionColor(
+      projectStatusOptions,
+      this.args.model?.project?.projectStatus,
+    );
+  }
+
+  get cardCount(): number {
+    return this.args.model?.cards?.length ?? 0;
+  }
+
+  toggleHideEmptyColumns = (): void => {
+    this.args.model.hideEmptyColumns = !this.args.model?.hideEmptyColumns;
+  };
+
+  openCard = (index: number): void => {
+    let card = this.args.model.cards?.[index];
+    if (card) {
+      this.args.viewCard?.(card, 'isolated');
+    }
+  };
+
+  addCardTask = dropTask(async (columnKey: string | null) => {
+    if (!columnKey) return;
+    let model = this.args.model as any;
+    let boardRealmURL: URL | undefined = model[realmURL];
+    let projectId: string | null = model.project?.id ?? null;
+    let cardId = await this.args.createCard?.(
+      issueCodeRef,
+      new URL(issueCodeRef.module),
+      {
+        realmURL: boardRealmURL,
+        doc: {
+          data: {
+            type: 'card',
+            attributes: { status: columnKey },
+            relationships: projectId
+              ? { project: { links: { self: projectId } } }
+              : {},
+            meta: { adoptsFrom: issueCodeRef },
+          },
+        },
+      },
+    );
+    if (cardId) {
+      let existing = this.args.model.placements ?? [];
+      let nextOrder = existing.length
+        ? Math.max(...existing.map((p) => p.sortOrder ?? 0)) + 1
+        : 0;
+      this.args.model.placements = [
+        ...existing,
+        Object.assign(new KanbanBoardPlacement(), {
+          itemId: cardId,
+          columnKey,
+          sortOrder: nextOrder,
+        }),
+      ];
+    }
+  });
+
+  handleChange = (newPlacements: KanbanPlacement[]) => {
+    let cards = this.args.model?.cards ?? [];
+    this.args.model.placements = newPlacements.map((p) => {
+      let columnKey = this.columns[p.column]?.key ?? '';
+      let card = cards[p.index] as any;
+      if (card && card.status !== columnKey) {
+        card.status = columnKey;
+      }
+      return Object.assign(new KanbanBoardPlacement(), {
+        itemId: card?.id ?? '',
+        columnKey,
+        sortOrder: p.sortOrder,
+      });
+    });
+  };
+
+  get placements(): KanbanPlacement[] {
+    let stored = this.args.model?.placements;
+    let cards = this.args.model?.cards ?? [];
+    if (stored?.length) {
+      let placedCardIds = new Set(stored.map((p) => p.itemId));
+      let resolved = stored
+        .map((p) => {
+          let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
+          if (cardIdx === -1) return null;
+          let card = cards[cardIdx] as any;
+          let effectiveKey = card?.status ?? p.columnKey;
+          let colIdx = this.columns.findIndex((c) => c.key === effectiveKey);
+          if (colIdx === -1)
+            colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
+          if (colIdx === -1) return null;
+          return {
+            column: colIdx,
+            index: cardIdx,
+            sortOrder: p.sortOrder ?? 0,
+          };
+        })
+        .filter((p): p is KanbanPlacement => p !== null);
+      let maxOrder = resolved.length
+        ? Math.max(...resolved.map((p) => p.sortOrder))
+        : -1;
+      let unplaced = cards
+        .map((card, idx) => ({ card, idx }))
+        .filter(({ card }) => !placedCardIds.has((card as any).id))
+        .map(({ card, idx }, i) => {
+          let status = (card as any).status ?? 'backlog';
+          let colIdx = this.columns.findIndex((c) => c.key === status);
+          return {
+            column: colIdx === -1 ? 0 : colIdx,
+            index: idx,
+            sortOrder: maxOrder + 1 + i,
+          };
+        });
+      return [...resolved, ...unplaced];
+    }
+    return cards.map((card, idx) => {
+      let status = (card as any).status ?? 'backlog';
+      let colIdx = this.columns.findIndex((c) => c.key === status);
+      return {
+        column: colIdx === -1 ? 0 : colIdx,
+        index: idx,
+        sortOrder: idx,
+      };
+    });
+  }
+
+  <template>
+    <div class='board-surface'>
+      <header class='kanban-toolbar'>
+        <div class='toolbar-left'>
+          <div class='kanban-heading'>
+            <h2 class='kanban-title'>
+              <SquareKanban />
+              <@fields.cardTitle />
+            </h2>
+            {{#if @model.project}}
+              <div class='kanban-project'>
+                <span class='dim-label'>Project</span>
+                <@fields.project @format='atom' />
+              </div>
+            {{/if}}
+          </div>
+          <div>
+            <span class='card-count' data-test-issue-tracker-card-count>
+              {{#if (eq this.cardCount 1)}}
+                1 card
+              {{else}}
+                {{this.cardCount}}
+                cards
+              {{/if}}
+            </span>
+          </div>
+        </div>
+        <div class='toolbar-right'>
+          <div class='column-visibility-toggle'>
+            <span class='group-by-label'>Hide empty</span>
+            <Switch
+              @isEnabled={{@model.hideEmptyColumns}}
+              @onChange={{this.toggleHideEmptyColumns}}
+              @label='Hide empty columns'
+            />
+          </div>
+        </div>
+      </header>
+      <div class='kanban-area'>
+        <KanbanPlane
+          @columns={{this.columns}}
+          @placements={{this.placements}}
+          @hideEmpty={{@model.hideEmptyColumns}}
+          @onChange={{this.handleChange}}
+          @onOpen={{this.openCard}}
+          @onAddCard={{this.addCardTask.perform}}
+        >
+          <:card as |placement|>
+            {{#let (get @fields.cards placement.index) as |CardField|}}
+              {{#if CardField}}
+                <div
+                  class='card-wrap'
+                  data-test-issue-tracker-card={{placement.index}}
+                >
+                  <CardField @format='fitted' />
+                </div>
+              {{/if}}
+            {{/let}}
+          </:card>
+          <:ghost as |dragIdx|>
+            {{#let (get @fields.cards dragIdx) as |CardField|}}
+              {{#if CardField}}
+                <div class='card-wrap'>
+                  <CardField @format='fitted' />
+                </div>
+              {{/if}}
+            {{/let}}
+          </:ghost>
+        </KanbanPlane>
+      </div>
+    </div>
+    <style scoped>
+      .board-surface {
+        --board-bg: var(--background, var(--boxel-200));
+        --board-fg: var(--foreground, var(--boxel-700));
+        --board-card-bg: var(--card, var(--boxel-light));
+        --board-card-fg: var(--foreground, var(--boxel-dark));
+        --board-muted-bg: var(--muted, var(--boxel-100));
+        --board-muted-fg: var(--muted-foreground, var(--boxel-500));
+        --board-border: var(--border, var(--boxel-border-color));
+
+        height: 100%;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        background-color: var(--board-bg);
+        color: var(--board-fg);
+      }
+      .kanban-area {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .card-wrap {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: inherit;
+      }
+      .kanban-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 1rem;
+        border-bottom: 1px solid var(--board-border);
+        background: var(--board-card-bg);
+        color: var(--board-card-fg);
+        flex-shrink: 0;
+      }
+      .toolbar-left {
+        display: flex;
+        gap: 0.5rem;
+      }
+      .kanban-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .column-visibility-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .group-by-label {
+        font-size: 0.75rem;
+        color: var(--board-muted-fg);
+        white-space: nowrap;
+      }
+      .kanban-title {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      .kanban-project {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .dim-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--board-muted-fg);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .card-count {
+        font-size: 0.75rem;
+        color: var(--board-muted-fg);
+        padding: 0.125rem 0.5rem;
+        background: var(--board-muted-bg);
+        border-radius: 4px;
+      }
+    </style>
+  </template>
+}
+
+// ── IssueTracker ──────────────────────────────────────────────────────
+
+export class IssueTracker extends KanbanBoard {
   static displayName = 'Issue Tracker Board';
 
   @field project = linksTo(() => Project);
 
   @field cards = linksToMany(() => Issue, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return this.project?.issues;
     },
   });
 
   @field columns = containsMany(KanbanColumnField, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return buildColumnsFromStatusOptions(
         getProjectIssueStatusOptions(this.project),
       );
@@ -1058,14 +1378,14 @@ export class IssueTrackerBoard extends KanbanBoard {
   @field placements = containsMany(KanbanBoardPlacement);
 
   @field cardTitle = contains(StringField, {
-    computeVia: function (this: IssueTrackerBoard) {
+    computeVia: function (this: IssueTracker) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
         : (this.boardTitle ?? this.project?.cardTitle ?? 'Issue Tracker Board');
     },
   });
 
-  static edit = class Edit extends Component<typeof IssueTrackerBoard> {
+  static edit = class Edit extends Component<typeof IssueTracker> {
     <template>
       <div class='board-edit'>
         <FieldContainer @label='Project' @vertical={{true}}>
@@ -1094,329 +1414,5 @@ export class IssueTrackerBoard extends KanbanBoard {
     </template>
   };
 
-  static isolated = class IssueTrackerBoardIsolated extends Component<
-    typeof IssueTrackerBoard
-  > {
-    get columns(): KanbanColumnConfig[] {
-      return buildColumnsFromStatusOptions(
-        getProjectIssueStatusOptions(this.args.model?.project),
-      ).map((col) => ({
-        key: col.key ?? null,
-        label: col.label ?? null,
-        color: col.color ?? null,
-        collapsed: col.collapsed ?? null,
-        sortOrder: col.sortOrder ?? null,
-        wipLimit: col.wipLimit ?? null,
-      }));
-    }
-
-    get statusColor(): string | undefined {
-      return findOptionColor(
-        projectStatusOptions,
-        this.args.model?.project?.projectStatus,
-      );
-    }
-
-    get cardCount(): number {
-      return this.args.model?.cards?.length ?? 0;
-    }
-
-    toggleHideEmptyColumns = (): void => {
-      this.args.model.hideEmptyColumns = !this.args.model?.hideEmptyColumns;
-    };
-
-    addCardTask = dropTask(async (columnKey: string | null) => {
-      if (!columnKey) return;
-      let model = this.args.model as any;
-      let boardRealmURL: URL | undefined = model[realmURL];
-      let projectId: string | null = model.project?.id ?? null;
-      let cardId = await this.args.createCard?.(
-        issueCodeRef,
-        new URL(issueCodeRef.module),
-        {
-          realmURL: boardRealmURL,
-          doc: {
-            data: {
-              type: 'card',
-              attributes: { status: columnKey },
-              relationships: projectId
-                ? { project: { links: { self: projectId } } }
-                : {},
-              meta: { adoptsFrom: issueCodeRef },
-            },
-          },
-        },
-      );
-      if (cardId) {
-        let existing = this.args.model.placements ?? [];
-        let nextOrder = existing.length
-          ? Math.max(...existing.map((p) => p.sortOrder ?? 0)) + 1
-          : 0;
-        this.args.model.placements = [
-          ...existing,
-          Object.assign(new KanbanBoardPlacement(), {
-            itemId: cardId,
-            columnKey,
-            sortOrder: nextOrder,
-          }),
-        ];
-      }
-    });
-
-    handleChange = (newPlacements: KanbanPlacement[]) => {
-      let cards = this.args.model?.cards ?? [];
-      this.args.model.placements = newPlacements.map((p) => {
-        let columnKey = this.columns[p.column]?.key ?? '';
-        let card = cards[p.index] as any;
-        if (card && card.status !== columnKey) {
-          card.status = columnKey;
-        }
-        return Object.assign(new KanbanBoardPlacement(), {
-          itemId: card?.id ?? '',
-          columnKey,
-          sortOrder: p.sortOrder,
-        });
-      });
-    };
-
-    get placements(): KanbanPlacement[] {
-      let stored = this.args.model?.placements;
-      let cards = this.args.model?.cards ?? [];
-      if (stored?.length) {
-        let placedCardIds = new Set(stored.map((p) => p.itemId));
-        let resolved = stored
-          .map((p) => {
-            let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
-            if (cardIdx === -1) return null;
-            let card = cards[cardIdx] as any;
-            let effectiveKey = card?.status ?? p.columnKey;
-            let colIdx = this.columns.findIndex((c) => c.key === effectiveKey);
-            if (colIdx === -1)
-              colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
-            if (colIdx === -1) return null;
-            return {
-              column: colIdx,
-              index: cardIdx,
-              sortOrder: p.sortOrder ?? 0,
-            };
-          })
-          .filter((p): p is KanbanPlacement => p !== null);
-        let maxOrder = resolved.length
-          ? Math.max(...resolved.map((p) => p.sortOrder))
-          : -1;
-        let unplaced = cards
-          .map((card, idx) => ({ card, idx }))
-          .filter(({ card }) => !placedCardIds.has((card as any).id))
-          .map(({ card, idx }, i) => {
-            let status = (card as any).status ?? 'backlog';
-            let colIdx = this.columns.findIndex((c) => c.key === status);
-            return {
-              column: colIdx === -1 ? 0 : colIdx,
-              index: idx,
-              sortOrder: maxOrder + 1 + i,
-            };
-          });
-        return [...resolved, ...unplaced];
-      }
-      return cards.map((card, idx) => {
-        let status = (card as any).status ?? 'backlog';
-        let colIdx = this.columns.findIndex((c) => c.key === status);
-        return {
-          column: colIdx === -1 ? 0 : colIdx,
-          index: idx,
-          sortOrder: idx,
-        };
-      });
-    }
-
-    <template>
-      <div class='board-surface'>
-        <header class='kanban-toolbar'>
-          <div class='toolbar-left'>
-            <div class='kanban-heading'>
-              <h2 class='kanban-title'>
-                <SquareKanban />
-                <@fields.cardTitle />
-              </h2>
-              {{#if @model.project}}
-                <div class='kanban-project'>
-                  <span class='dim-label'>Project</span>
-                  <@fields.project @format='atom' />
-                </div>
-              {{/if}}
-            </div>
-            <div>
-              <span class='card-count'>
-                {{#if (eq this.cardCount 1)}}
-                  1 card
-                {{else}}
-                  {{this.cardCount}}
-                  cards
-                {{/if}}
-              </span>
-            </div>
-          </div>
-          <div class='toolbar-right'>
-            <div class='column-visibility-toggle'>
-              <span class='group-by-label'>Hide empty</span>
-              <Switch
-                @isEnabled={{@model.hideEmptyColumns}}
-                @onChange={{this.toggleHideEmptyColumns}}
-                @label='Hide empty columns'
-              />
-            </div>
-            {{!-- <div class='group-by-picker'>
-            <SortDropdown
-              @options={{this.groupByOptions}}
-              @selectedOption={{this.selectedGroupByOption}}
-              @onSelect={{this.onGroupByChange}}
-            />
-          </div> --}}
-            {{!-- <ContextButton
-            class='settings-button'
-            @label='Toggle column settings'
-            @icon='context-menu-vertical'
-            @variant='ghost'
-            {{on 'click' this.toggleSettings}}
-          /> --}}
-          </div>
-        </header>
-        <div class='kanban-area'>
-          <KanbanPlane
-            @columns={{this.columns}}
-            @placements={{this.placements}}
-            @hideEmpty={{@model.hideEmptyColumns}}
-            @onChange={{this.handleChange}}
-            @onAddCard={{this.addCardTask.perform}}
-          >
-            <:card as |placement|>
-              {{#let (get @fields.cards placement.index) as |CardField|}}
-                {{#if CardField}}
-                  <div class='card-wrap'>
-                    <CardField @format='fitted' @displayContainer={{false}} />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </:card>
-            <:ghost as |dragIdx|>
-              {{#let (get @fields.cards dragIdx) as |CardField|}}
-                {{#if CardField}}
-                  <div class='card-wrap'>
-                    <CardField @format='fitted' @displayContainer={{false}} />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </:ghost>
-          </KanbanPlane>
-        </div>
-      </div>
-      <style scoped>
-        .board-surface {
-          --board-bg: var(--background, var(--boxel-200));
-          --board-fg: var(--foreground, var(--boxel-700));
-          --board-card-bg: var(--card, var(--boxel-light));
-          --board-card-fg: var(--foreground, var(--boxel-dark));
-          --board-muted-bg: var(--muted, var(--boxel-100));
-          --board-muted-fg: var(--muted-foreground, var(--boxel-500));
-          --board-border: var(--border, var(--boxel-border-color));
-
-          height: 100%;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-          background-color: var(--board-bg);
-          color: var(--board-fg);
-        }
-        .kanban-area {
-          flex: 1;
-          min-height: 0;
-          overflow: hidden;
-        }
-        .card-wrap {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          border-radius: inherit;
-        }
-        .kanban-toolbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0.625rem 1rem;
-          border-bottom: 1px solid var(--board-border);
-          background: var(--board-card-bg);
-          color: var(--board-card-fg);
-          flex-shrink: 0;
-        }
-        .toolbar-left {
-          display: flex;
-          gap: 0.5rem;
-        }
-        .kanban-heading {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-        .toolbar-right {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
-        }
-        .group-by-picker {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          min-width: 11rem;
-        }
-        .column-visibility-toggle {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-        .group-by-label {
-          font-size: 0.75rem;
-          color: var(--board-muted-fg);
-          white-space: nowrap;
-        }
-        .group-by-picker :deep(.sort-options-label) {
-          color: var(--board-muted-fg);
-          font-size: 0.75rem;
-        }
-        .group-by-picker :deep(.sort-button) {
-          min-width: 8rem;
-        }
-        .kanban-title {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
-          font-size: var(--boxel-font-size);
-          font-weight: 600;
-          margin: 0;
-          letter-spacing: -0.01em;
-        }
-        .kanban-project {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
-        }
-        .dim-label {
-          font-size: 0.75rem;
-          font-weight: 500;
-          color: var(--board-muted-fg);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-        .card-count {
-          font-size: 0.75rem;
-          color: var(--board-muted-fg);
-          padding: 0.125rem 0.5rem;
-          background: var(--board-muted-bg);
-          border-radius: 4px;
-        }
-        .settings-button {
-          color: var(--board-muted-fg);
-        }
-      </style>
-    </template>
-  };
+  static isolated = IssueTrackerIsolated;
 }

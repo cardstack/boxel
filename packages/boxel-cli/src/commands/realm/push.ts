@@ -25,6 +25,11 @@ interface PushOptions extends SyncOptions {
   force?: boolean;
 }
 
+// Fresh realms always include these server-managed cards even when the local
+// workspace has never pulled them. Treat them as realm artifacts, not user
+// drift, so `push --delete` only removes genuine remote-only user files.
+const REMOTE_DELETE_EXCLUSIONS = new Set(['index.json', 'realm.json']);
+
 class RealmPusher extends RealmSyncBase {
   hasError = false;
 
@@ -225,10 +230,16 @@ class RealmPusher extends RealmSyncBase {
 
     if (this.pushOptions.deleteRemote) {
       const filesToDelete = new Set(initialRemoteFiles.keys());
+      const skippedDeleteArtifacts: string[] = [];
 
       for (const relativePath of filesToDelete) {
         if (isProtectedFile(relativePath)) {
           filesToDelete.delete(relativePath);
+          continue;
+        }
+        if (REMOTE_DELETE_EXCLUSIONS.has(relativePath)) {
+          filesToDelete.delete(relativePath);
+          skippedDeleteArtifacts.push(relativePath);
         }
       }
 
@@ -236,21 +247,26 @@ class RealmPusher extends RealmSyncBase {
         filesToDelete.delete(relativePath);
       }
 
-      if (filesToDelete.size > 0) {
+      if (skippedDeleteArtifacts.length > 0) {
         console.log(
-          `Deleting ${filesToDelete.size} remote files that don't exist locally`,
+          `Skipping ${skippedDeleteArtifacts.length} realm-managed remote artifact(s): ${skippedDeleteArtifacts.join(', ')}`,
+        );
+      }
+
+      if (filesToDelete.size > 0) {
+        const deletePlan = Array.from(filesToDelete).sort();
+        console.log(
+          `Deleting ${deletePlan.length} remote files that don't exist locally: ${deletePlan.join(', ')}`,
         );
 
-        await Promise.all(
-          Array.from(filesToDelete).map(async (relativePath) => {
-            try {
-              await this.deleteFile(relativePath);
-            } catch (error) {
-              this.hasError = true;
-              console.error(`Error deleting ${relativePath}:`, error);
-            }
-          }),
-        );
+        for (const relativePath of deletePlan) {
+          try {
+            await this.deleteFile(relativePath);
+          } catch (error) {
+            this.hasError = true;
+            console.error(`Error deleting ${relativePath}:`, error);
+          }
+        }
       }
     }
 
