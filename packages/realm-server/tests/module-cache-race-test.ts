@@ -1,13 +1,26 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
 import type { Server } from 'http';
 import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType, param, query } from '@cardstack/runtime-common';
+import {
+  CachingDefinitionLookup,
+  SupportedMimeType,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
 import {
   setupPermissionedRealmCached,
+  setupDB,
   createJWT,
+  createRealm,
+  createVirtualNetwork,
+  getTestPrerenderer,
+  testCreatePrerenderAuth,
   withRealmPath,
   type RealmRequest,
 } from './helpers';
@@ -900,6 +913,200 @@ module(basename(__filename), function () {
           1,
           'generation column unchanged at the tombstone value',
         );
+      });
+    },
+  );
+
+  // CS-11030 two-instance integration coverage. The single-realm tests
+  // above prove the row is written / read / tombstoned correctly through
+  // one Realm's plumbing; these tests prove that two peer Realms — each
+  // with its own ModuleCacheCoordinator, both pointing at the same
+  // realm_url + pg — actually coalesce on babel through the L2 row and
+  // the advisory-lock + NOTIFY channel. Mirrors the
+  // CachingDefinitionLookup two-instance test in
+  // module-cache-coordination-test.ts but exercises the transpile flow.
+  module(
+    'Realm.#moduleCache L2 cross-instance coalesce',
+    function (hooks) {
+      let dbAdapter: PgAdapter;
+      let publisher: import('@cardstack/runtime-common').QueuePublisher;
+      let runner: import('@cardstack/runtime-common').QueueRunner;
+      setupDB(hooks, {
+        beforeEach: async (adapter, pub, run) => {
+          dbAdapter = adapter;
+          publisher = pub;
+          runner = run;
+        },
+      });
+
+      const peerRealmURL = 'http://127.0.0.1:5555/peer/';
+      const peerCardSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class PeerCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-peer><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      async function buildPeerRealm(args: {
+        dir: string;
+        coordinator: ModuleCacheCoordinator;
+      }): Promise<Realm> {
+        let virtualNetwork = createVirtualNetwork();
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+          virtualNetwork,
+          testCreatePrerenderAuth,
+        );
+        let { realm } = await createRealm({
+          dir: args.dir,
+          definitionLookup,
+          realmURL: peerRealmURL,
+          permissions: { '*': ['read', 'write'] },
+          virtualNetwork,
+          publisher,
+          runner,
+          dbAdapter,
+          transpileCoordinator: args.coordinator,
+        });
+        return realm;
+      }
+
+      async function setupTwoPeers(): Promise<{
+        realmA: Realm;
+        realmB: Realm;
+        coordA: ModuleCacheCoordinator;
+        coordB: ModuleCacheCoordinator;
+        cardPath: string;
+        canonicalUrl: string;
+      }> {
+        let tmp = dirSync();
+        let testRealmDir = join(tmp.name, 'peer-realm');
+        ensureDirSync(testRealmDir);
+        // Minimal .realm.json so the Realm bootstraps a name + readable
+        // visibility; the test only ever asks for module GETs.
+        writeJSONSync(join(testRealmDir, '.realm.json'), {
+          name: 'Peer Realm',
+        });
+        let cardPath = 'peer-card.gts';
+        writeFileSync(join(testRealmDir, cardPath), peerCardSource);
+
+        let coordA = new ModuleCacheCoordinator({ dbAdapter });
+        await coordA.start();
+        let coordB = new ModuleCacheCoordinator({ dbAdapter });
+        await coordB.start();
+        // Give both coordinators a moment to issue their LISTEN before
+        // the test fires NOTIFY traffic — matches the 100ms pause in
+        // module-cache-coordination-test.ts.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        let realmA = await buildPeerRealm({ dir: testRealmDir, coordinator: coordA });
+        let realmB = await buildPeerRealm({ dir: testRealmDir, coordinator: coordB });
+
+        // Drop anything either realm filled during construction so the
+        // test's request is the only thing that can drive the counter.
+        realmA.__testOnlyClearCaches();
+        realmB.__testOnlyClearCaches();
+        // __testOnlyClearCaches fire-and-forgets the L2 bulk wipe; wait
+        // for it to land before reads.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let canonicalUrl = new URL(cardPath, peerRealmURL).href;
+        return { realmA, realmB, coordA, coordB, cardPath, canonicalUrl };
+      }
+
+      function moduleRequest(realm: Realm, cardPath: string): Request {
+        return new Request(new URL(cardPath, peerRealmURL).href, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.All,
+            Authorization: `Bearer ${createJWT(realm, 'user', ['read'])}`,
+          },
+        });
+      }
+
+      test('L2 row written by peer A is served from L2 by peer B without re-running babel', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } =
+          await setupTwoPeers();
+        try {
+          let respA = await realmA.handle(moduleRequest(realmA, cardPath));
+          assert.strictEqual(respA?.status, 200, 'peer A served the module');
+          assert.strictEqual(
+            realmA.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer A ran babel exactly once',
+          );
+
+          let bCountBefore = realmB.__testOnlyGetTranspileCallCount();
+          let respB = await realmB.handle(moduleRequest(realmB, cardPath));
+          assert.strictEqual(respB?.status, 200, 'peer B served the module');
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount() - bCountBefore,
+            0,
+            'peer B served from the L2 row peer A wrote — no babel ran on peer B',
+          );
+        } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      test('two peers concurrently transpiling the same path coalesce through the coordinator: exactly one babel call across both', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } =
+          await setupTwoPeers();
+        try {
+          // Gate babel on both realms so whichever one wins the
+          // advisory lock parks inside transpileJS, holding the lock
+          // open. The loser's tryAcquireAndRun returns acquired:false
+          // BEFORE the runner fn is invoked, so the loser never reaches
+          // the delay — only the winner waits on the gate.
+          let releaseGate!: () => void;
+          let gate = new Promise<void>((resolve) => {
+            releaseGate = resolve;
+          });
+          realmA.__testOnlyDelayTranspile(() => gate);
+          realmB.__testOnlyDelayTranspile(() => gate);
+
+          // Stagger A → B by 100ms so A reliably takes the pg advisory
+          // lock first; B then contends and observes acquired:false.
+          // Mirrors the staggered start in the CachingDefinitionLookup
+          // two-instance test.
+          let pA = realmA.handle(moduleRequest(realmA, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          let pB = realmB.handle(moduleRequest(realmB, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // At this point: A is parked inside materializeAndTranspile
+          // awaiting the gate (transpile counter hasn't bumped yet —
+          // the delay hook runs before the count). B has observed
+          // acquired:false and is parked on waitForKey waiting for the
+          // NOTIFY A will emit when its tx commits.
+          releaseGate();
+          let [respA, respB] = await Promise.all([pA, pB]);
+          assert.strictEqual(respA?.status, 200, 'peer A served 200');
+          assert.strictEqual(respB?.status, 200, 'peer B served 200');
+
+          let aTotal = realmA.__testOnlyGetTranspileCallCount();
+          let bTotal = realmB.__testOnlyGetTranspileCallCount();
+          assert.strictEqual(
+            aTotal + bTotal,
+            1,
+            'exactly one babel call across both peers — the L2 winner wrote and the loser read',
+          );
+        } finally {
+          realmA.__testOnlyDelayTranspile(undefined);
+          realmB.__testOnlyDelayTranspile(undefined);
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
       });
     },
   );

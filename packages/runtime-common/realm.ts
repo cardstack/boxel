@@ -312,6 +312,11 @@ type ModuleTranspileResult = {
   canonicalPath: LocalPath;
   body: string;
   headers: Record<string, string>;
+  // Computed once at the transpile/L2-hit boundary so fallbackHandle's L1
+  // write can reuse them instead of re-running extractModuleDependencyKeys
+  // on every L1 miss. Carried through the L2 row so a cross-process L2 hit
+  // also skips the AST scan.
+  dependencyKeys: Set<string>;
 };
 
 // ETag base prefers a content fingerprint (md5 of the file body) over
@@ -2448,12 +2453,7 @@ export class Realm {
               canonicalPath: result.canonicalPath,
               body: result.body,
               headers: result.headers,
-              dependencyKeys: extractModuleDependencyKeys(
-                result.body,
-                result.canonicalPath,
-                this.url,
-                this.paths,
-              ),
+              dependencyKeys: result.dependencyKeys,
             });
           }
           response = createResponse({
@@ -2742,13 +2742,27 @@ export class Realm {
         // ignore
       }
     }
+    let canonicalPathLocal =
+      pathFromHeader ?? this.paths.local(new URL(canonicalPath));
+    let depsArray =
+      typeof row.dependency_keys === 'string'
+        ? (JSON.parse(row.dependency_keys) as string[])
+        : (row.dependency_keys ?? []);
+    // Carry the writer's deps through. The writer always persists the
+    // full set computed from the transpiled body, so an empty array
+    // legitimately means the module has no in-realm imports. A row
+    // written before deps were carried (rollout window) will also read
+    // as empty here — its L1 entry will be missing dep edges until the
+    // next invalidate forces a re-transpile. The table is UNLOGGED, so
+    // pre-rollout rows age out on any pg restart.
+    let dependencyKeys = new Set<string>(depsArray);
     return {
       result: {
         kind: 'module',
-        canonicalPath:
-          pathFromHeader ?? this.paths.local(new URL(canonicalPath)),
+        canonicalPath: canonicalPathLocal,
         body: row.body,
         headers,
+        dependencyKeys,
       },
       generation,
     };
@@ -2782,13 +2796,11 @@ export class Realm {
         ',',
         param(JSON.stringify(result.headers)),
         '::jsonb,',
-        // Dependency keys aren't propagated through #materializeAndTranspile
-        // currently (the in-memory entry derives them lazily from the
-        // transpile body via extractModuleDependencyKeys). Persist an
-        // empty array; the L1 write site recomputes them after the
-        // L2-hit return. A future revision can carry the keys forward to
-        // skip the recomputation on cross-process load.
-        param('[]'),
+        // Persist the full deps set computed once at the transpile
+        // boundary so a cross-process L2 reader can populate its L1
+        // entry directly instead of re-running extractModuleDependencyKeys
+        // on the bytes.
+        param(JSON.stringify([...result.dependencyKeys])),
         '::jsonb,',
         param(capturedGeneration),
         ',',
@@ -2924,11 +2936,22 @@ export class Realm {
     }
     headers['X-Boxel-Canonical-Path'] = canonicalPath;
 
+    // Compute deps once here so callers (L1 write site, L2 persist)
+    // reuse them. Carrying the set through the L2 row lets a peer
+    // skip this scan entirely on a cross-process cache hit.
+    let dependencyKeys = extractModuleDependencyKeys(
+      transpiled,
+      fileRef.path,
+      this.url,
+      this.paths,
+    );
+
     return {
       kind: 'module',
       canonicalPath: fileRef.path,
       body: transpiled,
       headers,
+      dependencyKeys,
     };
   }
 
