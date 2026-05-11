@@ -42,8 +42,7 @@
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "typescript": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "typescript": "catalog:"
   },
   "engines": {
     "pnpm": "^11"
