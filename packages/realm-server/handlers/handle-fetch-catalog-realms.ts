@@ -42,10 +42,7 @@ export default function handleFetchCatalogRealmsRequest({
             }
             let json = await realmInfoResponse.json();
             let attributes = json.data.attributes;
-            if (
-              attributes.showAsCatalog != null &&
-              attributes.showAsCatalog == false
-            ) {
+            if (attributes.showAsCatalog !== true) {
               return null;
             }
 
