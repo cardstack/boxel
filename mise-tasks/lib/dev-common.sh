@@ -127,12 +127,10 @@ _kill_tree_walk() {
 # `pkill -f` matches its pattern as ERE, so $REPO_ROOT must be regex-escaped
 # before interpolating; otherwise a checkout path with metacharacters (e.g.
 # `boxel.worktrees/...`, where `.` matches any char) would over-match and
-# signal unrelated processes outside this checkout. Most patterns are
-# anchored to ${REPO_ROOT_RE} so they never match outside this checkout —
-# the user may have unrelated vite/ember/node processes running for other
-# projects. The exceptions (pnpm host start, npm-run-all run-p, http-server
-# icons) are the wrapper layers whose argv does not carry the repo root;
-# those use tighter argv anchors instead so they still scope correctly.
+# signal unrelated processes outside this checkout. Every pattern below is
+# either repo-root-anchored or carries a Boxel-specific argv marker so a
+# parallel dev session in a sibling checkout (or an unrelated process that
+# happens to share a binary name) isn't collateral.
 #
 # The patterns:
 #   - mise-tasks/services/* — the bash service entrypoints
@@ -142,17 +140,19 @@ _kill_tree_walk() {
 #     don't `exec` it, so killing the wrapper alone leaves the ts-node
 #     grandchild reparented to init with its port still bound.
 #   - packages/host/scripts/vite-serve.js — the host start wrapper that
-#     spawns the actual vite child
+#     spawns the actual vite child. (We don't separately sweep `pnpm
+#     --filter @cardstack/host start`: its only child IS vite-serve.js, so
+#     killing the anchored child causes pnpm to exit on its own.)
 #   - packages/host/.*vite/bin/vite.js --port 4200 — the host dev server
 #     (port 4200) spawned by vite-serve.js
 #   - node_modules/.*/start-server-and-test/src/bin/start.js — the
 #     phase-coordinator that owns the run-p subtree
 #   - node_modules/.*/npm-run-all/bin/run-p — run-p, which spawns the
 #     `npm run start:*` wrappers and doesn't always forward signals
-#   - pnpm --filter @cardstack/host start — the outer wrapper dev-all
-#     backgrounds before SAT comes up
-#   - http-server .* dist (port 4206) — boxel-icons server. Matched
-#     unanchored because pnpm scripts strip the repo-root from argv.
+#   - http-server .* X-Boxel-Assume-User .* --port 4206 — boxel-icons
+#     server. Can't anchor to $REPO_ROOT (pnpm scripts strip it from argv),
+#     but the X-Boxel-Assume-User CORS header in the icons invocation is
+#     Boxel-specific and won't appear in unrelated http-server instances.
 sweep_orphaned_services() {
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
   TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
@@ -160,8 +160,7 @@ sweep_orphaned_services() {
   VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js --port 4200"
   SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
   RUNP_RE="${REPO_ROOT_RE}/.*node_modules/.*npm-run-all/bin/run-p"
-  PNPM_HOST_RE="pnpm --filter @cardstack/host start"
-  HTTP_SERVER_RE="http-server.*--port 4206"
+  HTTP_SERVER_RE="http-server.*X-Boxel-Assume-User.*--port 4206"
 
   for sig in TERM KILL; do
     pkill -"$sig" -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
@@ -170,7 +169,6 @@ sweep_orphaned_services() {
     pkill -"$sig" -f "$VITE_BIN_RE" 2>/dev/null || true
     pkill -"$sig" -f "$SAT_RE" 2>/dev/null || true
     pkill -"$sig" -f "$RUNP_RE" 2>/dev/null || true
-    pkill -"$sig" -f "$PNPM_HOST_RE" 2>/dev/null || true
     pkill -"$sig" -f "$HTTP_SERVER_RE" 2>/dev/null || true
     if [ "$sig" = "TERM" ]; then
       sleep "$SWEEP_GRACE_SECS"
