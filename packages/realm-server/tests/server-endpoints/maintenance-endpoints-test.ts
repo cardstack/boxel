@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
+import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
@@ -1156,6 +1157,199 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           initialJobs.length,
           'an index job was not created',
         );
+      });
+
+      test('grants read-only via grafana upsert-realm-user-permission endpoint', async function (assert) {
+        let user = '@op-test:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(perms[user], ['read'], 'user has read only');
+      });
+
+      test('grants read+write via grafana upsert-realm-user-permission endpoint', async function (assert) {
+        let user = '@op-test-rw:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'write'],
+          'user has read+write',
+        );
+      });
+
+      test('upserts: re-grant on the same user updates instead of duplicating', async function (assert) {
+        let user = '@op-test-upsert:localhost';
+        let url = (read: string, write: string) =>
+          `/_grafana-upsert-realm-user-permission` +
+          `?realm=${encodeURIComponent(testRealmURL.href)}` +
+          `&user=${encodeURIComponent(user)}` +
+          `&read=${read}&write=${write}`;
+        // First call: read only.
+        await context.request
+          .post(url('true', 'false'))
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        // Second call: upgrade to read+write.
+        let response = await context.request
+          .post(url('true', 'true'))
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'write'],
+          'second call replaced the first',
+        );
+      });
+
+      test('normalises realm URL — trailing slash and stripped querystring/hash', async function (assert) {
+        let user = '@op-test-normalize:localhost';
+        // Pass a URL without trailing slash + with extraneous querystring +
+        // fragment. Both should be normalised before insert so the row keys
+        // exactly to the canonical realm root the runtime consults.
+        let raw = testRealmURL.href.replace(/\/$/, '') + '?token=secret#frag';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(raw)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notOk(
+          response.body.message?.includes('token=secret'),
+          'response message does not echo the raw querystring',
+        );
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user],
+          ['read'],
+          'permission written under the canonical realm URL',
+        );
+      });
+
+      test('rejects write-only (write requires read)', async function (assert) {
+        let user = '@op-test-bad:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=false&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects read=false write=false (use the delete flow to revoke)', async function (assert) {
+        let user = '@op-test-revoke:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=false&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects non-boolean read/write flags', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=TRUE&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects missing realm param', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects non-URL realm param', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=not-a-url` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('returns 401 without a grafana secret', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('returns 404 on legacy GET (POST-only endpoint)', async function (assert) {
+        let response = await context.request
+          .get(
+            `/_grafana-upsert-realm-user-permission` +
+              `?authHeader=${grafanaSecret}` +
+              `&realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
     },
   );
