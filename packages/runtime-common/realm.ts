@@ -197,6 +197,16 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Opt-in to producing the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. When undefined / null /
+  // false the host's render route substitutes a small boilerplate
+  // placeholder instead and skips the (expensive) isolated render.
+  // The lever is primarily set by the publish handler on the
+  // published realm snapshot so anonymous-visitor SSR injection has
+  // real content; unpublished realms typically have nothing reading
+  // the index's isolated HTML. Optional to avoid forcing every
+  // RealmInfo fixture to update.
+  includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
@@ -209,6 +219,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
+  'includePrerenderedDefaultRealmIndex',
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
@@ -5346,6 +5357,7 @@ export class Realm {
       ),
       publishable: null,
       lastPublishedAt,
+      includePrerenderedDefaultRealmIndex: null,
     };
 
     if (realmConfig) {
@@ -5418,6 +5430,12 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -5449,6 +5467,12 @@ export class Realm {
         if ('iconURL' in attrs) {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
         }
       }
     } catch (e) {
