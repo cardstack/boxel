@@ -34,6 +34,7 @@ import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
+import { canonicalURL } from './index-runner/dependency-url';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
 import {
   discoverInvalidations,
@@ -205,6 +206,7 @@ export class IndexRunner {
         sortedInvalidations,
       );
     invalidations = ordered;
+    await current.preWarmModulesTable(invalidations);
     let concurrency = computeIndexVisitConcurrency(
       invalidations.length,
       maxLayerWidth,
@@ -568,6 +570,160 @@ export class IndexRunner {
       authUserId: isPublic ? '' : this.#realmOwnerUserId,
     };
     return this.#moduleCacheContext;
+  }
+
+  // Populate the `modules` table for every module the upcoming visit
+  // loop is likely to need, before the parallel visit phase fires.
+  //
+  // Why: a parallel batch where N concurrent file renders each fire a
+  // same-affinity `prerenderModule` sub-render produces a self-
+  // referential deadlock — the file renders hold the tabs the module
+  // sub-renders need, the module sub-renders are queued behind the
+  // file renders that are waiting on them. PagePool's per-affinity
+  // admission cap is designed to prevent this for a single in-flight
+  // file render, but it can't reserve enough headroom for N parallel
+  // file renders' worth of sub-renders. By pre-rendering modules in
+  // a controlled phase (parallel within the module queue, but never
+  // mixed with file admissions), we ensure every later file render
+  // finds its definitions already in cache and never triggers a mid-
+  // render sub-prerender.
+  //
+  // Signal sources, in priority order:
+  //   1. Existing `boxel_index.deps` — strongest, captured from a
+  //      prior successful render. Used for KNOWN URLs.
+  //   2. `adoptsFrom.module` read from disk — used for NOVEL `.json`
+  //      URLs that don't have a prior `deps` row yet.
+  //   3. The URL itself — used for NOVEL executable files (`.gts`
+  //      etc.); the file IS a module, pre-warm it directly.
+  //
+  // Modules that are already in the cache are skipped (the cache
+  // lookup is O(1) by URL). Misses fire `prerenderer.prerenderModule`
+  // in parallel; module sub-renders go through the module queue and
+  // bypass file admission, so they never deadlock against the (yet
+  // to start) file-visit phase.
+  private async preWarmModulesTable(invalidations: URL[]): Promise<void> {
+    if (invalidations.length === 0) {
+      return;
+    }
+    let preWarmStart = Date.now();
+    let hrefs = invalidations.map((u) => u.href);
+    let existingRows = await this.batch.getDependencyRows(hrefs);
+    let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
+    for (let row of existingRows) {
+      // Prefer rows that actually carry deps so the lookup below
+      // returns the strongest signal available for each URL.
+      let existing = bestByUrl.get(row.url);
+      if (!existing || (!existing.deps?.length && row.deps?.length)) {
+        bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
+      }
+    }
+
+    let toWarm = new Set<string>();
+    for (let url of invalidations) {
+      let row = bestByUrl.get(url.href);
+      if (row?.deps?.length) {
+        for (let dep of row.deps) {
+          let resolved = canonicalURL(dep, url.href);
+          if (hasExecutableExtension(resolved)) {
+            toWarm.add(resolved);
+          }
+        }
+      } else if (hasExecutableExtension(url.href)) {
+        toWarm.add(url.href);
+      } else if (url.href.endsWith('.json')) {
+        let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
+        if (adoptsFromModule && hasExecutableExtension(adoptsFromModule)) {
+          toWarm.add(adoptsFromModule);
+        }
+      }
+    }
+
+    if (toWarm.size === 0) {
+      return;
+    }
+
+    let { resolvedRealmURL, cacheScope, authUserId } =
+      await this.getModuleCacheContext();
+    let cached = await this.#definitionLookup.getModuleCacheEntries({
+      moduleUrls: [...toWarm],
+      cacheScope,
+      authUserId,
+      resolvedRealmURL,
+    });
+    let misses: string[] = [];
+    for (let moduleUrl of toWarm) {
+      let entry = cached[moduleUrl];
+      if (!entry || entry.error) {
+        misses.push(moduleUrl);
+      }
+    }
+
+    this.#perfLog.debug(
+      `${jobIdentity(this.#jobInfo)} pre-warm plan: candidates=${toWarm.size} cached=${toWarm.size - misses.length} misses=${misses.length}`,
+    );
+
+    if (misses.length === 0) {
+      this.#perfLog.debug(
+        `${jobIdentity(this.#jobInfo)} pre-warm complete (all cached) in ${Date.now() - preWarmStart} ms`,
+      );
+      return;
+    }
+
+    // Parallel pre-warm. Module sub-renders go through the module
+    // queue and bypass file admission, so spawning many at once
+    // saturates the module queue (good — we want the modules table
+    // populated before the file-visit phase starts) without
+    // contending against the still-to-come file admissions.
+    let results = await Promise.allSettled(
+      misses.map((moduleUrl) =>
+        this.#prerenderer.prerenderModule({
+          affinityType: 'realm',
+          affinityValue: this.#realmURL.href,
+          realm: this.#realmURL.href,
+          url: moduleUrl,
+          auth: this.#auth,
+          renderOptions: {},
+          ...(this.#jobPriority !== undefined
+            ? { priority: this.#jobPriority }
+            : {}),
+        }),
+      ),
+    );
+
+    let failed = 0;
+    for (let result of results) {
+      if (result.status === 'rejected') {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${misses.length} module pre-warms failed; the visit phase will retry on-demand if needed`,
+      );
+    }
+
+    this.#perfLog.debug(
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (warmed=${misses.length - failed} failed=${failed})`,
+    );
+  }
+
+  async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
+    try {
+      let fileRef = await this.#reader.readFile(url);
+      if (!fileRef?.content) {
+        return undefined;
+      }
+      let doc = JSON.parse(fileRef.content) as {
+        data?: { meta?: { adoptsFrom?: { module?: unknown } } };
+      };
+      let module = doc?.data?.meta?.adoptsFrom?.module;
+      if (typeof module !== 'string') {
+        return undefined;
+      }
+      return canonicalURL(module, url.href);
+    } catch {
+      return undefined;
+    }
   }
 
   #scheduleClearCacheForNextRender() {
