@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   createResponse,
   fetchUserPermissions,
+  isResolvedCodeRef,
   query,
   SupportedMimeType,
   logger,
@@ -44,6 +45,20 @@ import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
+
+// The CardsGrid CardDef can be referenced two equivalent ways in a
+// `meta.adoptsFrom.module` field — the absolute base-realm URL, or
+// the registered `@cardstack/base/` prefix form. `@cardstack/base/`
+// isn't currently wired as a virtual-network mapping in production
+// (only test fixtures register it), so today the canonical form on
+// disk is the absolute URL. Listing both forms keeps the detection
+// future-proof: once `@cardstack/base/` becomes a live prefix
+// mapping, `index.json` files that use it are still caught.
+const CARDS_GRID_MODULE_FORMS = new Set<string>([
+  'https://cardstack.com/base/cards-grid',
+  '@cardstack/base/cards-grid',
+]);
+const CARDS_GRID_NAME = 'CardsGrid';
 
 const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
@@ -160,15 +175,16 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
     log.warn(`could not parse published index.json at ${indexJsonPath}: ${e}`);
     return;
   }
-  let adoptsFrom = ((indexDoc as { data?: { meta?: { adoptsFrom?: unknown } } })
-    ?.data?.meta?.adoptsFrom ?? null) as {
-    module?: string;
-    name?: string;
-  } | null;
+  let adoptsFrom = (indexDoc as { data?: { meta?: { adoptsFrom?: unknown } } })
+    ?.data?.meta?.adoptsFrom as
+    | Parameters<typeof isResolvedCodeRef>[0]
+    | undefined;
+  if (!isResolvedCodeRef(adoptsFrom)) {
+    return;
+  }
   if (
-    !adoptsFrom ||
-    adoptsFrom.module !== 'https://cardstack.com/base/cards-grid' ||
-    adoptsFrom.name !== 'CardsGrid'
+    !CARDS_GRID_MODULE_FORMS.has(adoptsFrom.module) ||
+    adoptsFrom.name !== CARDS_GRID_NAME
   ) {
     return;
   }
