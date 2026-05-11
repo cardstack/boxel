@@ -41,12 +41,6 @@ const SKILL_PRIORITY: readonly string[] = [
   'boxel-command',
   'ember-best-practices',
   'software-factory-operations',
-  'boxel-sync',
-  'boxel-track',
-  'boxel-watch',
-  'boxel-restore',
-  'boxel-repair',
-  'boxel-setup',
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,8 +133,7 @@ export class DefaultSkillResolver implements SkillResolver {
    * 3. software-factory-operations — for factory delivery workflow issues
    * 4. boxel-api + boxel-command — always loaded so the agent has the realm
    *    search query syntax and host-command failure modes inline.
-   * 5. KnowledgeArticle tags can specify additional skills (including CLI
-   *    skills like boxel-sync if an article explicitly opts in).
+   * 5. KnowledgeArticle tags can specify additional skills.
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);

@@ -170,47 +170,30 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('does not auto-load CLI skills from generic issue keywords', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Sync the workspace, track changes, and watch for updates',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    // CLI skills describe interactive flows for humans. They are not in the
-    // auto-load set and a free-text issue mentioning sync/track/watch should
-    // NOT pull them in — only an explicit knowledge-tag opt-in does.
-    assert.false(skills.includes('boxel-sync'), 'boxel-sync not auto-loaded');
-    assert.false(skills.includes('boxel-track'), 'boxel-track not auto-loaded');
-    assert.false(skills.includes('boxel-watch'), 'boxel-watch not auto-loaded');
-  });
-
-  test('CLI skills can be opted in via knowledge article tags', function (assert) {
+  test('extra skills can be opted in via knowledge article tags', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue();
     let project = makeProject({
       knowledge: [
         {
-          id: 'Knowledge Articles/cli-ref',
-          tags: ['skill:boxel-sync', 'skill:boxel-repair'],
+          id: 'Knowledge Articles/extension-ref',
+          tags: ['skill:custom-extension', 'skill:another-domain-skill'],
         },
       ],
     });
 
     let skills = resolver.resolve(issue, project);
 
-    // After CS-10613 the factory loader can see boxel-cli's skills, and CLI
-    // skills are no longer filter-banned — an explicit knowledge-article
-    // opt-in is the deliberate way to include them.
+    // Knowledge-tag opt-in is the deliberate way to include any non-default
+    // skill (e.g., a project-specific domain skill that lives in a knowledge
+    // article). The resolver returns the name; the loader resolves it on disk.
     assert.true(
-      skills.includes('boxel-sync'),
-      'boxel-sync included from knowledge tag',
+      skills.includes('custom-extension'),
+      'custom-extension included from knowledge tag',
     );
     assert.true(
-      skills.includes('boxel-repair'),
-      'boxel-repair included from knowledge tag',
+      skills.includes('another-domain-skill'),
+      'another-domain-skill included from knowledge tag',
     );
   });
 
