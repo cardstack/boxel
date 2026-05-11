@@ -2,8 +2,8 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "IssueTrackerBoard",
-        "module": "../issue-tracker"
+        "name": "IssueTracker",
+        "module": "/software-factory/issue-tracker"
       }
     },
     "type": "card",

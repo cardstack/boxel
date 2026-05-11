@@ -18,14 +18,19 @@ set -m
 pnpm --filter @cardstack/host start &
 HOST_PID=$!
 cleanup() {
-  trap - EXIT INT TERM
+  trap - EXIT INT TERM HUP
   if [ -n "${SAT_PID:-}" ]; then
     kill_tree "$SAT_PID"
   fi
   kill_tree "$HOST_PID"
   sweep_orphaned_services
 }
-trap cleanup EXIT INT TERM
+# HUP is required: when the user hits Ctrl-C in a terminal running `mise run
+# dev-all`, mise often exits without forwarding SIGINT to this bash script,
+# and bash then receives SIGHUP from the dying parent. Bash's default action
+# on an untrapped SIGHUP is to terminate *without* running the EXIT trap, so
+# without `HUP` here the cleanup never fires and the entire subtree leaks.
+trap cleanup EXIT INT TERM HUP
 
 HOST_TIMEOUT=120
 ELAPSED=0

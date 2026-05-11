@@ -2,7 +2,11 @@ import { click, fillIn, settled } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { specRef, type Realm } from '@cardstack/runtime-common';
+import {
+  fieldDefFormats,
+  specRef,
+  type Realm,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -513,8 +517,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         declaration: 'Comment',
       });
       assert
-        .dom('[data-test-playground-format-chooser] button')
-        .exists({ count: 5 });
+        .dom('[data-test-playground-format-chooser] [data-test-format-chooser]')
+        .exists({ count: fieldDefFormats.length });
       assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert

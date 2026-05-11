@@ -160,6 +160,8 @@ export class IndexRunner {
       },
       getDependencyRows: async (urls) =>
         await this.batch.getDependencyRows(urls),
+      getOrderingDependencyRows: async (urls) =>
+        await this.batch.getOrderingDependencyRows(urls),
       getInvalidations: () => this.#batch?.invalidations ?? [],
     });
   }
