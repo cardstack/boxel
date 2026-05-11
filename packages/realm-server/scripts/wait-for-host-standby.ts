@@ -69,20 +69,29 @@ async function main() {
   let attempt = 0;
   let backoffMs = 500;
   let success = false;
+  // Cap each phase's timeout to whatever total budget is still left so the
+  // advertised 10-minute ceiling is actually honored — a fresh attempt
+  // started near the deadline would otherwise run for up to
+  // 2×PER_ATTEMPT_TIMEOUT_MS (goto + waitForFunction) past it.
+  let phaseBudgetMs = () =>
+    Math.max(
+      1,
+      Math.min(PER_ATTEMPT_TIMEOUT_MS, TOTAL_TIMEOUT_MS - (Date.now() - start)),
+    );
   try {
     while (Date.now() - start < TOTAL_TIMEOUT_MS) {
       attempt++;
       let page = await browser.newPage();
       try {
-        // Mirror page-pool.ts's #loadStandbyPage exactly: each phase gets
-        // its own PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only
-        // covers serving the HTML shell; waiting for Ember to boot and
-        // render `#standby-ready` is a separate clock because on a cold
-        // vite cache the script tag's module fetch can spin while the
+        // Mirror page-pool.ts's #loadStandbyPage: each phase gets its own
+        // PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only covers
+        // serving the HTML shell; waiting for Ember to boot and render
+        // `#standby-ready` is a separate clock because on a cold vite
+        // cache the script tag's module fetch can spin while the
         // optimizer is still bundling its dep graph.
         let response = await page.goto(standbyUrl, {
           waitUntil: 'domcontentloaded',
-          timeout: PER_ATTEMPT_TIMEOUT_MS,
+          timeout: phaseBudgetMs(),
         });
         let status = response?.status();
         if (status != null && status >= 400) {
@@ -90,7 +99,7 @@ async function main() {
         }
         await page.waitForFunction(
           () => !!document.querySelector('#standby-ready'),
-          { timeout: PER_ATTEMPT_TIMEOUT_MS },
+          { timeout: phaseBudgetMs() },
         );
         log(`browser-ready after ${elapsedSec(start)}s (attempt ${attempt})`);
         success = true;

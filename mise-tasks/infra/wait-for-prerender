@@ -23,7 +23,10 @@ START_TIME=$(date +%s)
 echo "Waiting for prerender manager at ${TRIMMED_URL} to register a worker"
 
 while true; do
-  BODY=$(curl -sf "$TRIMMED_URL" 2>/dev/null || true)
+  # --connect-timeout/--max-time bound any single curl invocation so a
+  # half-open TCP connection to the manager can't park the loop forever
+  # past TIMEOUT_SECONDS.
+  BODY=$(curl -sf --connect-timeout 5 --max-time 10 "$TRIMMED_URL" 2>/dev/null || true)
   case "$BODY" in
     *'"ready":true'*)
       break
