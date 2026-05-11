@@ -196,11 +196,22 @@ export class IndexRunner {
     );
 
     let visitStart = Date.now();
-    invalidations = sortInvalidations(invalidations, current.realmURL);
-    invalidations =
+    let sortedInvalidations = sortInvalidations(
+      invalidations,
+      current.realmURL,
+    );
+    let { ordered, maxLayerWidth, topoDepth } =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
-        invalidations,
+        sortedInvalidations,
       );
+    invalidations = ordered;
+    let concurrency = computeIndexVisitConcurrency(
+      invalidations.length,
+      maxLayerWidth,
+    );
+    current.#perfLog.debug(
+      `${jobIdentity(current.#jobInfo)} from-scratch visit plan: files=${invalidations.length} maxLayerWidth=${maxLayerWidth} topoDepth=${topoDepth} concurrency=${concurrency}`,
+    );
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -213,42 +224,52 @@ export class IndexRunner {
     });
     try {
       let filesCompleted = 0;
-      for (let invalidation of invalidations) {
-        // Resume guard. If a previous attempt of this same job already
-        // wrote URL_X to the working table AND the EFS mtime hasn't
-        // changed since, skip the visit — the existing working row is
-        // still authoritative and `applyBatchUpdates` will promote it
-        // (the constructor pre-seeded it into `#invalidations`). If
-        // mtime DID change, fall through to a normal visit so the
-        // upsert in `updateEntry` overwrites the resumed row with
-        // current content.
-        let resumedMtime = resumedRows.get(invalidation.href);
-        if (resumedMtime !== undefined) {
-          let currentMtime = discoverResult.filesystemMtimes[invalidation.href];
-          if (currentMtime !== undefined && currentMtime === resumedMtime) {
-            resumedSkipped++;
-            filesCompleted++;
-            current.#onProgress?.({
-              type: 'file-visited',
-              realmURL: current.realmURL.href,
-              jobId: current.#jobInfo.jobId,
-              url: invalidation.href,
-              filesCompleted,
-              totalFiles: invalidations.length,
-            });
-            continue;
+      let visitResults = await runWithBoundedConcurrency(
+        invalidations,
+        concurrency,
+        async (invalidation) => {
+          // Resume guard. If a previous attempt of this same job
+          // already wrote URL_X to the working table AND the EFS
+          // mtime hasn't changed since, skip the visit — the
+          // existing working row is still authoritative and
+          // `applyBatchUpdates` will promote it (the constructor
+          // pre-seeded it into `#invalidations`). If mtime DID
+          // change, fall through to a normal visit so the upsert in
+          // `updateEntry` overwrites the resumed row with current
+          // content.
+          let resumedMtime = resumedRows.get(invalidation.href);
+          if (resumedMtime !== undefined) {
+            let currentMtime =
+              discoverResult.filesystemMtimes[invalidation.href];
+            if (currentMtime !== undefined && currentMtime === resumedMtime) {
+              resumedSkipped++;
+              filesCompleted++;
+              current.#onProgress?.({
+                type: 'file-visited',
+                realmURL: current.realmURL.href,
+                jobId: current.#jobInfo.jobId,
+                url: invalidation.href,
+                filesCompleted,
+                totalFiles: invalidations.length,
+              });
+              return;
+            }
           }
-        }
-        await current.tryToVisit(invalidation);
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles: invalidations.length,
-        });
+          await current.tryToVisit(invalidation);
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: invalidation.href,
+            filesCompleted,
+            totalFiles: invalidations.length,
+          });
+        },
+      );
+      let rejection = firstRejection(visitResults);
+      if (rejection) {
+        throw rejection.reason;
       }
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
@@ -332,14 +353,22 @@ export class IndexRunner {
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
     );
     await current.batch.invalidate(urls);
-    let invalidations = sortInvalidations(
+    let sortedInvalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
       current.realmURL,
     );
-    invalidations =
+    let { ordered, maxLayerWidth, topoDepth } =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
-        invalidations,
+        sortedInvalidations,
       );
+    let invalidations = ordered;
+    let concurrency = computeIndexVisitConcurrency(
+      invalidations.length,
+      maxLayerWidth,
+    );
+    current.#perfLog.debug(
+      `${jobIdentity(current.#jobInfo)} incremental visit plan: files=${invalidations.length} maxLayerWidth=${maxLayerWidth} topoDepth=${topoDepth} concurrency=${concurrency}`,
+    );
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
     );
@@ -365,30 +394,39 @@ export class IndexRunner {
     });
     try {
       let filesCompleted = 0;
-      for (let invalidation of invalidations) {
-        if (
-          operations.get(invalidation.href) === 'delete' &&
-          hrefs.includes(invalidation.href)
-        ) {
-          // file is deleted, there is nothing to visit
-        } else if (resumedRows.has(invalidation.href)) {
-          // Previous attempt of this job already produced a working
-          // row for this URL. `args.changes` is the deterministic seed
-          // for incremental jobs; if the file changed again, that's a
-          // different changeset enqueued as a separate job. Skip.
-          resumedSkipped++;
-        } else {
-          await current.tryToVisit(invalidation);
-        }
-        filesCompleted++;
-        current.#onProgress?.({
-          type: 'file-visited',
-          realmURL: current.realmURL.href,
-          jobId: current.#jobInfo.jobId,
-          url: invalidation.href,
-          filesCompleted,
-          totalFiles: invalidations.length,
-        });
+      let visitResults = await runWithBoundedConcurrency(
+        invalidations,
+        concurrency,
+        async (invalidation) => {
+          if (
+            operations.get(invalidation.href) === 'delete' &&
+            hrefs.includes(invalidation.href)
+          ) {
+            // file is deleted, there is nothing to visit
+          } else if (resumedRows.has(invalidation.href)) {
+            // Previous attempt of this job already produced a working
+            // row for this URL. `args.changes` is the deterministic
+            // seed for incremental jobs; if the file changed again,
+            // that's a different changeset enqueued as a separate
+            // job. Skip.
+            resumedSkipped++;
+          } else {
+            await current.tryToVisit(invalidation);
+          }
+          filesCompleted++;
+          current.#onProgress?.({
+            type: 'file-visited',
+            realmURL: current.realmURL.href,
+            jobId: current.#jobInfo.jobId,
+            url: invalidation.href,
+            filesCompleted,
+            totalFiles: invalidations.length,
+          });
+        },
+      );
+      let rejection = firstRejection(visitResults);
+      if (rejection) {
+        throw rejection.reason;
       }
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
@@ -713,6 +751,113 @@ function assertURLEndsWithJSON(url: URL): URL {
     return new URL(`${url}.json`);
   }
   return url;
+}
+
+// Below this many invalidations the cold-tab tax dominates any
+// parallelism payoff (a fresh tab joining the shared BrowserContext
+// costs ~3-5s before it can produce useful work, plus per-tab cardDoc
+// / store / Glimmer-compile warmup paid before each tab's first
+// render). 10 lines up roughly with that crossover at the typical
+// per-card render budget of 1-3s.
+const PARALLEL_INDEX_VISIT_THRESHOLD = 10;
+// Topo graphs whose widest layer is this small are effectively linear
+// chains — every additional worker just waits on the head of the
+// chain. Keep visits serial in this case to avoid spawning tabs that
+// have nothing to do.
+const PARALLEL_INDEX_LAYER_MIN_WIDTH = 2;
+// Default cap on the number of in-flight file visits a single
+// IndexRunner will keep open. Overridable via the
+// `INDEX_RUNNER_MAX_CONCURRENCY` env var. The cap is independent of
+// the prerender pool's per-affinity envelope: even when the pool
+// permits more parallelism, this cap prevents a single realm's
+// reindex from monopolising server-fleet capacity.
+const DEFAULT_INDEX_VISIT_MAX_CONCURRENCY = 4;
+
+// Per-tab parallelism envelope. Each file visit can fan out into ~1-2
+// module sub-prerenders (one per `CachingDefinitionLookup` miss), so
+// we reserve one tab against `PRERENDER_AFFINITY_TAB_MAX` to leave
+// headroom for those sub-prerenders to land without queueing behind
+// the file renders that need their results. The fallback default of
+// 5 matches `PRERENDER_AFFINITY_TAB_MAX`'s default in
+// `packages/realm-server/prerender/page-pool.ts`.
+function affinityEnvelopeMax(): number {
+  let raw = process.env.PRERENDER_AFFINITY_TAB_MAX;
+  let parsed = raw != null ? parseInt(raw, 10) : NaN;
+  let envelope = Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+  return Math.max(1, envelope - 1);
+}
+
+function indexVisitHardCap(): number {
+  let raw = process.env.INDEX_RUNNER_MAX_CONCURRENCY;
+  let parsed = raw != null ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_INDEX_VISIT_MAX_CONCURRENCY;
+}
+
+export function computeIndexVisitConcurrency(
+  totalWork: number,
+  maxLayerWidth: number,
+): number {
+  if (totalWork < PARALLEL_INDEX_VISIT_THRESHOLD) {
+    return 1;
+  }
+  if (maxLayerWidth <= PARALLEL_INDEX_LAYER_MIN_WIDTH) {
+    return 1;
+  }
+  return Math.max(
+    1,
+    Math.min(affinityEnvelopeMax(), maxLayerWidth, indexVisitHardCap()),
+  );
+}
+
+// Run `fn` against each item with at most `concurrency` in flight at
+// once. Returns one `PromiseSettledResult` per input position. Caller
+// chooses how to react to rejected results — the runner re-throws the
+// first one to preserve the serial loop's "abort the batch on
+// unexpected error" semantics.
+export async function runWithBoundedConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  let results: PromiseSettledResult<R>[] = new Array(items.length);
+  if (items.length === 0) {
+    return results;
+  }
+  let n = Math.max(1, Math.min(concurrency, items.length));
+  let next = 0;
+  async function worker() {
+    for (;;) {
+      let i = next++;
+      if (i >= items.length) {
+        return;
+      }
+      try {
+        let value = await fn(items[i]!, i);
+        results[i] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+  let workers: Promise<void>[] = [];
+  for (let w = 0; w < n; w++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
+function firstRejection<R>(
+  results: PromiseSettledResult<R>[],
+): PromiseRejectedResult | undefined {
+  for (let result of results) {
+    if (result && result.status === 'rejected') {
+      return result;
+    }
+  }
+  return undefined;
 }
 
 function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
