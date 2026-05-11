@@ -470,23 +470,29 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'realm for Spec cards and instantiates every linkedExample on every ' +
       'card/app Spec; specs with no linkedExamples still get a bare ' +
       'instantiation to exercise the card class. With "path", instantiates ' +
-      'only that single realm-relative `.json` example file — its ' +
+      'only that single realm-relative `.json` **instance** file — its ' +
       '`meta.adoptsFrom` supplies the module + card name, and spec discovery ' +
       'is skipped entirely so the agent can self-check one instance in ' +
-      'isolation. The path must end in `.json`. The tool pushes your ' +
-      'workspace to the realm before instantiating so files you just wrote ' +
-      '(including the .json example and the card definition it adopts from) ' +
-      'are visible to the prerender sandbox. Safe to call repeatedly for ' +
-      'mid-turn self-validation — this tool does NOT create an ' +
-      'InstantiateResult card or any other validation artifact. The ' +
-      'orchestrator still runs the full validation pipeline (which writes ' +
-      'an InstantiateResult card) automatically after signal_done, so ' +
-      'calling this is optional. When a failure reports a line/column, ' +
-      'those numbers refer to the transpiled module — fetch the ' +
-      'transpiled output via Bash + `boxel read-transpiled <path> ' +
-      '--realm <url>` to locate the offending source construct, then ' +
-      'fix the .gts source (never copy transpiled patterns back into ' +
-      'source). Auth: realm server token.',
+      'isolation. The path must end in `.json`. **Do NOT pass a `Spec/...json` ' +
+      'path or any card whose `meta.adoptsFrom.module` is a base-realm URL ' +
+      '(`https://cardstack.com/base/...`). Specs adopt from the base realm, ' +
+      'and the prerender refuses cross-origin module loads — the call would ' +
+      'fail with "moduleUrl origin does not match realmUrl origin". To ' +
+      'validate Specs, call this tool WITHOUT a path; it discovers your ' +
+      'Specs and exercises their `linkedExamples` against the card class ' +
+      'you just wrote.** The tool pushes your workspace to the realm before ' +
+      'instantiating so files you just wrote (including the .json example ' +
+      'and the card definition it adopts from) are visible to the prerender ' +
+      'sandbox. Safe to call repeatedly for mid-turn self-validation — this ' +
+      'tool does NOT create an InstantiateResult card or any other ' +
+      'validation artifact. The orchestrator still runs the full validation ' +
+      'pipeline (which writes an InstantiateResult card) automatically after ' +
+      'signal_done, so calling this is optional. When a failure reports a ' +
+      'line/column, those numbers refer to the transpiled module — fetch ' +
+      'the transpiled output via Bash + `boxel read-transpiled <path> ' +
+      '--realm <url>` to locate the offending source construct, then fix ' +
+      'the .gts source (never copy transpiled patterns back into source). ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {

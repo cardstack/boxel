@@ -840,7 +840,44 @@ function summarizeSessionError(error: unknown): string {
   let parts = [`${name}: ${message}`];
   if (statusCode !== undefined) parts.push(`status=${statusCode}`);
   if (url) parts.push(`url=${url}`);
+  // The HTTP statusText (`message`) is usually generic ("Forbidden
+  // Request"). The actual reason ("Insufficient credits", model-not-
+  // available, upstream auth failure, ...) lives in the response body.
+  // Surface it when it's small enough to be useful in a single-line log.
+  let body = extractBodySummary(data.responseBody);
+  if (body) parts.push(`body=${body}`);
   return parts.join(' ');
+}
+
+function extractBodySummary(rawBody: unknown): string | undefined {
+  if (typeof rawBody !== 'string' || rawBody.length === 0) return undefined;
+  try {
+    let parsed = JSON.parse(rawBody);
+    // Common shapes we want to surface:
+    //   { errors: [string, ...] }  ← realm-server JSON:API error envelope
+    //   { error: { message: string } } ← OpenRouter / OpenAI-style
+    //   { error: string }          ← simpler form
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      Array.isArray((parsed as { errors?: unknown[] }).errors) &&
+      (parsed as { errors: unknown[] }).errors.length > 0
+    ) {
+      let first = (parsed as { errors: unknown[] }).errors[0];
+      return typeof first === 'string' ? first : JSON.stringify(first);
+    }
+    let err = (parsed as { error?: unknown }).error;
+    if (typeof err === 'string') return err;
+    if (err && typeof err === 'object') {
+      let msg = (err as { message?: unknown }).message;
+      if (typeof msg === 'string') return msg;
+      return JSON.stringify(err);
+    }
+  } catch {
+    // Non-JSON body — fall through to raw truncation.
+  }
+  // Truncate raw body so a giant HTML error page doesn't drown the log.
+  return rawBody.length > 200 ? rawBody.slice(0, 197) + '...' : rawBody;
 }
 
 function delay(ms: number): Promise<void> {

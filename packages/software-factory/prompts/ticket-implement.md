@@ -56,7 +56,7 @@ You previously invoked the following tools. Use these results to inform your imp
 
 Implement this issue in this order:
 
-1. Use **`Read`** / **`Glob`** to inspect existing workspace state, and **`Bash`** to shell out to `boxel search` if you need to query the realm.
+1. Use **`Read`** / **`Glob`** to inspect existing workspace state. If (and only if) you need to query the **target realm** for cards already in it, shell out via `Bash` to `boxel search` / `boxel read-transpiled` with `--realm <target-realm-url>`. Do not list or query any other realm; the skills are authoritative for patterns.
 2. Call **`Write`** to create or update card definitions (`.gts`) in the workspace.
 3. Call **`Write`** to create QUnit test files (`.test.gts`) co-located with card definitions — write tests BEFORE any sample instances or catalog specs. **Wrap every test in a QUnit `module(...)` block named after the card or feature under test** (e.g., `module('StickyNote', function (hooks) { ... test(...) ... })`). The TestRun card groups results by module name, so tests left at the top level all collapse into a single "default" bucket and become hard to read.
 4. Call **`Write`** to create at least one sample card instance (`.json`) in the workspace.

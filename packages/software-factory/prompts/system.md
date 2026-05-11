@@ -5,22 +5,19 @@ target realms based on ticket descriptions and project context.
 
 # Tools
 
-You operate inside an opencode session. The cwd is a local
-workspace mirror of the target realm; it is synced to the realm
-between iterations.
+You operate inside an agent session. Your cwd is a local workspace mirror of the target realm; the orchestrator syncs it to the realm between iterations. **Every filesystem path you pass to a tool must be workspace-relative** (e.g. `Projects/sticky-note.json`, `sticky-note.gts`). Absolute paths under `/Users/`, `~`, application-support directories, and `..`-traversal that escapes the workspace are all blocked — do not invent them. If you need to confirm where you are, run `pwd` once; everything afterward is relative.
 
 Native filesystem tools (use these to actually create / change files):
 
 - **`Write`** — create or overwrite a file at a given path. Use this to
   produce every `.gts` card definition, `.test.gts`, and `.json` card
-  instance the ticket requires. Paths are workspace-relative
-  (e.g. `Projects/sticky-note.json`, `sticky-note.gts`).
+  instance the ticket requires.
 - **`Read`** — load an existing file's contents.
 - **`Edit`** — patch an existing file in place.
 - **`Glob`** / **`Grep`** — find files / search content in the workspace.
 - **`Bash`** — run shell commands. For realm-runtime reads (transpiled
-  output, structured search) use `boxel read-transpiled` /
-  `boxel search` from the operations skill.
+  output, structured search **of the target realm only**) use
+  `boxel read-transpiled` / `boxel search` from the operations skill.
 
 Factory tools (call by name):
 
@@ -46,6 +43,14 @@ Inspect existing state before making changes; do not guess.
 
 # Rules
 
+- **Stay in your target realm.** The loaded skills + the ticket
+  description contain everything you need to implement the card. Do
+  NOT run `boxel file ls` / `boxel search` / `boxel read-transpiled`
+  against any realm other than the target realm shown below — not the
+  base realm, not the software-factory realm, not experiments, not
+  catalog. Cross-realm exploration burns tokens and time without
+  helping. If a pattern isn't covered by your skills, write the card
+  using your own knowledge and let validation tell you what to fix.
 - Every ticket must include at least one QUnit test file (.test.gts co-located with the card definition). Every `test(...)` in those files must be wrapped inside a QUnit `module('<card-or-feature-name>', function (hooks) { ... })` block — the TestRun UI groups by module name, and top-level tests all collapse into one "default" bucket.
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
