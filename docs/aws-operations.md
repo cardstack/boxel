@@ -14,7 +14,7 @@ Conventions used throughout:
 
 ## Activate the dynamic-pool prerender server
 
-Flips the boxel prerender server's `PagePool` from legacy fixed-size capacity (driven by `PRERENDER_PAGE_POOL_SIZE`) to the dynamic-pool envelope (driven by `MIN` / `MAX` / `HIGH_PRIORITY_MAX`). Use this once the dynamic-pool code is deployed and you're ready to activate the new behaviour on a deployed environment.
+Sets the boxel prerender server's `PagePool` envelope (`MIN` / `MAX` / `HIGH_PRIORITY_MAX`). Use this when first activating dynamic-pool behaviour on a deployed environment, or when re-tuning the envelope after a workload shift.
 
 ### Pre-requisites
 
@@ -98,24 +98,21 @@ If the ECS task is still 4 vCPU / 8 GB, the recommended values would OOM at `HP_
 
 ### Rollback
 
-Restoring legacy fixed-pool behaviour without a code change:
+Restore the previous envelope values via SSM, then force-redeploy. Capture the pre-change values before applying new ones so rollback is a single `put-parameter` per knob — there is no longer a "fall back to a different env var" escape hatch, so the rollback target must be a known-good envelope.
 
 ```sh
-# Reset all dynamic-pool knobs to the SSM placeholder value "0"
-# (which the application code treats as "unset", falling back to
-# the legacy PRERENDER_PAGE_POOL_SIZE path).
-for name in PRERENDER_PAGE_POOL_MIN PRERENDER_PAGE_POOL_MAX \
-            PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX \
-            PRERENDER_HIGH_PRIORITY_THRESHOLD \
-            PRERENDER_POOL_IDLE_CONTRACTION_MS \
-            PRERENDER_SHARED_CONTEXT_CAP; do
-  aws --profile $PROFILE ssm put-parameter \
-    --name "/${ENV}/boxel/${name}" --value "0" --overwrite
-done
+# Example: restoring a previous envelope. Substitute the values you
+# captured before applying.
+aws --profile $PROFILE ssm put-parameter \
+  --name "/${ENV}/boxel/PRERENDER_PAGE_POOL_MIN" --value <prev-min> --overwrite
+aws --profile $PROFILE ssm put-parameter \
+  --name "/${ENV}/boxel/PRERENDER_PAGE_POOL_MAX" --value <prev-max> --overwrite
+# … repeat for PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX,
+# PRERENDER_HIGH_PRIORITY_THRESHOLD,
+# PRERENDER_POOL_IDLE_CONTRACTION_MS,
+# PRERENDER_SHARED_CONTEXT_CAP as needed.
 
 aws --profile $PROFILE ecs update-service \
   --cluster $ENV --service boxel-prerender-server-$ENV \
   --force-new-deployment
 ```
-
-The pool re-enters the legacy behaviour driven by `PRERENDER_PAGE_POOL_SIZE` once the rollout finishes.
