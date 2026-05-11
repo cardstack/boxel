@@ -306,95 +306,161 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Operator action: grant the selected permission level to the chosen Matrix user on this realm. POSTs to the realm-server with Authorization: Bearer (token from SSM at apply time, CS-10929).",
+        "description": "Operator action: grant the chosen permission level to a Matrix user on this realm. Pick from existing users (sourced from the `users` table) or type a new Matrix ID like `@user:matrix.host`. POSTs to the realm-server with `Authorization: Bearer ${grafana_secret}` (token from SSM at apply time, CS-10929).",
         "fieldConfig": {
-          "defaults": {
-            "actions": [
-              {
-                "type": "fetch",
-                "title": "Grant ${permission_label} to ${matrix_username} on ${realm_url}",
-                "fetch": {
-                  "method": "POST",
-                  "url": "${realm_server}_grafana-upsert-realm-user-permission",
-                  "queryParams": [
-                    [
-                      "realm",
-                      "${realm_url}"
-                    ],
-                    [
-                      "user",
-                      "${matrix_username}"
-                    ],
-                    [
-                      "read",
-                      "${read_flag}"
-                    ],
-                    [
-                      "write",
-                      "${write_flag}"
-                    ]
-                  ],
-                  "headers": [
-                    [
-                      "Authorization",
-                      "Bearer ${grafana_secret}"
-                    ]
-                  ],
-                  "body": ""
-                },
-                "confirmation": "Grant ${permission_label} to ${matrix_username} on ${realm_url}?",
-                "oneClick": false
-              }
-            ],
-            "color": {
-              "mode": "thresholds"
-            },
-            "mappings": [
-              {
-                "options": {
-                  "from": 0,
-                  "result": {
-                    "index": 0,
-                    "text": "Grant"
-                  },
-                  "to": 9999999999999
-                },
-                "type": "range"
-              }
-            ],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green"
-                }
-              ]
-            }
-          },
+          "defaults": {},
           "overrides": []
         },
         "gridPos": {
-          "h": 4,
+          "h": 8,
           "w": 24,
           "x": 0,
           "y": 4
         },
         "id": 5,
         "options": {
-          "colorMode": "value",
-          "graphMode": "none",
-          "justifyMode": "center",
-          "orientation": "horizontal",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
           },
-          "textMode": "name"
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "matrix_username",
+              "type": "select",
+              "title": "Matrix username",
+              "tooltip": "Pick from existing users or type a new Matrix user ID like @user:matrix.host",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "",
+              "options": [],
+              "optionsSource": "Query",
+              "queryOptions": {
+                "source": "B",
+                "value": "matrix_user_id",
+                "label": "matrix_user_id"
+              },
+              "allowCustomValue": true
+            },
+            {
+              "id": "permission",
+              "type": "radio",
+              "title": "Permission level",
+              "tooltip": "Read = read-only; Read/Write = read and write.",
+              "labelWidth": 28,
+              "section": "input",
+              "value": "read",
+              "optionsSource": "Custom",
+              "options": [
+                {
+                  "id": "read",
+                  "label": "Read",
+                  "type": "string",
+                  "value": "read"
+                },
+                {
+                  "id": "read_write",
+                  "label": "Read/Write",
+                  "type": "string",
+                  "value": "read_write"
+                }
+              ]
+            },
+            {
+              "id": "btn_grant",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Grant on ${realm_url:text}",
+              "tooltip": "POST /_grafana-upsert-realm-user-permission?realm=...&user=...&read=...&write=...",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "const realm = ${realm_url:doublequote};\nconst username = (context.panel.elements.find(function(e){return e.id==='matrix_username';})||{}).value || '';\nconst permission = (context.panel.elements.find(function(e){return e.id==='permission';})||{}).value || 'read';\nconst trimmed = String(username).trim();\nif (!trimmed) {\n  context.grafana.notifyWarning(['Username required', 'Pick a Matrix user from the list or type one (e.g. @user:matrix.host).']);\n  return;\n}\nconst read = 'true';\nconst write = permission === 'read_write' ? 'true' : 'false';\nconst label = permission === 'read_write' ? 'read/write' : 'read';\nif (!window.confirm('Grant ' + label + ' to ' + trimmed + ' on ' + realm + '?')) { return; }\n(async () => {\ntry {\n  const url = ${realm_server:doublequote} + '_grafana-upsert-realm-user-permission?realm=' + encodeURIComponent(realm)\n            + '&user=' + encodeURIComponent(trimmed)\n            + '&read=' + read\n            + '&write=' + write;\n  const r = await fetch(url, { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Permission granted', label + ' granted to ' + trimmed + ' on ' + realm]);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Grant failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Grant failed', String(err)]);\n}\n\n})();"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "input",
+                "name": "Grant"
+              },
+              {
+                "id": "actions",
+                "name": "Action"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
         },
-        "pluginVersion": "12.4.3",
+        "pluginVersion": "6.2.0",
         "targets": [
           {
             "datasource": {
@@ -404,12 +470,23 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT 1 AS click;",
+            "rawSql": "SELECT 1 AS noop;",
             "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT matrix_user_id FROM users ORDER BY matrix_user_id;",
+            "refId": "B"
           }
         ],
         "title": "Grant Permission",
-        "type": "stat"
+        "type": "volkovlabs-form-panel"
       },
       {
         "datasource": {
@@ -484,7 +561,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 8
+          "y": 12
         },
         "id": 6,
         "options": {
@@ -649,7 +726,7 @@
           "h": 4,
           "w": 24,
           "x": 0,
-          "y": 18
+          "y": 22
         },
         "id": 7,
         "options": {
@@ -695,7 +772,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 26
         },
         "id": 100,
         "options": {
@@ -955,7 +1032,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 30
+          "y": 34
         },
         "id": 8,
         "options": {
@@ -1261,7 +1338,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 40
+          "y": 44
         },
         "id": 9,
         "options": {
@@ -1325,93 +1402,6 @@
           "regex": "",
           "skipUrlSync": false,
           "sort": 1,
-          "type": "query"
-        },
-        {
-          "current": {
-            "selected": false,
-            "text": "",
-            "value": ""
-          },
-          "hide": 0,
-          "label": "Matrix Username",
-          "name": "matrix_username",
-          "options": [],
-          "query": "",
-          "skipUrlSync": false,
-          "type": "textbox"
-        },
-        {
-          "current": {
-            "selected": true,
-            "text": "read",
-            "value": "read"
-          },
-          "hide": 0,
-          "includeAll": false,
-          "label": "Permission Level",
-          "multi": false,
-          "name": "permission_level",
-          "options": [],
-          "query": "read,read_write",
-          "skipUrlSync": false,
-          "type": "custom"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "cef5v5sl9k7i8f"
-          },
-          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
-          "hide": 2,
-          "includeAll": false,
-          "label": "permission_label",
-          "multi": false,
-          "name": "permission_label",
-          "options": [],
-          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
-          "refresh": 1,
-          "regex": "",
-          "skipUrlSync": true,
-          "sort": 0,
-          "type": "query"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "cef5v5sl9k7i8f"
-          },
-          "definition": "SELECT 'true' AS read_flag;",
-          "hide": 2,
-          "includeAll": false,
-          "label": "read_flag",
-          "multi": false,
-          "name": "read_flag",
-          "options": [],
-          "query": "SELECT 'true' AS read_flag;",
-          "refresh": 1,
-          "regex": "",
-          "skipUrlSync": true,
-          "sort": 0,
-          "type": "query"
-        },
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "cef5v5sl9k7i8f"
-          },
-          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
-          "hide": 2,
-          "includeAll": false,
-          "label": "write_flag",
-          "multi": false,
-          "name": "write_flag",
-          "options": [],
-          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
-          "refresh": 1,
-          "regex": "",
-          "skipUrlSync": true,
-          "sort": 0,
           "type": "query"
         },
         {
