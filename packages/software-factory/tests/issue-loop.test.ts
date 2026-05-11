@@ -228,15 +228,35 @@ function makeTool(name: string, result: unknown = { ok: true }): FactoryTool {
   };
 }
 
+// Real validators populate `details` with the per-step counts the new
+// vacuous-pass guard inspects (filesChecked / modulesChecked /
+// cardsChecked / passedCount+failedCount+skippedCount). Stub passing
+// results with non-zero counts so the guard treats them as "the
+// validator actually exercised something."
 function makePassingValidation(): ValidationResults {
   return {
     passed: true,
     steps: [
-      { step: 'parse', passed: true, errors: [] },
-      { step: 'lint', passed: true, errors: [] },
-      { step: 'evaluate', passed: true, errors: [] },
-      { step: 'instantiate', passed: true, errors: [] },
-      { step: 'test', passed: true, errors: [] },
+      { step: 'parse', passed: true, errors: [], details: { filesChecked: 1 } },
+      { step: 'lint', passed: true, errors: [], details: { filesChecked: 1 } },
+      {
+        step: 'evaluate',
+        passed: true,
+        errors: [],
+        details: { modulesChecked: 1 },
+      },
+      {
+        step: 'instantiate',
+        passed: true,
+        errors: [],
+        details: { cardsChecked: 1 },
+      },
+      {
+        step: 'test',
+        passed: true,
+        errors: [],
+        details: { passedCount: 1, failedCount: 0, skippedCount: 0 },
+      },
     ],
   };
 }
@@ -245,11 +265,63 @@ function makeFailingValidation(): ValidationResults {
   return {
     passed: false,
     steps: [
-      { step: 'parse', passed: true, errors: [] },
-      { step: 'lint', passed: false, errors: [{ message: 'lint error' }] },
-      { step: 'evaluate', passed: true, errors: [] },
-      { step: 'instantiate', passed: true, errors: [] },
-      { step: 'test', passed: false, errors: [{ message: 'test failure' }] },
+      { step: 'parse', passed: true, errors: [], details: { filesChecked: 1 } },
+      {
+        step: 'lint',
+        passed: false,
+        errors: [{ message: 'lint error' }],
+        details: { filesChecked: 1 },
+      },
+      {
+        step: 'evaluate',
+        passed: true,
+        errors: [],
+        details: { modulesChecked: 1 },
+      },
+      {
+        step: 'instantiate',
+        passed: true,
+        errors: [],
+        details: { cardsChecked: 1 },
+      },
+      {
+        step: 'test',
+        passed: false,
+        errors: [{ message: 'test failure' }],
+        details: { passedCount: 0, failedCount: 1, skippedCount: 0 },
+      },
+    ],
+  };
+}
+
+// All five validators "passed" but with zero items checked — what
+// happens in production when the agent calls signal_done before
+// writing any .gts / test / Spec / instance. Real validators return
+// this shape (each step is `passed: true` with `filesChecked: 0` etc).
+function makeVacuousPassingValidation(): ValidationResults {
+  return {
+    passed: true,
+    steps: [
+      { step: 'parse', passed: true, errors: [], details: { filesChecked: 0 } },
+      { step: 'lint', passed: true, errors: [], details: { filesChecked: 0 } },
+      {
+        step: 'evaluate',
+        passed: true,
+        errors: [],
+        details: { modulesChecked: 0 },
+      },
+      {
+        step: 'instantiate',
+        passed: true,
+        errors: [],
+        details: { cardsChecked: 0 },
+      },
+      {
+        step: 'test',
+        passed: true,
+        errors: [],
+        details: { passedCount: 0, failedCount: 0, skippedCount: 0 },
+      },
     ],
   };
 }
@@ -1151,5 +1223,142 @@ module('issue-loop > project completion', function () {
       [],
       'project status NOT updated when issues blocked',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Vacuous-pass guard (CS-11102)
+// ---------------------------------------------------------------------------
+
+module('issue-loop > vacuous validation guard', function () {
+  test('non-bootstrap issue: signal_done + all-vacuous validation does NOT mark done', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'sn-1',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+        issueType: 'feature',
+      } as Parameters<typeof makeIssue>[0]),
+    ]);
+
+    // Agent calls signal_done with zero card writes — exactly the
+    // production failure mode from CS-11102.
+    let agent = new MockLoopAgent(
+      [
+        { toolCalls: [{ tool: 'signal_done', args: {} }] },
+        { toolCalls: [{ tool: 'signal_done', args: {} }] },
+        { toolCalls: [{ tool: 'signal_done', args: {} }] },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        // Every iteration: real validators legitimately report zero
+        // items because the workspace is empty.
+        createValidator: () =>
+          new MockValidator([
+            makeVacuousPassingValidation(),
+            makeVacuousPassingValidation(),
+            makeVacuousPassingValidation(),
+          ]),
+        maxIterationsPerIssue: 3,
+      }),
+    );
+
+    let doneUpdate = store.updateCalls.find(
+      (c) => c.issueId === 'sn-1' && c.updates.status === 'done',
+    );
+    assert.notOk(
+      doneUpdate,
+      'issue is NOT marked done despite signal_done + every-step-passed',
+    );
+    assert.notStrictEqual(
+      result.outcome,
+      'all_issues_done',
+      'outer loop does not declare all-done',
+    );
+    assert.strictEqual(
+      result.issueResults[0].exitReason,
+      'blocked',
+      'issue exits as blocked after exhausting iterations',
+    );
+  });
+
+  test('bootstrap issue: signal_done + all-vacuous validation DOES mark done (exempt from guard)', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'bootstrap-seed',
+        status: 'backlog',
+        priority: 'critical',
+        order: 0,
+        issueType: 'bootstrap',
+      } as Parameters<typeof makeIssue>[0]),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [{ toolCalls: [{ tool: 'signal_done', args: {} }] }],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () =>
+          new MockValidator([makeVacuousPassingValidation()]),
+      }),
+    );
+
+    let doneUpdate = store.updateCalls.find(
+      (c) => c.issueId === 'bootstrap-seed' && c.updates.status === 'done',
+    );
+    assert.ok(
+      doneUpdate,
+      'bootstrap issue IS marked done — exempt from the vacuous-pass guard',
+    );
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+  });
+
+  test('non-bootstrap issue: signal_done + non-vacuous pass still marks done', async function (assert) {
+    // Sanity check: ensure the guard does not regress the happy path.
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'sn-2',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+        issueType: 'feature',
+      } as Parameters<typeof makeIssue>[0]),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'x' } },
+            { tool: 'signal_done', args: {} },
+          ],
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: () => new MockValidator([makePassingValidation()]),
+      }),
+    );
+
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    let doneUpdate = store.updateCalls.find(
+      (c) => c.issueId === 'sn-2' && c.updates.status === 'done',
+    );
+    assert.ok(doneUpdate, 'real implementation issue still marks done');
   });
 });

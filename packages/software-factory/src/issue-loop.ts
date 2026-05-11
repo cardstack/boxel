@@ -172,6 +172,59 @@ function issueSummaryLabel(issue: SchedulableIssue): string {
   return summary ? `"${issue.id}" — "${summary}"` : `"${issue.id}"`;
 }
 
+/**
+ * Detect a "vacuous pass" — overall `passed: true` where every step is a
+ * `passed: true` with zero items checked. The validators are correct to
+ * return this when their input set is empty (no .gts → nothing to lint),
+ * but the aggregate is misleading for a non-bootstrap implementation
+ * issue: the workspace is empty, the agent produced nothing. Bootstrap
+ * issues legitimately produce only tracker cards (Issues / Projects /
+ * Knowledge Articles) and have no `.gts` / test / Spec — they are
+ * supposed to vacuously pass and are exempt.
+ *
+ * Per-step `details` shapes:
+ * - `lint` / `parse`: `filesChecked: number`
+ * - `evaluate`: `modulesChecked: number`
+ * - `instantiate`: `cardsChecked: number`
+ * - `test`: `passedCount + failedCount + skippedCount`
+ */
+function isVacuousValidationOfImplementation(
+  results: ValidationResults,
+  issue: SchedulableIssue,
+): boolean {
+  if (!results.passed) return false;
+  let issueType = (issue as Record<string, unknown>).issueType;
+  if (issueType === 'bootstrap') return false;
+  if (results.steps.length === 0) return false;
+  return results.steps.every(isVacuousStep);
+}
+
+function isVacuousStep(step: ValidationStepResult): boolean {
+  if (!step.passed) return false;
+  let details = (step.details ?? {}) as Record<string, unknown>;
+  let asNumber = (v: unknown): number => (typeof v === 'number' ? v : 0);
+  switch (step.step) {
+    case 'lint':
+    case 'parse':
+      return asNumber(details.filesChecked) === 0;
+    case 'evaluate':
+      return asNumber(details.modulesChecked) === 0;
+    case 'instantiate':
+      return asNumber(details.cardsChecked) === 0;
+    case 'test':
+      return (
+        asNumber(details.passedCount) +
+          asNumber(details.failedCount) +
+          asNumber(details.skippedCount) ===
+        0
+      );
+    default:
+      // Unknown step shape — be permissive (don't fire on something we
+      // can't read) so this guard never blocks a legitimate pass.
+      return false;
+  }
+}
+
 function formatValidation(results: ValidationResults): string {
   if (results.passed) {
     let stepCount = results.steps.length;
@@ -394,6 +447,32 @@ export async function runIssueLoop(
       let syncFailed = !preValidationSync.ok || !postValidationSync.ok;
       let syncError = preValidationSync.error ?? postValidationSync.error;
 
+      // Vacuous-pass guard. Each validator step legitimately returns
+      // `passed: true` with zero items checked when its category of
+      // artifact doesn't exist yet (e.g. no .gts → "nothing to lint").
+      // But if every step is vacuous on a non-bootstrap issue, the
+      // workspace is empty: the agent produced no card definition, no
+      // tests, no Spec, no instances. Trusting the aggregated
+      // "passed: true" would let `signal_done` mark the issue done with
+      // nothing actually implemented. Override to failed so the next
+      // iteration re-prompts the agent with a "you wrote nothing"
+      // message; the existing max-iterations path then blocks the
+      // issue cleanly if the agent never recovers. Bootstrap issues
+      // legitimately produce only tracker cards and are exempt.
+      let vacuousValidationFailure = isVacuousValidationOfImplementation(
+        validationResults,
+        issue,
+      );
+      if (vacuousValidationFailure) {
+        log.warn(
+          `  Vacuous validation pass detected for non-bootstrap issue ${issueSummaryLabel(issue)}: every validator step reported zero items checked. Treating as failed.`,
+        );
+        validationResults = {
+          passed: false,
+          steps: validationResults.steps,
+        };
+      }
+
       // If either sync failed, the agent's writes didn't land on the
       // realm. Validators will have seen an empty/stale realm so a
       // "passed" result is vacuous. Surface the sync error into the
@@ -403,6 +482,17 @@ export async function runIssueLoop(
         validationResults && !validationResults.passed
           ? validator.formatForContext(validationResults)
           : undefined;
+      let vacuousNotice = vacuousValidationFailure
+        ? [
+            'Validation failed: every validator step reported "nothing to validate".',
+            'The workspace contains no card definition, no test file, no Spec, and no sample instances —',
+            'you called `signal_done` without producing any of the artifacts the ticket requires.',
+            'Re-read the issue\'s "Files to create" / acceptance section and produce each listed file',
+            'with native `Write` before calling `signal_done` again. At minimum a non-bootstrap issue',
+            'must yield: a `.gts` card definition, a co-located `.test.gts`, a `Spec/<slug>.json`',
+            'referencing the card, and at least one sample instance under `<CardType>/<slug>.json`.',
+          ].join('\n')
+        : undefined;
       if (syncFailed) {
         let syncNotice = [
           'Workspace sync to the realm FAILED — your file writes are still only on local disk.',
@@ -415,6 +505,10 @@ export async function runIssueLoop(
         validationContext = validationSummary
           ? `${syncNotice}\n\n${validationSummary}`
           : syncNotice;
+      } else if (vacuousNotice) {
+        validationContext = validationSummary
+          ? `${vacuousNotice}\n\n${validationSummary}`
+          : vacuousNotice;
       } else {
         validationContext = validationSummary;
       }
