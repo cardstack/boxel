@@ -13,6 +13,9 @@
 set -m
 
 init_pidfile
+# Spawn a detached watcher that re-runs cleanup if this script dies
+# without its trap firing. See `spawn_cleanup_guardian` in lib/dev-common.sh.
+spawn_cleanup_guardian $$
 
 cleanup() {
   trap - EXIT INT TERM HUP

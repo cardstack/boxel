@@ -13,6 +13,13 @@
 set -m
 
 init_pidfile
+# Spawn a detached watcher that re-runs cleanup if this script dies
+# without its trap firing — e.g. bash gets SIGKILL, or mise tears down
+# its task wrapper without forwarding a trappable signal. The trap below
+# is still the primary cleanup path; the guardian only matters when the
+# trap can't run. Guardian output goes to
+# $BOXEL_DEV_ALL_GUARDIAN_LOG (default ${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log).
+spawn_cleanup_guardian $$
 
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we

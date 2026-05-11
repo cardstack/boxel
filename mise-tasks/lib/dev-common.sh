@@ -73,6 +73,45 @@ kill_from_pidfile() {
   rm -f "$PIDFILE" 2>/dev/null || true
 }
 
+# Spawn a detached guardian process that polls the given parent pid and
+# runs `kill_from_pidfile` + `sweep_orphaned_services` once that pid dies.
+# This is the safety net for the case where dev-all's trap can't run —
+# e.g. dev-all bash gets SIGKILL, mise terminates without forwarding INT/
+# HUP, or the controlling session collapses before the trap handler can
+# execute. The trap path is still the primary cleanup; the guardian only
+# matters when the trap is denied a chance to fire.
+#
+# Implementation notes:
+#   - `setsid` puts the guardian in its own session so it doesn't get
+#     SIGHUP'd when dev-all's session dies.
+#   - stdin/stdout/stderr are redirected away from the terminal so the
+#     guardian can survive after the user's shell exits.
+#   - Output goes to a log file so the user can audit what fired.
+#   - The guardian exits as soon as it has run cleanup once; if cleanup
+#     already ran via the trap (which deleted the pidfile), the guardian's
+#     own `kill_from_pidfile` call is a no-op and the sweep is the only
+#     real work, which is idempotent.
+#   - `disown` removes the guardian from bash's job table so dev-all
+#     doesn't try to wait on it at exit.
+spawn_cleanup_guardian() {
+  _scg_parent_pid="$1"
+  _scg_log="${BOXEL_DEV_ALL_GUARDIAN_LOG:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log}"
+  _scg_lib="$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+  setsid sh -c "
+    exec </dev/null >>'$_scg_log' 2>&1
+    echo \"[guardian \$(date +%H:%M:%S)] watching dev-all pid $_scg_parent_pid (pidfile $PIDFILE)\"
+    while kill -0 $_scg_parent_pid 2>/dev/null; do
+      sleep 1
+    done
+    echo \"[guardian \$(date +%H:%M:%S)] dev-all pid $_scg_parent_pid is gone; running cleanup\"
+    . '$_scg_lib'
+    kill_from_pidfile
+    sweep_orphaned_services
+    echo \"[guardian \$(date +%H:%M:%S)] All dev-stack processes stopped (via guardian).\"
+  " &
+  disown 2>/dev/null || true
+}
+
 # Recursively SIGTERM a pid and all its descendants, sleep
 # KILL_TREE_GRACE_SECS, then SIGKILL stragglers. Walks by parent-pid (PPID)
 # rather than pgid because some callers pass a pid that isn't a pgroup
