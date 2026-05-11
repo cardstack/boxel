@@ -38,7 +38,6 @@ Required attributes:
 
 Relationships:
 
-- `board` → `../Boards/<slug>`
 - `knowledgeBase.0` → `../Knowledge Articles/<slug>-<article-slug>` (one per article)
 
 adoptsFrom: the darkfactory `Project` type.
@@ -57,11 +56,6 @@ Relationships:
 - `project` → `../Projects/<slug>`
 
 adoptsFrom: the darkfactory `IssueTracker` type.
-
-The Project card and the IssueTracker card must be linked both ways:
-
-- Project `board` → the board card
-- IssueTracker `project` → the project card
 
 ### 3. Knowledge Articles
 
