@@ -1,5 +1,6 @@
 'use strict';
 
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
@@ -7,6 +8,32 @@ const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
+
+// Classic ember-cli injected APP.version automatically; the Vite/Embroider
+// build does not, so we populate it here from package.json + the short git
+// SHA (matching ember-cli's `0.0.0+abcdef12` shape) so the submode-switcher
+// tooltip and any other consumer keeps working.
+function computeAppVersion() {
+  let pkgVersion = '0.0.0';
+  try {
+    pkgVersion = require('../package.json').version || pkgVersion;
+  } catch (_) {
+    // fall through with default
+  }
+  let sha = '';
+  try {
+    sha = execSync('git rev-parse --short=8 HEAD', {
+      cwd: __dirname,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch (_) {
+    // git unavailable (e.g. docker build without .git); fall back to pkg only
+  }
+  return sha ? `${pkgVersion}+${sha}` : pkgVersion;
+}
+const APP_VERSION = computeAppVersion();
 
 // Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames.
 // ENV_SLUG is set by mise's env-vars.sh; fall back to computing it for non-mise contexts.
@@ -68,6 +95,7 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
+      version: APP_VERSION,
     },
     'ember-cli-mirage': {
       enabled: false,
