@@ -1,9 +1,10 @@
 /**
  * Shared types, interfaces, and constants for the factory agent system.
  *
- * This module contains all the data types used across the declarative agent
- * (factory-agent.ts), the tool-use agent (factory-agent-tool-use.ts), and
- * their consumers (loop, context builder, prompt loader, etc.).
+ * The runtime agents (`ClaudeCodeFactoryAgent` in `claude-code.ts`,
+ * `OpencodeFactoryAgent` in `opencode.ts`) implement the `LoopAgent`
+ * interface declared here; orchestration consumers (issue loop, context
+ * builder, prompt loader) share the data types declared below.
  */
 
 // ---------------------------------------------------------------------------
@@ -17,7 +18,7 @@
  * Pinned to `claude-opus-4-7` rather than the unversioned `claude-opus-4`
  * alias. The alias route exhibited a deterministic mid-stream truncation
  * on large tool-call arguments (`finish_reason: null`, `completion=1`)
- * that broke every `write_file` for full `.gts` card definitions. Opus
+ * that broke every native `Write` for full `.gts` card definitions. Opus
  * 4.7 on the pinned route returned clean `finish_reason: tool_calls`
  * responses with completions up to ~4.7K tokens in a single turn, and
  * ran an end-to-end factory loop to `outcome=all_issues_done` with no
@@ -54,14 +55,6 @@ export const VALID_ACTION_TYPES = [
 
 export const VALID_REALMS = ['target', 'test'] as const;
 
-// Action types that require path + content
-export const FILE_ACTION_TYPES: ReadonlySet<string> = new Set([
-  'create_file',
-  'update_file',
-  'create_test',
-  'update_test',
-]);
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -93,8 +86,9 @@ export interface ClaudeCodeAgentConfig {
    * query's `cwd` so the model's native Read / Write / Edit / Bash / Glob /
    * Grep tools operate against the factory workspace by default — paths like
    * `sticky-note.gts` resolve inside the workspace, with no surprise hits
-   * against the user's filesystem. Realm I/O still goes through factory
-   * MCP tools (search_realm, run_command, validators, …).
+   * against the user's filesystem. Realm-runtime operations go through the
+   * factory MCP tools (get_card_schema, run_lint / run_parse / run_evaluate
+   * / run_instantiate / run_tests, signal_done, request_clarification).
    */
   workspaceDir?: string;
 }
@@ -257,14 +251,6 @@ export interface AgentAction {
   realm?: ActionRealm;
   tool?: string;
   toolArgs?: Record<string, unknown>;
-}
-
-// ---------------------------------------------------------------------------
-// FactoryAgent interface (declarative model)
-// ---------------------------------------------------------------------------
-
-export interface FactoryAgent {
-  plan(context: AgentContext): Promise<AgentAction[]>;
 }
 
 // ---------------------------------------------------------------------------
