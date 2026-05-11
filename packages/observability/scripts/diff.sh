@@ -107,7 +107,20 @@ if [[ -n "$only_changed_since" ]]; then
   # deletes; a deletion in the PR is a no-op for live state. Without
   # this, a PR that only deletes a dashboard would skip the empty-set
   # short-circuit below and trigger a needless `grafanactl pull`.
-  filter_paths="$(git diff --name-only --diff-filter=ACMRT \
+  #
+  # `git -C <repo-root>` so the path filter and output paths are both
+  # repo-rooted, regardless of where the script was invoked from. The
+  # CI workflow runs us with `working-directory: packages/observability`,
+  # which combined with the `cd "$(dirname "$0")/.."` above leaves
+  # `$PWD` at `packages/observability` — and from there git would
+  # interpret `-- packages/observability/grafanactl/resources/` as a
+  # CWD-relative pathspec (i.e., `packages/observability/packages/observability/...`),
+  # which never matches anything and silently returns an empty set,
+  # short-circuiting every observability PR to a blank diff comment.
+  # `is_in_filter_rel` below also expects repo-rooted paths in the
+  # `filter_paths` strings, so this fix keeps both sides aligned.
+  filter_paths="$(git -C "$(git rev-parse --show-toplevel)" \
+    diff --name-only --diff-filter=ACMRT \
     "${only_changed_since}...HEAD" \
     -- packages/observability/grafanactl/resources/)"
   if [[ -z "$filter_paths" ]]; then
