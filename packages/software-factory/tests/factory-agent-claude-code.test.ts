@@ -517,11 +517,15 @@ module('factory-agent-claude-code', function () {
         // into the Claude MCP catalog regardless of their plain name.
         makeTool({ name: 'realm-read', source: 'registered' }),
         makeTool({ name: 'search-realm', source: 'registered' }),
-        makeTool({ name: 'boxel-sync', source: 'registered' }),
+        makeTool({ name: 'sample-registered-tool', source: 'registered' }),
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
-      for (let registered of ['realm-read', 'search-realm', 'boxel-sync']) {
+      for (let registered of [
+        'realm-read',
+        'search-realm',
+        'sample-registered-tool',
+      ]) {
         assert.notOk(
           allowed.includes(`mcp__factory__${registered}`),
           `${registered} (registered) is not exposed on the Claude path`,

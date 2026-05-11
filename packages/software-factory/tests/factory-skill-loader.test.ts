@@ -816,7 +816,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
       let skills: ResolvedSkill[] = [
         { name: 'boxel-development', content: 'a'.repeat(2000) }, // 500 tokens
         { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // 500 tokens
-        { name: 'boxel-sync', content: 'c'.repeat(2000) }, // 500 tokens
+        { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // 500 tokens
       ];
 
       // Budget of 1000 tokens — can fit first two but not third
@@ -834,7 +834,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         'second priority kept',
       );
       assert.true(
-        warnings.some((w) => w.includes('boxel-sync')),
+        warnings.some((w) => w.includes('low-priority-test-skill')),
         'logged warning about dropped skill',
       );
     } finally {
@@ -849,9 +849,9 @@ module('factory-skill-loader > enforceSkillBudget', function () {
     try {
       let skills: ResolvedSkill[] = [
         // Present in reverse priority order
-        { name: 'boxel-sync', content: 'c'.repeat(2000) }, // priority 4
-        { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // priority 1
-        { name: 'boxel-development', content: 'a'.repeat(2000) }, // priority 0
+        { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // not in SKILL_PRIORITY → lowest
+        { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // priority 2
+        { name: 'boxel-development', content: 'a'.repeat(2000) }, // priority 1
       ];
 
       // Budget enough for only 2 skills
