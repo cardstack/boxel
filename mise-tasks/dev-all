@@ -24,6 +24,7 @@ cleanup() {
   trap - EXIT INT TERM HUP
   kill_from_pidfile
   sweep_orphaned_services
+  echo "[dev-all] All dev-stack processes stopped."
 }
 # HUP is required: when the user hits Ctrl-C in a terminal running `mise run
 # dev-all`, mise often exits without forwarding SIGINT to this bash script,

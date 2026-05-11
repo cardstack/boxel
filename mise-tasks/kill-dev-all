@@ -4,7 +4,7 @@
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
-echo "Cleaning up dev-all processes..."
+echo "[kill-dev-all] Cleaning up dev-stack processes..."
 kill_from_pidfile
 sweep_orphaned_services
-echo "Done. Verify ports with: ss -tlnp | grep -E ':(4200|4201|4202|4206|4210|4211|4221|4222|4213)'"
+echo "[kill-dev-all] All dev-stack processes stopped. Verify ports with: ss -tlnp | grep -E ':(4200|4201|4202|4206|4210|4211|4221|4222|4213)'"
