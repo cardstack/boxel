@@ -18,34 +18,34 @@
       "boardTitle": null,
       "placements": [
         {
-          "itemIndex": null,
+          "itemIndex": 0,
           "columnKey": "backlog",
           "sortOrder": 0
         },
         {
-          "itemIndex": null,
+          "itemIndex": 1,
+          "columnKey": "in_progress",
+          "sortOrder": 0
+        },
+        {
+          "itemIndex": 2,
+          "columnKey": "blocked",
+          "sortOrder": 0
+        },
+        {
+          "itemIndex": 3,
           "columnKey": "in_progress",
           "sortOrder": 1
         },
         {
-          "itemIndex": null,
-          "columnKey": "blocked",
-          "sortOrder": 1
-        },
-        {
-          "itemIndex": null,
-          "columnKey": "blocked",
-          "sortOrder": 2
-        },
-        {
-          "itemIndex": null,
+          "itemIndex": 4,
           "columnKey": "review",
-          "sortOrder": 4
+          "sortOrder": 0
         },
         {
-          "itemIndex": null,
+          "itemIndex": 5,
           "columnKey": "done",
-          "sortOrder": 5
+          "sortOrder": 0
         }
       ],
       "hideEmptyColumns": false

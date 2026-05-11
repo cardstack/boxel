@@ -1382,7 +1382,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 // ── IssueTracker ──────────────────────────────────────────────────────
 
 export class IssueTracker extends KanbanBoard {
-  static displayName = 'Issue Tracker Board';
+  static displayName = 'Issue Tracker';
 
   @field project = linksTo(() => Project);
 
