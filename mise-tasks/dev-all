@@ -12,17 +12,17 @@
 # dev run from binding the port.
 set -m
 
+init_pidfile
+
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we
 # start the host manually and use wait-on to gate readiness.
 pnpm --filter @cardstack/host start &
 HOST_PID=$!
+record_dev_pid host "$HOST_PID"
 cleanup() {
   trap - EXIT INT TERM HUP
-  if [ -n "${SAT_PID:-}" ]; then
-    kill_tree "$SAT_PID"
-  fi
-  kill_tree "$HOST_PID"
+  kill_from_pidfile
   sweep_orphaned_services
 }
 # HUP is required: when the user hits Ctrl-C in a terminal running `mise run
@@ -59,5 +59,6 @@ WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   "$NODE_TEST_REALM_READY" \
   'wait' &
 SAT_PID=$!
+record_dev_pid sat "$SAT_PID"
 wait "$SAT_PID"
 exit $?

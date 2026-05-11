@@ -1,0 +1,10 @@
+#!/bin/bash
+#MISE description="Force-kill any leaked dev-all processes (recovery from abnormal exit)"
+#MISE dir="packages/realm-server"
+
+. "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+
+echo "Cleaning up dev-all processes..."
+kill_from_pidfile
+sweep_orphaned_services
+echo "Done. Verify ports with: ss -tlnp | grep -E ':(4200|4201|4202|4206|4210|4211|4221|4222|4213)'"

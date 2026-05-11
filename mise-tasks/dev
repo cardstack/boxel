@@ -12,11 +12,11 @@
 # dev run from binding the port.
 set -m
 
+init_pidfile
+
 cleanup() {
   trap - EXIT INT TERM HUP
-  if [ -n "${SAT_PID:-}" ]; then
-    kill_tree "$SAT_PID"
-  fi
+  kill_from_pidfile
   sweep_orphaned_services
 }
 # HUP is required: when the user hits Ctrl-C in a terminal running `mise run
@@ -33,5 +33,6 @@ WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   "$NODE_TEST_REALM_READY" \
   'wait' &
 SAT_PID=$!
+record_dev_pid sat "$SAT_PID"
 wait "$SAT_PID"
 exit $?
