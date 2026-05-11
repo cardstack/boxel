@@ -2,7 +2,6 @@ import { get } from '@ember/helper';
 
 import {
   CardDef,
-  FieldDef,
   field,
   contains,
   containsMany,
@@ -12,7 +11,6 @@ import {
   type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
 
 import { KanbanPlane, Switch } from '@cardstack/boxel-ui/components';
 import type {
@@ -24,14 +22,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { KanbanColumnField } from './kanban-column';
-
-export class KanbanBoardPlacement extends FieldDef {
-  static displayName = 'Kanban Board Placement';
-
-  @field itemId = contains(StringField);
-  @field columnKey = contains(StringField);
-  @field sortOrder = contains(NumberField);
-}
+import { KanbanBoardPlacement } from './kanban-board-placement';
 
 export class KanbanBoard extends CardDef {
   static displayName = 'Kanban Board';

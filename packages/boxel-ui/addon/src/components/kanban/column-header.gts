@@ -21,7 +21,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
   <div class={{cn 'col-header' is-target=@isTarget}} ...attributes>
     <div class='col-header-left'>
       <span class='col-dot' style={{cssVar col-dot-bg=@column.color}}></span>
-      <span class='col-name'>{{if
+      <span class='col-name' data-test-boxel-kanban-col-name>{{if
           @column.label
           @column.label
           'Untitled'
@@ -38,6 +38,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
             (concat 'WIP limit ' @column.wipLimit)
           }}
           aria-live='polite'
+          data-test-kanban-col-wip={{@isOverWip}}
         >
           Max
           {{@column.wipLimit}}
@@ -54,6 +55,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
           @icon='add'
           @variant='ghost'
           {{on 'click' @onAddCard}}
+          data-test-column-add-button
         />
       {{/if}}
     </div>

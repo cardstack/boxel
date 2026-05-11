@@ -10,13 +10,13 @@ import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { StatusPill } from './status-pill';
 
-export class IssueOption extends FieldDef {
+export class IssueOptionField extends FieldDef {
   static displayName = 'Issue Option';
   @field value = contains(StringField);
   @field label = contains(StringField);
   @field color = contains(ColorField);
 
-  static edit = class Edit extends Component<typeof IssueOption> {
+  static edit = class Edit extends Component<typeof IssueOptionField> {
     <template>
       <div class='option-edit'>
         <div class='option-preview'>
@@ -112,7 +112,7 @@ export class IssueOption extends FieldDef {
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof IssueOption> {
+  static embedded = class Embedded extends Component<typeof IssueOptionField> {
     <template>
       <span class='option-item'>
         {{#if @model.color}}

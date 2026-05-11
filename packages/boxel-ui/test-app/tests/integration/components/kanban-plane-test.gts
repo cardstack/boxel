@@ -60,13 +60,13 @@ module('Integration | Component | kanban-plane', function (hooks) {
     );
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('.col-name').hasText('Doing');
-    assert.dom('.column.is-over-wip').exists();
-    assert.dom('.col-wip.over').hasText('Max 1');
+    assert.dom('[data-test-boxel-kanban-col-name]').hasText('Doing');
+    assert.dom('[data-test-column-is-over-wip]').exists();
+    assert.dom('[data-test-kanban-col-wip]').hasText('Max 1');
     assert.dom('[data-card-index]').exists({ count: 2 });
     assert.dom('[data-kanban-column="0"]').doesNotExist();
     assert.dom('[data-kanban-column="2"]').doesNotExist();
-    assert.dom('.empty-col').doesNotExist();
+    assert.dom('[data-test-empty-column]').doesNotExist();
   });
 
   test('it shows empty columns when hideEmpty is false', async function (assert) {
@@ -99,7 +99,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
     );
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('.empty-col').hasText('No cards');
+    assert.dom('[data-test-empty-column]').hasText('No cards');
   });
 
   test('hideEmpty with all-empty board renders no columns', async function (assert) {
@@ -177,8 +177,8 @@ module('Integration | Component | kanban-plane', function (hooks) {
       </template>,
     );
 
-    assert.dom('.col-add-btn').exists();
-    await click('.col-add-btn');
+    assert.dom('[data-test-column-add-button]').exists();
+    await click('[data-test-column-add-button]');
     assert.strictEqual(addedColumnKey, 'todo');
   });
 });

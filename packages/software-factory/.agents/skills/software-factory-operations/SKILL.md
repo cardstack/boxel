@@ -53,7 +53,7 @@ directory) before creating new ones.
 
 ### Tracker-schema cards — write JSON directly
 
-Project, Issue, KnowledgeArticle, and Spec cards are plain `.json` files
+Project, IssueTracker, Issue, KnowledgeArticle, and Spec cards are plain `.json` files
 in the workspace. Use `Write` (Claude) or `write_file` (OpenRouter) to
 create them and `Read` + `Edit` (or `Read` + `Write` of the merged
 document) to update them — same workspace fs surface as `.gts` files.
@@ -61,6 +61,7 @@ document) to update them — same workspace fs surface as `.gts` files.
 | File path                        | adoptsFrom                                                     |
 | -------------------------------- | -------------------------------------------------------------- |
 | `Projects/<slug>.json`           | `{module: "<darkfactoryModuleUrl>", name: "Project"}`          |
+| `Boards/<slug>.json`             | `{module: "<darkfactoryModuleUrl>", name: "IssueTracker"}`     |
 | `Issues/<slug>.json`             | `{module: "<darkfactoryModuleUrl>", name: "Issue"}`            |
 | `Knowledge Articles/<slug>.json` | `{module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle"}` |
 | `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`    |
