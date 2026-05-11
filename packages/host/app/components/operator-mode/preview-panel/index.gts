@@ -14,18 +14,22 @@ import {
   BoxelButton,
   CardContainer,
 } from '@cardstack/boxel-ui/components';
-import { eq, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   cardTypeDisplayName,
   cardTypeIcon,
-  formats as allFormats,
   getMenuItems,
   identifyCard,
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
+  cardDefFormats,
+  fileDefFormats,
+  fieldDefFormats,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { CardContextName } from '@cardstack/runtime-common';
@@ -89,6 +93,19 @@ export default class PreviewPanel extends Component<Signature> {
       return 'isolated';
     }
     return format;
+  }
+
+  // 'form' is a synthetic chooser option for "auto-generated standard
+  // view" — same mechanism as interact mode's "Toggle Standard View".
+  // The renderer doesn't know about 'form', so we render it as 'edit'
+  // and pin @codeRef to baseCardRef, which makes getComponent fall back
+  // to CardDef's auto-generated template instead of the subclass's
+  // custom edit template. Chooser-facing logic still uses `this.format`.
+  private get effectiveFormat(): Format {
+    return this.format === ('form' as Format) ? 'edit' : this.format;
+  }
+  private get effectiveCodeRef(): ResolvedCodeRef | undefined {
+    return this.format === ('form' as Format) ? baseCardRef : undefined;
   }
 
   private get cardId(): string | undefined {
@@ -161,14 +178,28 @@ export default class PreviewPanel extends Component<Signature> {
   }
 
   private get availableFormats() {
-    if (this.isCard) {
-      return allFormats;
-    }
-    let formats = allFormats.filter((f) => f !== 'edit');
     if (this.isFileDef) {
-      return [...formats, 'metadata' as Format];
+      return fileDefFormats;
     }
-    return formats;
+    if (this.isCard) {
+      const ctor = (this.args.card as CardDef).constructor as typeof CardDef;
+      const hasCustomEdit = ctor.hasCustomEditTemplate;
+      // Insert 'form' (toggle standard view) right after 'edit' ONLY
+      // when this card has a custom edit template. Note: a card that
+      // shares the same component for edit and isolated (e.g.
+      // Polymorph: `static edit = PolymorphIsolated`) still counts as
+      // having a custom edit — `hasCustomEditTemplate` is `edit !==
+      // CardDef.edit`, regardless of whether it equals isolated.
+      const result: Format[] = [];
+      for (const f of cardDefFormats) {
+        result.push(f);
+        if (f === 'edit' && hasCustomEdit) {
+          result.push('form' as Format);
+        }
+      }
+      return result;
+    }
+    return fieldDefFormats;
   }
 
   @provide(CardContextName)
@@ -241,9 +272,19 @@ export default class PreviewPanel extends Component<Signature> {
             @cardTypeIcon={{cardTypeIcon @card}}
             @cardTitle={{this.cardTitle}}
             @realmInfo={{this.realmInfo}}
-            @onEdit={{if this.canEditCard (fn @setFormat 'edit')}}
+            {{! Form is edit-with-base-template — visually the same as
+                edit for the header's green bar. Hide the pencil while
+                in either mode and let the X (finish editing) take you
+                back to isolated. }}
+            @onEdit={{if
+              (and
+                this.canEditCard
+                (not (or (eq this.format 'edit') (eq this.format 'form')))
+              )
+              (fn @setFormat 'edit')
+            }}
             @onFinishEditing={{if
-              (eq this.format 'edit')
+              (or (eq this.format 'edit') (eq this.format 'form'))
               (fn @setFormat 'isolated')
             }}
             @isTopCard={{true}}
@@ -273,15 +314,16 @@ export default class PreviewPanel extends Component<Signature> {
             <CardRenderer
               class='preview'
               @card={{@card}}
-              @format={{this.format}}
+              @format={{this.effectiveFormat}}
+              @codeRef={{this.effectiveCodeRef}}
             />
           {{/if}}
         </CardContainer>
       </div>
     </div>
-
-    <div class='card-renderer-format-chooser'>
+    <div class='card-renderer-format-chooser-container'>
       <FormatChooser
+        class='card-renderer-format-chooser'
         @format={{this.format}}
         @setFormat={{@setFormat}}
         @formats={{this.availableFormats}}
@@ -325,6 +367,9 @@ export default class PreviewPanel extends Component<Signature> {
       .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;
+        padding-bottom: calc(
+          var(--operator-mode-spacing) * 2 + var(--container-button-size)
+        );
         z-index: 0;
       }
       .card-renderer-content {
@@ -333,14 +378,30 @@ export default class PreviewPanel extends Component<Signature> {
       .card-renderer-content > :deep(.boxel-card-container.boundaries) {
         overflow: hidden;
       }
-      .card-renderer-format-chooser {
-        background-color: var(--boxel-dark);
-        right: 50%;
-        transform: translateX(50%);
+      /* Full-width centering shell for the floating chooser. Its
+         width tracks the card preview area so the chooser inside can
+         measure available width honestly (a `width: max-content`
+         shell would hug the chooser and create a stuck-compact loop
+         when room becomes available again). The dark capsule +
+         radius lives on the chooser itself in this layout. */
+      .card-renderer-format-chooser-container {
         position: absolute;
-        bottom: var(--boxel-sp-sm);
-        width: 460px;
-        border-radius: var(--boxel-border-radius);
+        bottom: var(--operator-mode-spacing);
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: center;
+        padding: 0 var(--operator-mode-spacing);
+        padding-right: calc(
+          var(--operator-mode-spacing) * 2 + var(--container-button-size)
+        );
+      }
+      .card-renderer-format-chooser {
+        --boxel-format-chooser-border-color: var(--boxel-400);
+        margin: 0;
+        max-width: 100%;
+        box-shadow: none;
+        border-radius: var(--boxel-border-radius-2xl);
       }
       :deep(.fitted-format-gallery) {
         padding: var(--boxel-sp-sm);
@@ -348,13 +409,6 @@ export default class PreviewPanel extends Component<Signature> {
       .preview {
         box-shadow: none;
         border-radius: 0;
-      }
-      :deep(.format-chooser) {
-        --boxel-format-chooser-border-color: var(--boxel-400);
-        margin: 0;
-        width: 100%;
-        box-shadow: none;
-        border-radius: var(--boxel-border-radius);
       }
     </style>
   </template>
