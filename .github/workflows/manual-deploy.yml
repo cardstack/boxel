@@ -37,7 +37,7 @@ jobs:
             echo "environment_url=" >> "$GITHUB_OUTPUT"
           fi
       - id: create
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const environment = '${{ inputs.environment }}';
@@ -54,7 +54,7 @@ jobs:
             });
             core.setOutput('deployment_id', response.data.id.toString());
       - name: Mark deployment in progress
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const deployment_id = Number('${{ steps.create.outputs.deployment_id }}');
@@ -360,7 +360,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set deployment status
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           NEEDS: ${{ toJson(needs) }}
           DEPLOYMENT_ID: ${{ needs.create-deployment.outputs.deployment-id }}
