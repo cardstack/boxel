@@ -172,7 +172,11 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
   try {
     indexDoc = readJsonSync(indexJsonPath);
   } catch (e) {
-    log.warn(`could not parse published index.json at ${indexJsonPath}: ${e}`);
+    log.warn(
+      `could not parse published index.json at ${indexJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
     return;
   }
   let adoptsFrom = (indexDoc as { data?: { meta?: { adoptsFrom?: unknown } } })
@@ -192,7 +196,11 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
   try {
     realmConfigDoc = readJsonSync(realmJsonPath) as Record<string, unknown>;
   } catch (e) {
-    log.warn(`could not parse published realm.json at ${realmJsonPath}: ${e}`);
+    log.warn(
+      `could not parse published realm.json at ${realmJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
     return;
   }
   let data = (realmConfigDoc.data ?? {}) as Record<string, unknown>;
@@ -207,7 +215,9 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
     writeJsonSync(realmJsonPath, realmConfigDoc, { spaces: 2 });
   } catch (e) {
     log.warn(
-      `could not write includePrerenderedDefaultRealmIndex into ${realmJsonPath}: ${e}`,
+      `could not write includePrerenderedDefaultRealmIndex into ${realmJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
     );
   }
 }
