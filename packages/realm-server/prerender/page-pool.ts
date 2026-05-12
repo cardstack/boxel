@@ -8,6 +8,10 @@ import type { ConsoleMessage, Page } from 'puppeteer';
 import type { BrowserContext } from 'puppeteer';
 import { resolvePrerenderManagerURL } from './config';
 import type { BrowserManager } from './browser-manager';
+import {
+  DURING_PRERENDER_HEADER,
+  DURING_PRERENDER_HEADER_VALUE,
+} from './prerender-constants';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 import { AsyncSemaphore } from './async-semaphore';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
@@ -1256,6 +1260,7 @@ export class PagePool {
           'Expected each prerender page to use its own browser context for localStorage isolation',
         );
       }
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -1845,6 +1850,7 @@ export class PagePool {
     let page: Page | undefined;
     try {
       page = await shared.context.newPage();
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, affinityKey, pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -2201,6 +2207,19 @@ export class PagePool {
   // sees a unified additionalErrors stream.
   //
   // Awaited (not fire-and-forget) so the CDP `Runtime.enable` round-
+  // Stamp every outbound HTTP request from this page with the
+  // during-prerender marker so the realm server can short-circuit
+  // recursive lookupDefinition fan-out in populateQueryFields when
+  // serving the host SPA's _federated-search / _search calls. This
+  // is the inbound signal the deadlock fix relies on; without it,
+  // parallel indexing renders fan out into self-referential
+  // prerender chains.
+  async #markPageAsInPrerender(page: Page): Promise<void> {
+    await page.setExtraHTTPHeaders({
+      [DURING_PRERENDER_HEADER]: DURING_PRERENDER_HEADER_VALUE,
+    });
+  }
+
   // trip completes before callers begin page navigation — otherwise
   // we'd miss exceptions thrown during early page boot. Attach
   // failures inside the helper still resolve cleanly without throwing
