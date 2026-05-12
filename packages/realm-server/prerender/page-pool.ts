@@ -2205,6 +2205,12 @@ export class PagePool {
   // populateQueryFields that causes self-referential prerender
   // deadlocks under parallel indexing.
   async #markPageAsInPrerender(page: Page): Promise<void> {
+    // Test stubs of Page in prerender-deadlock-test.ts don't expose
+    // every puppeteer method — guard the call so this stays optional
+    // observability rather than a load-bearing side effect.
+    if (typeof page.evaluateOnNewDocument !== 'function') {
+      return;
+    }
     await page.evaluateOnNewDocument(() => {
       (
         globalThis as unknown as { __boxelDuringPrerender?: boolean }
