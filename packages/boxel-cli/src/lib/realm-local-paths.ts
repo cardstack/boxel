@@ -37,23 +37,57 @@ function canonicalDomainFromHost(hostname: string): string {
   return hostname;
 }
 
-export function relativeStructuredPathForRealmUrl(realmUrl: string): string {
-  const url = new URL(realmUrl);
+// Reject segments that would let a crafted realmUrl escape the rootDir tree
+// (`.`, `..`, anything containing a path separator or NUL) — defence in depth
+// against malformed manifests; `findMisplacedLocalRealmDirs` also re-checks
+// containment after `path.resolve` collapses any `..` it didn't catch.
+function isSafePathSegment(segment: string): boolean {
+  if (!segment) return false;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    return false;
+  }
+  if (decoded === '.' || decoded === '..') return false;
+  if (
+    decoded.includes('/') ||
+    decoded.includes('\\') ||
+    decoded.includes('\0')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function relativeStructuredPathForRealmUrl(
+  realmUrl: string,
+): string | null {
+  let url: URL;
+  try {
+    url = new URL(realmUrl);
+  } catch {
+    return null;
+  }
   const domain = canonicalDomainFromHost(url.hostname);
+  if (!isSafePathSegment(domain)) return null;
   const parts = url.pathname
     .replace(/^\/|\/$/g, '')
     .split('/')
     .filter(Boolean);
   const owner = parts[0] ?? 'unknown-owner';
   const realm = parts[1] ?? parts[0] ?? 'workspace';
+  if (!isSafePathSegment(owner) || !isSafePathSegment(realm)) return null;
   return path.join(domain, owner, realm);
 }
 
 export function absoluteStructuredPathForRealmUrl(
   realmUrl: string,
   rootDir: string,
-): string {
-  return path.resolve(rootDir, relativeStructuredPathForRealmUrl(realmUrl));
+): string | null {
+  const rel = relativeStructuredPathForRealmUrl(realmUrl);
+  if (rel === null) return null;
+  return path.resolve(rootDir, rel);
 }
 
 function tryReadRealmUrl(manifestPath: string): MinimalManifest | null {
@@ -118,6 +152,17 @@ function findManifestPaths(rootDir: string): string[] {
   return manifests;
 }
 
+// True iff `child` is `root` or a descendant of `root`. Belt-and-suspenders
+// containment check after `path.resolve` — even if a crafted realmUrl made
+// it past `isSafePathSegment`, the resolved path must stay inside rootDir
+// before we move anything.
+function isWithin(root: string, child: string): boolean {
+  const rel = path.relative(root, child);
+  if (rel === '') return true;
+  if (rel.startsWith('..')) return false;
+  return !path.isAbsolute(rel);
+}
+
 export function findMisplacedLocalRealmDirs(
   rootDir: string,
 ): MisplacedLocalRealmEntry[] {
@@ -137,12 +182,18 @@ export function findMisplacedLocalRealmDirs(
       continue;
     }
 
-    const currentDir = path.dirname(manifestPath);
     const expectedDir = absoluteStructuredPathForRealmUrl(
       manifest.realmUrl,
       absoluteRoot,
     );
+    if (expectedDir === null) {
+      continue;
+    }
+    if (!isWithin(absoluteRoot, expectedDir)) {
+      continue;
+    }
 
+    const currentDir = path.dirname(manifestPath);
     if (path.resolve(currentDir) !== path.resolve(expectedDir)) {
       entries.push({
         manifestPath,

@@ -63,6 +63,37 @@ describe('relativeStructuredPathForRealmUrl', () => {
       path.join('stack.cards', 'unknown-owner', 'workspace'),
     );
   });
+
+  it('returns null for a string that is not a parseable URL', () => {
+    expect(relativeStructuredPathForRealmUrl('not a url')).toBeNull();
+    expect(relativeStructuredPathForRealmUrl('')).toBeNull();
+  });
+
+  it('returns null for segments containing encoded path separators or NUL', () => {
+    // `%2F` decodes to `/`, `%5C` to `\`, `%00` to NUL — any of these in an
+    // owner/realm segment could be used to construct a destination outside
+    // the intended <domain>/<owner>/<realm> tree if we let them through.
+    expect(
+      relativeStructuredPathForRealmUrl('https://stack.cards/foo%2Fbar/baz'),
+    ).toBeNull();
+    expect(
+      relativeStructuredPathForRealmUrl('https://stack.cards/alice/foo%5Cbar'),
+    ).toBeNull();
+    expect(
+      relativeStructuredPathForRealmUrl('https://stack.cards/foo%00bar/baz'),
+    ).toBeNull();
+  });
+
+  it('produces a safely-rooted path even for traversal-shaped URLs (WHATWG normalizes ..)', () => {
+    // The URL parser collapses `..` to `/`; the result lives under
+    // `<root>/stack.cards/...` and never escapes.
+    expect(relativeStructuredPathForRealmUrl('https://stack.cards/../..')).toBe(
+      path.join('stack.cards', 'unknown-owner', 'workspace'),
+    );
+    expect(
+      relativeStructuredPathForRealmUrl('https://stack.cards/%2e%2e/foo'),
+    ).toBe(path.join('stack.cards', 'foo', 'foo'));
+  });
 });
 
 describe('absoluteStructuredPathForRealmUrl', () => {
@@ -73,6 +104,12 @@ describe('absoluteStructuredPathForRealmUrl', () => {
         '/tmp/root',
       ),
     ).toBe(path.resolve('/tmp/root', 'stack.cards', 'alice', 'notes'));
+  });
+
+  it('returns null for an unparseable realmUrl', () => {
+    expect(
+      absoluteStructuredPathForRealmUrl('not a url', '/tmp/root'),
+    ).toBeNull();
   });
 });
 
@@ -156,6 +193,39 @@ describe('findMisplacedLocalRealmDirs', () => {
     expect(() => findMisplacedLocalRealmDirs(tmpRoot)).not.toThrow();
     expect(findMisplacedLocalRealmDirs(tmpRoot)).toEqual([]);
   });
+
+  it('ignores manifests whose realmUrl is not a parseable URL (no throw)', () => {
+    writeManifest(path.join(tmpRoot, 'bad-url'), {
+      realmUrl: 'not even a url',
+    });
+
+    expect(() => findMisplacedLocalRealmDirs(tmpRoot)).not.toThrow();
+    expect(findMisplacedLocalRealmDirs(tmpRoot)).toEqual([]);
+  });
+
+  it('ignores manifests with encoded path separators in segments', () => {
+    writeManifest(path.join(tmpRoot, 'sneaky-slash'), {
+      realmUrl: 'https://stack.cards/foo%2Fbar/baz',
+    });
+
+    expect(findMisplacedLocalRealmDirs(tmpRoot)).toEqual([]);
+  });
+
+  it('keeps traversal-shaped URLs inside rootDir (WHATWG normalizes ..)', () => {
+    writeManifest(path.join(tmpRoot, 'traversal-attempt'), {
+      realmUrl: 'https://stack.cards/../../etc/passwd',
+    });
+
+    const entries = findMisplacedLocalRealmDirs(tmpRoot);
+    expect(entries).toHaveLength(1);
+    // expectedDir must stay strictly within tmpRoot, never escape.
+    expect(entries[0].expectedDir.startsWith(path.resolve(tmpRoot))).toBe(true);
+    expect(
+      path
+        .relative(path.resolve(tmpRoot), entries[0].expectedDir)
+        .startsWith('..'),
+    ).toBe(false);
+  });
 });
 
 describe('warnIfMisplacedLocalRealmDirs', () => {
@@ -219,6 +289,15 @@ describe('warnIfMisplacedLocalRealmDirs', () => {
     setQuiet(true);
 
     warnIfMisplacedLocalRealmDirs(tmpRoot);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when a manifest contains a malformed realmUrl (regression for preAction crash)', () => {
+    writeManifest(path.join(tmpRoot, 'broken'), {
+      realmUrl: 'not even a url',
+    });
+
+    expect(() => warnIfMisplacedLocalRealmDirs(tmpRoot)).not.toThrow();
     expect(warnSpy).not.toHaveBeenCalled();
   });
 });
