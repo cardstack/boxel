@@ -9,7 +9,7 @@ import { registerWriteCommand } from './write';
 export function registerFileCommand(program: Command): void {
   let file = program
     .command('file')
-    .description('Read, write, search, and manage files in a realm');
+    .description('Read, write, and manage files in a realm');
 
   registerDeleteCommand(file);
   registerListCommand(file);
