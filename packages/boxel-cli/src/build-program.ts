@@ -8,6 +8,7 @@ import { registerRunCommand } from './commands/run-command';
 import { registerSearchCommand } from './commands/search';
 import { setQuiet } from './lib/cli-log';
 import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths';
+import { getProfileManager } from './lib/profile-manager';
 
 /**
  * Construct the boxel CLI program with every command registered. Pure builder
@@ -27,12 +28,26 @@ export function buildBoxelProgram(version: string): Command {
       '-q, --quiet',
       'Suppress informational progress logs (info/log/debug). Errors and warnings, plus command result payloads (JSON, file contents), are still emitted. Use this when invoking the CLI from automation (e.g. the software factory test harness) to keep stdout focused on the result.',
     )
-    .hook('preAction', (thisCommand) => {
+    .hook('preAction', async (thisCommand) => {
       let opts = thisCommand.optsWithGlobals?.() ?? thisCommand.opts();
       if (opts.quiet) {
         setQuiet(true);
       }
       warnIfMisplacedLocalRealmDirs(process.cwd());
+      // One-shot migration for profiles persisted before CS-10725 (when the
+      // schema stored `password` instead of `matrixAccessToken`). Runs once
+      // per CLI invocation: re-logs-in with the on-disk password and
+      // replaces it with the resulting access token. Failures are warned
+      // about and skipped so a single broken profile doesn't block the
+      // rest of the command.
+      try {
+        await getProfileManager().migrateLegacyProfiles();
+      } catch {
+        // migrateLegacyProfiles swallows per-profile failures internally;
+        // any error here means something is fundamentally wrong with the
+        // profiles file. Surface nothing — the actual command will fail
+        // loudly when it tries to use a profile.
+      }
     });
 
   program

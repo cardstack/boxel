@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -8,15 +8,43 @@ import {
   getUsernameFromMatrixId,
   getDomainFromMatrixId,
   getEnvironmentLabel,
+  type ProfileManagerDeps,
 } from '../../src/lib/profile-manager.js';
+import { MatrixAuthError, type MatrixAuth } from '../../src/lib/auth.js';
+
+// A fake MatrixAuth shaped like what `matrixLogin` would return — used to
+// drive the dependency-injection seam without touching a real Matrix server.
+function fakeAuth(matrixId: string, matrixUrl: string): MatrixAuth {
+  return {
+    accessToken: `token-for-${matrixId}`,
+    userId: matrixId,
+    deviceId: `DEVICE_${matrixId.replace(/[^A-Za-z0-9]/g, '_')}`,
+    matrixUrl,
+  };
+}
+
+function stubLogin(): ProfileManagerDeps {
+  return {
+    matrixLogin: vi.fn(async (matrixUrl: string, username: string) =>
+      fakeAuth(
+        `@${username}:${new URL(matrixUrl).hostname.replace(/^matrix[-.]/, '')}`,
+        matrixUrl,
+      ),
+    ),
+  };
+}
 
 describe('ProfileManager', () => {
   let tmpDir: string;
   let manager: ProfileManager;
+  let loginStub: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
-    manager = new ProfileManager(tmpDir);
+    loginStub = vi.fn(async (matrixUrl: string, username: string) =>
+      fakeAuth(`@${username}:stack.cards`, matrixUrl),
+    );
+    manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
   });
 
   afterEach(() => {
@@ -29,32 +57,99 @@ describe('ProfileManager', () => {
     expect(manager.getActiveProfile()).toBeNull();
   });
 
-  it('adds a profile and sets it as active when no other profiles exist', async () => {
+  it('addProfile logs in once and stores tokens (not password)', async () => {
     await manager.addProfile(
       '@testuser:stack.cards',
       'password123',
       'Test User',
     );
 
-    expect(manager.listProfiles()).toEqual(['@testuser:stack.cards']);
-    expect(manager.getActiveProfileId()).toBe('@testuser:stack.cards');
+    expect(loginStub).toHaveBeenCalledOnce();
+    expect(loginStub).toHaveBeenCalledWith(
+      'https://matrix-staging.stack.cards',
+      'testuser',
+      'password123',
+    );
 
-    const profile = manager.getProfile('@testuser:stack.cards');
-    expect(profile).toBeDefined();
-    expect(profile!.displayName).toBe('Test User');
-    expect(profile!.password).toBe('password123');
-    expect(profile!.matrixUrl).toBe('https://matrix-staging.stack.cards');
-    expect(profile!.realmServerUrl).toBe('https://realms-staging.stack.cards/');
+    const profile = manager.getProfile('@testuser:stack.cards')!;
+    expect(profile.displayName).toBe('Test User');
+    expect(profile.matrixAccessToken).toBe('token-for-@testuser:stack.cards');
+    expect(profile.matrixUserId).toBe('@testuser:stack.cards');
+    expect(profile.matrixDeviceId).toBe('DEVICE__testuser_stack_cards');
+    expect(profile.matrixUrl).toBe('https://matrix-staging.stack.cards');
+    expect(profile.realmServerUrl).toBe('https://realms-staging.stack.cards/');
+    // The password must never end up on the persisted Profile.
+    expect((profile as { password?: string }).password).toBeUndefined();
+
+    const onDisk = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, 'profiles.json'), 'utf-8'),
+    );
+    expect(onDisk.profiles['@testuser:stack.cards'].password).toBeUndefined();
+    expect(
+      onDisk.profiles['@testuser:stack.cards'].matrixAccessToken,
+    ).toBe('token-for-@testuser:stack.cards');
+  });
+
+  it('addProfile rejects when Matrix returns a different userId than the matrixId', async () => {
+    loginStub.mockResolvedValueOnce({
+      accessToken: 't',
+      deviceId: 'd',
+      userId: '@someoneelse:stack.cards',
+      matrixUrl: 'https://matrix-staging.stack.cards',
+    });
+
+    await expect(
+      manager.addProfile('@testuser:stack.cards', 'pw'),
+    ).rejects.toThrow(/Matrix returned userId.*@someoneelse/);
+  });
+
+  it('addProfileWithAuth persists tokens without invoking matrixLogin', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+      'Bob',
+    );
+    expect(loginStub).not.toHaveBeenCalled();
+    const profile = manager.getProfile('@bob:stack.cards')!;
+    expect(profile.matrixAccessToken).toBe('token-for-@bob:stack.cards');
+    expect(profile.matrixUserId).toBe('@bob:stack.cards');
+    expect(profile.matrixDeviceId).toBe('DEVICE__bob_stack_cards');
+  });
+
+  it('addProfileWithAuth preserves cached realm tokens when re-adding a profile', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setRealmServerToken('cached-server-token');
+    manager.setRealmToken('https://realms-staging.stack.cards/r/', 'realm-jwt');
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      {
+        ...fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+        accessToken: 'new-token',
+      },
+    );
+
+    expect(manager.getRealmServerToken()).toBe('cached-server-token');
+    expect(
+      manager.getRealmToken('https://realms-staging.stack.cards/r/'),
+    ).toBe('realm-jwt');
+    const profile = manager.getProfile('@bob:stack.cards')!;
+    expect(profile.matrixAccessToken).toBe('new-token');
   });
 
   it('adds a production profile with correct defaults', async () => {
+    loginStub.mockImplementation(async (matrixUrl: string, username: string) =>
+      fakeAuth(`@${username}:boxel.ai`, matrixUrl),
+    );
     await manager.addProfile('@testuser:boxel.ai', 'password123');
 
-    const profile = manager.getProfile('@testuser:boxel.ai');
-    expect(profile).toBeDefined();
-    expect(profile!.matrixUrl).toBe('https://matrix.boxel.ai');
-    expect(profile!.realmServerUrl).toBe('https://app.boxel.ai/');
-    expect(profile!.displayName).toBe('testuser \u00b7 boxel.ai');
+    const profile = manager.getProfile('@testuser:boxel.ai')!;
+    expect(profile.matrixUrl).toBe('https://matrix.boxel.ai');
+    expect(profile.realmServerUrl).toBe('https://app.boxel.ai/');
+    expect(profile.displayName).toBe('testuser · boxel.ai');
   });
 
   it('does not change active profile when adding a second profile', async () => {
@@ -106,13 +201,12 @@ describe('ProfileManager', () => {
       'Test User',
     );
 
-    // Create a new manager pointing at the same config dir
     const manager2 = new ProfileManager(tmpDir);
     expect(manager2.listProfiles()).toEqual(['@testuser:stack.cards']);
     expect(manager2.getActiveProfileId()).toBe('@testuser:stack.cards');
 
-    const profile = manager2.getProfile('@testuser:stack.cards');
-    expect(profile!.password).toBe('password123');
+    const profile = manager2.getProfile('@testuser:stack.cards')!;
+    expect(profile.matrixAccessToken).toBe('token-for-@testuser:stack.cards');
   });
 
   it.skipIf(process.platform === 'win32')(
@@ -122,43 +216,10 @@ describe('ProfileManager', () => {
 
       const profilesFile = path.join(tmpDir, 'profiles.json');
       const stats = fs.statSync(profilesFile);
-      // Check owner-only permissions (0600 = 0o600 = 384 decimal)
       const mode = stats.mode & 0o777;
       expect(mode).toBe(0o600);
     },
   );
-
-  it('gets active credentials from profile', async () => {
-    await manager.addProfile(
-      '@testuser:stack.cards',
-      'password123',
-      'Test User',
-    );
-
-    const creds = await manager.getActiveCredentials();
-    expect(creds).not.toBeNull();
-    expect(creds!.username).toBe('testuser');
-    expect(creds!.password).toBe('password123');
-    expect(creds!.matrixUrl).toBe('https://matrix-staging.stack.cards');
-    expect(creds!.realmServerUrl).toBe('https://realms-staging.stack.cards/');
-    expect(creds!.profileId).toBe('@testuser:stack.cards');
-  });
-
-  it('returns null credentials when no profile and no env vars', async () => {
-    const creds = await manager.getActiveCredentials();
-    expect(creds).toBeNull();
-  });
-
-  it('updates password for existing profile', async () => {
-    await manager.addProfile('@testuser:stack.cards', 'oldpass');
-
-    expect(
-      await manager.updatePassword('@testuser:stack.cards', 'newpass'),
-    ).toBe(true);
-
-    const profile = manager.getProfile('@testuser:stack.cards');
-    expect(profile!.password).toBe('newpass');
-  });
 
   it('updates display name for existing profile', async () => {
     await manager.addProfile('@testuser:stack.cards', 'pass', 'Old Name');
@@ -172,11 +233,10 @@ describe('ProfileManager', () => {
   });
 
   it('updateUrls replaces stored URLs and clears cached tokens', async () => {
-    await manager.addProfile(
+    await manager.addProfileWithAuth(
       '@testuser:my.server',
-      'pass',
+      fakeAuth('@testuser:my.server', 'https://matrix.old.server'),
       undefined,
-      'https://matrix.old.server',
       'https://realms.old.server/',
     );
     manager.setRealmServerToken('cached-server-token');
@@ -195,59 +255,10 @@ describe('ProfileManager', () => {
     expect(profile.realmServerToken).toBeUndefined();
   });
 
-  it('updateUrls returns false and preserves tokens when nothing changes', async () => {
-    await manager.addProfile(
-      '@testuser:my.server',
-      'pass',
-      undefined,
-      'https://matrix.my.server',
-      'https://realms.my.server/',
-    );
-    manager.setRealmServerToken('cached-server-token');
-
-    const changed = manager.updateUrls('@testuser:my.server', {
-      matrixUrl: 'https://matrix.my.server',
-      realmServerUrl: 'https://realms.my.server/',
-    });
-
-    expect(changed).toBe(false);
-    expect(manager.getRealmServerToken()).toBe('cached-server-token');
-  });
-
-  it('updateUrls accepts a partial update', async () => {
-    await manager.addProfile(
-      '@testuser:my.server',
-      'pass',
-      undefined,
-      'https://matrix.old.server',
-      'https://realms.my.server/',
-    );
-
-    const changed = manager.updateUrls('@testuser:my.server', {
-      matrixUrl: 'https://matrix.new.server',
-    });
-
-    expect(changed).toBe(true);
-    const profile = manager.getProfile('@testuser:my.server')!;
-    expect(profile.matrixUrl).toBe('https://matrix.new.server');
-    // realmServerUrl is unchanged
-    expect(profile.realmServerUrl).toBe('https://realms.my.server/');
-  });
-
-  it('updateUrls returns false for nonexistent profile', () => {
-    expect(
-      manager.updateUrls('@nonexistent:my.server', {
-        matrixUrl: 'https://matrix.x',
-      }),
-    ).toBe(false);
-  });
-
   it('handles corrupted config file gracefully', async () => {
-    // Write invalid JSON to the config file
     const profilesFile = path.join(tmpDir, 'profiles.json');
     fs.writeFileSync(profilesFile, 'not valid json{{{');
 
-    // Should start fresh without throwing
     const freshManager = new ProfileManager(tmpDir);
     expect(freshManager.listProfiles()).toEqual([]);
   });
@@ -267,6 +278,9 @@ describe('ProfileManager', () => {
   });
 
   it('allows unknown domains with explicit URLs', async () => {
+    loginStub.mockImplementationOnce(async (matrixUrl: string) =>
+      fakeAuth('@alice:custom.domain', matrixUrl),
+    );
     await manager.addProfile(
       '@alice:custom.domain',
       'password123',
@@ -282,18 +296,290 @@ describe('ProfileManager', () => {
   });
 });
 
+describe('getStoredMatrixAuth', () => {
+  let tmpDir: string;
+  let manager: ProfileManager;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
+    manager = new ProfileManager(tmpDir, stubLogin());
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns the stored MatrixAuth for the active profile', async () => {
+    await manager.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    const auth = manager.getStoredMatrixAuth();
+    expect(auth.accessToken).toBe('token-for-@user:stack.cards');
+    expect(auth.userId).toBe('@user:stack.cards');
+    expect(auth.deviceId).toBe('DEVICE__user_stack_cards');
+    expect(auth.matrixUrl).toBe('https://matrix-staging.stack.cards');
+  });
+
+  it('returns the stored MatrixAuth for an explicit profileId', async () => {
+    await manager.addProfileWithAuth(
+      '@first:stack.cards',
+      fakeAuth('@first:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    await manager.addProfileWithAuth(
+      '@second:stack.cards',
+      fakeAuth('@second:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    const auth = manager.getStoredMatrixAuth('@second:stack.cards');
+    expect(auth.userId).toBe('@second:stack.cards');
+  });
+
+  it('throws when no profile is active', () => {
+    expect(() => manager.getStoredMatrixAuth()).toThrow(/No active profile/);
+  });
+});
+
+describe('migrateLegacyProfiles', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function seedLegacyProfile(passwordValue = 'legacy-password'): string {
+    const profilesFile = path.join(tmpDir, 'profiles.json');
+    fs.writeFileSync(
+      profilesFile,
+      JSON.stringify(
+        {
+          activeProfile: '@legacy:stack.cards',
+          profiles: {
+            '@legacy:stack.cards': {
+              displayName: 'Legacy',
+              matrixUrl: 'https://matrix-staging.stack.cards',
+              realmServerUrl: 'https://realms-staging.stack.cards/',
+              password: passwordValue,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    return profilesFile;
+  }
+
+  it('runs matrixLogin for legacy profiles and replaces password with tokens on disk', async () => {
+    const profilesFile = seedLegacyProfile();
+    const loginStub = vi.fn(async () =>
+      fakeAuth('@legacy:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
+
+    const result = await manager.migrateLegacyProfiles();
+
+    expect(result.migrated).toEqual(['@legacy:stack.cards']);
+    expect(result.failed).toEqual([]);
+    expect(loginStub).toHaveBeenCalledWith(
+      'https://matrix-staging.stack.cards',
+      'legacy',
+      'legacy-password',
+    );
+
+    const onDisk = JSON.parse(fs.readFileSync(profilesFile, 'utf-8'));
+    const profile = onDisk.profiles['@legacy:stack.cards'];
+    expect(profile.password).toBeUndefined();
+    expect(profile.matrixAccessToken).toBe('token-for-@legacy:stack.cards');
+    expect(profile.matrixUserId).toBe('@legacy:stack.cards');
+    expect(profile.matrixDeviceId).toBe('DEVICE__legacy_stack_cards');
+  });
+
+  it('records failures and leaves the legacy password in place when matrixLogin throws', async () => {
+    seedLegacyProfile();
+    const loginStub = vi
+      .fn()
+      .mockRejectedValue(new Error('Matrix unreachable'));
+    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await manager.migrateLegacyProfiles();
+
+    expect(result.migrated).toEqual([]);
+    expect(result.failed).toEqual(['@legacy:stack.cards']);
+    const profile = manager.getProfile('@legacy:stack.cards')!;
+    expect(profile.matrixAccessToken).toBeUndefined();
+    expect((profile as { password?: string }).password).toBe('legacy-password');
+
+    warnSpy.mockRestore();
+  });
+
+  it('is a no-op for profiles that already have an access token', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'profiles.json'),
+      JSON.stringify(
+        {
+          activeProfile: '@new:stack.cards',
+          profiles: {
+            '@new:stack.cards': {
+              displayName: 'New',
+              matrixUrl: 'https://matrix-staging.stack.cards',
+              realmServerUrl: 'https://realms-staging.stack.cards/',
+              matrixAccessToken: 'already-have-one',
+              matrixUserId: '@new:stack.cards',
+              matrixDeviceId: 'NEWDEV',
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const loginStub = vi.fn();
+    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
+
+    const result = await manager.migrateLegacyProfiles();
+    expect(result.migrated).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(loginStub).not.toHaveBeenCalled();
+  });
+});
+
+describe('reAuthenticate', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('throws a clear error when stdin is not a TTY', async () => {
+    const manager = new ProfileManager(tmpDir, {
+      ...stubLogin(),
+      isTty: () => false,
+    });
+    await manager.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    await expect(manager.reAuthenticate()).rejects.toThrow(
+      /no longer valid.*boxel profile add/,
+    );
+  });
+
+  it('prompts for password, re-runs matrixLogin, and writes new tokens on TTY', async () => {
+    const loginStub = vi.fn(async () => ({
+      accessToken: 'fresh-token',
+      userId: '@user:stack.cards',
+      deviceId: 'FRESH_DEVICE',
+      matrixUrl: 'https://matrix-staging.stack.cards',
+    }));
+    const promptStub = vi.fn(async () => 'typed-password');
+    const manager = new ProfileManager(tmpDir, {
+      matrixLogin: loginStub,
+      promptPassword: promptStub,
+      isTty: () => true,
+    });
+    await manager.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    const fresh = await manager.reAuthenticate();
+
+    expect(promptStub).toHaveBeenCalledOnce();
+    expect(loginStub).toHaveBeenCalledWith(
+      'https://matrix-staging.stack.cards',
+      'user',
+      'typed-password',
+    );
+    expect(fresh.accessToken).toBe('fresh-token');
+    expect(manager.getProfile('@user:stack.cards')!.matrixAccessToken).toBe(
+      'fresh-token',
+    );
+  });
+
+  it('refreshServerToken recovers from a 401 by re-authenticating once', async () => {
+    let loginCount = 0;
+    const loginStub = vi.fn(async () => {
+      loginCount += 1;
+      return {
+        accessToken: `token-v${loginCount}`,
+        userId: '@user:stack.cards',
+        deviceId: `DEV${loginCount}`,
+        matrixUrl: 'https://matrix-staging.stack.cards',
+      };
+    });
+    const promptStub = vi.fn(async () => 'typed-password');
+    const manager = new ProfileManager(tmpDir, {
+      matrixLogin: loginStub,
+      promptPassword: promptStub,
+      isTty: () => true,
+    });
+    await manager.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    // Stub global fetch: first call to OpenID returns 401, after re-auth it
+    // succeeds; subsequent /_server-session returns a JWT in the
+    // Authorization header.
+    let openIdCount = 0;
+    const fetchStub = vi.fn(async (input: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/openid/request_token')) {
+        openIdCount += 1;
+        if (openIdCount === 1) {
+          return new Response('expired', { status: 401 });
+        }
+        return new Response(JSON.stringify({ token: 'oid' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/_server-session')) {
+        return new Response('{}', {
+          status: 200,
+          headers: { Authorization: 'realm-jwt' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      const token = await manager.refreshServerToken();
+      expect(token).toBe('realm-jwt');
+      // Should have re-authed exactly once.
+      expect(promptStub).toHaveBeenCalledOnce();
+      expect(manager.getProfile('@user:stack.cards')!.matrixAccessToken).toBe(
+        'token-v1',
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('token storage', () => {
   let tmpDir: string;
   let manager: ProfileManager;
 
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
-    manager = new ProfileManager(tmpDir);
-    await manager.addProfile(
+    manager = new ProfileManager(tmpDir, stubLogin());
+    await manager.addProfileWithAuth(
       '@test:localhost',
-      'pass',
+      fakeAuth('@test:localhost', 'http://localhost:8008'),
       'Test',
-      'http://localhost:8008',
       'http://localhost:4201/',
     );
   });
@@ -328,18 +614,6 @@ describe('token storage', () => {
 
     let manager2 = new ProfileManager(tmpDir);
     expect(manager2.getRealmServerToken()).toBe('server-jwt-456');
-  });
-
-  it('stores multiple realm tokens independently', () => {
-    manager.setRealmToken('http://localhost:4201/realm-a/', 'jwt-a');
-    manager.setRealmToken('http://localhost:4201/realm-b/', 'jwt-b');
-
-    expect(manager.getRealmToken('http://localhost:4201/realm-a/')).toBe(
-      'jwt-a',
-    );
-    expect(manager.getRealmToken('http://localhost:4201/realm-b/')).toBe(
-      'jwt-b',
-    );
   });
 
   it('returns undefined for unknown realm token', () => {
@@ -380,5 +654,13 @@ describe('environment helpers', () => {
     expect(getEnvironmentLabel('staging')).toBe('stack.cards');
     expect(getEnvironmentLabel('production')).toBe('boxel.ai');
     expect(getEnvironmentLabel('unknown')).toBe('unknown');
+  });
+});
+
+describe('MatrixAuthError integration', () => {
+  it('is throwable and identifiable via instanceof', () => {
+    const err = new MatrixAuthError(401, 'rejected');
+    expect(err).toBeInstanceOf(MatrixAuthError);
+    expect(err.status).toBe(401);
   });
 });

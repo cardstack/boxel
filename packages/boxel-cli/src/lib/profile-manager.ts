@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors';
 import {
   matrixLogin,
+  MatrixAuthError,
   getRealmServerToken as fetchRealmServerToken,
   getRealmTokens,
   addRealmToMatrixAccountData,
@@ -12,7 +13,14 @@ import {
   getUserRealmsFromMatrixAccountData,
   type MatrixAuth,
 } from './auth';
+import { promptPassword as defaultPromptPassword } from './prompt';
 import type { RealmAuthenticator } from './realm-authenticator';
+
+export interface ProfileManagerDeps {
+  matrixLogin?: typeof matrixLogin;
+  promptPassword?: (question: string) => Promise<string>;
+  isTty?: () => boolean;
+}
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
@@ -49,9 +57,14 @@ export interface Profile {
   displayName: string;
   matrixUrl: string;
   realmServerUrl: string;
-  password: string; // Stored in plaintext - file should have restricted permissions, this will be updated in CS-10642
+  matrixAccessToken: string;
+  matrixUserId: string;
+  matrixDeviceId: string;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
+  // Legacy field — accepted only when loading pre-CS-10725 profiles.json so
+  // `migrateLegacyProfiles()` can re-login once and replace it with tokens.
+  password?: string;
 }
 
 export interface ProfilesConfig {
@@ -121,11 +134,17 @@ export class ProfileManager implements RealmAuthenticator {
   private config: ProfilesConfig;
   private configDir: string;
   private profilesFile: string;
+  private matrixLoginFn: typeof matrixLogin;
+  private promptPasswordFn: (question: string) => Promise<string>;
+  private isTtyFn: () => boolean;
 
-  constructor(configDir?: string) {
+  constructor(configDir?: string, deps?: ProfileManagerDeps) {
     this.configDir = configDir || DEFAULT_CONFIG_DIR;
     this.profilesFile = path.join(this.configDir, PROFILES_FILENAME);
     this.config = this.loadConfig();
+    this.matrixLoginFn = deps?.matrixLogin ?? matrixLogin;
+    this.promptPasswordFn = deps?.promptPassword ?? defaultPromptPassword;
+    this.isTtyFn = deps?.isTty ?? (() => Boolean(process.stdin.isTTY));
   }
 
   private ensureConfigDir(): void {
@@ -199,13 +218,20 @@ export class ProfileManager implements RealmAuthenticator {
     return { id, profile };
   }
 
-  async addProfile(
+  // Resolve {matrixUrl, realmServerUrl, displayName} from environment defaults
+  // and caller-provided overrides. Shared by `addProfile` and
+  // `addProfileWithAuth` so both paths agree on naming + URL inference.
+  private resolveProfileSlots(
     matrixId: string,
-    password: string,
-    displayName?: string,
-    matrixUrl?: string,
-    realmServerUrl?: string,
-  ): Promise<void> {
+    displayName: string | undefined,
+    matrixUrl: string | undefined,
+    realmServerUrl: string | undefined,
+  ): {
+    matrixUrl: string;
+    realmServerUrl: string;
+    displayName: string;
+    username: string;
+  } {
     const env = getEnvironmentFromMatrixId(matrixId);
     const username = getUsernameFromMatrixId(matrixId);
 
@@ -225,11 +251,42 @@ export class ProfileManager implements RealmAuthenticator {
         : 'https://realms-staging.stack.cards/';
 
     const domain = getDomainFromMatrixId(matrixId);
-    const profile: Profile = {
-      displayName: displayName || `${username} \u00b7 ${domain}`,
+    return {
       matrixUrl: matrixUrl || defaultMatrixUrl,
       realmServerUrl: realmServerUrl || defaultRealmUrl,
-      password,
+      displayName: displayName || `${username} \u00b7 ${domain}`,
+      username,
+    };
+  }
+
+  // Persist a profile from an already-acquired MatrixAuth. The token is
+  // stored; the original password (if any) never reaches this function. Used
+  // directly by tests, and as the "store" half of `addProfile`.
+  // When re-authing an existing profile we keep its cached realm tokens \u2014 a
+  // fresh access token doesn't invalidate the realm-server JWT.
+  async addProfileWithAuth(
+    matrixId: string,
+    auth: MatrixAuth,
+    displayName?: string,
+    realmServerUrl?: string,
+  ): Promise<void> {
+    const slots = this.resolveProfileSlots(
+      matrixId,
+      displayName,
+      auth.matrixUrl,
+      realmServerUrl,
+    );
+
+    const existing = this.config.profiles[matrixId];
+    const profile: Profile = {
+      displayName: slots.displayName,
+      matrixUrl: slots.matrixUrl,
+      realmServerUrl: slots.realmServerUrl,
+      matrixAccessToken: auth.accessToken,
+      matrixUserId: auth.userId,
+      matrixDeviceId: auth.deviceId,
+      realmTokens: existing?.realmTokens,
+      realmServerToken: existing?.realmServerToken,
     };
 
     this.config.profiles[matrixId] = profile;
@@ -239,6 +296,41 @@ export class ProfileManager implements RealmAuthenticator {
     }
 
     this.saveConfig();
+  }
+
+  async addProfile(
+    matrixId: string,
+    password: string,
+    displayName?: string,
+    matrixUrl?: string,
+    realmServerUrl?: string,
+  ): Promise<void> {
+    const slots = this.resolveProfileSlots(
+      matrixId,
+      displayName,
+      matrixUrl,
+      realmServerUrl,
+    );
+
+    const auth = await this.matrixLoginFn(
+      slots.matrixUrl,
+      slots.username,
+      password,
+    );
+
+    if (auth.userId !== matrixId) {
+      throw new Error(
+        `Matrix returned userId "${auth.userId}" but profile was added as "${matrixId}". ` +
+          `Check the Matrix ID and try again.`,
+      );
+    }
+
+    await this.addProfileWithAuth(
+      matrixId,
+      auth,
+      slots.displayName,
+      slots.realmServerUrl,
+    );
   }
 
   async removeProfile(profileId: string): Promise<boolean> {
@@ -262,56 +354,6 @@ export class ProfileManager implements RealmAuthenticator {
       return false;
     }
     this.config.activeProfile = profileId;
-    this.saveConfig();
-    return true;
-  }
-
-  async getActiveCredentials(): Promise<{
-    matrixUrl: string;
-    username: string;
-    password: string;
-    realmServerUrl: string;
-    profileId: string | null;
-  } | null> {
-    const active = this.getActiveProfile();
-    if (active && active.profile.password) {
-      return {
-        matrixUrl: active.profile.matrixUrl,
-        username: getUsernameFromMatrixId(active.id),
-        password: active.profile.password,
-        realmServerUrl: active.profile.realmServerUrl,
-        profileId: active.id,
-      };
-    }
-
-    const matrixUrl = process.env.MATRIX_URL;
-    const username = process.env.MATRIX_USERNAME;
-    const password = process.env.MATRIX_PASSWORD;
-    const realmServerUrl = process.env.REALM_SERVER_URL;
-
-    if (matrixUrl && username && password && realmServerUrl) {
-      return {
-        matrixUrl,
-        username,
-        password,
-        realmServerUrl,
-        profileId: null,
-      };
-    }
-
-    return null;
-  }
-
-  async getPassword(profileId: string): Promise<string | null> {
-    const profile = this.config.profiles[profileId];
-    return profile?.password || null;
-  }
-
-  async updatePassword(profileId: string, password: string): Promise<boolean> {
-    if (!this.config.profiles[profileId]) {
-      return false;
-    }
-    this.config.profiles[profileId].password = password;
     this.saveConfig();
     return true;
   }
@@ -385,14 +427,92 @@ export class ProfileManager implements RealmAuthenticator {
     return active?.profile.realmServerToken;
   }
 
-  private async loginToMatrix(): Promise<MatrixAuth> {
-    let active = this.getActiveProfile();
-    if (!active) {
-      throw new Error('No active profile');
+  // Return the Matrix credentials stored for a profile. Sync — reads only
+  // the in-memory `this.config`, which is populated by the constructor.
+  // Throws when the profile has no stored token yet (e.g. legacy profile
+  // that hasn't gone through `migrateLegacyProfiles()` or `addProfile`).
+  getStoredMatrixAuth(profileId?: string): MatrixAuth {
+    const targetId = profileId ?? this.config.activeProfile ?? undefined;
+    const profile = targetId ? this.config.profiles[targetId] : undefined;
+    if (!targetId || !profile) {
+      throw new Error(NO_ACTIVE_PROFILE_ERROR);
     }
-    let { id, profile } = active;
-    let username = getUsernameFromMatrixId(id);
-    return matrixLogin(profile.matrixUrl, username, profile.password);
+    if (!profile.matrixAccessToken) {
+      throw new Error(
+        `Profile "${targetId}" has no stored Matrix access token. ` +
+          `Run \`boxel profile add ${targetId}\` to authenticate.`,
+      );
+    }
+    return {
+      accessToken: profile.matrixAccessToken,
+      userId: profile.matrixUserId,
+      deviceId: profile.matrixDeviceId,
+      matrixUrl: profile.matrixUrl,
+    };
+  }
+
+  // When the stored access token gets rejected by Matrix (revoked, expired,
+  // server-side device deletion), prompt the user for their password on a
+  // TTY, run matrixLogin again, persist the new tokens, and return the
+  // refreshed MatrixAuth. Non-TTY contexts get a clear "re-add the profile"
+  // error instead of hanging on a prompt that can never be answered.
+  async reAuthenticate(profileId?: string): Promise<MatrixAuth> {
+    const targetId = profileId ?? this.config.activeProfile ?? undefined;
+    const profile = targetId ? this.config.profiles[targetId] : undefined;
+    if (!targetId || !profile) {
+      throw new Error(NO_ACTIVE_PROFILE_ERROR);
+    }
+
+    if (!this.isTtyFn()) {
+      throw new Error(
+        `Stored Matrix token for "${targetId}" is no longer valid. ` +
+          `Run \`boxel profile add -u ${targetId} -p <password>\` to re-authenticate.`,
+      );
+    }
+
+    console.log(
+      `\n${FG_YELLOW}Stored Matrix session for ${formatProfileBadge(targetId)} has expired.${RESET}`,
+    );
+    const password = await this.promptPasswordFn(`Password for ${targetId}: `);
+    if (!password) {
+      throw new Error('Re-authentication cancelled: password is required.');
+    }
+
+    const username = getUsernameFromMatrixId(targetId);
+    const auth = await this.matrixLoginFn(
+      profile.matrixUrl,
+      username,
+      password,
+    );
+    await this.addProfileWithAuth(
+      targetId,
+      auth,
+      profile.displayName,
+      profile.realmServerUrl,
+    );
+    return this.getStoredMatrixAuth(targetId);
+  }
+
+  // Wrap a realm-server-token fetch in the standard "if Matrix says 401,
+  // re-auth and retry once" recovery. Centralised so getOrRefreshServerToken
+  // and refreshServerToken share the same behaviour.
+  private async fetchRealmServerTokenWithReauth(): Promise<string> {
+    const matrixAuth = this.getStoredMatrixAuth();
+    const active = this.getActiveProfile()!;
+    const realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    try {
+      const token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
+      this.setRealmServerToken(token);
+      return token;
+    } catch (e) {
+      if (!(e instanceof MatrixAuthError)) {
+        throw e;
+      }
+      const freshAuth = await this.reAuthenticate();
+      const token = await fetchRealmServerToken(freshAuth, realmServerUrl);
+      this.setRealmServerToken(token);
+      return token;
+    }
   }
 
   async getOrRefreshServerToken(): Promise<string> {
@@ -400,21 +520,11 @@ export class ProfileManager implements RealmAuthenticator {
     if (cached && !isJwtNearExpiry(cached)) {
       return cached;
     }
-    let matrixAuth = await this.loginToMatrix();
-    let active = this.getActiveProfile()!;
-    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-    let token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
-    this.setRealmServerToken(token);
-    return token;
+    return this.fetchRealmServerTokenWithReauth();
   }
 
   async refreshServerToken(): Promise<string> {
-    let matrixAuth = await this.loginToMatrix();
-    let active = this.getActiveProfile()!;
-    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-    let token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
-    this.setRealmServerToken(token);
-    return token;
+    return this.fetchRealmServerTokenWithReauth();
   }
 
   private findRealmTokenForUrl(url: string): string | undefined {
@@ -546,19 +656,81 @@ export class ProfileManager implements RealmAuthenticator {
     return token;
   }
 
+  // Run a Matrix call that uses the stored access token, falling back to
+  // interactive re-auth + retry on a 401 (revoked / expired token).
+  private async withMatrixAuthRecovery<T>(
+    fn: (matrixAuth: MatrixAuth) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await fn(this.getStoredMatrixAuth());
+    } catch (e) {
+      if (!(e instanceof MatrixAuthError)) {
+        throw e;
+      }
+      const freshAuth = await this.reAuthenticate();
+      return fn(freshAuth);
+    }
+  }
+
   async addToUserRealms(realmUrl: string): Promise<void> {
-    let matrixAuth = await this.loginToMatrix();
-    await addRealmToMatrixAccountData(matrixAuth, realmUrl);
+    await this.withMatrixAuthRecovery((auth) =>
+      addRealmToMatrixAccountData(auth, realmUrl),
+    );
   }
 
   async removeFromUserRealms(realmUrl: string): Promise<boolean> {
-    let matrixAuth = await this.loginToMatrix();
-    return removeRealmFromMatrixAccountData(matrixAuth, realmUrl);
+    return this.withMatrixAuthRecovery((auth) =>
+      removeRealmFromMatrixAccountData(auth, realmUrl),
+    );
   }
 
   async getUserRealms(): Promise<string[]> {
-    let matrixAuth = await this.loginToMatrix();
-    return getUserRealmsFromMatrixAccountData(matrixAuth);
+    return this.withMatrixAuthRecovery((auth) =>
+      getUserRealmsFromMatrixAccountData(auth),
+    );
+  }
+
+  // Walk every loaded profile; for each one that still has the pre-CS-10725
+  // `password` field but no `matrixAccessToken`, perform a real Matrix login
+  // and replace the password with the resulting tokens. Failures are warned
+  // about and left in place so the user can re-add the profile themselves.
+  async migrateLegacyProfiles(): Promise<{
+    migrated: string[];
+    failed: string[];
+  }> {
+    const migrated: string[] = [];
+    const failed: string[] = [];
+    for (const [id, profile] of Object.entries(this.config.profiles)) {
+      if (profile.matrixAccessToken || !profile.password) {
+        continue;
+      }
+      try {
+        const username = getUsernameFromMatrixId(id);
+        const auth = await this.matrixLoginFn(
+          profile.matrixUrl,
+          username,
+          profile.password,
+        );
+        profile.matrixAccessToken = auth.accessToken;
+        profile.matrixUserId = auth.userId;
+        profile.matrixDeviceId = auth.deviceId;
+        delete profile.password;
+        migrated.push(id);
+      } catch (e) {
+        failed.push(id);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(
+          `${FG_YELLOW}Could not migrate stored password for ${id}: ${msg}${RESET}`,
+        );
+        console.warn(
+          `Run \`boxel profile add -u ${id} -p <password>\` to re-authenticate.`,
+        );
+      }
+    }
+    if (migrated.length > 0) {
+      this.saveConfig();
+    }
+    return { migrated, failed };
   }
 
   async migrateFromEnv(): Promise<{
@@ -578,15 +750,7 @@ export class ProfileManager implements RealmAuthenticator {
     const domain = isProduction ? 'boxel.ai' : 'stack.cards';
     const matrixId = `@${username}:${domain}`;
 
-    if (this.config.profiles[matrixId]) {
-      // Update password if it changed
-      if (this.config.profiles[matrixId].password !== password) {
-        this.config.profiles[matrixId].password = password;
-        this.saveConfig();
-      }
-      return { profileId: matrixId, created: false };
-    }
-
+    const created = !this.config.profiles[matrixId];
     await this.addProfile(
       matrixId,
       password,
@@ -594,7 +758,7 @@ export class ProfileManager implements RealmAuthenticator {
       matrixUrl,
       realmServerUrl,
     );
-    return { profileId: matrixId, created: true };
+    return { profileId: matrixId, created };
   }
 
   printStatus(): void {
@@ -610,11 +774,6 @@ export class ProfileManager implements RealmAuthenticator {
       console.log(
         `  ${DIM}Realm Server:${RESET} ${active.profile.realmServerUrl}`,
       );
-    } else if (process.env.MATRIX_USERNAME) {
-      console.log(
-        `\n${BOLD}Using environment variables${RESET} (no profile active)`,
-      );
-      console.log(`  ${DIM}Username:${RESET} ${process.env.MATRIX_USERNAME}`);
     } else {
       console.log(
         `\n${FG_YELLOW}No active profile and no environment variables set.${RESET}`,

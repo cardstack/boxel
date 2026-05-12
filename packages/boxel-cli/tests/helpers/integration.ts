@@ -237,11 +237,17 @@ export async function setupJwtTestProfile(
     sessionRoom?: string;
   },
 ): Promise<void> {
-  await pm.addProfile(
+  // Use addProfileWithAuth so we skip the real Matrix login round-trip — the
+  // injected realm-server JWT means we never need a working Matrix token.
+  await pm.addProfileWithAuth(
     opts.user,
-    'unused-password',
+    {
+      accessToken: 'test-access-token',
+      userId: opts.user,
+      deviceId: 'CLI_TEST_DEVICE',
+      matrixUrl: matrixURL.href,
+    },
     'CLI Test User',
-    matrixURL.href,
     opts.realmServerUrl,
   );
   let jwt = createRealmServerJWT(
