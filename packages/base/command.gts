@@ -115,7 +115,7 @@ export class FileIdentifierCard extends CardDef {
 }
 
 export class RealmIdentifierCard extends CardDef {
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
 }
 
 export class InvalidateRealmIdentifiersInput extends RealmIdentifierCard {
@@ -385,7 +385,7 @@ export class SendAiAssistantMessageInput extends CardDef {
   @field clientGeneratedId = contains(StringField);
   @field attachedCards = linksToMany(CardDef);
   @field attachedFileIdentifiers = containsMany(StringField);
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
   @field openCardIds = containsMany(StringField);
   @field requireCommandCall = contains(BooleanField);
 }
@@ -474,7 +474,7 @@ export class VisitCardsInput extends CardDef {
 
 export class EvaluateModuleInput extends CardDef {
   @field moduleIdentifier = contains(StringField);
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
 }
 
 export class EvaluateModuleResult extends CardDef {
@@ -487,7 +487,7 @@ export class EvaluateModuleResult extends CardDef {
 export class InstantiateCardInput extends CardDef {
   @field moduleIdentifier = contains(StringField);
   @field cardName = contains(StringField);
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
   @field instanceData = contains(StringField);
 }
 
@@ -582,7 +582,7 @@ export class RealmInfoField extends FieldDef {
 export class RealmMetaField extends FieldDef {
   @field info = contains(RealmInfoField);
   @field canWrite = contains(BooleanField);
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
 }
 
 export class GetAllRealmMetasResult extends CardDef {
@@ -590,11 +590,11 @@ export class GetAllRealmMetasResult extends CardDef {
 }
 
 export class GetAvailableRealmIdentifiersResult extends CardDef {
-  @field realmIdentifiers = containsMany(StringField);
+  @field realmUrls = containsMany(StringField);
 }
 
 export class GetCatalogRealmIdentifiersResult extends CardDef {
-  @field realmIdentifiers = containsMany(StringField);
+  @field realmUrls = containsMany(StringField);
 }
 
 export class FetchCardJsonInput extends CardDef {
@@ -606,7 +606,7 @@ export class FetchCardJsonResult extends CardDef {
 }
 
 export class ExecuteAtomicOperationsInput extends CardDef {
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
   @field operations = containsMany(JsonField);
 }
 
@@ -624,11 +624,11 @@ export class GetRealmOfResourceIdentifierInput extends CardDef {
 }
 
 export class GetRealmOfResourceIdentifierResult extends CardDef {
-  @field realmIdentifier = contains(StringField); // empty string if not found
+  @field realmUrl = contains(StringField); // empty string if not found
 }
 
 export class CanReadRealmInput extends CardDef {
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
 }
 
 export class CanReadRealmResult extends CardDef {
@@ -648,15 +648,15 @@ export class AuthedFetchResult extends CardDef {
 }
 
 export class GetDefaultWritableRealmResult extends CardDef {
-  @field realmIdentifier = contains(StringField); // empty string if no writable realm found
+  @field realmUrl = contains(StringField); // empty string if no writable realm found
 }
 
 export class ValidateRealmInput extends CardDef {
-  @field realmIdentifier = contains(StringField);
+  @field realmUrl = contains(StringField);
 }
 
 export class ValidateRealmResult extends CardDef {
-  @field realmIdentifier = contains(StringField); // normalized with trailing slash
+  @field realmUrl = contains(StringField); // normalized with trailing slash
 }
 
 export class SanitizeModuleListInput extends CardDef {

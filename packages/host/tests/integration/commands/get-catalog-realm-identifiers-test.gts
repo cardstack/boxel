@@ -71,7 +71,7 @@ module(
         commandService.commandContext,
       );
       let result = await command.execute();
-      assert.deepEqual(result.realmIdentifiers, [
+      assert.deepEqual(result.realmUrls, [
         'https://example.com/catalog/',
       ]);
     });

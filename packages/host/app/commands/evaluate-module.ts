@@ -32,7 +32,7 @@ export default class EvaluateModuleCommand extends HostBaseCommand<
     input: BaseCommandModule.EvaluateModuleInput,
   ): Promise<BaseCommandModule.EvaluateModuleResult> {
     let moduleUrl = input.moduleIdentifier;
-    let realmUrl = input.realmIdentifier;
+    let realmUrl = input.realmUrl;
 
     if (!moduleUrl) {
       throw new Error('moduleUrl is required');

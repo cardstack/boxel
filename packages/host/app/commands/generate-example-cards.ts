@@ -85,7 +85,7 @@ export default class GenerateExampleCardsCommand extends HostBaseCommand<
       prompt: userPrompt,
       attachedCards: input.exampleCard ? [input.exampleCard] : [],
       attachedFileIdentifiers: this.getAttachedFileURLs(input),
-      realmIdentifier: realm,
+      realmUrl: realm,
     });
   }
 }

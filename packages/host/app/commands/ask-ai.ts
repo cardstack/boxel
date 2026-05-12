@@ -52,7 +52,7 @@ export default class AskAiCommand extends HostBaseCommand<
       prompt: input.prompt,
       attachedCards: openCards,
       openCardIds: openCards?.map((c: any) => c.id),
-      realmIdentifier: this.operatorModeStateService.realmURL,
+      realmUrl: this.operatorModeStateService.realmURL,
     });
 
     await openRoomCommand.execute({ roomId });

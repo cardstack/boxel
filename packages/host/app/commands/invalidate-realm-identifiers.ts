@@ -26,7 +26,7 @@ export default class InvalidateRealmIdentifiersCommand extends HostBaseCommand<
     input: BaseCommandModule.InvalidateRealmIdentifiersInput,
   ): Promise<undefined> {
     await this.realm.invalidateUrls(
-      input.realmIdentifier,
+      input.realmUrl,
       input.resourceIdentifiers,
     );
   }

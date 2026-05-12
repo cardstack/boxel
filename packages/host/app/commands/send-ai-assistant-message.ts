@@ -99,7 +99,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       new Set(attachedOpenCards.map((c) => c.id)),
     );
 
-    context.realmUrl = input.realmIdentifier;
+    context.realmUrl = input.realmUrl;
     context.requireToolCall = requireToolCall;
     context.tools = tools;
     context.functions = [];

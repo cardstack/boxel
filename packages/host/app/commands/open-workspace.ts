@@ -21,17 +21,17 @@ export default class OpenWorkspaceCommand extends HostBaseCommand<
     return RealmIdentifierCard;
   }
 
-  requireInputFields = ['realmIdentifier'];
+  requireInputFields = ['realmUrl'];
 
   protected async run(
     input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<undefined> {
-    let { realmIdentifier } = input;
-    if (!realmIdentifier) {
+    let { realmUrl } = input;
+    if (!realmUrl) {
       throw new Error('Realm identifier is required to open a workspace.');
     }
 
-    await this.operatorModeStateService.openWorkspace(realmIdentifier);
+    await this.operatorModeStateService.openWorkspace(realmUrl);
 
     return undefined;
   }

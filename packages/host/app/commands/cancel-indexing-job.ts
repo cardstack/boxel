@@ -24,6 +24,6 @@ export default class CancelIndexingJobCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<undefined> {
-    await this.realm.cancelIndexingJob(input.realmIdentifier);
+    await this.realm.cancelIndexingJob(input.realmUrl);
   }
 }

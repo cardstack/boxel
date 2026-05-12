@@ -30,11 +30,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           .filter(
             (realmMeta: RealmMetaField) =>
               realmMeta.canWrite &&
-              realmMeta.realmIdentifier !== this.args.model[realmURL]?.href,
+              realmMeta.realmUrl !== this.args.model[realmURL]?.href,
           )
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
-            url: realmMeta.realmIdentifier,
+            url: realmMeta.realmUrl,
             iconURL: realmMeta.info.iconURL,
           }));
       }

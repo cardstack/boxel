@@ -58,16 +58,16 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
         }
 
         // Only allow modules that belong to a realm we can read
-        const { realmIdentifier } =
+        const { realmUrl } =
           await new GetRealmOfResourceIdentifierCommand(
             this.commandContext,
           ).execute({ resourceIdentifier: dep });
-        if (!realmIdentifier) {
+        if (!realmUrl) {
           return null;
         }
         const { canRead } = await new CanReadRealmCommand(
           this.commandContext,
-        ).execute({ realmIdentifier });
+        ).execute({ realmUrl });
         return canRead ? dep : null;
       }),
     );

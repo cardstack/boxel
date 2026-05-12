@@ -70,7 +70,7 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
       prompt: this.prompt,
       attachedCards: [card],
       attachedFileIdentifiers: this.getAttachedFileURLs(card),
-      realmIdentifier: card[realmURL]?.href,
+      realmUrl: card[realmURL]?.href,
     });
   }
 }

@@ -159,9 +159,9 @@ export default class SyncOpenRouterModelsCommand extends HostBaseCommand<
     input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<BaseCommandModule.SyncOpenRouterModelsResult> {
     let commandModule = await this.loadCommandModule();
-    let realmURL = input.realmIdentifier;
+    let realmURL = input.realmUrl;
     if (!realmURL) {
-      throw new Error('realmIdentifier is required');
+      throw new Error('realmUrl is required');
     }
     if (!realmURL.endsWith('/')) {
       realmURL += '/';

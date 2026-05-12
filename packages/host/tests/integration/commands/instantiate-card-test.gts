@@ -76,7 +76,7 @@ module('Integration | commands | instantiate-card', function (hooks) {
     let input = new InputType({
       moduleIdentifier: `${testRealmURL}valid-card`,
       cardName: 'ValidCard',
-      realmIdentifier: testRealmURL,
+      realmUrl: testRealmURL,
       instanceData: JSON.stringify(instanceDoc),
     });
 
@@ -94,7 +94,7 @@ module('Integration | commands | instantiate-card', function (hooks) {
     let input = new InputType({
       moduleIdentifier: `${testRealmURL}valid-card`,
       cardName: 'ValidCard',
-      realmIdentifier: testRealmURL,
+      realmUrl: testRealmURL,
     });
 
     let result = await command.execute(input);
@@ -128,7 +128,7 @@ module('Integration | commands | instantiate-card', function (hooks) {
     let input = new InputType({
       moduleIdentifier: `${testRealmURL}tags-card`,
       cardName: 'TagsCard',
-      realmIdentifier: testRealmURL,
+      realmUrl: testRealmURL,
       instanceData: JSON.stringify(instanceDoc),
     });
 

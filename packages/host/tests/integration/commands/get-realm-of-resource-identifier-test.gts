@@ -78,7 +78,7 @@ module(
       let result = await command.execute({
         resourceIdentifier: `${testRealmURL}some-card`,
       });
-      assert.strictEqual(result.realmIdentifier, testRealmURL);
+      assert.strictEqual(result.realmUrl, testRealmURL);
     });
 
     test('returns empty string when resource is not in any realm', async function (assert) {
@@ -90,7 +90,7 @@ module(
       let result = await command.execute({
         resourceIdentifier: 'https://unknown.example.com/card',
       });
-      assert.strictEqual(result.realmIdentifier, '');
+      assert.strictEqual(result.realmUrl, '');
     });
   },
 );

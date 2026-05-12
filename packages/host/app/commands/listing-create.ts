@@ -55,10 +55,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   description = 'Create a catalog listing for an example card';
 
   private async getCatalogRealm(): Promise<string> {
-    const { realmIdentifiers } = await new GetCatalogRealmIdentifiersCommand(
+    const { realmUrls } = await new GetCatalogRealmIdentifiersCommand(
       this.commandContext,
     ).execute();
-    let catalogRealm = realmIdentifiers.find((realm: string) =>
+    let catalogRealm = realmUrls.find((realm: string) =>
       realm.endsWith('/catalog/'),
     );
     if (!catalogRealm) {
@@ -239,7 +239,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     moduleUrl: string, // the module URL of the card type being listed
     codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
-    const { realmIdentifier: resourceRealmIdentifier } =
+    const { realmUrl: resourceRealmIdentifier } =
       await new GetRealmOfResourceIdentifierCommand(
         this.commandContext,
       ).execute({ resourceIdentifier: resourceUrl });

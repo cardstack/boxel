@@ -23,7 +23,7 @@ export default class GetCatalogRealmIdentifiersCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { GetCatalogRealmIdentifiersResult } = commandModule;
     return new GetCatalogRealmIdentifiersResult({
-      realmIdentifiers: this.realmServer.catalogRealmURLs,
+      realmUrls: this.realmServer.catalogRealmURLs,
     });
   }
 }

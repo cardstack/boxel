@@ -18,23 +18,23 @@ export default class ValidateRealmCommand extends HostBaseCommand<
     return ValidateRealmInput;
   }
 
-  requireInputFields = ['realmIdentifier'];
+  requireInputFields = ['realmUrl'];
 
   protected async run(
     input: BaseCommandModule.ValidateRealmInput,
   ): Promise<BaseCommandModule.ValidateRealmResult> {
-    let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
+    let realmUrl = new RealmPaths(new URL(input.realmUrl)).url;
 
-    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersCommand(
+    let { realmUrls } = await new GetAvailableRealmIdentifiersCommand(
       this.commandContext,
     ).execute();
 
-    if (!realmIdentifiers.includes(realmIdentifier)) {
-      throw new Error(`Invalid realm: ${realmIdentifier}`);
+    if (!realmUrls.includes(realmUrl)) {
+      throw new Error(`Invalid realm: ${realmUrl}`);
     }
 
     let commandModule = await this.loadCommandModule();
     const { ValidateRealmResult } = commandModule;
-    return new ValidateRealmResult({ realmIdentifier });
+    return new ValidateRealmResult({ realmUrl });
   }
 }

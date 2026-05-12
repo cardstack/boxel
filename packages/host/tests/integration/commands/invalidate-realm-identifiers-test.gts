@@ -98,7 +98,7 @@ module(
       let realmURL = new URL('test/', realmServer.url).href;
 
       let result = await command.execute({
-        realmIdentifier: realmURL,
+        realmUrl: realmURL,
         resourceIdentifiers: [
           `${realmURL}mango`,
           `${realmURL}mango`,
@@ -168,7 +168,7 @@ module(
 
       await assert.rejects(
         command.execute({
-          realmIdentifier: realmURL,
+          realmUrl: realmURL,
           resourceIdentifiers: [`${realmURL}mango`],
         }),
         /Invalidate urls failed: 500 - boom/,

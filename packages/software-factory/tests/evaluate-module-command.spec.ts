@@ -238,7 +238,7 @@ test.describe('evaluate-module command', () => {
         realmServerUrl,
         realmUrl,
         '@cardstack/boxel-host/commands/evaluate-module/default',
-        { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
+        { moduleIdentifier: moduleUrl, realmUrl: realmUrl },
       );
 
       expect(response.status).toBe('ready');
@@ -275,7 +275,7 @@ test.describe('evaluate-module command', () => {
         realmServerUrl,
         realmUrl,
         '@cardstack/boxel-host/commands/evaluate-module/default',
-        { moduleIdentifier: moduleUrl, realmIdentifier: realmUrl },
+        { moduleIdentifier: moduleUrl, realmUrl: realmUrl },
       );
 
       // If the prerender catches the broken import, the command should return passed=false

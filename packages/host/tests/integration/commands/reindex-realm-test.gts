@@ -92,7 +92,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     );
 
     let result = await command.execute({
-      realmIdentifier: realmURL,
+      realmUrl: realmURL,
     });
 
     assert.strictEqual(result, undefined, 'command has no result card');
@@ -161,7 +161,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
 
     await assert.rejects(
       command.execute({
-        realmIdentifier: realmURL,
+        realmUrl: realmURL,
       }),
       /Reindex realm failed: 500 - boom/,
       'propagates non-204 failure as an error',
@@ -180,7 +180,7 @@ module('Integration | commands | reindex-realm', function (hooks) {
     let realmURL = new URL('test/', realmServer.url).href;
 
     await command.execute({
-      realmIdentifier: realmURL,
+      realmUrl: realmURL,
     });
 
     assert.true(

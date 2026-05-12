@@ -109,16 +109,16 @@ export default class RemixCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
     let { realm, listing: listingInput } = input;
-    let { realmIdentifier } = await new ValidateRealmCommand(
+    let { realmUrl } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmIdentifier: realm });
+    ).execute({ realmUrl: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
 
     const { selectedCodeRef, exampleCardId, skillCardId } =
       await new ListingInstallCommand(this.commandContext).execute({
-        realm: realmIdentifier,
+        realm: realmUrl,
         listing,
       });
     await this.navigateView({

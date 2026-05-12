@@ -29,9 +29,9 @@ export default class GetRealmOfResourceIdentifierCommand extends HostBaseCommand
   ): Promise<BaseCommandModule.GetRealmOfResourceIdentifierResult> {
     let commandModule = await this.loadCommandModule();
     const { GetRealmOfResourceIdentifierResult } = commandModule;
-    const realmIdentifier = this.realm.realmOf(rri(input.resourceIdentifier));
+    const realmUrl = this.realm.realmOf(rri(input.resourceIdentifier));
     return new GetRealmOfResourceIdentifierResult({
-      realmIdentifier: realmIdentifier ?? '',
+      realmUrl: realmUrl ?? '',
     });
   }
 }
