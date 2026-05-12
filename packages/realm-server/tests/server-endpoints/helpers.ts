@@ -27,7 +27,20 @@ export type ServerEndpointsTestContext = {
   virtualNetwork: VirtualNetwork;
 };
 
-export function setupServerEndpointsTest(hooks: NestedHooks) {
+type ServerEndpointsTestOptions = {
+  // CS-10009: pick the realm fixture that backs this test's testRealm.
+  // Default is 'blank' — most server-level endpoint tests
+  // (bot-commands, webhooks, realm lifecycle, etc.) don't read card
+  // content out of the testRealm and want the lightest possible
+  // template build. Tests that DO read the kitchen sink (e.g.
+  // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
+  fixture?: 'blank' | 'simple' | 'realistic';
+};
+
+export function setupServerEndpointsTest(
+  hooks: NestedHooks,
+  options: ServerEndpointsTestOptions = {},
+) {
   let context = {} as ServerEndpointsTestContext;
 
   function onRealmSetup(args: {
@@ -57,6 +70,7 @@ export function setupServerEndpointsTest(hooks: NestedHooks) {
   }
 
   setupPermissionedRealmCached(hooks, {
+    fixture: options.fixture ?? 'blank',
     realmURL: testRealmURL,
     permissions: {
       '*': ['read', 'write'],
