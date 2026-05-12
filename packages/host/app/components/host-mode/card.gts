@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
@@ -56,8 +56,9 @@ export default class HostModeCard extends Component<Signature> {
 
   <template>
     <CardContainer
-      class='host-mode-card {{if @isPrimary "is-primary"}}'
+      class={{cn 'host-mode-card' is-primary=@isPrimary}}
       displayBoundaries={{@displayBoundaries}}
+      data-host-mode-card
       data-test-host-mode-card-loaded={{bool this.card}}
       ...attributes
     >

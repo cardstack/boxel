@@ -1,6 +1,7 @@
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -205,6 +206,21 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
+  // Holds the scroll offset captured just before prerendered markup is
+  // removed, so it can be restored on the Ember-rendered card container.
+  #prehydrateScrollTop = 0;
+
+  private restorePrehydrateScrollTop() {
+    if (this.#prehydrateScrollTop === 0) {
+      return;
+    }
+    let cardContainer = document.querySelector('data-host-mode-card');
+    if (cardContainer instanceof HTMLElement) {
+      cardContainer.scrollTop = this.#prehydrateScrollTop;
+    }
+    this.#prehydrateScrollTop = 0;
+  }
+
   // TODO: remove in CS-9977, with rehydration
   removeIsolatedMarkup = modifier(() => {
     if (typeof document === 'undefined') {
@@ -215,11 +231,29 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     if (!start || !end) {
       return;
     }
+
+    // Before hydration the page scrolls at window level; after hydration the
+    // card container becomes the scroll host. Capture both so we cover
+    // whichever is non-zero.
+    let scrollTop = window.scrollY;
+    let prerenderedContainer = start.nextElementSibling;
+    if (
+      prerenderedContainer instanceof HTMLElement &&
+      prerenderedContainer !== end
+    ) {
+      scrollTop = Math.max(scrollTop, prerenderedContainer.scrollTop);
+    }
+
     let node = start.nextSibling;
     while (node && node !== end) {
       let next = node.nextSibling;
       node.parentNode?.removeChild(node);
       node = next;
+    }
+
+    if (scrollTop > 0) {
+      this.#prehydrateScrollTop = scrollTop;
+      scheduleOnce('afterRender', this, this.restorePrehydrateScrollTop);
     }
   });
 
