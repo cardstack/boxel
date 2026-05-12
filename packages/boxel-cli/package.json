@@ -74,8 +74,8 @@
     "version:patch": "npm version patch",
     "version:minor": "npm version minor",
     "version:major": "npm version major",
-    "publish:npm": "npm publish",
-    "publish:dry": "npm publish --dry-run"
+    "publish:npm": "pnpm publish --no-git-checks",
+    "publish:dry": "pnpm publish --dry-run --no-git-checks"
   },
   "publishConfig": {
     "access": "public",
