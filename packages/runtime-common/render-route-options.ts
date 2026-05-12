@@ -4,6 +4,15 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export interface RenderRouteOptions {
   clearCache?: true;
+  // CS-11043 step 2. Resets only the prerender Loader (so any cached
+  // module bytes are evicted on this render), without resetting the
+  // store. Use this for renders that follow a previous render in the
+  // same batch — the first render in the batch should still carry
+  // `clearCache: true` for the full reset; subsequent renders set
+  // `resetLoaderOnly` so the store-cached hydration data accumulated
+  // during the batch is preserved for the serialized HTML. Mutually
+  // exclusive with `clearCache`; if both are set, `clearCache` wins.
+  resetLoaderOnly?: true;
   cardRender?: true;
   fileExtract?: true;
   fileRender?: true;
@@ -23,6 +32,8 @@ export function parseRenderRouteOptions(
     let options: RenderRouteOptions = {};
     if (parsed.clearCache) {
       options.clearCache = true;
+    } else if (parsed.resetLoaderOnly) {
+      options.resetLoaderOnly = true;
     }
     if (parsed.cardRender) {
       options.cardRender = true;
@@ -57,6 +68,8 @@ export function serializeRenderRouteOptions(
   let serialized: RenderRouteOptions = {};
   if (options.clearCache) {
     serialized.clearCache = true;
+  } else if (options.resetLoaderOnly) {
+    serialized.resetLoaderOnly = true;
   }
   if (options.cardRender) {
     serialized.cardRender = true;

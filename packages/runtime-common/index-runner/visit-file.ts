@@ -41,7 +41,7 @@ interface VisitFileFusedOptions {
   // traffic that happens to land on the same warm tab.
   batchId: string;
   prerenderer: Prerenderer;
-  consumeClearCacheForRender(): boolean;
+  consumeClearCacheForRender(): import('./clear-cache-tracker').ResetForRender;
   logDebug(message: string): void;
   logWarn(message: string): void;
   indexCardWithResult(args: {
@@ -153,13 +153,23 @@ export async function visitFileForIndexingFused({
   let fileURL = url.href;
   let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
 
-  let clearCache = consumeClearCacheForRender();
+  // CS-11043 step 2. The tracker returns 'clear-cache' for the very
+  // first render in a batch (full Loader + store reset, matches
+  // pre-CS-11043 behavior), 'reset-loader-only' for subsequent
+  // renders in a sticky batch (Loader-only reset so accumulated
+  // store hydration data survives), or 'none' when no reset is
+  // needed. The two reset flavors are mutually exclusive on the
+  // render route — the host's render.ts handles whichever is set.
+  let resetForRender = consumeClearCacheForRender();
   let renderOptions: RenderRouteOptions = {
     fileDefCodeRef,
     ...(needCardRender ? { cardRender: true } : {}),
     ...(needFileExtract ? { fileExtract: true } : {}),
     ...(needFileRender ? { fileRender: true } : {}),
-    ...(clearCache ? { clearCache } : {}),
+    ...(resetForRender === 'clear-cache' ? { clearCache: true } : {}),
+    ...(resetForRender === 'reset-loader-only'
+      ? { resetLoaderOnly: true }
+      : {}),
   };
 
   let visitResponse: RenderVisitResponse;

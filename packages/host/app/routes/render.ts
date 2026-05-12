@@ -330,6 +330,15 @@ export default class RenderRoute extends Route<Model> {
         this.store.resetCache();
         this.lastStoreResetKey = resetKey;
       }
+    } else if (parsedOptions.resetLoaderOnly) {
+      // CS-11043 step 2. The Loader is reset but the store is left
+      // alone — preserves the cumulative hydration data accumulated
+      // during a batch's earlier renders so query-field server
+      // hydration baked into the serialized HTML survives.
+      this.loaderService.resetLoader({
+        clearFetchCache: true,
+        reason: 'render-route resetLoaderOnly',
+      });
     }
     if (parsedOptions.fileExtract) {
       let state = new TrackedMap<string, unknown>();

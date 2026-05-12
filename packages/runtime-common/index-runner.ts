@@ -40,7 +40,10 @@ import {
   type DiscoverInvalidationsResult,
 } from './index-runner/discover-invalidations';
 import { visitFileForIndexingFused } from './index-runner/visit-file';
-import { ClearCacheTracker } from './index-runner/clear-cache-tracker';
+import {
+  ClearCacheTracker,
+  type ResetForRender,
+} from './index-runner/clear-cache-tracker';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
@@ -553,7 +556,7 @@ export class IndexRunner {
     this.#clearCacheTracker.upgradeToStickyForBatch();
   }
 
-  #consumeClearCacheForRender(): boolean {
+  #consumeClearCacheForRender(): ResetForRender {
     return this.#clearCacheTracker.consume();
   }
 

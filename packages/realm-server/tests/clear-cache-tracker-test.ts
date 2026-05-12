@@ -13,69 +13,106 @@ import { ClearCacheTracker } from '@cardstack/runtime-common/index-runner/clear-
 // the same realm URL. The published nyuitp2026 realm rendered against an
 // old presentation.gts for ~37 h after publishing for exactly this reason.
 //
-// The fix promotes the single boolean to a small state machine: default
-// behavior (consume-once-then-stop) preserves the existing first-render
-// arm, but when the IndexRunner detects an executable invalidation it
-// upgrades the tracker to sticky-for-batch — every subsequent consume
-// returns true so every fanned-out page gets a loader reset.
+// CS-11043 step 2 (this contract). Resetting the *whole* prerender state
+// on every render in a batch erased per-batch hydration data that was
+// baked into serialized HTML (the host's store cache), so the upgrade
+// distinguishes two reset shapes:
+//
+//   - 'clear-cache'       — first render of a batch, full reset
+//                           (Loader + store). Mirrors the historical
+//                           consume-once behavior.
+//   - 'reset-loader-only' — subsequent renders in a sticky batch,
+//                           Loader-only reset so accumulated store
+//                           hydration data survives for query-field
+//                           serialization.
+//   - 'none'              — no reset requested.
 
 module(basename(__filename), function () {
   module('ClearCacheTracker — consume-once mode (default)', function () {
-    test('first consume returns true, subsequent consumes return false', function (assert) {
+    test("first consume returns 'clear-cache', subsequent consumes return 'none'", function (assert) {
       let tracker = new ClearCacheTracker();
-      assert.true(tracker.consume(), 'first call returns true');
-      assert.false(tracker.consume(), 'second call returns false');
-      assert.false(tracker.consume(), 'third call returns false');
+      assert.strictEqual(tracker.consume(), 'clear-cache', 'first call');
+      assert.strictEqual(tracker.consume(), 'none', 'second call');
+      assert.strictEqual(tracker.consume(), 'none', 'third call');
     });
 
-    test('consume() returns false immediately when constructed off', function (assert) {
+    test("consume() returns 'none' immediately when constructed off", function (assert) {
       let tracker = new ClearCacheTracker({ initialMode: 'off' });
-      assert.false(tracker.consume());
-      assert.false(tracker.consume());
+      assert.strictEqual(tracker.consume(), 'none');
+      assert.strictEqual(tracker.consume(), 'none');
     });
   });
 
   module('ClearCacheTracker — sticky-for-batch mode', function () {
-    test('upgradeToStickyForBatch on a fresh tracker: every consume returns true', function (assert) {
+    test("upgradeToStickyForBatch on a fresh tracker: first consume returns 'clear-cache', subsequent return 'reset-loader-only'", function (assert) {
       let tracker = new ClearCacheTracker();
       tracker.upgradeToStickyForBatch();
-      for (let i = 0; i < 5; i++) {
-        assert.true(tracker.consume(), `consume #${i + 1}`);
+      assert.strictEqual(
+        tracker.consume(),
+        'clear-cache',
+        'first consume after upgrade is full clear-cache',
+      );
+      for (let i = 0; i < 4; i++) {
+        assert.strictEqual(
+          tracker.consume(),
+          'reset-loader-only',
+          `consume #${i + 2} is reset-loader-only`,
+        );
       }
     });
 
     test('upgrade after first consume rescues subsequent renders (the CS-11043 fan-out case)', function (assert) {
       // Mirrors the live shape of an IndexRunner batch where
       // executable invalidation is detected AFTER the first render
-      // has already been queued. Even in that ordering, every
-      // subsequent render needs clearCache to land on its own page.
+      // has already been queued. The first render already got the
+      // full clear-cache; the upgrade ensures every subsequent
+      // render gets a Loader reset so multi-page fan-out doesn't
+      // serve stale modules.
       let tracker = new ClearCacheTracker();
-      assert.true(tracker.consume(), 'first render gets clearCache');
-      assert.false(tracker.consume(), 'without upgrade, second would not');
-      tracker.upgradeToStickyForBatch();
-      assert.true(
+      assert.strictEqual(
         tracker.consume(),
-        'after upgrade, every consume returns true',
+        'clear-cache',
+        'first render gets full clear-cache',
       );
-      assert.true(tracker.consume(), 'and stays true');
+      assert.strictEqual(
+        tracker.consume(),
+        'none',
+        'without upgrade, second render would get no reset',
+      );
+      tracker.upgradeToStickyForBatch();
+      assert.strictEqual(
+        tracker.consume(),
+        'reset-loader-only',
+        'after upgrade, subsequent consumes reset only the loader',
+      );
+      assert.strictEqual(tracker.consume(), 'reset-loader-only', 'and stays');
     });
 
     test('upgrade is idempotent', function (assert) {
       let tracker = new ClearCacheTracker();
       tracker.upgradeToStickyForBatch();
       tracker.upgradeToStickyForBatch();
-      assert.true(tracker.consume());
-      assert.true(tracker.consume());
+      assert.strictEqual(tracker.consume(), 'clear-cache');
+      assert.strictEqual(tracker.consume(), 'reset-loader-only');
     });
 
     test('an off tracker upgraded to sticky still flips on', function (assert) {
       // Operationally we don't expect this combination today, but the
-      // contract should be unambiguous: the upgrade overrides off.
+      // contract should be unambiguous: upgrade lifts off → sticky,
+      // and the first consume after lift is the batch's full reset.
       let tracker = new ClearCacheTracker({ initialMode: 'off' });
-      assert.false(tracker.consume(), 'off before upgrade');
+      assert.strictEqual(tracker.consume(), 'none', 'off before upgrade');
       tracker.upgradeToStickyForBatch();
-      assert.true(tracker.consume(), 'sticky overrides off');
-      assert.true(tracker.consume());
+      assert.strictEqual(
+        tracker.consume(),
+        'clear-cache',
+        'first consume after upgrade is full clear-cache',
+      );
+      assert.strictEqual(
+        tracker.consume(),
+        'reset-loader-only',
+        'subsequent consumes loader-only',
+      );
     });
   });
 });
