@@ -66,20 +66,9 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--dry-run` — Preview without making changes
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
-### `boxel realm watch <realm-url> <local-dir>`
+### `boxel realm watch`
 
-Watch a Boxel realm for server-side changes and pull them into a local directory
-
-**Arguments:**
-
-- `<realm-url>` — The URL of the realm to watch (e.g., https://app.boxel.ai/demo/)
-- `<local-dir>` — The local directory to write changes into
-
-**Options:**
-
-- `-i, --interval <seconds>` — Polling interval in seconds
-- `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
-- `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+Watch a Boxel realm; subcommands manage watch processes
 
 ### `boxel realm push <local-dir> <realm-url>`
 
