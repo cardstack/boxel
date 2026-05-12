@@ -1,5 +1,6 @@
 #!/bin/sh
 #MISE description="Start services for host test suite (trimmed catalog)"
+#MISE depends=["infra:ensure-dev-cert"]
 #MISE dir="packages/realm-server"
 
 set -eu
@@ -33,8 +34,20 @@ done
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+# Pick wait-on's protocol prefix based on the realm-server's scheme.
+# Realm-server speaks HTTPS+HTTP/2 in local dev (see infra:ensure-dev-cert);
+# stripping `*://` instead of a hardcoded `http://` lets the same script
+# work whether REALM_BASE_URL is https or http.
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
+case "$REALM_TEST_URL" in
+  https://*) REALM_TEST_READY_SCHEME="https-get" ;;
+  *)         REALM_TEST_READY_SCHEME="http-get"  ;;
+esac
+BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
+NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
