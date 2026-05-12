@@ -483,7 +483,7 @@ export class RealmServer {
         let realmURL = new URL(routedRealm.url);
         realmURL.protocol = requestURL.protocol;
         let realmPaths = new RealmPaths(realmURL);
-        let pathInRealm = '/' + realmPaths.local(rri(requestURL.href));
+        let pathInRealm = '/' + realmPaths.local(requestURL);
         let rule = routingMap.find((r) => r.path === pathInRealm);
         if (rule) {
           cardURL = new URL(rule.id);
