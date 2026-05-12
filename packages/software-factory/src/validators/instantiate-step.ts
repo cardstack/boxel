@@ -151,16 +151,28 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     if (specInfos.length === 0) {
       let hasModules = false;
       let filenames: string[] = [];
+      let listError: string | undefined;
       try {
         let filesResult = await this.fetchFilenamesFn(targetRealm);
-        filenames = filesResult.filenames ?? [];
-        hasModules = filenames.some(
-          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
-        );
+        // `fetchFilenamesFn` (defaults to `client.listFiles`) reports
+        // failures via a returned `error` field, not by throwing. Treat
+        // either path as "we don't actually know what's in the realm" and
+        // fall back to the no-modules branch so we don't fail the step
+        // with a misleading "modules exist but no specs" message.
+        if (filesResult.error) {
+          listError = filesResult.error;
+        } else {
+          filenames = filesResult.filenames ?? [];
+          hasModules = filenames.some(
+            (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+          );
+        }
       } catch (err) {
-        // If we can't check filenames, treat as nothing to validate
+        listError = err instanceof Error ? err.message : String(err);
+      }
+      if (listError) {
         log.warn(
-          `Failed to list realm files while diagnosing empty spec search: ${err instanceof Error ? err.message : String(err)}`,
+          `Failed to list realm files while diagnosing empty spec search: ${listError}`,
         );
       }
 
