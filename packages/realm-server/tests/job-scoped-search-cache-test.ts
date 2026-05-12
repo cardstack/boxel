@@ -137,7 +137,11 @@ module(basename(__filename), function () {
         populate,
       });
 
-      assert.strictEqual(calls, 1, 'only the first sequential caller ran populate');
+      assert.strictEqual(
+        calls,
+        1,
+        'only the first sequential caller ran populate',
+      );
       assert.strictEqual(a, b, 'b returned the cached doc');
       assert.strictEqual(b, c, 'c returned the cached doc');
     });
@@ -178,8 +182,13 @@ module(basename(__filename), function () {
       release();
       let [a, b] = await Promise.all([aP, bP]);
 
-      assert.strictEqual(calls, 2, 'both concurrent callers ran their own populate');
-      assert.ok(a && b, 'both resolved');
+      assert.strictEqual(
+        calls,
+        2,
+        'both concurrent callers ran their own populate',
+      );
+      assert.ok(a, 'a resolved');
+      assert.ok(b, 'b resolved');
       // A subsequent sequential caller observes whichever doc landed
       // last in the cache. (Last-write-wins; either is valid.)
       let c = await cache.getOrPopulate({
@@ -188,8 +197,13 @@ module(basename(__filename), function () {
         opts: undefined,
         populate,
       });
-      assert.strictEqual(calls, 2, 'sequential c hit the cache (no new populate)');
-      assert.ok(c === a || c === b, 'c returned one of the cached docs');
+      assert.strictEqual(
+        calls,
+        2,
+        'sequential c hit the cache (no new populate)',
+      );
+      let cIsOneOfCached = c === a || c === b;
+      assert.true(cIsOneOfCached, 'c returned one of the cached docs');
     });
 
     test('clearJob drops every entry for that job and leaves peers untouched', async function (assert) {
