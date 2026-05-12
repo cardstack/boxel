@@ -246,11 +246,15 @@ module(basename(__filename), function (hooks) {
         scheme: 'http',
       });
       assert.strictEqual(res.status, 301, 'plain http GET returns 301');
+      let location =
+        typeof res.headers.location === 'string' ? res.headers.location : '';
       assert.true(
-        typeof res.headers.location === 'string' &&
-          res.headers.location.startsWith('https://') &&
-          res.headers.location.endsWith('/_alive'),
-        `Location is https://…/_alive — got "${res.headers.location}"`,
+        location.startsWith('https://'),
+        `Location is https:// — got "${location}"`,
+      );
+      assert.true(
+        location.endsWith('/_alive'),
+        `Location preserves /_alive — got "${location}"`,
       );
     } finally {
       await close();
@@ -277,15 +281,18 @@ module(basename(__filename), function (hooks) {
       });
       let locMatch = response.match(/^Location:\s*(.+)\r$/im);
       let location = locMatch?.[1] ?? '';
+      let statusLine = response.split('\n')[0]?.trim() ?? '';
       assert.true(
-        response.startsWith('HTTP/1.0 301') ||
-          response.startsWith('HTTP/1.1 301'),
-        `got 301 — first line was "${response.split('\n')[0]?.trim()}"`,
+        /^HTTP\/1\.[01] 301\b/.test(statusLine),
+        `got 301 — first line was "${statusLine}"`,
       );
       assert.true(
-        location.startsWith('https://127.0.0.1:') &&
-          location.endsWith('/_alive'),
-        `Location reflects socket-bound port — got "${location}"`,
+        location.startsWith('https://127.0.0.1:'),
+        `Location uses https + bound host — got "${location}"`,
+      );
+      assert.true(
+        location.endsWith('/_alive'),
+        `Location preserves /_alive — got "${location}"`,
       );
     } finally {
       await close();
