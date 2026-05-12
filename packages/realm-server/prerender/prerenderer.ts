@@ -147,6 +147,13 @@ export class Prerenderer {
     return this.#pagePool.getQueueDepthSnapshot();
   }
 
+  // Manager heartbeats should reflect the pool's live tab capacity, not
+  // the constructor fallback. Under the dynamic-pool config this value
+  // mutates between MIN and MAX as expansion / contraction runs.
+  get currentPoolCapacity(): number {
+    return this.#pagePool.currentMaxPages;
+  }
+
   // Test-only seam — see PagePool.__test_seedRevokedException.
   __test_seedRevokedException(
     pageId: string,

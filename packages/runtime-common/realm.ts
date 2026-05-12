@@ -160,6 +160,7 @@ import { filterAtomicOperations } from './atomic-document';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
+  type PopulateCoordinator,
 } from './definition-lookup';
 import {
   fetchSessionRoom,
@@ -197,9 +198,39 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Opt-in to producing the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. When undefined / null /
+  // false the host's render route substitutes a small boilerplate
+  // placeholder instead and skips the (expensive) isolated render.
+  // The lever is primarily set by the publish handler on the
+  // published realm snapshot so anonymous-visitor SSR injection has
+  // real content; unpublished realms typically have nothing reading
+  // the index's isolated HTML. Optional to avoid forcing every
+  // RealmInfo fixture to update.
+  includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
+
+// Marker header the host SPA attaches to outbound _federated-search /
+// _search calls when it's running inside a prerender tab. The prerender
+// server uses puppeteer's `evaluateOnNewDocument` to inject a window
+// global (`__boxelDuringPrerender = true`) into every Chrome tab before
+// the host loads; the host's realm-server fetch wrapper then reads that
+// flag and adds this header on its own outbound search requests only —
+// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
+// see it on a CORS preflight. When the realm sees this on an inbound
+// _search request it knows the caller is the host SPA mid-render and
+// switches the search to cacheOnlyDefinitions:true, which short-circuits
+// the recursive lookupDefinition → prerenderModule path in
+// populateQueryFields that causes self-referential prerender deadlocks
+// under parallel indexing. Kept as a bare string here so runtime-common
+// stays independent of realm-server. The realm-server prerender side
+// re-exports the same value from prerender-constants.ts.
+export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
+function isDuringPrerenderRequest(request: Request): boolean {
+  return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
 
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not
 // in this set is still written to the legacy .realm.json sidecar until
@@ -209,6 +240,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
+  'includePrerenderedDefaultRealmIndex',
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
@@ -226,6 +258,14 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+// CS-11030: DB table backing the cross-process transpile cache and
+// the matching budget the loser path waits before re-reading. Same
+// 180 s budget as CachingDefinitionLookup's COALESCE_NOTIFY_WAIT_MS —
+// prerenders + transpiles run on similar timescales; bigger budgets
+// just delay the fallthrough on missed NOTIFY, smaller budgets risk
+// a second transpile before the winner finishes.
+const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
+const COALESCE_NOTIFY_WAIT_MS = 180_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
 // Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
@@ -296,12 +336,19 @@ type ModuleLoadResult =
       canonicalPath: LocalPath;
       headers: Record<string, string>;
     }
-  | {
-      kind: 'module';
-      canonicalPath: LocalPath;
-      body: string;
-      headers: Record<string, string>;
-    };
+  | ModuleTranspileResult;
+
+type ModuleTranspileResult = {
+  kind: 'module';
+  canonicalPath: LocalPath;
+  body: string;
+  headers: Record<string, string>;
+  // Computed once at the transpile/L2-hit boundary so fallbackHandle's L1
+  // write can reuse them instead of re-running extractModuleDependencyKeys
+  // on every L1 miss. Carried through the L2 row so a cross-process L2 hit
+  // also skips the AST scan.
+  dependencyKeys: Set<string>;
+};
 
 // ETag base prefers a content fingerprint (md5 of the file body) over
 // `lastModified` because the unix-second timestamp collides for two
@@ -570,6 +617,48 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
+  // CS-11028: per-path generation counters for #moduleCache. Bumped
+  // synchronously by invalidateCache(path) before any await. fallbackHandle
+  // snapshots at entry and discards its post-transpile cache write if the
+  // path's generation moved during the in-flight transpile — otherwise the
+  // pre-invalidation bytes would re-populate the slot that invalidate just
+  // cleared and serve stale code until the next invalidate of that path.
+  // #moduleCacheGlobalGeneration covers __testOnlyClearCaches, which wipes
+  // the whole map; a snapshot taken before the wipe sees its `path`
+  // component reset to 0 alongside the live counter, so a global generation
+  // is the only thing that reliably mismatches afterwards.
+  #moduleCacheGenerations: Map<LocalPath, number> = new Map();
+  #moduleCacheGlobalGeneration = 0;
+  // CS-11029: in-process inflight dedup for the transpile pipeline.
+  // Concurrent same-path callers that miss #moduleCache used to each call
+  // transpileJS independently — 50–500 ms of babel + ember-template-
+  // compilation + decorator transforms wasted per duplicate. The map is
+  // keyed by local path so the second-and-onward caller awaits the first
+  // caller's promise instead of running babel again. Invalidation paths
+  // (writeMany, invalidateCache, the full-index clear, etc.) drop the
+  // entry through the shared #dropModuleCacheEntry /
+  // #dropAllModuleCacheEntries helpers so post-invalidate callers don't
+  // join a stale transpile whose #moduleCache.set will be discarded by
+  // CS-11028's generation guard anyway. Identity-checked cleanup on
+  // settle is the same shape as CachingDefinitionLookup's #inFlight — a
+  // newer pending entry installed after a drop survives an older
+  // promise's eventual settle.
+  #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
+    new Map();
+  // Monotonic count of transpileJS invocations, used by the CS-11029
+  // dedup tests to assert that N concurrent same-path readers triggered
+  // exactly one transpile call. Reset by __testOnlyClearCaches so each
+  // test reasons from a clean baseline.
+  #transpileCallCount = 0;
+  // CS-11030: optional cross-process coalesce coordinator. When set, the
+  // first realm-server in the fleet to miss the in-memory cache for a
+  // given (realm_url, canonical_path) acquires an advisory lock, writes
+  // the transpiled bytes to module_transpile_cache, and emits NOTIFY;
+  // peers wait on NOTIFY and re-read the row instead of each running
+  // babel independently. Undefined in deployments without pg (sqlite /
+  // in-memory) — the realm then runs the uncoordinated CS-11029 path
+  // and writes nothing to the DB cache.
+  #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -634,6 +723,7 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      transpileCoordinator,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -646,6 +736,13 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      // CS-11030: when set, the realm coalesces concurrent cross-process
+      // transpiles through an advisory-lock + NOTIFY winner/loser flow
+      // and persists the resulting bytes to `module_transpile_cache` so
+      // peers re-read instead of re-running babel. Optional — sqlite /
+      // in-memory deployments leave this undefined and the uncoordinated
+      // CS-11029 in-process dedup is the only sharing layer.
+      transpileCoordinator?: PopulateCoordinator;
     },
     opts?: Options,
   ) {
@@ -663,6 +760,7 @@ export class Realm {
       this.#matrixClient.matrixURL.href,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
+    this.#transpileCoordinator = transpileCoordinator;
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
@@ -927,7 +1025,7 @@ export class Realm {
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
       await this.#definitionLookup.clearRealmCache(this.url);
-      this.#moduleCache.clear();
+      this.#dropAllModuleCacheEntries();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1167,7 +1265,7 @@ export class Realm {
           requestContext,
         });
       }
-      if (!this.paths.inRealm(rri(parsedURL.href))) {
+      if (!this.paths.inRealm(parsedURL)) {
         return badRequest({
           message: `URL is not in realm: ${parsedURL.href}`,
           requestContext,
@@ -1224,8 +1322,34 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#moduleCache.clear();
+    this.#dropAllModuleCacheEntries();
+    // Reset the transpile counter so each test reasons about its own
+    // delta. Production never reads this counter — only the CS-11029
+    // dedup tests do (CS-11029).
+    this.#transpileCallCount = 0;
   }
+
+  // CS-11029 test seams: tests need to assert "N concurrent same-path
+  // readers triggered exactly one transpile" and "the in-flight slot
+  // released after the shared transpile settled." Exposing the
+  // monotonic counter + the live map size is the smallest surface that
+  // satisfies both — no externally-observable behavior changes.
+  __testOnlyGetTranspileCallCount(): number {
+    return this.#transpileCallCount;
+  }
+  __testOnlyGetInFlightTranspileCount(): number {
+    return this.#inFlightTranspiles.size;
+  }
+  // Test-only gate: when set, #materializeAndTranspile awaits the
+  // returned promise before calling transpileJS. Lets the dedup tests
+  // park a transpile mid-flight so they can observe inflight state
+  // without racing real .gts transpile timing in CI. The hook fires
+  // BEFORE #transpileCallCount is bumped — when the count rises, the
+  // gate has released and babel is running.
+  __testOnlyDelayTranspile(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlyTranspileDelay = fn;
+  }
+  #testOnlyTranspileDelay?: () => Promise<void>;
 
   // Invalidate the in-memory byte caches for a single path. Called by the
   // realm_file_changes LISTEN handler on peer instances after a write lands
@@ -1236,8 +1360,105 @@ export class Realm {
   invalidateCache(path: LocalPath): void {
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
+      this.#dropModuleCacheEntry(path);
     }
+  }
+
+  // CS-11028: shared drop helper for any in-process site that invalidates a
+  // single #moduleCache entry — writeMany, delete/deleteAll, the local
+  // file-watcher callback, the index-updater's executable-invalidation
+  // cascade, the public invalidateCache entry point, etc. Bumps the
+  // per-path generation BEFORE the cache delete so a concurrent in-flight
+  // transpile for the same path — already past its generation snapshot in
+  // fallbackHandle — observes the new value at persist time and drops its
+  // #moduleCache.set instead of re-filling the slot we're about to empty.
+  #dropModuleCacheEntry(path: LocalPath): void {
+    this.#bumpModuleCacheGeneration(path);
+    this.#moduleCache.invalidate(path);
+    // CS-11029: drop the in-flight transpile entry too. Existing
+    // waiters on the old promise still receive its result — their
+    // requests preceded the invalidate, so pre-invalidation bytes are
+    // the correct response. But a caller arriving AFTER this point
+    // must not join the stale transpile (its #moduleCache.set is
+    // about to be discarded by the generation guard); they install
+    // their own pending against current source instead.
+    this.#inFlightTranspiles.delete(path);
+    // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
+    // because invalidateCache is sync (called from the LISTEN handler
+    // among others). Best-effort by design — every peer's listener
+    // runs the same DELETE for its own copy, so a transient pg
+    // failure on one peer is repaired by the next; and a stale L2
+    // row that survives is corrected on next reader's invalidate
+    // path or by the writer overwriting it via the ON CONFLICT DO
+    // NOTHING (which becomes a no-op once we re-DELETE).
+    let canonicalPath = this.paths.fileURL(path).href;
+    void this.#deleteTranspileCacheRow(canonicalPath);
+  }
+
+  // Wipes every #moduleCache entry and bumps the global generation so any
+  // in-flight transpile whose snapshot was taken before this wipe discards
+  // its post-transpile cache write rather than re-populating the
+  // just-cleared map (CS-11028). The per-path map is cleared because the
+  // generations it held are no longer reachable — the global counter is
+  // what catches in-flight snapshots after a wipe.
+  #dropAllModuleCacheEntries(): void {
+    this.#moduleCache.clear();
+    this.#moduleCacheGenerations.clear();
+    this.#moduleCacheGlobalGeneration += 1;
+    // CS-11029: same reason as #dropModuleCacheEntry — post-wipe
+    // callers must not join a stale transpile.
+    this.#inFlightTranspiles.clear();
+    // CS-11030: fire-and-forget bulk DELETE for the realm's L2 rows.
+    void this.#deleteAllTranspileCacheRows();
+  }
+
+  #bumpModuleCacheGeneration(path: LocalPath): void {
+    this.#moduleCacheGenerations.set(
+      path,
+      (this.#moduleCacheGenerations.get(path) ?? 0) + 1,
+    );
+  }
+
+  // Snapshot generations for every path the in-flight request could end
+  // up resolving to. fallbackHandle hands us the request's localPath
+  // (e.g. "foo"), but loadModuleFromDisk's getFileWithFallbacks may
+  // resolve to "foo" or to "foo.<ext>" for each executable extension —
+  // and invalidateCache fires against the canonical (with-extension)
+  // path. Snapshotting only "foo" would let an invalidate of "foo.gts"
+  // bump the canonical's generation while leaving the snapshotted
+  // "foo" gen unchanged, so the post-await check would miss the race
+  // and re-populate the "foo" alias with pre-invalidation bytes. By
+  // snapshotting all candidates here and letting the post-await check
+  // key on result.canonicalPath, we catch the race whether the request
+  // was extensionless or not.
+  #snapshotModuleCacheGeneration(localPath: LocalPath): {
+    pathGens: Map<LocalPath, number>;
+    global: number;
+  } {
+    let pathGens = new Map<LocalPath, number>();
+    pathGens.set(localPath, this.#moduleCacheGenerations.get(localPath) ?? 0);
+    if (!hasExecutableExtension(localPath)) {
+      for (let ext of executableExtensions) {
+        let candidate = localPath + ext;
+        pathGens.set(
+          candidate,
+          this.#moduleCacheGenerations.get(candidate) ?? 0,
+        );
+      }
+    }
+    return { pathGens, global: this.#moduleCacheGlobalGeneration };
+  }
+
+  #moduleCacheGenerationChanged(
+    canonicalPath: LocalPath,
+    snapshot: { pathGens: Map<LocalPath, number>; global: number },
+  ): boolean {
+    if (this.#moduleCacheGlobalGeneration !== snapshot.global) {
+      return true;
+    }
+    let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
+    let curGen = this.#moduleCacheGenerations.get(canonicalPath) ?? 0;
+    return curGen !== snapGen;
   }
 
   // Broadcast a file-change notification to peer realm-server instances so
@@ -1395,10 +1616,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       (isNewFile ? addedFiles : updatedFiles).push(path);
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
       await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
@@ -1876,10 +2094,7 @@ export class Realm {
       removed: [path],
       realmURL: this.url,
     });
-    this.#sourceCache.invalidate(path);
-    if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
-    }
+    this.invalidateCache(path);
     await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
@@ -1900,10 +2115,7 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
       removePromises.push(this.#adapter.remove(path));
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
     }
 
     await Promise.all(trackPromises);
@@ -2231,6 +2443,26 @@ export class Realm {
       }
     }
 
+    // CS-11028: snapshot module-cache generations BEFORE the first await
+    // for every candidate path getFileWithFallbacks could resolve to
+    // (localPath plus each executable-extension fallback when the
+    // request is extensionless). invalidateCache(path) bumps the
+    // counter synchronously, so if it fires while loadModuleFromDisk
+    // is in-flight (typically 50–500 ms for a .gts transpile) the
+    // post-await comparison against result.canonicalPath's snapshotted
+    // gen catches the race and we skip the cache write — otherwise the
+    // pre-invalidation bytes we just produced would re-fill the slot
+    // invalidate just cleared. Checking by canonicalPath rather than
+    // localPath is what makes the discard work for extensionless alias
+    // requests (e.g. /foo → loadModuleFromDisk returns foo.gts);
+    // invalidateCache targets the canonical, so the gen we need to
+    // compare against is the canonical's. We still serve our own
+    // response: it reflects the source A read at request time, which
+    // is consistent with the caller's happens-before ordering.
+    let cacheGenSnapshot = moduleCachingDisabled
+      ? undefined
+      : this.#snapshotModuleCacheGeneration(localPath);
+
     let response: ResponseWithNodeStream;
     try {
       let result = await this.loadModuleFromDisk(
@@ -2240,17 +2472,19 @@ export class Realm {
       );
       switch (result.kind) {
         case 'module': {
-          if (!moduleCachingDisabled) {
+          if (
+            !moduleCachingDisabled &&
+            cacheGenSnapshot &&
+            !this.#moduleCacheGenerationChanged(
+              result.canonicalPath,
+              cacheGenSnapshot,
+            )
+          ) {
             this.#moduleCache.set(localPath, {
               canonicalPath: result.canonicalPath,
               body: result.body,
               headers: result.headers,
-              dependencyKeys: extractModuleDependencyKeys(
-                result.body,
-                result.canonicalPath,
-                this.url,
-                this.paths,
-              ),
+              dependencyKeys: result.dependencyKeys,
             });
           }
           response = createResponse({
@@ -2355,6 +2589,343 @@ export class Realm {
       };
     }
 
+    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+  }
+
+  // Dedups the materialize + transpile pipeline across concurrent
+  // same-path callers (CS-11029). The first caller installs a pending
+  // promise keyed by localPath; any caller that arrives while it's
+  // in-flight returns the same promise instead of running babel a
+  // second time. Identity-checked cleanup on settle mirrors
+  // CachingDefinitionLookup.#inFlight — a newer pending entry installed
+  // after invalidateCache drops the slot is preserved when the older
+  // promise eventually settles.
+  async #transpileModuleDeduped(
+    localPath: LocalPath,
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let existing = this.#inFlightTranspiles.get(localPath);
+    if (existing) {
+      return existing;
+    }
+    // Assign the chained `.finally` to `pending` and store/return THAT
+    // (not the raw layered promise). If we kept the raw promise in the
+    // map and dangled an unused `.finally(...)` chain, a rejection from
+    // transpileJS would propagate through both promises but only the
+    // raw one has waiters — the chained one would surface as an
+    // unhandled rejection in Node's host hook. Same shape as
+    // CachingDefinitionLookup.#inFlight.
+    let pending: Promise<ModuleTranspileResult>;
+    let core = this.#transpileWithLayers(fileRef, etag);
+    pending = core.finally(() => {
+      if (this.#inFlightTranspiles.get(localPath) === pending) {
+        this.#inFlightTranspiles.delete(localPath);
+      }
+    });
+    this.#inFlightTranspiles.set(localPath, pending);
+    return pending;
+  }
+
+  // CS-11030: orchestrates the cache layers below the in-process inflight
+  // dedup. Layering:
+  //   1. read module_transpile_cache — a peer (or this process on a
+  //      prior request that fell out of the in-memory cache) may have
+  //      already produced the bytes; just return them.
+  //   2. (with coordinator) tryAcquireAndRun: winner re-reads the DB,
+  //      transpiles on miss, persists to module_transpile_cache, and
+  //      emits NOTIFY before commit; losers waitForKey + re-read.
+  //   3. (no coordinator, or loser fell through) run #materializeAndTranspile
+  //      directly. The L2 DB write still happens — sqlite deployments
+  //      simply skip the cross-process coalesce.
+  //
+  // The L2 write uses an OCC pattern: the writer captures the row's
+  // `generation` at the L2 read step (or 0 if the row is absent) and
+  // UPSERTs with that captured value via `ON CONFLICT DO UPDATE
+  // WHERE existing.generation <= captured`. An invalidate that lands
+  // during the transpile bumps the row's generation past the captured
+  // value, so the writer's UPSERT is rejected by the WHERE clause and
+  // a stale transpile started before the invalidate cannot resurrect
+  // the row. Mirrors CS-11028's L1 generation guard but with a durable
+  // counter visible to every peer.
+  async #transpileWithLayers(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
+    let coordinator = this.#transpileCoordinator;
+
+    // L2 read first — cheap query (UNLOGGED, indexed PK), saves babel.
+    let cached = await this.#readTranspileCacheRow(canonicalPath);
+    if (cached?.result) {
+      return cached.result;
+    }
+    // capturedGeneration is the row's generation observed at this
+    // point in time — 0 if the row was absent, the tombstone's
+    // generation otherwise. The L2 write uses this value as its OCC
+    // token: any invalidate that races the transpile bumps generation
+    // past `capturedGeneration`, so the write's WHERE clause rejects
+    // the UPSERT.
+    let capturedGeneration = cached?.generation ?? 0;
+
+    if (!coordinator) {
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        capturedGeneration,
+      );
+      return result;
+    }
+
+    let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
+    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
+      // Winner path: a peer may have written between our miss and our
+      // lock acquisition; re-read so we don't redo their work AND
+      // refresh our captured generation in case a tombstone landed.
+      let recheck = await this.#readTranspileCacheRow(canonicalPath);
+      if (recheck?.result) {
+        return recheck.result;
+      }
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        recheck?.generation ?? 0,
+      );
+      return result;
+    });
+    if (attempt.acquired) {
+      return attempt.result;
+    }
+
+    // Loser path: park on NOTIFY (resolves on either the populate
+    // signal or a bounded timeout — see CachingDefinitionLookup's
+    // COALESCE_NOTIFY_WAIT_MS for the rationale on the budget). On
+    // wake, re-read; the row should be there if the winner succeeded.
+    await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
+    let postWait = await this.#readTranspileCacheRow(canonicalPath);
+    if (postWait?.result) {
+      return postWait.result;
+    }
+    // Missed NOTIFY, peer crashed, or the winner skipped persist (e.g.
+    // a generation discard upstream). Fall through to a local transpile;
+    // we still persist so the NEXT reader sees a cached row. Use the
+    // freshest generation we've observed for the OCC token.
+    let result = await this.#materializeAndTranspile(fileRef, etag);
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      result,
+      postWait?.generation ?? 0,
+    );
+    return result;
+  }
+
+  async #readTranspileCacheRow(canonicalPath: string): Promise<
+    | {
+        result?: ModuleTranspileResult;
+        generation: number;
+      }
+    | undefined
+  > {
+    let rows = (await query(this.#dbAdapter, [
+      'SELECT body, headers, dependency_keys, generation',
+      'FROM',
+      MODULE_TRANSPILE_CACHE_TABLE,
+      'WHERE realm_url =',
+      param(this.url),
+      'AND canonical_path =',
+      param(canonicalPath),
+    ])) as {
+      body: string | null;
+      headers: Record<string, string> | string | null;
+      dependency_keys: string[] | string | null;
+      generation: string | number;
+    }[];
+    if (!rows.length) {
+      return undefined;
+    }
+    let row = rows[0];
+    let generation =
+      typeof row.generation === 'string'
+        ? Number(row.generation)
+        : row.generation;
+    if (row.body == null || row.headers == null) {
+      // Tombstone — surface only the generation so the writer can
+      // capture it for OCC.
+      return { generation };
+    }
+    let headers =
+      typeof row.headers === 'string'
+        ? (JSON.parse(row.headers) as Record<string, string>)
+        : row.headers;
+    let canonicalFromHeader = headers['X-Boxel-Canonical-Path'];
+    // canonical_path stores the realm-relative + extension form
+    // matching fileRef.path; the header carries the full URL.
+    // Either is sufficient to reconstruct the result, but the
+    // header is what the response uses, so prefer that and parse
+    // back to the local path for the returned `canonicalPath`.
+    let pathFromHeader: string | undefined = undefined;
+    if (canonicalFromHeader) {
+      try {
+        pathFromHeader = this.paths.local(new URL(canonicalFromHeader));
+      } catch {
+        // ignore
+      }
+    }
+    let canonicalPathLocal =
+      pathFromHeader ?? this.paths.local(new URL(canonicalPath));
+    let depsArray =
+      typeof row.dependency_keys === 'string'
+        ? (JSON.parse(row.dependency_keys) as string[])
+        : (row.dependency_keys ?? []);
+    // Carry the writer's deps through. The writer always persists the
+    // full set computed from the transpiled body, so an empty array
+    // legitimately means the module has no in-realm imports. A row
+    // written before deps were carried (rollout window) will also read
+    // as empty here — its L1 entry will be missing dep edges until the
+    // next invalidate forces a re-transpile. The table is UNLOGGED, so
+    // pre-rollout rows age out on any pg restart.
+    let dependencyKeys = new Set<string>(depsArray);
+    return {
+      result: {
+        kind: 'module',
+        canonicalPath: canonicalPathLocal,
+        body: row.body,
+        headers,
+        dependencyKeys,
+      },
+      generation,
+    };
+  }
+
+  async #writeTranspileCacheRow(
+    canonicalPath: string,
+    result: ModuleTranspileResult,
+    capturedGeneration: number,
+  ): Promise<void> {
+    try {
+      // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
+      // if the row's current generation is still <= capturedGeneration.
+      // If an invalidate has tombstoned-and-bumped the row past that
+      // value, the WHERE clause rejects the UPDATE and the stale
+      // transpile is discarded. capturedGeneration may legitimately be
+      // 0 (row absent at read time, tombstone never created) — in
+      // that case the WHERE 0 <= 0 still allows a no-op same-gen
+      // overwrite which is benign because the bytes are deterministic
+      // for the same source.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        param(result.body),
+        ',',
+        param(JSON.stringify(result.headers)),
+        '::jsonb,',
+        // Persist the full deps set computed once at the transpile
+        // boundary so a cross-process L2 reader can populate its L1
+        // entry directly instead of re-running extractModuleDependencyKeys
+        // on the bytes.
+        param(JSON.stringify([...result.dependencyKeys])),
+        '::jsonb,',
+        param(capturedGeneration),
+        ',',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = EXCLUDED.body,',
+        'headers = EXCLUDED.headers,',
+        'dependency_keys = EXCLUDED.dependency_keys,',
+        'generation = EXCLUDED.generation,',
+        'created_at = EXCLUDED.created_at',
+        `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
+      ]);
+    } catch (err: unknown) {
+      // L2 persistence is best-effort. A transient pg failure must not
+      // break the response the caller is about to serve — they already
+      // have the bytes in memory. Log and move on; the next reader will
+      // re-try the write.
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {
+    try {
+      // Tombstone-and-bump rather than physically DELETE: an in-flight
+      // writer that captured this path's generation BEFORE the
+      // invalidate needs to observe the bumped generation when it
+      // tries to UPSERT, so its WHERE existing.generation <= captured
+      // clause fails and the stale bytes are rejected. A physical
+      // DELETE would let the writer's INSERT succeed (no conflict, no
+      // row to compare against) and resurrect the stale transpile.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        'NULL, NULL, NULL, 1,',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = NULL,',
+        'headers = NULL,',
+        'dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at = EXCLUDED.created_at',
+      ]);
+    } catch (err: unknown) {
+      // Same best-effort posture as #writeTranspileCacheRow — the in-memory
+      // L1 cache for this path was already invalidated, so a stale L2 row
+      // is at worst a brief window before the next reader's transpile
+      // overwrites it (or the next invalidate retries the tombstone).
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} tombstone failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #deleteAllTranspileCacheRows(): Promise<void> {
+    try {
+      // Bulk tombstone-and-bump rather than DELETE — same reason as
+      // #deleteTranspileCacheRow: any in-flight writer captured the
+      // pre-wipe generation and must see a bumped row when it tries
+      // to UPSERT so the OCC WHERE clause rejects the stale write.
+      // Note that this bumps existing rows but does not create new
+      // tombstones for paths that didn't yet have a row; a writer
+      // for one of those paths that captured generation 0 would still
+      // succeed post-wipe, but that's a narrow window and currently
+      // limited to the __testOnly bulk-wipe path.
+      await query(this.#dbAdapter, [
+        'UPDATE',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        'SET body = NULL, headers = NULL, dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at =',
+        param(Date.now()),
+        'WHERE realm_url =',
+        param(this.url),
+      ]);
+    } catch (err: unknown) {
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone failed for ${this.url}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #materializeAndTranspile(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let fileWithContent = await this.materializeFileRef(fileRef);
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
@@ -2367,6 +2938,10 @@ export class Realm {
       let debugFilename = fileWithContent.path.startsWith('/')
         ? fileWithContent.path
         : `/${fileWithContent.path}`;
+      if (this.#testOnlyTranspileDelay) {
+        await this.#testOnlyTranspileDelay();
+      }
+      this.#transpileCallCount += 1;
       transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
@@ -2392,11 +2967,22 @@ export class Realm {
     }
     headers['X-Boxel-Canonical-Path'] = canonicalPath;
 
+    // Compute deps once here so callers (L1 write site, L2 persist)
+    // reuse them. Carrying the set through the L2 row lets a peer
+    // skip this scan entirely on a cross-process cache hit.
+    let dependencyKeys = extractModuleDependencyKeys(
+      transpiled,
+      fileRef.path,
+      this.url,
+      this.paths,
+    );
+
     return {
       kind: 'module',
       canonicalPath: fileRef.path,
       body: transpiled,
       headers,
+      dependencyKeys,
     };
   }
 
@@ -2894,7 +3480,7 @@ export class Realm {
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         let invalidatedPath = this.paths.local(invalidatedURL);
-        this.#moduleCache.invalidate(invalidatedPath);
+        this.#dropModuleCacheEntry(invalidatedPath);
         changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
@@ -2907,7 +3493,7 @@ export class Realm {
       for (let invalidatedModuleURL of invalidatedModuleURLs) {
         try {
           let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
-          this.#moduleCache.invalidate(invalidatedPath);
+          this.#dropModuleCacheEntry(invalidatedPath);
           changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         } catch (_err) {
           // ignore invalidations outside this realm
@@ -2919,7 +3505,7 @@ export class Realm {
       this.moduleCacheDependencyEntries(),
     );
     for (let invalidatedPath of dependentInvalidations) {
-      this.#moduleCache.invalidate(invalidatedPath);
+      this.#dropModuleCacheEntry(invalidatedPath);
     }
   }
 
@@ -4013,10 +4599,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(query: Query): Promise<LinkableCollectionDocument> {
+  public async search(
+    query: Query,
+    opts?: { cacheOnlyDefinitions?: boolean },
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
     });
   }
 
@@ -4067,7 +4657,9 @@ export class Realm {
 
     try {
       assertQuery(cardsQuery);
-      let doc = await this.search(cardsQuery);
+      let doc = await this.search(cardsQuery, {
+        cacheOnlyDefinitions: isDuringPrerenderRequest(request),
+      });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -5172,6 +5764,7 @@ export class Realm {
       ),
       publishable: null,
       lastPublishedAt,
+      includePrerenderedDefaultRealmIndex: null,
     };
 
     if (realmConfig) {
@@ -5244,6 +5837,12 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -5275,6 +5874,12 @@ export class Realm {
         if ('iconURL' in attrs) {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
         }
       }
     } catch (e) {
@@ -5584,10 +6189,9 @@ export class Realm {
       }
 
       let localPath = this.paths.local(tracked.url);
-      this.#sourceCache.invalidate(localPath);
+      this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
-        this.#moduleCache.invalidate(localPath);
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
@@ -5796,7 +6400,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(rri(parsed.href));
+  return baseRealm.inRealm(parsed);
 }
 
 function lastModifiedHeader(

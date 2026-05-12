@@ -75,6 +75,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need history reaching back to the merge-base with the PR's
+          # base branch so `diff.sh --only-changed-since=origin/<base>`
+          # can run `git diff --name-only origin/<base>...HEAD`. Default
+          # fetch-depth: 1 only gives HEAD; 0 = full history.
+          fetch-depth: 0
+
+      - name: Fetch PR base ref
+        # Belt-and-suspenders: even with `fetch-depth: 0`, ensure the
+        # PR base ref is available as `origin/<base>` so diff.sh's
+        # `git rev-parse --verify` succeeds. Cheap on already-fetched
+        # history; idempotent if the ref is already up to date.
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags --depth=1 origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
@@ -131,10 +146,15 @@ jobs:
       - name: Compute diff
         id: diff
         working-directory: packages/observability
+        env:
+          # Scope the diff to files THIS PR changes (vs total drift between
+          # staging and main, which can be large and unrelated to the PR).
+          # `pull_request.base.ref` is the target branch (typically `main`).
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -eo pipefail
           DIFF_FILE="$(mktemp)"
-          ./scripts/diff.sh --env staging > "$DIFF_FILE"
+          ./scripts/diff.sh --env staging --only-changed-since="origin/${PR_BASE_REF}" > "$DIFF_FILE"
           # Persist the diff path for the next step (raw stdout via $GITHUB_OUTPUT
           # has multi-line / size limits we want to handle in JS instead).
           echo "diff_file=$DIFF_FILE" >> "$GITHUB_OUTPUT"
@@ -145,10 +165,10 @@ jobs:
           echo "::endgroup::"
 
       - name: Post sticky PR comment
-        # Pinned to SHA (rather than @v7) because this step has
+        # Pinned to SHA (rather than @v9) because this step has
         # pull-requests: write and runs after assuming an AWS role —
         # supply-chain risk is non-negligible.
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DIFF_FILE: ${{ steps.diff.outputs.diff_file }}
         with:

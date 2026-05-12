@@ -3,14 +3,17 @@
  *
  * One file per backend, each implementing the `LoopAgent` interface in
  * `./types.ts`:
- *   - `./openrouter.ts` — OpenRouter (OpenAI-compat tool-use protocol)
- *   - `./claude-code.ts` — Claude Code Agent SDK (in-process MCP)
+ *   - `./opencode.ts` — opencode SDK driving an OpenRouter (or proxy)
+ *     model. Backs the `--agent openrouter` CLI flag.
+ *   - `./claude-code.ts` — Claude Code Agent SDK (in-process MCP).
+ *     Backs the `--agent claude` CLI flag.
  *
  * `createLoopAgent()` in `../factory-issue-loop-wiring.ts` picks which to
  * instantiate based on the `--agent` flag.
  */
 
 export * from './types';
-export { OpenRouterFactoryAgent } from './openrouter';
+export { OpencodeFactoryAgent } from './opencode';
+export type { OpencodeAgentConfig } from './opencode';
 export { ClaudeCodeFactoryAgent } from './claude-code';
-export { MockFactoryAgent, MockLoopAgent } from './mocks';
+export { MockLoopAgent } from './mocks';

@@ -2008,4 +2008,302 @@ module('Unit | index-writer', function (hooks) {
       'resumed row search_doc landed in boxel_index',
     );
   });
+
+  module('getOrderingDependencyRows', function () {
+    test('returns production row when URL exists only in boxel_index', async function (assert) {
+      let url = `${testRealmURL}prod-only.json`;
+      let depUrl = `${testRealmURL}prod-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns the production row deps',
+      );
+    });
+
+    test('returns working row when URL exists only in boxel_index_working and is not deleted', async function (assert) {
+      let url = `${testRealmURL}working-only.json`;
+      let depUrl = `${testRealmURL}working-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns the working row deps',
+      );
+    });
+
+    test('working non-deleted wins over production when both exist', async function (assert) {
+      let url = `${testRealmURL}both.json`;
+      let workingDep = `${testRealmURL}working-dep.json`;
+      let productionDep = `${testRealmURL}production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [workingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [workingDep] }],
+        'working-non-deleted beat production',
+      );
+    });
+
+    test('production wins over deleted working row', async function (assert) {
+      let url = `${testRealmURL}deleted-working.json`;
+      let workingDep = `${testRealmURL}should-not-appear.json`;
+      let productionDep = `${testRealmURL}production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: true,
+              deps: [workingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [productionDep] }],
+        'production picked when working row is deleted',
+      );
+    });
+
+    test('falls back to deleted working row when no production exists', async function (assert) {
+      let url = `${testRealmURL}deleted-only.json`;
+      let depUrl = `${testRealmURL}deleted-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: true,
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns deleted working row as last-resort fallback',
+      );
+    });
+
+    test('mixed input returns the correct provenance per URL', async function (assert) {
+      let workingOnlyUrl = `${testRealmURL}mixed-working.json`;
+      let workingOnlyDep = `${testRealmURL}mixed-working-dep.json`;
+      let productionOnlyUrl = `${testRealmURL}mixed-production.json`;
+      let productionOnlyDep = `${testRealmURL}mixed-production-dep.json`;
+      let bothUrl = `${testRealmURL}mixed-both.json`;
+      let bothWorkingDep = `${testRealmURL}mixed-both-working-dep.json`;
+      let bothProductionDep = `${testRealmURL}mixed-both-production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url: workingOnlyUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [workingOnlyDep],
+              types: [],
+            },
+            {
+              url: bothUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [bothWorkingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url: productionOnlyUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionOnlyDep],
+              types: [],
+            },
+            {
+              url: bothUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [bothProductionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([
+        workingOnlyUrl,
+        productionOnlyUrl,
+        bothUrl,
+      ]);
+      let byUrl = new Map(rows.map((r) => [r.url, r]));
+      assert.deepEqual(
+        byUrl.get(workingOnlyUrl),
+        { url: workingOnlyUrl, type: 'instance', deps: [workingOnlyDep] },
+        'working-only URL returns working deps',
+      );
+      assert.deepEqual(
+        byUrl.get(productionOnlyUrl),
+        {
+          url: productionOnlyUrl,
+          type: 'instance',
+          deps: [productionOnlyDep],
+        },
+        'production-only URL returns production deps',
+      );
+      assert.deepEqual(
+        byUrl.get(bothUrl),
+        { url: bothUrl, type: 'instance', deps: [bothWorkingDep] },
+        'URL present in both returns working deps (working wins)',
+      );
+      assert.strictEqual(rows.length, 3, 'one row returned per requested URL');
+    });
+
+    test('projection excludes error_doc, has_error, and is_deleted', async function (assert) {
+      let url = `${testRealmURL}projection.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              has_error: true,
+              error_doc: {
+                id: url,
+                status: 500,
+                title: 'kaboom',
+                message: 'should not be returned',
+                additionalErrors: null,
+              },
+              deps: [],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.strictEqual(rows.length, 1, 'one row returned');
+      let row = rows[0]!;
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        ['deps', 'type', 'url'],
+        'row exposes only url, type, deps — no error_doc / has_error / is_deleted',
+      );
+    });
+  });
 });

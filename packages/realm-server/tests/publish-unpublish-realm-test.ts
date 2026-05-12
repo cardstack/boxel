@@ -392,6 +392,122 @@ module(basename(__filename), function () {
         );
       });
 
+      test('publishing a realm with the default CardsGrid index writes includePrerenderedDefaultRealmIndex into the published realm.json', async function (assert) {
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://testuser.localhost:4445/cards-grid-default/',
+            }),
+          );
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmConfigPath = join(
+          publishedDir,
+          publishedRealmId,
+          'realm.json',
+        );
+        assert.ok(
+          existsSync(publishedRealmConfigPath),
+          'published realm.json exists on disk',
+        );
+        let publishedRealmConfig = readJsonSync(publishedRealmConfigPath) as {
+          data?: {
+            attributes?: { includePrerenderedDefaultRealmIndex?: boolean };
+          };
+        };
+        assert.true(
+          publishedRealmConfig?.data?.attributes
+            ?.includePrerenderedDefaultRealmIndex,
+          'published realm.json carries includePrerenderedDefaultRealmIndex: true after publish',
+        );
+      });
+
+      test('publishing a realm whose index.json is not a CardsGrid leaves the published realm.json untouched', async function (assert) {
+        let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+        // Replace the source realm's default CardsGrid index with a
+        // bespoke CardDef-adopting index so the publish handler should
+        // NOT set the opt-in flag.
+        let customIndexResponse = await request
+          .post(`${sourceRealmPath}index.json`)
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            }),
+          );
+        assert.strictEqual(
+          customIndexResponse.status,
+          204,
+          'custom non-CardsGrid index.json can be written',
+        );
+
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/custom-index/',
+            }),
+          );
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmConfigPath = join(
+          publishedDir,
+          publishedRealmId,
+          'realm.json',
+        );
+        assert.ok(
+          existsSync(publishedRealmConfigPath),
+          'published realm.json exists on disk',
+        );
+        let publishedRealmConfig = readJsonSync(publishedRealmConfigPath) as {
+          data?: {
+            attributes?: { includePrerenderedDefaultRealmIndex?: boolean };
+          };
+        };
+        assert.notStrictEqual(
+          publishedRealmConfig?.data?.attributes
+            ?.includePrerenderedDefaultRealmIndex,
+          true,
+          'published realm.json does NOT carry includePrerenderedDefaultRealmIndex when the source index is a non-CardsGrid card',
+        );
+      });
+
       test('POST /_publish-realm serves cached module entries for published realm URLs', async function (assert) {
         let requestedPublishedRealmURL = 'http://localhost:4445/test-realm/';
         let sourceRealmPath = new URL(sourceRealmUrlString).pathname;

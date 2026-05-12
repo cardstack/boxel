@@ -88,6 +88,17 @@
    PRIMARY KEY ( id ) 
 );
 
+ CREATE TABLE IF NOT EXISTS module_transpile_cache (
+   realm_url TEXT NOT NULL,
+   canonical_path TEXT NOT NULL,
+   body TEXT,
+   headers BLOB,
+   dependency_keys BLOB,
+   generation DEFAULT 0 NOT NULL,
+   created_at,
+   PRIMARY KEY ( realm_url, canonical_path ) 
+);
+
  CREATE TABLE IF NOT EXISTS modules (
    url TEXT NOT NULL,
    cache_scope TEXT NOT NULL,

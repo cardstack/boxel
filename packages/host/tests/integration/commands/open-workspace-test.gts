@@ -49,7 +49,7 @@ module('Integration | commands | open-workspace', function (hooks) {
     );
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     await openWorkspaceCommand.execute({
-      realmUrl: testRealmURL,
+      realmIdentifier: testRealmURL,
     });
     assert.strictEqual(operatorModeStateService.state?.submode, 'interact');
     assert.strictEqual(operatorModeStateService.state?.stacks.length, 1);
@@ -68,7 +68,7 @@ module('Integration | commands | open-workspace', function (hooks) {
     let realmUrlWithTrailingSlash = testRealmURL;
     let realmUrlWithoutTrailingSlash = testRealmURL.replace(/\/$/, '');
     await openWorkspaceCommand.execute({
-      realmUrl: realmUrlWithoutTrailingSlash,
+      realmIdentifier: realmUrlWithoutTrailingSlash,
     });
     assert.strictEqual(
       operatorModeStateService.state?.stacks[0][0].id,

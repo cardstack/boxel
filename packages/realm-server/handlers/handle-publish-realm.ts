@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   createResponse,
   fetchUserPermissions,
+  isResolvedCodeRef,
   query,
   SupportedMimeType,
   logger,
@@ -44,6 +45,20 @@ import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
+
+// The CardsGrid CardDef can be referenced two equivalent ways in a
+// `meta.adoptsFrom.module` field — the absolute base-realm URL, or
+// the registered `@cardstack/base/` prefix form. `@cardstack/base/`
+// isn't currently wired as a virtual-network mapping in production
+// (only test fixtures register it), so today the canonical form on
+// disk is the absolute URL. Listing both forms keeps the detection
+// future-proof: once `@cardstack/base/` becomes a live prefix
+// mapping, `index.json` files that use it are still caught.
+const CARDS_GRID_MODULE_FORMS = new Set<string>([
+  'https://cardstack.com/base/cards-grid',
+  '@cardstack/base/cards-grid',
+]);
+const CARDS_GRID_NAME = 'CardsGrid';
 
 const PUBLISHED_REALM_DOMAIN_OVERRIDES = getPublishedRealmDomainOverrides(
   process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES,
@@ -134,6 +149,77 @@ function rewriteHostHomeForPublishedRealm(
   return hostHome.startsWith(sourceRealmURL)
     ? `${publishedRealmURL}${hostHome.slice(sourceRealmURL.length)}`
     : undefined;
+}
+
+// If the published realm's index card is the default CardsGrid, write
+// `includePrerenderedDefaultRealmIndex: true` into the realm's
+// RealmConfig card on disk so the indexer (which the publish handler
+// kicks off below) produces a real isolated HTML for the index card
+// instead of the boilerplate placeholder. Anonymous visitors of a
+// published realm's homepage hit the SSR injection path, which
+// expects real prerendered content; without this opt-in they'd see
+// the placeholder until JS boots. The check is a structural read of
+// the index.json's adoptsFrom — a published realm that has customised
+// its index to a different CardDef is left alone (its isolated render
+// is presumably the bespoke landing page the publisher wanted).
+function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
+  let indexJsonPath = join(publishedRealmPath, 'index.json');
+  let realmJsonPath = join(publishedRealmPath, 'realm.json');
+  if (!existsSync(indexJsonPath) || !existsSync(realmJsonPath)) {
+    return;
+  }
+  let indexDoc: unknown;
+  try {
+    indexDoc = readJsonSync(indexJsonPath);
+  } catch (e) {
+    log.warn(
+      `could not parse published index.json at ${indexJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return;
+  }
+  let adoptsFrom = (indexDoc as { data?: { meta?: { adoptsFrom?: unknown } } })
+    ?.data?.meta?.adoptsFrom as
+    | Parameters<typeof isResolvedCodeRef>[0]
+    | undefined;
+  if (!isResolvedCodeRef(adoptsFrom)) {
+    return;
+  }
+  if (
+    !CARDS_GRID_MODULE_FORMS.has(adoptsFrom.module) ||
+    adoptsFrom.name !== CARDS_GRID_NAME
+  ) {
+    return;
+  }
+  let realmConfigDoc: Record<string, unknown>;
+  try {
+    realmConfigDoc = readJsonSync(realmJsonPath) as Record<string, unknown>;
+  } catch (e) {
+    log.warn(
+      `could not parse published realm.json at ${realmJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+    return;
+  }
+  let data = (realmConfigDoc.data ?? {}) as Record<string, unknown>;
+  let attributes = (data.attributes ?? {}) as Record<string, unknown>;
+  if (attributes.includePrerenderedDefaultRealmIndex === true) {
+    return;
+  }
+  attributes.includePrerenderedDefaultRealmIndex = true;
+  data.attributes = attributes;
+  realmConfigDoc.data = data;
+  try {
+    writeJsonSync(realmJsonPath, realmConfigDoc, { spaces: 2 });
+  } catch (e) {
+    log.warn(
+      `could not write includePrerenderedDefaultRealmIndex into ${realmJsonPath}: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    );
+  }
 }
 
 export default function handlePublishRealm({
@@ -427,6 +513,20 @@ export default function handlePublishRealm({
             newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
             writeJsonSync(publishedRealmConfigPath, newlyPublishedRealmConfig);
           }
+
+          // For published realms whose homepage is the default
+          // CardsGrid, opt them in to keeping the full prerendered
+          // isolated HTML on the realm index card. Anonymous visitors
+          // of the published homepage hit the SSR injection path
+          // (server.ts → retrieveIsolatedHTML → injectIsolatedHTML);
+          // without the opt-in the host returns a boilerplate
+          // placeholder for that card and the SSR shell would inject
+          // an empty grid. Unpublished realms with the same CardsGrid
+          // index never need this; only the published snapshot does.
+          // The flag is written to the published realm's RealmConfig
+          // card (/realm.json) on disk before the reindex below picks
+          // it up.
+          ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
 
           // Clear stale modules cache for the published realm so that
           // error entries from a previous publish don't persist

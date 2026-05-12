@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import jwt from 'jsonwebtoken';
 import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors';
 import {
   matrixLogin,
@@ -15,6 +16,31 @@ import type { RealmAuthenticator } from './realm-authenticator';
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
+
+/**
+ * Tokens issued by the realm server carry a 7-day TTL. Re-mint when
+ * there's less than a day left so a long-running operation (or a
+ * downstream consumer that bakes the token into a static header, like
+ * opencode's passthrough provider) doesn't get a 401 mid-flight.
+ *
+ * Decode-only — we don't verify the signature; the realm server does
+ * that on every request. We only care about the `exp` claim.
+ */
+const SERVER_TOKEN_EXPIRY_SAFETY_MARGIN_SEC = 86400; // 1 day
+
+function isJwtNearExpiry(
+  token: string,
+  safetyMarginSec = SERVER_TOKEN_EXPIRY_SAFETY_MARGIN_SEC,
+): boolean {
+  // Tokens are cached verbatim from the realm server's `Authorization`
+  // response header, so they're prefixed with `Bearer ` — strip it before
+  // decoding or jsonwebtoken returns null and we'd refresh on every call.
+  let raw = token.replace(/^Bearer\s+/i, '');
+  let decoded = jwt.decode(raw) as { exp?: number } | null;
+  if (!decoded?.exp) return true; // unparseable / missing exp → treat as expired
+  let nowSec = Math.floor(Date.now() / 1000);
+  return decoded.exp - nowSec < safetyMarginSec;
+}
 
 export const NO_ACTIVE_PROFILE_ERROR =
   'No active profile. Run `boxel profile add` to create one.';
@@ -371,7 +397,7 @@ export class ProfileManager implements RealmAuthenticator {
 
   async getOrRefreshServerToken(): Promise<string> {
     let cached = this.getRealmServerToken();
-    if (cached) {
+    if (cached && !isJwtNearExpiry(cached)) {
       return cached;
     }
     let matrixAuth = await this.loginToMatrix();

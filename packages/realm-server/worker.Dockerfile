@@ -7,7 +7,7 @@ ENV worker_script=$worker_script
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql jq
-RUN npm install -g pnpm@10.30.0
+RUN npm install -g pnpm@11.0.9
 
 COPY pnpm-lock.yaml ./
 

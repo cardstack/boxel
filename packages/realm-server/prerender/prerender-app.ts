@@ -22,10 +22,12 @@ import { Prerenderer } from './index';
 import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
@@ -66,15 +68,10 @@ export function buildPrerenderApp(options: {
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
-  // Resolved pool size (explicit option → env → default). Returned so
-  // `createPrerenderHttpServer` can report the same value to the
-  // manager in `sendHeartbeat` without duplicating the resolution.
-  maxPages: number;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
-  let maxPages =
-    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
+  let maxPages = options?.maxPages ?? 5;
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
@@ -957,12 +954,14 @@ export function buildPrerenderApp(options: {
       return next();
     })
     .use((ctxt: Koa.Context, next: Koa.Next) => {
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+      let jobTag = jobId ? ` [job: ${jobId}]` : '';
       log.info(
-        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
+        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}${jobTag}`,
       );
       ctxt.res.on('finish', () => {
         log.info(
-          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
         );
         log.debug(JSON.stringify(ctxt.req.headers));
       });
@@ -975,7 +974,7 @@ export function buildPrerenderApp(options: {
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return { app, prerenderer, maxPages };
+  return { app, prerenderer };
 }
 
 function resolvePrerenderServerURL(port?: number): string {
@@ -1016,15 +1015,7 @@ export function createPrerenderHttpServer(options?: {
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let {
-    app,
-    prerenderer,
-    // Reuse the resolved value `buildPrerenderApp` computed so
-    // `sendHeartbeat` reports the same pool size the PagePool was
-    // actually constructed with — no duplicate resolution, no drift
-    // when the default or env var changes.
-    maxPages: resolvedMaxPages,
-  } = buildPrerenderApp({
+  let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -1060,7 +1051,7 @@ export function createPrerenderHttpServer(options?: {
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = resolvedMaxPages;
+      const capacity = prerenderer.currentPoolCapacity;
       let body = {
         data: {
           type: 'prerender-server',

@@ -6,9 +6,28 @@
 #
 # Usage:
 #   ./scripts/diff.sh [--env local|staging|production]
+#                     [--only-changed-since <git-ref>]
+#
+# Flags:
+#   --env                  Target Grafana environment to compare against
+#                          (default: staging).
+#   --only-changed-since   Restrict the diff to dashboards / folders whose
+#                          files changed in
+#                          `git diff --name-only <ref>...HEAD --diff-filter=ACMRT`
+#                          under `packages/observability/grafanactl/resources/`.
+#                          Used by the PR comment workflow so the diff
+#                          reflects what the PR actually changes (vs total
+#                          drift between staging and main). Deletions are
+#                          excluded since `grafanactl push` is upsert-only —
+#                          deletion-only PRs short-circuit to empty stdout.
+#                          When the filter set is empty (no PR-relevant
+#                          changes) the script exits 0 with no output before
+#                          calling `grafanactl pull`.
 #
 # Output: human-readable diff on stdout. Empty output (and exit 0) means
-# the committed state matches the live state.
+# the committed state matches the live state, or — when
+# --only-changed-since is set — that the PR didn't change any
+# grafanactl-managed resources.
 #
 # Scope: this only diffs the resources grafanactl manages — dashboards
 # and folders. The `provisioning/` tree (data sources, alert rules) is
@@ -23,6 +42,7 @@ set -eo pipefail
 usage_error() { echo "error: $1" >&2; exit 2; }
 
 env_name=staging
+only_changed_since=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --env)
@@ -35,6 +55,25 @@ while [[ $# -gt 0 ]]; do
       [[ -n "$env_name" ]] || usage_error "missing value for --env"
       shift
       ;;
+    # When set, restrict the diff to dashboards/folders whose files
+    # changed in `git diff --name-only <ref>...HEAD` under
+    # `packages/observability/grafanactl/resources/`. Used by the PR
+    # comment workflow so the diff reflects what THIS PR would do to
+    # staging on apply, rather than total drift between staging and
+    # main (which can be large and unrelated to the PR).
+    #
+    # If no PR-relevant paths changed, the diff is empty and the script
+    # exits 0 immediately (skipping the live pull).
+    --only-changed-since)
+      [[ $# -ge 2 && "$2" != --* ]] || usage_error "missing value for --only-changed-since"
+      only_changed_since="$2"
+      shift 2
+      ;;
+    --only-changed-since=*)
+      only_changed_since="${1#--only-changed-since=}"
+      [[ -n "$only_changed_since" ]] || usage_error "missing value for --only-changed-since"
+      shift
+      ;;
     *)
       usage_error "unknown option: $1"
       ;;
@@ -42,6 +81,70 @@ while [[ $# -gt 0 ]]; do
 done
 
 cd "$(dirname "$0")/.."
+
+# Build the changed-paths filter list BEFORE the expensive grafanactl
+# pull, so a no-op PR exits without touching staging. Stored as a
+# newline-separated string (instead of an associative array) for bash
+# 3.2 compatibility — same constraint the rest of this script honors.
+# Each line is a path relative to repo root (e.g.,
+# `packages/observability/grafanactl/resources/dashboards/.../foo.json`)
+# so it matches `git diff --name-only` output directly.
+filter_paths=""
+if [[ -n "$only_changed_since" ]]; then
+  # Validate the ref up front so a missing/invalid ref produces a clear
+  # error rather than a noisy `git diff` failure further down. CI usually
+  # passes `origin/<base-ref>` and we'd rather surface "this ref isn't
+  # available locally" with actionable guidance than git's bare
+  # "fatal: bad revision" exiting under set -e.
+  if ! git rev-parse --verify --quiet "${only_changed_since}^{commit}" >/dev/null; then
+    echo "error: --only-changed-since=$only_changed_since does not resolve to a commit." \
+         "In CI, ensure the workflow does \`git fetch origin <base-ref>\` (or" \
+         "\`actions/checkout\` with \`fetch-depth: 0\`) before invoking diff.sh." >&2
+    exit 1
+  fi
+  # `--diff-filter=ACMRT` — Added / Copied / Modified / Renamed / Type-changed.
+  # Exclude Deleted because `grafanactl push` is upsert-only and never
+  # deletes; a deletion in the PR is a no-op for live state. Without
+  # this, a PR that only deletes a dashboard would skip the empty-set
+  # short-circuit below and trigger a needless `grafanactl pull`.
+  #
+  # `git -C <repo-root>` so the path filter and output paths are both
+  # repo-rooted, regardless of where the script was invoked from. The
+  # CI workflow runs us with `working-directory: packages/observability`,
+  # which combined with the `cd "$(dirname "$0")/.."` above leaves
+  # `$PWD` at `packages/observability` — and from there git would
+  # interpret `-- packages/observability/grafanactl/resources/` as a
+  # CWD-relative pathspec (i.e., `packages/observability/packages/observability/...`),
+  # which never matches anything and silently returns an empty set,
+  # short-circuiting every observability PR to a blank diff comment.
+  # `is_in_filter_rel` below also expects repo-rooted paths in the
+  # `filter_paths` strings, so this fix keeps both sides aligned.
+  filter_paths="$(git -C "$(git rev-parse --show-toplevel)" \
+    diff --name-only --diff-filter=ACMRT \
+    "${only_changed_since}...HEAD" \
+    -- packages/observability/grafanactl/resources/)"
+  if [[ -z "$filter_paths" ]]; then
+    # Empty stdout signals "no diff" to the workflow's comment step,
+    # which renders the "No dashboard / folder changes detected"
+    # comment body.
+    exit 0
+  fi
+fi
+
+# Returns 0 (success) if a path under grafanactl/resources/ should be
+# included in the diff. Always returns 0 when the filter is inactive —
+# preserving the original "diff everything" behavior.
+#   $1 — path relative to grafanactl/resources/ (e.g.
+#        `dashboards/boxel-status/foo.json`).
+is_in_filter_rel() {
+  [[ -z "$filter_paths" ]] && return 0
+  local key="packages/observability/grafanactl/resources/$1"
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == "$key" ]] && return 0
+  done <<< "$filter_paths"
+  return 1
+}
 
 # shellcheck source=./grafanactl-env.sh
 source ./scripts/grafanactl-env.sh "$env_name"
@@ -138,6 +241,7 @@ normalize() {  # $1: subdir under grafanactl/resources, $2: pulled-kind dirname
     pulled="${remote}/${kind}/${uid}.json"
     [[ -f "$pulled" ]] || continue
     rel="${committed#./grafanactl/resources/}"
+    is_in_filter_rel "$rel" || continue
     target="${remote_norm}/${rel}"
     mkdir -p "$(dirname "$target")"
     cp "$pulled" "$target"
@@ -254,6 +358,7 @@ normalize_json_content() {  # $1: src dir, $2: dest dir
   local f rel target
   while IFS= read -r -d '' f; do
     rel="${f#"$src"/}"
+    is_in_filter_rel "$rel" || continue
     target="$dest/$rel"
     mkdir -p "$(dirname "$target")"
     jq --sort-keys --arg url "$realm_server_url" "$JQ_NORMALIZE" "$f" > "$target"

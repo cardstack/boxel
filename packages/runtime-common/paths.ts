@@ -1,4 +1,4 @@
-import { rri } from './card-reference-resolver';
+import { cardIdToURL } from './card-reference-resolver';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -42,7 +42,7 @@ export class RealmPaths {
   ): LocalPath {
     if (input instanceof URL) {
       this.assertURLBased('local');
-      if (!this.inRealm(rri(input.href))) {
+      if (!this.inRealm(input)) {
         let error = new Error(
           `realm ${this.url} does not contain ${input.href}`,
         );
@@ -88,17 +88,40 @@ export class RealmPaths {
     return new URL(local + '/', this.url);
   }
 
-  inRealm(input: RealmResourceIdentifier): boolean {
+  inRealm(input: RealmResourceIdentifier | URL): boolean {
+    let inputStr = input instanceof URL ? input.href : input;
     let decoded: string;
     try {
-      decoded = decodeURI(input);
+      decoded = decodeURI(inputStr);
+    } catch {
+      return false;
+    }
+    // Same-form fast path: both sides URL or both prefix.
+    if (
+      decoded.startsWith(this.url) ||
+      // realm root with missing trailing slash, optionally with query string
+      decoded.split('?')[0] === this.url.replace(/\/$/, '')
+    ) {
+      return true;
+    }
+    // Cross-form: normalize both sides to URL form and re-check.
+    let realmURL: string;
+    let inputURL: string;
+    try {
+      realmURL = cardIdToURL(this.url).href;
+      inputURL = cardIdToURL(inputStr).href;
+    } catch {
+      return false;
+    }
+    let decodedURL: string;
+    try {
+      decodedURL = decodeURI(inputURL);
     } catch {
       return false;
     }
     return (
-      decoded.startsWith(this.url) ||
-      // realm root with missing trailing slash, optionally with query string
-      decoded.split('?')[0] === this.url.replace(/\/$/, '')
+      decodedURL.startsWith(realmURL) ||
+      decodedURL.split('?')[0] === realmURL.replace(/\/$/, '')
     );
   }
 

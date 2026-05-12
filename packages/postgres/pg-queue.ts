@@ -730,12 +730,32 @@ export class PgQueueRunner implements QueueRunner {
             newStatus = 'resolved';
           } catch (err: any) {
             Sentry.captureException(err);
-            console.error(
-              `Error running job ${jobToRun.id}: jobType=${
-                jobToRun.job_type
-              } args=${JSON.stringify(jobToRun.args)}`,
-              err,
-            );
+            // ECONNREFUSED typically means the upstream's port wasn't bound
+            // when the job tried to reach it — common during boot, where
+            // workers can come up before their upstream service. Log a
+            // single line so a transient startup race doesn't bury genuine
+            // job failures in stack-trace noise; Sentry still captures the
+            // full error for deployed-environment visibility.
+            let cause = err?.cause;
+            if (
+              err?.code === 'ECONNREFUSED' ||
+              cause?.code === 'ECONNREFUSED'
+            ) {
+              let target =
+                cause?.address && cause?.port
+                  ? `${cause.address}:${cause.port}`
+                  : 'upstream';
+              console.warn(
+                `job ${jobToRun.id} (${jobToRun.job_type}) failed: ECONNREFUSED to ${target}`,
+              );
+            } else {
+              console.error(
+                `Error running job ${jobToRun.id}: jobType=${
+                  jobToRun.job_type
+                } args=${JSON.stringify(jobToRun.args)}`,
+                err,
+              );
+            }
             result = serializableError(err);
             newStatus = 'rejected';
           }

@@ -677,6 +677,19 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
   }
 
+  private get keyboardShortcutLabels() {
+    return {
+      // Pencil button in view mode → enter edit (Ctrl+E on every platform;
+      // Cmd+E is reserved by browsers for "Use Selection for Find").
+      edit: this.isFileCard ? undefined : 'Ctrl+E',
+      // Pencil button in edit mode → exit to view (Esc or Ctrl+E).
+      finishEditing: this.isFileCard ? undefined : 'Esc or Ctrl+E',
+      // Close button: Esc only closes when not editing — in edit mode
+      // Esc means "exit edit", so don't claim it in the close tooltip.
+      close: this.isEditing ? undefined : 'Esc',
+    };
+  }
+
   private get cardFormat() {
     return this.isFileCard ? 'isolated' : this.args.item.format;
   }
@@ -819,6 +832,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
               }}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
+              @editShortcutHint={{this.keyboardShortcutLabels.edit}}
+              @finishEditingShortcutHint={{this.keyboardShortcutLabels.finishEditing}}
+              @closeShortcutHint={{this.keyboardShortcutLabels.close}}
               class='stack-item-header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if

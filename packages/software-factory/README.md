@@ -162,6 +162,7 @@ Key modules:
 
 ## Notes
 
+- **Realm card tests (`realm/*.test.gts`)** — QUnit tests co-located with source realm card definitions. These run inside the Boxel host app (via the host test suite), not via Playwright. To run them, use `pnpm test` in `packages/host` with the relevant test file pattern. They are separate from the Playwright specs in `tests/` which test the factory loop end-to-end. To run them interactively in the browser, go to: `http://localhost:4200/tests/index.html?liveTest=true&realmURL=http%3A%2F%2Flocalhost%3A4201%2Fsoftware-factory%2F`
 - Template DBs are reused across runs while the seeded Postgres container stays up.
 - `serve:support` publishes a shared support context in `/tmp/software-factory-runtime/support.json`.
 - When that shared support context exists, `serve:realm` and `smoke:realm` reuse the running Synapse and prerender services instead of restarting them.
@@ -177,6 +178,6 @@ Key modules:
   (`software-factory-browser`) so they do not depend on a human-managed profile.
 - Host requests for the base realm URL are redirected to the isolated realm
   server. Skills redirects are only enabled when
-  `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
+  `TEST_HARNESS_INCLUDE_SKILLS=1`.
 - The test fixtures should point at the isolated `4205` software-factory source
   realm directly, so they do not depend on any ambient external realm server.

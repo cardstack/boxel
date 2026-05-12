@@ -275,13 +275,30 @@ export default defineConfig(({ mode }) => ({
     },
     ...(envHostname ? { allowedHosts: [envHostname] } : {}),
   },
-  server: envHostname
-    ? {
-        allowedHosts: [envHostname],
-        hmr: {
-          host: envHostname,
-          clientPort: 80,
-        },
-      }
-    : undefined,
+  server: {
+    // Pre-warm the dep optimizer at server boot so the prerender's first
+    // `/_standby` navigation doesn't race a cold Vite optimize. The host
+    // transitive graph is ~1000 packages, and a cold optimize routinely
+    // exceeds the prerender's standby-load retry window (see
+    // `STANDBY_TIMEOUT_MS` and `STANDBY_CREATION_RETRIES` in
+    // packages/realm-server/prerender/page-pool.ts). HTTP readiness probes
+    // against `/` only fetch the HTML shell — they never request modules,
+    // so they don't kick the optimizer; only a browser-shaped navigation
+    // does. Warming `./app/app.ts` here surfaces the full app graph
+    // (Ember runtime, boxel-ui, plus `@embroider/virtual/compat-modules`
+    // which fans out to every route, component, and template) at boot,
+    // so optimization is already in flight by the time Puppeteer
+    // connects. Async by design: server-ready isn't blocked, so devs
+    // who don't run the prerender don't pay the cost upfront.
+    warmup: {
+      clientFiles: ['./app/app.ts'],
+    },
+    ...(envHostname && {
+      allowedHosts: [envHostname],
+      hmr: {
+        host: envHostname,
+        clientPort: 80,
+      },
+    }),
+  },
 }));

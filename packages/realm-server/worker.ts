@@ -1,5 +1,18 @@
 import './instrument';
 import './setup-logger'; // This should be first
+
+// Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
+// SIGKILL'd or its dev-log-tee dead during dev-all Ctrl-C) doesn't make
+// every subsequent `log.info` an uncaughtException. See the matching
+// comment in worker-manager.ts (CS-11084).
+const swallowEpipe = (err: NodeJS.ErrnoException) => {
+  if (err?.code !== 'EPIPE') {
+    throw err;
+  }
+};
+process.stdout.on('error', swallowEpipe);
+process.stderr.on('error', swallowEpipe);
+
 import {
   Worker,
   VirtualNetwork,
@@ -154,8 +167,19 @@ let autoMigrate = migrateDB || undefined;
     process.send(`ready:${workerId}`);
   }
 
-  // Handle graceful shutdown
+  // Handle graceful shutdown. Registered against four triggers
+  // (SIGINT/SIGTERM, parent IPC disconnect, and a `'stop'` message from the
+  // manager), so the manager's IPC `'stop'` and a bash-trap SIGTERM can
+  // both fire on the same child during dev-all teardown. The guard makes
+  // shutdown idempotent — without it, the second invocation would call
+  // `pool.end()` a second time and pg-pool throws `Called end on pool
+  // more than once` synchronously from `dbAdapter.close()`.
+  let isShuttingDown = false;
   const shutdown = async () => {
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
     log.info(`Shutting down worker ${workerId}...`);
     try {
       await queue.destroy();

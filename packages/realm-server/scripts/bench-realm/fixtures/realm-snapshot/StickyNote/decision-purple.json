@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Decided: ship dark mode in v2",
+      "body": "Group voted yes. Default off, opt-in toggle in settings. Revisit defaults at end of quarter.",
+      "color": "purple",
+      "x": 520,
+      "y": 320,
+      "rotation": 3,
+      "author": "Ren",
+      "createdAt": "2026-05-04T17:00:00.000Z",
+      "cardInfo": {
+        "name": "Decided: ship dark mode in v2"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

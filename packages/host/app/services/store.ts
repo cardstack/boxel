@@ -23,6 +23,7 @@ import {
   baseFileRef,
   CardError,
   cardIdToURL,
+  DURING_PRERENDER_HEADER,
   isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
@@ -117,6 +118,18 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+
+// Set by the prerender server's `evaluateOnNewDocument` before the
+// SPA boots — `__boxelDuringPrerender = true`. Read here so the
+// federated-search fetch wrapper can attach the marker header on
+// realm-server-bound calls only, narrowly scoping the signal to the
+// endpoint that needs it. See realm.ts:DURING_PRERENDER_HEADER for
+// the full chain.
+function duringPrerenderHeaders(): Record<string, string> {
+  let flag = (globalThis as unknown as { __boxelDuringPrerender?: boolean })
+    .__boxelDuringPrerender;
+  return flag ? { [DURING_PRERENDER_HEADER]: '1' } : {};
+}
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
@@ -826,6 +839,7 @@ export default class StoreService extends Service implements StoreInterface {
         headers: {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
+          ...duringPrerenderHeaders(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -892,6 +906,7 @@ export default class StoreService extends Service implements StoreInterface {
         headers: {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
+          ...duringPrerenderHeaders(),
         },
         body: JSON.stringify({ ...query, realms }),
       },

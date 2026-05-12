@@ -17,7 +17,7 @@
 #
 # Auth and URL come from SSM:
 #   /<env>/loki/auth_token  — bearer token
-#   /<env>/loki/public_url  — e.g. https://grafana-staging.stack.cards/loki
+#   /<env>/loki/public_url  — e.g. https://dashboard-staging.stack.cards/loki
 # Local mode hits http://localhost:3100 without auth.
 #
 # Examples:

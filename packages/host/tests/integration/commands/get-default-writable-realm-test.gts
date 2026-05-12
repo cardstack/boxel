@@ -61,7 +61,7 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
       commandService.commandContext,
     );
     let result = await command.execute();
-    assert.strictEqual(result.realmUrl, testRealmURL);
+    assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
   test('returns empty string when no default writable realm exists', async function (assert) {
@@ -77,6 +77,6 @@ module('Integration | commands | get-default-writable-realm', function (hooks) {
       commandService.commandContext,
     );
     let result = await command.execute();
-    assert.strictEqual(result.realmUrl, '');
+    assert.strictEqual(result.realmIdentifier, '');
   });
 });

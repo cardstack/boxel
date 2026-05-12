@@ -518,6 +518,29 @@ async function prepareExampleInstance(
   }
 
   let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
+
+  // The prerender refuses cross-origin module loads. The most common way
+  // an agent triggers this is by passing a `Spec/...json` path: Specs
+  // adopt from `https://cardstack.com/base/spec`, which lives in a
+  // different origin than any user realm. Catch it here with a clearer
+  // error than the prerender's "moduleUrl origin … does not match
+  // realmUrl origin …" so the agent knows what to do instead.
+  let moduleOrigin = new URL(moduleUrl).origin;
+  let targetRealmOrigin = new URL(targetRealm).origin;
+  if (moduleOrigin !== targetRealmOrigin) {
+    return {
+      error:
+        `Example "${exampleUrl}" adopts from a module at ${moduleUrl} ` +
+        `(origin ${moduleOrigin}), but instantiation is scoped to the ` +
+        `target realm at ${targetRealmOrigin}. This typically means you ` +
+        `passed a Spec card path — Specs adopt from the base realm and ` +
+        `cannot be instantiated cross-origin. To validate Specs, call ` +
+        `run_instantiate WITHOUT a "path"; it discovers Specs in the ` +
+        `target realm and exercises their linkedExamples against the ` +
+        `card classes you wrote.`,
+    };
+  }
+
   document.data.meta!.adoptsFrom = { module: moduleUrl, name: adoptsFrom.name };
   document.data.id = exampleCardUrl;
 
@@ -753,9 +776,9 @@ async function attemptInstantiateCard(
   instanceData?: string,
 ): Promise<InstantiateModuleResult> {
   let commandInput: Record<string, unknown> = {
-    moduleUrl,
+    moduleIdentifier: moduleUrl,
     cardName,
-    realmUrl,
+    realmIdentifier: realmUrl,
   };
   if (instanceData) {
     commandInput.instanceData = instanceData;

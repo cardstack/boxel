@@ -277,11 +277,9 @@ export class PagePool {
   // `setCapacity` whenever this changes.
   #maxPages: number;
   // Idle floor — `#maxPages` never goes below this on contraction. When
-  // `PRERENDER_PAGE_POOL_MIN` is unset and the legacy
-  // `PRERENDER_PAGE_POOL_SIZE` (or `options.maxPages`) drives the
+  // `PRERENDER_PAGE_POOL_MIN` is unset, `options.maxPages` drives the
   // configuration, `#minPages === #maxBurstPages === options.maxPages`
-  // → no expansion or contraction, identical to the pre-dynamic
-  // behaviour.
+  // → no expansion or contraction, identical to a fixed-size pool.
   #minPages: number;
   // Burst ceiling reachable by any priority on saturation. Equal to
   // `#minPages` when the legacy fixed-size config drives the pool.
@@ -421,12 +419,11 @@ export class PagePool {
     contractionTickMs?: number;
   }) {
     // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
-    // `_MAX` are the new dynamic knobs; when either is unset the pool
-    // collapses to a single fixed size (legacy `PRERENDER_PAGE_POOL_SIZE`
-    // / `options.maxPages` behaviour) — `#minPages === #maxBurstPages`
-    // means no expansion or contraction can fire. `_INITIAL` only
-    // matters when MIN < MAX; it's the boot-time count and defaults to
-    // MIN.
+    // `_MAX` are the dynamic knobs; when either is unset the pool
+    // collapses to a single fixed size driven by `options.maxPages` —
+    // `#minPages === #maxBurstPages` means no expansion or contraction
+    // can fire. `_INITIAL` only matters when MIN < MAX; it's the
+    // boot-time count and defaults to MIN.
     let envMin = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MIN);
     let envMax = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MAX);
     let envInitial = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_INITIAL);
@@ -1259,6 +1256,7 @@ export class PagePool {
           'Expected each prerender page to use its own browser context for localStorage isolation',
         );
       }
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -1848,6 +1846,7 @@ export class PagePool {
     let page: Page | undefined;
     try {
       page = await shared.context.newPage();
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, affinityKey, pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -2192,6 +2191,31 @@ export class PagePool {
     } catch (e) {
       log.warn(`Error closing shared context for ${affinityKey}:`, e);
     }
+  }
+
+  // Inject a window global into every page before any document
+  // loads, so the host SPA can synchronously detect at boot that it's
+  // running inside a prerender tab. Used by the host's
+  // realm-server fetch wrapper to attach `x-boxel-during-prerender`
+  // on _federated-search / _search calls only — narrowly scoped so
+  // unrelated services (icons, vite, etc.) don't see the header on
+  // their CORS preflights. The inbound signal the realm server reads
+  // tells it to pass cacheOnlyDefinitions:true to searchCards,
+  // short-circuiting the recursive lookupDefinition fan-out in
+  // populateQueryFields that causes self-referential prerender
+  // deadlocks under parallel indexing.
+  async #markPageAsInPrerender(page: Page): Promise<void> {
+    // Test stubs of Page in prerender-deadlock-test.ts don't expose
+    // every puppeteer method — guard the call so this stays optional
+    // observability rather than a load-bearing side effect.
+    if (typeof page.evaluateOnNewDocument !== 'function') {
+      return;
+    }
+    await page.evaluateOnNewDocument(() => {
+      (
+        globalThis as unknown as { __boxelDuringPrerender?: boolean }
+      ).__boxelDuringPrerender = true;
+    });
   }
 
   // Attach all per-page error/exception observability surfaces. The

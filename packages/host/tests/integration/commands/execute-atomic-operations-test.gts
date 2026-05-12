@@ -73,7 +73,7 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
       commandService.commandContext,
     );
     let result = await command.execute({
-      realmUrl: testRealmURL,
+      realmIdentifier: testRealmURL,
       operations: [{ op: 'add', path: 'card-1' }] as any,
     });
     assert.deepEqual(result.results, [{ id: 'card-1' }, { id: 'card-2' }]);
@@ -89,7 +89,7 @@ module('Integration | commands | execute-atomic-operations', function (hooks) {
     );
     try {
       await command.execute({
-        realmUrl: testRealmURL,
+        realmIdentifier: testRealmURL,
         operations: [{ op: 'add', path: 'card-1' }] as any,
       });
       assert.ok(false, 'should have thrown');

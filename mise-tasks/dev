@@ -1,12 +1,42 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start full dev stack (realm server, workers, test realms)"
 #MISE dir="packages/realm-server"
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+
+# Enable job control so backgrounded subprocesses run in their own process
+# group. Without this, Ctrl-C is delivered to the whole foreground group;
+# npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
+# `npm run` children, which then reparent to init and leak ports — most
+# visibly the worker-manager listening on 4210, which blocks the next
+# dev run from binding the port.
+set -m
+
+init_pidfile
+# Spawn a detached watcher that re-runs cleanup if this script dies
+# without its trap firing. See `spawn_cleanup_guardian` in lib/dev-common.sh.
+spawn_cleanup_guardian $$
+
+cleanup() {
+  trap - EXIT INT TERM HUP
+  kill_from_pidfile
+  sweep_orphaned_services
+  echo "[dev] All dev-stack processes stopped."
+}
+# HUP is required: when the user hits Ctrl-C in a terminal running `mise run
+# dev`, mise often exits without forwarding SIGINT to this bash script, and
+# bash then receives SIGHUP from the dying parent. Bash's default action on
+# an untrapped SIGHUP is to terminate *without* running the EXIT trap, so
+# without `HUP` here the cleanup never fires and the entire subtree leaks.
+trap cleanup EXIT INT TERM HUP
 
 WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$PHASE1_URLS" \
   'run-p -ln start:worker-test start:test-realms' \
   "$NODE_TEST_REALM_READY" \
-  'wait'
+  'wait' &
+SAT_PID=$!
+record_dev_pid sat "$SAT_PID"
+wait "$SAT_PID"
+exit $?

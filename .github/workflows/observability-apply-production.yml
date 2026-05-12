@@ -50,7 +50,7 @@ jobs:
     # extra safety, since the dispatcher is already a trusted operator.
     environment:
       name: observability-production
-      url: https://grafana.boxel.ai
+      url: https://dashboard.boxel.ai
 
     env:
       AWS_REGION: us-east-1
@@ -68,7 +68,7 @@ jobs:
       # packages/observability/grafanactl/config.yaml (see staging workflow
       # for the rationale). The pre-flight check below asserts the expected
       # hostname for paranoia.
-      EXPECTED_GRAFANA_HOSTNAME: grafana.boxel.ai
+      EXPECTED_GRAFANA_HOSTNAME: dashboard.boxel.ai
       GRAFANACTL_VERSION: "0.1.10"
 
     steps:
@@ -112,8 +112,7 @@ jobs:
           echo "expected:                       https://${EXPECTED_GRAFANA_HOSTNAME}"
           if [[ "$ACTUAL" != "https://${EXPECTED_GRAFANA_HOSTNAME}" ]]; then
             echo "::error::config.yaml's production context server URL doesn't match expected hostname." >&2
-            echo "If this is intentional (e.g., Phase 6 cutover renaming to dashboard.boxel.ai)," >&2
-            echo "update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
+            echo "If this is an intentional rename, update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
             exit 1
           fi
 

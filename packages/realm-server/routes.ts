@@ -26,8 +26,10 @@ import handleReindex from './handlers/handle-reindex';
 import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
+import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough';
 import handlePostDeployment from './handlers/handle-post-deployment';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
@@ -166,6 +168,13 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
+  router.post(
+    '/_openrouter/chat/completions',
+    jwtMiddleware(args.realmSecretSeed),
+    handleOpenRouterPassthrough({
+      dbAdapter: args.dbAdapter,
+    }),
+  );
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
@@ -250,6 +259,15 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
+  // POST-only, Bearer-only — this endpoint is new in CS-10987-era
+  // (Grafana button-panel form) and never had the legacy GET +
+  // `?authHeader=` link form, so skip `registerGrafanaEndpoint`'s dual
+  // GET/POST registration.
+  router.post(
+    '/_grafana-upsert-realm-user-permission',
+    grafanaAuthorization(args.grafanaSecret),
+    handleUpsertRealmUserPermission(args),
+  );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(
     '/_realm-auth',

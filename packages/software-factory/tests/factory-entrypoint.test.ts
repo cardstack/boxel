@@ -71,6 +71,7 @@ module('factory-entrypoint', function (hooks) {
       realmServerUrl: 'https://realms.example.test/',
       agent: 'claude',
       openRouterModel: undefined,
+      openRouterApiKey: undefined,
       debug: undefined,
       retryBlocked: true,
     });

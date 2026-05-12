@@ -22,6 +22,7 @@ import {
   Deferred,
   type ResolvedCodeRef,
   rri,
+  fileDefFormats,
 } from '@cardstack/runtime-common';
 
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -1746,6 +1747,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-module-inspector-view="preview"]');
     await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
 
+    assert
+      .dom('[data-test-format-chooser]')
+      .exists({ count: fileDefFormats.length });
     // Default: isolated is active
     assert
       .dom('[data-test-format-chooser="isolated"]')

@@ -16,6 +16,7 @@ import {
   hasExecutableExtension,
   trimJsonExtension,
   type Realm,
+  cardDefFormats,
 } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -168,6 +169,18 @@ const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.c
   }
 `;
 
+const customEditCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+  export class CustomEdit extends CardDef {
+    static displayName = 'Custom Edit';
+    @field name = contains(StringField);
+    static edit = class Edit extends Component<typeof this> {
+      <template>
+        <div data-test-custom-edit>Custom Edit: <@fields.name /></div>
+      </template>
+    };
+  }`;
+
 const headPreviewCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringField from "https://cardstack.com/base/string";
 
@@ -186,6 +199,77 @@ const headPreviewCard = `import { contains, field, CardDef, Component } from "ht
     };
   }
 `;
+
+async function waitForHeadPreviewText(
+  selector: string,
+  expectedText: string,
+  context: string,
+) {
+  let safeQuerySelector = (selector: string) => {
+    try {
+      return { element: document.querySelector(selector), error: null };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          element: null,
+          error: {
+            name: error.name,
+            message: error.message,
+          },
+        };
+      }
+      return {
+        element: null,
+        error: {
+          name: 'UnknownError',
+          message: String(error),
+        },
+      };
+    }
+  };
+
+  let readSelectorText = (selector: string) => {
+    let { element, error } = safeQuerySelector(selector);
+    return {
+      text: element?.textContent?.trim() ?? null,
+      error,
+    };
+  };
+
+  try {
+    await waitUntil(() => readSelectorText(selector).text === expectedText, {
+      timeout: 5000,
+    });
+  } catch (error) {
+    let actual = readSelectorText(selector);
+    let googleTitle = readSelectorText('.google-title');
+    let googleDescription = readSelectorText('.google-description');
+    let googleSiteName = readSelectorText('.google-site-name');
+    let previewPanel = safeQuerySelector('[data-test-playground-panel]');
+
+    console.info(
+      'head preview diagnostics',
+      {
+        context,
+        selector,
+        expectedText,
+        actualText: actual.text,
+        selectorError: actual.error,
+        googleTitleText: googleTitle.text,
+        googleTitleError: googleTitle.error,
+        googleDescriptionText: googleDescription.text,
+        googleDescriptionError: googleDescription.error,
+        googleSiteNameText: googleSiteName.text,
+        googleSiteNameError: googleSiteName.error,
+        playgroundPreviewHtml:
+          previewPanel.element?.innerHTML?.slice(0, 2000) ?? null,
+        playgroundPreviewError: previewPanel.error,
+      },
+      error,
+    );
+    throw error;
+  }
+}
 
 const localStyleReferenceCard = {
   data: {
@@ -255,6 +339,18 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             'test-spec.gts': testSpecCard,
             'person.gts': personCard,
             'head-preview.gts': headPreviewCard,
+            'custom-edit.gts': customEditCard,
+            'CustomEdit/sample.json': {
+              data: {
+                attributes: { name: 'Sample' },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}custom-edit`,
+                    name: 'CustomEdit',
+                  },
+                },
+              },
+            },
             'Author/jane-doe.json': {
               data: {
                 attributes: {
@@ -419,6 +515,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
         [testRealmURL, 'author.gts'],
+        [testRealmURL, 'CustomEdit/sample.json'],
+        [testRealmURL, 'custom-edit.gts'],
         [testRealmURL, 'BlogPost/mad-hatter.json'],
         [testRealmURL, 'Category/city-design.json'],
         [testRealmURL, 'Category/future-tech.json'],
@@ -575,13 +673,22 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         declaration: 'HeadPreview',
       });
       await selectFormat('head');
+      await waitForHeadPreviewText(
+        '.google-title',
+        'Definition Title',
+        'initial head preview render in card playground',
+      );
 
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');
       assert.dom('.google-site-name').hasText('example.com');
 
       setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
-      await settled();
+      await waitForHeadPreviewText(
+        '.google-title',
+        'Definition Title!!',
+        'updated head preview render in card playground',
+      );
 
       assert.dom('.google-title').hasText('Definition Title!!');
     });
@@ -769,6 +876,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Jane Doe is the Senior Managing Editor');
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: cardDefFormats.length });
+
       await selectFormat('embedded');
       assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
@@ -809,6 +920,52 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-markdown-preview]')
         .exists('markdown preview container renders');
       assertCardExists(assert, cardId, 'markdown');
+    });
+
+    test('shows "form" format button only for cards with a custom edit template', async function (assert) {
+      const cardId = `${testRealmURL}CustomEdit/sample`;
+      await openFileInPlayground('custom-edit.gts', testRealmURL, {
+        declaration: 'CustomEdit',
+      });
+      assertCardExists(assert, cardId, 'isolated');
+
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: cardDefFormats.length + 1 });
+      assert
+        .dom('[data-test-format-chooser="form"]')
+        .exists(
+          '"form" button appears because CustomEdit has a custom edit template',
+        );
+      assert
+        .dom('[data-test-format-chooser="edit"]')
+        .exists('"edit" button still present alongside "form"');
+
+      await selectFormat('form');
+      assert.dom('[data-test-format-chooser="form"]').hasClass('active');
+      assertCardExists(assert, cardId, 'edit');
+      assert
+        .dom('[data-test-custom-edit]')
+        .doesNotExist(
+          'base CardDef template is used, not the custom edit template',
+        );
+
+      await selectFormat('edit');
+      assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
+      assertCardExists(assert, cardId, 'edit');
+      assert
+        .dom('[data-test-custom-edit]')
+        .exists('custom edit template is used when "edit" is selected');
+
+      // Author has no custom edit template — "form" must not appear
+      await openFileInPlayground('author.gts', testRealmURL, {
+        declaration: 'Author',
+      });
+      assert
+        .dom('[data-test-format-chooser="form"]')
+        .doesNotExist(
+          '"form" button absent for cards without a custom edit template',
+        );
     });
 
     test('can toggle edit format via button on card header', async function (assert) {

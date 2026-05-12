@@ -36,11 +36,12 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
+import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
+import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
-const runtimeMetadataFile =
-  process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
+const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
   writeRuntimeMetadataFile(runtimeMetadataFile, 'realm-server', payload);
@@ -109,6 +110,14 @@ const FULL_INDEX_ON_STARTUP =
 // test's first lookupDefinition.
 const SKIP_MODULES_CACHE_CLEAR_ON_STARTUP =
   process.env.REALM_SERVER_SKIP_MODULES_CACHE_CLEAR_ON_STARTUP === 'true';
+// CS-10953 cross-process prerender coalesce. Off by default — flip on
+// after a stage burn-in. Effectively inert at N=1 (no contention; the
+// in-process #inFlight coalescer already dedups same-process callers),
+// but the extra BEGIN/try-lock/COMMIT roundtrip on every cache miss is
+// measurable, so we ship dormant and flip explicitly. At N>1 enables
+// 1-prerender-per-fleet on cold fan-out.
+const PRERENDER_COALESCE_ACROSS_PROCESSES =
+  process.env.PRERENDER_COALESCE_ACROSS_PROCESSES === 'true';
 
 let {
   port,
@@ -285,6 +294,10 @@ const getIndexHTML = async () => {
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
+  let moduleCacheInvalidationListener:
+    | ModuleCacheInvalidationListener
+    | undefined;
+  let moduleCacheCoordinator: ModuleCacheCoordinator | undefined;
 
   if (workerManagerUrl) {
     await waitForWorkerManager(workerManagerUrl);
@@ -303,11 +316,23 @@ const getIndexHTML = async () => {
     serverURL,
   );
 
+  // CS-10953: optionally construct a cross-process prerender coalescer
+  // (advisory-lock + NOTIFY) and wire it into CachingDefinitionLookup.
+  // Off by default — flip via PRERENDER_COALESCE_ACROSS_PROCESSES=true.
+  // The listener has to be `start()`ed before any coordinated load can
+  // park on it, so we spin it up here, before the CachingDefinitionLookup
+  // would ever serve its first lookup.
+  if (PRERENDER_COALESCE_ACROSS_PROCESSES) {
+    moduleCacheCoordinator = new ModuleCacheCoordinator({ dbAdapter });
+    await moduleCacheCoordinator.start();
+  }
+
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
     virtualNetwork,
     createPrerenderAuth,
+    moduleCacheCoordinator,
   );
 
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
@@ -408,6 +433,14 @@ const getIndexHTML = async () => {
           matrixClient,
           realmServerURL: serverURL,
           definitionLookup,
+          // CS-11030: reuse the same coordinator that powers
+          // CachingDefinitionLookup's cross-process coalesce. Distinct
+          // coalesce keys ("transpile|..." vs the prerender key shape)
+          // route through the shared MODULE_CACHE_POPULATED_CHANNEL —
+          // waiters key off the int64 hash of the full coalesceKey, so
+          // crosstalk between the two flows is a benign hash miss in
+          // each direction.
+          transpileCoordinator: moduleCacheCoordinator,
           cardSizeLimitBytes: Number(
             process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
           ),
@@ -496,6 +529,8 @@ const getIndexHTML = async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
+          moduleCacheInvalidationListener?.shutDown(),
+          moduleCacheCoordinator?.shutDown(),
         ]);
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
@@ -571,6 +606,18 @@ const getIndexHTML = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await fileChangesListener.start();
+
+  // Cross-instance module-cache invalidation (CS-10952). When a peer
+  // realm-server emits NOTIFY module_cache_invalidated, replay the bump on
+  // this instance's CachingDefinitionLookup so its in-flight prerenders
+  // observe the invalidation at persist time and discard stale results.
+  // Self-notify is harmless — the emitter already bumped synchronously
+  // before the DELETE; a second bump from the listener loop is idempotent.
+  moduleCacheInvalidationListener = new ModuleCacheInvalidationListener({
+    dbAdapter,
+    definitionLookup,
+  });
+  await moduleCacheInvalidationListener.start();
 
   let actualPort =
     (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;

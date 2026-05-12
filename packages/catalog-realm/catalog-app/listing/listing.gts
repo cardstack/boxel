@@ -75,11 +75,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           .filter(
             (realmMeta: RealmMetaField) =>
               realmMeta.canWrite &&
-              realmMeta.url !== this.args.model[realmURL]?.href,
+              realmMeta.realmIdentifier !== this.args.model[realmURL]?.href,
           )
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
-            url: realmMeta.url,
+            url: realmMeta.realmIdentifier,
             iconURL: realmMeta.info.iconURL,
           }));
       }

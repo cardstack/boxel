@@ -450,6 +450,18 @@ export class BoxelCLIClient {
     return this.pm.authedRealmServerFetch(input, init);
   }
 
+  /**
+   * Return the realm-server JWT, fetching one via Matrix login if no token
+   * is cached. Use only when you need to hand the bare token to a downstream
+   * client that can't go through `authedServerFetch` (e.g. opencode's
+   * static-Authorization provider config). Prefer `authedServerFetch` for
+   * server endpoints called from JS — it handles per-request 401 retries
+   * that this getter cannot.
+   */
+  async getServerToken(): Promise<string> {
+    return this.pm.getOrRefreshServerToken();
+  }
+
   async pull(
     realmUrl: string,
     localDir: string,

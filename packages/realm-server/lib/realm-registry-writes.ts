@@ -1,5 +1,5 @@
-import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger, param, query } from '@cardstack/runtime-common';
+import type { DBAdapter, Querier } from '@cardstack/runtime-common';
+import { dbAdapterQuerier, logger, param } from '@cardstack/runtime-common';
 
 // Helpers that the realm-mutating handlers (publish/unpublish/delete/create)
 // use to write `realm_registry`. Phase 4 PR 2 (CS-10897) made the registry the
@@ -26,12 +26,12 @@ const REGISTRY_CHANNEL = 'realm_registry';
 const log = logger('realm-server:registry-writes');
 
 async function notifyRegistry(
-  dbAdapter: DBAdapter,
+  querier: Querier,
   op: 'upsert' | 'delete',
   url: string,
 ): Promise<void> {
   try {
-    await query(dbAdapter, [
+    await querier([
       `SELECT pg_notify(`,
       param(REGISTRY_CHANNEL),
       `, `,
@@ -59,8 +59,10 @@ export async function upsertPublishedRealmInRegistry(
     sourceRealmURL: string;
     lastPublishedAt: number;
   },
+  querier?: Querier,
 ): Promise<void> {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at, pinned) VALUES (`,
     param(args.publishedRealmURL),
     `, 'published', `,
@@ -74,7 +76,7 @@ export async function upsertPublishedRealmInRegistry(
     `, false`,
     `) ON CONFLICT (url) DO UPDATE SET last_published_at = EXCLUDED.last_published_at, updated_at = now() WHERE realm_registry.kind = 'published'`,
   ]);
-  await notifyRegistry(dbAdapter, 'upsert', args.publishedRealmURL);
+  await notifyRegistry(q, 'upsert', args.publishedRealmURL);
 }
 
 // Insert a source realm row. Called from server.ts:createRealm after
@@ -86,8 +88,10 @@ export async function insertSourceRealmInRegistry(
     diskId: string;
     ownerUsername: string;
   },
+  querier?: Querier,
 ): Promise<void> {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     `INSERT INTO realm_registry (url, kind, disk_id, owner_username, pinned) VALUES (`,
     param(args.url),
     `, 'source', `,
@@ -97,7 +101,7 @@ export async function insertSourceRealmInRegistry(
     `, false`,
     `) ON CONFLICT (url) DO NOTHING`,
   ]);
-  await notifyRegistry(dbAdapter, 'upsert', args.url);
+  await notifyRegistry(q, 'upsert', args.url);
 }
 
 // Delete a single row by url. Used by handle-unpublish-realm (published row)
@@ -106,13 +110,15 @@ export async function insertSourceRealmInRegistry(
 export async function deleteRegistryRowByUrl(
   dbAdapter: DBAdapter,
   url: string,
+  querier?: Querier,
 ): Promise<void> {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     `DELETE FROM realm_registry WHERE url =`,
     param(url),
     ` AND kind <> 'bootstrap'`,
   ]);
-  await notifyRegistry(dbAdapter, 'delete', url);
+  await notifyRegistry(q, 'delete', url);
 }
 
 // Delete every kind='published' row whose source_url matches the given source
@@ -121,16 +127,24 @@ export async function deleteRegistryRowByUrl(
 // even though the schema's CHECK constraint already guarantees that only
 // published rows have non-null source_url — stating the contract in the SQL
 // matches the helper's name and survives any future schema changes.
+//
+// Returns the rows that were actually deleted so the caller can drive
+// per-published cleanup (permissions, DB artifacts, FS) against the
+// authoritative set the tx committed — closes the TOCTOU window where a
+// pre-lock SELECT could miss a row inserted before the tx began.
 export async function deletePublishedRowsBySourceUrl(
   dbAdapter: DBAdapter,
   sourceUrl: string,
-): Promise<void> {
-  await query(dbAdapter, [
+  querier?: Querier,
+): Promise<{ url: string; disk_id: string }[]> {
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  let deleted = (await q([
     `DELETE FROM realm_registry WHERE source_url =`,
     param(sourceUrl),
-    ` AND kind = 'published'`,
-  ]);
+    ` AND kind = 'published' RETURNING url, disk_id`,
+  ])) as { url: string; disk_id: string }[];
   // Single NOTIFY keyed on the source URL. Reconcilers will re-read and see
   // all deletes; the payload is a hint, not a precise per-row signal.
-  await notifyRegistry(dbAdapter, 'delete', sourceUrl);
+  await notifyRegistry(q, 'delete', sourceUrl);
+  return deleted;
 }

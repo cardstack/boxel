@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Auth service flakey",
+      "body": "Login endpoint returns 500 ~5% of the time. Blocking the new signup flow.",
+      "color": "pink",
+      "x": 320,
+      "y": 100,
+      "rotation": 1,
+      "author": "Priya",
+      "createdAt": "2026-04-22T14:15:00.000Z",
+      "cardInfo": {
+        "name": "Auth service flakey"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

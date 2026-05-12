@@ -20,6 +20,28 @@ else
   DEFAULT_HOST_URL="${HOST_URL:-http://localhost:4200}"
 fi
 
+# Dev mode only: gate startup on the host's `/_standby` route being
+# browser-loadable. Without this gate, the prerender service launches
+# while vite is still cold-bundling the host's ~1000-package dep graph,
+# puppeteer's first `/_standby` navigation times out, the page pool's
+# retry budget is exhausted before vite is ready, and the prerender is
+# left unable to render any card — every indexing job then fails with
+# "No standby page available," and recovering requires manually
+# restarting the service. The hosted environment doesn't have this
+# problem because it serves a pre-built bundle with no optimizer phase,
+# so the gate is skipped under ENV_MODE.
+#
+# A curl-based readiness probe can't substitute for this: vite serves
+# the `/_standby` HTML and most module URLs while the optimizer is
+# still working, so HTTP 200 is not a real readiness signal. The
+# puppeteer probe in scripts/wait-for-host-standby.ts exercises the same
+# navigation the prerender will take, so it succeeds the instant the
+# host is actually browser-ready.
+if [ -z "$ENV_MODE" ]; then
+  HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
+    ts-node --transpileOnly ./scripts/wait-for-host-standby.ts || exit $?
+fi
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
