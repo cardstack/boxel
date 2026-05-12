@@ -37,7 +37,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('public readable realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
-        fixture: 'blank',
+        fixture: 'realistic',
         permissions: {
           '*': ['read'],
         },
@@ -82,7 +82,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
-        fixture: 'blank',
+        fixture: 'realistic',
         permissions: {
           '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
@@ -155,7 +155,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       'shared realm because there is `users` permission',
       function (hooks) {
         setupPermissionedRealmCached(hooks, {
-          fixture: 'blank',
+          fixture: 'realistic',
           permissions: {
             users: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -197,7 +197,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('shared realm because there are multiple users', function (hooks) {
       setupPermissionedRealmCached(hooks, {
-        fixture: 'blank',
+        fixture: 'realistic',
         permissions: {
           bob: ['read'],
           jane: ['read'],
