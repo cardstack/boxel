@@ -4,11 +4,15 @@ Self-host Grafana dashboards, alerts, and data sources as code, plus a local `do
 
 ## Project context
 
-Part of the AMG → self-host Grafana migration:
+This package is the source of truth for the self-host Grafana stack
+(staging cutover landed 2026-05-06, production cutover landed
+2026-05-06). It superseded the Amazon Managed Grafana (AMG) deployment;
+the AMG-era Terraform workspace `cardstack/infra:configs/boxel-dashboard/`
+is decommissioned in Phase 7 (CS-10942).
 
 - [Linear: Replace dashboard with our own grafana](https://linear.app/cardstack/project/replace-dashboard-with-our-own-grafana-1b7e3de21dbf)
 - Self-host Grafana Terraform: `cardstack/infra:configs/grafana/`
-- AMG Terraform (current production, being deprecated): `cardstack/infra:configs/boxel-dashboard/`
+- Per-env data-source values: `cardstack/infra:configs/boxel-grafana-data-sources/`
 
 ## Architecture: two trees, two delivery mechanisms
 
@@ -96,7 +100,7 @@ docker compose up -d
 # Verify connectivity
 ./scripts/check.sh --env local
 
-# Apply (no-op until Phase 3 imports dashboards from AMG)
+# Apply local dashboards (matches what grafanactl pushes to staging/production)
 ./scripts/apply.sh --env local
 ```
 
@@ -331,7 +335,7 @@ backend to query based on what you're doing:
 | Tailing live activity from a laptop                                   | Loki         | `tail-logs.sh` (CS-10920) / `logcli` keep the same labels and a uniform shell.                                   |
 | Cross-service queries (e.g. "all errors in staging in the last hour") | Loki         | One label plane (`env=staging`) covers everything. CloudWatch needs a Logs Insights query per log group.         |
 | Long-window forensics (>30 days)                                      | CloudWatch   | CloudWatch retention is set per-log-group on the existing infra; Loki's S3 lifecycle expires chunks at 180 days. |
-| AMG-era saved query / runbook you remember                            | CloudWatch   | The CloudWatch shape didn't change — paste the old Logs Insights query and it still works through Phase 7.       |
+| Pre-2026-05-06 saved query / runbook (AMG-era)                        | CloudWatch   | The CloudWatch shape didn't change — paste the old Logs Insights query and it still works through Phase 7.       |
 | AWS-side troubleshooting (ECS Agent, FireLens itself)                 | CloudWatch   | Loki only sees the application's stdout. ECS-internal events are CloudWatch only.                                |
 
 The dual-ship goes away (CloudWatch-only drop) in a follow-up ticket
@@ -366,28 +370,21 @@ source ./scripts/grafanactl-env.sh staging
 ./scripts/pull.sh --env staging --path /tmp/staging-snapshot
 ```
 
-CI will run `apply.sh --env staging` on merge to main once Phase 4 (CS-10932) lands.
+CI runs `apply.sh --env staging` on merge to main (workflow:
+`.github/workflows/observability-apply-staging.yml`, CS-10932) and
+`apply.sh --env production` on the production workflow
+(CS-10936).
 
 ## Phase status
 
-| Ticket   | Phase | Status      | Description                                   |
-| -------- | ----- | ----------- | --------------------------------------------- |
-| CS-10914 | 2     | landed      | Package skeleton                              |
-| CS-10912 | 2     | landed      | Local `docker-compose.yml` for Grafana        |
-| CS-10913 | 2     | landed      | grafanactl `local`/`staging`/`prod` ctxs      |
-| CS-10918 | 2.5   | landed      | Loki container + data source (local)          |
-| CS-10916 | 2.5   | landed      | Alloy log scraper for local                   |
-| CS-10919 | 2.5   | landed      | Loki on ECS (staging + production)            |
-| CS-10917 | 2.5   | landed      | FireLens dual-ship (5 task families × 2 envs) |
-| CS-10920 | 2.5   | this PR     | `tail-logs.sh` + Claude agent skill           |
-| CS-10921 | 2.5   | landed      | Loki + tail-logs README                       |
-| CS-10968 | 2.5   | this PR     | Hosted Grafana → Loki data source wiring      |
-| CS-10984 | 2.5   | this PR     | Local mise tasks tee into Alloy file source   |
-| CS-10922 | 3     | landed      | AMG export and reformat                       |
-| CS-10932 | 4     | landed      | CI: apply to staging on merge                 |
-| CS-10933 | 4     | not started | CI: post diff comment on PRs                  |
-| CS-10936 | 5     | landed      | CI: apply to production                       |
-| CS-10930 | 6.5   | this PR     | Live indexing-progress panel                  |
+Phases 2 through 6 (build-out and cutover) landed by 2026-05-06.
+Remaining work:
+
+| Ticket   | Phase | Status      | Description                                              |
+| -------- | ----- | ----------- | -------------------------------------------------------- |
+| CS-10933 | 4     | not started | CI: post diff comment on PRs                             |
+| CS-10942 | 7     | not started | Decommission AMG `boxel-dashboard/` TF (cardstack/infra) |
+| CS-10987 | 3.5   | not started | Operator-action button panels (auth via bearer token)    |
 
 ## Indexing progress (CS-10930)
 
