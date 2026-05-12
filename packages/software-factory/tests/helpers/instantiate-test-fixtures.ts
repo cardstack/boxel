@@ -6,7 +6,10 @@
  * the two surfaces are exercised against identical inputs.
  */
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { specRef } from '@cardstack/runtime-common/constants';
 import { expect } from '@playwright/test';
+
+import { retryWithPoll } from '../../src/retry-with-poll';
 
 // ---------------------------------------------------------------------------
 // Card modules
@@ -151,8 +154,10 @@ export function tagsCardSpecJson(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Write a file + await the realm's index to pick it up. Returns once the
- * file is visible to subsequent searches.
+ * Write a file + await the realm to ack it back via GET. The file is
+ * readable here, but realm-side search-index ingestion happens out-of-band
+ * — `awaitSpecSearchable` covers that separately for the Spec card the
+ * downstream `InstantiateValidationStep` queries for.
  */
 async function writeAndAwaitIndex(
   client: BoxelCLIClient,
@@ -169,6 +174,55 @@ async function writeAndAwaitIndex(
     timeoutMs: 30_000,
   });
   expect(indexed, `waiting for ${path} to be indexed timed out`).toBe(true);
+}
+
+/**
+ * Poll the realm's federated search until the just-seeded Spec card surfaces
+ * as a Spec-type result. `waitForFile` only guarantees the source file is
+ * GET-able; the realm runs source POST indexing asynchronously, so there is
+ * a window where the file is readable but `client.search({type: spec})`
+ * still returns an empty list. Without this gate the downstream
+ * `InstantiateValidationStep`'s 30s discovery poll has been observed
+ * timing out in CI under load (the test falls into the "modules exist but
+ * no Spec cards" branch, where `result.details` is undefined). The
+ * 60s budget here gives the realm headroom even when its indexer is
+ * queued behind from-scratch index work from test setup.
+ */
+async function awaitSpecSearchable(
+  client: BoxelCLIClient,
+  realmUrl: string,
+  specPath: string,
+): Promise<void> {
+  let expectedSuffix = specPath.replace(/\.json$/, '');
+  let lastResult: Awaited<ReturnType<typeof client.search>> | undefined;
+  let result = await retryWithPoll(
+    async () => {
+      lastResult = await client.search(realmUrl, {
+        filter: { type: specRef },
+      });
+      return lastResult;
+    },
+    (r) => {
+      if (!r.ok) return false;
+      let found = (r.data ?? []).some((card) => {
+        let id = (card as { id?: unknown }).id;
+        return typeof id === 'string' && id.endsWith(expectedSuffix);
+      });
+      return !found;
+    },
+    { totalWaitMs: 60_000, pollMs: 250 },
+  );
+  expect(
+    result.ok,
+    `search for Spec at ${specPath} failed: ${result.error}`,
+  ).toBe(true);
+  let cardIds = (result.data ?? []).map(
+    (c) => (c as { id?: unknown }).id ?? '(no id)',
+  );
+  expect(
+    cardIds.some((id) => typeof id === 'string' && id.endsWith(expectedSuffix)),
+    `Spec ${specPath} did not show up in search within 60s; got: ${JSON.stringify(cardIds)}`,
+  ).toBe(true);
 }
 
 /**
@@ -197,6 +251,7 @@ export async function seedValidCardWithSpec(
     'Spec/valid-card-spec.json',
     validCardSpecJson(),
   );
+  await awaitSpecSearchable(client, realmUrl, 'Spec/valid-card-spec.json');
 }
 
 /**
@@ -222,6 +277,12 @@ export async function seedTagsCardWithBrokenExampleAndSpec(
     'Spec/tags-card-spec.json',
     tagsCardSpecJson(),
   );
+  // Gate on the Spec actually appearing in search results before we drop
+  // the broken example. The broken example deliberately fails indexing
+  // (containsMany received a string), and a still-queued realm indexer
+  // can keep the Spec out of search results past `discoverRealmSpecs`'s
+  // own 30s poll budget — that is the historical flake.
+  await awaitSpecSearchable(client, realmUrl, 'Spec/tags-card-spec.json');
   await writeAndAwaitIndex(
     client,
     realmUrl,
