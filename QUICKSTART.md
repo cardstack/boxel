@@ -2,9 +2,17 @@
 
 To build the entire repository and run the application, follow these steps:
 
-1. The 2 main system dependencies to install are:
+1. The system dependencies to install are:
    - [mise](https://mise.jdx.dev/getting-started.html)
    - [docker](https://docs.docker.com/get-docker/)
+   - [mkcert](https://github.com/FiloSottile/mkcert) — provisions the
+     local TLS cert the realm-server needs to speak HTTPS+HTTP/2 (local
+     dev has no HTTP fallback). Install with
+     `sudo apt install -y mkcert libnss3-tools` on Debian/Ubuntu or
+     `brew install mkcert nss` on macOS. After install, run
+     `mise run infra:ensure-dev-cert` once before the first `mise run
+dev` / `pnpm start:all`; subsequent runs are a no-op. See the
+     repo-root [README](README.md#local-https-dev-access) for details.
 
 2. Clone the repo:
 
