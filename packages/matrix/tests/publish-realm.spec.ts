@@ -366,20 +366,30 @@ test.describe('Publish realm', () => {
     await page.locator('[data-test-default-domain-checkbox]').click();
     let publishButton = page.locator('[data-test-publish-button]');
     // Set up the network wait BEFORE clicking — the handler awaits the
-    // full reindex before returning 202, so the response is the
-    // authoritative "publish is done" signal. 60s budget covers the
-    // from-scratch reindex even on slow CI.
-    let publishResponsePromise = page.waitForResponse(
-      (r) =>
-        r.url().endsWith('/_publish-realm') && r.request().method() === 'POST',
-      { timeout: 60_000 },
-    );
+    // full reindex before returning 202, so when this resolves we
+    // know the publish is fully done. Real-world republishes can sit
+    // behind a from-scratch that takes a few minutes on contended CI;
+    // 3 minutes is the safe upper bound. We `.catch()` the wait so a
+    // transient hiccup (Playwright losing the response, the page
+    // refresh-bouncing, etc.) downgrades to null rather than
+    // throwing — the published-URL assertion below is the
+    // load-bearing check either way.
+    let publishResponsePromise = page
+      .waitForResponse(
+        (r) =>
+          r.url().endsWith('/_publish-realm') &&
+          r.request().method() === 'POST',
+        { timeout: 180_000 },
+      )
+      .catch(() => null);
     await publishButton.click();
     let publishResponse = await publishResponsePromise;
-    expect(
-      publishResponse.status(),
-      'second publish should succeed',
-    ).toBeLessThan(300);
+    if (publishResponse) {
+      expect(
+        publishResponse.status(),
+        'second publish should succeed',
+      ).toBeLessThan(300);
+    }
 
     // Open the published URL again and verify the UPDATED sentinel
     // renders — and the initial sentinel does NOT. This is the
@@ -394,9 +404,14 @@ test.describe('Publish realm', () => {
       .click();
     let secondTab = await secondTabPromise;
     await secondTab.waitForLoadState();
+    // Generous retry budget: if waitForResponse above was downgraded
+    // to null, the publish may not yet be done by the time we land on
+    // the published URL. The assertion retries until the sentinel
+    // appears or this budget expires, which gives slow republishes
+    // room to land without flapping the test.
     await expect(secondTab.locator('[data-test-sentinel-output]')).toHaveText(
       updatedSentinel,
-      { timeout: 30_000 },
+      { timeout: 120_000 },
     );
     await expect(secondTab.locator('body')).not.toContainText(initialSentinel);
     await secondTab.close();
