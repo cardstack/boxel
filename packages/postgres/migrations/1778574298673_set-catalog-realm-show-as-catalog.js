@@ -18,6 +18,9 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.sql(`
     UPDATE realm_metadata SET show_as_catalog = NULL
-    WHERE url LIKE '%/catalog/'
+    WHERE url IN (
+      SELECT realm_url FROM realm_user_permissions
+      WHERE username = '*' AND read = true AND realm_url LIKE '%/catalog/'
+    )
   `);
 };
