@@ -214,7 +214,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     if (this.#prehydrateScrollTop === 0) {
       return;
     }
-    let cardContainer = document.querySelector('data-host-mode-card');
+    let cardContainer = document.querySelector('[data-host-mode-card]');
     if (cardContainer instanceof HTMLElement) {
       cardContainer.scrollTop = this.#prehydrateScrollTop;
     }

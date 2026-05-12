@@ -9,6 +9,7 @@ import {
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -522,6 +523,47 @@ module('Acceptance | host mode tests', function (hooks) {
 
     // Stack shouldn't exist when there are no stacked cards
     assert.dom('[data-test-host-mode-stack]').doesNotExist();
+  });
+
+  test('scroll position is restored on card container after hydration', async function (assert) {
+    // Simulate the user having scrolled down the prerendered page before JS
+    // loaded. ember-window-mock stores this in its holder object so that
+    // window.scrollY reads back 300 inside the removeIsolatedMarkup modifier.
+    (window as unknown as Record<string, unknown>).scrollY = 300;
+
+    // Constrain the card container and force its inner card renderer to
+    // overflow so that scrollTop can actually be set to a non-zero value.
+    // Browsers clamp scrollTop to (scrollHeight − clientHeight), so the
+    // content must be taller than the container for the restoration to stick.
+    let testStyle = document.createElement('style');
+    testStyle.textContent = `
+      [data-host-mode-card] {
+        height: 100px !important;
+        max-height: 100px !important;
+      }
+      [data-host-mode-card] .card {
+        height: 500px !important;
+        min-height: 500px !important;
+        flex: none !important;
+      }
+    `;
+    document.head.appendChild(testStyle);
+
+    try {
+      await visit('/test/Pet/mango.json');
+      await waitFor('[data-test-pet-isolated="Mango"]');
+
+      let cardContainer = document.querySelector(
+        '[data-host-mode-card]',
+      ) as HTMLElement;
+      assert.ok(cardContainer, 'card container exists');
+      assert.ok(
+        cardContainer.scrollTop > 0,
+        `scroll position is restored onto card container after hydration (scrollTop=${cardContainer.scrollTop})`,
+      );
+    } finally {
+      testStyle.remove();
+    }
   });
 
   module('with a custom subdomain', function (hooks) {
