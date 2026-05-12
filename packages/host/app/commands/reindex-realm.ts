@@ -25,6 +25,11 @@ export default class ReindexRealmCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<undefined> {
+    if (!input.realmIdentifier) {
+      throw new Error(
+        "ReindexRealmCommand requires a 'realmIdentifier' attribute (the realm URL).",
+      );
+    }
     await this.realm.reindex(input.realmIdentifier);
   }
 }
