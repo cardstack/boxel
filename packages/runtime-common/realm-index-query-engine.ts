@@ -130,10 +130,15 @@ export function searchInFlightKey(
   query: Query,
   opts: Options | undefined,
 ): string | undefined {
+  // Encode the tuple as a JSON array (not a delimited string) so user-supplied
+  // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
+  // collide with the delimiter and cause unrelated searches to coalesce.
   try {
-    let queryDigest = JSON.stringify(normalizeQueryForSignature(query));
-    let optsDigest = opts ? JSON.stringify(sortKeysDeep(opts)) : '';
-    return `${realmURL}|${queryDigest}|${optsDigest}`;
+    return JSON.stringify([
+      realmURL,
+      normalizeQueryForSignature(query),
+      opts ? sortKeysDeep(opts) : null,
+    ]);
   } catch {
     return undefined;
   }
@@ -179,6 +184,23 @@ export class RealmIndexQueryEngine {
   // (Realm.search → JSON.stringify → HTTP response). Do not mutate the
   // returned doc.
   #inFlightSearch = new Map<string, Promise<LinkableCollectionDocument>>();
+
+  // Drop every pending in-flight entry. Callers that registered before the
+  // drop continue to await their existing promise (the underlying SQL was
+  // already in motion); only *new* callers after the drop will miss the map
+  // and fire a fresh search against the now-current index. Wire this to any
+  // event that means "boxel_index has just moved" — typically a worker's
+  // batch.done() swap reaching this realm-server process.
+  //
+  // The clear is local-process only. Cross-process invalidation (peer
+  // realm-server replicas serving live `_search` while a different worker
+  // commits a swap) is closed by Phase 2's NOTIFY-driven eviction. Within a
+  // single process — which covers dev, single-instance deployments, and the
+  // realm-server-drives-its-own-indexing path — this method closes the
+  // post-swap-staleness window.
+  clearInFlightSearch(): void {
+    this.#inFlightSearch.clear();
+  }
 
   constructor({
     realm,

@@ -21,7 +21,11 @@ module(basename(__filename), function () {
       await runSharedTest(searchInFlightKeyTests, assert, {});
     });
 
-    test('undefined opts vs empty-equivalent opts produce different keys', async function (assert) {
+    test('different opts shapes produce different keys', async function (assert) {
+      await runSharedTest(searchInFlightKeyTests, assert, {});
+    });
+
+    test('undefined opts and empty-object opts produce different keys', async function (assert) {
       await runSharedTest(searchInFlightKeyTests, assert, {});
     });
 

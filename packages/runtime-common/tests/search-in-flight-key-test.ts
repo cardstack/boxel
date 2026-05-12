@@ -67,15 +67,25 @@ const tests = Object.freeze({
     );
   },
 
-  'undefined opts vs empty-equivalent opts produce different keys': async (
-    assert,
-  ) => {
-    // undefined opts → '' digest; {loadLinks:true} → non-empty digest.
-    // This is deliberate — callers passing different opts shapes should not
-    // coalesce, even if those shapes happen to produce the same result.
+  'different opts shapes produce different keys': async (assert) => {
+    // Callers passing different opts shapes should not coalesce.
     assert.notStrictEqual(
       searchInFlightKey(realmURL, baseQuery, undefined),
       searchInFlightKey(realmURL, baseQuery, { loadLinks: true }),
+    );
+  },
+
+  'undefined opts and empty-object opts produce different keys': async (
+    assert,
+  ) => {
+    // The key intentionally distinguishes `undefined` (no opts at all) from
+    // `{}` (opts object with no flags set). They semantically behave the same
+    // inside searchCards, but keeping them distinct keys avoids any future
+    // surprise if the two shapes ever diverge — coalescing only happens for
+    // callers passing literally the same opts.
+    assert.notStrictEqual(
+      searchInFlightKey(realmURL, baseQuery, undefined),
+      searchInFlightKey(realmURL, baseQuery, {}),
     );
   },
 
