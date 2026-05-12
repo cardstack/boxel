@@ -69,12 +69,6 @@ export class ToolNotFoundError extends Error {
 // ---------------------------------------------------------------------------
 // ToolExecutor
 // ---------------------------------------------------------------------------
-//
-// After CS-10883's tool retirements the registry only contains
-// `realm-create`. The executor reflects that — there's no script
-// spawning, no boxel-cli wrapping, no HTTP-direct read/write/delete/
-// search dispatch. If we ever bring registered tools back, that's where
-// new code goes; until then this stays narrow on purpose.
 
 export class ToolExecutor {
   private registry: ToolRegistry;

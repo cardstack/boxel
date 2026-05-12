@@ -80,12 +80,13 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   try {
     // The factory always runs the issue loop after seed creation. We
-    // force the OpenRouter path here so the loop fails deterministically
-    // on the missing OPENROUTER_API_KEY — this test is only validating
-    // seed-issue creation and target-realm bootstrap, not the agent loop.
-    // Without the explicit `--agent openrouter`, the default `claude`
-    // backend would try to use the Claude Agent SDK, with less
-    // predictable failure modes in the test harness.
+    // force the OpenRouter path with an obviously-invalid API key so
+    // opencode takes the direct path and fail-fasts on a 401 from
+    // openrouter.ai — this test is only validating seed-issue creation
+    // and target-realm bootstrap, not the agent loop. Without the
+    // explicit key, the openrouter path falls into passthrough mode and
+    // opencode hangs trying to reach the realm-server proxy, which
+    // would time out the whole test.
     let result = await runCommand(
       'node',
       [
@@ -102,6 +103,8 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         '--no-retry-blocked',
         '--agent',
         'openrouter',
+        '--openrouter-api-key',
+        'sk-or-test-invalid',
       ],
       {
         cwd: packageRoot,
@@ -148,9 +151,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       };
     };
     expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-    // The loop picks up the seed issue and sets it to in_progress before
-    // the agent fails (no OPENROUTER_API_KEY), so the status is in_progress.
-    expect(issueJson.data.attributes.status).toBe('in_progress');
+    // The loop picks up the seed issue and starts it, the agent reports
+    // a hard backend error (401 from openrouter.ai because we passed an
+    // invalid key on purpose), and the loop marks the issue blocked.
+    expect(issueJson.data.attributes.status).toBe('blocked');
     expect(issueJson.data.attributes.summary).toContain(
       'Process brief and create project artifacts',
     );

@@ -6,6 +6,7 @@ import {
   containsMany,
   linksTo,
 } from './card-api';
+import BooleanField from './boolean';
 import StringField from './string';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
@@ -31,6 +32,17 @@ export class RealmConfig extends CardDef {
   @field backgroundURL = contains(StringField);
   @field iconURL = contains(StringField);
   @field hostRoutingRules = containsMany(RoutingRuleField);
+  // Opt-in to keeping the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. Default behaviour for this
+  // card writes a small boilerplate placeholder instead — the
+  // CardsGrid isolated render fans out into a fitted render per card
+  // in the realm and dominates indexing wall-clock on larger realms,
+  // and nothing reads its isolated HTML in production for an
+  // unpublished realm. Set this to `true` when the realm's index is
+  // served as published-realm SSR (the publish handler writes it
+  // automatically in that case) or when an operator otherwise needs
+  // the full isolated render present in the index.
+  @field includePrerenderedDefaultRealmIndex = contains(BooleanField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: RealmConfig) {

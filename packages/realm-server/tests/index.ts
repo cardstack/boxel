@@ -240,6 +240,7 @@ const ALL_TEST_FILES: string[] = [
   './types-endpoint-test',
   './virtual-network-test',
   './request-forward-test',
+  './openrouter-passthrough-test',
   './publish-unpublish-realm-test',
   './boxel-domain-availability-test',
   './get-boxel-claimed-domain-test',

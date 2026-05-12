@@ -197,9 +197,39 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Opt-in to producing the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. When undefined / null /
+  // false the host's render route substitutes a small boilerplate
+  // placeholder instead and skips the (expensive) isolated render.
+  // The lever is primarily set by the publish handler on the
+  // published realm snapshot so anonymous-visitor SSR injection has
+  // real content; unpublished realms typically have nothing reading
+  // the index's isolated HTML. Optional to avoid forcing every
+  // RealmInfo fixture to update.
+  includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
+
+// Marker header the host SPA attaches to outbound _federated-search /
+// _search calls when it's running inside a prerender tab. The prerender
+// server uses puppeteer's `evaluateOnNewDocument` to inject a window
+// global (`__boxelDuringPrerender = true`) into every Chrome tab before
+// the host loads; the host's realm-server fetch wrapper then reads that
+// flag and adds this header on its own outbound search requests only —
+// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
+// see it on a CORS preflight. When the realm sees this on an inbound
+// _search request it knows the caller is the host SPA mid-render and
+// switches the search to cacheOnlyDefinitions:true, which short-circuits
+// the recursive lookupDefinition → prerenderModule path in
+// populateQueryFields that causes self-referential prerender deadlocks
+// under parallel indexing. Kept as a bare string here so runtime-common
+// stays independent of realm-server. The realm-server prerender side
+// re-exports the same value from prerender-constants.ts.
+export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
+function isDuringPrerenderRequest(request: Request): boolean {
+  return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
 
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not
 // in this set is still written to the legacy .realm.json sidecar until
@@ -209,6 +239,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
+  'includePrerenderedDefaultRealmIndex',
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
@@ -4224,10 +4255,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(query: Query): Promise<LinkableCollectionDocument> {
+  public async search(
+    query: Query,
+    opts?: { cacheOnlyDefinitions?: boolean },
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
     });
   }
 
@@ -4278,7 +4313,9 @@ export class Realm {
 
     try {
       assertQuery(cardsQuery);
-      let doc = await this.search(cardsQuery);
+      let doc = await this.search(cardsQuery, {
+        cacheOnlyDefinitions: isDuringPrerenderRequest(request),
+      });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -5346,6 +5383,7 @@ export class Realm {
       ),
       publishable: null,
       lastPublishedAt,
+      includePrerenderedDefaultRealmIndex: null,
     };
 
     if (realmConfig) {
@@ -5418,6 +5456,12 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -5449,6 +5493,12 @@ export class Realm {
         if ('iconURL' in attrs) {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
         }
       }
     } catch (e) {

@@ -21,7 +21,8 @@ Wraps the `boxel realm` subcommands that move data between a local directory and
 | "push my changes" / "deploy" | `boxel realm push <local-dir> <realm-url>` |
 | "download a realm" / "pull it locally" | `boxel realm pull <realm-url> <local-dir>` |
 | "sync" / "keep them in lockstep" | `boxel realm sync <local-dir> <realm-url> --prefer-newest` (or `--prefer-local` / `--prefer-remote`) |
-| "watch the realm" / "live-mirror remote changes locally" | `boxel realm watch <realm-url> <local-dir>` |
+| "watch the realm" / "live-mirror remote changes locally" | `boxel realm watch start <realm-url> <local-dir>` |
+| "stop watching" / "kill the watcher" | `boxel realm watch stop <local-dir>` |
 | "make a new realm" | `boxel realm create <realm-name> <display-name>` |
 | "delete this realm" / "remove a realm" | `boxel realm remove <realm-url>` |
 | "what realms do I have access to" | `boxel realm list` |
@@ -66,9 +67,9 @@ Bidirectional sync between a local directory and a Boxel realm
 - `--dry-run` — Preview without making changes
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
-### `boxel realm watch <realm-url> <local-dir>`
+### `boxel realm watch start <realm-url> <local-dir>`
 
-Watch a Boxel realm for server-side changes and pull them into a local directory
+Start watching a Boxel realm for server-side changes and pull them into a local directory
 
 **Arguments:**
 
@@ -80,6 +81,10 @@ Watch a Boxel realm for server-side changes and pull them into a local directory
 - `-i, --interval <seconds>` — Polling interval in seconds
 - `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+
+### `boxel realm watch stop`
+
+Stop all running boxel realm watch processes
 
 ### `boxel realm push <local-dir> <realm-url>`
 

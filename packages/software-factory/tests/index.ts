@@ -12,7 +12,6 @@ import './factory-context-builder.test';
 import './factory-tool-builder.test';
 import './factory-tool-schema-adapter.test';
 import './factory-agent-claude-code.test';
-import './factory-agent-schema-boundary.test';
 import './issue-loop.test';
 import './issue-scheduler.test';
 import './retry-blocked-issues.test';

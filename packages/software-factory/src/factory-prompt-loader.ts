@@ -430,7 +430,7 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('ticket-implement', {
+  return loader.load('issue-implement', {
     project: context.project,
     issue: context.issue,
     knowledge: context.knowledge,
@@ -460,7 +460,7 @@ export function assembleBootstrapPrompt(
 export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
   let { context, implementedFiles, loader } = options;
 
-  return loader.load('ticket-test', {
+  return loader.load('issue-test', {
     issue: context.issue,
     implementedFiles,
   });
@@ -483,7 +483,7 @@ export function assembleIteratePrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('ticket-iterate', {
+  return loader.load('issue-iterate', {
     project: context.project,
     issue: context.issue,
     iteration,

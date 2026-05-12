@@ -7,7 +7,7 @@
  * - RealmIssueRelationshipLoader for context building
  * - ContextBuilder with issue-aware mode
  * - ToolRegistry, ToolExecutor, FactoryTool[] via buildFactoryTools
- * - OpenRouterFactoryAgent as the LoopAgent
+ * - ClaudeCodeFactoryAgent or OpencodeFactoryAgent as the LoopAgent
  * - ValidationPipeline as the Validator
  * - runIssueLoop() invocation
  */
@@ -21,9 +21,8 @@ import { logger } from './logger';
 
 import {
   ClaudeCodeFactoryAgent,
-  OpenRouterFactoryAgent,
+  OpencodeFactoryAgent,
   FACTORY_DEFAULT_OPENROUTER_MODEL,
-  type FactoryAgentConfig,
   type FactoryAgentProvider,
   type LoopAgent,
 } from './factory-agent';
@@ -72,6 +71,14 @@ export interface IssueLoopWiringConfig {
   agent?: FactoryAgentProvider;
   /** Explicit OpenRouter model id; only honoured when agent === 'openrouter'. */
   openRouterModel?: string;
+  /**
+   * OpenRouter API key for direct billing. Only honoured when
+   * `agent === 'openrouter'`. When unset, the OpenRouter path falls
+   * back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). The CLI plumbs this through from
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
+   */
+  openRouterApiKey?: string;
   debug?: boolean;
   /** Inject a pre-built LoopAgent instance (tests only). Wins over `agent`. */
   agentOverride?: LoopAgent;
@@ -183,6 +190,7 @@ export async function runFactoryIssueLoop(
     let built = createLoopAgentWithLabel({
       provider,
       openRouterModel: config.openRouterModel,
+      openRouterApiKey: config.openRouterApiKey,
       realmServerUrl,
       client,
       debug: config.debug,
@@ -232,7 +240,20 @@ export async function runFactoryIssueLoop(
     maxOuterCycles: config.maxOuterCycles,
   };
 
-  return runIssueLoop(issueLoopConfig);
+  try {
+    return await runIssueLoop(issueLoopConfig);
+  } finally {
+    // Some agents (notably `OpencodeFactoryAgent`) hold persistent
+    // backend state across iterations — long-lived opencode subprocess
+    // + MCP server + JWT'd HTTP client. Tear that down here so a
+    // crash mid-loop doesn't orphan an opencode process holding
+    // port 4096.
+    if (typeof agent.close === 'function') {
+      await agent.close().catch((err) => {
+        log.warn(`agent.close() failed: ${String(err)}`);
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -243,13 +264,21 @@ export interface CreateLoopAgentConfig {
   provider: FactoryAgentProvider;
   /** Only used when provider === 'openrouter'. */
   openRouterModel?: string;
+  /**
+   * Optional OpenRouter API key. When set, the opencode-backed
+   * `--agent openrouter` path uses it directly; when unset, the agent
+   * falls back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). Read from CLI flag
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
+   */
+  openRouterApiKey?: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   debug?: boolean;
   /**
-   * Factory workspace directory. Forwarded to the Claude backend so its
-   * native fs tools (Read / Write / Edit / Bash) resolve relative paths
-   * inside the workspace. Other backends ignore it.
+   * Factory workspace directory. Both the Claude path and the
+   * opencode-backed OpenRouter path use this as their cwd so native
+   * fs tools resolve realm-relative paths inside the workspace.
    */
   workspaceDir?: string;
 }
@@ -310,14 +339,27 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
         config.openRouterModel && config.openRouterModel.trim() !== ''
           ? config.openRouterModel.trim()
           : FACTORY_DEFAULT_OPENROUTER_MODEL;
+      if (!config.workspaceDir) {
+        throw new Error(
+          '--agent openrouter requires a workspaceDir — opencode mounts ' +
+            'it as cwd for native fs tools.',
+        );
+      }
+      let apiKey =
+        config.openRouterApiKey && config.openRouterApiKey.trim() !== ''
+          ? config.openRouterApiKey.trim()
+          : (process.env.OPENROUTER_API_KEY?.trim() ?? undefined);
+      let mode = apiKey ? 'direct' : 'passthrough';
       return {
-        agent: new OpenRouterFactoryAgent({
+        agent: new OpencodeFactoryAgent({
           model,
           realmServerUrl: config.realmServerUrl,
           client: config.client,
+          openRouterApiKey: apiKey,
+          workspaceDir: config.workspaceDir,
           debug: config.debug,
-        } satisfies FactoryAgentConfig),
-        label: `openrouter (model=${model})`,
+        }),
+        label: `openrouter (model=${model}, mode=${mode})`,
       };
     }
   }

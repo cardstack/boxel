@@ -3,7 +3,16 @@ import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
 
-import { isValidFormat } from '@cardstack/runtime-common';
+import {
+  internalKeyFor,
+  isRealmIndexCardId,
+  isValidFormat,
+  realmURL,
+  type CodeRef,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
+
+import type RealmService from '@cardstack/host/services/realm';
 
 import type {
   BoxComponent,
@@ -15,14 +24,34 @@ import { getClass, getTypes } from './meta';
 
 import type { Model as ParentModel } from '../render';
 
+// Stable internal key for the base CardsGrid type. We compare against
+// the internalKeyFor representation of the cards-grid module + name so
+// the check tolerates whatever resolved form the host's identify path
+// produces (e.g. realm-aliased base URLs).
+const CARDS_GRID_REF = {
+  module: 'https://cardstack.com/base/cards-grid',
+  name: 'CardsGrid',
+} as ResolvedCodeRef;
+const CARDS_GRID_INTERNAL_KEY = internalKeyFor(CARDS_GRID_REF, undefined);
+
 export interface Model {
   instance: CardDef;
   format: Format;
   Component: BoxComponent;
+  // True when this render should be short-circuited to the realm-
+  // index boilerplate placeholder instead of running through Glimmer.
+  // Set only when `format === 'isolated'`, the card is the realm's
+  // default index, the type chain is base CardsGrid, and the realm
+  // has not opted in via `includePrerenderedDefaultRealmIndex` on its
+  // RealmConfig card. The orchestrator in `card-prerender.gts`
+  // honours this flag by substituting the boilerplate string and
+  // skipping the actual Glimmer render.
+  useRealmIndexBoilerplate?: boolean;
 }
 
 export default class RenderHtmlRoute extends Route<Model> {
   @service declare router: RouterService;
+  @service declare realm: RealmService;
 
   beforeModel(transition: Transition) {
     let parentModel = this.modelFor('render') as ParentModel | undefined;
@@ -69,7 +98,8 @@ export default class RenderHtmlRoute extends Route<Model> {
     if (isNaN(level)) {
       throw new Error('not a valid ancestor_level');
     }
-    let componentCodeRef = getTypes(getClass(instance))[level];
+    let types = getTypes(getClass(instance));
+    let componentCodeRef = types[level];
     if (!componentCodeRef) {
       throw new Error(`ancestor_level ${level} does not exist`);
     }
@@ -77,6 +107,37 @@ export default class RenderHtmlRoute extends Route<Model> {
     let Component = instance.constructor.getComponent(instance, undefined, {
       componentCodeRef,
     });
-    return { format, instance, Component };
+
+    let useRealmIndexBoilerplate =
+      format === 'isolated' &&
+      level === 0 &&
+      this.#isDefaultRealmCardsGridIndex(instance, types);
+
+    return { format, instance, Component, useRealmIndexBoilerplate };
+  }
+
+  // True when the card under render is the realm's default index card
+  // AND its type chain begins with the base CardsGrid AND the realm
+  // has NOT opted in to keeping its prerendered isolated HTML via
+  // `RealmInfo.includePrerenderedDefaultRealmIndex`. The orchestrator
+  // substitutes a boilerplate placeholder for the captured HTML in
+  // that case so the indexer doesn't pay for the (expensive) grid
+  // fan-out render of every card in the realm. Published realms
+  // receive the opt-in automatically from the publish handler.
+  #isDefaultRealmCardsGridIndex(instance: CardDef, types: CodeRef[]): boolean {
+    let cardRealmURL = instance[realmURL];
+    if (!cardRealmURL || !isRealmIndexCardId(instance.id, cardRealmURL)) {
+      return false;
+    }
+    let topType = types[0];
+    if (!topType) {
+      return false;
+    }
+    let topKey = internalKeyFor(topType, undefined);
+    if (topKey !== CARDS_GRID_INTERNAL_KEY) {
+      return false;
+    }
+    let info = this.realm.info(cardRealmURL.href);
+    return info?.includePrerenderedDefaultRealmIndex !== true;
   }
 }

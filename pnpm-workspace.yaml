@@ -290,4 +290,5 @@ allowBuilds:
   esbuild: true
   fsevents: true
   keytar: true
+  opencode-ai: true
   puppeteer: true
