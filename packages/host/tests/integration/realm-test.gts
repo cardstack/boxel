@@ -3465,7 +3465,7 @@ posts/ignore-me.gts
             lastPublishedAt: null,
             interactHome: null,
             hostHome: null,
-            includePrerenderedDefaultRealmIndex: false,
+            includePrerenderedDefaultRealmIndex: null,
           },
         },
       },
