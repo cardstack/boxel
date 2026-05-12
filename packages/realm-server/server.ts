@@ -580,10 +580,20 @@ export class RealmServer {
       );
     }
 
-    if (routingMap.length > 0) {
+    if (routingMap.length > 0 && routedRealm) {
+      // Rules are stored realm-relative ('/whitepaper'). The client sees URL
+      // paths that include the realm's mount segment ('/routing/whitepaper'
+      // when the realm is mounted at '/routing/' on the published host). For
+      // the SPA's path lookup to be a direct equality match, prefix each
+      // rule path with the realm's pathname before serializing.
+      let realmPathname = new URL(routedRealm.url).pathname;
+      let hostScopedMap = routingMap.map((rule) => ({
+        path: realmPathname + rule.path.replace(/^\//, ''),
+        id: rule.id,
+      }));
       // Escape `<` so any embedded `</script>` or `<!--` in the JSON can't
       // break out of the script context.
-      let safeMap = JSON.stringify(routingMap).replace(/</g, '\\u003c');
+      let safeMap = JSON.stringify(hostScopedMap).replace(/</g, '\\u003c');
       headFragments.push(
         `<script>window.__hostRoutingMap = ${safeMap};</script>`,
       );
