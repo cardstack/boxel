@@ -415,10 +415,25 @@ test.describe('Host mode', () => {
 
     await logout(page);
 
-    // Visit the bare routed path — no .json extension, no card path.
-    // Today this 404s; once routing is wired up it should render the
-    // white-paper card full-screen.
-    await page.goto(`${publishedRealmURL}whitepaper`);
+    // The _publish-realm POST returns 202 before the published realm has
+    // finished re-indexing the new realm.json. Poll the bare URL until the
+    // server-rendered HTML contains the target card's marker — that
+    // confirms the routing rule is indexed AND the server cardURL rewrite
+    // is applying it. Mirrors the waitUntil pattern in the
+    // `published card response` test above.
+    let routedURL = `${publishedRealmURL}whitepaper`;
+    await waitUntil(async () => {
+      let response = await page.request.get(routedURL, {
+        headers: { Accept: 'text/html' },
+      });
+      if (!response.ok()) {
+        return false;
+      }
+      let text = await response.text();
+      return text.includes('data-test-white-paper');
+    });
+
+    await page.goto(routedURL);
     await expect(page.locator('[data-test-white-paper]')).toBeVisible();
   });
 });
