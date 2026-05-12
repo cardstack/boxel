@@ -1164,14 +1164,14 @@ Both return `204 No Content` and enqueue `userInitiatedPriority` jobs. The calle
 
 ```sh
 # Single realm
-curl -H "Authorization: $GRAFANA_SECRET" \
+curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET" \
   "$REALM_SERVER/_grafana-reindex?realm=<realm-path-without-leading-or-trailing-slash>"
 
 # Full server (enqueues one full-reindex job covering every realm on this server)
-curl -H "Authorization: $GRAFANA_SECRET" "$REALM_SERVER/_grafana-full-reindex"
+curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET" "$REALM_SERVER/_grafana-full-reindex"
 ```
 
-`GET` (because grafana-driven), takes the secret as a bare `Authorization` header with no `Bearer` prefix. Clears module caches before enqueuing. Use when you don't have a user account on the realm but do have access to the server's grafana secret.
+`POST` with `Authorization: Bearer <secret>`. Clears module caches before enqueuing. Use when you don't have a user account on the realm but do have access to the server's grafana secret.
 
 A single card (not a whole realm) re-renders the moment you save its backing file, so "reindex one card" usually means "save the file, then watch the next log lines and DB rows for that card" — no endpoint call needed.
 
@@ -1212,7 +1212,7 @@ grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
 
 Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
-If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
+If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (no MIME gotcha on the grafana endpoints). In dev the per-realm JWT path is almost always easier.
 
 ## Prerender capacity tuning knobs
 

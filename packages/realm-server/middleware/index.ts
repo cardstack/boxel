@@ -219,15 +219,6 @@ export function grafanaAuthorization(
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
-    // Accept either the bare secret (legacy form: link-style `?authHeader=`
-    // promoted to a header by convertAuthHeaderQueryParam) or the
-    // standards-compliant `Bearer <secret>` form (CS-10987 button-panel
-    // dashboards). The Bearer parse follows RFC 6750: scheme name is
-    // case-insensitive and any 1+ whitespace separator is allowed. Both
-    // shapes route through the same downstream handler. Once the GET-link
-    // dashboards have been retired for a release cycle, drop the
-    // bare-secret branch + the convertAuthHeaderQueryParam middleware in
-    // one cleanup PR.
     if (!authorization) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
@@ -235,17 +226,12 @@ export function grafanaAuthorization(
       );
       return;
     }
-    let trimmed = authorization.trim();
-    let isValid = trimmed === grafanaSecret;
-    if (!isValid) {
-      // Match only the first whitespace run so a secret that itself
-      // contains whitespace stays intact in the captured token. A greedy
-      // /\s+/ split produced parts.length > 2 for any such secret and
-      // false-rejected the request.
-      let bearerMatch = trimmed.match(/^bearer\s+(.+)$/i);
-      isValid = !!bearerMatch && bearerMatch[1] === grafanaSecret;
-    }
-    if (!isValid) {
+    // RFC 6750: scheme name is case-insensitive and any 1+ whitespace
+    // separator is allowed. Match only the first whitespace run so a
+    // secret that itself contains whitespace stays intact in the
+    // captured token (a greedy /\s+/ split would false-reject those).
+    let bearerMatch = authorization.trim().match(/^bearer\s+(.+)$/i);
+    if (!bearerMatch || bearerMatch[1] !== grafanaSecret) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.TokenInvalid,

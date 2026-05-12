@@ -38,7 +38,6 @@ import {
   proxyAsset,
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
-import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
 import { resolve, join } from 'path';
 import merge from 'lodash/merge';
 
@@ -218,7 +217,6 @@ export class RealmServer {
         await next();
       })
       .use(convertAcceptHeaderQueryParam)
-      .use(convertAuthHeaderQueryParam)
       .use(methodOverrideSupport)
       .use(
         createRoutes({
