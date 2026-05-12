@@ -3,6 +3,7 @@ import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
 import http from 'http';
 import http2 from 'http2';
+import net from 'net';
 import { readFileSync } from 'fs';
 import type {
   DefinitionLookup,
@@ -81,8 +82,16 @@ import { JSDOM } from 'jsdom';
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 
-export type RealmHttpServer = http.Server | http2.Http2SecureServer;
+export type RealmHttpServer =
+  | http.Server
+  | http2.Http2SecureServer
+  | net.Server;
 
+// In TLS mode the realm-server binds a single net.Server that peeks each
+// connection's first byte and routes TLS handshakes (0x16) to the HTTP/2
+// secure server and plain-text HTTP to a tiny 301-redirect server. This
+// gives http://localhost:4201 → https://localhost:4201 the same-port
+// redirect UX without running two listeners on different ports.
 function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
@@ -106,14 +115,12 @@ function createListener(
     );
     return { server: http.createServer(app.callback()), isHttp2: false };
   }
+  let tlsServer: http2.Http2SecureServer;
   try {
-    return {
-      server: http2.createSecureServer(
-        { cert, key, allowHTTP1: true },
-        app.callback(),
-      ),
-      isHttp2: true,
-    };
+    tlsServer = http2.createSecureServer(
+      { cert, key, allowHTTP1: true },
+      app.callback(),
+    );
   } catch (e) {
     log.warn(
       `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
@@ -121,6 +128,61 @@ function createListener(
     );
     return { server: http.createServer(app.callback()), isHttp2: false };
   }
+  let redirectServer = http.createServer(redirectToHttps);
+  let dispatcher = net.createServer({ pauseOnConnect: true }, (socket) => {
+    socket.once('readable', () => {
+      let firstByte: Buffer | null;
+      try {
+        firstByte = socket.read(1);
+      } catch {
+        socket.destroy();
+        return;
+      }
+      if (firstByte == null) {
+        // Connection opened then closed without data — let the kernel drop it.
+        socket.resume();
+        return;
+      }
+      socket.unshift(firstByte);
+      // 0x16 is the TLS ClientHello record type. Anything else is treated
+      // as plain HTTP (ASCII verb byte) and gets the redirect path.
+      if (firstByte[0] === 0x16) {
+        tlsServer.emit('connection', socket);
+      } else {
+        redirectServer.emit('connection', socket);
+      }
+      socket.resume();
+    });
+  });
+  // Surface dispatcher-level errors with the same logger as the rest of
+  // the realm-server. The TLS and redirect servers raise their own errors
+  // separately through their normal lifecycles.
+  dispatcher.on('error', (e) => {
+    log.warn(`dispatcher socket error: %s`, e.message);
+  });
+  return { server: dispatcher, isHttp2: true };
+}
+
+// Same-port 301 redirect for plain-text HTTP requests that land on the
+// HTTPS port. Preserves Host (without port) and path/query, defaults the
+// port to the listener's actual bind port via the Host header we received.
+function redirectToHttps(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): void {
+  let hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
+  // Strip an inbound :port so the redirect goes to the canonical HTTPS port.
+  // We don't have an explicit "canonical port" reference here, so reuse the
+  // inbound port if present — when the dispatcher binds the realm-server's
+  // single port the inbound and target ports agree.
+  let hostNoBracket = hostHeader.replace(/^\[(.+)\](:\d+)?$/, '$1$2');
+  let host = hostNoBracket || 'localhost';
+  let location = `https://${host}${req.url ?? '/'}`;
+  res.writeHead(301, {
+    Location: location,
+    'Content-Type': 'text/plain; charset=utf-8',
+  });
+  res.end(`Redirecting to ${location}\n`);
 }
 
 export class RealmServer {

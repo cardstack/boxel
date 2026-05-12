@@ -251,21 +251,37 @@ suspenders coverage.
 
 ##### Migration after pulling this change
 
-The canonical realm URLs are now `https://localhost:4201/…`, so any
-local card data created under the old `http://localhost:4201/…`
-canonical references is stale. After the first `mise run
-infra:ensure-dev-cert`, reset your local realm DB so realms re-bootstrap
-under the new canonical URLs:
+The canonical realm URLs are now `https://localhost:4201/…` and
+`https://localhost:4202/…`, so every row that was written under the old
+`http://localhost:42XX/…` canonical needs its URLs rewritten in place
+— PK columns, FK columns, JSONB documents (`pristine_doc`, `search_doc`,
+`error_doc`, `deps`, `value`, `headers`, etc.), and rendered HTML /
+markdown payloads. The repo ships an auto-run migration that handles
+all of it:
 
-```
-mise run infra:full-reset    # wipes Postgres + lets the next boot re-index
-```
+- `pnpm migrate` (which `mise run dev` runs via `--migrateDB`) picks up
+  `packages/postgres/migrations/1779200000000_canonical-url-http-to-https.js`
+  on the next boot.
+- That migration walks `information_schema.columns`, finds every
+  text/varchar/jsonb column on every public table (skipping `modules`,
+  which the realm-server truncates on startup anyway), and runs an
+  in-place `REPLACE` for the two canonicals. WHERE-filtered so it only
+  touches rows that still contain the old URL — idempotent, and a
+  no-op in production (where the canonical URL is never `localhost`).
 
-(In-tree realms — base, catalog, skills, openrouter, experiments — are
-re-indexed automatically. Personal realms under `realms/localhost_4201/`
-are left on disk; if you have local card files keyed by the old http
-canonical URLs you'll want to either recreate them or rewrite the
-`id` fields in their `.json` files.)
+After the migration runs, the realm-server boots normally on
+`https://localhost:4201/`. The same-port HTTP→HTTPS dispatcher catches
+any lingering `http://localhost:4201/…` requests (e.g. you typed it
+into a browser, or a card still has a stale URL in a rendered HTML
+attribute) and 301-redirects to the canonical https origin.
+
+Personal realm files under `realms/localhost_4201/**/*.json` may still
+have `id`/`relationships` URLs spelled `http://localhost:4201/…`. The
+indexer re-derives canonical URLs from the realm mount root, so those
+files index cleanly under the new canonical and the redirect handles
+runtime fetches; cleaning up the on-disk strings is optional (a
+`sed -i 's|http://localhost:4201|https://localhost:4201|g'` across the
+realm dir does it in one shot).
 
 ##### Verify
 
