@@ -349,23 +349,43 @@ export class RealmServer {
 
   // Start an HTTPS+HTTP/2 listener on the alias port. Returns undefined when
   // cert env vars are unset (e.g., CI, or before the dev cert has been
-  // provisioned). The two listeners share this.app; an alias-host rewrite
-  // middleware (installed by the app getter) normalizes the `Host` header so
-  // URL-keyed routing matches the canonical serverURL on both ports.
+  // provisioned) or when the cert files are missing/malformed. The two
+  // listeners share this.app; an alias-host rewrite middleware (installed
+  // by the app getter) normalizes the `Host` header so URL-keyed routing
+  // matches the canonical serverURL on both ports.
   listenSecure(port: number): http2.Http2SecureServer | undefined {
     let certFile = process.env[TLS_CERT_FILE_ENV];
     let keyFile = process.env[TLS_KEY_FILE_ENV];
     if (!certFile || !keyFile) {
       return undefined;
     }
-    let instance = http2.createSecureServer(
-      {
-        cert: readFileSync(certFile),
-        key: readFileSync(keyFile),
-        allowHTTP1: true,
-      },
-      this.app.callback(),
-    );
+    let cert: Buffer;
+    let key: Buffer;
+    try {
+      cert = readFileSync(certFile);
+      key = readFileSync(keyFile);
+    } catch (e) {
+      this.log.warn(
+        `Unable to read TLS cert/key (%s, %s): %s — skipping HTTPS/h2 alias listener`,
+        certFile,
+        keyFile,
+        (e as Error).message,
+      );
+      return undefined;
+    }
+    let instance: http2.Http2SecureServer;
+    try {
+      instance = http2.createSecureServer(
+        { cert, key, allowHTTP1: true },
+        this.app.callback(),
+      );
+    } catch (e) {
+      this.log.warn(
+        `Unable to construct HTTPS/h2 server (malformed cert?): %s — skipping HTTPS/h2 alias listener`,
+        (e as Error).message,
+      );
+      return undefined;
+    }
     instance.listen(port);
     instance.on('listening', () => {
       let actualPort =

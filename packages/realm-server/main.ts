@@ -501,11 +501,20 @@ const getIndexHTML = async () => {
   // per-origin HTTP/1.1 6-connection ceiling during aggregator-card
   // prerender fan-outs. Comes up only when the cert env vars are set
   // (see `infra:ensure-dev-cert`). Stays undefined in CI / hermetic
-  // test harnesses.
-  let tlsPort = process.env.REALM_SERVER_TLS_PORT
-    ? Number(process.env.REALM_SERVER_TLS_PORT)
-    : undefined;
-  let tlsServer = tlsPort != null ? server.listenSecure(tlsPort) : undefined;
+  // test harnesses. A non-numeric or out-of-range REALM_SERVER_TLS_PORT
+  // logs a warning and skips the alias rather than failing boot.
+  let tlsServer: import('http2').Http2SecureServer | undefined;
+  let rawTlsPort = process.env.REALM_SERVER_TLS_PORT;
+  if (rawTlsPort) {
+    let tlsPort = Number(rawTlsPort);
+    if (Number.isInteger(tlsPort) && tlsPort > 0 && tlsPort < 65536) {
+      tlsServer = server.listenSecure(tlsPort);
+    } else {
+      log.warn(
+        `REALM_SERVER_TLS_PORT="${rawTlsPort}" is not a valid TCP port; skipping HTTPS/h2 alias listener`,
+      );
+    }
+  }
   httpServer.on('listening', () => {
     let actualPort =
       (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;

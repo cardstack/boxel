@@ -33,10 +33,12 @@ export class BrowserManager {
     // fan-outs, the host's VirtualNetwork re-routes per-page fetches
     // inside Chromium to the h2 listener. The cert is a local mkcert
     // leaf, which puppeteer's bundled Chromium doesn't trust by
-    // default, so we skip the check here. Safe for prerender: the
-    // origins are fixed by REALM_H2_ORIGIN_MAPPINGS and the connection
-    // is loopback-only.
-    if (process.env.REALM_H2_ORIGIN_MAPPINGS) {
+    // default, so we skip the check here — but only when every mapping
+    // destination is an https loopback origin. If REALM_H2_ORIGIN_MAPPINGS
+    // is accidentally polluted with an off-loopback destination, leave
+    // Chromium's default trust policy intact so a fetch to that origin
+    // would still fail safely.
+    if (allH2DestinationsAreLoopback(process.env.REALM_H2_ORIGIN_MAPPINGS)) {
       launchArgs.push('--ignore-certificate-errors');
     }
 
@@ -366,4 +368,41 @@ export class BrowserManager {
       this.#browserUserDataDir = undefined;
     }
   }
+}
+
+// Returns true only when REALM_H2_ORIGIN_MAPPINGS parses to at least one
+// well-formed `{from, to}` pair whose destination is an `https:` URL
+// pointing at a loopback hostname. Used as a guard before passing
+// `--ignore-certificate-errors` to Chromium so that a polluted env var
+// can't be used to relax cert trust toward an arbitrary origin.
+function allH2DestinationsAreLoopback(raw: string | undefined): boolean {
+  if (!raw) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return false;
+  for (let entry of parsed) {
+    if (!entry || typeof entry !== 'object') return false;
+    let to = (entry as { to?: unknown }).to;
+    if (typeof to !== 'string') return false;
+    let toUrl: URL;
+    try {
+      toUrl = new URL(to);
+    } catch {
+      return false;
+    }
+    if (toUrl.protocol !== 'https:') return false;
+    let h = toUrl.hostname.toLowerCase();
+    let loopback =
+      h === 'localhost' ||
+      h.endsWith('.localhost') ||
+      h === '127.0.0.1' ||
+      h === '::1' ||
+      h === '[::1]';
+    if (!loopback) return false;
+  }
+  return true;
 }

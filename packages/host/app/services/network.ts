@@ -95,31 +95,10 @@ export default class NetworkService extends Service {
   // the wire fetch is rewritten. See the repo-root README's "HTTP/2 dev
   // access" section.
   private installH2OriginMappings(virtualNetwork: VirtualNetwork) {
-    let h2MappingsRaw = (
-      globalThis as unknown as { __realmH2OriginMappings__?: string }
-    ).__realmH2OriginMappings__;
-    if (!h2MappingsRaw) {
-      return;
-    }
-    let pairs: Array<{ from?: string; to?: string }>;
-    try {
-      let parsed = JSON.parse(h2MappingsRaw);
-      pairs = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return;
-    }
-    for (let { from, to } of pairs) {
-      if (!from || !to) continue;
-      let fromUrl: URL;
-      let toUrl: URL;
-      try {
-        fromUrl = new URL(from);
-        toUrl = new URL(to);
-      } catch {
-        continue;
-      }
-      if (fromUrl.origin === toUrl.origin) continue;
-      virtualNetwork.addURLMapping(fromUrl, toUrl);
+    let raw = (globalThis as unknown as { __realmH2OriginMappings__?: string })
+      .__realmH2OriginMappings__;
+    for (let { from, to } of parseH2OriginMappings(raw)) {
+      virtualNetwork.addURLMapping(from, to);
     }
   }
 
@@ -136,4 +115,54 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+// Parses the JSON-encoded h2 origin mappings injected by the prerender
+// harness. Each entry must have a parseable `from` URL and a `to` URL
+// whose scheme is `https:` and whose hostname is a loopback alias —
+// this contains the `--ignore-certificate-errors` trust relaxation to
+// local-dev only. A malformed input, an empty global, or a `to` that
+// would redirect realm fetches off-loopback returns nothing.
+export function parseH2OriginMappings(
+  raw: string | undefined,
+): Array<{ from: URL; to: URL }> {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  let mappings: Array<{ from: URL; to: URL }> = [];
+  for (let entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    let from = (entry as { from?: unknown }).from;
+    let to = (entry as { to?: unknown }).to;
+    if (typeof from !== 'string' || typeof to !== 'string') continue;
+    let fromUrl: URL;
+    let toUrl: URL;
+    try {
+      fromUrl = new URL(from);
+      toUrl = new URL(to);
+    } catch {
+      continue;
+    }
+    if (toUrl.protocol !== 'https:') continue;
+    if (!isLoopbackHostname(toUrl.hostname)) continue;
+    if (fromUrl.origin === toUrl.origin) continue;
+    mappings.push({ from: fromUrl, to: toUrl });
+  }
+  return mappings;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  let h = hostname.toLowerCase();
+  return (
+    h === 'localhost' ||
+    h.endsWith('.localhost') ||
+    h === '127.0.0.1' ||
+    h === '::1' ||
+    h === '[::1]'
+  );
 }
