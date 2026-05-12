@@ -29,13 +29,9 @@ contexts:
       server: https://dashboard-staging.stack.cards
       org-id: 1
       token: ${GRAFANA_TOKEN}
-      # Hostname is the build-out placeholder; rename to dashboard-staging.stack.cards
-      # at Phase 6 cutover (atomic with the AMG DNS handover).
 
   production:
     grafana:
       server: https://dashboard.boxel.ai
       org-id: 1
       token: ${GRAFANA_TOKEN}
-      # Hostname is the build-out placeholder; rename to dashboard.boxel.ai at
-      # Phase 6 cutover.
