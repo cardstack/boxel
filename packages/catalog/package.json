@@ -37,10 +37,9 @@
     "ember-modify-based-class-resource": "catalog:"
   },
   "scripts": {
-    "catalog:setup": "([ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }) && pnpm catalog:rewrite-legacy-aliases",
-    "catalog:update": "sh scripts/catalog-update.sh && pnpm catalog:rewrite-legacy-aliases",
+    "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
+    "catalog:update": "sh scripts/catalog-update.sh",
     "catalog:reset": "rm -rf contents && pnpm catalog:setup",
-    "catalog:rewrite-legacy-aliases": "node ./scripts/rewrite-legacy-aliases.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:hbs": "ember-template-lint contents --no-error-on-unmatched-pattern",
