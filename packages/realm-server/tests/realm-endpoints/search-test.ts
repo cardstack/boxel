@@ -59,6 +59,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read'],
           },
@@ -753,6 +754,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read'],
           },
@@ -829,6 +831,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -886,6 +889,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('search query validation', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
