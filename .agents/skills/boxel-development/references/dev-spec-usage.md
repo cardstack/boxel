@@ -1,24 +1,52 @@
 # Catalog Spec Card Instances
 
-For each top-level card definition, create a Catalog Spec card instance in the target realm's `Spec/` folder using the `create_catalog_spec` tool. This makes the card discoverable in the Boxel catalog.
+For each top-level card definition, write a Catalog Spec card instance in the target realm's `Spec/` folder. This makes the card discoverable in the Boxel catalog.
 
-The `create_catalog_spec` tool has the authoritative JSON schema for Spec card fields — use its parameter definitions to know which attributes and relationships are available. The tool auto-constructs the document with the correct `adoptsFrom` (`https://cardstack.com/base/spec#Spec`).
+Specs adopt from the `Spec` class exported by `https://cardstack.com/base/spec` — that module lives in the base realm, not your target realm. Fetch the authoritative schema by calling the `get_card_schema` factory tool:
 
-## Usage
+```
+get_card_schema({ module: 'https://cardstack.com/base/spec', name: 'Spec' })
+```
 
-Use the `create_catalog_spec` tool to create a Spec card. The tool's parameters define the available fields dynamically from the card definition — consult the tool schema for the exact field names and types.
+The result gives you the exact `attributes` and `relationships` shape. Write the JSON file with native `Write` (paths are workspace-relative, e.g. `Spec/sticky-note.json`); `boxel sync` pushes it to the realm between iterations.
+
+## Required Shape
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "specType": "card",
+      "ref": { "module": "../sticky-note", "name": "StickyNote" },
+      "readMe": "...",
+      "cardInfo": { "name": "Sticky Note", "summary": "..." }
+    },
+    "relationships": {
+      "linkedExamples.0": { "links": { "self": "../StickyNote/welcome-note" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
+```
 
 Key concepts:
 
 - `ref` — a CodeRef pointing to the card definition (module path + exported class name). The module path is relative from the Spec card to the `.gts` file (e.g., `../sticky-note` from `Spec/sticky-note.json`).
 - `specType` — `"card"` for CardDef, `"field"` for FieldDef, `"component"` for standalone components.
-- `linkedExamples` — a relationship pointing to sample card instances. Create at least one sample instance and link it here.
+- `linkedExamples` — a `linksToMany` relationship pointing to sample card instances. Use dotted keys (`linkedExamples.0`, `linkedExamples.1`, …) — the array form is rejected by the indexer. Create at least one sample instance and link it here.
+- **Do NOT call `run_instantiate` on the Spec file itself.** Spec's module lives in the base realm; the prerender enforces same-origin module loads and the call always fails. To validate Specs, call `run_instantiate` WITHOUT a `path`; it discovers Specs in the target realm and exercises their `linkedExamples` against the card classes you wrote.
 
 ## Sample Card Instances
 
 Create at least one sample instance with realistic data for each top-level card. Sample instances serve as both catalog examples and test fixtures.
 
-Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`). Use `write_file` to create them. The `linkedExamples` relationship in the Spec card points to these using a relative path (e.g., `../StickyNote/welcome-note`).
+Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`) and write them with native `Write`. The `linkedExamples` relationship in the Spec card points to these using a relative path without the `.json` suffix (e.g., `../StickyNote/welcome-note`).
 
 ---
 

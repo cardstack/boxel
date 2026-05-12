@@ -49,10 +49,9 @@ export const PARSEABLE_GTS_EXTENSIONS = ['.gts', '.gjs', '.ts'];
 export const PARSEABLE_JSON_EXTENSION = '.json';
 
 /**
- * Monorepo layout assumptions — mirrored from the previous parse-step.ts
- * location of this constant. The software-factory package lives at
- * `packages/software-factory` alongside `packages/base`, `packages/host`,
- * and `packages/boxel-ui`.
+ * Monorepo layout assumption: this package lives at
+ * `packages/software-factory`, alongside `packages/base`,
+ * `packages/host`, and `packages/boxel-ui`.
  */
 const PACKAGES_PATH = resolve(__dirname, '..', '..');
 const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');

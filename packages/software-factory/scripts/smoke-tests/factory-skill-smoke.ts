@@ -155,14 +155,10 @@ async function main(): Promise<void> {
   let allSkillNames = [
     'boxel-development',
     'boxel-file-structure',
+    'boxel-api',
+    'boxel-command',
     'ember-best-practices',
     'software-factory-operations',
-    'boxel-sync',
-    'boxel-track',
-    'boxel-watch',
-    'boxel-restore',
-    'boxel-repair',
-    'boxel-setup',
   ];
 
   let allSkills = await loader.loadAll(allSkillNames);

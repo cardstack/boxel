@@ -62,14 +62,6 @@ function makeWorkspace(): TestWorkspace {
  */
 let configWorkspaces = new WeakMap<ToolBuilderConfig, TestWorkspace>();
 
-function workspaceFor(config: ToolBuilderConfig): TestWorkspace {
-  let ws = configWorkspaces.get(config);
-  if (!ws) {
-    throw new Error('No workspace attached to ToolBuilderConfig');
-  }
-  return ws;
-}
-
 function makeConfig(
   overrides?: Partial<ToolBuilderConfig> & { fetch?: typeof globalThis.fetch },
 ): ToolBuilderConfig {
@@ -89,66 +81,6 @@ function makeConfig(
     configWorkspaces.set(config, workspace);
   }
   return config;
-}
-
-interface CapturedRequest {
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body: string;
-}
-
-function createMockFetch(
-  status: number,
-  responseBody: unknown,
-  /** Optional: return this document for GET requests (read-patch-write support). */
-  getResponseBody?: unknown,
-): {
-  fetch: typeof globalThis.fetch;
-  requests: CapturedRequest[];
-} {
-  let requests: CapturedRequest[] = [];
-
-  let mockFetch = (async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    let url = typeof input === 'string' ? input : input.toString();
-    let headers: Record<string, string> = {};
-    if (init?.headers) {
-      let h = init.headers as Record<string, string>;
-      for (let [k, v] of Object.entries(h)) {
-        headers[k] = v;
-      }
-    }
-    let method = init?.method ?? 'GET';
-    requests.push({
-      url,
-      method,
-      headers,
-      body: typeof init?.body === 'string' ? init.body : '',
-    });
-    // For GET requests (reads), return the getResponseBody if provided,
-    // otherwise return 404 (card doesn't exist yet → fresh create).
-    if (method === 'GET' && getResponseBody !== undefined) {
-      return new Response(JSON.stringify(getResponseBody), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-    if (method === 'GET' && getResponseBody === undefined) {
-      return new Response('Not Found', {
-        status: 404,
-        headers: { 'Content-Type': 'text/plain' },
-      });
-    }
-    return new Response(JSON.stringify(responseBody), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }) as typeof globalThis.fetch;
-
-  return { fetch: mockFetch, requests };
 }
 
 interface CapturedToolCall {
@@ -201,26 +133,40 @@ module('factory-tool-builder > tool building', function () {
 
     let toolNames = tools.map((t) => t.name);
 
-    assert.true(toolNames.includes('write_file'));
-    assert.true(toolNames.includes('read_file'));
-    assert.true(toolNames.includes('search_realm'));
+    // The 8 surviving factory tools after CS-11034: get_card_schema +
+    // 5 validators + 2 control signals. Native fs / Bash / Glob /
+    // Grep are owned by the agent backend (Claude Agent SDK or
+    // opencode); `get_card_schema` survives because it introspects
+    // the live `CardDef` via the realm-server prerenderer (no Bash
+    // equivalent).
     assert.true(toolNames.includes('get_card_schema'));
+    assert.true(toolNames.includes('run_tests'));
+    assert.true(toolNames.includes('run_lint'));
+    assert.true(toolNames.includes('run_evaluate'));
+    assert.true(toolNames.includes('run_parse'));
+    assert.true(toolNames.includes('run_instantiate'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
     // After CS-10883 retired the kebab-case shadow tools, only
     // `realm-create` survives in the registry.
     assert.true(toolNames.includes('realm-create'));
-    // Structured update tools are now retired — agent writes raw JSON.
+    // Tools retired by CS-10883 (structured updates) and CS-11034
+    // (OpenRouter-only fs wrappers).
     for (let retired of [
       'update_project',
       'update_issue',
       'create_knowledge',
       'create_catalog_spec',
       'add_comment',
+      'read_file',
+      'write_file',
+      'search_realm',
+      'fetch_transpiled_module',
+      'run_command',
     ]) {
       assert.notOk(
         toolNames.includes(retired),
-        `${retired} retired (agent writes JSON directly via Write)`,
+        `${retired} retired (use native fs / Bash + boxel CLI instead)`,
       );
     }
   });
@@ -239,246 +185,6 @@ module('factory-tool-builder > tool building', function () {
       assert.strictEqual(typeof tool.parameters, 'object');
       assert.strictEqual(typeof tool.execute, 'function');
     }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// write_file: file routing (.gts vs .json)
-// ---------------------------------------------------------------------------
-
-module('factory-tool-builder > write_file', function () {
-  test('writes .gts file to the workspace with raw text body', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let result = (await writeTool.execute({
-      path: 'my-card.gts',
-      content: 'export default class MyCard {}',
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    assert.true(ws.exists('my-card.gts'), 'workspace has my-card.gts');
-    assert.strictEqual(
-      ws.read('my-card.gts'),
-      'export default class MyCard {}',
-    );
-  });
-
-  test('writes nested .ts path to the workspace', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let result = (await writeTool.execute({
-      path: 'utils/helpers.ts',
-      content: 'export function helper() {}',
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    assert.strictEqual(
-      ws.read('utils/helpers.ts'),
-      'export function helper() {}',
-    );
-  });
-
-  test('writes .json file as raw content (no JSON parsing)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let cardJson = JSON.stringify({
-      data: { type: 'card', attributes: { title: 'Test Card' } },
-    });
-
-    let result = (await writeTool.execute({
-      path: 'Card/1.json',
-      content: cardJson,
-    })) as { ok: boolean };
-
-    assert.true(result.ok);
-    // Content is written verbatim — no re-serialization by write_file.
-    assert.strictEqual(ws.read('Card/1.json'), cardJson);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Argument validation (guards against malformed LLM tool calls)
-// ---------------------------------------------------------------------------
-
-/**
- * The OpenRouter tool-use protocol treats `required` on parameter schemas
- * as advisory: models can still emit `tool_call` with an empty args blob
- * (`write_file({})`). Without runtime validation, the factory would
- * silently write to `<realm>/undefined` because `path` stringifies to the
- * literal "undefined" further down the call chain.
- *
- * These tests assert that every path-taking tool rejects
- * missing/empty/non-string path with a clear error — one the agent can
- * self-correct on during the next inner-loop iteration — and that the
- * realm never sees an HTTP request for the malformed call.
- */
-module('factory-tool-builder > path-arg validation', function () {
-  async function expectPathError(
-    invoke: () => Promise<unknown>,
-    toolName: string,
-    assert: Assert,
-  ) {
-    let err: Error | undefined;
-    try {
-      await invoke();
-    } catch (e) {
-      err = e as Error;
-    }
-    assert.ok(err, 'tool must throw for missing/empty path');
-    assert.true(
-      /non-empty string "path"/.test(err?.message ?? ''),
-      `error mentions the missing path arg (got: ${err?.message})`,
-    );
-    assert.true(
-      err!.message.includes(toolName),
-      `error mentions the tool name "${toolName}"`,
-    );
-  }
-
-  test('write_file({}) throws and does NOT hit the realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await expectPathError(() => writeTool.execute({}), 'write_file', assert);
-    assert.strictEqual(
-      requests.length,
-      0,
-      'no realm HTTP request was made for an empty write_file call',
-    );
-  });
-
-  test('write_file with empty-string path throws', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await expectPathError(
-      () => writeTool.execute({ path: '   ', content: 'x' }),
-      'write_file',
-      assert,
-    );
-  });
-
-  test('write_file with missing content throws (required arg)', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let err: Error | undefined;
-    try {
-      await writeTool.execute({ path: 'card.gts' });
-    } catch (e) {
-      err = e as Error;
-    }
-    assert.ok(err);
-    assert.true(/non-empty string "content"/.test(err?.message ?? ''));
-    assert.strictEqual(requests.length, 0, 'no write request was made');
-  });
-
-  test('read_file({}) throws and does NOT hit the realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    await expectPathError(() => readTool.execute({}), 'read_file', assert);
-    assert.strictEqual(requests.length, 0);
-  });
-
-  test('fetch_transpiled_module({}) throws', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let fetchTool = findTool(tools, 'fetch_transpiled_module');
-
-    await expectPathError(
-      () => fetchTool.execute({}),
-      'fetch_transpiled_module',
-      assert,
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Realm targeting (target vs test) + JWT auth
-// ---------------------------------------------------------------------------
-
-module('factory-tool-builder > realm targeting', function () {
-  test('write_file writes to the workspace (target realm)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({ path: 'card.gts', content: 'content' });
-
-    assert.true(ws.exists('card.gts'));
-    assert.strictEqual(ws.read('card.gts'), 'content');
-  });
-
-  test('read_file reads from the workspace (target realm)', async function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let ws = workspaceFor(config);
-    // Pre-seed the workspace with the file the agent will read.
-    ws.write('card.gts', 'export class Card {}');
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    let result = (await readTool.execute({ path: 'card.gts' })) as {
-      ok: boolean;
-      content?: string;
-    };
-
-    assert.true(result.ok);
-    assert.strictEqual(result.content, 'export class Card {}');
-  });
-
-  test('search_realm targets target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchTool = findTool(tools, 'search_realm');
-
-    await searchTool.execute({
-      query: { filter: { type: { name: 'Issue' } } },
-    });
-
-    assert.true(requests[0].url.startsWith(TARGET_REALM));
   });
 });
 

@@ -106,6 +106,8 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       skills.includes('boxel-file-structure'),
       'includes boxel-file-structure',
     );
+    assert.true(skills.includes('boxel-api'), 'includes boxel-api');
+    assert.true(skills.includes('boxel-command'), 'includes boxel-command');
   });
 
   test('includes ember-best-practices when issue mentions .gts', function (assert) {
@@ -168,71 +170,30 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('excludes CLI-only skills even when issue mentions sync', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Sync the workspace after local edits',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.false(
-      skills.includes('boxel-sync'),
-      'boxel-sync excluded (CLI-only skill)',
-    );
-  });
-
-  test('excludes CLI-only skills even when issue mentions restore', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Restore workspace to a previous checkpoint',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.false(
-      skills.includes('boxel-restore'),
-      'boxel-restore excluded (CLI-only skill)',
-    );
-  });
-
-  test('excludes all CLI-only skills even when issue mentions multiple CLI operations', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let issue = makeIssue({
-      description: 'Sync the workspace, track changes, and watch for updates',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(issue, project);
-
-    assert.false(skills.includes('boxel-sync'), 'boxel-sync excluded');
-    assert.false(skills.includes('boxel-track'), 'boxel-track excluded');
-    assert.false(skills.includes('boxel-watch'), 'boxel-watch excluded');
-  });
-
-  test('excludes CLI-only skills even when added via knowledge article tags', function (assert) {
+  test('extra skills can be opted in via knowledge article tags', function (assert) {
     let resolver = new DefaultSkillResolver();
     let issue = makeIssue();
     let project = makeProject({
       knowledge: [
         {
-          id: 'Knowledge Articles/cli-ref',
-          tags: ['skill:boxel-sync', 'skill:boxel-repair'],
+          id: 'Knowledge Articles/extension-ref',
+          tags: ['skill:custom-extension', 'skill:another-domain-skill'],
         },
       ],
     });
 
     let skills = resolver.resolve(issue, project);
 
-    assert.false(
-      skills.includes('boxel-sync'),
-      'boxel-sync excluded even from knowledge tags',
+    // Knowledge-tag opt-in is the deliberate way to include any non-default
+    // skill (e.g., a project-specific domain skill that lives in a knowledge
+    // article). The resolver returns the name; the loader resolves it on disk.
+    assert.true(
+      skills.includes('custom-extension'),
+      'custom-extension included from knowledge tag',
     );
-    assert.false(
-      skills.includes('boxel-repair'),
-      'boxel-repair excluded even from knowledge tags',
+    assert.true(
+      skills.includes('another-domain-skill'),
+      'another-domain-skill included from knowledge tag',
     );
   });
 
@@ -299,8 +260,8 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let issue = makeIssue({
       relatedKnowledge: [
         {
-          id: 'Knowledge Articles/ticket-knowledge',
-          tags: ['skill:ticket-skill'],
+          id: 'Knowledge Articles/issue-knowledge',
+          tags: ['skill:issue-skill'],
         },
       ],
     });
@@ -309,7 +270,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let skills = resolver.resolve(issue, project);
 
     assert.true(
-      skills.includes('ticket-skill'),
+      skills.includes('issue-skill'),
       'includes skill from issue relatedKnowledge',
     );
   });
@@ -855,7 +816,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
       let skills: ResolvedSkill[] = [
         { name: 'boxel-development', content: 'a'.repeat(2000) }, // 500 tokens
         { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // 500 tokens
-        { name: 'boxel-sync', content: 'c'.repeat(2000) }, // 500 tokens
+        { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // 500 tokens
       ];
 
       // Budget of 1000 tokens — can fit first two but not third
@@ -873,7 +834,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         'second priority kept',
       );
       assert.true(
-        warnings.some((w) => w.includes('boxel-sync')),
+        warnings.some((w) => w.includes('low-priority-test-skill')),
         'logged warning about dropped skill',
       );
     } finally {
@@ -888,9 +849,9 @@ module('factory-skill-loader > enforceSkillBudget', function () {
     try {
       let skills: ResolvedSkill[] = [
         // Present in reverse priority order
-        { name: 'boxel-sync', content: 'c'.repeat(2000) }, // priority 4
-        { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // priority 1
-        { name: 'boxel-development', content: 'a'.repeat(2000) }, // priority 0
+        { name: 'low-priority-test-skill', content: 'c'.repeat(2000) }, // not in SKILL_PRIORITY → lowest
+        { name: 'boxel-file-structure', content: 'b'.repeat(2000) }, // priority 2
+        { name: 'boxel-development', content: 'a'.repeat(2000) }, // priority 1
       ];
 
       // Budget enough for only 2 skills

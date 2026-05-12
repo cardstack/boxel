@@ -53,11 +53,11 @@ All validation steps passed.
 
 Fix the validation failures shown above. You have the same tools available. You can:
 
-- Use read_file to inspect the current state of your implementation
-- Use write_file to update implementation or test files
-- Use search_realm to check what cards exist
+- Use **`Read`** / **`Glob`** to inspect the current state of your implementation
+- Use **`Write`** or **`Edit`** to update implementation or test files
+- Use **`Bash`** + `boxel search` to check what cards exist in the realm
 - If a lint violation is in your code, fix the code to pass lint
 - If the test expectation is wrong, fix the test
 - If the implementation is wrong, fix the implementation
 
-When done, call signal_done.
+When done, call **`signal_done`** (factory MCP tool).

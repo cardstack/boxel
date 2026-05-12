@@ -2,15 +2,13 @@
  * Adapter that converts a FactoryTool's JSON-Schema `parameters` into a Zod
  * raw shape suitable for the Claude Agent SDK's `tool()` helper.
  *
- * Why this exists: the factory emits JSON Schema (what OpenRouter's tool-use
- * protocol accepts); the Claude Agent SDK's `createSdkMcpServer` +
+ * Why this exists: the factory emits JSON Schema (what tool-use protocols
+ * accept); the Claude Agent SDK's `createSdkMcpServer` +
  * `tool(name, desc, schema, execute)` API accepts a `ZodRawShape`
  * (`Record<string, ZodTypeAny>`). This module is the single seam between
- * the two so the rest of the factory can keep publishing JSON Schema.
- *
- * Invariant: the OpenRouter path (`ToolUseFactoryAgent`) never imports from
- * this module. The cross-backend schema-boundary test in
- * `tests/factory-agent-schema-boundary.test.ts` asserts this explicitly.
+ * the two so the rest of the factory can keep publishing JSON Schema. The
+ * opencode-backed OpenRouter path consumes the JSON Schema directly and
+ * never imports from this module.
  */
 
 import { convertJsonSchemaToZod } from 'zod-from-json-schema';
