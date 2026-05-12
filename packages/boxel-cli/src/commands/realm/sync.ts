@@ -520,8 +520,8 @@ export interface SyncResult {
   error?: string;
 }
 
-export function registerSyncCommand(realm: Command): void {
-  realm
+export function registerSyncCommand(realm: Command): Command {
+  const syncCmd = realm
     .command('sync')
     .description(
       'Bidirectional sync between a local directory and a Boxel realm',
@@ -578,6 +578,7 @@ export function registerSyncCommand(realm: Command): void {
         console.log('Sync completed successfully');
       },
     );
+  return syncCmd;
 }
 
 /**
