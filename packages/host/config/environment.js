@@ -50,17 +50,23 @@ function getEnvSlug() {
 
 function environmentDefaults() {
   if (!process.env.BOXEL_ENVIRONMENT) {
-    // Local realm-server speaks HTTPS+HTTP/2 by default — see the
-    // repo-root README "Local HTTPS dev access" section.
+    // Realm-server scheme defaults to https when the dev cert is
+    // provisioned (env-vars.sh flips REALM_BASE_URL accordingly). For
+    // CI / hermetic-test paths with no cert, REALM_BASE_URL stays http
+    // and the host config follows. See the repo-root README "Local
+    // HTTPS dev access" section.
+    let scheme = (process.env.REALM_BASE_URL || '').startsWith('https://')
+      ? 'https'
+      : 'http';
     return {
-      realmServerURL: 'https://localhost:4201/',
+      realmServerURL: `${scheme}://localhost:4201/`,
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
-      baseRealmURL: 'https://localhost:4201/base/',
-      catalogRealmURL: 'https://localhost:4201/catalog/',
-      legacyCatalogRealmURL: 'https://localhost:4201/legacy-catalog/',
-      skillsRealmURL: 'https://localhost:4201/skills/',
-      openRouterRealmURL: 'https://localhost:4201/openrouter/',
+      baseRealmURL: `${scheme}://localhost:4201/base/`,
+      catalogRealmURL: `${scheme}://localhost:4201/catalog/`,
+      legacyCatalogRealmURL: `${scheme}://localhost:4201/legacy-catalog/`,
+      skillsRealmURL: `${scheme}://localhost:4201/skills/`,
+      openRouterRealmURL: `${scheme}://localhost:4201/openrouter/`,
     };
   }
   let slug = getEnvSlug();

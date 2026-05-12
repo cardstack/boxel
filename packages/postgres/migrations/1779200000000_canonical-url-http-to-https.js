@@ -1,6 +1,7 @@
+/* eslint-disable camelcase */
 'use strict';
 
-// CS-11114: local realm-server flipped from http://localhost:42XX to
+// Local realm-server flipped from http://localhost:42XX to
 // https://localhost:42XX as the canonical scheme when the realm-server
 // terminates HTTPS+HTTP/2. Every row that was indexed/persisted under
 // the old canonical needs its URLs rewritten in place so URL-keyed
@@ -28,7 +29,7 @@
 //
 // Excluded:
 //   - The `modules` table — truncated on every realm-server boot.
-//   - `pgmigrations` (the migration tracker itself).
+//   - `pgmigrations` / `migrations` (the migration tracker tables).
 //   - Identity columns and timestamps fall outside text/varchar/jsonb,
 //     so the type filter excludes them implicitly.
 
@@ -48,7 +49,7 @@ BEGIN
     SELECT table_name, column_name, data_type, udt_name
     FROM information_schema.columns
     WHERE table_schema = 'public'
-      AND table_name NOT IN ('modules', 'pgmigrations')
+      AND table_name NOT IN ('modules', 'pgmigrations', 'migrations')
       AND (
         data_type IN ('text', 'character varying', 'character')
         OR udt_name = 'jsonb'

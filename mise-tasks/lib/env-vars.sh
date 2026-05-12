@@ -83,11 +83,12 @@ else
     # Transitioning from env mode to standard mode in the same shell:
     # reset derived variables to standard defaults to avoid stale env-mode values.
 
-    # Service URLs. Realm-server speaks HTTPS+HTTP/2 in local dev — see
-    # the repo-root README "Local HTTPS dev access" section and the
-    # `infra:ensure-dev-cert` mise task that provisions the cert.
-    export REALM_BASE_URL="https://localhost:4201"
-    export REALM_TEST_URL="https://localhost:4202"
+    # Service URLs. Realm-server flips to HTTPS+HTTP/2 below when the
+    # dev cert has been provisioned by `mise run infra:ensure-dev-cert`;
+    # absent that cert the URLs stay http. See the repo-root README's
+    # "Local HTTPS dev access" section.
+    export REALM_BASE_URL="http://localhost:4201"
+    export REALM_TEST_URL="http://localhost:4202"
     export MATRIX_URL_VAL="http://localhost:8008"
     export WORKER_MGR_URL="http://localhost:4210"
     export WORKER_TEST_MGR_URL="http://localhost:4211"
@@ -115,11 +116,14 @@ else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
 
-    # Service URLs — use :- so production/staging env vars are not clobbered.
-    # Realm-server defaults to HTTPS+HTTP/2 in local dev (see
-    # `infra:ensure-dev-cert` and README "Local HTTPS dev access").
-    export REALM_BASE_URL="${REALM_BASE_URL:-https://localhost:4201}"
-    export REALM_TEST_URL="${REALM_TEST_URL:-https://localhost:4202}"
+    # Service URLs — use :- so production/staging env vars are not
+    # clobbered. Realm-server flips to HTTPS+HTTP/2 below when the dev
+    # cert has been provisioned (see `infra:ensure-dev-cert` and the
+    # repo-root README "Local HTTPS dev access"). Without a cert the
+    # realm-server listens on plain HTTP/1.1 and these URLs stay http
+    # — that's the CI / hermetic-test path.
+    export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
+    export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
     export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
     export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
     export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
@@ -161,6 +165,14 @@ else
   if [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
     export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
     export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
+    # Cert is provisioned — realm-server will terminate HTTPS+HTTP/2 on
+    # both ports, so flip the canonical URLs to match the wire.
+    case "$REALM_BASE_URL" in
+      http://localhost:4201) export REALM_BASE_URL="https://localhost:4201" ;;
+    esac
+    case "$REALM_TEST_URL" in
+      http://localhost:4202) export REALM_TEST_URL="https://localhost:4202" ;;
+    esac
     if command -v mkcert >/dev/null 2>&1; then
       _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then

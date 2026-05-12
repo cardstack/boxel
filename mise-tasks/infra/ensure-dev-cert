@@ -45,20 +45,21 @@ fi
 
 if ! command -v mkcert >/dev/null 2>&1; then
   cat >&2 <<'EOF'
-[ensure-dev-cert] mkcert is required but not installed.
-
-Local dev now serves the realm-server over HTTPS+HTTP/2 — there is no
-HTTP fallback. mkcert provisions the cert; install it once:
+[ensure-dev-cert] mkcert not installed — skipping HTTPS cert provisioning.
+The realm-server's `listen()` falls back to plain HTTP when the cert
+env vars are unset, so this is a soft warning (CI and any environment
+without mkcert keep working unchanged). Local dev still gets the
+HTTPS/HTTP-2 throughput win by installing mkcert and re-running:
 
   Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
   Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
   macOS (Homebrew):      brew install mkcert nss
 
-Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
+Then: `mise run infra:ensure-dev-cert`
 
 See the repo-root README ("Local HTTPS dev access") for the why.
 EOF
-  exit 1
+  exit 0
 fi
 
 mkdir -p "$CERT_DIR"
