@@ -433,6 +433,14 @@ const getIndexHTML = async () => {
           matrixClient,
           realmServerURL: serverURL,
           definitionLookup,
+          // CS-11030: reuse the same coordinator that powers
+          // CachingDefinitionLookup's cross-process coalesce. Distinct
+          // coalesce keys ("transpile|..." vs the prerender key shape)
+          // route through the shared MODULE_CACHE_POPULATED_CHANNEL —
+          // waiters key off the int64 hash of the full coalesceKey, so
+          // crosstalk between the two flows is a benign hash miss in
+          // each direction.
+          transpileCoordinator: moduleCacheCoordinator,
           cardSizeLimitBytes: Number(
             process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
           ),

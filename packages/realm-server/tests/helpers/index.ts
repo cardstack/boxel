@@ -39,6 +39,7 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type Prerenderer,
+  type PopulateCoordinator,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -1000,6 +1001,7 @@ export async function createRealm({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  transpileCoordinator,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1016,6 +1018,12 @@ export async function createRealm({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  // CS-11030: optional cross-process transpile coordinator. Tests that
+  // simulate two peer realms need each peer to hold its own coordinator
+  // pointing at the same dbAdapter so the advisory-lock + NOTIFY plumbing
+  // is the only thing serializing them — that's the behavior we want to
+  // exercise.
+  transpileCoordinator?: PopulateCoordinator;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1083,6 +1091,7 @@ export async function createRealm({
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
       ),
+    transpileCoordinator,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
