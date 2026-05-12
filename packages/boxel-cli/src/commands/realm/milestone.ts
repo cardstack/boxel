@@ -4,6 +4,7 @@ import {
   CheckpointManager,
   type Checkpoint,
 } from '../../lib/checkpoint-manager';
+import { cliLog } from '../../lib/cli-log';
 import { findCheckpoint } from '../../lib/find-checkpoint';
 import {
   BOLD,
@@ -343,7 +344,7 @@ export function registerMilestoneCommand(realm: Command): void {
       });
 
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        cliLog.output(JSON.stringify(result, null, 2));
         if (!result.ok) process.exit(1);
         return;
       }

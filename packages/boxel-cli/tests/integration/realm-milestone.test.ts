@@ -74,7 +74,12 @@ describe('realm milestone (integration)', () => {
     });
 
     it('returns error for non-existent directory', async () => {
-      const result = await realmMilestone('/tmp/no-such-dir-boxel-milestone');
+      const missing = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'boxel-milestone-missing-'),
+      );
+      fs.rmSync(missing, { recursive: true, force: true });
+
+      const result = await realmMilestone(missing);
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/directory not found/i);
     });
