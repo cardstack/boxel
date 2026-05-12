@@ -134,7 +134,10 @@ describe('realm milestone (integration)', () => {
       const cm = new CheckpointManager(workspaceDir);
       await makeCheckpoint(cm, 'a.gts', 'a');
 
-      const result = await realmMilestone(workspaceDir, { mark: '1', name: '   ' });
+      const result = await realmMilestone(workspaceDir, {
+        mark: '1',
+        name: '   ',
+      });
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/--name must not be empty/i);
     });
@@ -143,13 +146,19 @@ describe('realm milestone (integration)', () => {
       const cm = new CheckpointManager(workspaceDir);
       await makeCheckpoint(cm, 'a.gts', 'a');
 
-      const result = await realmMilestone(workspaceDir, { mark: '99', name: 'nope' });
+      const result = await realmMilestone(workspaceDir, {
+        mark: '99',
+        name: 'nope',
+      });
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/not found/i);
     });
 
     it('returns error when no checkpoint history exists', async () => {
-      const result = await realmMilestone(workspaceDir, { mark: '1', name: 'x' });
+      const result = await realmMilestone(workspaceDir, {
+        mark: '1',
+        name: 'x',
+      });
       expect(result.ok).toBe(false);
       expect(result.error).toMatch(/no checkpoint history/i);
     });

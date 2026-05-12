@@ -103,7 +103,10 @@ async function resolveRef(
     }
     return { ok: true, target: found.target };
   } catch (e) {
-    return { ok: false, error: `Failed to read checkpoints: ${errorMessage(e)}` };
+    return {
+      ok: false,
+      error: `Failed to read checkpoints: ${errorMessage(e)}`,
+    };
   }
 }
 
@@ -121,7 +124,10 @@ async function listMilestonesStep(
     const milestones = await manager.getMilestones();
     return { ok: true, milestones };
   } catch (e) {
-    return { ok: false, error: `Failed to read milestones: ${errorMessage(e)}` };
+    return {
+      ok: false,
+      error: `Failed to read milestones: ${errorMessage(e)}`,
+    };
   }
 }
 
@@ -143,14 +149,23 @@ async function markMilestoneStep(
 
   try {
     const manager = new CheckpointManager(workspaceDir);
-    const result = await manager.markMilestone(resolved.target.hash, trimmedName);
+    const result = await manager.markMilestone(
+      resolved.target.hash,
+      trimmedName,
+    );
     if (!result) {
-      return { ok: false, error: 'Could not mark milestone. The checkpoint may already have one.' };
+      return {
+        ok: false,
+        error: 'Could not mark milestone. The checkpoint may already have one.',
+      };
     }
     const checkpoints = await manager.getCheckpoints(limit);
     const marked = checkpoints.find((cp) => cp.hash === resolved.target.hash);
     if (!marked) {
-      return { ok: false, error: 'Milestone created but checkpoint could not be re-read.' };
+      return {
+        ok: false,
+        error: 'Milestone created but checkpoint could not be re-read.',
+      };
     }
     return { ok: true, marked };
   } catch (e) {
@@ -182,7 +197,10 @@ async function removeMilestoneStep(
     const success = await manager.unmarkMilestone(target.hash);
     return { ok: true, removed: success };
   } catch (e) {
-    return { ok: false, error: `Failed to remove milestone: ${errorMessage(e)}` };
+    return {
+      ok: false,
+      error: `Failed to remove milestone: ${errorMessage(e)}`,
+    };
   }
 }
 
@@ -195,7 +213,10 @@ export async function realmMilestone(
   options: MilestoneOptions = {},
 ): Promise<MilestoneResult> {
   if (options.mark !== undefined && options.remove !== undefined) {
-    return { ok: false, error: 'Only one of --mark or --remove may be specified.' };
+    return {
+      ok: false,
+      error: 'Only one of --mark or --remove may be specified.',
+    };
   }
   if (
     options.limit !== undefined &&
@@ -209,17 +230,28 @@ export async function realmMilestone(
     if (options.name === undefined) {
       return { ok: false, error: '--name is required when using --mark.' };
     }
-    const r = await markMilestoneStep(workspaceDir, options.mark, options.name, limit);
-    return r.ok ? { ok: true, marked: r.marked } : { ok: false, error: r.error };
+    const r = await markMilestoneStep(
+      workspaceDir,
+      options.mark,
+      options.name,
+      limit,
+    );
+    return r.ok
+      ? { ok: true, marked: r.marked }
+      : { ok: false, error: r.error };
   }
 
   if (options.remove !== undefined) {
     const r = await removeMilestoneStep(workspaceDir, options.remove, limit);
-    return r.ok ? { ok: true, removed: r.removed } : { ok: false, error: r.error };
+    return r.ok
+      ? { ok: true, removed: r.removed }
+      : { ok: false, error: r.error };
   }
 
   const r = await listMilestonesStep(workspaceDir);
-  return r.ok ? { ok: true, milestones: r.milestones } : { ok: false, error: r.error };
+  return r.ok
+    ? { ok: true, milestones: r.milestones }
+    : { ok: false, error: r.error };
 }
 
 function printMilestones(milestones: Checkpoint[], workspaceDir: string): void {
@@ -325,7 +357,9 @@ export function registerMilestoneCommand(realm: Command): void {
         console.log(
           `\n${FG_GREEN}✓${RESET} ${FG_YELLOW}⭐${RESET} Milestone created: ${FG_MAGENTA}${cp.milestoneName}${RESET}`,
         );
-        console.log(`  Checkpoint: ${FG_YELLOW}${cp.shortHash}${RESET} ${cp.message}`);
+        console.log(
+          `  Checkpoint: ${FG_YELLOW}${cp.shortHash}${RESET} ${cp.message}`,
+        );
         console.log();
         return;
       }
