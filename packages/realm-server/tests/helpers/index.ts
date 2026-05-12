@@ -208,7 +208,7 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: null,
+  includePrerenderedDefaultRealmIndex: false,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
