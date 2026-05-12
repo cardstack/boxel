@@ -85,9 +85,9 @@ describe('ProfileManager', () => {
       fs.readFileSync(path.join(tmpDir, 'profiles.json'), 'utf-8'),
     );
     expect(onDisk.profiles['@testuser:stack.cards'].password).toBeUndefined();
-    expect(
-      onDisk.profiles['@testuser:stack.cards'].matrixAccessToken,
-    ).toBe('token-for-@testuser:stack.cards');
+    expect(onDisk.profiles['@testuser:stack.cards'].matrixAccessToken).toBe(
+      'token-for-@testuser:stack.cards',
+    );
   });
 
   it('addProfile rejects when Matrix returns a different userId than the matrixId', async () => {
@@ -124,18 +124,15 @@ describe('ProfileManager', () => {
     manager.setRealmServerToken('cached-server-token');
     manager.setRealmToken('https://realms-staging.stack.cards/r/', 'realm-jwt');
 
-    await manager.addProfileWithAuth(
-      '@bob:stack.cards',
-      {
-        ...fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
-        accessToken: 'new-token',
-      },
-    );
+    await manager.addProfileWithAuth('@bob:stack.cards', {
+      ...fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+      accessToken: 'new-token',
+    });
 
     expect(manager.getRealmServerToken()).toBe('cached-server-token');
-    expect(
-      manager.getRealmToken('https://realms-staging.stack.cards/r/'),
-    ).toBe('realm-jwt');
+    expect(manager.getRealmToken('https://realms-staging.stack.cards/r/')).toBe(
+      'realm-jwt',
+    );
     const profile = manager.getProfile('@bob:stack.cards')!;
     expect(profile.matrixAccessToken).toBe('new-token');
   });
