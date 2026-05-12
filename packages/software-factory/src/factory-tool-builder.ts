@@ -162,6 +162,15 @@ export function buildFactoryTools(
   ];
 
   // Wrap registered realm-api manifests (currently just `realm-create`).
+  // Tracker-schema cards (Project / IssueTracker / Issue / KnowledgeArticle /
+  // Spec / issue comments) used to have dedicated wrapper tools here that
+  // auto-constructed the JSON:API document, enforced Issue-description
+  // immutability, etc. CS-10883 retired all five; the agent now writes
+  // those `.json` files directly via `Write`. The shapes and invariants are
+  // taught in the `software-factory-bootstrap` and
+  // `software-factory-operations` skills, with the live
+  // `darkfactoryModuleUrl` named in the system prompt for
+  // `adoptsFrom.module`.
   for (let manifest of toolRegistry.getManifests()) {
     if (manifest.category === 'realm-api') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));
@@ -227,7 +236,7 @@ function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
       'definition by its CodeRef. Returns `{ attributes, relationships? }` ' +
       'with field names, types, and enum values introspected from the ' +
       'actual `CardDef` at runtime — never hard-coded. Use this BEFORE ' +
-      'writing a tracker JSON file (Project, Issue, KnowledgeArticle, ' +
+      'writing a tracker JSON file (Project, IssueTracker, Issue, KnowledgeArticle, ' +
       'Spec, etc.) so the document you write matches the live schema, ' +
       'even when the schema evolves. Schemas are fetched via the realm ' +
       'server prerenderer (the same path the AI Bot uses) and cached ' +

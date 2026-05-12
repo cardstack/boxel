@@ -30,16 +30,16 @@ import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GenerateThumbnailCommandModule from './generate-thumbnail';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
-import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
+import * as GetAvailableRealmIdentifiersCommandModule from './get-available-realm-identifiers';
 import * as GetCardCommandModule from './get-card';
 import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
-import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
+import * as GetCatalogRealmIdentifiersCommandModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
-import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
+import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
-import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
+import * as InvalidateRealmIdentifiersCommandModule from './invalidate-realm-identifiers';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -96,6 +96,19 @@ import * as CommandUtilsModule from './utils';
 import * as ValidateRealmCommandModule from './validate-realm';
 import * as WriteBinaryFileCommandModule from './write-binary-file';
 import * as WriteTextFileCommandModule from './write-text-file';
+
+// Deprecated URL-flavored aliases kept for backwards compatibility with
+// boxel-skills/boxel-catalog cards still referencing the old module
+// paths. Each module is a thin re-export of its renamed counterpart.
+// Remove this block (imports + shimModule calls below + the .ts files
+// themselves) once downstream consumers have been on the renamed paths
+// for at least one release. Tracked by CS-11046.
+/* eslint-disable import/order */
+import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
+import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
+import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
+import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
+/* eslint-enable import/order */
 
 import type HostBaseCommand from '../lib/host-base-command';
 
@@ -193,8 +206,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     InviteUserToRoomCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invalidate-realm-urls',
-    InvalidateRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/invalidate-realm-identifiers',
+    InvalidateRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -437,12 +450,12 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetAllRealmMetasCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-available-realm-urls',
-    GetAvailableRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/get-available-realm-identifiers',
+    GetAvailableRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
-    GetCatalogRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/get-catalog-realm-identifiers',
+    GetCatalogRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/can-read-realm',
@@ -453,8 +466,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetDefaultWritableRealmCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-url',
-    GetRealmOfUrlCommandModule,
+    '@cardstack/boxel-host/commands/get-realm-of-resource-identifier',
+    GetRealmOfResourceIdentifierCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/sanitize-module-list',
@@ -488,6 +501,25 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     '@cardstack/boxel-host/commands/set-user-system-card',
     SetUserSystemCardCommandModule,
   );
+
+  // Deprecated URL-flavored aliases — see the import-block comment for
+  // these modules above. Tracked by CS-11046.
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-realm-of-url',
+    GetRealmOfUrlCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-available-realm-urls',
+    GetAvailableRealmUrlsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
+    GetCatalogRealmUrlsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/invalidate-realm-urls',
+    InvalidateRealmUrlsCommandModule,
+  );
 }
 
 // Note - this is used for the tests
@@ -514,16 +546,16 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateThumbnailCommandModule.default,
   ScreenshotCardCommandModule.default,
   GetAllRealmMetasCommandModule.default,
-  GetAvailableRealmUrlsCommandModule.default,
+  GetAvailableRealmIdentifiersCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
-  GetCatalogRealmUrlsCommandModule.default,
+  GetCatalogRealmIdentifiersCommandModule.default,
   GetCardCommandModule.default,
-  GetRealmOfUrlCommandModule.default,
+  GetRealmOfResourceIdentifierCommandModule.default,
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
-  InvalidateRealmUrlsCommandModule.default,
+  InvalidateRealmIdentifiersCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,

@@ -296,12 +296,14 @@ type ModuleLoadResult =
       canonicalPath: LocalPath;
       headers: Record<string, string>;
     }
-  | {
-      kind: 'module';
-      canonicalPath: LocalPath;
-      body: string;
-      headers: Record<string, string>;
-    };
+  | ModuleTranspileResult;
+
+type ModuleTranspileResult = {
+  kind: 'module';
+  canonicalPath: LocalPath;
+  body: string;
+  headers: Record<string, string>;
+};
 
 // ETag base prefers a content fingerprint (md5 of the file body) over
 // `lastModified` because the unix-second timestamp collides for two
@@ -570,6 +572,39 @@ export class Realm {
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
   #moduleCache = new AliasCache<ModuleCacheEntry>();
+  // CS-11028: per-path generation counters for #moduleCache. Bumped
+  // synchronously by invalidateCache(path) before any await. fallbackHandle
+  // snapshots at entry and discards its post-transpile cache write if the
+  // path's generation moved during the in-flight transpile — otherwise the
+  // pre-invalidation bytes would re-populate the slot that invalidate just
+  // cleared and serve stale code until the next invalidate of that path.
+  // #moduleCacheGlobalGeneration covers __testOnlyClearCaches, which wipes
+  // the whole map; a snapshot taken before the wipe sees its `path`
+  // component reset to 0 alongside the live counter, so a global generation
+  // is the only thing that reliably mismatches afterwards.
+  #moduleCacheGenerations: Map<LocalPath, number> = new Map();
+  #moduleCacheGlobalGeneration = 0;
+  // CS-11029: in-process inflight dedup for the transpile pipeline.
+  // Concurrent same-path callers that miss #moduleCache used to each call
+  // transpileJS independently — 50–500 ms of babel + ember-template-
+  // compilation + decorator transforms wasted per duplicate. The map is
+  // keyed by local path so the second-and-onward caller awaits the first
+  // caller's promise instead of running babel again. Invalidation paths
+  // (writeMany, invalidateCache, the full-index clear, etc.) drop the
+  // entry through the shared #dropModuleCacheEntry /
+  // #dropAllModuleCacheEntries helpers so post-invalidate callers don't
+  // join a stale transpile whose #moduleCache.set will be discarded by
+  // CS-11028's generation guard anyway. Identity-checked cleanup on
+  // settle is the same shape as CachingDefinitionLookup's #inFlight — a
+  // newer pending entry installed after a drop survives an older
+  // promise's eventual settle.
+  #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
+    new Map();
+  // Monotonic count of transpileJS invocations, used by the CS-11029
+  // dedup tests to assert that N concurrent same-path readers triggered
+  // exactly one transpile call. Reset by __testOnlyClearCaches so each
+  // test reasons from a clean baseline.
+  #transpileCallCount = 0;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -927,7 +962,7 @@ export class Realm {
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
       await this.#definitionLookup.clearRealmCache(this.url);
-      this.#moduleCache.clear();
+      this.#dropAllModuleCacheEntries();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1224,8 +1259,34 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#moduleCache.clear();
+    this.#dropAllModuleCacheEntries();
+    // Reset the transpile counter so each test reasons about its own
+    // delta. Production never reads this counter — only the CS-11029
+    // dedup tests do (CS-11029).
+    this.#transpileCallCount = 0;
   }
+
+  // CS-11029 test seams: tests need to assert "N concurrent same-path
+  // readers triggered exactly one transpile" and "the in-flight slot
+  // released after the shared transpile settled." Exposing the
+  // monotonic counter + the live map size is the smallest surface that
+  // satisfies both — no externally-observable behavior changes.
+  __testOnlyGetTranspileCallCount(): number {
+    return this.#transpileCallCount;
+  }
+  __testOnlyGetInFlightTranspileCount(): number {
+    return this.#inFlightTranspiles.size;
+  }
+  // Test-only gate: when set, #materializeAndTranspile awaits the
+  // returned promise before calling transpileJS. Lets the dedup tests
+  // park a transpile mid-flight so they can observe inflight state
+  // without racing real .gts transpile timing in CI. The hook fires
+  // BEFORE #transpileCallCount is bumped — when the count rises, the
+  // gate has released and babel is running.
+  __testOnlyDelayTranspile(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlyTranspileDelay = fn;
+  }
+  #testOnlyTranspileDelay?: () => Promise<void>;
 
   // Invalidate the in-memory byte caches for a single path. Called by the
   // realm_file_changes LISTEN handler on peer instances after a write lands
@@ -1236,8 +1297,93 @@ export class Realm {
   invalidateCache(path: LocalPath): void {
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
+      this.#dropModuleCacheEntry(path);
     }
+  }
+
+  // CS-11028: shared drop helper for any in-process site that invalidates a
+  // single #moduleCache entry — writeMany, delete/deleteAll, the local
+  // file-watcher callback, the index-updater's executable-invalidation
+  // cascade, the public invalidateCache entry point, etc. Bumps the
+  // per-path generation BEFORE the cache delete so a concurrent in-flight
+  // transpile for the same path — already past its generation snapshot in
+  // fallbackHandle — observes the new value at persist time and drops its
+  // #moduleCache.set instead of re-filling the slot we're about to empty.
+  #dropModuleCacheEntry(path: LocalPath): void {
+    this.#bumpModuleCacheGeneration(path);
+    this.#moduleCache.invalidate(path);
+    // CS-11029: drop the in-flight transpile entry too. Existing
+    // waiters on the old promise still receive its result — their
+    // requests preceded the invalidate, so pre-invalidation bytes are
+    // the correct response. But a caller arriving AFTER this point
+    // must not join the stale transpile (its #moduleCache.set is
+    // about to be discarded by the generation guard); they install
+    // their own pending against current source instead.
+    this.#inFlightTranspiles.delete(path);
+  }
+
+  // Wipes every #moduleCache entry and bumps the global generation so any
+  // in-flight transpile whose snapshot was taken before this wipe discards
+  // its post-transpile cache write rather than re-populating the
+  // just-cleared map (CS-11028). The per-path map is cleared because the
+  // generations it held are no longer reachable — the global counter is
+  // what catches in-flight snapshots after a wipe.
+  #dropAllModuleCacheEntries(): void {
+    this.#moduleCache.clear();
+    this.#moduleCacheGenerations.clear();
+    this.#moduleCacheGlobalGeneration += 1;
+    // CS-11029: same reason as #dropModuleCacheEntry — post-wipe
+    // callers must not join a stale transpile.
+    this.#inFlightTranspiles.clear();
+  }
+
+  #bumpModuleCacheGeneration(path: LocalPath): void {
+    this.#moduleCacheGenerations.set(
+      path,
+      (this.#moduleCacheGenerations.get(path) ?? 0) + 1,
+    );
+  }
+
+  // Snapshot generations for every path the in-flight request could end
+  // up resolving to. fallbackHandle hands us the request's localPath
+  // (e.g. "foo"), but loadModuleFromDisk's getFileWithFallbacks may
+  // resolve to "foo" or to "foo.<ext>" for each executable extension —
+  // and invalidateCache fires against the canonical (with-extension)
+  // path. Snapshotting only "foo" would let an invalidate of "foo.gts"
+  // bump the canonical's generation while leaving the snapshotted
+  // "foo" gen unchanged, so the post-await check would miss the race
+  // and re-populate the "foo" alias with pre-invalidation bytes. By
+  // snapshotting all candidates here and letting the post-await check
+  // key on result.canonicalPath, we catch the race whether the request
+  // was extensionless or not.
+  #snapshotModuleCacheGeneration(localPath: LocalPath): {
+    pathGens: Map<LocalPath, number>;
+    global: number;
+  } {
+    let pathGens = new Map<LocalPath, number>();
+    pathGens.set(localPath, this.#moduleCacheGenerations.get(localPath) ?? 0);
+    if (!hasExecutableExtension(localPath)) {
+      for (let ext of executableExtensions) {
+        let candidate = localPath + ext;
+        pathGens.set(
+          candidate,
+          this.#moduleCacheGenerations.get(candidate) ?? 0,
+        );
+      }
+    }
+    return { pathGens, global: this.#moduleCacheGlobalGeneration };
+  }
+
+  #moduleCacheGenerationChanged(
+    canonicalPath: LocalPath,
+    snapshot: { pathGens: Map<LocalPath, number>; global: number },
+  ): boolean {
+    if (this.#moduleCacheGlobalGeneration !== snapshot.global) {
+      return true;
+    }
+    let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
+    let curGen = this.#moduleCacheGenerations.get(canonicalPath) ?? 0;
+    return curGen !== snapGen;
   }
 
   // Broadcast a file-change notification to peer realm-server instances so
@@ -1395,10 +1541,7 @@ export class Realm {
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       (isNewFile ? addedFiles : updatedFiles).push(path);
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
       await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
@@ -1876,10 +2019,7 @@ export class Realm {
       removed: [path],
       realmURL: this.url,
     });
-    this.#sourceCache.invalidate(path);
-    if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
-    }
+    this.invalidateCache(path);
     await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
@@ -1900,10 +2040,7 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
       removePromises.push(this.#adapter.remove(path));
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
     }
 
     await Promise.all(trackPromises);
@@ -2231,6 +2368,26 @@ export class Realm {
       }
     }
 
+    // CS-11028: snapshot module-cache generations BEFORE the first await
+    // for every candidate path getFileWithFallbacks could resolve to
+    // (localPath plus each executable-extension fallback when the
+    // request is extensionless). invalidateCache(path) bumps the
+    // counter synchronously, so if it fires while loadModuleFromDisk
+    // is in-flight (typically 50–500 ms for a .gts transpile) the
+    // post-await comparison against result.canonicalPath's snapshotted
+    // gen catches the race and we skip the cache write — otherwise the
+    // pre-invalidation bytes we just produced would re-fill the slot
+    // invalidate just cleared. Checking by canonicalPath rather than
+    // localPath is what makes the discard work for extensionless alias
+    // requests (e.g. /foo → loadModuleFromDisk returns foo.gts);
+    // invalidateCache targets the canonical, so the gen we need to
+    // compare against is the canonical's. We still serve our own
+    // response: it reflects the source A read at request time, which
+    // is consistent with the caller's happens-before ordering.
+    let cacheGenSnapshot = moduleCachingDisabled
+      ? undefined
+      : this.#snapshotModuleCacheGeneration(localPath);
+
     let response: ResponseWithNodeStream;
     try {
       let result = await this.loadModuleFromDisk(
@@ -2240,7 +2397,14 @@ export class Realm {
       );
       switch (result.kind) {
         case 'module': {
-          if (!moduleCachingDisabled) {
+          if (
+            !moduleCachingDisabled &&
+            cacheGenSnapshot &&
+            !this.#moduleCacheGenerationChanged(
+              result.canonicalPath,
+              cacheGenSnapshot,
+            )
+          ) {
             this.#moduleCache.set(localPath, {
               canonicalPath: result.canonicalPath,
               body: result.body,
@@ -2355,6 +2519,49 @@ export class Realm {
       };
     }
 
+    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+  }
+
+  // Dedups the materialize + transpile pipeline across concurrent
+  // same-path callers (CS-11029). The first caller installs a pending
+  // promise keyed by localPath; any caller that arrives while it's
+  // in-flight returns the same promise instead of running babel a
+  // second time. Identity-checked cleanup on settle mirrors
+  // CachingDefinitionLookup.#inFlight — a newer pending entry installed
+  // after invalidateCache drops the slot is preserved when the older
+  // promise eventually settles.
+  async #transpileModuleDeduped(
+    localPath: LocalPath,
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let existing = this.#inFlightTranspiles.get(localPath);
+    if (existing) {
+      return existing;
+    }
+    // Assign the chained `.finally` to `pending` and store/return THAT
+    // (not the raw `#materializeAndTranspile` promise). If we kept the
+    // raw promise in the map and dangled an unused `.finally(...)`
+    // chain, a rejection from transpileJS would propagate through both
+    // promises but only the raw one has waiters — the chained one would
+    // surface as an unhandled rejection in Node's host hook. Same shape
+    // as CachingDefinitionLookup.#inFlight.
+    let pending: Promise<ModuleTranspileResult>;
+    let core = this.#materializeAndTranspile(fileRef, etag);
+    pending = core.finally(() => {
+      if (this.#inFlightTranspiles.get(localPath) === pending) {
+        this.#inFlightTranspiles.delete(localPath);
+      }
+    });
+    this.#inFlightTranspiles.set(localPath, pending);
+    return pending;
+  }
+
+  async #materializeAndTranspile(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let fileWithContent = await this.materializeFileRef(fileRef);
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
@@ -2367,6 +2574,10 @@ export class Realm {
       let debugFilename = fileWithContent.path.startsWith('/')
         ? fileWithContent.path
         : `/${fileWithContent.path}`;
+      if (this.#testOnlyTranspileDelay) {
+        await this.#testOnlyTranspileDelay();
+      }
+      this.#transpileCallCount += 1;
       transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
@@ -2894,7 +3105,7 @@ export class Realm {
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         let invalidatedPath = this.paths.local(invalidatedURL);
-        this.#moduleCache.invalidate(invalidatedPath);
+        this.#dropModuleCacheEntry(invalidatedPath);
         changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
@@ -2907,7 +3118,7 @@ export class Realm {
       for (let invalidatedModuleURL of invalidatedModuleURLs) {
         try {
           let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
-          this.#moduleCache.invalidate(invalidatedPath);
+          this.#dropModuleCacheEntry(invalidatedPath);
           changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         } catch (_err) {
           // ignore invalidations outside this realm
@@ -2919,7 +3130,7 @@ export class Realm {
       this.moduleCacheDependencyEntries(),
     );
     for (let invalidatedPath of dependentInvalidations) {
-      this.#moduleCache.invalidate(invalidatedPath);
+      this.#dropModuleCacheEntry(invalidatedPath);
     }
   }
 
@@ -5547,10 +5758,9 @@ export class Realm {
       }
 
       let localPath = this.paths.local(tracked.url);
-      this.#sourceCache.invalidate(localPath);
+      this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
-        this.#moduleCache.invalidate(localPath);
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 

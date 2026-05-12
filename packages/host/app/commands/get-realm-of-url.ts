@@ -1,35 +1,5 @@
-import { service } from '@ember/service';
-
-import { rri } from '@cardstack/runtime-common';
-
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
-import HostBaseCommand from '../lib/host-base-command';
-
-import type RealmService from '../services/realm';
-
-export default class GetRealmOfUrlCommand extends HostBaseCommand<
-  typeof BaseCommandModule.GetRealmOfUrlInput,
-  typeof BaseCommandModule.GetRealmOfUrlResult
-> {
-  @service declare private realm: RealmService;
-
-  description = 'Get the realm URL that contains a given URL';
-
-  async getInputType() {
-    let commandModule = await this.loadCommandModule();
-    const { GetRealmOfUrlInput } = commandModule;
-    return GetRealmOfUrlInput;
-  }
-
-  requireInputFields = ['url'];
-
-  protected async run(
-    input: BaseCommandModule.GetRealmOfUrlInput,
-  ): Promise<BaseCommandModule.GetRealmOfUrlResult> {
-    let commandModule = await this.loadCommandModule();
-    const { GetRealmOfUrlResult } = commandModule;
-    const realmUrl = this.realm.realmOf(rri(input.url));
-    return new GetRealmOfUrlResult({ realmUrl: realmUrl ?? '' });
-  }
-}
+// Deprecated alias kept for backwards compatibility with cards still
+// referencing the old URL-flavored module path. Remove once all
+// downstream consumers have been on the renamed path for at least one
+// release. Tracked by CS-11046.
+export { default } from './get-realm-of-resource-identifier';

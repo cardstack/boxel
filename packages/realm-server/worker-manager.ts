@@ -1,5 +1,26 @@
 import './instrument';
 import './setup-logger'; // This should be first
+
+// During `mise dev-all` Ctrl-C, the bash trap walks the process tree
+// deepest-first. The `dev-log-tee` reader on this process's stdout/stderr
+// can die before this process gets SIGTERM, so any subsequent `log.info` /
+// `console.error` write throws EPIPE. Without these listeners, EPIPE
+// surfaces as an uncaughtException; the existing uncaughtException
+// handler then calls `log.error`, which writes to the same dead stream
+// and throws *again*. Node delivers the throw inside an uncaughtException
+// handler as the next pending exception, so V8 hot-loops re-reporting it
+// (uv__run_check → CheckImmediate → InspectorConsoleCall → Error.stack
+// formatting via ts-node) at ~100% CPU until the process is SIGKILLed —
+// CS-11084. Swallowing EPIPE at the stream level breaks the loop and
+// lets normal SIGTERM-driven shutdown finish.
+const swallowEpipe = (err: NodeJS.ErrnoException) => {
+  if (err?.code !== 'EPIPE') {
+    throw err;
+  }
+};
+process.stdout.on('error', swallowEpipe);
+process.stderr.on('error', swallowEpipe);
+
 import {
   logger,
   userInitiatedPriority,
@@ -51,6 +72,14 @@ const runtimeMetadataFile =
 function writeRuntimeMetadata(payload: unknown): void {
   writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);
 }
+
+const WORKER_START_TIMEOUT_MS = (() => {
+  let parsed = Number.parseInt(
+    process.env.TEST_HARNESS_WORKER_START_TIMEOUT_MS ?? '',
+    10,
+  );
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
+})();
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -889,11 +918,13 @@ async function startWorker(
         }
       });
     }),
-    new Promise<true>((r) => setTimeout(() => r(true), 30_000).unref()),
+    new Promise<true>((r) =>
+      setTimeout(() => r(true), WORKER_START_TIMEOUT_MS).unref(),
+    ),
   ]);
   if (timeout) {
     console.error(
-      `timed-out waiting for worker ${name} to start. Stopping worker manager`,
+      `timed-out waiting for worker ${name} to start after ${WORKER_START_TIMEOUT_MS}ms. Stopping worker manager`,
     );
     process.exit(-2);
   }

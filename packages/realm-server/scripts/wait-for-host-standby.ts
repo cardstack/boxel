@@ -1,0 +1,131 @@
+// Dev-only probe: assert the host's `/_standby` route is browser-loadable
+// AND that Ember has booted far enough to render the route's
+// `#standby-ready` marker — the same two-phase check the real prerender's
+// `#loadStandbyPage` in page-pool.ts performs.
+//
+// Without this gate, the prerender launches while vite is still
+// cold-bundling the host's ~1000-package dep graph. Puppeteer's first
+// `/_standby` navigation inside the prerender then blocks on the in-flight
+// bundle, hits the 30s per-attempt navigation timeout, and the page pool's
+// retry budget is exhausted long before the optimizer finishes — leaving
+// the prerender unable to render any card. Every indexing job that
+// follows fails with "No standby page available," and recovery needs an
+// operator to manually restart the service. The hosted environment serves
+// a pre-built bundle with no optimizer phase, so this probe is dev-only.
+//
+// `domcontentloaded` alone is NOT a sufficient signal. Vite serves the
+// `/_standby` HTML shell as soon as its HTTP server is up — long before
+// the optimizer has bundled the Ember runtime + app graph the page tries
+// to import. Puppeteer treats that bare shell as a successful navigation,
+// so a probe that stops there returns "ready" while Ember is still
+// crashing on unresolved imports. We instead wait for `#standby-ready`,
+// which is rendered by the `/_standby` route's template and therefore
+// only present once Ember has booted and the router has resolved.
+//
+// We don't extend the page pool's retry budget to cover this: it's a dev
+// concern and stretching production's failure-detection window would mask
+// real prerender problems in the hosted environment. Instead we run the
+// same puppeteer navigation the prerender would perform, in a one-shot
+// process whose job is just to wait for vite. Each attempt has the same
+// 30s budget as the prerender; failures retry with exponential backoff
+// (500ms doubling to a 5s cap). The 10-minute overall ceiling guards
+// against a genuinely broken vite — in normal dev that ceiling is never
+// reached.
+
+import puppeteer from 'puppeteer';
+
+const PER_ATTEMPT_TIMEOUT_MS = 30_000;
+const MAX_BACKOFF_MS = 5_000;
+const TOTAL_TIMEOUT_MS = 600_000;
+
+const log = (msg: string) => console.log(`[wait-for-host-standby] ${msg}`);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const elapsedSec = (start: number) => Math.round((Date.now() - start) / 1000);
+
+async function main() {
+  let hostUrl =
+    process.argv[2] || process.env.HOST_URL || 'http://localhost:4200';
+  let standbyUrl = `${hostUrl}/_standby`;
+
+  let launchArgs: string[] = [];
+  if (
+    process.env.CI === 'true' ||
+    process.env.PUPPETEER_DISABLE_SANDBOX === 'true'
+  ) {
+    launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+  }
+
+  log(`probing ${standbyUrl} (max ${TOTAL_TIMEOUT_MS / 1000}s)...`);
+  let start = Date.now();
+
+  let browser = await puppeteer.launch({
+    headless: true,
+    ...(launchArgs.length > 0 ? { args: launchArgs } : {}),
+    ...(process.env.PUPPETEER_EXECUTABLE_PATH
+      ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH }
+      : {}),
+  });
+
+  let attempt = 0;
+  let backoffMs = 500;
+  let success = false;
+  // Cap each phase's timeout to whatever total budget is still left so the
+  // advertised 10-minute ceiling is actually honored — a fresh attempt
+  // started near the deadline would otherwise run for up to
+  // 2×PER_ATTEMPT_TIMEOUT_MS (goto + waitForFunction) past it.
+  let phaseBudgetMs = () =>
+    Math.max(
+      1,
+      Math.min(PER_ATTEMPT_TIMEOUT_MS, TOTAL_TIMEOUT_MS - (Date.now() - start)),
+    );
+  try {
+    while (Date.now() - start < TOTAL_TIMEOUT_MS) {
+      attempt++;
+      let page = await browser.newPage();
+      try {
+        // Mirror page-pool.ts's #loadStandbyPage: each phase gets its own
+        // PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only covers
+        // serving the HTML shell; waiting for Ember to boot and render
+        // `#standby-ready` is a separate clock because on a cold vite
+        // cache the script tag's module fetch can spin while the
+        // optimizer is still bundling its dep graph.
+        let response = await page.goto(standbyUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: phaseBudgetMs(),
+        });
+        let status = response?.status();
+        if (status != null && status >= 400) {
+          throw new Error(`HTTP ${status}`);
+        }
+        await page.waitForFunction(
+          () => !!document.querySelector('#standby-ready'),
+          { timeout: phaseBudgetMs() },
+        );
+        log(`browser-ready after ${elapsedSec(start)}s (attempt ${attempt})`);
+        success = true;
+        break;
+      } catch (e) {
+        let message = e instanceof Error ? e.message : String(e);
+        log(
+          `attempt ${attempt} failed after ${elapsedSec(start)}s: ${message}; retrying in ${backoffMs}ms`,
+        );
+      } finally {
+        await page.close().catch(() => {});
+      }
+      await sleep(backoffMs);
+      backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+
+  if (!success) {
+    log(`ERROR: /_standby not browser-ready after ${elapsedSec(start)}s`);
+    process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error('[wait-for-host-standby] unexpected failure:', err);
+  process.exit(1);
+});

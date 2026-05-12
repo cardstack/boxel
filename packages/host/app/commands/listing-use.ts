@@ -39,9 +39,9 @@ export default class ListingUseCommand extends HostBaseCommand<
 
     const listing = listingInput as Listing;
 
-    let { realmUrl } = await new ValidateRealmCommand(
+    let { realmIdentifier } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmUrl: realm });
+    ).execute({ realmIdentifier: realm });
 
     const specsToCopy = listing.specs ?? [];
     const specsWithoutFields = specsToCopy.filter(
@@ -64,7 +64,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       let card = new Klass({}) as CardAPI.CardDef;
       await new SaveCardCommand(this.commandContext).execute({
         card,
-        realm: realmUrl,
+        realm: realmIdentifier,
         localDir,
       });
     }
@@ -76,7 +76,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       for (const card of sourceCards) {
         await new CopyCardToRealmCommand(this.commandContext).execute({
           sourceCard: card,
-          targetRealm: realmUrl,
+          targetRealm: realmIdentifier,
           localDir,
         });
       }
@@ -87,7 +87,7 @@ export default class ListingUseCommand extends HostBaseCommand<
         listing.skills.map((skill: Skill) =>
           new CopyCardToRealmCommand(this.commandContext).execute({
             sourceCard: skill,
-            targetRealm: realmUrl,
+            targetRealm: realmIdentifier,
             localDir,
           }),
         ),

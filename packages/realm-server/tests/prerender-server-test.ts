@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
+import sinon from 'sinon';
 
 import {
   closeServer,
@@ -559,6 +560,73 @@ module(basename(__filename), function () {
         prerenderer.getWarmAffinities().length >= beforeWarm.length,
         'warm affinity list does not shrink',
       );
+    });
+
+    test('heartbeat capacity tracks the live pool capacity', async function (assert) {
+      let previousMin = process.env.PRERENDER_PAGE_POOL_MIN;
+      let previousMax = process.env.PRERENDER_PAGE_POOL_MAX;
+      let previousManagerURL = process.env.PRERENDER_MANAGER_URL;
+      let previousInterval = process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
+      let originalFetch = global.fetch;
+      let fetchStub = sinon
+        .stub(global, 'fetch')
+        .resolves(new Response(null, { status: 204 }));
+      process.env.PRERENDER_PAGE_POOL_MIN = '2';
+      process.env.PRERENDER_PAGE_POOL_MAX = '6';
+      process.env.PRERENDER_MANAGER_URL = 'http://127.0.0.1:4999';
+      process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = '60000';
+
+      let server = createPrerenderHttpServer({
+        maxPages: 5,
+        fatalExitOnUncaught: false,
+      });
+
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(0, '127.0.0.1', () => resolve());
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        let heartbeatCall = fetchStub.getCalls().find((call) => {
+          let raw = call.args[0];
+          let url = typeof raw === 'string' ? raw : raw.toString();
+          return url.endsWith('/prerender-servers');
+        });
+        assert.ok(heartbeatCall, 'heartbeat posted to the prerender manager');
+        let body = JSON.parse(String(heartbeatCall!.args[1]?.body));
+        assert.strictEqual(
+          body.data.attributes.capacity,
+          2,
+          'heartbeat reports PRERENDER_PAGE_POOL_MIN as the initial live capacity',
+        );
+      } finally {
+        await closeServer(server);
+        fetchStub.restore();
+        global.fetch = originalFetch;
+
+        if (previousMin === undefined) {
+          delete process.env.PRERENDER_PAGE_POOL_MIN;
+        } else {
+          process.env.PRERENDER_PAGE_POOL_MIN = previousMin;
+        }
+        if (previousMax === undefined) {
+          delete process.env.PRERENDER_PAGE_POOL_MAX;
+        } else {
+          process.env.PRERENDER_PAGE_POOL_MAX = previousMax;
+        }
+        if (previousManagerURL === undefined) {
+          delete process.env.PRERENDER_MANAGER_URL;
+        } else {
+          process.env.PRERENDER_MANAGER_URL = previousManagerURL;
+        }
+        if (previousInterval === undefined) {
+          delete process.env.PRERENDER_HEARTBEAT_INTERVAL_MS;
+        } else {
+          process.env.PRERENDER_HEARTBEAT_INTERVAL_MS = previousInterval;
+        }
+      }
     });
 
     test('reports per-affinity vacancy for warm-vacancy-first routing', async function (assert) {

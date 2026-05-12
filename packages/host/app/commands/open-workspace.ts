@@ -7,7 +7,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class OpenWorkspaceCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RealmUrlCard
+  typeof BaseCommandModule.RealmIdentifierCard
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
@@ -17,21 +17,21 @@ export default class OpenWorkspaceCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { RealmUrlCard } = commandModule;
-    return RealmUrlCard;
+    const { RealmIdentifierCard } = commandModule;
+    return RealmIdentifierCard;
   }
 
-  requireInputFields = ['realmUrl'];
+  requireInputFields = ['realmIdentifier'];
 
   protected async run(
-    input: BaseCommandModule.RealmUrlCard,
+    input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<undefined> {
-    let { realmUrl } = input;
-    if (!realmUrl) {
-      throw new Error('Realm URL is required to open a workspace.');
+    let { realmIdentifier } = input;
+    if (!realmIdentifier) {
+      throw new Error('Realm identifier is required to open a workspace.');
     }
 
-    await this.operatorModeStateService.openWorkspace(realmUrl);
+    await this.operatorModeStateService.openWorkspace(realmIdentifier);
 
     return undefined;
   }

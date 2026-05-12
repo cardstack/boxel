@@ -93,6 +93,15 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
       preferLocal: true,
     });
     expect(syncResult.hasError).toBe(false);
+    let indexed = await client.waitForFile(
+      realm.realmURL.href,
+      'Issues/bootstrap-seed.json',
+      {
+        pollMs: 300,
+        timeoutMs: 30_000,
+      },
+    );
+    expect(indexed).toBe(true);
 
     // Verify the card is readable with correct fields
     let issueResponse = await client.authedFetch(

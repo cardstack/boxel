@@ -50,7 +50,7 @@ jobs:
     # extra safety, since the dispatcher is already a trusted operator.
     environment:
       name: observability-production
-      url: https://grafana.boxel.ai
+      url: https://dashboard.boxel.ai
 
     env:
       AWS_REGION: us-east-1
@@ -68,7 +68,7 @@ jobs:
       # packages/observability/grafanactl/config.yaml (see staging workflow
       # for the rationale). The pre-flight check below asserts the expected
       # hostname for paranoia.
-      EXPECTED_GRAFANA_HOSTNAME: grafana.boxel.ai
+      EXPECTED_GRAFANA_HOSTNAME: dashboard.boxel.ai
       GRAFANACTL_VERSION: "0.1.10"
 
     steps:

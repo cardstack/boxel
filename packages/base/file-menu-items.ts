@@ -46,15 +46,15 @@ export function getDefaultFileMenuItems(
     menuItems.push({
       label: 'Copy to Workspace',
       action: async () => {
-        let { newFileUrl } = await new CopyFileToRealmCommand(
+        let { newFileIdentifier } = await new CopyFileToRealmCommand(
           params.commandContext,
         ).execute({
-          sourceFileUrl: fileDefInstance.sourceUrl,
+          sourceFileIdentifier: fileDefInstance.sourceUrl,
           targetRealm: params.menuContextParams.activeRealmURL,
         });
 
         await new ShowFileCommand(params.commandContext).execute({
-          fileUrl: newFileUrl,
+          fileIdentifier: newFileIdentifier,
         });
       },
       icon: ArrowLeft,

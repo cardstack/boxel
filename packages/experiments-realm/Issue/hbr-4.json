@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "Issue",
-        "module": "../issue-tracker"
+        "module": "/software-factory/issue-tracker"
       }
     },
     "type": "card",

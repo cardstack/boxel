@@ -93,6 +93,10 @@ cfg="$(./scripts/render-config.sh "$env_name")"
 #                                              `Authorization: Bearer
 #                                              ${grafana_secret}` in
 #                                              operator-action button panels)
+#   __ENV__               → env_name          (local|staging|production;
+#                                              used in CloudWatch
+#                                              dimension values like
+#                                              "boxel-realm-server-${env}")
 # Local mode uses hardcoded defaults so devs don't need any extra setup.
 rendered="$(mktemp -d -t grafanactl-render.XXXXXX)"
 trap 'rm -f "$cfg"; rm -rf "$rendered"' EXIT
@@ -132,7 +136,7 @@ while IFS= read -r -d '' f; do
   # this is a no-op for any other constant template variable that happens to
   # share a name. Lint enforces grafana_secret == REPLACE_AT_APPLY_TIME on
   # committed JSON, so the guard never spuriously skips a real secret.
-  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" '
+  jq --arg url "$realm_server_url" --arg secret "$grafana_secret" --arg envname "$env_name" '
     walk(
       if type == "object"
          and .name? == "realm_server"
@@ -148,10 +152,54 @@ while IFS= read -r -d '' f; do
       then
         .query = $secret
         | (if .current then .current.value = $secret | .current.text = $secret else . end)
+      elif type == "object"
+         and .name? == "env"
+         and .type? == "constant"
+         and .query? == "__ENV__"
+      then
+        .query = $envname
+        | (if .current then .current.value = $envname | .current.text = $envname else . end)
       else . end
     )
   ' "$f" > "$f.tmp"
   mv "$f.tmp" "$f"
+
+  # Local-only: swap CloudWatch panels for a markdown placeholder. The
+  # committed JSON keeps real CloudWatch queries (so staging/production
+  # apply pushes them unchanged); locally there are no AWS creds, so the
+  # panels would otherwise show "No data" + a query-error triangle that's
+  # indistinguishable from a real broken panel.
+  #
+  # Match by gridPos+datasource.type so we only rewrite top-level panels
+  # (panel targets also carry a `datasource.type: cloudwatch` field but
+  # don't have gridPos). Preserve id, title, and gridPos so layout is
+  # unchanged; replace everything else with a `text` markdown panel.
+  if [[ "$env_name" == "local" ]]; then
+    jq '
+      walk(
+        if type == "object"
+           and (.datasource? | type == "object")
+           and .datasource.type? == "cloudwatch"
+           and (.gridPos? | type == "object")
+        then
+          {
+            id: .id,
+            type: "text",
+            title: .title,
+            gridPos: .gridPos,
+            options: {
+              code: { language: "plaintext", showLineNumbers: false, showMiniMap: false },
+              content: "**☁️ AWS CloudWatch — staging/production only**\n\nThe `boxel-cloudwatch` datasource has no AWS credentials in local dev. ECS resource utilisation (CPU / Memory / Tasks) renders correctly when this dashboard is applied to a hosted Grafana.",
+              mode: "markdown"
+            },
+            pluginVersion: "12.4.3",
+            transparent: false
+          }
+        else . end
+      )
+    ' "$f" > "$f.tmp"
+    mv "$f.tmp" "$f"
+  fi
 done < <(find "$rendered/dashboards" -type f -name '*.json' -print0)
 
 grafanactl \
@@ -170,3 +218,10 @@ grafanactl \
 # guaranteed to exist before the rules land. Local skips this (the
 # docker-compose file mount provisions alerts at container startup).
 ./scripts/apply-alerting.sh --env "$env_name"
+
+# Org-wide default home dashboard — Grafana has no file-provisioning shape
+# for org preferences, so PATCH /api/org/preferences directly. Runs in
+# every env (including local — preferences aren't in the file-provisioning
+# tree). Must run AFTER the dashboards push above so the referenced UID
+# exists when Grafana validates the preference.
+./scripts/apply-home-dashboard.sh --env "$env_name"

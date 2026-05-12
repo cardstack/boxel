@@ -20,21 +20,26 @@ export default class CopySourceCommand extends HostBaseCommand<
     return CopySourceInput;
   }
 
-  requireInputFields = ['originSourceUrl', 'destinationSourceUrl'];
+  requireInputFields = [
+    'originSourceIdentifier',
+    'destinationSourceIdentifier',
+  ];
 
   protected async run(
     input: BaseCommandModule.CopySourceInput,
   ): Promise<BaseCommandModule.CopySourceResult> {
-    const originSourceUrl = new URL(input.originSourceUrl);
-    const destinationSourceUrl = new URL(input.destinationSourceUrl);
+    const originSourceIdentifier = new URL(input.originSourceIdentifier);
+    const destinationSourceIdentifier = new URL(
+      input.destinationSourceIdentifier,
+    );
     let r = await this.cardService.copySource(
-      originSourceUrl,
-      destinationSourceUrl,
+      originSourceIdentifier,
+      destinationSourceIdentifier,
     );
     let commandModule = await this.loadCommandModule();
     const { CopySourceResult } = commandModule;
     if (r.ok && r.url) {
-      return new CopySourceResult({ url: r.url });
+      return new CopySourceResult({ identifier: r.url });
     }
     return new CopySourceResult({});
   }

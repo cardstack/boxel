@@ -277,11 +277,9 @@ export class PagePool {
   // `setCapacity` whenever this changes.
   #maxPages: number;
   // Idle floor — `#maxPages` never goes below this on contraction. When
-  // `PRERENDER_PAGE_POOL_MIN` is unset and the legacy
-  // `PRERENDER_PAGE_POOL_SIZE` (or `options.maxPages`) drives the
+  // `PRERENDER_PAGE_POOL_MIN` is unset, `options.maxPages` drives the
   // configuration, `#minPages === #maxBurstPages === options.maxPages`
-  // → no expansion or contraction, identical to the pre-dynamic
-  // behaviour.
+  // → no expansion or contraction, identical to a fixed-size pool.
   #minPages: number;
   // Burst ceiling reachable by any priority on saturation. Equal to
   // `#minPages` when the legacy fixed-size config drives the pool.
@@ -421,12 +419,11 @@ export class PagePool {
     contractionTickMs?: number;
   }) {
     // Resolve the dynamic-pool envelope. `PRERENDER_PAGE_POOL_MIN` and
-    // `_MAX` are the new dynamic knobs; when either is unset the pool
-    // collapses to a single fixed size (legacy `PRERENDER_PAGE_POOL_SIZE`
-    // / `options.maxPages` behaviour) — `#minPages === #maxBurstPages`
-    // means no expansion or contraction can fire. `_INITIAL` only
-    // matters when MIN < MAX; it's the boot-time count and defaults to
-    // MIN.
+    // `_MAX` are the dynamic knobs; when either is unset the pool
+    // collapses to a single fixed size driven by `options.maxPages` —
+    // `#minPages === #maxBurstPages` means no expansion or contraction
+    // can fire. `_INITIAL` only matters when MIN < MAX; it's the
+    // boot-time count and defaults to MIN.
     let envMin = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MIN);
     let envMax = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_MAX);
     let envInitial = parsePositiveInt(process.env.PRERENDER_PAGE_POOL_INITIAL);

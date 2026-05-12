@@ -13,10 +13,11 @@ import './setup-logger';
 import { logger } from './logger';
 
 // Strip ambient env vars that could break the hermetic test seal.
-// The harness always passes port values explicitly through CLI args or
-// function parameters — ambient env vars (e.g. from a dev shell running
-// mise dev-all) would be inherited by child processes, overriding the
-// dynamically allocated ports and breaking test isolation.
+// The harness always passes its own listen ports and should control
+// prerender sizing explicitly inside the stack it spawns. Ambient env
+// vars (for example from `mise dev-all`) would otherwise leak into child
+// processes, overriding dynamically allocated ports or changing the
+// prerender pool shape under tests.
 // This module is only imported by harness code (test infrastructure),
 // so it's safe to strip unconditionally — NODE_ENV may be 'test' or
 // 'development' depending on how the harness is invoked.
@@ -25,6 +26,15 @@ delete process.env.TEST_HARNESS_REALM_PORT;
 delete process.env.TEST_HARNESS_COMPAT_REALM_PORT;
 delete process.env.TEST_HARNESS_PRERENDER_PORT;
 delete process.env.TEST_HARNESS_PRERENDER_URL;
+delete process.env.PRERENDER_PAGE_POOL_MIN;
+delete process.env.PRERENDER_PAGE_POOL_MAX;
+delete process.env.PRERENDER_PAGE_POOL_INITIAL;
+delete process.env.PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX;
+delete process.env.PRERENDER_HIGH_PRIORITY_THRESHOLD;
+delete process.env.PRERENDER_POOL_IDLE_CONTRACTION_MS;
+delete process.env.PRERENDER_SHARED_CONTEXT_CAP;
+delete process.env.PRERENDER_AFFINITY_TAB_MAX;
+delete process.env.PRERENDER_AFFINITY_FILE_CONCURRENCY;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
