@@ -2137,6 +2137,13 @@ module(basename(__filename), function () {
     });
 
     test(`Can perform full indexing multiple times on a server that runs multiple realms`, async function (assert) {
+      // Three sequential reindex pairs (base + testRealm) per test —
+      // since CS-11043 each render in a from-scratch batch resets
+      // the prerender Loader, which makes back-to-back reindexes
+      // measurably slower than they used to be. The 60s default
+      // qunit timeout is right at the edge on contended CI; 120s
+      // gives breathing room without changing the test logic.
+      assert.timeout(120_000);
       {
         let response = await request
           .get('/demo/person-1')
