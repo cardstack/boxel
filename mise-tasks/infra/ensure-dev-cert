@@ -49,7 +49,7 @@ To enable HTTP/2, install mkcert and re-run this task:
 
 Then: `mise run infra:ensure-dev-cert`
 
-See packages/realm-server/README.md ("HTTP/2 dev access") for the why.
+See the repo-root README ("HTTP/2 dev access") for the why.
 EOF
   exit 0
 fi

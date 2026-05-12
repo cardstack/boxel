@@ -31,7 +31,7 @@ export PGPORT="${PGPORT:-5435}"
 # tells the prerender's Chromium (via the host's VirtualNetwork) which
 # canonical http origin to rewrite to which https origin so per-page
 # fetches multiplex over h2. Absent → realm-servers stay HTTP-only.
-# See packages/realm-server/README.md ("HTTP/2 dev access") for the why.
+# See the repo-root README ("HTTP/2 dev access") for the why.
 _BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
 _BOXEL_DEV_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
 _BOXEL_DEV_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"

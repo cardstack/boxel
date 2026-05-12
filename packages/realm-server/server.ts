@@ -91,28 +91,46 @@ export function isTlsEnabled(): boolean {
 // Rewrites the inbound `Host` header to match the canonical serverURL
 // when a request arrives on the h2 alias port. Without this, downstream
 // URL construction (e.g., `fullRequestURL`) would build URLs that
-// don't match any mounted realm. The rewrite is scoped to requests
-// whose port differs from the canonical so wildcard-subdomain
-// (published realm) routing is unaffected.
+// don't match any mounted realm. Wildcard-subdomain (published realm)
+// routing is preserved: subdomains of the canonical hostname keep
+// their subdomain but pick up the canonical port — and when the
+// canonical URL has no explicit port (env-mode), no port is added.
 function aliasHostToCanonical(canonical: URL) {
   let canonicalHost = canonical.host; // e.g., "localhost:4201"
+  let canonicalPort = canonical.port; // e.g., "4201" or "" in env-mode
   let canonicalHostnameLower = canonical.hostname.toLowerCase();
   return async function (ctx: Koa.Context, next: Koa.Next) {
     let host = ctx.req.headers.host;
-    if (typeof host === 'string' && host !== canonicalHost) {
-      // Only rewrite when the hostname matches the canonical hostname (or
-      // is a subdomain of it); leaves cross-host requests alone.
-      let inboundHostname = host.split(':')[0].toLowerCase();
-      if (
-        inboundHostname === canonicalHostnameLower ||
-        inboundHostname.endsWith(`.${canonicalHostnameLower}`)
-      ) {
-        let rewritten =
-          inboundHostname === canonicalHostnameLower
-            ? canonicalHost
-            : `${inboundHostname}:${canonical.port || (canonical.protocol === 'https:' ? '443' : '80')}`;
-        ctx.req.headers.host = rewritten;
-      }
+    if (typeof host !== 'string' || host === canonicalHost) {
+      await next();
+      return;
+    }
+    // Parse via URL so IPv6 literals like `[::1]:4203` are handled
+    // correctly — string-splitting on ':' breaks bracketed authorities.
+    let inboundHostname: string;
+    try {
+      inboundHostname = new URL(`http://${host}`).hostname.toLowerCase();
+    } catch {
+      await next();
+      return;
+    }
+    let isCanonicalHostname = inboundHostname === canonicalHostnameLower;
+    let isCanonicalSubdomain = inboundHostname.endsWith(
+      `.${canonicalHostnameLower}`,
+    );
+    if (!isCanonicalHostname && !isCanonicalSubdomain) {
+      await next();
+      return;
+    }
+    if (isCanonicalHostname) {
+      ctx.req.headers.host = canonicalHost;
+    } else {
+      // Subdomain — preserve it, attach the canonical port if any. In
+      // env-mode (canonicalPort === '') the port is omitted, matching
+      // the realm-server's expectations for Traefik-routed subdomains.
+      ctx.req.headers.host = canonicalPort
+        ? `${inboundHostname}:${canonicalPort}`
+        : inboundHostname;
     }
     await next();
   };

@@ -92,8 +92,8 @@ export default class NetworkService extends Service {
   // they multiplex over one connection per origin instead of
   // serializing through Chrome's HTTP/1.1 6-per-origin ceiling.
   // Canonical realm URLs (in card data) stay on the http origin — only
-  // the wire fetch is rewritten. See packages/realm-server/README.md
-  // "HTTP/2 dev access".
+  // the wire fetch is rewritten. See the repo-root README's "HTTP/2 dev
+  // access" section.
   private installH2OriginMappings(virtualNetwork: VirtualNetwork) {
     let h2MappingsRaw = (
       globalThis as unknown as { __realmH2OriginMappings__?: string }
