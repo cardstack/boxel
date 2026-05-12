@@ -23,15 +23,15 @@ module(basename(__filename), function () {
   module('ClearCacheTracker — consume-once mode (default)', function () {
     test('first consume returns true, subsequent consumes return false', function (assert) {
       let tracker = new ClearCacheTracker();
-      assert.strictEqual(tracker.consume(), true, 'first call returns true');
-      assert.strictEqual(tracker.consume(), false, 'second call returns false');
-      assert.strictEqual(tracker.consume(), false, 'third call returns false');
+      assert.true(tracker.consume(), 'first call returns true');
+      assert.false(tracker.consume(), 'second call returns false');
+      assert.false(tracker.consume(), 'third call returns false');
     });
 
     test('consume() returns false immediately when constructed off', function (assert) {
       let tracker = new ClearCacheTracker({ initialMode: 'off' });
-      assert.strictEqual(tracker.consume(), false);
-      assert.strictEqual(tracker.consume(), false);
+      assert.false(tracker.consume());
+      assert.false(tracker.consume());
     });
   });
 
@@ -40,7 +40,7 @@ module(basename(__filename), function () {
       let tracker = new ClearCacheTracker();
       tracker.upgradeToStickyForBatch();
       for (let i = 0; i < 5; i++) {
-        assert.strictEqual(tracker.consume(), true, `consume #${i + 1}`);
+        assert.true(tracker.consume(), `consume #${i + 1}`);
       }
     });
 
@@ -50,29 +50,32 @@ module(basename(__filename), function () {
       // has already been queued. Even in that ordering, every
       // subsequent render needs clearCache to land on its own page.
       let tracker = new ClearCacheTracker();
-      assert.strictEqual(tracker.consume(), true, 'first render gets clearCache');
-      assert.strictEqual(tracker.consume(), false, 'without upgrade, second would not');
+      assert.true(tracker.consume(), 'first render gets clearCache');
+      assert.false(tracker.consume(), 'without upgrade, second would not');
       tracker.upgradeToStickyForBatch();
-      assert.strictEqual(tracker.consume(), true, 'after upgrade, every consume returns true');
-      assert.strictEqual(tracker.consume(), true, 'and stays true');
+      assert.true(
+        tracker.consume(),
+        'after upgrade, every consume returns true',
+      );
+      assert.true(tracker.consume(), 'and stays true');
     });
 
     test('upgrade is idempotent', function (assert) {
       let tracker = new ClearCacheTracker();
       tracker.upgradeToStickyForBatch();
       tracker.upgradeToStickyForBatch();
-      assert.strictEqual(tracker.consume(), true);
-      assert.strictEqual(tracker.consume(), true);
+      assert.true(tracker.consume());
+      assert.true(tracker.consume());
     });
 
     test('an off tracker upgraded to sticky still flips on', function (assert) {
       // Operationally we don't expect this combination today, but the
       // contract should be unambiguous: the upgrade overrides off.
       let tracker = new ClearCacheTracker({ initialMode: 'off' });
-      assert.strictEqual(tracker.consume(), false, 'off before upgrade');
+      assert.false(tracker.consume(), 'off before upgrade');
       tracker.upgradeToStickyForBatch();
-      assert.strictEqual(tracker.consume(), true, 'sticky overrides off');
-      assert.strictEqual(tracker.consume(), true);
+      assert.true(tracker.consume(), 'sticky overrides off');
+      assert.true(tracker.consume());
     });
   });
 });
