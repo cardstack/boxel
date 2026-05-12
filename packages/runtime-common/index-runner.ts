@@ -45,6 +45,42 @@ import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
 
+// Bound for the pre-warm parallel walk. Each in-flight pre-warm can
+// fire a `prerenderModule` against the prerender pool when the URL
+// isn't already in the modules cache; the prerender server's
+// affinity-scoped admission cap handles the actual back-pressure
+// against the pool, but bounding here keeps the websocket fan-out
+// from spiking on large invalidation sets. The same cap also bounds
+// the upstream `readFile`/JSON parse fan-out for novel `.json`
+// invalidations, since `reader.readFile` is an HTTP fetch in the
+// worker process.
+const PRE_WARM_MAX_CONCURRENCY = 4;
+
+// Run `fn` over `items` with at most `concurrency` outstanding calls.
+// Results are returned in the input order, regardless of completion
+// order. Failures from `fn` propagate — the caller is expected to
+// catch inside `fn` if best-effort semantics are wanted.
+async function runBounded<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  concurrency: number,
+): Promise<R[]> {
+  let results: R[] = new Array(items.length);
+  let next = 0;
+  let limit = Math.min(items.length, concurrency);
+  let worker = async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await fn(items[i]);
+    }
+  };
+  let workers: Promise<void>[] = [];
+  for (let i = 0; i < limit; i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
@@ -548,8 +584,10 @@ export class IndexRunner {
   // Signal sources, in priority order:
   //   1. Existing `boxel_index.deps` — the runtime-captured dep list
   //      from the URL's prior successful render. Strongest signal.
-  //   2. `adoptsFrom.module` read from disk — used for novel `.json`
-  //      URLs without a prior `deps` row.
+  //   2. `adoptsFrom.module` read via `reader.readFile` — used for
+  //      novel `.json` URLs without a prior `deps` row. In the
+  //      worker context the reader is HTTP-backed; the call is fast
+  //      but not free.
   //   3. The URL itself — used for novel executable files; the file
   //      IS a module, pre-warm it directly.
   //
@@ -561,9 +599,15 @@ export class IndexRunner {
   // process coalescer, so two callers asking for the same URL share
   // one prerender.
   //
-  // Phase 1: serial. Validates that pre-warm as a concept clears the
-  // deadlock without concurrency-driven variability. Phase 2 will
-  // bound-parallelize this loop.
+  // Parallel: pre-warm lookups fire in bounded parallel batches. The
+  // CachingDefinitionLookup `#inFlight` map coalesces concurrent
+  // same-URL callers into one prerender, so parallel callers asking
+  // for the same URL share work rather than duplicating it.
+  //
+  // The novel `.json` `adoptsFrom` source reads are also parallelized
+  // (under the same concurrency bound) so a wide invalidation set
+  // doesn't pay N sequential `reader.readFile` calls — which are
+  // HTTP fetches in the worker context — for the upfront resolution.
   //
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
@@ -611,15 +655,25 @@ export class IndexRunner {
         novelJsonUrls.push(url);
       }
     }
-    for (let url of novelJsonUrls) {
-      let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
-      // adoptsFrom.module is always a module reference. The most common
-      // form is relative + extensionless (e.g. `"../author"`), which
-      // canonicalizes to an extensionless URL; gating on
+    if (novelJsonUrls.length > 0) {
+      // `reader.readFile` is HTTP in the worker process, so this
+      // fan-out is bounded by the same cap as the module lookups —
+      // a wide invalidation set won't burst N concurrent fetches
+      // against the realm server.
+      let adoptsFrom = await runBounded(
+        novelJsonUrls,
+        (u) => this.#readAdoptsFromModuleViaReader(u),
+        PRE_WARM_MAX_CONCURRENCY,
+      );
+      // adoptsFrom.module is always a module reference. The most
+      // common form is relative + extensionless (e.g. `"../author"`),
+      // which canonicalizes to an extensionless URL; gating on
       // hasExecutableExtension would drop those entirely and leave
       // pre-warm missing exactly the module it is supposed to prime.
-      if (adoptsFromModule) {
-        toWarm.add(adoptsFromModule);
+      for (let module of adoptsFrom) {
+        if (module) {
+          toWarm.add(module);
+        }
       }
     }
 
@@ -627,14 +681,20 @@ export class IndexRunner {
       return;
     }
 
+    let moduleUrls = [...toWarm];
     let failed = 0;
-    for (let moduleUrl of toWarm) {
-      try {
-        await this.#definitionLookup.getModuleCacheEntry(moduleUrl);
-      } catch {
-        failed += 1;
-      }
-    }
+    await runBounded(
+      moduleUrls,
+      async (moduleUrl) => {
+        try {
+          await this.#definitionLookup.getModuleCacheEntry(moduleUrl);
+        } catch {
+          failed += 1;
+        }
+      },
+      PRE_WARM_MAX_CONCURRENCY,
+    );
+
     if (failed > 0) {
       this.#log.warn(
         `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
@@ -646,7 +706,7 @@ export class IndexRunner {
     );
   }
 
-  async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
+  async #readAdoptsFromModuleViaReader(url: URL): Promise<string | undefined> {
     try {
       let fileRef = await this.#reader.readFile(url);
       if (!fileRef?.content) {
