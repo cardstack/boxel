@@ -364,39 +364,44 @@ export class CheckpointManager {
       });
 
     return Promise.all(
-      lines.map(async (line) => {
-        const [hash, shortHash, subject, dateStr] = line.split('|');
-
-        const isMajor = subject.includes('[MAJOR]');
-        const source = subject.includes('[local]')
-          ? ('local' as const)
-          : subject.includes('[remote]')
-            ? ('remote' as const)
-            : ('manual' as const);
-
-        const message = subject
-          .replace(/\[(MAJOR|minor)\]\s*/i, '')
-          .replace(/\[(local|remote|manual)\]\s*/i, '');
-
-        const stats = await this.getCommitStats(hash);
-
-        const milestoneName = milestones.get(hash);
-        const isMilestone = !!milestoneName;
-
-        return {
-          hash,
-          shortHash,
-          message,
-          description: '',
-          date: new Date(dateStr),
-          isMajor,
-          source,
-          isMilestone,
-          milestoneName,
-          ...stats,
-        };
-      }),
+      lines.map((line) => this.parseCheckpointLine(line, milestones)),
     );
+  }
+
+  private async parseCheckpointLine(
+    line: string,
+    milestones: Map<string, string>,
+  ): Promise<Checkpoint> {
+    const [hash, shortHash, subject, dateStr] = line.split('|');
+
+    const isMajor = subject.includes('[MAJOR]');
+    const source = subject.includes('[local]')
+      ? ('local' as const)
+      : subject.includes('[remote]')
+        ? ('remote' as const)
+        : ('manual' as const);
+
+    const message = subject
+      .replace(/\[(MAJOR|minor)\]\s*/i, '')
+      .replace(/\[(local|remote|manual)\]\s*/i, '');
+
+    const stats = await this.getCommitStats(hash);
+
+    const milestoneName = milestones.get(hash);
+    const isMilestone = !!milestoneName;
+
+    return {
+      hash,
+      shortHash,
+      message,
+      description: '',
+      date: new Date(dateStr),
+      isMajor,
+      source,
+      isMilestone,
+      milestoneName,
+      ...stats,
+    };
   }
 
   private async getCommitStats(hash: string): Promise<{
@@ -575,8 +580,36 @@ export class CheckpointManager {
   }
 
   async getMilestones(): Promise<Checkpoint[]> {
-    const all = await this.getCheckpoints(100);
-    return all.filter((cp) => cp.isMilestone);
+    if (!(await this.isInitialized())) {
+      return [];
+    }
+    const milestones = await this.getAllMilestones();
+    if (milestones.size === 0) {
+      return [];
+    }
+
+    // Enumerate from the milestone tags directly so the result is complete
+    // regardless of how deep the tagged checkpoints sit in history. `--no-walk`
+    // limits `git log` to just the listed commits — no traversal, no implicit
+    // cap.
+    const format = '%H|%h|%s|%aI|%an';
+    const log = await this.git(
+      'log',
+      '--no-walk',
+      `--format=${format}`,
+      ...milestones.keys(),
+    );
+
+    if (!log.trim()) {
+      return [];
+    }
+
+    return Promise.all(
+      log
+        .trim()
+        .split('\n')
+        .map((line) => this.parseCheckpointLine(line, milestones)),
+    );
   }
 
   private git(...args: string[]): Promise<string> {

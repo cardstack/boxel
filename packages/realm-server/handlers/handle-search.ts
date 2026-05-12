@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
+  DURING_PRERENDER_HEADER,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
   parseSearchQueryFromPayload,
@@ -51,10 +52,15 @@ export default function handleSearch(opts?: {
       throw e;
     }
 
+    let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    let searchOpts = cacheOnlyDefinitions
+      ? { cacheOnlyDefinitions: true }
+      : undefined;
     let runSearch = () =>
       searchRealms(
         realmList.map((realmURL) => realmByURL.get(realmURL)),
         cardsQuery,
+        searchOpts,
       );
 
     // Job-scoped same-realm cache. Gated on all three:
@@ -84,7 +90,7 @@ export default function handleSearch(opts?: {
       ? await searchCache!.getOrPopulate({
           jobId: jobId!,
           query: cardsQuery,
-          opts: undefined,
+          opts: searchOpts,
           populate: runSearch,
         })
       : await runSearch();

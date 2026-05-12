@@ -31,14 +31,33 @@ function config() {
 
 type Config = ReturnType<typeof config>;
 
-function configuredPoolMax(): number | undefined {
+// node-postgres' default pool max is 10. That's too small for the
+// realm-server under parallel indexing — a single file render can
+// fire several federated-search calls, each running primaryQuery +
+// loadLinks-layer queries that each hold a connection for the
+// duration of the SQL round-trip. With INDEX_RUNNER_MAX_CONCURRENCY=4
+// renders in flight at peak, observed pg connection demand reaches
+// 20+ — and any waiter past max sits in node-postgres' internal
+// acquire queue, which is indistinguishable from "the SQL is slow"
+// in diagnostic logs (we saw primaryQuery=73s for queries returning
+// 3 rows during the ambitious-piranha benchmark). 40 gives a margin
+// over that peak for non-search realm-server work (advisory locks,
+// indexer writes, NOTIFY dispatch) so a search burst doesn't crowd
+// out the indexer's own commits. Hosted RDS sizing (staging
+// db.r7g.large ≈ 1700, prod db.r7g.xlarge ≈ 3500 default
+// max_connections) leaves plenty of headroom even with 4-6 client
+// processes each opening their own pool. Operators can raise it
+// further via the env var for fleets with bigger pg instances; lower
+// it to throttle a noisy realm.
+const DEFAULT_POOL_MAX = 40;
+function configuredPoolMax(): number {
   let rawValue = process.env.PG_POOL_MAX;
   if (!rawValue) {
-    return undefined;
+    return DEFAULT_POOL_MAX;
   }
 
   let value = Number(rawValue);
-  return Number.isInteger(value) && value > 0 ? value : undefined;
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_POOL_MAX;
 }
 
 export type NotificationHandler = (notification: Notification) => void;
@@ -90,7 +109,7 @@ export class PgAdapter implements DBAdapter {
       database,
       password,
       port,
-      ...(max ? { max } : {}),
+      max,
     });
   }
 
