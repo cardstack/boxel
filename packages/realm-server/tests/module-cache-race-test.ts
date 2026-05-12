@@ -535,9 +535,13 @@ module(basename(__filename), function () {
       testRealm.__testOnlyClearCaches();
 
       // Independent gates per call so A and B can be released
-      // separately. The hook captures `currentGate` by reference each
-      // time the delay is invoked, so swapping after firing A but
-      // before firing B routes B to a fresh gate.
+      // separately. The hook routes by call index rather than a
+      // mutable `currentGate` reference — `waitForInflight` only
+      // confirms the in-flight slot is set, which happens BEFORE the
+      // transpile hook fires, so A may still be racing toward the
+      // hook when the test swaps the gate. Call-index routing plus
+      // explicit hook-entry signals make the test order deterministic
+      // under CI load.
       let releaseA: () => void = () => {};
       let gateA = new Promise<void>((r) => {
         releaseA = r;
@@ -546,12 +550,36 @@ module(basename(__filename), function () {
       let gateB = new Promise<void>((r) => {
         releaseB = r;
       });
-      let currentGate = gateA;
-      testRealm.__testOnlyDelayTranspile(() => currentGate);
+      let signalAEntered: () => void = () => {};
+      let aEntered = new Promise<void>((r) => {
+        signalAEntered = r;
+      });
+      let signalBEntered: () => void = () => {};
+      let bEntered = new Promise<void>((r) => {
+        signalBEntered = r;
+      });
+      let hookCalls = 0;
+      testRealm.__testOnlyDelayTranspile(() => {
+        hookCalls += 1;
+        if (hookCalls === 1) {
+          signalAEntered();
+          return gateA;
+        }
+        signalBEntered();
+        return gateB;
+      });
 
       try {
         let pendingA = fireRequest(modulePath);
-        await waitForInflight(1);
+        // Wait until A is actually parked at gateA — not just until
+        // the in-flight slot is set. Otherwise the invalidate below
+        // can race A's hook invocation.
+        await aEntered;
+        assert.strictEqual(
+          testRealm.__testOnlyGetInFlightTranspileCount(),
+          1,
+          'A installed its in-flight entry',
+        );
 
         // Invalidate drops A from the map. A is still parked at gateA.
         testRealm.invalidateCache(modulePath);
@@ -561,9 +589,8 @@ module(basename(__filename), function () {
           'invalidate dropped A from the map',
         );
 
-        currentGate = gateB;
         let pendingB = fireRequest(modulePath);
-        await waitForInflight(1);
+        await bEntered;
         assert.strictEqual(
           testRealm.__testOnlyGetInFlightTranspileCount(),
           1,
@@ -883,8 +910,13 @@ module(basename(__filename), function () {
           'created_at = EXCLUDED.created_at',
         ]);
         let postTombstoneGen = await readL2Generation(canonicalUrl);
+        assert.notStrictEqual(
+          postTombstoneGen,
+          undefined,
+          'tombstone row carries a generation value',
+        );
         assert.ok(
-          postTombstoneGen != null && postTombstoneGen > preTombstoneGen,
+          postTombstoneGen! > preTombstoneGen,
           `tombstone bumped generation (${preTombstoneGen} → ${postTombstoneGen})`,
         );
 
