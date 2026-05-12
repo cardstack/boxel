@@ -16,4 +16,4 @@ export * from './types';
 export { OpencodeFactoryAgent } from './opencode';
 export type { OpencodeAgentConfig } from './opencode';
 export { ClaudeCodeFactoryAgent } from './claude-code';
-export { MockFactoryAgent, MockLoopAgent } from './mocks';
+export { MockLoopAgent } from './mocks';

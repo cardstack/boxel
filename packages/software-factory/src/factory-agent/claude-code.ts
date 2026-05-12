@@ -66,11 +66,10 @@ const MAX_TOOL_USE_TURNS = 50;
 
 /**
  * Built-in Claude Code tools the factory exposes to the model on the
- * Claude backend. These replace the custom `read_file` / `write_file`
- * factory tools — they operate on the SDK query's `cwd` (the factory
- * workspace), so the model uses native semantics for fs work and we
- * keep MCP focused on operations that genuinely need realm runtime
- * access (search_realm, validators, structured updates, signals).
+ * Claude backend. They operate on the SDK query's `cwd` (the factory
+ * workspace), so the model handles workspace files natively while MCP
+ * stays focused on what needs realm runtime access (`get_card_schema`,
+ * validators, control signals).
  */
 const NATIVE_FS_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
 
@@ -298,14 +297,12 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
     // Two tool surfaces are visible to the model on the Claude backend:
     //   1. Native Claude Code tools (Read / Write / Edit / Bash / Glob /
     //      Grep) — anchored to the factory workspace via the SDK query's
-    //      `cwd`. These replace the factory's old `read_file` /
-    //      `write_file` shims; the model works on the local mirror of the
-    //      target realm directly.
+    //      `cwd`. The model works on the local mirror of the target realm
+    //      directly; `boxel sync` pushes between iterations.
     //   2. Factory tools exposed via an in-process MCP server, prefixed
-    //      with `mcp__<server>__`. Used for everything that needs realm
-    //      runtime access (search, validators, host commands, structured
-    //      updates) and for control signals (signal_done /
-    //      request_clarification).
+    //      with `mcp__<server>__`. Used for realm-runtime operations
+    //      (`get_card_schema`, the five validators) and for control
+    //      signals (`signal_done`, `request_clarification`).
     //
     // The shared prompt template / skills reference factory operations by
     // their plain names (e.g. `signal_done`). Append a short rename map

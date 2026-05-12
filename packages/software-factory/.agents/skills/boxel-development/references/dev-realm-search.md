@@ -1,6 +1,12 @@
 # Realm Search Query Reference
 
-How to use the `search_realm` tool to query cards in a realm. The query object follows the Boxel realm search API format.
+How to construct queries for the Boxel realm search index. Run them from `Bash` against your **target realm** with:
+
+```
+boxel search --realm <target-realm-url> --query '<json-query>'
+```
+
+The query JSON below is what goes into `--query`. Do not query other realms (base, software-factory, experiments, catalog) — the skills you've loaded are authoritative for patterns; cross-realm exploration burns tokens without helping.
 
 ## Basic Structure
 
@@ -216,27 +222,18 @@ Descending order:
 
 ## Discovering Available Fields
 
-You can only filter/sort on fields that exist on the card type. To find which fields a card type has:
+You can only filter/sort on fields that exist on the card type. To find which fields a card type has, call the `get_card_schema` factory tool:
 
-1. Use `run_command` to fetch the JSON schema for a card type:
-
-```json
-{
-  "command": "@cardstack/boxel-host/commands/get-card-type-schema/default",
-  "commandInput": {
-    "codeRef": {
-      "module": "http://localhost:4201/software-factory/darkfactory",
-      "name": "Issue"
-    }
-  }
-}
+```
+get_card_schema({
+  module: 'http://localhost:4201/software-factory/darkfactory',
+  name: 'Issue'
+})
 ```
 
-2. The result contains `attributes.properties` listing all searchable fields (e.g., `status`, `summary`, `priority`).
+The result contains `schema.attributes.properties` listing all searchable fields (e.g., `status`, `summary`, `priority`) plus their types and any enum values. Use those field names in your `eq`, `contains`, `range`, or `sort` with the matching `on` type.
 
-3. Use those field names in your `eq`, `contains`, `range`, or `sort` with the matching `on` type.
-
-The card tools (`update_project`, `update_issue`, `create_knowledge`, `create_catalog_spec`) also have dynamic JSON schemas in their parameters that list available fields.
+`get_card_schema` is also how you learn the shape for writing tracker (Project / Issue / KnowledgeArticle) and Spec card JSON files — call it before writing the JSON so what you write matches the live `CardDef`.
 
 ### Inheritance
 
