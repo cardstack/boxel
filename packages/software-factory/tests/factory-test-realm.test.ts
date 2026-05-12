@@ -782,7 +782,7 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle1 = await resolveTestRun({
       ...testRealmOptions,
       targetRealm: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
@@ -790,14 +790,14 @@ module('factory-test-realm > resolveTestRun', function () {
       client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
-    assert.strictEqual(handle1.testRunId, 'Validations/test_my-ticket-1');
+    assert.strictEqual(handle1.testRunId, 'Validations/test_my-issue-1');
 
     // Second call — search index is STALE (still returns empty), but
     // lastSequenceNumber=1 prevents reusing sequence 1.
     let handle2 = await resolveTestRun({
       ...testRealmOptions,
       targetRealm: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       lastSequenceNumber: 1,
@@ -808,7 +808,7 @@ module('factory-test-realm > resolveTestRun', function () {
 
     assert.strictEqual(
       handle2.testRunId,
-      'Validations/test_my-ticket-2',
+      'Validations/test_my-issue-2',
       'uses lastSequenceNumber as floor even when index returns nothing',
     );
 
@@ -816,7 +816,7 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle3 = await resolveTestRun({
       ...testRealmOptions,
       targetRealm: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       lastSequenceNumber: 2,
@@ -827,7 +827,7 @@ module('factory-test-realm > resolveTestRun', function () {
 
     assert.strictEqual(
       handle3.testRunId,
-      'Validations/test_my-ticket-3',
+      'Validations/test_my-issue-3',
       'continues incrementing from lastSequenceNumber floor',
     );
   });

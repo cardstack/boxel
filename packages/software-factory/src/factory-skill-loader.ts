@@ -70,7 +70,7 @@ const FACTORY_WORKFLOW_KEYWORDS = [
 
 /**
  * Reference files in `boxel-development/references/` and the keywords that
- * trigger their inclusion. When a ticket doesn't match any keyword, only the
+ * trigger their inclusion. When an issue doesn't match any keyword, only the
  * "always load" references from SKILL.md are included.
  */
 const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {

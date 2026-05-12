@@ -260,8 +260,8 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let issue = makeIssue({
       relatedKnowledge: [
         {
-          id: 'Knowledge Articles/ticket-knowledge',
-          tags: ['skill:ticket-skill'],
+          id: 'Knowledge Articles/issue-knowledge',
+          tags: ['skill:issue-skill'],
         },
       ],
     });
@@ -270,7 +270,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let skills = resolver.resolve(issue, project);
 
     assert.true(
-      skills.includes('ticket-skill'),
+      skills.includes('issue-skill'),
       'includes skill from issue relatedKnowledge',
     );
   });

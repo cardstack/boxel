@@ -545,7 +545,7 @@ function buildSignalDoneTool(): FactoryTool {
   return {
     name: 'signal_done',
     description:
-      'Signal that the current ticket is complete. Call this when all implementation and test files have been written.',
+      'Signal that the current issue is complete. Call this when all implementation and test files have been written.',
     parameters: { type: 'object', properties: {} },
     execute: async () => {
       return { signal: DONE_SIGNAL } as DoneResult;
