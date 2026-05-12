@@ -75,6 +75,13 @@ if [[ "$env_name" != "local" ]]; then
     # constant template variable — CS-10929. Used as `Authorization: Bearer
     # ${grafana_secret}` by the operator-action button panels.
     GRAFANA_SECRET
+    # CloudWatch log group + owning AWS account substituted into the
+    # worker-status-group alert rules at push time — CS-11107. The same
+    # provisioning file is shipped to both envs, so the log-group name
+    # and account-id have to come from outside the file, otherwise prod
+    # ends up querying staging's log group and every evaluation 404s.
+    WORKER_LOG_GROUP_NAME
+    WORKER_LOG_GROUP_ACCOUNT_ID
   )
   for v in "${required_env_vars[@]}"; do
     [[ -n "${!v:-}" ]] \
