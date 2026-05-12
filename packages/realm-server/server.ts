@@ -850,7 +850,7 @@ export class RealmServer {
     };
 
     let indexHTML = (await this.getIndexHTML()).replace(
-      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*?)("\s*\/?>)/,
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
 
