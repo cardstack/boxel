@@ -188,10 +188,16 @@ export const DEFAULT_ICONS_PROBE_URL = new URL(
 export const DEFAULT_PG_PORT = process.env.TEST_HARNESS_PGPORT ?? '55436';
 export const DEFAULT_PG_HOST = process.env.TEST_HARNESS_PGHOST ?? '127.0.0.1';
 export const DEFAULT_PG_USER = process.env.TEST_HARNESS_PGUSER ?? 'postgres';
-// The seeded test Postgres used by the harness runs with max_connections=50, so
-// isolated workers need a smaller per-process pool cap to keep workers=3 stable.
+// The seeded test Postgres runs with max_connections=50 (see
+// realm-server/tests/scripts/boot_preseeded.sh). A single stack runs two
+// pg-pool clients (realm-server + worker), so the ceiling for one stack is
+// pool_max × 2 processes ≈ peak connections. With pool_max=20 that's 40
+// connections at peak, leaving ~10 headroom for the harness's own pg client
+// and the migration template DB — comfortably under 50 even when every pool
+// slot is saturated. Production uses pg-adapter's default of 40 because the
+// hosted RDS has 1700+ max_connections and never sees the test pg's cap.
 export const DEFAULT_PG_POOL_MAX = Number(
-  process.env.TEST_HARNESS_PG_POOL_MAX ?? 2,
+  process.env.TEST_HARNESS_PG_POOL_MAX ?? 20,
 );
 export const DEFAULT_MIGRATED_TEMPLATE_DB =
   process.env.TEST_HARNESS_MIGRATED_TEMPLATE_DB ?? 'boxel_migrated_template';
