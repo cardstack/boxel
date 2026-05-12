@@ -46,8 +46,8 @@ const noopPrerenderer: Prerenderer = {
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
 
-const TEST_USERNAME = `cli-test-${Date.now()}`;
-const TEST_PASSWORD = 'test-password-for-cli';
+export const TEST_USERNAME = `cli-test-${Date.now()}`;
+export const TEST_PASSWORD = 'test-password-for-cli';
 
 let testRealmHttpServer: Server | undefined;
 let activeRealms: Realm[] = [];
