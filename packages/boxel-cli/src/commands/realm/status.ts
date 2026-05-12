@@ -13,6 +13,7 @@ import {
 } from '../../lib/sync-logic';
 import {
   computeFileHash,
+  isValidManifest,
   loadManifest,
   saveManifest,
   pathExists,
@@ -61,6 +62,7 @@ export interface StatusAllEntry extends StatusResult {
 }
 
 export interface StatusAllResult {
+  rootDir: string;
   workspaces: StatusAllEntry[];
   hasError: boolean;
   error?: string;
@@ -125,7 +127,6 @@ class RealmStatusInspector extends RealmSyncBase {
   pulled: string[] = [];
   hasError = false;
   error?: string;
-  manifest?: SyncManifest;
   remoteMtimes: Map<string, number> = new Map();
 
   constructor(
@@ -134,16 +135,18 @@ class RealmStatusInspector extends RealmSyncBase {
     authenticator: RealmAuthenticator,
   ) {
     super(statusOptions, authenticator);
-    this.manifest = loadedManifest;
   }
 
   async sync(): Promise<void> {
     let localFilesWithMtimes;
+    let remoteFileList: Map<string, boolean> | undefined;
     try {
-      [localFilesWithMtimes, this.remoteMtimes] = await Promise.all([
-        this.getLocalFileListWithMtimes(),
-        this.getRemoteMtimes(),
-      ]);
+      [localFilesWithMtimes, this.remoteMtimes, remoteFileList] =
+        await Promise.all([
+          this.getLocalFileListWithMtimes(),
+          this.getRemoteMtimes(),
+          this.getRemoteFileList(),
+        ]);
     } catch (err) {
       this.hasError = true;
       this.error =
@@ -151,6 +154,22 @@ class RealmStatusInspector extends RealmSyncBase {
           ? `Failed to fetch realm state: ${err.message}`
           : `Failed to fetch realm state: ${String(err)}`;
       return;
+    }
+
+    // Fall back to directory listing when `_mtimes` is unavailable, so
+    // remote-existing files don't get classified as `deleted-remote`.
+    // Mirrors `sync.ts`. The placeholder mtime (0) lands them in
+    // `classifyRemote`'s "known in manifest.files → changed" branch,
+    // which we render as `modified-remote` — noisy but visible, vs.
+    // silently misreporting deletions.
+    if (
+      remoteFileList &&
+      this.remoteMtimes.size === 0 &&
+      remoteFileList.size > 0
+    ) {
+      for (const [filePath] of remoteFileList) {
+        this.remoteMtimes.set(filePath, 0);
+      }
     }
 
     const localFiles = new Map<string, string>();
@@ -208,6 +227,7 @@ class RealmStatusInspector extends RealmSyncBase {
       return;
     }
 
+    const failures: Array<{ file: string; message: string }> = [];
     for (const change of safe) {
       const localPath = path.join(this.options.localDir, change.file);
       try {
@@ -224,8 +244,15 @@ class RealmStatusInspector extends RealmSyncBase {
       } catch (err) {
         this.hasError = true;
         const msg = err instanceof Error ? err.message : String(err);
+        failures.push({ file: change.file, message: msg });
         console.error(`  ${FG_RED}✗ ${change.file}${RESET} (${msg})`);
       }
+    }
+
+    if (failures.length > 0) {
+      this.error = `Failed to pull ${failures.length} file(s): ${failures
+        .map((f) => `${f.file} (${f.message})`)
+        .join('; ')}`;
     }
 
     if (this.pulled.length > 0) {
@@ -310,7 +337,7 @@ export async function status(
     manifestMtime,
     changes: inspector.changes,
     pulled: inspector.pulled.slice().sort(),
-    inSync: inspector.changes.length === 0,
+    inSync: !inspector.hasError && inspector.changes.length === 0,
     hasError: inspector.hasError,
     error: inspector.error,
   };
@@ -341,7 +368,6 @@ async function findSyncDirs(root: string, maxDepth: number): Promise<string[]> {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (ALL_IGNORED_DIRS.has(entry.name)) continue;
-      if (entry.name.startsWith('.')) continue;
       await walk(path.join(dir, entry.name), depth + 1);
     }
   }
@@ -357,15 +383,19 @@ export async function statusAll(
 ): Promise<StatusAllResult> {
   if (options.pull) {
     return {
+      rootDir,
       workspaces: [],
       hasError: true,
       error: 'Cannot use --pull with --all',
     };
   }
 
-  const maxDepth = Number(
-    process.env.BOXEL_STATUS_ALL_MAX_DEPTH ?? DEFAULT_MAX_DEPTH,
-  );
+  const envDepth = process.env.BOXEL_STATUS_ALL_MAX_DEPTH;
+  const parsedDepth = envDepth !== undefined ? Number(envDepth) : NaN;
+  const maxDepth =
+    Number.isFinite(parsedDepth) && parsedDepth >= 0
+      ? parsedDepth
+      : DEFAULT_MAX_DEPTH;
   const dirs = await findSyncDirs(rootDir, maxDepth);
 
   const workspaces: StatusAllEntry[] = [];
@@ -390,9 +420,13 @@ export async function statusAll(
       continue;
     }
 
+    let parsed: unknown;
     try {
-      JSON.parse(rawContent);
+      parsed = JSON.parse(rawContent);
     } catch {
+      parsed = undefined;
+    }
+    if (!isValidManifest(parsed)) {
       workspaces.push({
         localDir: dir,
         realmUrl: '',
@@ -419,7 +453,7 @@ export async function statusAll(
     workspaces.push(entry);
   }
 
-  return { workspaces, hasError };
+  return { rootDir, workspaces, hasError };
 }
 
 function renderStatus(result: StatusResult): void {
@@ -515,7 +549,9 @@ function renderStatusAll(result: StatusAllResult): void {
     return;
   }
   if (result.workspaces.length === 0) {
-    console.log('No .boxel-sync.json directories found under cwd.');
+    console.log(
+      `No .boxel-sync.json directories found under ${result.rootDir}.`,
+    );
     return;
   }
   for (const ws of result.workspaces) {

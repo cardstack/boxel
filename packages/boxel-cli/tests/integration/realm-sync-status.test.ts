@@ -358,6 +358,37 @@ describe('realm sync status (integration)', () => {
     expect(ok!.hasError).toBe(false);
   });
 
+  it('--all flags a valid-JSON-but-wrong-shape manifest as malformed', async () => {
+    let root = makeLocalDir();
+    let dirShape = path.join(root, 'shape');
+    fs.mkdirSync(dirShape, { recursive: true });
+    // Valid JSON, but missing required `realmUrl` and `files` fields.
+    fs.writeFileSync(
+      path.join(dirShape, '.boxel-sync.json'),
+      JSON.stringify({ wrong: 'shape' }),
+    );
+
+    let result = await statusAll(root, { profileManager });
+
+    let entry = result.workspaces.find((w) => w.localDir === dirShape);
+    expect(entry).toBeDefined();
+    expect(entry!.skipped).toBe('malformed');
+  });
+
+  it('--all walker discovers sync dirs under non-ignored dot-prefixed dirs', async () => {
+    let root = makeLocalDir();
+    let realmUrl = await createTestRealm();
+    let dotDir = path.join(root, '.workspaces', 'project');
+    fs.mkdirSync(dotDir, { recursive: true });
+    writeLocalFile(dotDir, 'one.gts', 'export const x = 1;\n');
+    await sync(dotDir, realmUrl, { preferLocal: true, profileManager });
+
+    let result = await statusAll(root, { profileManager });
+
+    let discovered = result.workspaces.map((w) => w.localDir);
+    expect(discovered).toContain(dotDir);
+  });
+
   it('rejects --all combined with --pull', async () => {
     let root = makeLocalDir();
 
