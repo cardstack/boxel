@@ -15,14 +15,15 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
  * Additional skill search directories, checked in order when a skill is not
  * found in the primary directory.
  *
- * - `packages/boxel-cli/.agents/skills/` hosts the CLI + API skills
- *   (`boxel-api`, `boxel-command`, `boxel-sync`, etc.) — boxel-cli owns the
- *   entire Boxel API surface, so its skills describe the platform.
+ * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
+ *   plugin skills (`boxel-api`, `boxel-command`, etc.) — boxel-cli owns the
+ *   entire Boxel API surface, so its skills describe the platform. Same
+ *   directory the plugin distributes to end users.
  * - The monorepo root `.agents/skills/` hosts shared domain skills
  *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
  */
 const DEFAULT_FALLBACK_DIRS = [
-  join(MONOREPO_ROOT, 'packages', 'boxel-cli', '.agents', 'skills'),
+  join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
   join(MONOREPO_ROOT, '.agents', 'skills'),
 ];
 

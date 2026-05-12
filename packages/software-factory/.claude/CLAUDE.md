@@ -27,8 +27,9 @@ The agent's instructions live in `.agents/skills/`. The factory loader
 
 1. `packages/software-factory/.agents/skills/` — factory-specific skills
    (`software-factory-bootstrap`, `software-factory-operations`).
-2. `packages/boxel-cli/.agents/skills/` — Boxel API skills (`boxel-api`,
-   `boxel-command`).
+2. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code plugin
+   skills (`boxel-api`, `boxel-command`); same directory the plugin
+   distributes to end users.
 3. monorepo root `.agents/skills/` — general domain skills
    (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
 

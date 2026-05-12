@@ -25,7 +25,7 @@ instructions live in `.agents/skills/` (root + this package + `boxel-cli`).
 - `src/issue-loop.ts` — inner/outer issue scheduling loop.
 - `src/factory-skill-loader.ts` — resolves and loads skills from
   `packages/software-factory/.agents/skills/` (primary),
-  `packages/boxel-cli/.agents/skills/` (fallback), and monorepo root
+  `packages/boxel-cli/plugin/skills/` (fallback), and monorepo root
   `.agents/skills/` (fallback).
 - `src/workspace-fs.ts` — local-filesystem mirror of the target realm;
   the agent reads/writes here, the orchestrator syncs.
