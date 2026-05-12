@@ -540,10 +540,10 @@ export class IndexRunner {
   // `populateQueryFields` → `lookupDefinition` for a definition not
   // in the modules cache triggers a nested prerender. That nested
   // prerender enters the same affinity-scoped tab queue the original
-  // render is occupying, deadlocking the pool (PR #4777 papered over
-  // this with `cacheOnlyDefinitions:true`). Pre-warming the modules
-  // table before the visit loop fires means `lookupDefinition` hits
-  // a populated row instead of spawning a sub-prerender.
+  // render is occupying, deadlocking the pool. Pre-warming the
+  // modules table before the visit loop fires means
+  // `lookupDefinition` hits a populated row instead of spawning a
+  // sub-prerender.
   //
   // Signal sources, in priority order:
   //   1. Existing `boxel_index.deps` — the runtime-captured dep list

@@ -317,17 +317,13 @@ export function combinePrerenderedSearchResults(
 }
 
 type SearchableRealm = {
-  search: (
-    query: Query,
-    opts?: { cacheOnlyDefinitions?: boolean },
-  ) => Promise<LinkableCollectionDocument>;
+  search: (query: Query) => Promise<LinkableCollectionDocument>;
   url?: string;
 };
 
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
-  opts?: { cacheOnlyDefinitions?: boolean },
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
@@ -336,7 +332,7 @@ export async function searchRealms(
       label: realm.url ? String(realm.url) : undefined,
     }));
   let searchPromises = realmEntries.map(({ realm }) =>
-    Promise.resolve().then(() => realm.search(query, opts)),
+    Promise.resolve().then(() => realm.search(query)),
   );
   let results = await Promise.allSettled(searchPromises);
   let queryLabel = '[unserializable query]';

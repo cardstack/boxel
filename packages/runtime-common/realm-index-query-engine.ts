@@ -56,12 +56,7 @@ import {
   isLinkableCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
-import type {
-  CardResource,
-  FileMetaResource,
-  QueryFieldMeta,
-  Saved,
-} from './resource-types';
+import type { CardResource, FileMetaResource, Saved } from './resource-types';
 import { getImmediateFieldDef, type FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -78,11 +73,6 @@ const RECURSING_DEPTH = 3;
 type Options = {
   loadLinks?: true;
   linkFields?: string[];
-  // When true, populateQueryFields will only use cached definitions from the
-  // database and will never trigger a prerenderer call.  This prevents deadlocks
-  // when file-meta responses are served during card prerendering (the single
-  // prerender semaphore permit is already held).
-  cacheOnlyDefinitions?: boolean;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -373,16 +363,7 @@ export class RealmIndexQueryEngine {
       return false;
     }
     try {
-      let definition: import('./definitions').Definition | undefined;
-      if (opts?.cacheOnlyDefinitions) {
-        definition =
-          await this.#definitionLookup.lookupCachedDefinition(codeRef);
-        if (!definition) {
-          return false;
-        }
-      } else {
-        definition = await this.#definitionLookup.lookupDefinition(codeRef);
-      }
+      let definition = await this.#definitionLookup.lookupDefinition(codeRef);
       if (!definition) {
         return false;
       }
@@ -611,7 +592,7 @@ export class RealmIndexQueryEngine {
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
-    let definition = await this.lookupDefinitionForOpts(codeRef, opts);
+    let definition = await this.#definitionLookup.lookupDefinition(codeRef);
     if (!definition) {
       return;
     }
@@ -690,9 +671,8 @@ export class RealmIndexQueryEngine {
       if (visited.filter((v) => v === childCardKey).length > RECURSING_DEPTH) {
         continue;
       }
-      let childDef = await this.lookupDefinitionForOpts(
+      let childDef = await this.#definitionLookup.lookupDefinition(
         fieldDefinition.fieldOrCard,
-        opts,
       );
       if (!childDef) {
         continue;
@@ -705,55 +685,6 @@ export class RealmIndexQueryEngine {
         opts,
         [...visited, childCardKey],
       );
-    }
-  }
-
-  private async lookupDefinitionForOpts(
-    codeRef: import('./code-ref').ResolvedCodeRef,
-    opts: Options | undefined,
-  ): Promise<import('./definitions').Definition | undefined> {
-    if (opts?.cacheOnlyDefinitions) {
-      return await this.#definitionLookup.lookupCachedDefinition(codeRef);
-    }
-    return await this.#definitionLookup.lookupDefinition(codeRef);
-  }
-
-  // Populate query-based relationship fields using pre-extracted metadata
-  // stored in the resource's meta during file indexing. This avoids a
-  // runtime definition lookup (which could deadlock during prerendering).
-  private async populateQueryFieldsFromMeta(
-    resource: LooseCardResource | FileMetaResource,
-    realmURL: URL,
-    queryFieldDefs: Record<string, QueryFieldMeta>,
-    opts?: Options,
-  ): Promise<void> {
-    for (let [fieldName, meta] of Object.entries(queryFieldDefs)) {
-      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
-        continue;
-      }
-      let fieldDefinition: FieldDefinition = {
-        type: meta.type,
-        isPrimitive: false,
-        isComputed: true,
-        fieldOrCard: meta.fieldOrCard,
-        query: meta.query,
-      };
-      let { results, errors, searchURL } = await this.executeQueryForField({
-        fieldDefinition,
-        fieldName,
-        queryDefinition: meta.query,
-        resource,
-        realmURL,
-        opts,
-      });
-      this.applyQueryResults({
-        fieldDefinition,
-        fieldName,
-        resource,
-        results,
-        errors,
-        searchURL,
-      });
     }
   }
 
@@ -1170,21 +1101,7 @@ export class RealmIndexQueryEngine {
               : opts?.linkFields
                 ? { ...opts, linkFields: undefined }
                 : opts;
-            let storedDefs = (
-              resource.meta as {
-                queryFieldDefs?: Record<string, QueryFieldMeta>;
-              }
-            )?.queryFieldDefs;
-            if (popOpts?.cacheOnlyDefinitions && storedDefs) {
-              await this.populateQueryFieldsFromMeta(
-                resource,
-                realmURL,
-                storedDefs,
-                popOpts,
-              );
-            } else {
-              await this.populateQueryFields(resource, realmURL, popOpts);
-            }
+            await this.populateQueryFields(resource, realmURL, popOpts);
           }),
         );
       } catch (err: unknown) {
