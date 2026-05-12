@@ -71,9 +71,9 @@ jobs:
         working-directory: packages/boxel-cli
         run: |
           if [ "${{ inputs.environment }}" = "production" ]; then
-            npm publish --access public --provenance
+            pnpm publish --access public --provenance --no-git-checks
           else
-            npm publish --access public --provenance --tag beta
+            pnpm publish --access public --provenance --no-git-checks --tag beta
           fi
 
       - name: Create GitHub Release

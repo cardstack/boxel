@@ -197,9 +197,39 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Opt-in to producing the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. When undefined / null /
+  // false the host's render route substitutes a small boilerplate
+  // placeholder instead and skips the (expensive) isolated render.
+  // The lever is primarily set by the publish handler on the
+  // published realm snapshot so anonymous-visitor SSR injection has
+  // real content; unpublished realms typically have nothing reading
+  // the index's isolated HTML. Optional to avoid forcing every
+  // RealmInfo fixture to update.
+  includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
+
+// Marker header the host SPA attaches to outbound _federated-search /
+// _search calls when it's running inside a prerender tab. The prerender
+// server uses puppeteer's `evaluateOnNewDocument` to inject a window
+// global (`__boxelDuringPrerender = true`) into every Chrome tab before
+// the host loads; the host's realm-server fetch wrapper then reads that
+// flag and adds this header on its own outbound search requests only —
+// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
+// see it on a CORS preflight. When the realm sees this on an inbound
+// _search request it knows the caller is the host SPA mid-render and
+// switches the search to cacheOnlyDefinitions:true, which short-circuits
+// the recursive lookupDefinition → prerenderModule path in
+// populateQueryFields that causes self-referential prerender deadlocks
+// under parallel indexing. Kept as a bare string here so runtime-common
+// stays independent of realm-server. The realm-server prerender side
+// re-exports the same value from prerender-constants.ts.
+export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
+function isDuringPrerenderRequest(request: Request): boolean {
+  return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
 
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not
 // in this set is still written to the legacy .realm.json sidecar until
@@ -209,6 +239,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
+  'includePrerenderedDefaultRealmIndex',
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
@@ -296,12 +327,14 @@ type ModuleLoadResult =
       canonicalPath: LocalPath;
       headers: Record<string, string>;
     }
-  | {
-      kind: 'module';
-      canonicalPath: LocalPath;
-      body: string;
-      headers: Record<string, string>;
-    };
+  | ModuleTranspileResult;
+
+type ModuleTranspileResult = {
+  kind: 'module';
+  canonicalPath: LocalPath;
+  body: string;
+  headers: Record<string, string>;
+};
 
 // ETag base prefers a content fingerprint (md5 of the file body) over
 // `lastModified` because the unix-second timestamp collides for two
@@ -582,6 +615,27 @@ export class Realm {
   // is the only thing that reliably mismatches afterwards.
   #moduleCacheGenerations: Map<LocalPath, number> = new Map();
   #moduleCacheGlobalGeneration = 0;
+  // CS-11029: in-process inflight dedup for the transpile pipeline.
+  // Concurrent same-path callers that miss #moduleCache used to each call
+  // transpileJS independently — 50–500 ms of babel + ember-template-
+  // compilation + decorator transforms wasted per duplicate. The map is
+  // keyed by local path so the second-and-onward caller awaits the first
+  // caller's promise instead of running babel again. Invalidation paths
+  // (writeMany, invalidateCache, the full-index clear, etc.) drop the
+  // entry through the shared #dropModuleCacheEntry /
+  // #dropAllModuleCacheEntries helpers so post-invalidate callers don't
+  // join a stale transpile whose #moduleCache.set will be discarded by
+  // CS-11028's generation guard anyway. Identity-checked cleanup on
+  // settle is the same shape as CachingDefinitionLookup's #inFlight — a
+  // newer pending entry installed after a drop survives an older
+  // promise's eventual settle.
+  #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
+    new Map();
+  // Monotonic count of transpileJS invocations, used by the CS-11029
+  // dedup tests to assert that N concurrent same-path readers triggered
+  // exactly one transpile call. Reset by __testOnlyClearCaches so each
+  // test reasons from a clean baseline.
+  #transpileCallCount = 0;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -1237,7 +1291,33 @@ export class Realm {
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
     this.#dropAllModuleCacheEntries();
+    // Reset the transpile counter so each test reasons about its own
+    // delta. Production never reads this counter — only the CS-11029
+    // dedup tests do (CS-11029).
+    this.#transpileCallCount = 0;
   }
+
+  // CS-11029 test seams: tests need to assert "N concurrent same-path
+  // readers triggered exactly one transpile" and "the in-flight slot
+  // released after the shared transpile settled." Exposing the
+  // monotonic counter + the live map size is the smallest surface that
+  // satisfies both — no externally-observable behavior changes.
+  __testOnlyGetTranspileCallCount(): number {
+    return this.#transpileCallCount;
+  }
+  __testOnlyGetInFlightTranspileCount(): number {
+    return this.#inFlightTranspiles.size;
+  }
+  // Test-only gate: when set, #materializeAndTranspile awaits the
+  // returned promise before calling transpileJS. Lets the dedup tests
+  // park a transpile mid-flight so they can observe inflight state
+  // without racing real .gts transpile timing in CI. The hook fires
+  // BEFORE #transpileCallCount is bumped — when the count rises, the
+  // gate has released and babel is running.
+  __testOnlyDelayTranspile(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlyTranspileDelay = fn;
+  }
+  #testOnlyTranspileDelay?: () => Promise<void>;
 
   // Invalidate the in-memory byte caches for a single path. Called by the
   // realm_file_changes LISTEN handler on peer instances after a write lands
@@ -1263,6 +1343,14 @@ export class Realm {
   #dropModuleCacheEntry(path: LocalPath): void {
     this.#bumpModuleCacheGeneration(path);
     this.#moduleCache.invalidate(path);
+    // CS-11029: drop the in-flight transpile entry too. Existing
+    // waiters on the old promise still receive its result — their
+    // requests preceded the invalidate, so pre-invalidation bytes are
+    // the correct response. But a caller arriving AFTER this point
+    // must not join the stale transpile (its #moduleCache.set is
+    // about to be discarded by the generation guard); they install
+    // their own pending against current source instead.
+    this.#inFlightTranspiles.delete(path);
   }
 
   // Wipes every #moduleCache entry and bumps the global generation so any
@@ -1275,6 +1363,9 @@ export class Realm {
     this.#moduleCache.clear();
     this.#moduleCacheGenerations.clear();
     this.#moduleCacheGlobalGeneration += 1;
+    // CS-11029: same reason as #dropModuleCacheEntry — post-wipe
+    // callers must not join a stale transpile.
+    this.#inFlightTranspiles.clear();
   }
 
   #bumpModuleCacheGeneration(path: LocalPath): void {
@@ -2459,6 +2550,49 @@ export class Realm {
       };
     }
 
+    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+  }
+
+  // Dedups the materialize + transpile pipeline across concurrent
+  // same-path callers (CS-11029). The first caller installs a pending
+  // promise keyed by localPath; any caller that arrives while it's
+  // in-flight returns the same promise instead of running babel a
+  // second time. Identity-checked cleanup on settle mirrors
+  // CachingDefinitionLookup.#inFlight — a newer pending entry installed
+  // after invalidateCache drops the slot is preserved when the older
+  // promise eventually settles.
+  async #transpileModuleDeduped(
+    localPath: LocalPath,
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let existing = this.#inFlightTranspiles.get(localPath);
+    if (existing) {
+      return existing;
+    }
+    // Assign the chained `.finally` to `pending` and store/return THAT
+    // (not the raw `#materializeAndTranspile` promise). If we kept the
+    // raw promise in the map and dangled an unused `.finally(...)`
+    // chain, a rejection from transpileJS would propagate through both
+    // promises but only the raw one has waiters — the chained one would
+    // surface as an unhandled rejection in Node's host hook. Same shape
+    // as CachingDefinitionLookup.#inFlight.
+    let pending: Promise<ModuleTranspileResult>;
+    let core = this.#materializeAndTranspile(fileRef, etag);
+    pending = core.finally(() => {
+      if (this.#inFlightTranspiles.get(localPath) === pending) {
+        this.#inFlightTranspiles.delete(localPath);
+      }
+    });
+    this.#inFlightTranspiles.set(localPath, pending);
+    return pending;
+  }
+
+  async #materializeAndTranspile(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let fileWithContent = await this.materializeFileRef(fileRef);
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
@@ -2471,6 +2605,10 @@ export class Realm {
       let debugFilename = fileWithContent.path.startsWith('/')
         ? fileWithContent.path
         : `/${fileWithContent.path}`;
+      if (this.#testOnlyTranspileDelay) {
+        await this.#testOnlyTranspileDelay();
+      }
+      this.#transpileCallCount += 1;
       transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
@@ -4117,10 +4255,14 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(query: Query): Promise<LinkableCollectionDocument> {
+  public async search(
+    query: Query,
+    opts?: { cacheOnlyDefinitions?: boolean },
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
     });
   }
 
@@ -4171,7 +4313,9 @@ export class Realm {
 
     try {
       assertQuery(cardsQuery);
-      let doc = await this.search(cardsQuery);
+      let doc = await this.search(cardsQuery, {
+        cacheOnlyDefinitions: isDuringPrerenderRequest(request),
+      });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -5239,6 +5383,7 @@ export class Realm {
       ),
       publishable: null,
       lastPublishedAt,
+      includePrerenderedDefaultRealmIndex: null,
     };
 
     if (realmConfig) {
@@ -5311,6 +5456,12 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
+        }
       }
     } catch (e) {
       this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
@@ -5342,6 +5493,12 @@ export class Realm {
         if ('iconURL' in attrs) {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
         }
       }
     } catch (e) {

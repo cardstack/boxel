@@ -65,7 +65,7 @@ export class ContextBuilder {
    * Assemble a complete AgentContext for one iteration of the execution loop.
    *
    * Steps:
-   * 1. Resolve skill names from ticket + project context
+   * 1. Resolve skill names from issue + project context
    * 2. Load all resolved skills from disk
    * 3. Apply skill budget if configured
    * 4. Return AgentContext (tools are provided separately as FactoryTool[])

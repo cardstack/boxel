@@ -37,6 +37,13 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Volkov Labs Business Forms panel — used by Operator Actions panels
+      # in boxel-status/indexing, realms, users, and job-queue dashboards.
+      # Signed plugin, archived upstream at v6.2.0 (2025-09) but still
+      # functional on Grafana 12.x. Staging / production self-host Grafana
+      # installs this via cardstack/infra
+      # configs/grafana/base/container-definitions/grafana.yaml.
+      GF_INSTALL_PLUGINS: "volkovlabs-form-panel"
       # Substituted into provisioning/datasources/loki.yaml at startup.
       LOKI_URL: http://loki:3100
       # Substituted into provisioning/datasources/boxel-db.yaml at startup.

@@ -493,7 +493,11 @@ module('factory-agent-claude-code', function () {
       );
     });
 
-    test('filters factory tools that have native or boxel CLI alternatives', async function (assert) {
+    test('filters out registry-sourced shadow tools from the MCP catalog', async function (assert) {
+      // The filter keeps `'registered'` tools (kebab-case shadows
+      // from the realm-api ToolRegistry) off the Claude MCP catalog.
+      // Verify both halves: registered shadows are filtered, core
+      // tools pass through.
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
         { workspaceDir: '/tmp/factory-workspace-test' },
@@ -507,40 +511,21 @@ module('factory-agent-claude-code', function () {
       );
 
       await agent.run(makeContext(), [
-        makeTool({ name: 'read_file' }),
-        makeTool({ name: 'write_file' }),
-        makeTool({ name: 'run_command' }),
-        makeTool({ name: 'fetch_transpiled_module' }),
-        makeTool({ name: 'search_realm' }),
         makeTool({ name: 'signal_done' }),
-        // Simulate registry-sourced tools (script + realm-api).
-        // These shadow core tools with kebab-case duplicates and must
-        // not leak into the Claude MCP catalog.
+        makeTool({ name: 'run_tests' }),
+        // Registry-sourced (kebab-case) shadow tools must not leak
+        // into the Claude MCP catalog regardless of their plain name.
         makeTool({ name: 'realm-read', source: 'registered' }),
         makeTool({ name: 'search-realm', source: 'registered' }),
-        makeTool({ name: 'boxel-sync', source: 'registered' }),
+        makeTool({ name: 'sample-registered-tool', source: 'registered' }),
       ]);
 
       let allowed = capturedOptions!.allowedTools ?? [];
-      // Filtered: native fs replaces read/write; run_command is unused
-      // in practice; fetch_transpiled_module reaches the same realm
-      // endpoint via `boxel read-transpiled`; search_realm reaches the
-      // same endpoint via `boxel search` (with single-quoted JSON).
-      for (let filtered of [
-        'read_file',
-        'write_file',
-        'run_command',
-        'fetch_transpiled_module',
-        'search_realm',
+      for (let registered of [
+        'realm-read',
+        'search-realm',
+        'sample-registered-tool',
       ]) {
-        assert.notOk(
-          allowed.includes(`mcp__factory__${filtered}`),
-          `${filtered} is not registered as an MCP tool on the Claude path`,
-        );
-      }
-      // Registered (kebab-case) shadow tools must not leak into the
-      // Claude MCP catalog regardless of their plain name.
-      for (let registered of ['realm-read', 'search-realm', 'boxel-sync']) {
         assert.notOk(
           allowed.includes(`mcp__factory__${registered}`),
           `${registered} (registered) is not exposed on the Claude path`,
@@ -549,6 +534,10 @@ module('factory-agent-claude-code', function () {
       assert.true(
         allowed.includes('mcp__factory__signal_done'),
         'control-flow factory tools remain in the MCP catalog',
+      );
+      assert.true(
+        allowed.includes('mcp__factory__run_tests'),
+        'validators remain in the MCP catalog',
       );
     });
 

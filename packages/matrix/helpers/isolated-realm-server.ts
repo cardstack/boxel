@@ -567,12 +567,26 @@ export async function startServer({
     }
   }
 
-  return new IsolatedRealmServer(
+  let server = new IsolatedRealmServer(
     realmServer,
     workerManager,
     testRealmDir,
     testDBName,
   );
+
+  // /_catalog-realms only surfaces realms with show_as_catalog = true.
+  // Matrix tests treat the test fixture realm and the skills realm as
+  // catalogs (workspace chooser, card-catalog modal); opt them in here
+  // so the harness doesn't depend on a sidecar value that the
+  // metadata backfill trims on first boot.
+  await server.executeSQL(
+    `INSERT INTO realm_metadata (url, show_as_catalog) VALUES
+       ('http://localhost:4205/test/', true),
+       ('http://localhost:4205/skills/', true)
+     ON CONFLICT (url) DO UPDATE SET show_as_catalog = true`,
+  );
+
+  return server;
 }
 
 export interface SQLExecutor {

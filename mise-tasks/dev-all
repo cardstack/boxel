@@ -12,18 +12,26 @@
 # dev run from binding the port.
 set -m
 
+init_pidfile
+# Spawn a detached watcher that re-runs cleanup if this script dies
+# without its trap firing — e.g. bash gets SIGKILL, or mise tears down
+# its task wrapper without forwarding a trappable signal. The trap below
+# is still the primary cleanup path; the guardian only matters when the
+# trap can't run. Guardian output goes to
+# $BOXEL_DEV_ALL_GUARDIAN_LOG (default ${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log).
+spawn_cleanup_guardian $$
+
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we
 # start the host manually and use wait-on to gate readiness.
 pnpm --filter @cardstack/host start &
 HOST_PID=$!
+record_dev_pid host "$HOST_PID"
 cleanup() {
   trap - EXIT INT TERM HUP
-  if [ -n "${SAT_PID:-}" ]; then
-    kill_tree "$SAT_PID"
-  fi
-  kill_tree "$HOST_PID"
+  kill_from_pidfile
   sweep_orphaned_services
+  echo "[dev-all] All dev-stack processes stopped."
 }
 # HUP is required: when the user hits Ctrl-C in a terminal running `mise run
 # dev-all`, mise often exits without forwarding SIGINT to this bash script,
@@ -59,5 +67,6 @@ WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   "$NODE_TEST_REALM_READY" \
   'wait' &
 SAT_PID=$!
+record_dev_pid sat "$SAT_PID"
 wait "$SAT_PID"
 exit $?

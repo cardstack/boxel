@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Start base realm server only"
-#MISE depends=["infra:ensure-pg"]
+#MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then

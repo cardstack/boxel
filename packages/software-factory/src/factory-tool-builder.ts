@@ -35,7 +35,6 @@ import {
 } from './parse-execution';
 import { runTestsInMemory } from './test-run-execution';
 import type { RunTestsInMemoryOptions, RunTestsResult } from './test-run-types';
-import { readCard, writeCard } from './workspace-fs';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,15 +47,12 @@ export interface FactoryTool {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
   /**
    * Origin marker. `'core'` is for tools defined directly in this
-   * builder (read_file, search_realm, run_lint, the structured update
-   * tools, signals, …). `'registered'` is for tools wrapped from the
-   * `ToolRegistry`'s script + realm-api manifests (realm-read,
-   * search-realm, boxel-sync, …).
-   *
-   * The Claude backend filters out `'registered'` tools because they
-   * shadow the core ones with kebab-case duplicates the model picks at
-   * random — and most of them are reachable through native fs / Bash +
-   * boxel CLI anyway. OpenRouter still gets every tool.
+   * builder (`get_card_schema`, `run_*`, `signal_done`,
+   * `request_clarification`). `'registered'` is for tools wrapped
+   * from the `ToolRegistry`'s realm-api manifests (currently just
+   * `realm-create`); these are filtered out of the agent's hot path
+   * since the entrypoint drives the realm-create flow before the
+   * agent runs.
    */
   source?: 'core' | 'registered';
 }
@@ -144,13 +140,18 @@ export function buildFactoryTools(
   toolExecutor: ToolExecutor,
   toolRegistry: ToolRegistry,
 ): FactoryTool[] {
+  // Filesystem and shell are owned by the agent backend (Claude Agent
+  // SDK or opencode) via native tools. The factory contributes
+  // `get_card_schema` (introspects a live `CardDef` via the
+  // realm-server prerenderer — no Bash equivalent), the validation
+  // run_* tools, and the two control signals. Tracker-schema cards
+  // (Project / Issue / KnowledgeArticle / Spec / issue comments) are
+  // written as plain JSON via the backend's native `Write` after
+  // schema introspection; the shapes and invariants live in the
+  // `software-factory-bootstrap` and `software-factory-operations`
+  // skills.
   let tools: FactoryTool[] = [
-    buildWriteFileTool(config),
-    buildReadFileTool(config),
-    buildFetchTranspiledModuleTool(config),
-    buildSearchRealmTool(config),
     buildGetCardSchemaTool(config),
-    buildRunCommandTool(config),
     buildRunLintTool(config),
     buildRunTestsTool(config),
     buildRunEvaluateTool(config),
@@ -160,19 +161,16 @@ export function buildFactoryTools(
     buildRequestClarificationTool(),
   ];
 
-  // Tracker-schema cards (Project / IssueTracker / Issue / KnowledgeArticle / Spec /
-  // issue comments) used to have dedicated wrapper tools here that
+  // Wrap registered realm-api manifests (currently just `realm-create`).
+  // Tracker-schema cards (Project / IssueTracker / Issue / KnowledgeArticle /
+  // Spec / issue comments) used to have dedicated wrapper tools here that
   // auto-constructed the JSON:API document, enforced Issue-description
-  // immutability, and so on. CS-10883 retired all five; the agent now
-  // writes those `.json` files directly via `Write` (Claude) /
-  // `write_file` (OpenRouter). The shapes and invariants are taught in
-  // the `software-factory-bootstrap` and `software-factory-operations`
-  // skills, with the live `darkfactoryModuleUrl` named in the system
-  // prompt for `adoptsFrom.module`.
-
-  // Add registered realm-api tools as FactoryTool wrappers. After the
-  // CS-10883 retirements the registry only contains `realm-create`;
-  // anything else added later goes through the same build path.
+  // immutability, etc. CS-10883 retired all five; the agent now writes
+  // those `.json` files directly via `Write`. The shapes and invariants are
+  // taught in the `software-factory-bootstrap` and
+  // `software-factory-operations` skills, with the live
+  // `darkfactoryModuleUrl` named in the system prompt for
+  // `adoptsFrom.module`.
   for (let manifest of toolRegistry.getManifests()) {
     if (manifest.category === 'realm-api') {
       tools.push(buildRegisteredTool(manifest, toolExecutor, config));
@@ -206,12 +204,10 @@ async function syncWorkspaceForToolRun(
 /**
  * Enforce that a required string argument is present and non-empty. Returns
  * the trimmed value or throws a clear error that propagates back to the
- * model as a tool-call result. This is the only runtime guardrail against
- * an LLM emitting a malformed tool call like `write_file({})` — the JSON
- * Schema `required` declaration is advisory for OpenRouter's tool-use and
- * the model can still send empty args. Without this check, path strings
- * like `"undefined"` would end up at the realm's root (e.g., a file named
- * `<realm>/undefined`).
+ * model as a tool-call result. The JSON Schema `required` declaration is
+ * advisory — the model can still send empty args — so this is the runtime
+ * guardrail that keeps a malformed tool call (e.g. `get_card_schema({})`)
+ * from sliding through with a `"undefined"` path or name.
  */
 export function requireStringArg(
   args: Record<string, unknown>,
@@ -231,123 +227,6 @@ export function requireStringArg(
 // ---------------------------------------------------------------------------
 // Factory-level tools
 // ---------------------------------------------------------------------------
-
-function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'write_file',
-    description:
-      'Write a file to the target realm workspace. The path must include the file extension. Writes go to the local workspace and are synced to the realm between iterations.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative file path with extension (e.g., "my-card.gts", "Card/1.json")',
-        },
-        content: { type: 'string', description: 'File content' },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to write to (default: target)',
-        },
-      },
-      required: ['path', 'content'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'write_file');
-      let content = requireStringArg(args, 'content', 'write_file');
-      return writeCard(config.workspaceDir, path, content);
-    },
-  };
-}
-
-function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'read_file',
-    description:
-      'Read a file from the target realm workspace. Returns parsed JSON when possible, otherwise raw text.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description: 'Realm-relative file path',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'read_file');
-      return readCard(config.workspaceDir, path);
-    },
-  };
-}
-
-function buildFetchTranspiledModuleTool(
-  config: ToolBuilderConfig,
-): FactoryTool {
-  return {
-    name: 'fetch_transpiled_module',
-    description:
-      "Debugging tool ONLY for investigating runtime errors in .gts modules you've written. Use when an eval or instantiate validation error reports a line/column number — those line numbers refer to the transpiled output, not your .gts source, so fetching the transpiled output is how you locate the offending source construct. Never use the transpiled output as a reference for how to write code. Do NOT copy its patterns (setComponentTemplate, precompileTemplate, wire-format templates, base64 CSS imports) into source — always write idiomatic Ember / <template>-tag / CardDef source. Editing: only edit the .gts source (the transpiled output is regenerated on the next write). Auth: per-realm JWT.",
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative module path. The .gts extension is optional — the realm accepts either form.',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to read from (default: target)',
-        },
-      },
-      required: ['path'],
-    },
-    execute: async (args) => {
-      let path = requireStringArg(args, 'path', 'fetch_transpiled_module');
-      let realmUrl = resolveRealm(config, args.realm as string | undefined);
-      return config.client.readTranspiled(realmUrl, path);
-    },
-  };
-}
-
-function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'search_realm',
-    description:
-      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: {
-          type: 'object',
-          description: 'Search query object (filter, sort, page)',
-        },
-        realm: {
-          type: 'string',
-          enum: ['target'],
-          description: 'Which realm to search (default: target)',
-        },
-      },
-      required: ['query'],
-    },
-    execute: async (args) => {
-      let query = args.query as Record<string, unknown>;
-      let realmUrl = resolveRealm(config, args.realm as string | undefined);
-      let result = await config.client.search(realmUrl, query);
-      return result.ok ? { data: result.data } : { error: result.error };
-    },
-  };
-}
 
 function buildGetCardSchemaTool(config: ToolBuilderConfig): FactoryTool {
   return {
@@ -489,16 +368,20 @@ function buildRunEvaluateTool(config: ToolBuilderConfig): FactoryTool {
       'module counts, per-failure error + stackTrace). Without "path", ' +
       'evaluates every non-test evaluable module in the realm. With ' +
       '"path", evaluates only that single realm-relative file — handy ' +
-      'for a quick self-check right after writing one module. Safe to ' +
+      'for a quick self-check right after writing one module. The tool ' +
+      'pushes your workspace to the realm before evaluating so files you ' +
+      'just wrote are visible to the prerender sandbox — the same sync ' +
+      'the orchestrator runs after signal_done, brought forward. Safe to ' +
       'call repeatedly for mid-turn self-validation — this tool does NOT ' +
-      'create an EvalResult card or any other realm artifact. The ' +
+      'create an EvalResult card or any other validation artifact. The ' +
       'orchestrator still runs the full validation pipeline (which writes ' +
       'an EvalResult card) automatically after signal_done, so calling ' +
       'this is optional. When a failure reports a line/column, those ' +
-      'numbers refer to the transpiled module — use `fetch_transpiled_module` ' +
-      'to locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm ' +
-      'server token.',
+      'numbers refer to the transpiled module — fetch the transpiled ' +
+      'output via Bash + `boxel read-transpiled <path> --realm <url>` ' +
+      'to locate the offending source construct, then fix the .gts ' +
+      'source (never copy transpiled patterns back into source). ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -596,19 +479,29 @@ function buildRunInstantiateTool(config: ToolBuilderConfig): FactoryTool {
       'realm for Spec cards and instantiates every linkedExample on every ' +
       'card/app Spec; specs with no linkedExamples still get a bare ' +
       'instantiation to exercise the card class. With "path", instantiates ' +
-      'only that single realm-relative `.json` example file — its ' +
+      'only that single realm-relative `.json` **instance** file — its ' +
       '`meta.adoptsFrom` supplies the module + card name, and spec discovery ' +
       'is skipped entirely so the agent can self-check one instance in ' +
-      'isolation. The path must end in `.json`. Safe to call repeatedly for ' +
-      'mid-turn self-validation — this tool does NOT create an ' +
-      'InstantiateResult card or any other realm artifact. The orchestrator ' +
-      'still runs the full validation pipeline (which writes an ' +
-      'InstantiateResult card) automatically after signal_done, so calling ' +
-      'this is optional. When a failure reports a line/column, those numbers ' +
-      'refer to the transpiled module — use `fetch_transpiled_module` to ' +
-      'locate the offending source construct, then fix the .gts source ' +
-      '(never copy transpiled patterns back into source). Auth: realm server ' +
-      'token.',
+      'isolation. The path must end in `.json`. **Do NOT pass a `Spec/...json` ' +
+      'path or any card whose `meta.adoptsFrom.module` is a base-realm URL ' +
+      '(`https://cardstack.com/base/...`). Specs adopt from the base realm, ' +
+      'and the prerender refuses cross-origin module loads — the call would ' +
+      'fail with "moduleUrl origin does not match realmUrl origin". To ' +
+      'validate Specs, call this tool WITHOUT a path; it discovers your ' +
+      'Specs and exercises their `linkedExamples` against the card class ' +
+      'you just wrote.** The tool pushes your workspace to the realm before ' +
+      'instantiating so files you just wrote (including the .json example ' +
+      'and the card definition it adopts from) are visible to the prerender ' +
+      'sandbox. Safe to call repeatedly for mid-turn self-validation — this ' +
+      'tool does NOT create an InstantiateResult card or any other ' +
+      'validation artifact. The orchestrator still runs the full validation ' +
+      'pipeline (which writes an InstantiateResult card) automatically after ' +
+      'signal_done, so calling this is optional. When a failure reports a ' +
+      'line/column, those numbers refer to the transpiled module — fetch ' +
+      'the transpiled output via Bash + `boxel read-transpiled <path> ' +
+      '--realm <url>` to locate the offending source construct, then fix ' +
+      'the .gts source (never copy transpiled patterns back into source). ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
@@ -652,7 +545,7 @@ function buildSignalDoneTool(): FactoryTool {
   return {
     name: 'signal_done',
     description:
-      'Signal that the current ticket is complete. Call this when all implementation and test files have been written.',
+      'Signal that the current issue is complete. Call this when all implementation and test files have been written.',
     parameters: { type: 'object', properties: {} },
     execute: async () => {
       return { signal: DONE_SIGNAL } as DoneResult;
@@ -680,41 +573,6 @@ function buildRequestClarificationTool(): FactoryTool {
         signal: CLARIFICATION_SIGNAL,
         message: args.message as string,
       } as ClarificationResult;
-    },
-  };
-}
-
-function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
-  return {
-    name: 'run_command',
-    description:
-      'Execute a Boxel host command on the realm server via the prerenderer. ' +
-      'This runs Boxel host commands ONLY — not shell commands, scripts, or Node.js. ' +
-      'Commands must be Boxel host command specifiers in the format ' +
-      '"@cardstack/boxel-host/commands/<name>/default". ' +
-      'Auth: realm server token.',
-    parameters: {
-      type: 'object',
-      properties: {
-        command: {
-          type: 'string',
-          description:
-            'Boxel host command specifier — must be in the format "@cardstack/boxel-host/commands/<name>/default"',
-        },
-        commandInput: {
-          type: 'object',
-          description: 'Optional input for the command',
-        },
-      },
-      required: ['command'],
-    },
-    execute: async (args) => {
-      return config.client.runCommand(
-        config.realmServerUrl,
-        config.targetRealm,
-        args.command as string,
-        args.commandInput as Record<string, unknown> | undefined,
-      );
     },
   };
 }
@@ -769,10 +627,3 @@ function buildRegisteredTool(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function resolveRealm(
-  config: ToolBuilderConfig,
-  _realm: string | undefined,
-): string {
-  return config.targetRealm;
-}

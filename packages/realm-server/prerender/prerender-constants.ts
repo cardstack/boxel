@@ -36,6 +36,22 @@ export function sanitizePrerenderRequestId(
 // in worker logs.
 export const PRERENDER_JOB_ID_HEADER = 'x-boxel-job-id';
 
+// Stamped on the host's outbound _federated-search / _search calls
+// when the host SPA detects it's running inside a prerender tab. The
+// prerender server signals "you are in a prerender" by injecting
+// `globalThis.__boxelDuringPrerender = true` via evaluateOnNewDocument
+// before the host SPA boots. The host's realm-server fetch wrapper
+// reads that flag and attaches this header to the request; the
+// search handlers read it inbound and pass `cacheOnlyDefinitions:true`
+// to searchCards, short-circuiting the recursive lookupDefinition
+// fan-out in populateQueryFields that causes self-referential
+// prerender deadlocks under parallel indexing.
+//
+// Defined in runtime-common's realm.ts as the single source of truth
+// so the Realm class can read it without depending on realm-server.
+// Re-exported here for the host fetch wrapper's import-locality.
+export { DURING_PRERENDER_HEADER } from '@cardstack/runtime-common';
+
 // Sanitize the inbound job-id header. Format is `<digits>.<digits>`
 // (job.id + reservation.id, both bigint-shaped); accept up to 32
 // digits per side (so up to 65 chars total including the separator)

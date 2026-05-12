@@ -150,13 +150,30 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     // Check if there's anything to validate before creating artifacts
     if (specInfos.length === 0) {
       let hasModules = false;
+      let filenames: string[] = [];
+      let listError: string | undefined;
       try {
         let filesResult = await this.fetchFilenamesFn(targetRealm);
-        hasModules = (filesResult.filenames ?? []).some(
-          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+        // `fetchFilenamesFn` (defaults to `client.listFiles`) reports
+        // failures via a returned `error` field, not by throwing. Treat
+        // either path as "we don't actually know what's in the realm" and
+        // fall back to the no-modules branch so we don't fail the step
+        // with a misleading "modules exist but no specs" message.
+        if (filesResult.error) {
+          listError = filesResult.error;
+        } else {
+          filenames = filesResult.filenames ?? [];
+          hasModules = filenames.some(
+            (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+          );
+        }
+      } catch (err) {
+        listError = err instanceof Error ? err.message : String(err);
+      }
+      if (listError) {
+        log.warn(
+          `Failed to list realm files while diagnosing empty spec search: ${listError}`,
         );
-      } catch {
-        // If we can't check filenames, treat as nothing to validate
       }
 
       if (!hasModules) {
@@ -165,8 +182,22 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         return { step: 'instantiate', passed: true, files: [], errors: [] };
       }
 
-      // Modules exist but no specs — fail with actionable message
-      log.info('Card modules exist but no Spec cards found — failing');
+      // Modules exist but no specs — likely either a real "no Catalog Spec"
+      // configuration miss OR an indexer/search-readiness lag where the
+      // Spec source file is on disk but `_federated-search` hasn't picked
+      // it up yet. Dump the filename list (filtered to spec-like paths)
+      // and the count of total files so future flakes can be triaged
+      // against an actual log line instead of an assertion that swallows
+      // the context.
+      let specLikeFilenames = filenames.filter(
+        (f) =>
+          f.endsWith('.json') &&
+          (f.startsWith('Spec/') || f.includes('-spec.json')),
+      );
+      log.warn(
+        `Card modules exist but no Spec cards found in search — failing. ` +
+          `realm=${targetRealm} totalFiles=${filenames.length} specLikeFiles=${JSON.stringify(specLikeFilenames)}`,
+      );
       return {
         step: 'instantiate',
         passed: false,

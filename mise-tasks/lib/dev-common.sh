@@ -15,14 +15,109 @@ export PATH="${REPO_ROOT}/node_modules/.bin:${REPO_ROOT}/packages/realm-server/n
 # start-server-and-test, run-p) that don't immediately forward SIGTERM to
 # their children, so we have to give them a real grace window — but not so
 # long that the user is staring at a hung terminal after Ctrl-C.
-KILL_TREE_GRACE_SECS=5
+KILL_TREE_GRACE_SECS=2
 SWEEP_GRACE_SECS=3
+PGROUP_GRACE_SECS=2
 
-# Recursively SIGTERM a pid and all its descendants, then wait up to
-# KILL_TREE_GRACE_SECS for them to exit, then SIGKILL anything still alive.
-# Walks by parent-pid (independent of pgid, which `mise run` rewrites for its
-# tasks) so we catch the whole tree before any layer dies and orphans its
-# children to init.
+# Pidfile records the top-level pgroup leaders dev-all/dev spawn so that
+# `mise run kill-all` can recover after an abnormal exit (SIGKILL, OOM,
+# parent terminal killed) that prevented the trap from firing. Default
+# location prefers $XDG_RUNTIME_DIR (typically /run/user/$UID, mode 0700,
+# per-user) over /tmp (world-writable sticky) so the file can't be
+# symlink-targeted by another local user. Override via BOXEL_DEV_ALL_PIDFILE
+# for parallel dev sessions / tests.
+PIDFILE="${BOXEL_DEV_ALL_PIDFILE:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all.pids}"
+
+# Reset the pidfile at script start. Stale pids from a previous run would
+# either be reused by unrelated processes or simply gone, both bad. `rm -f`
+# unlinks any pre-existing symlink (rm targets the link, not its referent),
+# so the subsequent truncate-via-redirect creates a fresh file even if the
+# location was symlink-poisoned. `chmod 600` then narrows the file to the
+# owning user.
+init_pidfile() {
+  rm -f "$PIDFILE" 2>/dev/null || true
+  : > "$PIDFILE"
+  chmod 600 "$PIDFILE" 2>/dev/null || true
+}
+
+# Append `<label>=<pid>` to the pidfile. The pid passed in must be a pgroup
+# leader (i.e. spawned via `&` in a shell with `set -m`) — kill_from_pidfile
+# signals the *process group*, not just this pid.
+record_dev_pid() {
+  printf '%s=%s\n' "$1" "$2" >> "$PIDFILE"
+}
+
+# SIGTERM the entire process group, give it PGROUP_GRACE_SECS to exit, then
+# SIGKILL. Negative pid in `kill` targets the pgid; with `set -m` the
+# top-level `&` children are pgroup leaders so PID == PGID, and one signal
+# reaches the whole subtree atomically (no race with grandchildren
+# reparenting to init before we walk to them).
+kill_pgroup_escalating() {
+  _kpe_pid="$1"
+  _kpe_timeout="${2:-$PGROUP_GRACE_SECS}"
+  kill -TERM -- "-$_kpe_pid" 2>/dev/null || true
+  sleep "$_kpe_timeout"
+  kill -KILL -- "-$_kpe_pid" 2>/dev/null || true
+}
+
+# Drain the pidfile: signal each recorded pgroup leader with TERM→KILL, then
+# delete the file. Safe to call when the pidfile is missing or empty.
+kill_from_pidfile() {
+  if [ ! -f "$PIDFILE" ]; then
+    return 0
+  fi
+  while IFS='=' read -r _kfp_label _kfp_pid; do
+    [ -z "$_kfp_pid" ] && continue
+    kill_pgroup_escalating "$_kfp_pid"
+  done < "$PIDFILE"
+  rm -f "$PIDFILE" 2>/dev/null || true
+}
+
+# Spawn a detached guardian process that polls the given parent pid and
+# runs `kill_from_pidfile` + `sweep_orphaned_services` once that pid dies.
+# This is the safety net for the case where dev-all's trap can't run —
+# e.g. dev-all bash gets SIGKILL, mise terminates without forwarding INT/
+# HUP, or the controlling session collapses before the trap handler can
+# execute. The trap path is still the primary cleanup; the guardian only
+# matters when the trap is denied a chance to fire.
+#
+# Implementation notes:
+#   - `setsid` puts the guardian in its own session so it doesn't get
+#     SIGHUP'd when dev-all's session dies.
+#   - stdin/stdout/stderr are redirected away from the terminal so the
+#     guardian can survive after the user's shell exits.
+#   - Output goes to a log file so the user can audit what fired.
+#   - The guardian exits as soon as it has run cleanup once; if cleanup
+#     already ran via the trap (which deleted the pidfile), the guardian's
+#     own `kill_from_pidfile` call is a no-op and the sweep is the only
+#     real work, which is idempotent.
+#   - `disown` removes the guardian from bash's job table so dev-all
+#     doesn't try to wait on it at exit.
+spawn_cleanup_guardian() {
+  _scg_parent_pid="$1"
+  _scg_log="${BOXEL_DEV_ALL_GUARDIAN_LOG:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log}"
+  _scg_lib="$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+  setsid sh -c "
+    exec </dev/null >>'$_scg_log' 2>&1
+    echo \"[guardian \$(date +%H:%M:%S)] watching dev-all pid $_scg_parent_pid (pidfile $PIDFILE)\"
+    while kill -0 $_scg_parent_pid 2>/dev/null; do
+      sleep 1
+    done
+    echo \"[guardian \$(date +%H:%M:%S)] dev-all pid $_scg_parent_pid is gone; running cleanup\"
+    . '$_scg_lib'
+    kill_from_pidfile
+    sweep_orphaned_services
+    echo \"[guardian \$(date +%H:%M:%S)] All dev-stack processes stopped (via guardian).\"
+  " &
+  disown 2>/dev/null || true
+}
+
+# Recursively SIGTERM a pid and all its descendants, sleep
+# KILL_TREE_GRACE_SECS, then SIGKILL stragglers. Walks by parent-pid (PPID)
+# rather than pgid because some callers pass a pid that isn't a pgroup
+# leader (e.g. a service supervisor whose pgid was rewritten by mise);
+# kill_pgroup_escalating is the preferred primitive when the pid *is* a
+# pgroup leader.
 #
 # Two-phase TERM-then-KILL because the wrapper layers in this stack (pnpm,
 # npm exec, run-p, start-server-and-test) frequently exit *before* relaying
@@ -31,9 +126,9 @@ SWEEP_GRACE_SECS=3
 # reparent to init and keep their ports bound — which is exactly the leak
 # this helper is supposed to prevent.
 # All locals carry an `_kill_tree_` prefix because this file is sourced, so
-# bare names like `pid` / `elapsed` would become globals in the caller's
-# shell and could clobber its variables. `local` would be cleaner but isn't
-# in POSIX sh and this file runs under `#!/bin/sh`.
+# bare names like `pid` would become globals in the caller's shell and
+# could clobber its variables. `local` would be cleaner but isn't in POSIX
+# sh and this file runs under `#!/bin/sh`.
 kill_tree() {
   _kill_tree_collect_pids "$1"
   _kill_tree_pids="$_kill_tree_collected"
@@ -42,20 +137,24 @@ kill_tree() {
     kill -TERM "$_kill_tree_pid" 2>/dev/null || true
   done
 
-  _kill_tree_elapsed=0
-  while [ "$_kill_tree_elapsed" -lt "$KILL_TREE_GRACE_SECS" ]; do
-    _kill_tree_any_alive=0
+  # Poll at 100ms intervals up to KILL_TREE_GRACE_SECS so a fast,
+  # well-behaved SIGTERM shutdown isn't penalized with the full grace
+  # window. Each tick re-checks whether any tracked pid is still alive
+  # via `kill -0`; we exit as soon as the set is empty. Plain integer
+  # tick counter rather than nanosecond-deadline math because `date +%N`
+  # isn't POSIX (BSD date rejects it).
+  _kill_tree_ticks=$(( KILL_TREE_GRACE_SECS * 10 ))
+  while [ "$_kill_tree_ticks" -gt 0 ]; do
+    _kill_tree_alive=0
     for _kill_tree_pid in $_kill_tree_pids; do
       if kill -0 "$_kill_tree_pid" 2>/dev/null; then
-        _kill_tree_any_alive=1
+        _kill_tree_alive=1
         break
       fi
     done
-    if [ "$_kill_tree_any_alive" -eq 0 ]; then
-      return 0
-    fi
-    sleep 1
-    _kill_tree_elapsed=$((_kill_tree_elapsed + 1))
+    [ "$_kill_tree_alive" -eq 0 ] && break
+    sleep 0.1
+    _kill_tree_ticks=$(( _kill_tree_ticks - 1 ))
   done
 
   for _kill_tree_pid in $_kill_tree_pids; do
@@ -93,10 +192,10 @@ _kill_tree_walk() {
 # `pkill -f` matches its pattern as ERE, so $REPO_ROOT must be regex-escaped
 # before interpolating; otherwise a checkout path with metacharacters (e.g.
 # `boxel.worktrees/...`, where `.` matches any char) would over-match and
-# signal unrelated processes outside this checkout. Every pattern is
-# anchored to ${REPO_ROOT_RE} so it never matches outside this checkout —
-# the user may have unrelated vite/ember/node processes running for other
-# projects.
+# signal unrelated processes outside this checkout. Every pattern below is
+# either repo-root-anchored or carries a Boxel-specific argv marker so a
+# parallel dev session in a sibling checkout (or an unrelated process that
+# happens to share a binary name) isn't collateral.
 #
 # The patterns:
 #   - mise-tasks/services/* — the bash service entrypoints
@@ -105,24 +204,37 @@ _kill_tree_walk() {
 #     (4201/4202, 4210/4211, 4221/4222). Wrappers that just invoke ts-node
 #     don't `exec` it, so killing the wrapper alone leaves the ts-node
 #     grandchild reparented to init with its port still bound.
-#   - packages/host/.*vite/bin/vite.js — the host dev server (port 4200)
-#   - node_modules/.*/start-server-and-test/ — the phase-coordinator that
-#     owns the run-p subtree
-#   - node_modules/.*/npm-run-all/.*run-[ps] — run-p / run-s, which spawn
-#     the `npm run start:*` wrappers and don't always forward signals
+#   - packages/host/scripts/vite-serve.js — the host start wrapper that
+#     spawns the actual vite child. (We don't separately sweep `pnpm
+#     --filter @cardstack/host start`: its only child IS vite-serve.js, so
+#     killing the anchored child causes pnpm to exit on its own.)
+#   - packages/host/.*vite/bin/vite.js --port 4200 — the host dev server
+#     (port 4200) spawned by vite-serve.js
+#   - node_modules/.*/start-server-and-test/src/bin/start.js — the
+#     phase-coordinator that owns the run-p subtree
+#   - node_modules/.*/npm-run-all/bin/run-p — run-p, which spawns the
+#     `npm run start:*` wrappers and doesn't always forward signals
+#   - http-server .* X-Boxel-Assume-User .* --port 4206 — boxel-icons
+#     server. Can't anchor to $REPO_ROOT (pnpm scripts strip it from argv),
+#     but the X-Boxel-Assume-User CORS header in the icons invocation is
+#     Boxel-specific and won't appear in unrelated http-server instances.
 sweep_orphaned_services() {
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
   TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
-  VITE_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js"
-  SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/"
-  RUNP_RE="${REPO_ROOT_RE}/.*node_modules/.*npm-run-all/bin/run-[ps]"
+  VITE_SERVE_RE="${REPO_ROOT_RE}/packages/host/scripts/vite-serve\.js"
+  VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js --port 4200"
+  SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
+  RUNP_RE="${REPO_ROOT_RE}/.*node_modules/.*npm-run-all/bin/run-p"
+  HTTP_SERVER_RE="http-server.*X-Boxel-Assume-User.*--port 4206"
 
   for sig in TERM KILL; do
     pkill -"$sig" -f "${REPO_ROOT_RE}/mise-tasks/services/" 2>/dev/null || true
     pkill -"$sig" -f "$TSNODE_RE" 2>/dev/null || true
-    pkill -"$sig" -f "$VITE_RE" 2>/dev/null || true
+    pkill -"$sig" -f "$VITE_SERVE_RE" 2>/dev/null || true
+    pkill -"$sig" -f "$VITE_BIN_RE" 2>/dev/null || true
     pkill -"$sig" -f "$SAT_RE" 2>/dev/null || true
     pkill -"$sig" -f "$RUNP_RE" 2>/dev/null || true
+    pkill -"$sig" -f "$HTTP_SERVER_RE" 2>/dev/null || true
     if [ "$sig" = "TERM" ]; then
       sleep "$SWEEP_GRACE_SECS"
     fi
