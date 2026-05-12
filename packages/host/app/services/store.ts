@@ -32,6 +32,7 @@ import {
   isSingleCardDocument,
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
+  X_BOXEL_CONSUMING_REALM_HEADER,
   Deferred,
   delay,
   mergeRelationships,
@@ -117,6 +118,20 @@ let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
+
+// While rendering inside a prerender tab the render route writes
+// `__boxelConsumingRealm` with the URL of the realm whose card is being
+// rendered. Attach it to outbound `_federated-search` requests so the
+// realm-server's job-scoped cache layer can gate same-realm-only
+// caching. Read each fetch (not cached at module scope) so a tab that
+// renders cards from multiple realms in sequence sends the correct
+// header per request. Returns an empty object when the global is not
+// set so non-prerender (live SPA) fetches behave exactly as before.
+function consumingRealmHeader(): Record<string, string> {
+  let r = (globalThis as unknown as { __boxelConsumingRealm?: string })
+    .__boxelConsumingRealm;
+  return r ? { [X_BOXEL_CONSUMING_REALM_HEADER]: r } : {};
+}
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
@@ -826,6 +841,7 @@ export default class StoreService extends Service implements StoreInterface {
         headers: {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
+          ...consumingRealmHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -892,6 +908,7 @@ export default class StoreService extends Service implements StoreInterface {
         headers: {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
+          ...consumingRealmHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },

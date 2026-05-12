@@ -38,6 +38,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import handleFederatedTypes from './handlers/handle-federated-types';
@@ -118,6 +119,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
+  // One job-scoped same-realm search cache per realm-server process.
+  // Lives for the life of the process; TTL-evicts entries 10 min after
+  // last touch. Future work wires NOTIFY-driven eviction so a job
+  // completion releases its entries immediately.
+  let searchCache = new JobScopedSearchCache();
 
   router.get(
     '/',
@@ -178,7 +184,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch(),
+    handleSearch({ searchCache }),
   );
   router.all(
     '/_federated-info',

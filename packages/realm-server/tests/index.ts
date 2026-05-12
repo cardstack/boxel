@@ -252,6 +252,8 @@ const ALL_TEST_FILES: string[] = [
   './query-matches-filter-test',
   './matches-filter-integration-test',
   './search-in-flight-key-test',
+  './job-scoped-search-cache-test',
+  './consuming-realm-header-test',
   './delete-boxel-claimed-domain-test',
   './realm-auth-test',
   './queries-test',
