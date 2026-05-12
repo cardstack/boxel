@@ -4,11 +4,11 @@ Self-host Grafana dashboards, alerts, and data sources as code, plus a local `do
 
 ## Project context
 
-This package is the source of truth for the self-host Grafana stack
-(staging cutover landed 2026-05-06, production cutover landed
-2026-05-06). It superseded the Amazon Managed Grafana (AMG) deployment;
-the AMG-era Terraform workspace `cardstack/infra:configs/boxel-dashboard/`
-is decommissioned in Phase 7 (CS-10942).
+This package is the source of truth for the self-host Grafana stack.
+Staging and production cut over from Amazon Managed Grafana (AMG) on
+2026-05-06; the AMG-era Terraform workspace
+`cardstack/infra:configs/boxel-dashboard/` is slated for decommission
+in Phase 7 (CS-10942).
 
 - [Linear: Replace dashboard with our own grafana](https://linear.app/cardstack/project/replace-dashboard-with-our-own-grafana-1b7e3de21dbf)
 - Self-host Grafana Terraform: `cardstack/infra:configs/grafana/`
