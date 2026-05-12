@@ -1256,6 +1256,7 @@ export class PagePool {
           'Expected each prerender page to use its own browser context for localStorage isolation',
         );
       }
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -1845,6 +1846,7 @@ export class PagePool {
     let page: Page | undefined;
     try {
       page = await shared.context.newPage();
+      await this.#markPageAsInPrerender(page);
       let pageId = uuidv4();
       await this.#attachPageObservability(page, affinityKey, pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -2201,6 +2203,24 @@ export class PagePool {
   // sees a unified additionalErrors stream.
   //
   // Awaited (not fire-and-forget) so the CDP `Runtime.enable` round-
+  // Inject a window global into every page before any document
+  // loads, so the host SPA can synchronously detect at boot that it's
+  // running inside a prerender tab. Used by the host's
+  // realm-server fetch wrapper to attach `x-boxel-during-prerender`
+  // on _federated-search / _search calls only — narrowly scoped so
+  // unrelated services (icons, vite, etc.) don't see the header on
+  // their CORS preflights. The inbound signal the realm server reads
+  // tells it to pass cacheOnlyDefinitions:true to searchCards,
+  // short-circuiting the recursive lookupDefinition fan-out in
+  // populateQueryFields that causes self-referential prerender
+  // deadlocks under parallel indexing.
+  async #markPageAsInPrerender(page: Page): Promise<void> {
+    await page.evaluateOnNewDocument(() => {
+      (globalThis as unknown as { __boxelDuringPrerender?: boolean }).__boxelDuringPrerender =
+        true;
+    });
+  }
+
   // trip completes before callers begin page navigation — otherwise
   // we'd miss exceptions thrown during early page boot. Attach
   // failures inside the helper still resolve cleanly without throwing
