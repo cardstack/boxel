@@ -27,5 +27,5 @@ export const testRealmInfo: RealmInfo = {
   realmUserId: '@realm_server:localhost',
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: false,
+  includePrerenderedDefaultRealmIndex: null,
 };
