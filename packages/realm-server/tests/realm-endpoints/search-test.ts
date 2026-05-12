@@ -521,6 +521,56 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             'firstName attribute is present',
           );
         });
+
+        test('coalesces concurrent searchCards calls with identical query+opts', async function (assert) {
+          let q = buildPersonQuery('Mango');
+          let [a, b] = await Promise.all([
+            testRealm.realmIndexQueryEngine.searchCards(q, {
+              loadLinks: true,
+            }),
+            testRealm.realmIndexQueryEngine.searchCards(q, {
+              loadLinks: true,
+            }),
+          ]);
+          assert.strictEqual(
+            a,
+            b,
+            'concurrent identical calls share the same resolved doc instance',
+          );
+        });
+
+        test('does not coalesce when filter differs', async function (assert) {
+          let [a, b] = await Promise.all([
+            testRealm.realmIndexQueryEngine.searchCards(
+              buildPersonQuery('Mango'),
+              { loadLinks: true },
+            ),
+            testRealm.realmIndexQueryEngine.searchCards(
+              buildPersonQuery('does-not-exist'),
+              { loadLinks: true },
+            ),
+          ]);
+          assert.notStrictEqual(
+            a,
+            b,
+            'concurrent calls with different filters produce independent results',
+          );
+        });
+
+        test('cleans up in-flight slot after settlement (sequential calls produce fresh results)', async function (assert) {
+          let q = buildPersonQuery('Mango');
+          let a = await testRealm.realmIndexQueryEngine.searchCards(q, {
+            loadLinks: true,
+          });
+          let b = await testRealm.realmIndexQueryEngine.searchCards(q, {
+            loadLinks: true,
+          });
+          assert.notStrictEqual(
+            a,
+            b,
+            'a sequential call after settlement produces a fresh doc (slot was released)',
+          );
+        });
       });
 
       module('fields-based link loading', function (hooks) {

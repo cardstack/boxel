@@ -36,7 +36,12 @@ import type {
   RealmResourceIdentifier,
   RealmIdentifier,
 } from './card-reference-resolver';
-import type { Filter, Query } from './query';
+import {
+  normalizeQueryForSignature,
+  sortKeysDeep,
+  type Filter,
+  type Query,
+} from './query';
 import { CardError, type SerializedError } from './error';
 import {
   isCodeRef,
@@ -117,6 +122,23 @@ type QueryFieldErrorDetail = {
   status?: number;
 };
 
+// Stable digest key for searchCards in-flight dedup. Returns undefined if
+// the inputs can't be serialized deterministically — caller falls back to
+// running uncoalesced so dedup is best-effort, never a correctness boundary.
+export function searchInFlightKey(
+  realmURL: string,
+  query: Query,
+  opts: Options | undefined,
+): string | undefined {
+  try {
+    let queryDigest = JSON.stringify(normalizeQueryForSignature(query));
+    let optsDigest = opts ? JSON.stringify(sortKeysDeep(opts)) : '';
+    return `${realmURL}|${queryDigest}|${optsDigest}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
@@ -140,6 +162,23 @@ export class RealmIndexQueryEngine {
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
+  // In-flight dedup for searchCards: concurrent callers asking for the same
+  // (realm, query, opts) share one in-flight promise instead of each running
+  // an independent SQL + loadLinks walk.
+  //
+  // Safety: this layer is user-agnostic. Per-realm read authorization is
+  // enforced by realm-server middleware (multiRealmAuthorization) BEFORE the
+  // request reaches Realm.search → searchCards; once we're here, every
+  // authorized caller for the same (realm, query, opts) is entitled to the
+  // same bytes. The key intentionally omits caller identity. If per-card
+  // visibility-by-user is ever added at this layer, this key must grow to
+  // include the caller's identity, or the dedup must be moved up the stack
+  // to where auth-equivalence is established.
+  //
+  // The shared resolved document is treated as read-only by all callers
+  // (Realm.search → JSON.stringify → HTTP response). Do not mutate the
+  // returned doc.
+  #inFlightSearch = new Map<string, Promise<LinkableCollectionDocument>>();
 
   constructor({
     realm,
@@ -169,6 +208,31 @@ export class RealmIndexQueryEngine {
   }
 
   async searchCards(
+    query: Query,
+    opts?: Options,
+  ): Promise<LinkableCollectionDocument> {
+    let key = searchInFlightKey(this.#realm.url, query, opts);
+    if (key !== undefined) {
+      let existing = this.#inFlightSearch.get(key);
+      if (existing) {
+        return await existing;
+      }
+      let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
+        // Identity-check before deletion: a concurrent invalidation path
+        // could in principle replace the entry. Only clean up if the map
+        // still points at *this* pending promise. Mirrors
+        // CachingDefinitionLookup#inFlight.
+        if (this.#inFlightSearch.get(key) === pending) {
+          this.#inFlightSearch.delete(key);
+        }
+      });
+      this.#inFlightSearch.set(key, pending);
+      return await pending;
+    }
+    return await this.searchCardsUncoalesced(query, opts);
+  }
+
+  private async searchCardsUncoalesced(
     query: Query,
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {
