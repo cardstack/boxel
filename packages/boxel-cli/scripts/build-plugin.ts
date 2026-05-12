@@ -26,7 +26,8 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: 'realm-sync',
     commands: [
       'realm sync',
-      'realm watch',
+      'realm watch start',
+      'realm watch stop',
       'realm push',
       'realm pull',
       'realm create',
