@@ -108,6 +108,23 @@ export default class HostModeService extends Service {
     return this.operatorModeStateService.realmURL;
   }
 
+  // CS-10055: routing rules from the realm config card. The realm-server
+  // injects this map as `window.__hostRoutingMap` in the SPA shell so the
+  // first-render decision in the index route is synchronous.
+  get hostRoutingMap(): { path: string; id: string }[] {
+    let map = (window as { __hostRoutingMap?: unknown }).__hostRoutingMap;
+    return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
+  }
+
+  // Returns the target card id if `path` matches a routing rule, else null.
+  // `path` is the path within the realm; a leading slash is added if absent
+  // so the index path is matchable as either '' or '/'.
+  resolveRoutedPath(path: string): string | null {
+    let normalized = path.startsWith('/') ? path : `/${path}`;
+    let rule = this.hostRoutingMap.find((r) => r.path === normalized);
+    return rule ? rule.id : null;
+  }
+
   get currentCardId() {
     if (this.isActive) {
       let stack = this.hostModeStateService.stackItems;

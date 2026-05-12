@@ -471,6 +471,27 @@ export class RealmServer {
       return;
     }
 
+    // CS-10055: host routing rules in the realm config can map a bare path
+    // (e.g. /whitepaper) to a target card. When the requested path matches
+    // a rule, rewrite cardURL so the head/isolated/scoped CSS fetched
+    // below render the routed target. The same map is also injected as
+    // a <script> further down so the SPA can resolve the path post-hydration.
+    let routingMap: { path: string; id: string }[] = [];
+    let routedRealm = await this.findOrMountRealm(requestURL);
+    if (routedRealm) {
+      routingMap = await routedRealm.getHostRoutingMap();
+      if (routingMap.length > 0) {
+        let realmURL = new URL(routedRealm.url);
+        realmURL.protocol = requestURL.protocol;
+        let realmPaths = new RealmPaths(realmURL);
+        let pathInRealm = '/' + realmPaths.local(rri(requestURL.href));
+        let rule = routingMap.find((r) => r.path === pathInRealm);
+        if (rule) {
+          cardURL = new URL(rule.id);
+        }
+      }
+    }
+
     this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
     this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
     this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
@@ -557,6 +578,15 @@ export class RealmServer {
     if (!hasAppleTouchIcon) {
       headFragments.push(
         `<link href="${webclipURL}" rel="apple-touch-icon" />`,
+      );
+    }
+
+    if (routingMap.length > 0) {
+      // Escape `<` so any embedded `</script>` or `<!--` in the JSON can't
+      // break out of the script context.
+      let safeMap = JSON.stringify(routingMap).replace(/</g, '\\u003c');
+      headFragments.push(
+        `<script>window.__hostRoutingMap = ${safeMap};</script>`,
       );
     }
 
