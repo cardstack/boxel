@@ -42,7 +42,7 @@ export default function handleSearch(): (ctxt: Koa.Context) => Promise<void> {
       throw e;
     }
 
-    let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER) !== '';
+    let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
     let combined = await searchRealms(
       realmList.map((realmURL) => realmByURL.get(realmURL)),
       cardsQuery,

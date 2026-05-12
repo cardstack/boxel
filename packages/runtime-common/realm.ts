@@ -201,19 +201,24 @@ export type RealmInfo = {
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
-// Marker header the prerender server stamps on every outbound request
-// from inside a Chrome tab it owns (via puppeteer setExtraHTTPHeaders).
-// When the realm sees this on an inbound _search request it knows the
-// caller is the host SPA mid-render, and switches the search to
-// cacheOnlyDefinitions:true — which short-circuits the recursive
-// lookupDefinition → prerenderModule path in populateQueryFields that
-// causes self-referential prerender deadlocks under parallel
-// indexing. Kept as a bare string here so runtime-common stays
-// independent of realm-server. The realm-server prerender side
+// Marker header the host SPA attaches to outbound _federated-search /
+// _search calls when it's running inside a prerender tab. The prerender
+// server uses puppeteer's `evaluateOnNewDocument` to inject a window
+// global (`__boxelDuringPrerender = true`) into every Chrome tab before
+// the host loads; the host's realm-server fetch wrapper then reads that
+// flag and adds this header on its own outbound search requests only —
+// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
+// see it on a CORS preflight. When the realm sees this on an inbound
+// _search request it knows the caller is the host SPA mid-render and
+// switches the search to cacheOnlyDefinitions:true, which short-circuits
+// the recursive lookupDefinition → prerenderModule path in
+// populateQueryFields that causes self-referential prerender deadlocks
+// under parallel indexing. Kept as a bare string here so runtime-common
+// stays independent of realm-server. The realm-server prerender side
 // re-exports the same value from prerender-constants.ts.
 export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
 function isDuringPrerenderRequest(request: Request): boolean {
-  return request.headers.get(DURING_PRERENDER_HEADER) != null;
+  return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not

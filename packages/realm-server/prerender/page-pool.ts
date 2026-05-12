@@ -2193,16 +2193,6 @@ export class PagePool {
     }
   }
 
-  // Attach all per-page error/exception observability surfaces. The
-  // console-message listener catches things that surfaced via the JS
-  // event layer (page logs, Chrome's late "Uncaught (in promise)..."
-  // tracker output); the runtime-exception capture catches things at
-  // V8's first-layer throw notification, even when the WebAPI dispatch
-  // would later get retracted by an upstream `.catch` (the whitepaper-
-  // class bug). Both feed the same per-page bucket so render-runner
-  // sees a unified additionalErrors stream.
-  //
-  // Awaited (not fire-and-forget) so the CDP `Runtime.enable` round-
   // Inject a window global into every page before any document
   // loads, so the host SPA can synchronously detect at boot that it's
   // running inside a prerender tab. Used by the host's
@@ -2216,11 +2206,22 @@ export class PagePool {
   // deadlocks under parallel indexing.
   async #markPageAsInPrerender(page: Page): Promise<void> {
     await page.evaluateOnNewDocument(() => {
-      (globalThis as unknown as { __boxelDuringPrerender?: boolean }).__boxelDuringPrerender =
-        true;
+      (
+        globalThis as unknown as { __boxelDuringPrerender?: boolean }
+      ).__boxelDuringPrerender = true;
     });
   }
 
+  // Attach all per-page error/exception observability surfaces. The
+  // console-message listener catches things that surfaced via the JS
+  // event layer (page logs, Chrome's late "Uncaught (in promise)..."
+  // tracker output); the runtime-exception capture catches things at
+  // V8's first-layer throw notification, even when the WebAPI dispatch
+  // would later get retracted by an upstream `.catch` (the whitepaper-
+  // class bug). Both feed the same per-page bucket so render-runner
+  // sees a unified additionalErrors stream.
+  //
+  // Awaited (not fire-and-forget) so the CDP `Runtime.enable` round-
   // trip completes before callers begin page navigation — otherwise
   // we'd miss exceptions thrown during early page boot. Attach
   // failures inside the helper still resolve cleanly without throwing
