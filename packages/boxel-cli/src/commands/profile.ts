@@ -80,7 +80,7 @@ function validateUrl(input: string, label: string): string {
 
 // Matches scripts/env-slug.sh: lowercase, "/" -> "-", strip chars outside
 // [a-z0-9-], collapse runs of "-", trim leading/trailing "-".
-function computeEnvSlug(name: string): string {
+export function computeEnvSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/\//g, '-')
@@ -91,7 +91,7 @@ function computeEnvSlug(name: string): string {
 
 // Derive URLs from BOXEL_ENVIRONMENT using the same ".${slug}.localhost"
 // pattern that mise-tasks/lib/env-vars.sh produces for env-mode local dev.
-function resolveBoxelEnvironment(): EnvironmentDefaults | null {
+export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   const raw = process.env.BOXEL_ENVIRONMENT;
   if (!raw || !raw.trim()) return null;
   const slug = computeEnvSlug(raw);
