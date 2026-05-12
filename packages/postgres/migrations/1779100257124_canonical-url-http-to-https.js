@@ -63,6 +63,7 @@ BEGIN
     FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name NOT IN ('modules', 'pgmigrations', 'migrations')
+      AND is_generated = 'NEVER'
       AND (
         data_type IN ('text', 'character varying', 'character')
         OR udt_name = 'jsonb'

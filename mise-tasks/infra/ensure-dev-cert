@@ -33,16 +33,10 @@ CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
 CERT_FILE="$CERT_DIR/localhost.pem"
 KEY_FILE="$CERT_DIR/localhost-key.pem"
 
-# Idempotent skip when the cert already exists and isn't within 7 days of
-# expiry. openssl's `-checkend` returns 0 if the cert is valid for at least
-# the given number of seconds.
-if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
-    exit 0
-  fi
-  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
-fi
-
+# mkcert is required even on the idempotent-skip path: env-vars.sh needs
+# `mkcert -CAROOT` to populate `NODE_EXTRA_CA_CERTS` so Node clients
+# trust the cert. An existing cert without a working mkcert binary leaves
+# the trust path half-wired.
 if ! command -v mkcert >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 [ensure-dev-cert] mkcert is required but not installed.
@@ -60,6 +54,18 @@ Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
 See the repo-root README ("Local HTTPS dev access") for the why.
 EOF
   exit 1
+fi
+
+# Idempotent skip when the cert already exists and isn't within 7 days of
+# expiry. openssl's `-checkend` returns 0 if the cert is valid for at
+# least the given number of seconds. Sequenced after the mkcert check so
+# we never let a stale cert slip past while mkcert is uninstalled —
+# env-vars.sh needs `mkcert -CAROOT` to wire `NODE_EXTRA_CA_CERTS`.
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
+    exit 0
+  fi
+  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
 fi
 
 mkdir -p "$CERT_DIR"

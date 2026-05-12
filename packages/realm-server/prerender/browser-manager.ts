@@ -34,9 +34,8 @@ export class BrowserManager {
     // may or may not be in the system trust store depending on whether
     // the dev ran `mkcert -install`. Puppeteer's bundled Chromium uses
     // its own NSS DB that mkcert doesn't always touch, so we relax cert
-    // checks unconditionally for the prerender path. Safe: the origins
-    // are fixed by REALM_SERVER_DOMAIN/REALM_BASE_URL and the connection
-    // is loopback-only.
+    // checks unconditionally for the prerender path. Safe: the origin is
+    // fixed by REALM_BASE_URL and the connection is loopback-only.
     if (process.env.REALM_BASE_URL?.startsWith('https://')) {
       launchArgs.push('--ignore-certificate-errors');
     }

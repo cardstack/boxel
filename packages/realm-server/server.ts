@@ -38,6 +38,7 @@ import {
   ecsMetadata,
   setContextResponse,
   fetchRequestFromContext,
+  fullRequestURL,
   methodOverrideSupport,
   proxyAsset,
 } from './middleware';
@@ -130,6 +131,17 @@ function createListener(
   }
   let redirectServer = http.createServer(redirectToHttps);
   let dispatcher = net.createServer({ pauseOnConnect: true }, (socket) => {
+    // Attach a per-socket error listener BEFORE doing any I/O. A peer that
+    // RSTs the connection mid-handshake (or in the half-open window before
+    // we route it) emits `'error'` on this raw socket; without a listener
+    // Node escalates that to an uncaught exception and the realm-server
+    // would crash. Logging + best-effort destroy is sufficient — the
+    // dispatcher is the realm-server's single inbound listener and must
+    // survive hostile or unlucky clients.
+    socket.on('error', (e) => {
+      log.warn(`dispatcher socket error: %s`, e.message);
+      socket.destroy();
+    });
     socket.once('readable', () => {
       let firstByte: Buffer | null;
       try {
@@ -139,8 +151,11 @@ function createListener(
         return;
       }
       if (firstByte == null) {
-        // Connection opened then closed without data — let the kernel drop it.
-        socket.resume();
+        // Connection opened then closed without data — release the socket
+        // promptly instead of letting it idle in CLOSE_WAIT until the OS
+        // reaps it. Cheap defense against half-open-connection accumulators
+        // (port scanners, eager load balancers, etc.).
+        socket.destroy();
         return;
       }
       socket.unshift(firstByte);
@@ -154,11 +169,10 @@ function createListener(
       socket.resume();
     });
   });
-  // Surface dispatcher-level errors with the same logger as the rest of
-  // the realm-server. The TLS and redirect servers raise their own errors
-  // separately through their normal lifecycles.
+  // Server-level errors (e.g. `EADDRINUSE` at `listen()` time). Per-socket
+  // errors are handled inside the connection callback above.
   dispatcher.on('error', (e) => {
-    log.warn(`dispatcher socket error: %s`, e.message);
+    log.warn(`dispatcher server error: %s`, e.message);
   });
   return { server: dispatcher, isHttp2: true };
 }
@@ -176,12 +190,12 @@ function redirectToHttps(
   let path = req.url ?? '/';
   let authority: string;
   try {
-    let parsed = new URL(`http://${hostHeader || 'localhost'}`);
+    let parsed = new URL(`http://${hostHeader || hostFromSocket(req)}`);
     // `url.host` preserves brackets around IPv6 literals and the port if
     // present, which is exactly the form we want in the redirect target.
     authority = parsed.host;
   } catch {
-    authority = 'localhost';
+    authority = hostFromSocket(req);
   }
   let location = `https://${authority}${path}`;
   res.writeHead(301, {
@@ -189,6 +203,17 @@ function redirectToHttps(
     'Content-Type': 'text/plain; charset=utf-8',
   });
   res.end(`Redirecting to ${location}\n`);
+}
+
+// Best-effort fallback when the inbound request has no Host header
+// (HTTP/1.0 client). Uses the dispatcher's bound `localAddress:localPort`
+// so the redirect goes to the actual listener instead of guessing port
+// 443. Brackets IPv6 literals to match URL `host` formatting.
+function hostFromSocket(req: http.IncomingMessage): string {
+  let addr = req.socket.localAddress ?? 'localhost';
+  let port = req.socket.localPort;
+  let bracketed = addr.includes(':') ? `[${addr}]` : addr;
+  return port ? `${bracketed}:${port}` : bracketed;
 }
 
 export class RealmServer {
@@ -462,9 +487,7 @@ export class RealmServer {
     let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
     let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
 
-    let requestURL = new URL(
-      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-    );
+    let requestURL = fullRequestURL(ctxt);
 
     // Track published realm info from routing checks to avoid redundant
     // DB queries in the ETag logic below.
@@ -1059,9 +1082,7 @@ export class RealmServer {
     // dispatch below. Mount failures throw — the catch turns them into
     // 503 so the next request retries from scratch (ensureMounted's
     // failure path clears mounted/pendingMounts).
-    let requestURL = new URL(
-      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-    );
+    let requestURL = fullRequestURL(ctxt);
     try {
       await this.findOrMountRealm(requestURL);
     } catch (err: any) {

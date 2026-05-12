@@ -140,9 +140,17 @@ export function fullRequestURL(ctxt: Koa.Context): URL {
     ctxt.req.headers['x-forwarded-proto'] === 'https' || socket?.encrypted
       ? 'https'
       : 'http';
-  let computedURL = new URL(
-    `${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`,
-  );
+  // HTTP/2 carries the authority in the `:authority` pseudo-header rather
+  // than the legacy `Host` header. Node's http2 compat layer normally
+  // populates `headers.host` from `:authority`, but only when the value
+  // is set; falling back to `:authority` makes URL construction robust to
+  // h2 clients (and proxies) that may omit `host`.
+  let h2Headers = ctxt.req.headers as Record<string, string | undefined>;
+  let host =
+    typeof h2Headers.host === 'string' && h2Headers.host
+      ? h2Headers.host
+      : (h2Headers[':authority'] ?? '');
+  let computedURL = new URL(`${protocol}://${host}${ctxt.req.url}`);
   let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
   if (
     process.env.BOXEL_TRUST_FORWARDED_URL === 'true' &&
@@ -184,9 +192,24 @@ export async function fetchRequestFromContext(
   }
 
   let url = fullRequestURL(ctxt).href;
+  // HTTP/2's compat layer presents pseudo-headers (`:method`, `:scheme`,
+  // `:path`, `:authority`) alongside the regular headers. WHATWG `Headers`
+  // rejects names starting with `:` as invalid, so the raw `ctxt.req.headers`
+  // object cannot be passed to `new Request()` on h2 requests. Strip the
+  // pseudo-headers — the URL and method are already extracted above, and
+  // `:authority` is folded back into `host` by `fullRequestURL`.
+  let headers: Record<string, string> = {};
+  for (let [name, value] of Object.entries(ctxt.req.headers)) {
+    if (name.startsWith(':')) continue;
+    if (typeof value === 'string') {
+      headers[name] = value;
+    } else if (Array.isArray(value)) {
+      headers[name] = value.join(', ');
+    }
+  }
   return new Request(url, {
     method: ctxt.method,
-    headers: ctxt.req.headers as { [name: string]: string },
+    headers,
     ...(reqBody !== undefined ? { body: reqBody as BodyInit } : {}),
   });
 }

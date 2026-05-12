@@ -137,7 +137,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `https://localhost:4201/base` and the experiments realm's app is at `https://localhost:4201/experiments`. (Local dev now serves HTTPS+HTTP/2 — see "Local HTTPS dev access" below for the one-time cert setup.)
+The recommended way to view a realm's app is the host vite dev server at `http://localhost:4200` — open it and navigate via the workspace chooser. The realm-server itself terminates HTTPS+HTTP/2 on `https://localhost:4201` (see "Local HTTPS dev access" below for the one-time cert setup), and the in-browser host on `:4200` makes its realm fetches over that https origin so the indexing path multiplexes per Chrome's HTTP/2 connection rules. Visiting `https://localhost:4201/<realm>` directly does work but will surface mixed-content warnings, because the host bundle and icons it loads are still served over plain HTTP on `:4200`/`:4206`.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -260,7 +260,7 @@ markdown payloads. The repo ships an auto-run migration that handles
 all of it:
 
 - `pnpm migrate` (which `mise run dev` runs via `--migrateDB`) picks up
-  `packages/postgres/migrations/1779200000000_canonical-url-http-to-https.js`
+  `packages/postgres/migrations/1779100257124_canonical-url-http-to-https.js`
   on the next boot.
 - That migration walks `information_schema.columns`, finds every
   text/varchar/jsonb column on every public table (skipping `modules`,
@@ -304,7 +304,7 @@ store; Node clients pick up the cert via `NODE_EXTRA_CA_CERTS`.
 
 #### Using `mise run services:realm-server`
 
-You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open https://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
+You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. Visit `http://localhost:4200` (the vite host) to navigate the workspace — the host bundle there fetches realm data over the realm-server's https origin on `:4201`. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
 
 #### Indexing dashboard
 
