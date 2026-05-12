@@ -50,6 +50,7 @@ export default class NetworkService extends Service {
 
   private makeVirtualNetwork() {
     let virtualNetwork = new VirtualNetwork(globalThis.fetch);
+    this.installH2OriginMappings(virtualNetwork);
     let resolvedBaseRealmURL = new URL(
       withTrailingSlash(config.resolvedBaseRealmURL),
     );
@@ -83,6 +84,43 @@ export default class NetworkService extends Service {
       );
     }
     return virtualNetwork;
+  }
+
+  // HTTP/2 alias re-route: when the prerender harness injects a JSON
+  // list of {from, to} origin pairs as window.__realmH2OriginMappings__,
+  // route realm-server fetches through the HTTPS/h2 listener(s) so
+  // they multiplex over one connection per origin instead of
+  // serializing through Chrome's HTTP/1.1 6-per-origin ceiling.
+  // Canonical realm URLs (in card data) stay on the http origin — only
+  // the wire fetch is rewritten. See packages/realm-server/README.md
+  // "HTTP/2 dev access".
+  private installH2OriginMappings(virtualNetwork: VirtualNetwork) {
+    let h2MappingsRaw = (
+      globalThis as unknown as { __realmH2OriginMappings__?: string }
+    ).__realmH2OriginMappings__;
+    if (!h2MappingsRaw) {
+      return;
+    }
+    let pairs: Array<{ from?: string; to?: string }>;
+    try {
+      let parsed = JSON.parse(h2MappingsRaw);
+      pairs = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return;
+    }
+    for (let { from, to } of pairs) {
+      if (!from || !to) continue;
+      let fromUrl: URL;
+      let toUrl: URL;
+      try {
+        fromUrl = new URL(from);
+        toUrl = new URL(to);
+      } catch {
+        continue;
+      }
+      if (fromUrl.origin === toUrl.origin) continue;
+      virtualNetwork.addURLMapping(fromUrl, toUrl);
+    }
   }
 
   resetState = () => {

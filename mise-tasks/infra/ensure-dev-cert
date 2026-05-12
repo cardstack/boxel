@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+#MISE description="Provision a local dev cert so realm-server can serve HTTPS/HTTP-2"
+#
+# Generates ~/.local/share/boxel/dev-certs/{localhost.pem, localhost-key.pem}
+# using mkcert. Idempotent — re-runs are a no-op if the cert already exists
+# and isn't near expiry.
+#
+# Why: indexing fans out 80+ federated-search requests per heavy aggregator
+# card render. Chrome's HTTP/1.1 per-origin connection limit (6) serializes
+# them and turns a single cohort render into ~4–5 minutes. HTTP/2 multiplexes
+# them over one connection, dropping the same render to seconds. Browsers
+# only do HTTP/2 over TLS, so realm-server needs a cert.
+#
+# Note: this script does NOT run `mkcert -install`. That step adds mkcert's
+# root CA to the system trust store and requires sudo. It's only needed if
+# you want YOUR manual browser sessions (visiting https://localhost:4203
+# directly) to trust the cert without a warning. The prerenderer and the
+# test-harness indexer don't need it — they launch Chromium with
+# `--ignore-certificate-errors`. The hint at the end of this script shows
+# how to opt in.
+
+set -euo pipefail
+
+CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+CERT_FILE="$CERT_DIR/localhost.pem"
+KEY_FILE="$CERT_DIR/localhost-key.pem"
+
+# Idempotent skip when the cert already exists and isn't within 7 days of
+# expiry. openssl's `-checkend` returns 0 if the cert is valid for at least
+# the given number of seconds.
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
+    exit 0
+  fi
+  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
+fi
+
+if ! command -v mkcert >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[ensure-dev-cert] mkcert is required but not installed.
+
+Install one of:
+  Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
+  Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
+  macOS (Homebrew):      brew install mkcert nss
+
+Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
+
+Why mkcert is needed: it provisions a self-signed cert so realm-server can
+speak HTTP/2 on https://localhost:4203. Without it, indexing falls back to
+HTTP/1.1 and aggregator-card renders (cohort, dashboards) get throttled by
+Chrome's 6-per-origin connection cap. See packages/realm-server/README.md
+for the full HTTP/2 dev access guide.
+EOF
+  exit 1
+fi
+
+mkdir -p "$CERT_DIR"
+
+echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
+mkcert \
+  -cert-file "$CERT_FILE" \
+  -key-file "$KEY_FILE" \
+  localhost 127.0.0.1 ::1
+
+if ! mkcert -CAROOT >/dev/null 2>&1; then
+  # mkcert prints CAROOT to stdout; the check above only confirms the binary
+  # works. If a CA root doesn't exist yet on this machine, the cert above
+  # will still have been generated against a freshly created root in mkcert's
+  # own data dir — it just isn't installed into the system trust store.
+  :
+fi
+
+cat <<EOF
+[ensure-dev-cert] Cert provisioned. After your next `mise run dev`, the
+realm-server will accept HTTP/2 on https://localhost:4203 in addition to
+the existing HTTP/1.1 on http://localhost:4201.
+
+The prerenderer and test-harness indexer always use the HTTP/2 alias
+(automatic). If you also want YOUR browser to trust the cert without a
+warning when visiting https://localhost:4203 directly, run:
+
+  mkcert -install      # one-time, requires sudo
+EOF

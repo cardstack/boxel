@@ -1,6 +1,9 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
+import http from 'http';
+import http2 from 'http2';
+import { readFileSync } from 'fs';
 import type {
   DefinitionLookup,
   Realm,
@@ -66,6 +69,54 @@ import {
 } from './lib/index-html-injection';
 import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
 import { JSDOM } from 'jsdom';
+
+// Optional h2 alias listener: when both files point to readable certs,
+// realm-server also serves HTTPS+HTTP/2 on REALM_SERVER_TLS_PORT (default
+// 4203). The h2 alias lets clients that suffer under HTTP/1.1's 6-per-origin
+// connection limit (Chrome and Chromium-based prerenderers) multiplex
+// many concurrent fetches over one TCP connection. The h2 origin is an
+// alias — incoming `Host` headers get rewritten to the canonical
+// `serverURL` so URL-keyed realm lookup is identical on both ports.
+const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
+const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
+
+export type RealmHttpServer = http.Server | http2.Http2SecureServer;
+
+export function isTlsEnabled(): boolean {
+  return Boolean(
+    process.env[TLS_CERT_FILE_ENV] && process.env[TLS_KEY_FILE_ENV],
+  );
+}
+
+// Rewrites the inbound `Host` header to match the canonical serverURL
+// when a request arrives on the h2 alias port. Without this, downstream
+// URL construction (e.g., `fullRequestURL`) would build URLs that
+// don't match any mounted realm. The rewrite is scoped to requests
+// whose port differs from the canonical so wildcard-subdomain
+// (published realm) routing is unaffected.
+function aliasHostToCanonical(canonical: URL) {
+  let canonicalHost = canonical.host; // e.g., "localhost:4201"
+  let canonicalHostnameLower = canonical.hostname.toLowerCase();
+  return async function (ctx: Koa.Context, next: Koa.Next) {
+    let host = ctx.req.headers.host;
+    if (typeof host === 'string' && host !== canonicalHost) {
+      // Only rewrite when the hostname matches the canonical hostname (or
+      // is a subdomain of it); leaves cross-host requests alone.
+      let inboundHostname = host.split(':')[0].toLowerCase();
+      if (
+        inboundHostname === canonicalHostnameLower ||
+        inboundHostname.endsWith(`.${canonicalHostnameLower}`)
+      ) {
+        let rewritten =
+          inboundHostname === canonicalHostnameLower
+            ? canonicalHost
+            : `${inboundHostname}:${canonical.port || (canonical.protocol === 'https:' ? '443' : '80')}`;
+        ctx.req.headers.host = rewritten;
+      }
+    }
+    await next();
+  };
+}
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -188,6 +239,7 @@ export class RealmServer {
   @Memoize()
   get app() {
     let app = new Koa<Koa.DefaultState, Koa.Context>()
+      .use(aliasHostToCanonical(this.serverURL))
       .use(httpLogging)
       .use(ecsMetadata)
       .use(
@@ -267,11 +319,43 @@ export class RealmServer {
   }
 
   listen(port: number) {
-    let instance = this.app.listen(port);
+    let instance = http.createServer(this.app.callback());
+    instance.listen(port);
     instance.on('listening', () => {
       let actualPort =
         (instance.address() as import('net').AddressInfo | null)?.port ?? port;
-      this.log.info(`Realm server listening on port %s\n`, actualPort);
+      this.log.info(`Realm server listening on port %s (http)\n`, actualPort);
+    });
+    return instance;
+  }
+
+  // Start an HTTPS+HTTP/2 listener on the alias port. Returns undefined when
+  // cert env vars are unset (e.g., CI, or before the dev cert has been
+  // provisioned). The two listeners share this.app; an alias-host rewrite
+  // middleware (installed by the app getter) normalizes the `Host` header so
+  // URL-keyed routing matches the canonical serverURL on both ports.
+  listenSecure(port: number): http2.Http2SecureServer | undefined {
+    let certFile = process.env[TLS_CERT_FILE_ENV];
+    let keyFile = process.env[TLS_KEY_FILE_ENV];
+    if (!certFile || !keyFile) {
+      return undefined;
+    }
+    let instance = http2.createSecureServer(
+      {
+        cert: readFileSync(certFile),
+        key: readFileSync(keyFile),
+        allowHTTP1: true,
+      },
+      this.app.callback(),
+    );
+    instance.listen(port);
+    instance.on('listening', () => {
+      let actualPort =
+        (instance.address() as import('net').AddressInfo | null)?.port ?? port;
+      this.log.info(
+        `Realm server listening on port %s (https/h2 alias)\n`,
+        actualPort,
+      );
     });
     return instance;
   }

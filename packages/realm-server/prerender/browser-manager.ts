@@ -29,6 +29,17 @@ export class BrowserManager {
       launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
     }
 
+    // When the realm-server is exposing an HTTP/2 alias for indexing
+    // fan-outs, the host's VirtualNetwork re-routes per-page fetches
+    // inside Chromium to the h2 listener. The cert is a local mkcert
+    // leaf, which puppeteer's bundled Chromium doesn't trust by
+    // default, so we skip the check here. Safe for prerender: the
+    // origins are fixed by REALM_H2_ORIGIN_MAPPINGS and the connection
+    // is loopback-only.
+    if (process.env.REALM_H2_ORIGIN_MAPPINGS) {
+      launchArgs.push('--ignore-certificate-errors');
+    }
+
     let extraArgs =
       process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
     if (extraArgs && extraArgs.length > 0) {

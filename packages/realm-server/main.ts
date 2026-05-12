@@ -497,6 +497,15 @@ const getIndexHTML = async () => {
   });
 
   let httpServer = server.listen(port);
+  // Optional HTTPS/h2 alias listener — used to relieve Chromium's
+  // per-origin HTTP/1.1 6-connection ceiling during aggregator-card
+  // prerender fan-outs. Comes up only when the cert env vars are set
+  // (see `infra:ensure-dev-cert`). Stays undefined in CI / hermetic
+  // test harnesses.
+  let tlsPort = process.env.REALM_SERVER_TLS_PORT
+    ? Number(process.env.REALM_SERVER_TLS_PORT)
+    : undefined;
+  let tlsServer = tlsPort != null ? server.listenSecure(tlsPort) : undefined;
   httpServer.on('listening', () => {
     let actualPort =
       (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
@@ -515,9 +524,19 @@ const getIndexHTML = async () => {
     if (isEnvironmentMode()) {
       deregisterEnvironment();
     }
+    // http.Server has closeAllConnections() for force-close. Http2SecureServer
+    // does not expose it — graceful close() is sufficient for dev shutdown.
     httpServer.closeAllConnections();
+    let closeTls = new Promise<void>((resolve) => {
+      if (!tlsServer) {
+        resolve();
+        return;
+      }
+      tlsServer.close(() => resolve());
+    });
     httpServer.close(() => {
       (async () => {
+        await closeTls;
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),

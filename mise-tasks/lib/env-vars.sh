@@ -22,6 +22,30 @@ unset _ENV_VARS_DIR _REPO_ROOT
 
 export PGPORT="${PGPORT:-5435}"
 
+# HTTP/2 dev access: when the dev cert provisioned by
+# `mise run infra:ensure-dev-cert` is present, expose its paths to the
+# realm-servers so each can bring up an HTTPS/h2 alias listener alongside
+# the existing HTTP/1.1 listener. Two realm-servers run side-by-side in
+# local dev: the development server on 4201 (h2 alias 4203) and the
+# test-realms server on 4202 (h2 alias 4204). REALM_H2_ORIGIN_MAPPINGS
+# tells the prerender's Chromium (via the host's VirtualNetwork) which
+# canonical http origin to rewrite to which https origin so per-page
+# fetches multiplex over h2. Absent → realm-servers stay HTTP-only.
+# See packages/realm-server/README.md ("HTTP/2 dev access") for the why.
+_BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+_BOXEL_DEV_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
+_BOXEL_DEV_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"
+# Env-mode (BOXEL_ENVIRONMENT) uses Traefik subdomains and has its own
+# routing layer; HTTP/2 wiring is standard-mode only for now.
+if [ -z "${BOXEL_ENVIRONMENT:-}" ] && [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
+  export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
+  export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
+  export REALM_SERVER_TLS_PORT="${REALM_SERVER_TLS_PORT:-4203}"
+  export REALM_TEST_TLS_PORT="${REALM_TEST_TLS_PORT:-4204}"
+  export REALM_H2_ORIGIN_MAPPINGS="${REALM_H2_ORIGIN_MAPPINGS:-[{\"from\":\"http://localhost:4201\",\"to\":\"https://localhost:${REALM_SERVER_TLS_PORT}\"},{\"from\":\"http://localhost:4202\",\"to\":\"https://localhost:${REALM_TEST_TLS_PORT}\"}]}"
+fi
+unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
+
 # Turbo mode: boost parallelism for local development.
 # All turbo defaults can be overridden individually.
 if [ "${BOXEL_TURBO:-}" = "true" ]; then

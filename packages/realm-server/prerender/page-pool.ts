@@ -12,6 +12,24 @@ import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel';
 import { AsyncSemaphore } from './async-semaphore';
 import { attachRuntimeExceptionCapture } from './runtime-exception-capture';
 
+// Browser-side init hook used by `#markPageAsInPrerender`. Declared at
+// module scope so puppeteer can serialize it across the CDP boundary
+// without dragging closure state from PagePool. Receives the JSON-
+// encoded h2 origin mappings (see env-vars.sh / REALM_H2_ORIGIN_MAPPINGS);
+// when present, the host's VirtualNetwork reads them out of
+// `__realmH2OriginMappings__` and re-routes realm fetches to the
+// HTTPS/h2 listener. Empty string when no dev cert is provisioned.
+function installPrerenderGlobals(args: { h2Mappings: string }): void {
+  let g = globalThis as unknown as {
+    __boxelDuringPrerender?: boolean;
+    __realmH2OriginMappings__?: string;
+  };
+  g.__boxelDuringPrerender = true;
+  if (args.h2Mappings) {
+    g.__realmH2OriginMappings__ = args.h2Mappings;
+  }
+}
+
 type RenderSemaphore = {
   acquire(signal?: AbortSignal, priority?: number): Promise<() => void>;
   // Optional resize hook used by dynamic pool expansion / contraction.
@@ -2211,10 +2229,8 @@ export class PagePool {
     if (typeof page.evaluateOnNewDocument !== 'function') {
       return;
     }
-    await page.evaluateOnNewDocument(() => {
-      (
-        globalThis as unknown as { __boxelDuringPrerender?: boolean }
-      ).__boxelDuringPrerender = true;
+    await page.evaluateOnNewDocument(installPrerenderGlobals, {
+      h2Mappings: process.env.REALM_H2_ORIGIN_MAPPINGS ?? '',
     });
   }
 
