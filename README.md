@@ -34,10 +34,10 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 Two catalog realms run side by side. The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.com/cardstack/boxel-catalog)) is the source of truth for new development and the destination for community submissions. The **Legacy Catalog** (shipped from this monorepo) remains available during the deprecation window for content that hasn't been migrated upstream.
 
-| Realm                  | Source                                                                                  | URL path           | Purpose                                                                                                                          |
-| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Cardstack Catalog**  | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/`        | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`.     |
-| **Legacy Catalog**     | `packages/catalog-realm`                                                                | `/legacy-catalog/` | Historical catalog shipped from this repo. Kept visible in the workspace chooser while existing content migrates upstream.       |
+| Realm                 | Source                                                                                  | URL path           | Purpose                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Cardstack Catalog** | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/`        | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`. |
+| **Legacy Catalog**    | `packages/catalog-realm`                                                                | `/legacy-catalog/` | Historical catalog shipped from this repo. Kept visible in the workspace chooser while existing content migrates upstream.   |
 
 Both catalogs appear in the workspace chooser by default; the Cardstack Catalog is sorted first, Legacy Catalog last. Both are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_CATALOG=true` skips setup and startup for both.
 
@@ -137,7 +137,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the experiments realm's app is at `http://localhost:4201/experiments`.
+You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `https://localhost:4201/base` and the experiments realm's app is at `https://localhost:4201/experiments`. (Local dev now serves HTTPS+HTTP/2 — see "Local HTTPS dev access" below for the one-time cert setup.)
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -191,10 +191,10 @@ Here's what is spun up with `mise run dev`:
 
 | Port  | Description                                                                                   | `mise run dev` | `mise run services:realm-server-base` |
 | ----- | --------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
-| :4201 | `/base` base realm                                                                            | ✅             | ✅                                    |
+| :4201 | `/base` base realm (HTTPS+HTTP/2; see "Local HTTPS dev access" below)                         | ✅             | ✅                                    |
 | :4201 | `/skills` skills realm                                                                        | ✅             | 🚫                                    |
 | :4201 | `/experiments` experiments realm                                                              | ✅             | 🚫                                    |
-| :4202 | `/test` host test realm, `/node-test` node test realm                                         | ✅             | 🚫                                    |
+| :4202 | `/test` host test realm, `/node-test` node test realm (HTTPS+HTTP/2)                          | ✅             | 🚫                                    |
 | :4205 | `/test` realm for matrix client tests (playwright controlled)                                 | 🚫             | 🚫                                    |
 | :4206 | Boxel icons server                                                                            | ✅             | 🚫                                    |
 | :4210 | Development Worker Manager (spins up 1 worker by default)                                     | ✅             | 🚫                                    |
@@ -207,9 +207,86 @@ Here's what is spun up with `mise run dev`:
 | :5435 | Postgres DB                                                                                   | ✅             | 🚫                                    |
 | :8008 | Matrix synapse server                                                                         | ✅             | 🚫                                    |
 
+#### Local HTTPS dev access
+
+##### Why
+
+Heavy aggregator cards (Cohort, dashboards) fan out 80+ federated-search
+requests per render. Chrome — including the headless Chromium that
+drives the prerender — caps any single origin at 6 concurrent HTTP/1.1
+connections, so the 80+ requests serialize. A single cohort render
+takes ~4–5 minutes under that ceiling. HTTP/2 multiplexes them over one
+connection and the same render finishes in seconds. Browsers only do
+HTTP/2 over TLS, so the local realm-server terminates a leaf cert.
+
+##### Setup
+
+```
+mise run infra:ensure-dev-cert
+```
+
+That task:
+
+1. Requires [`mkcert`](https://github.com/FiloSottile/mkcert)
+   (`sudo apt install -y mkcert libnss3-tools` on Debian/Ubuntu;
+   `brew install mkcert nss` on macOS). If it's missing, the task
+   prints these instructions and exits non-zero — local dev now
+   speaks HTTPS only and has no HTTP fallback.
+2. Attempts `mkcert -install` once (one-time sudo prompt) so mkcert's
+   root CA lands in your system trust store. Your normal browser then
+   silently accepts the cert. If you decline the sudo prompt the cert
+   is still generated, indexing keeps working, and you can run
+   `mkcert -install` later when convenient.
+3. Generates `~/.local/share/boxel/dev-certs/{localhost.pem,
+localhost-key.pem}`. Idempotent — re-runs are a no-op until the
+   cert is within 7 days of expiry.
+
+After provisioning, `mise run dev` (and `mise run dev-all`) automatically
+brings the realm-server up on `https://localhost:4201` (and
+`https://localhost:4202` for the test-realms server). Node clients
+(worker, scripts, prerender Node-side) trust the cert via
+`NODE_EXTRA_CA_CERTS` (pointed at mkcert's root by `env-vars.sh`); the
+prerender Chromium uses `--ignore-certificate-errors` for belt-and-
+suspenders coverage.
+
+##### Migration after pulling this change
+
+The canonical realm URLs are now `https://localhost:4201/…`, so any
+local card data created under the old `http://localhost:4201/…`
+canonical references is stale. After the first `mise run
+infra:ensure-dev-cert`, reset your local realm DB so realms re-bootstrap
+under the new canonical URLs:
+
+```
+mise run infra:full-reset    # wipes Postgres + lets the next boot re-index
+```
+
+(In-tree realms — base, catalog, skills, openrouter, experiments — are
+re-indexed automatically. Personal realms under `realms/localhost_4201/`
+are left on disk; if you have local card files keyed by the old http
+canonical URLs you'll want to either recreate them or rewrite the
+`id` fields in their `.json` files.)
+
+##### Verify
+
+```
+curl -kI --http2 https://localhost:4201/_alive
+```
+
+Look for `HTTP/2 200`. The `mise run dev` log also confirms with
+`Realm server listening on port 4201 (https/h2)`.
+
+##### CI / hermetic test harness
+
+`env-vars.sh` exports the cert env vars only when the cert files exist
+under `~/.local/share/boxel/dev-certs/`. CI images and the software-
+factory hermetic harness do not provision the cert, so realm-server
+boots HTTP/1.1 on `http://localhost:4201/…` exactly as before. This
+keeps the test harness path unchanged.
+
 #### Using `mise run services:realm-server`
 
-You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
+You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open https://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
 
 #### Indexing dashboard
 
@@ -610,12 +687,12 @@ BOXEL_ENVIRONMENT=parallel mise run services:ai-bot
 
 In environment mode, services are available at:
 
-| Service       | Hostname                                  |
-| ------------- | ----------------------------------------- |
-| Host app      | `http://host.<slug>.localhost`            |
-| Realm server  | `http://realm-server.<slug>.localhost`    |
-| Matrix        | `http://matrix.<slug>.localhost`          |
-| Icons         | `http://icons.<slug>.localhost`           |
+| Service      | Hostname                               |
+| ------------ | -------------------------------------- |
+| Host app     | `http://host.<slug>.localhost`         |
+| Realm server | `http://realm-server.<slug>.localhost` |
+| Matrix       | `http://matrix.<slug>.localhost`       |
+| Icons        | `http://icons.<slug>.localhost`        |
 
 Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
 

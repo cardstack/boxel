@@ -2,8 +2,7 @@ import { execSync } from 'child_process';
 import { writeFileSync, renameSync, unlinkSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { logger } from '@cardstack/runtime-common';
-import type { Server } from 'http';
-import type { AddressInfo } from 'net';
+import type { AddressInfo, Server } from 'net';
 import yaml from 'yaml';
 
 const log = logger('dev-service-registry');

@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+#MISE description="Provision a local dev TLS cert so realm-server can speak HTTP/2"
+#
+# Generates ~/.local/share/boxel/dev-certs/{localhost.pem, localhost-key.pem}
+# using mkcert. Idempotent — re-runs are a no-op if the cert already exists
+# and isn't near expiry.
+#
+# Why this exists
+# ---------------
+# Heavy aggregator-card prerenders (Cohort, dashboards) fan out 80+
+# federated-search requests in a single Chromium tab. Chrome's HTTP/1.1
+# per-origin connection limit (6) serializes them and turns one cohort
+# render into multiple minutes. HTTP/2 multiplexes them over a single
+# TCP connection and the same render finishes in seconds.
+#
+# Browsers only do HTTP/2 over TLS, so the realm-server has to terminate
+# a cert. We use mkcert because:
+#   1. It can install a local CA into the system trust store (one-time,
+#      requires sudo) so the dev's normal browser and command-line tools
+#      silently accept the cert.
+#   2. The leaf cert it generates is short-lived and replaceable; it
+#      lives under the dev's home dir and is never committed.
+#
+# This task tries `mkcert -install` automatically — if it succeeds (or
+# was already done), the dev's whole local toolchain trusts the cert.
+# If the sudo prompt is declined, we still generate the cert so the
+# server can boot; only the manual browser keeps showing warnings until
+# the dev opts in.
+
+set -euo pipefail
+
+CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+CERT_FILE="$CERT_DIR/localhost.pem"
+KEY_FILE="$CERT_DIR/localhost-key.pem"
+
+# Idempotent skip when the cert already exists and isn't within 7 days of
+# expiry. openssl's `-checkend` returns 0 if the cert is valid for at least
+# the given number of seconds.
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
+    exit 0
+  fi
+  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
+fi
+
+if ! command -v mkcert >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[ensure-dev-cert] mkcert is required but not installed.
+
+Local dev now serves the realm-server over HTTPS+HTTP/2 — there is no
+HTTP fallback. mkcert provisions the cert; install it once:
+
+  Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
+  Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
+  macOS (Homebrew):      brew install mkcert nss
+
+Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
+
+See the repo-root README ("Local HTTPS dev access") for the why.
+EOF
+  exit 1
+fi
+
+mkdir -p "$CERT_DIR"
+
+# Best-effort trust install. On a fresh machine this prompts for sudo
+# once and adds mkcert's root CA to /etc/ssl/certs (Linux) or the system
+# keychain (macOS). On subsequent runs it's a no-op. If the prompt is
+# declined, we still proceed — the cert is generated, indexing works
+# via puppeteer's --ignore-certificate-errors flag and Node clients
+# via NODE_EXTRA_CA_CERTS, and only the manual browser keeps showing
+# warnings until the dev opts in later.
+if ! mkcert -install 2>/dev/null; then
+  cat >&2 <<'EOF'
+[ensure-dev-cert] `mkcert -install` did not complete (sudo declined or
+not available). The cert is still generated below; indexing and Node
+clients pick up the local CA via NODE_EXTRA_CA_CERTS. To silence cert
+warnings in your manual browser later, run:
+
+  mkcert -install      # one-time, requires sudo
+
+EOF
+fi
+
+echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
+mkcert \
+  -cert-file "$CERT_FILE" \
+  -key-file "$KEY_FILE" \
+  localhost 127.0.0.1 ::1

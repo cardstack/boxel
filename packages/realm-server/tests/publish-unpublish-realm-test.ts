@@ -12,7 +12,7 @@ import {
   removeSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {

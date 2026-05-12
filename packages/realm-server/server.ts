@@ -1,6 +1,9 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
+import http from 'http';
+import http2 from 'http2';
+import { readFileSync } from 'fs';
 import type {
   DefinitionLookup,
   Realm,
@@ -66,6 +69,59 @@ import {
 } from './lib/index-html-injection';
 import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
 import { JSDOM } from 'jsdom';
+
+// When both env vars point to readable cert files, the realm server
+// speaks HTTPS with HTTP/2 (and HTTP/1.1 fallback over the same TLS port
+// via ALPN). Otherwise it stays on plain HTTP/1.1 — that's the path
+// in-process tests and any environment without a provisioned cert take.
+// In local dev `mise run infra:ensure-dev-cert` provisions the cert and
+// `mise-tasks/lib/env-vars.sh` exports the env vars so the dev stack
+// always boots HTTPS. The h2 lift fixes Chrome's HTTP/1.1 6-per-origin
+// connection ceiling for heavy aggregator-card prerender fan-outs.
+const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
+const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
+
+export type RealmHttpServer = http.Server | http2.Http2SecureServer;
+
+function createListener(
+  log: ReturnType<typeof logger>,
+  app: { callback: Koa['callback'] },
+): { server: RealmHttpServer; isHttp2: boolean } {
+  let certFile = process.env[TLS_CERT_FILE_ENV];
+  let keyFile = process.env[TLS_KEY_FILE_ENV];
+  if (!certFile || !keyFile) {
+    return { server: http.createServer(app.callback()), isHttp2: false };
+  }
+  let cert: Buffer;
+  let key: Buffer;
+  try {
+    cert = readFileSync(certFile);
+    key = readFileSync(keyFile);
+  } catch (e) {
+    log.warn(
+      `Unable to read TLS cert/key (%s, %s): %s — falling back to HTTP/1.1`,
+      certFile,
+      keyFile,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), isHttp2: false };
+  }
+  try {
+    return {
+      server: http2.createSecureServer(
+        { cert, key, allowHTTP1: true },
+        app.callback(),
+      ),
+      isHttp2: true,
+    };
+  } catch (e) {
+    log.warn(
+      `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), isHttp2: false };
+  }
+}
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -266,12 +322,17 @@ export class RealmServer {
     return app;
   }
 
-  listen(port: number) {
-    let instance = this.app.listen(port);
+  listen(port: number): RealmHttpServer {
+    let { server: instance, isHttp2 } = createListener(this.log, this.app);
+    instance.listen(port);
     instance.on('listening', () => {
       let actualPort =
         (instance.address() as import('net').AddressInfo | null)?.port ?? port;
-      this.log.info(`Realm server listening on port %s\n`, actualPort);
+      this.log.info(
+        `Realm server listening on port %s (%s)\n`,
+        actualPort,
+        isHttp2 ? 'https/h2' : 'http',
+      );
     });
     return instance;
   }

@@ -523,7 +523,12 @@ const getIndexHTML = async () => {
     if (isEnvironmentMode()) {
       deregisterEnvironment();
     }
-    httpServer.closeAllConnections();
+    // http.Server has closeAllConnections() for force-close. The
+    // Http2SecureServer used when TLS is enabled does not expose it —
+    // graceful close() is sufficient for dev shutdown.
+    if (typeof (httpServer as any).closeAllConnections === 'function') {
+      (httpServer as any).closeAllConnections();
+    }
     httpServer.close(() => {
       (async () => {
         await Promise.all([

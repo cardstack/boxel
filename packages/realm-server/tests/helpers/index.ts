@@ -58,7 +58,7 @@ import {
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import { Socket as NetSocket } from 'net';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
@@ -543,9 +543,11 @@ export async function closeServer(server: Server) {
   // Force-close idle keep-alive sockets so server.close() resolves promptly.
   // Without this, a lingering connection from the host page (puppeteer fetching
   // from the realm server) can hold the port bound long after the test moves
-  // on, causing EADDRINUSE when the next test tries to re-bind.
-  server.closeIdleConnections?.();
-  server.closeAllConnections?.();
+  // on, causing EADDRINUSE when the next test tries to re-bind. http.Server
+  // exposes these methods; Http2SecureServer does not — cast to widen at this
+  // call site and let the optional chain swallow the missing case.
+  (server as { closeIdleConnections?: () => void }).closeIdleConnections?.();
+  (server as { closeAllConnections?: () => void }).closeAllConnections?.();
   await new Promise<void>((r) => server.close(() => r()));
 
   if (host && typeof port === 'number' && port > 0) {
@@ -835,9 +837,9 @@ export async function stopTestPrerenderServer() {
   prerenderServerStart = undefined;
 }
 
-interface StoppablePrerenderServer extends Server {
+type StoppablePrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
-}
+};
 
 function hasStopPrerenderer(
   server: Server,

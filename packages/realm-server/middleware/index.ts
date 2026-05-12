@@ -127,8 +127,19 @@ function isLoopbackAddress(address: string | undefined): boolean {
 }
 
 export function fullRequestURL(ctxt: Koa.Context): URL {
+  // Three protocol signals, checked in order:
+  //   1. `x-forwarded-proto: https` — set by a TLS-terminating proxy in front
+  //      of us (ALB, Traefik, etc.). Trust it ahead of the socket check because
+  //      the proxy may have negotiated TLS even when our socket is plain HTTP.
+  //   2. The TLS socket flag — set when we terminate TLS ourselves (the local
+  //      dev HTTPS/h2 listener). `tls.TLSSocket#encrypted` is true here; plain
+  //      http.IncomingMessage sockets do not have the property.
+  //   3. Default to http.
+  let socket = ctxt.req.socket as { encrypted?: boolean } | undefined;
   let protocol =
-    ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    ctxt.req.headers['x-forwarded-proto'] === 'https' || socket?.encrypted
+      ? 'https'
+      : 'http';
   let computedURL = new URL(
     `${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`,
   );

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import jwt from 'jsonwebtoken';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmServerTokenClaim } from '../../utils/jwt';

@@ -50,15 +50,17 @@ function getEnvSlug() {
 
 function environmentDefaults() {
   if (!process.env.BOXEL_ENVIRONMENT) {
+    // Local realm-server speaks HTTPS+HTTP/2 by default — see the
+    // repo-root README "Local HTTPS dev access" section.
     return {
-      realmServerURL: 'http://localhost:4201/',
+      realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
-      baseRealmURL: 'http://localhost:4201/base/',
-      catalogRealmURL: 'http://localhost:4201/catalog/',
-      legacyCatalogRealmURL: 'http://localhost:4201/legacy-catalog/',
-      skillsRealmURL: 'http://localhost:4201/skills/',
-      openRouterRealmURL: 'http://localhost:4201/openrouter/',
+      baseRealmURL: 'https://localhost:4201/base/',
+      catalogRealmURL: 'https://localhost:4201/catalog/',
+      legacyCatalogRealmURL: 'https://localhost:4201/legacy-catalog/',
+      skillsRealmURL: 'https://localhost:4201/skills/',
+      openRouterRealmURL: 'https://localhost:4201/openrouter/',
     };
   }
   let slug = getEnvSlug();

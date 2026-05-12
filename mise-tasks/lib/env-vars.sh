@@ -83,9 +83,11 @@ else
     # Transitioning from env mode to standard mode in the same shell:
     # reset derived variables to standard defaults to avoid stale env-mode values.
 
-    # Service URLs
-    export REALM_BASE_URL="http://localhost:4201"
-    export REALM_TEST_URL="http://localhost:4202"
+    # Service URLs. Realm-server speaks HTTPS+HTTP/2 in local dev — see
+    # the repo-root README "Local HTTPS dev access" section and the
+    # `infra:ensure-dev-cert` mise task that provisions the cert.
+    export REALM_BASE_URL="https://localhost:4201"
+    export REALM_TEST_URL="https://localhost:4202"
     export MATRIX_URL_VAL="http://localhost:8008"
     export WORKER_MGR_URL="http://localhost:4210"
     export WORKER_TEST_MGR_URL="http://localhost:4211"
@@ -113,9 +115,11 @@ else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
 
-    # Service URLs — use :- so production/staging env vars are not clobbered
-    export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
-    export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
+    # Service URLs — use :- so production/staging env vars are not clobbered.
+    # Realm-server defaults to HTTPS+HTTP/2 in local dev (see
+    # `infra:ensure-dev-cert` and README "Local HTTPS dev access").
+    export REALM_BASE_URL="${REALM_BASE_URL:-https://localhost:4201}"
+    export REALM_TEST_URL="${REALM_TEST_URL:-https://localhost:4202}"
     export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
     export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
     export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
@@ -142,4 +146,33 @@ else
   fi
 
   unset _PREV_ENV_MODE
+
+  # Local HTTPS dev access: when the cert provisioned by
+  # `mise run infra:ensure-dev-cert` is present, expose its paths to
+  # the realm-server so it terminates HTTPS+HTTP/2 on the canonical
+  # port, and point Node clients at mkcert's local CA via
+  # NODE_EXTRA_CA_CERTS so they trust the cert without requiring
+  # `mkcert -install` to have written it into the system trust store.
+  # If the cert is missing, the realm-server falls back to plain HTTP
+  # (tests/CI path). See the repo-root README "Local HTTPS dev access".
+  _BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+  _BOXEL_DEV_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
+  _BOXEL_DEV_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"
+  if [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
+    export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
+    export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
+    if command -v mkcert >/dev/null 2>&1; then
+      _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+      if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+        # Merge with any existing NODE_EXTRA_CA_CERTS the dev already set.
+        if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ "$NODE_EXTRA_CA_CERTS" != "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+          export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem:$NODE_EXTRA_CA_CERTS"
+        else
+          export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
+        fi
+      fi
+      unset _BOXEL_MKCERT_CAROOT
+    fi
+  fi
+  unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
 fi

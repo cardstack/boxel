@@ -4,7 +4,7 @@ import { readFileSync, utimesSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import type { DirResult } from 'tmp';
 import {
   createJWT,

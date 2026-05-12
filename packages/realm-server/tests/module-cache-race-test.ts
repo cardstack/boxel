@@ -3,7 +3,7 @@ import { basename, join } from 'path';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,

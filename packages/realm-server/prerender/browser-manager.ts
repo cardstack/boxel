@@ -29,6 +29,18 @@ export class BrowserManager {
       launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
     }
 
+    // When the realm-server speaks HTTPS (local dev with a mkcert leaf
+    // cert), Chromium needs to be told to accept it. mkcert's root CA
+    // may or may not be in the system trust store depending on whether
+    // the dev ran `mkcert -install`. Puppeteer's bundled Chromium uses
+    // its own NSS DB that mkcert doesn't always touch, so we relax cert
+    // checks unconditionally for the prerender path. Safe: the origins
+    // are fixed by REALM_SERVER_DOMAIN/REALM_BASE_URL and the connection
+    // is loopback-only.
+    if (process.env.REALM_BASE_URL?.startsWith('https://')) {
+      launchArgs.push('--ignore-certificate-errors');
+    }
+
     let extraArgs =
       process.env.PUPPETEER_CHROME_ARGS?.split(/\s+/).filter(Boolean);
     if (extraArgs && extraArgs.length > 0) {
