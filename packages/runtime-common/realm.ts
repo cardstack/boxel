@@ -1145,6 +1145,11 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[]) => {
+        // Drop the searchCards in-flight map: the worker's batch.done()
+        // swap landed in this realm's boxel_index, so any pending
+        // pre-swap promises must not be coalesced into by post-swap
+        // callers.
+        this.#realmIndexQueryEngine.clearInFlightSearch();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1189,6 +1194,7 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[]) => {
+        this.#realmIndexQueryEngine.clearInFlightSearch();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1313,6 +1319,9 @@ export class Realm {
       { clearLastModified: opts?.clearLastModified },
     );
     await completed;
+    // Drop searchCards in-flight entries — the from-scratch swap has
+    // landed in boxel_index, so any pre-swap promise must not be reused.
+    this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
   }
 
