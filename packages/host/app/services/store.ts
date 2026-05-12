@@ -34,6 +34,7 @@ import {
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
   X_BOXEL_CONSUMING_REALM_HEADER,
+  X_BOXEL_JOB_ID_HEADER,
   Deferred,
   delay,
   mergeRelationships,
@@ -144,6 +145,19 @@ function consumingRealmHeader(): Record<string, string> {
   let r = (globalThis as unknown as { __boxelConsumingRealm?: string })
     .__boxelConsumingRealm;
   return r ? { [X_BOXEL_CONSUMING_REALM_HEADER]: r } : {};
+}
+
+// Companion to `consumingRealmHeader()`. The prerender server's
+// `prerenderVisitAttempt` injects `__boxelJobId` onto the page before
+// transitioning into the render route — see
+// `packages/realm-server/prerender/render-runner.ts`. Read it on each
+// fetch (not module-scope-cached) so a page reused across multiple
+// visits picks up the current visit's job id. Outside a prerender
+// tab the global is undefined and we send no header, so user / API
+// callers continue to bypass the realm-server's job-scoped cache.
+function jobIdHeader(): Record<string, string> {
+  let j = (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId;
+  return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
 }
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
@@ -856,6 +870,7 @@ export default class StoreService extends Service implements StoreInterface {
           'Content-Type': 'application/json',
           ...duringPrerenderHeaders(),
           ...consumingRealmHeader(),
+          ...jobIdHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -924,6 +939,7 @@ export default class StoreService extends Service implements StoreInterface {
           'Content-Type': 'application/json',
           ...duringPrerenderHeaders(),
           ...consumingRealmHeader(),
+          ...jobIdHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },

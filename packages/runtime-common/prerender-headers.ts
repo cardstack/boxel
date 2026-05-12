@@ -1,3 +1,16 @@
+// `<jobId>.<reservationId>` of the indexing job that triggered a
+// prerender visit. Originates at the worker (`pg-queue`), tagged
+// onto outbound prerender requests by `remote-prerenderer`, echoed
+// through prerender-manager → prerender-server, and (new in CS-11115
+// Phase 2) injected into the rendered host as `window.__boxelJobId`
+// so the host's `_federated-search` fetch wrapper can re-stamp it on
+// outbound calls. Lives in runtime-common alongside the consuming-
+// realm header so the host SPA can import it without taking a
+// dependency on the realm-server package. realm-server's
+// `prerender-constants.ts` re-exports this as `PRERENDER_JOB_ID_HEADER`
+// for backwards-compatibility with existing imports.
+export const X_BOXEL_JOB_ID_HEADER = 'x-boxel-job-id';
+
 // HTTP header sent by the host's `_federated-search` fetch wrapper while
 // rendering inside a prerender tab. Carries the URL of the realm whose
 // card is currently being rendered (the "consuming" realm). The realm-

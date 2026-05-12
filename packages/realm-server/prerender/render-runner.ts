@@ -715,6 +715,7 @@ export class RenderRunner {
     fileData,
     types,
     priority,
+    jobId,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -777,6 +778,23 @@ export class RenderRunner {
       await page.evaluate((sessionAuth) => {
         localStorage.setItem('boxel-session', sessionAuth);
       }, auth);
+      // Expose the indexing job id to the rendered host so its
+      // `_federated-search` fetch wrapper can stamp `x-boxel-job-id`
+      // on outbound calls. The realm-server's handle-search gate
+      // requires both `x-boxel-job-id` and `x-boxel-consuming-realm`
+      // before consulting the JobScopedSearchCache. Cleared first
+      // so a tab reused across multiple visits never bleeds a prior
+      // visit's job id into the next render.
+      await page
+        .evaluate((id: string | undefined) => {
+          (
+            globalThis as unknown as { __boxelJobId?: string }
+          ).__boxelJobId = id;
+        }, jobId)
+        .catch(() => {
+          // best-effort: a transient page/CDP error here doesn't break
+          // the render — the cache simply doesn't engage for this visit.
+        });
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
       await page
