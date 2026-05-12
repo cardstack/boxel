@@ -93,7 +93,9 @@ export type RealmHttpServer =
 // secure server and plain-text HTTP to a tiny 301-redirect server. This
 // gives http://localhost:4201 → https://localhost:4201 the same-port
 // redirect UX without running two listeners on different ports.
-function createListener(
+// Exported for tests in `tests/listener-dispatcher-test.ts` — the
+// production caller is `RealmServer.listen()` below.
+export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
 ): { server: RealmHttpServer; isHttp2: boolean } {
@@ -130,7 +132,16 @@ function createListener(
     return { server: http.createServer(app.callback()), isHttp2: false };
   }
   let redirectServer = http.createServer(redirectToHttps);
+  // Track every accepted socket so shutdown can force-close them. Without
+  // this, `dispatcher.close()` waits for active HTTP/2 sessions and
+  // keep-alive HTTP/1 connections to end on their own — a single open
+  // browser tab can keep the realm-server from ever shutting down. Mirror
+  // the API surface (`closeAllConnections`) so main.ts's existing typeof
+  // guard picks this up without a special-case branch.
+  let activeSockets = new Set<net.Socket>();
   let dispatcher = net.createServer({ pauseOnConnect: true }, (socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => activeSockets.delete(socket));
     // Attach a per-socket error listener BEFORE doing any I/O. A peer that
     // RSTs the connection mid-handshake (or in the half-open window before
     // we route it) emits `'error'` on this raw socket; without a listener
@@ -174,6 +185,21 @@ function createListener(
   dispatcher.on('error', (e) => {
     log.warn(`dispatcher server error: %s`, e.message);
   });
+  // Mirror http.Server's `closeAllConnections()` so shutdown can force-
+  // close in-flight TLS / HTTP/2 / keep-alive sockets without waiting for
+  // peers to close them. main.ts feature-detects this method.
+  (
+    dispatcher as net.Server & { closeAllConnections: () => void }
+  ).closeAllConnections = () => {
+    for (let s of activeSockets) {
+      try {
+        s.destroy();
+      } catch {
+        // best-effort
+      }
+    }
+    activeSockets.clear();
+  };
   return { server: dispatcher, isHttp2: true };
 }
 
