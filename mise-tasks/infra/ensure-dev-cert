@@ -37,22 +37,21 @@ fi
 
 if ! command -v mkcert >/dev/null 2>&1; then
   cat >&2 <<'EOF'
-[ensure-dev-cert] mkcert is required but not installed.
+[ensure-dev-cert] mkcert not installed — skipping HTTP/2 cert provisioning.
+The realm-server will boot HTTP/1.1-only; indexing falls back to the slow
+serial path for heavy aggregator cards. This is a soft warning, not an
+error — `mise run dev` continues normally.
 
-Install one of:
+To enable HTTP/2, install mkcert and re-run this task:
   Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
   Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
   macOS (Homebrew):      brew install mkcert nss
 
-Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
+Then: `mise run infra:ensure-dev-cert`
 
-Why mkcert is needed: it provisions a self-signed cert so realm-server can
-speak HTTP/2 on https://localhost:4203. Without it, indexing falls back to
-HTTP/1.1 and aggregator-card renders (cohort, dashboards) get throttled by
-Chrome's 6-per-origin connection cap. See packages/realm-server/README.md
-for the full HTTP/2 dev access guide.
+See packages/realm-server/README.md ("HTTP/2 dev access") for the why.
 EOF
-  exit 1
+  exit 0
 fi
 
 mkdir -p "$CERT_DIR"
