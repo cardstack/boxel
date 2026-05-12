@@ -31,3 +31,20 @@ runs:
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       shell: bash
       run: pnpm store prune
+
+    # Provision the mandatory dev cert so the realm-server can speak
+    # HTTPS+HTTP/2 — the only protocol it supports. Local devs get this
+    # via `mise run infra:ensure-dev-cert`; CI runs it explicitly here
+    # so every downstream job starts with the cert in
+    # ~/.local/share/boxel/dev-certs/ and `NODE_EXTRA_CA_CERTS` pointed
+    # at mkcert's root. See packages/realm-server/server.ts and
+    # mise-tasks/infra/ensure-dev-cert.
+    - name: Install mkcert
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mkcert libnss3-tools
+
+    - name: Provision dev TLS cert
+      shell: bash
+      run: mise run infra:ensure-dev-cert

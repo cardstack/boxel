@@ -164,20 +164,26 @@ function createListener(
 }
 
 // Same-port 301 redirect for plain-text HTTP requests that land on the
-// HTTPS port. Preserves Host (without port) and path/query, defaults the
-// port to the listener's actual bind port via the Host header we received.
+// HTTPS port. The dispatcher binds a single port so the inbound and
+// target ports agree; we just rewrite the scheme. Parses via URL so
+// bracketed IPv6 authorities (`[::1]:4201`) round-trip cleanly instead
+// of being mangled by string-level regex.
 function redirectToHttps(
   req: http.IncomingMessage,
   res: http.ServerResponse,
 ): void {
   let hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
-  // Strip an inbound :port so the redirect goes to the canonical HTTPS port.
-  // We don't have an explicit "canonical port" reference here, so reuse the
-  // inbound port if present — when the dispatcher binds the realm-server's
-  // single port the inbound and target ports agree.
-  let hostNoBracket = hostHeader.replace(/^\[(.+)\](:\d+)?$/, '$1$2');
-  let host = hostNoBracket || 'localhost';
-  let location = `https://${host}${req.url ?? '/'}`;
+  let path = req.url ?? '/';
+  let authority: string;
+  try {
+    let parsed = new URL(`http://${hostHeader || 'localhost'}`);
+    // `url.host` preserves brackets around IPv6 literals and the port if
+    // present, which is exactly the form we want in the redirect target.
+    authority = parsed.host;
+  } catch {
+    authority = 'localhost';
+  }
+  let location = `https://${authority}${path}`;
   res.writeHead(301, {
     Location: location,
     'Content-Type': 'text/plain; charset=utf-8',

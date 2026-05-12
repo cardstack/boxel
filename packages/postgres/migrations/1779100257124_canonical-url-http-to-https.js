@@ -1,4 +1,3 @@
-/* eslint-disable camelcase */
 'use strict';
 
 // Local realm-server flipped from http://localhost:42XX to
@@ -35,6 +34,12 @@
 
 exports.shorthands = undefined;
 
+// Cheap pre-check: realm_registry is a small table whose `url` column
+// holds the canonical realm URL. If no row there matches the old
+// localhost canonicals, no other table will either, so we exit before
+// touching the larger tables. Avoids full-column scans on
+// production/staging databases where the canonical realm URLs are real
+// hostnames and `localhost` never appears.
 const REWRITE_BLOCK = `
 DO $$
 DECLARE
@@ -45,6 +50,14 @@ DECLARE
   ];
   i int;
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM realm_registry
+    WHERE url LIKE 'http://localhost:4201/%' OR url LIKE 'http://localhost:4202/%'
+    LIMIT 1
+  ) THEN
+    RETURN;
+  END IF;
+
   FOR rec IN
     SELECT table_name, column_name, data_type, udt_name
     FROM information_schema.columns

@@ -294,11 +294,13 @@ Look for `HTTP/2 200`. The `mise run dev` log also confirms with
 
 ##### CI / hermetic test harness
 
-`env-vars.sh` exports the cert env vars only when the cert files exist
-under `~/.local/share/boxel/dev-certs/`. CI images and the software-
-factory hermetic harness do not provision the cert, so realm-server
-boots HTTP/1.1 on `http://localhost:4201/…` exactly as before. This
-keeps the test harness path unchanged.
+CI runs the same `mise run infra:ensure-dev-cert` step out of its init
+action (see `.github/actions/init/action.yml`) — mkcert is installed
+via apt and the cert is provisioned before any test job starts. So CI
+realm-servers boot HTTPS+HTTP/2 on `https://localhost:4201/…` exactly
+like local dev. Test harnesses that launch their own Chromium pass
+`--ignore-certificate-errors` so they don't need the system trust
+store; Node clients pick up the cert via `NODE_EXTRA_CA_CERTS`.
 
 #### Using `mise run services:realm-server`
 

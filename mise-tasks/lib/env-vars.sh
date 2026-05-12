@@ -83,12 +83,11 @@ else
     # Transitioning from env mode to standard mode in the same shell:
     # reset derived variables to standard defaults to avoid stale env-mode values.
 
-    # Service URLs. Realm-server flips to HTTPS+HTTP/2 below when the
-    # dev cert has been provisioned by `mise run infra:ensure-dev-cert`;
-    # absent that cert the URLs stay http. See the repo-root README's
-    # "Local HTTPS dev access" section.
-    export REALM_BASE_URL="http://localhost:4201"
-    export REALM_TEST_URL="http://localhost:4202"
+    # Service URLs. Realm-server speaks HTTPS+HTTP/2 in local dev — the
+    # dev cert is mandatory (see `infra:ensure-dev-cert` and the
+    # repo-root README "Local HTTPS dev access" section).
+    export REALM_BASE_URL="https://localhost:4201"
+    export REALM_TEST_URL="https://localhost:4202"
     export MATRIX_URL_VAL="http://localhost:8008"
     export WORKER_MGR_URL="http://localhost:4210"
     export WORKER_TEST_MGR_URL="http://localhost:4211"
@@ -117,13 +116,11 @@ else
     # use :- so production/staging env vars are not clobbered.
 
     # Service URLs — use :- so production/staging env vars are not
-    # clobbered. Realm-server flips to HTTPS+HTTP/2 below when the dev
-    # cert has been provisioned (see `infra:ensure-dev-cert` and the
-    # repo-root README "Local HTTPS dev access"). Without a cert the
-    # realm-server listens on plain HTTP/1.1 and these URLs stay http
-    # — that's the CI / hermetic-test path.
-    export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
-    export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
+    # clobbered. Realm-server speaks HTTPS+HTTP/2 in local dev; the dev
+    # cert is mandatory (see `infra:ensure-dev-cert` and the repo-root
+    # README "Local HTTPS dev access").
+    export REALM_BASE_URL="${REALM_BASE_URL:-https://localhost:4201}"
+    export REALM_TEST_URL="${REALM_TEST_URL:-https://localhost:4202}"
     export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
     export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
     export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
@@ -165,21 +162,16 @@ else
   if [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
     export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
     export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
-    # Cert is provisioned — realm-server will terminate HTTPS+HTTP/2 on
-    # both ports, so flip the canonical URLs to match the wire.
-    case "$REALM_BASE_URL" in
-      http://localhost:4201) export REALM_BASE_URL="https://localhost:4201" ;;
-    esac
-    case "$REALM_TEST_URL" in
-      http://localhost:4202) export REALM_TEST_URL="https://localhost:4202" ;;
-    esac
     if command -v mkcert >/dev/null 2>&1; then
       _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
-        # Merge with any existing NODE_EXTRA_CA_CERTS the dev already set.
-        if [ -n "${NODE_EXTRA_CA_CERTS:-}" ] && [ "$NODE_EXTRA_CA_CERTS" != "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
-          export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem:$NODE_EXTRA_CA_CERTS"
-        else
+        # Node's NODE_EXTRA_CA_CERTS accepts a single PEM file path (not
+        # a colon-separated list). If the dev has already pointed it at
+        # something, leave their value in place — they presumably have
+        # mkcert's CA in there already, or know what they're doing.
+        # Otherwise point at mkcert's rootCA so realm-server fetches
+        # validate against the local cert without `mkcert -install`.
+        if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
           export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
         fi
       fi
