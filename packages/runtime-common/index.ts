@@ -488,6 +488,18 @@ export interface Prerenderer {
   // before invoking since not every Prerenderer implementation participates
   // in ownership tracking (e.g. test stubs, remote variants on older servers).
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
+  // Optional: dispose all puppeteer pages for an affinity. Used by the
+  // publish-realm handler (CS-11043) to evict per-page host-Loader
+  // caches when the underlying files have been swapped on disk — the
+  // next render against the affinity then spawns fresh pages that
+  // fetch modules from the realm-server rather than serving stale
+  // cached module bytes. Optional because remote/stub Prerenderer
+  // implementations may not be able to reach into the page pool;
+  // callers should probe at runtime.
+  disposeAffinity?(args: {
+    affinityType: AffinityType;
+    affinityValue: string;
+  }): Promise<void>;
   // Optional: capture a settled card render to a PNG. Optional so test
   // stubs and older Prerenderer implementations are not forced to
   // implement it; the screenshot-card worker task
