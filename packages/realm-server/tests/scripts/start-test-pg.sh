@@ -15,7 +15,7 @@ start_container() {
   docker run -d \
     --name "$TEST_PG_CONTAINER" \
     -p "127.0.0.1:${TEST_PG_PORT}:5432" \
-    --tmpfs /var/lib/postgresql/data:rw \
+    --tmpfs "/var/lib/postgresql/data:rw,size=${TEST_PG_TMPFS_SIZE:-4g}" \
     -e POSTGRES_HOST_AUTH_METHOD=trust \
     -v "${TEST_PG_SEED_TAR}:/seed/pgdata.tar:ro" \
     -v "${SCRIPT_DIR}/boot_preseeded.sh:/usr/local/bin/pg-seeded-tmpfs-entrypoint.sh:ro" \
