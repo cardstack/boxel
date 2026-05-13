@@ -125,11 +125,13 @@ export abstract class RealmSyncBase {
     try {
       const url = this.buildDirectoryUrl(dir);
 
-      const response = await this.authenticator.authedRealmFetch(url, {
-        headers: {
-          Accept: 'application/vnd.api+json',
-        },
-      });
+      const response = await this.remoteLimit(() =>
+        this.authenticator.authedRealmFetch(url, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }),
+      );
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -167,10 +169,10 @@ export abstract class RealmSyncBase {
               }
               return [] as Array<[string, boolean]>;
             } else {
-              return this.remoteLimit(async () => {
+              return (async () => {
                 const subdirFiles = await this.getRemoteFileList(entryPath);
                 return Array.from(subdirFiles.entries());
-              });
+              })();
             }
           }),
         );
