@@ -87,6 +87,49 @@ export type RealmHttpServer =
   | http2.Http2SecureServer
   | net.Server;
 
+// Node's HTTP/2 compat layer reports Http2Stream.writable === false on
+// server-side streams whose request method is HEAD (the protocol forbids a
+// body, so the stream is marked non-writable up front). Koa's
+// `ctx.writable` getter delegates to `res.socket.writable`, so for HEAD
+// over h2 it sees `false` and `respond()` bails silently — the response
+// headers never get sent and the client hangs until its timeout.
+// Patching the prototype getter to recognise HEAD-over-h2 streams as
+// writable (when they are otherwise healthy) restores normal HEAD
+// semantics over h2 without disturbing GET/POST or HTTP/1.1. Exported so
+// tests that build their own Koa app pick up the same fix.
+let koaResponsePatchedForH2 = false;
+export function patchKoaResponseForH2Head() {
+  if (koaResponsePatchedForH2) return;
+  // Construct a throwaway Koa instance just to find the prototype — Koa's
+  // response prototype isn't exported directly.
+  let proto = Object.getPrototypeOf(new Koa().response) as object;
+  let descriptor = Object.getOwnPropertyDescriptor(proto, 'writable');
+  let origWritable = descriptor?.get;
+  if (!origWritable) return;
+  Object.defineProperty(proto, 'writable', {
+    configurable: true,
+    get(this: Koa.Response) {
+      let res = this.res as unknown as {
+        writableEnded?: boolean;
+        req?: { method?: string };
+        stream?: { destroyed?: boolean; closed?: boolean };
+      };
+      if (res?.writableEnded) return false;
+      let stream = res?.stream;
+      if (
+        res?.req?.method === 'HEAD' &&
+        stream &&
+        !stream.destroyed &&
+        !stream.closed
+      ) {
+        return true;
+      }
+      return origWritable!.call(this);
+    },
+  });
+  koaResponsePatchedForH2 = true;
+}
+
 // In TLS mode the realm-server binds a single net.Server that peeks each
 // connection's first byte and routes TLS handshakes (0x16) to the HTTP/2
 // secure server and plain-text HTTP to a tiny 301-redirect server. This
@@ -103,6 +146,9 @@ export function createListener(
   if (!certFile || !keyFile) {
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
+  // We only need the patch on the h2 path — but it's idempotent and
+  // cheap, so we apply it unconditionally once cert/key are present.
+  patchKoaResponseForH2Head();
   let cert: Buffer;
   let key: Buffer;
   try {

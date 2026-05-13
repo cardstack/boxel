@@ -348,7 +348,21 @@ export async function setContextResponse(
   let { status, statusText, headers, body, nodeStream } = response;
   ctxt.status = status;
   ctxt.message = statusText;
+  // HTTP/2 forbids connection-specific (hop-by-hop) headers — sending any
+  // of them on an h2 response causes Node's http2 compat layer to either
+  // strip them silently or, worse, drop the stream mid-flight. Filter
+  // them out before forwarding the realm's WHATWG Response headers to
+  // Koa's response. RFC 9113 §8.2.2.
+  const H2_FORBIDDEN_RESPONSE_HEADERS = new Set([
+    'connection',
+    'keep-alive',
+    'transfer-encoding',
+    'upgrade',
+    'proxy-connection',
+    'http2-settings',
+  ]);
   for (let [header, value] of headers.entries()) {
+    if (H2_FORBIDDEN_RESPONSE_HEADERS.has(header.toLowerCase())) continue;
     ctxt.set(header, value);
   }
   if (!headers.get('content-type')) {

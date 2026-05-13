@@ -104,7 +104,7 @@ async function startListener(opts: {
     let force = (server as { closeAllConnections?: () => void })
       .closeAllConnections;
     if (typeof force === 'function') {
-      force();
+      force.call(server);
     }
     await new Promise<void>((resolve, reject) =>
       server.close((err) => (err ? reject(err) : resolve())),
@@ -156,23 +156,45 @@ function h1Request(opts: {
 function h2Request(opts: {
   port: number;
   path: string;
-}): Promise<{ status: number; body: string; protocol: string }> {
+  method?: 'GET' | 'HEAD';
+  timeoutMs?: number;
+}): Promise<{
+  status: number;
+  body: string;
+  protocol: string;
+  responseHeaders: Record<string, string>;
+}> {
   return new Promise((resolve, reject) => {
     let client = http2.connect(`https://127.0.0.1:${opts.port}`, {
       rejectUnauthorized: false,
     });
     client.on('error', reject);
-    let req = client.request({ ':method': 'GET', ':path': opts.path });
+    let req = client.request({
+      ':method': opts.method ?? 'GET',
+      ':path': opts.path,
+    });
+    if (opts.timeoutMs) {
+      req.setTimeout(opts.timeoutMs, () => {
+        req.close();
+        client.close();
+        reject(new Error(`h2 request timed out after ${opts.timeoutMs}ms`));
+      });
+    }
     let status = 0;
+    let responseHeaders: Record<string, string> = {};
     let chunks: Buffer[] = [];
     req.on('response', (headers) => {
       status = Number(headers[':status'] ?? 0);
+      for (let [k, v] of Object.entries(headers)) {
+        if (k.startsWith(':')) continue;
+        responseHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v);
+      }
     });
     req.on('data', (c) => chunks.push(c as Buffer));
     req.on('end', () => {
       let body = Buffer.concat(chunks).toString('utf8');
       client.close();
-      resolve({ status, body, protocol: 'h2' });
+      resolve({ status, body, protocol: 'h2', responseHeaders });
     });
     req.on('error', reject);
     req.end();
@@ -203,6 +225,37 @@ module(basename(__filename), function (hooks) {
       assert.true(
         res.body.includes('ok via 2.0'),
         `body indicates HTTP/2 — got "${res.body}"`,
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  test('TLS h2 HEAD returns 200 without hanging', async function (assert) {
+    // Regression: Node's http2 compat layer marks Http2Stream.writable=false
+    // for HEAD-method server streams. Koa.respond() then short-circuits on
+    // `!ctx.writable` without sending any headers and the client hangs
+    // until its timeout. `patchKoaResponseForH2Head()` (applied inside
+    // `createListener` when an h2 listener is constructed) restores normal
+    // HEAD semantics. Without the patch, this test would time out below.
+    let { port, isHttp2, close } = await startListener({
+      cert: certFile,
+      key: keyFile,
+    });
+    try {
+      assert.true(isHttp2, 'listener advertises h2 mode');
+      let res = await h2Request({
+        port,
+        path: '/_alive',
+        method: 'HEAD',
+        timeoutMs: 2000,
+      });
+      assert.strictEqual(res.status, 200, 'h2 HEAD returns 200');
+      assert.strictEqual(res.body, '', 'h2 HEAD body is empty');
+      assert.strictEqual(
+        res.responseHeaders['content-length'],
+        String(Buffer.byteLength('ok via 2.0')),
+        'h2 HEAD reports the GET body length via content-length',
       );
     } finally {
       await close();

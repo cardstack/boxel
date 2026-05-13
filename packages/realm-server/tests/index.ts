@@ -180,6 +180,7 @@ const ALL_TEST_FILES: string[] = [
   './full-reindex-test',
   './indexing-test',
   './lazy-mount-test',
+  './listener-dispatcher-test',
   './module-cache-race-test',
   './module-syntax-test',
   './permissions/permission-checker-test',
