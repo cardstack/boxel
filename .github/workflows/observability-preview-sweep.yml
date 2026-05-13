@@ -1,0 +1,148 @@
+name: Observability — preview sweep
+
+# Daily sweep that removes stale preview folders + dashboards from the
+# staging Grafana. Safety net for observability-preview.yml's cleanup-on-
+# close job: a missed `closed` webhook, a job that errored mid-delete, or a
+# preview pushed against a PR that was later deleted from GitHub all leave
+# orphan `pr<n>-*` resources behind. This workflow notices and cleans up.
+#
+# Decision rule per PR number (derived from the `pr<n>-` UID prefix):
+#   - PR is open                → keep
+#   - PR is closed/merged       → delete
+#   - PR doesn't exist on GitHub → delete (PR was deleted from repo state)
+#
+# CS-11106.
+
+on:
+  schedule:
+    # Daily at 06:23 UTC — chosen to avoid the top-of-hour rush. No
+    # particular significance to the minute; deliberately not on :00 so
+    # GHA's "scheduled workflows often run minutes late" behavior doesn't
+    # batch this with other on-the-hour crons.
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # The sweeper is idempotent, but running two at once would do redundant
+  # API calls against Grafana and GitHub. Serialize; don't cancel an
+  # in-flight run if the cron fires while a manual dispatch is still going.
+  group: observability-preview-sweep
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
+  GRAFANACTL_VERSION: "0.1.10"
+
+jobs:
+  sweep:
+    name: Sweep stale previews from staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install grafanactl
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source GRAFANA_TOKEN
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /staging/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Identify stale previews
+        id: identify
+        working-directory: packages/observability
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eo pipefail
+          remote="$(mktemp -d)"
+          cfg="$(./scripts/render-config.sh staging)"
+          trap 'rm -rf "$remote"; rm -f "$cfg"' EXIT
+
+          grafanactl --config "$cfg" --context staging \
+            resources pull dashboards folders --path "$remote" >/dev/null
+
+          # Extract the set of unique PR numbers present in preview UIDs.
+          pr_numbers="$(find "$remote" -type f -name '*.json' \
+            -exec jq -r '.metadata.name // ""' {} \; \
+            | grep -E '^pr[0-9]+-' \
+            | sed -E 's/^pr([0-9]+)-.*/\1/' \
+            | sort -u)"
+
+          if [[ -z "$pr_numbers" ]]; then
+            echo "no preview resources present — nothing to sweep"
+            echo "stale_prs=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "found previews for PR(s): $(echo "$pr_numbers" | tr '\n' ' ')"
+
+          # For each PR number, ask GitHub whether it's still open. `gh pr view`
+          # returns nonzero when the PR doesn't exist; we treat that as
+          # "delete" (the PR was deleted from the repo). Open PRs are kept;
+          # everything else (closed, merged, missing) gets swept.
+          stale=""
+          while IFS= read -r pr; do
+            [[ -n "$pr" ]] || continue
+            if state="$(gh pr view "$pr" --repo "$REPO" --json state -q .state 2>/dev/null)"; then
+              if [[ "$state" == "OPEN" ]]; then
+                echo "  PR #${pr}: OPEN — keep"
+                continue
+              fi
+              echo "  PR #${pr}: ${state} — sweep"
+            else
+              echo "  PR #${pr}: not found — sweep"
+            fi
+            stale="${stale}${pr} "
+          done <<< "$pr_numbers"
+
+          echo "stale_prs=${stale}" >> "$GITHUB_OUTPUT"
+
+      - name: Sweep
+        if: steps.identify.outputs.stale_prs != ''
+        working-directory: packages/observability
+        env:
+          STALE_PRS: ${{ steps.identify.outputs.stale_prs }}
+        run: |
+          set -eo pipefail
+          for pr in $STALE_PRS; do
+            echo "::group::Cleanup PR #${pr}"
+            ./scripts/cleanup-preview.sh --pr "$pr" --env staging
+            echo "::endgroup::"
+          done
+
+      - name: Summary
+        if: always()
+        env:
+          STALE_PRS: ${{ steps.identify.outputs.stale_prs }}
+        run: |
+          {
+            echo "## Preview sweep"
+            echo ""
+            if [[ -z "${STALE_PRS:-}" ]]; then
+              echo "No stale previews."
+            else
+              echo "Swept previews for PR(s): \`${STALE_PRS}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
