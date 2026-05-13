@@ -249,7 +249,7 @@
             "links": [
               {
                 "title": "Open Users dashboard",
-                "url": "/d/boxelusers0001",
+                "url": "/d/boxelusers0001?${__url_time_range}",
                 "targetBlank": false
               }
             ],
@@ -297,7 +297,7 @@
         "links": [
           {
             "title": "Open Users dashboard",
-            "url": "/d/boxelusers0001",
+            "url": "/d/boxelusers0001?${__url_time_range}",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -325,7 +325,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |~ \"Processed request.*simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
+            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
             "queryType": "range",
             "legendFormat": "Concurrent Users",
             "refId": "A"
@@ -388,7 +388,7 @@
                   "value": [
                     {
                       "title": "Open in Users dashboard",
-                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text}",
+                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
                       "targetBlank": false
                     }
                   ]
@@ -429,7 +429,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |~ \"Processed request.*simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
+            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
             "queryType": "instant",
             "legendFormat": "{{user}}",
             "refId": "A"
