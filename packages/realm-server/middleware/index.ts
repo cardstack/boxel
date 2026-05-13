@@ -55,16 +55,32 @@ export function proxyAsset(
     // `:path`, `:authority`) to `req.headers`. http-proxy forwards every
     // header verbatim into Node's `new http.ClientRequest(...)`, which
     // throws `ERR_INVALID_HTTP_TOKEN` for any name starting with `:` —
-    // every proxied h2 request becomes a 500. Strip the pseudo-headers
-    // off the request object before handing it to the inner proxy
-    // middleware; the URL and method are already read from ctxt.
-    let headers = ctxt.req.headers as Record<string, unknown>;
-    for (let name of Object.keys(headers)) {
-      if (name.startsWith(':')) {
-        delete headers[name];
+    // every proxied h2 request becomes a 500. Shadow `req.headers` with
+    // a filtered copy for the inner proxy call. Mutating the original
+    // would clobber Node's internal headers map (it's the same object
+    // returned by the `req.headers` getter), and `req.method` / `req.url`
+    // read from that map too — so deleting `:method` / `:path` would
+    // null them out and break Koa's `ctx.path` lookup.
+    let original = ctxt.req.headers;
+    let filtered: Record<string, string | string[] | undefined> = {};
+    for (let [name, value] of Object.entries(original)) {
+      if (!name.startsWith(':')) {
+        filtered[name] = value;
       }
     }
-    return inner(ctxt, next);
+    Object.defineProperty(ctxt.req, 'headers', {
+      value: filtered,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    });
+    try {
+      return await inner(ctxt, next);
+    } finally {
+      // Restore the prototype getter so downstream middleware (and any
+      // later request-scoped logic) sees Node's original h2 headers map.
+      delete (ctxt.req as { headers?: unknown }).headers;
+    }
   };
 }
 
