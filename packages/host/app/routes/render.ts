@@ -214,6 +214,24 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    // Stamp the "consuming realm" — the realm that owns the card being
+    // rendered — onto a global the store-service's federated-search
+    // wrapper reads. The realm-server's job-scoped search cache pairs
+    // this with `x-boxel-job-id` to gate same-realm-only caching:
+    // cross-realm reads bypass the cache because peer realms can swap
+    // independently.
+    try {
+      let consumingRealm = this.realm.realmOf(new URL(id));
+      (
+        globalThis as unknown as { __boxelConsumingRealm?: string }
+      ).__boxelConsumingRealm = consumingRealm
+        ? String(consumingRealm)
+        : undefined;
+    } catch {
+      (
+        globalThis as unknown as { __boxelConsumingRealm?: string }
+      ).__boxelConsumingRealm = undefined;
+    }
     // CS-10872: render-stage breadcrumb. `model()` running means we
     // made it past route setup and are about to build the render
     // model. Each long-running stage below updates this slot so the

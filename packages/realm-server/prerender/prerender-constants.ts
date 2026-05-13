@@ -34,7 +34,13 @@ export function sanitizePrerenderRequestId(
 // `proxying`/`proxied` lines so a single job's prerender activity is
 // greppable across services with the same `[job: J.R]` substring used
 // in worker logs.
-export const PRERENDER_JOB_ID_HEADER = 'x-boxel-job-id';
+//
+// CS-11115 Phase 2: the canonical definition now lives in runtime-
+// common's prerender-headers.ts (as `X_BOXEL_JOB_ID_HEADER`) so the
+// host SPA can import it without taking a realm-server dependency.
+// Re-exported here under the legacy name so existing realm-server
+// imports keep working unchanged.
+export { X_BOXEL_JOB_ID_HEADER as PRERENDER_JOB_ID_HEADER } from '@cardstack/runtime-common';
 
 // Stamped on the host's outbound _federated-search / _search calls
 // when the host SPA detects it's running inside a prerender tab. The
