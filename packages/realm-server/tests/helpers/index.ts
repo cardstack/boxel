@@ -1102,6 +1102,23 @@ export async function createRealm({
   return { realm, adapter };
 }
 
+// Defense-in-depth for test bootstraps that don't share `tests/index.ts`:
+// strip the dev TLS env vars before any fixture realm-server is spun up.
+// `env-vars.sh` exports these whenever the local mkcert cert exists, which
+// is now the CI default (the init action provisions it). Without this
+// delete, an in-process fixture would bind the HTTPS+HTTP/2 dispatcher
+// on its random `127.0.0.1:444X` port and supertest / direct-fetch
+// callers in tests that connect plain HTTP would get 301-redirected to
+// `https://…`, breaking every assertion that expects `200`/`4xx`.
+// The qunit-runner-driven realm-server tests already do this in their
+// own `tests/index.ts`; this call covers callers like the boxel-cli and
+// workspace-sync vitest suites that consume the helpers without that
+// bootstrap.
+function stripTlsEnvVars() {
+  delete process.env.REALM_SERVER_TLS_CERT_FILE;
+  delete process.env.REALM_SERVER_TLS_KEY_FILE;
+}
+
 export async function runTestRealmServer({
   testRealmDir,
   realmsRootPath,
@@ -1143,6 +1160,7 @@ export async function runTestRealmServer({
   };
   prerenderer?: Prerenderer;
 }) {
+  stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
@@ -1278,6 +1296,7 @@ export async function runTestRealmServerWithRealms({
   };
   prerenderer?: Prerenderer;
 }) {
+  stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
 
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
