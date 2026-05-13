@@ -1,8 +1,6 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, basename } from 'path';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync } from 'fs-extra';
+import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -12,28 +10,21 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET directory path', function (hooks) {
+  module('Realm-specific Endpoints | GET directory path', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
-    });
 
     function onRealmSetup(args: {
       testRealm: Realm;
       request: SuperTest<Test>;
-      dir: DirResult;
     }) {
       testRealm = args.testRealm;
       request = args.request;
-      dir = args.dir;
     }
 
     module('public readable realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
+        fixture: 'realistic',
         permissions: {
           '*': ['read'],
         },
@@ -102,6 +93,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
+        fixture: 'realistic',
         permissions: {
           john: ['read'],
           '@node-test_realm:localhost': ['read', 'realm-owner'],
