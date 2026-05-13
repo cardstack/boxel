@@ -132,10 +132,11 @@ module(basename(__filename), function (hooks) {
     // under the new shape, a warm-tab caller skips the await entirely.
     gate.block();
 
-    let started = Date.now();
     let second = await pool.getPage('A');
-    let elapsed = Date.now() - started;
 
+    // `tabStartupMs === 0` is the deterministic contract proof: the
+    // caller never reached the path that awaits `#ensureStandbyPool`.
+    // Wall-clock assertions would be timing-flaky under slow CI.
     assert.true(
       second.reused,
       'second getPage on the same affinity finds the warm tab (reused === true)',
@@ -144,10 +145,6 @@ module(basename(__filename), function (hooks) {
       second.waits.tabStartupMs,
       0,
       'tabStartupMs is 0 because the caller never awaited #ensureStandbyPool',
-    );
-    assert.true(
-      elapsed < 200,
-      `second getPage returns quickly (was ${elapsed}ms) despite blocked standby refill`,
     );
 
     second.release();
@@ -162,15 +159,23 @@ module(basename(__filename), function (hooks) {
     // Block creations immediately. The very first getPage has no warm
     // tab and no commandeer-able standby; it must hit the awaited-
     // refill last-resort path in `#selectEntryForAffinity`. We unblock
-    // after a short delay so the test doesn't hang.
+    // after a short delay so the test doesn't hang — and assert that
+    // the unblock actually fired before getPage resolved, proving
+    // the caller was genuinely awaiting the refill (not just spinning
+    // through fast paths).
     gate.block();
-    let unblockAt = Date.now() + 60;
-    setTimeout(() => gate.unblockAll(), 60);
+    let unblockFired = false;
+    setTimeout(() => {
+      unblockFired = true;
+      gate.unblockAll();
+    }, 60);
 
-    let started = Date.now();
     let result = await pool.getPage('A');
-    let elapsed = Date.now() - started;
 
+    assert.true(
+      unblockFired,
+      'unblock timer fired before getPage resolved — getPage was genuinely awaiting the standby refill',
+    );
     assert.false(
       result.reused,
       'no warm tab existed; caller got a freshly commandeered standby',
@@ -179,11 +184,6 @@ module(basename(__filename), function (hooks) {
       result.waits.tabStartupMs >= 50,
       `tabStartupMs reflects actual standby wait (was ${result.waits.tabStartupMs}ms, expected >=50)`,
     );
-    assert.true(
-      elapsed >= 50,
-      `getPage waited for the refill (was ${elapsed}ms)`,
-    );
-    assert.true(unblockAt > 0, 'unblock fired before getPage resolved');
 
     result.release();
   });
@@ -205,21 +205,19 @@ module(basename(__filename), function (hooks) {
     // return without awaiting the (hung) `#ensureStandbyPool`.
     gate.block();
 
-    let started = Date.now();
     let [resA, resB] = await Promise.all([
       pool.getPage('A'),
       pool.getPage('B'),
     ]);
-    let elapsed = Date.now() - started;
 
+    // `tabStartupMs === 0` on both callers is the deterministic
+    // proof that neither awaited `#ensureStandbyPool`. Pre-fix, a
+    // single shared `#ensuringStandbys` promise would have leaked
+    // its hang into both callers and produced non-zero values here.
     assert.true(resA.reused, 'A: reused warm tab');
     assert.true(resB.reused, 'B: reused warm tab');
     assert.strictEqual(resA.waits.tabStartupMs, 0, 'A: tabStartupMs === 0');
     assert.strictEqual(resB.waits.tabStartupMs, 0, 'B: tabStartupMs === 0');
-    assert.true(
-      elapsed < 200,
-      `both reused-tab callers returned in ${elapsed}ms despite blocked standby refill`,
-    );
 
     resA.release();
     resB.release();

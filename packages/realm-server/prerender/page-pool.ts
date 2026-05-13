@@ -952,9 +952,7 @@ export class PagePool {
     // refill itself in that case (returning the wait time as
     // `tabStartupMs`). Callers that find a warm tab or orphan never
     // touch `#ensuringStandbys` at all.
-    void this.#ensureStandbyPool().catch((e) => {
-      log.debug('background standby refill failed:', e);
-    });
+    this.#kickStandbyRefill('getPage pre-acquire');
     try {
       throwIfAborted(signal);
     } catch (e) {
@@ -1019,7 +1017,7 @@ export class PagePool {
     let semaphoreMs = Date.now() - semaphoreStart;
     entry.lastUsedAt = Date.now();
     this.#touchLRU(affinityKey);
-    void this.#ensureStandbyPool();
+    this.#kickStandbyRefill('getPage post-acquire');
     let released = false;
     let release = () => {
       if (released) return;
@@ -1126,7 +1124,7 @@ export class PagePool {
     // affinities leak a small constant per key; cleared on
     // `closeAll()`.
     void this.#browserManager.cleanupUserDataDirs();
-    void this.#ensureStandbyPool();
+    this.#kickStandbyRefill('disposeAffinity');
   }
 
   async closeAll(): Promise<void> {
@@ -1175,6 +1173,18 @@ export class PagePool {
       this.#ensuringStandbys = null;
     });
     return await this.#ensuringStandbys;
+  }
+
+  // Fire-and-forget kick used by call sites that don't need to await
+  // refill completion (post-acquire warming, post-eviction warming,
+  // pre-acquire warming inside `getPage`). Always attaches `.catch`
+  // so an unhandled rejection from `#ensureStandbyPool` — e.g. when
+  // the browser is unreachable — can't crash the process under
+  // Node's `--unhandled-rejections=strict` mode.
+  #kickStandbyRefill(reason: string): void {
+    void this.#ensureStandbyPool().catch((e) => {
+      log.debug(`background standby refill failed (${reason}):`, e);
+    });
   }
 
   async #ensureStandbyPoolInternal(): Promise<void> {
