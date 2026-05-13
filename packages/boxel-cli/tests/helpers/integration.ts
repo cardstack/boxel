@@ -100,6 +100,22 @@ export async function startTestRealmServer(
   prepareTestDB();
   dbAdapter = await createTestPgAdapter();
   publisher = new PgQueuePublisher(dbAdapter);
+  // Test-only hardening for a leak in runtime-common's enqueueReindexRealmJob:
+  // server.createRealm, handle-publish-realm, and full-reindex discard the Job
+  // returned by queue.publish(), but publish() still registers a Deferred that
+  // rejects when cancelRunningJobsInConcurrencyGroup fires during a concurrent
+  // delete-realm (status: 418, "User initiated job cancellation"). A discarded
+  // Deferred with no handler surfaces to vitest as an unhandled rejection and
+  // fails the suite even though every assertion passes. Other consumers chained
+  // off the same job.done still see the rejection through their own handlers.
+  // Upstream fix belongs in packages/runtime-common/jobs/reindex-realm.ts; we
+  // keep this branch scoped to boxel-cli.
+  let basePublish = publisher.publish.bind(publisher);
+  publisher.publish = (async (args) => {
+    let job = await basePublish(args);
+    void job.done.catch(() => {});
+    return job;
+  }) as typeof publisher.publish;
   runner = new PgQueueRunner({
     adapter: dbAdapter,
     workerId: 'cli-test-worker',
