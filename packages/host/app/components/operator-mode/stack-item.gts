@@ -15,6 +15,7 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import DeselectIcon from '@cardstack/boxel-icons/deselect';
+import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
@@ -636,7 +637,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
 
-    return toMenuItems(
+    const items = toMenuItems(
       this.card?.[getMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
@@ -646,6 +647,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
         useBaseTemplate: this.args.item.useBaseTemplate,
       }) ?? [],
     );
+
+    if (this.isTopCard && !this.isExpanded) {
+      items.unshift(
+        new MenuItem({
+          label: 'Expand to full width',
+          icon: Maximize,
+          action: this.toggleExpanded,
+        }),
+      );
+    }
+
+    return items;
   }
 
   @cached
@@ -986,7 +999,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     this.canEdit
                     (fn this.cardCrudFunctions.editCard this.card)
                   }}
-                  @onExpand={{if this.isTopCard this.toggleExpanded}}
+                  @onExpand={{if this.isExpanded this.toggleExpanded}}
                   @isExpanded={{this.isExpanded}}
                   @onFinishEditing={{if this.isEditing this.doneEditing}}
                   @onClose={{unless this.isBuried this.closeItem}}
@@ -1009,7 +1022,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   this.canEdit
                   (fn this.cardCrudFunctions.editCard this.card)
                 }}
-                @onExpand={{if this.isTopCard this.toggleExpanded}}
+                @onExpand={{if this.isExpanded this.toggleExpanded}}
                 @isExpanded={{this.isExpanded}}
                 @onFinishEditing={{if this.isEditing this.doneEditing}}
                 @onClose={{unless this.isBuried this.closeItem}}
