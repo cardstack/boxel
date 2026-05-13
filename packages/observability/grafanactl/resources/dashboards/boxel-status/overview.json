@@ -961,61 +961,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1036,7 +1009,7 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1057,7 +1030,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1075,7 +1049,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1273,61 +1265,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1348,7 +1313,7 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1369,7 +1334,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1387,7 +1353,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1585,61 +1569,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1660,7 +1617,7 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1681,7 +1638,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1699,7 +1657,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1897,61 +1873,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1972,7 +1921,7 @@
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1993,7 +1942,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -2011,7 +1961,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
