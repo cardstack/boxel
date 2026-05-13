@@ -19,6 +19,7 @@ import {
   setupMatrixRoom,
   createJWT,
   cardInfo,
+  fixtureDir,
   type RealmRequest,
   withRealmPath,
 } from './helpers';
@@ -72,6 +73,7 @@ module(basename(__filename), function () {
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -288,7 +290,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             readFileSync(
-              join(__dirname, '../tests/cards', 'person-with-error.gts'),
+              join(fixtureDir('realistic'), 'person-with-error.gts'),
               {
                 encoding: 'utf8',
               },
@@ -365,6 +367,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read'],
@@ -416,6 +419,7 @@ module(basename(__filename), function () {
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -491,6 +495,7 @@ module(basename(__filename), function () {
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -565,6 +570,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -608,6 +614,7 @@ module(basename(__filename), function () {
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1015,6 +1022,7 @@ module(basename(__filename), function () {
 
       module('public writable realm with size limit', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1051,6 +1059,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -1129,6 +1138,7 @@ module(basename(__filename), function () {
     module('binary file POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1421,6 +1431,7 @@ module(basename(__filename), function () {
         'public writable realm with size limit for binary',
         function (hooks) {
           setupPermissionedRealmCached(hooks, {
+            fixture: 'simple',
             realmURL,
             permissions: {
               '*': ['read', 'write'],
@@ -1449,6 +1460,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm for binary', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],

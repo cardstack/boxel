@@ -11,6 +11,7 @@ import {
   runTestRealmServer,
   closeServer,
   createJWT,
+  fixtureDir,
   insertUser,
   insertPlan,
   realmSecretSeed,
@@ -40,7 +41,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
+      copySync(fixtureDir('simple'), dir.name);
     });
 
     async function startRealmServer(
@@ -73,7 +74,7 @@ module(basename(__filename), function () {
         runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
 
         // Set up allowed proxy destinations in database BEFORE starting server
         await dbAdapter.execute(

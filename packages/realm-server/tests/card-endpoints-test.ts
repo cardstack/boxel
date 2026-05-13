@@ -140,6 +140,7 @@ module(basename(__filename), function () {
     module('card GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -952,6 +953,7 @@ module(basename(__filename), function () {
 
       module('published realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -1037,6 +1039,7 @@ module(basename(__filename), function () {
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1113,6 +1116,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read'],
@@ -1229,6 +1233,7 @@ module(basename(__filename), function () {
     module('card POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -2240,6 +2245,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -2319,6 +2325,7 @@ module(basename(__filename), function () {
     module('card PATCH request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -3973,6 +3980,7 @@ module(basename(__filename), function () {
 
       module('public writable realm with size limit', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -4022,6 +4030,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -4094,6 +4103,7 @@ module(basename(__filename), function () {
     module('card DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -4206,6 +4216,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],

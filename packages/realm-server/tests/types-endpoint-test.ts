@@ -12,6 +12,7 @@ import {
   setupDB,
   setupMatrixRoom,
   createVirtualNetwork,
+  fixtureDir,
   matrixURL,
   closeServer,
   type RealmRequest,
@@ -65,6 +66,7 @@ module(basename(__filename), function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'simple',
       permissions: {
         '*': ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
@@ -106,7 +108,7 @@ module(basename(__filename), function () {
         runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
         await startRealmServer(dbAdapter2, publisher, runner);
       },
       afterEach: async () => {
