@@ -259,7 +259,8 @@ module(basename(__filename), function () {
       let cache = new JobScopedSearchCache({ maxEntries: 3 });
       let populate = async (label: string) => makeDoc(label);
 
-      // Fill exactly to capacity.
+      // Fill exactly to capacity. Insertion order: A (seq 0), B (1),
+      // C (2). All three under jobId 42.1.
       await cache.getOrPopulate({
         jobId: '42.1',
         query: makeQuery('A'),
@@ -280,7 +281,8 @@ module(basename(__filename), function () {
       });
       assert.strictEqual(cache.size(), 3, 'at-capacity entry count');
 
-      // One more triggers FIFO eviction of the oldest (A).
+      // One more insert triggers FIFO eviction of the oldest (A, seq 0).
+      // Map now holds B, C, D (seqs 1, 2, 3).
       await cache.getOrPopulate({
         jobId: '42.1',
         query: makeQuery('D'),
@@ -289,7 +291,8 @@ module(basename(__filename), function () {
       });
       assert.strictEqual(cache.size(), 3, 'still at cap after overflow');
 
-      // Re-requesting A re-populates (cache miss); B and C remain hits.
+      // Re-requesting A misses (evicted); the new A insert (seq 4)
+      // pushes the now-oldest (B, seq 1) out. Map now holds C, D, A.
       let aCalls = 0;
       await cache.getOrPopulate({
         jobId: '42.1',
@@ -301,7 +304,28 @@ module(basename(__filename), function () {
         },
       });
       assert.strictEqual(aCalls, 1, 'A was re-populated (it was evicted)');
+      assert.strictEqual(cache.size(), 3, 'still at cap after re-insert');
 
+      // D was inserted just before A and is the youngest survivor —
+      // verify it's still a hit. (Strict-FIFO: any of {C, D} could
+      // remain depending on cap math; pick the most-recently-inserted
+      // non-A entry so the assertion is stable under future cap
+      // changes.)
+      let dCalls = 0;
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('D'),
+        opts: undefined,
+        populate: async () => {
+          dCalls++;
+          return populate('D');
+        },
+      });
+      assert.strictEqual(dCalls, 0, 'D was a cache hit (younger than B)');
+
+      // B is the entry FIFO evicted by the A re-insert — verify it
+      // misses, confirming "oldest non-active entry leaves first" is
+      // what the cap enforces.
       let bCalls = 0;
       await cache.getOrPopulate({
         jobId: '42.1',
@@ -312,7 +336,7 @@ module(basename(__filename), function () {
           return populate('B');
         },
       });
-      assert.strictEqual(bCalls, 0, 'B was a cache hit (not evicted)');
+      assert.strictEqual(bCalls, 1, 'B was evicted by the A re-insert');
     });
 
     test('opts variance produces distinct entries', async function (assert) {
