@@ -1,0 +1,325 @@
+name: Observability — PR preview
+
+# Spins up a per-PR preview of the dashboards a PR changes inside the staging
+# Grafana, under per-PR-prefixed UIDs (`pr<n>-*`) in a per-PR folder so the
+# preview coexists with the canonical staging copies without overwriting
+# them. On PR close the preview is torn down. A separate sweep workflow
+# (observability-preview-sweep.yml) is the safety net for closes the
+# preview-cleanup job missed.
+#
+# Scope: dashboards + folders only. Data sources, alert rules, and the
+# home-dashboard preference are file-provisioned at Grafana startup and
+# can't be previewed per-PR — the existing observability-diff.yml comment
+# already surfaces their changes. CS-11106.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - "packages/observability/**"
+      - ".github/workflows/observability-preview.yml"
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  # Serialize per-PR so a force-push after an open doesn't race the previous
+  # push, but allow different PRs to run in parallel. Don't cancel in-flight —
+  # we never want to leave the preview in a half-pushed state.
+  group: observability-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  # Reuses the apply role from cardstack/infra#665 (same role
+  # observability-apply-staging.yml uses). Permissions cover every SSM path
+  # below — see that workflow's header for the up-to-date list.
+  AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
+  GRAFANACTL_VERSION: "0.1.10"
+  PREVIEW_MARKER: "<!-- observability-preview -->"
+  STAGING_GRAFANA_BASE_URL: "https://dashboard-staging.stack.cards"
+
+jobs:
+  preview-apply:
+    name: Apply preview to staging
+    # Fork-PR guard: this job assumes AWS and pushes to staging Grafana, so
+    # it must not run on PRs whose code we don't trust. Same pattern as
+    # observability-diff.yml and observability-apply-staging.yml.
+    if: >-
+      github.event.action != 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # render-preview.sh runs `git diff origin/<base>...HEAD` to detect
+          # changed dashboards, so we need full history to reach the merge-base
+          # (same constraint as observability-diff.yml).
+          fetch-depth: 0
+
+      - name: Fetch PR base ref
+        # Ensure origin/<base> is fully available — no `--depth=1`.
+        # A shallow base makes `git diff origin/<base>...HEAD` fail with
+        # "no merge base" whenever main has advanced past the PR's true
+        # merge base (i.e., any PR in flight long enough for a merge to
+        # land on main). Unbounded fetch is cheap against the full repo
+        # the checkout step already pulled (fetch-depth: 0).
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags origin "${PR_BASE_REF}"
+
+      - name: Install grafanactl
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source preview-time secrets from SSM
+        # Subset of what observability-apply-staging.yml fetches. The preview
+        # only touches dashboards + folders, so we don't need the LOKI_URL /
+        # BOXEL_DB_* / WORKER_LOG_* set — those are read by apply-datasources
+        # / apply-alerting, which apply-preview.sh never invokes.
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /staging/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+          REALM_SERVER_URL="$(aws ssm get-parameter \
+            --name /staging/boxel-grafana/realm_server_url \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
+
+          GRAFANA_SECRET="$(aws ssm get-parameter \
+            --name /staging/boxel/GRAFANA_SECRET \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_SECRET"
+          echo "GRAFANA_SECRET=$GRAFANA_SECRET" >> "$GITHUB_ENV"
+
+      - name: Apply preview
+        id: apply
+        working-directory: packages/observability
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -eo pipefail
+          OUT_FILE="$(mktemp)"
+          ./scripts/apply-preview.sh \
+            --pr "$PR_NUMBER" \
+            --base-ref "origin/${PR_BASE_REF}" \
+            --env staging \
+            > "$OUT_FILE"
+          echo "out_file=$OUT_FILE" >> "$GITHUB_OUTPUT"
+          if [[ -s "$OUT_FILE" ]]; then
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::group::Preview summary"
+          cat "$OUT_FILE"
+          echo "::endgroup::"
+
+      - name: Cleanup stale preview (no changes left)
+        # When the current head of the PR has no dashboard changes vs base,
+        # apply-preview emits empty output and pushes nothing. But a prior
+        # push to the same PR may have already applied a preview that's
+        # still live in staging — revert/rebase scenarios. Run cleanup so
+        # the PR's staging footprint matches its current head; otherwise
+        # the daily sweep wouldn't catch this until PR close.
+        if: steps.apply.outputs.empty == 'true'
+        working-directory: packages/observability
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
+
+      - name: Post sticky PR comment
+        # Pinned to SHA (matches observability-diff.yml's reasoning):
+        # pull-requests: write + AWS role = non-trivial supply-chain exposure.
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          OUT_FILE: ${{ steps.apply.outputs.out_file }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = process.env.PREVIEW_MARKER;
+            const grafanaBase = process.env.STAGING_GRAFANA_BASE_URL;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const raw = fs.readFileSync(process.env.OUT_FILE, 'utf8').trim();
+
+            // Find any prior preview sticky on this PR; we either update or
+            // delete it based on whether there's anything to preview now.
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              },
+            );
+            const existing = comments.find(
+              c => c.body && c.body.startsWith(marker),
+            );
+
+            if (!raw) {
+              // No dashboards changed at this HEAD. Don't post a "nothing
+              // to see" comment — if a prior push left a sticky behind,
+              // delete it so the PR's comment stream matches its current
+              // state. (Stale preview *resources* from a prior push are
+              // handled by the "Cleanup stale preview" step above.)
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+                core.info(`Deleted stale sticky comment ${existing.id}`);
+              } else {
+                core.info('No dashboard changes — nothing to post.');
+              }
+              return;
+            }
+
+            const folders = [];
+            const dashboards = [];
+            for (const line of raw.split('\n')) {
+              // Format: `<KIND>:<uid>:<title>` (title may contain `:`).
+              const m = line.match(/^(FOLDER|DASHBOARD):([^:]+):(.*)$/);
+              if (!m) continue;
+              const [, kind, uid, title] = m;
+              (kind === 'FOLDER' ? folders : dashboards).push({ uid, title });
+            }
+
+            const folderLines = folders.map(f =>
+              `- **Folder:** [${f.title}](${grafanaBase}/dashboards/f/${f.uid}/)`,
+            );
+            const dashboardLines = dashboards.map(d =>
+              `- [${d.title}](${grafanaBase}/d/${d.uid}/)`,
+            );
+
+            const body = [
+              marker,
+              '## Grafana preview',
+              '',
+              `Preview deployed for **${dashboards.length} dashboard${dashboards.length === 1 ? '' : 's'}** in the staging Grafana.`,
+              'Cross-dashboard drill-throughs still point at the canonical staging dashboards.',
+              '',
+              ...folderLines,
+              '',
+              '**Dashboards:**',
+              ...dashboardLines,
+              '',
+              'Preview is torn down automatically when this PR is closed or merged.',
+              '',
+              `_(Run: ${runUrl})_`,
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated sticky comment ${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info('Created sticky comment');
+            }
+
+  preview-cleanup:
+    name: Cleanup preview from staging
+    # Cleanup runs on the `closed` action (covers both merge and close-
+    # without-merge). Same fork-PR guard — cleanup hits staging.
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install grafanactl
+        uses: ./.github/actions/install-grafanactl
+        with:
+          version: ${{ env.GRAFANACTL_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Source GRAFANA_TOKEN
+        # Cleanup doesn't need any of the URL/secret substitution values —
+        # it lists live state and deletes by selector. Only the grafanactl
+        # token matters.
+        run: |
+          GRAFANA_TOKEN="$(aws ssm get-parameter \
+            --name /staging/grafana/grafanactl_token \
+            --with-decryption \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "::add-mask::$GRAFANA_TOKEN"
+          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Cleanup preview
+        working-directory: packages/observability
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
+
+      - name: Delete sticky PR comment
+        # After cleanup, there's nothing left to point at — delete the
+        # sticky entirely rather than leaving a "preview cleaned up"
+        # gravestone. Matches the apply-time policy of not posting a
+        # comment when there's nothing to show.
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = process.env.PREVIEW_MARKER;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              },
+            );
+            const existing = comments.find(
+              c => c.body && c.body.startsWith(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+              });
+              core.info(`Deleted sticky comment ${existing.id}`);
+            } else {
+              core.info('No preview comment to delete — skipping.');
+            }
