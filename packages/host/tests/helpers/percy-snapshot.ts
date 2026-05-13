@@ -139,28 +139,34 @@ export default async function percySnapshot(
     await pauseTest();
   }
 
-  // Race the actual Percy upload against `PERCY_SNAPSHOT_BUDGET_MS`. The
-  // upstream promise is attached to `.catch` first so a late rejection (after
-  // we've already moved on) doesn't surface as an unhandled rejection during a
-  // later test.
+  // Race the actual Percy upload against `PERCY_SNAPSHOT_BUDGET_MS`. Errors
+  // that surface BEFORE the budget elapses are real upload failures (Percy
+  // server unreachable, malformed call, etc.) — those propagate through
+  // `Promise.race` and fail the test. The side `.catch` only swallows
+  // rejections that arrive AFTER we've already abandoned the upload, so a
+  // late rejection can't surface as an unhandled rejection in a later test.
   const snapshotName = describeSnapshot(args);
   const percyStart = performance.now();
-  let timedOut = false;
-  const percyPromise = (originalPercySnapshot(...args) as Promise<void>).catch(
-    (err) => {
+  let abandoned = false;
+  const upload = originalPercySnapshot(...args) as Promise<void>;
+  upload.catch((err) => {
+    if (abandoned) {
       console.warn(
-        `[percy-snapshot] late rejection from Percy snapshot "${snapshotName}":`,
+        `[percy-snapshot] late rejection from abandoned snapshot "${snapshotName}":`,
         err,
       );
-    },
-  );
+    }
+    // If `abandoned` is false here, the rejection already surfaced via
+    // `Promise.race` below — nothing more to do.
+  });
   const timeoutPromise = new Promise<void>((resolve) => {
     setTimeout(() => {
-      timedOut = true;
+      abandoned = true;
       resolve();
     }, PERCY_SNAPSHOT_BUDGET_MS);
   });
-  await Promise.race([percyPromise, timeoutPromise]);
+  await Promise.race([upload, timeoutPromise]);
+  const timedOut = abandoned;
   const percyMs = Math.round(performance.now() - percyStart);
   const totalMs = Math.round(performance.now() - overallStart);
 
