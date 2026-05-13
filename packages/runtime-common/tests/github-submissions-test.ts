@@ -1,94 +1,44 @@
-import {
-  branchNameToSubmissionMeta,
-  toBranchName,
-} from '../github-submissions';
+import { toBranchName } from '../github-submissions';
 import type { SharedTests } from '../helpers';
 
+const BRANCH_PATTERN = /^[a-f0-9]{6}-(.+)$/;
+
 const tests = Object.freeze({
-  'it converts a branch name back to a matrix room id': async (assert) => {
-    let branchName = 'room-IUZFZGlxWXRoRW52WU51QmlnbTpib3hlbC5haQ';
-    assert.deepEqual(branchNameToSubmissionMeta(branchName), {
-      matrixRoomId: '!FEdiqYthEnvYNuBigm:boxel.ai',
-    });
-  },
-
-  'it extracts the room id from a branch name with a suffix': async (
-    assert,
-  ) => {
-    let roomId = '!NVeTCArRGAqTnFzcPU:stack.cards';
-    let roomPrefix = toBranchName(roomId, 'seed').split('/')[0];
-    let branchName = `${roomPrefix}/my-feature`;
-    assert.strictEqual(
-      branchNameToSubmissionMeta(branchName).matrixRoomId,
-      roomId,
-    );
-  },
-
-  'it builds a branch name from a room id and listing name': async (assert) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    assert.strictEqual(
-      toBranchName(roomId, 'SomeSampleListing'),
-      'room-IVhlekVEcVVsSUpjTmRzdWFGQjpsb2NhbGhvc3Q/some-sample-listing',
-    );
+  'it builds a branch name from a listing name': async (assert) => {
+    let branch = toBranchName('SomeSampleListing');
+    let match = branch.match(BRANCH_PATTERN);
+    assert.ok(match, `branch ${branch} matches {hash6}-{slug}`);
+    assert.strictEqual(match![1], 'some-sample-listing');
   },
 
   'it normalizes listing names with spaces and punctuation': async (assert) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    let roomPrefix = toBranchName(roomId, 'seed').split('/')[0];
-    assert.strictEqual(
-      toBranchName(roomId, '  My  New Listing  '),
-      `${roomPrefix}/my-new-listing`,
-    );
-    assert.strictEqual(
-      toBranchName(roomId, 'Weird---Name!!'),
-      `${roomPrefix}/weird-name`,
-    );
+    let branch = toBranchName('  My  New Listing  ');
+    assert.ok(/^[a-f0-9]{6}-my-new-listing$/.test(branch), branch);
+    let branch2 = toBranchName('Weird---Name!!');
+    assert.ok(/^[a-f0-9]{6}-weird-name$/.test(branch2), branch2);
   },
 
   'it normalizes camelcase listing names': async (assert) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    let roomPrefix = toBranchName(roomId, 'seed').split('/')[0];
-    assert.strictEqual(
-      toBranchName(roomId, 'CamelCaseListing'),
-      `${roomPrefix}/camel-case-listing`,
+    let branch = toBranchName('CamelCaseListing');
+    assert.ok(/^[a-f0-9]{6}-camel-case-listing$/.test(branch), branch);
+  },
+
+  'it returns only the hash when the slug is empty': async (assert) => {
+    let branch = toBranchName('   ---   ');
+    assert.ok(/^[a-f0-9]{6}$/.test(branch), branch);
+  },
+
+  'it rejects missing listing names': async (assert) => {
+    assert.throws(() => toBranchName(''), /listingName is required/);
+  },
+
+  'it generates a different hash on each call': async (assert) => {
+    let branches = new Set(
+      Array.from({ length: 10 }, () => toBranchName('same-name')),
     );
-  },
-
-  'it drops the listing segment when the slug is empty': async (assert) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    let roomPrefix = toBranchName(roomId, 'seed').split('/')[0];
-    assert.strictEqual(toBranchName(roomId, '   '), roomPrefix);
-  },
-
-  'it rejects missing listing names when building branch names': async (
-    assert,
-  ) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    assert.throws(() => toBranchName(roomId, ''), /listingName is required/);
-  },
-
-  'it can invert a branch name into room id and listing name': async (
-    assert,
-  ) => {
-    let roomId = '!XezEDqUlIJcNdsuaFB:localhost';
-    let branchName = toBranchName(roomId, 'SomeSampleListing');
-    let result = branchNameToSubmissionMeta(branchName);
-    assert.strictEqual(result.matrixRoomId, roomId);
-    assert.strictEqual(result.listingName, 'some-sample-listing');
-  },
-
-  'it rejects branch names without the prefix': async (assert) => {
-    assert.throws(
-      () => branchNameToSubmissionMeta('feature/room-abc'),
-      /matrix room id prefix/,
-    );
-  },
-
-  'it rejects branch names with an invalid encoded room id': async (assert) => {
-    assert.throws(
-      () => branchNameToSubmissionMeta('room-@@@'),
-      /invalid encoded matrix room id/,
-    );
+    // Vanishingly small chance of collision; if this flakes we have bigger
+    // problems than this test.
+    assert.ok(branches.size > 1, 'multiple calls produce different hashes');
   },
 } as SharedTests<Record<string, never>>);
 
