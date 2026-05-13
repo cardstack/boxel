@@ -980,7 +980,13 @@ jobs:
       - name: Start dev stack (icons + host-dist + base realm + prerenderer)
         run: |
           mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
+          # `-k` skips cert verification (the local realm-server speaks
+          # HTTPS with the mkcert leaf cert). `-w '%{http_code}'` + grep
+          # ensures we treat 3xx as still-not-ready instead of letting
+          # `-f` return 0 on the dispatcher's redirect response, which
+          # would race the tests ahead of the base realm finishing its
+          # initial index.
+          timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" http://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli
