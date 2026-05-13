@@ -2,7 +2,7 @@
 shard_flag=${1:+--shard}
 echo "running tests: ${1}"
 
-BASE_REALM="http-get://localhost:4201/base/"
+BASE_REALM="https-get://localhost:4201/base/"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 

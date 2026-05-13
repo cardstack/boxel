@@ -1,9 +1,9 @@
 #! /bin/sh
 
-BASE_REALM="http-get://localhost:4201/base/"
-EXPERIMENTS_REALM="http-get://localhost:4201/experiments/"
-NODE_TEST_REALM="http-get://localhost:4202/node-test/"
-TEST_REALM="http-get://localhost:4202/test/"
+BASE_REALM="https-get://localhost:4201/base/"
+EXPERIMENTS_REALM="https-get://localhost:4201/experiments/"
+NODE_TEST_REALM="https-get://localhost:4202/node-test/"
+TEST_REALM="https-get://localhost:4202/test/"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
