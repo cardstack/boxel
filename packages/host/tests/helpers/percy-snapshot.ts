@@ -159,13 +159,22 @@ export default async function percySnapshot(
     // If `abandoned` is false here, the rejection already surfaced via
     // `Promise.race` below — nothing more to do.
   });
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<void>((resolve) => {
-    setTimeout(() => {
+    timeoutHandle = setTimeout(() => {
       abandoned = true;
       resolve();
     }, PERCY_SNAPSHOT_BUDGET_MS);
   });
-  await Promise.race([upload, timeoutPromise]);
+  try {
+    await Promise.race([upload, timeoutPromise]);
+  } finally {
+    // Race settled (upload resolved, upload rejected, or budget fired). In
+    // every case we no longer need the timer — leaving it would fire mid-way
+    // through a later test, mutating a stale `abandoned` closure for no
+    // benefit and holding the snapshot's locals live for 25 s longer.
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
   const timedOut = abandoned;
   const percyMs = Math.round(performance.now() - percyStart);
   const totalMs = Math.round(performance.now() - overallStart);
