@@ -9,6 +9,23 @@ import type { SynapseInstance } from '../docker/synapse';
 
 setGracefulCleanup();
 
+// The isolated realm-server / worker stack the matrix tests spin up
+// binds plain `http://localhost:4205` and the test fixtures (URL maps,
+// realm registry entries, Playwright `baseURL`) all hardcode `http://`.
+// In CI, `mise-tasks/lib/env-vars.sh` exports
+// `REALM_SERVER_TLS_CERT_FILE` / `_KEY_FILE` for the parent dev stack
+// (which speaks HTTPS+HTTP/2 on 4201 / 4202). Those env vars leak into
+// every `spawn()` we do unless explicitly stripped — leaking them
+// makes the isolated realm-server come up on HTTPS+h2 too, and every
+// `http://localhost:4205/…` lookup misses the realm registry. Build a
+// process-env snapshot without those vars and pass it to spawn().
+function envWithoutTLS(): NodeJS.ProcessEnv {
+  let copy = { ...process.env };
+  delete copy.REALM_SERVER_TLS_CERT_FILE;
+  delete copy.REALM_SERVER_TLS_KEY_FILE;
+  return copy;
+}
+
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
@@ -53,11 +70,7 @@ function parseTimeoutMs(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
 }
 
-function pushOutputTail(
-  output: string[],
-  prefix: string,
-  data: Buffer,
-): void {
+function pushOutputTail(output: string[], prefix: string, data: Buffer): void {
   for (let line of data.toString().split(/\r?\n/)) {
     if (!line.trim()) {
       continue;
@@ -109,7 +122,9 @@ function buildStartupFailure(
   diagnostics: Record<string, unknown>,
 ): Error {
   let message =
-    reason instanceof Error ? reason.message : `Startup failed: ${String(reason)}`;
+    reason instanceof Error
+      ? reason.message
+      : `Startup failed: ${String(reason)}`;
   let error = new Error(
     `${message}\nStartup diagnostics:\n${JSON.stringify(
       {
@@ -231,7 +246,7 @@ export async function startPrerenderServer(
   let port = await findAvailablePort(options?.port ?? DEFAULT_PRERENDER_PORT);
   let url = `http://localhost:${port}`;
   let env = {
-    ...process.env,
+    ...envWithoutTLS(),
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
     BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
@@ -320,7 +335,10 @@ export async function startServer({
     process.env.TEST_HARNESS_REALM_SERVER_START_TIMEOUT_MS,
     DEFAULT_REALM_SERVER_START_TIMEOUT_MS,
   );
-  let workerManagerMetadataFile = join(dir.name, 'worker-manager-metadata.json');
+  let workerManagerMetadataFile = join(
+    dir.name,
+    'worker-manager-metadata.json',
+  );
   let realmServerMetadataFile = join(dir.name, 'realm-server-metadata.json');
   let workerManagerOutput: string[] = [];
   let realmServerOutput: string[] = [];
@@ -362,7 +380,7 @@ export async function startServer({
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
-      ...process.env,
+      ...envWithoutTLS(),
       TEST_HARNESS_WORKER_START_TIMEOUT_MS: String(workerStartTimeoutMs),
       TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
     },
@@ -469,7 +487,7 @@ export async function startServer({
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
-      ...process.env,
+      ...envWithoutTLS(),
       // Matrix tests don't exercise GitHub PR creation, so disable that route
       // to avoid pulling Octokit into the realm server startup path.
       DISABLE_GITHUB_PR_ROUTE: 'true',
