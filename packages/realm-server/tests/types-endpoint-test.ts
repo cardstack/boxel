@@ -164,7 +164,7 @@ module(basename(__filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'http://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
+          id: 'https://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
           attributes: {
             displayName: 'FriendWithUsedLink',
             total: 2,
