@@ -588,6 +588,32 @@ export default function handlePublishRealm({
             throw dbError;
           }
 
+          // CS-11043. For a republish, the realm is already mounted on
+          // this realm-server with its #sourceCache holding the
+          // pre-swap bytes. The reindex enqueued just below fans out
+          // module fetches through HTTP to this same realm-server, and
+          // without an explicit invalidation those fetches would hit
+          // the cached old bytes — producing a fresh reindex against
+          // STALE source, which then gets written to
+          // boxel_index.isolated_html and served forever (this was the
+          // staging-CI failure even after disposeAffinity + the
+          // Cache-Control: no-store + the DB modules DELETE — none of
+          // those reach into the realm-server's per-Realm byte cache).
+          // The Phase-3-PR-2 comment above relies on the NodeAdapter
+          // file watcher to invalidate via change events, but that's
+          // an async race against the immediately-enqueued reindex.
+          // Force the invalidation synchronously here.
+          //
+          // For a new publish, lookupOrMount mounts the realm fresh
+          // (registry row was just upserted above); the cache is
+          // empty so clearLocalCaches is a no-op. Either way the
+          // reindex below sees correct source.
+          let mountedRealmForCacheClear =
+            await reconciler.lookupOrMount(publishedRealmURL);
+          if (mountedRealmForCacheClear) {
+            mountedRealmForCacheClear.clearLocalCaches();
+          }
+
           // Refresh the index. For a new publish this is redundant
           // (lazy-mount's first start() does its own fullIndex on a
           // fresh DB), but the from-scratch-index coalesce handler
