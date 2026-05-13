@@ -90,7 +90,11 @@ module(basename(__filename), function (hooks) {
     }
   });
 
-  function makePool(opts: { maxPages: number; browserManager: any }): PagePool {
+  function makePool(opts: {
+    maxPages: number;
+    browserManager: any;
+    disableStandbyRefill?: boolean;
+  }): PagePool {
     let pool = new PagePool({
       maxPages: opts.maxPages,
       serverURL: 'http://localhost',
@@ -98,6 +102,7 @@ module(basename(__filename), function (hooks) {
       boxelHostURL: 'http://localhost:4200',
       standbyTimeoutMs: 500,
       disableFileAdmission: true,
+      disableStandbyRefill: opts.disableStandbyRefill ?? false,
     });
     pools.push(pool);
     return pool;
@@ -231,5 +236,92 @@ module(basename(__filename), function (hooks) {
     } finally {
       (process.stderr.write as any) = originalStderrWrite;
     }
+  });
+
+  test("cross-affinity reuse of a supplementary tab does not corrupt the donor affinity's primary bookkeeping", async function (assert) {
+    // CS-11140 added a guard in `#assignStandbyToAffinity` so a
+    // second concurrent tab on an active affinity stays entry-owned
+    // rather than overwriting the primary's `pageCount`. The
+    // follow-up risk Codex flagged: if that supplementary entry is
+    // later commandeered by another affinity via
+    // `#reassignAffinityTab`, the old `#transferSharedContextBookkeeping`
+    // would still decrement the donor affinity's primary `pageCount` —
+    // even though the moving entry's context was NOT the primary.
+    // That would wrongly evict the primary's bookkeeping while
+    // sibling tabs are still using it. Fix: pass the entry's context
+    // to `#transferSharedContextBookkeeping` and skip the decrement
+    // when contexts don't match.
+    let control: CloseControl = {
+      blockContextClose: false,
+      contextCloseStarts: 0,
+      contextCloseCompletes: 0,
+    };
+    let browserManager = makeBrowserStub(control);
+    // Small pool of 2 with `disableStandbyRefill: true` so the second
+    // tab adoption drains standbys without triggering background
+    // refill — leaving the subsequent getPage('B') to take the cross-
+    // affinity-steal branch (no standbys left to commandeer).
+    // `warmStandbys()` still seeds the initial 2 standbys because
+    // `disableStandbyRefill` only kicks in once `activeTabs > 0`.
+    let pool = makePool({
+      maxPages: 2,
+      browserManager,
+      disableStandbyRefill: true,
+    });
+    await pool.warmStandbys();
+
+    // 1. First call on affinity A — adopts a standby. The standby's
+    //    BrowserContext gets registered as A's primary in
+    //    `#sharedContexts`.
+    let aFirst = await pool.getPage('A');
+
+    // 2. Concurrent second call on A — adopts the remaining standby.
+    //    With CS-11140's guard the standby's context is NOT
+    //    registered as A's primary (it stays supplementary).
+    let aSecond = await pool.getPage('A');
+
+    let aPrimaryBefore = pool
+      .getSharedContextSnapshot()
+      .entries.find((s) => s.affinityKey === 'A');
+    assert.ok(aPrimaryBefore, 'A has a primary shared-context row');
+    assert.strictEqual(
+      aPrimaryBefore?.pageCount,
+      1,
+      "A's primary pageCount is 1 (the supplementary tab does not contribute)",
+    );
+
+    // 3. Release the supplementary tab so it becomes an idle cross-
+    //    affinity-stealable candidate.
+    aSecond.release();
+
+    // 4. Brand-new affinity B requests a tab. No standbys left; the
+    //    cross-affinity scan in `#commandeerDormantTab` finds
+    //    `aSecond` idle on A and reassigns it. That triggers
+    //    `#reassignAffinityTab` →
+    //    `#transferSharedContextBookkeeping('A', supplementary_ctx)`.
+    //
+    //    Pre-fix: that call unconditionally decremented A's primary
+    //    `pageCount` to 0 and deleted A's `#sharedContexts` row,
+    //    silently losing A's bookkeeping while `aFirst` was still
+    //    using the primary context. Post-fix: the helper compares
+    //    `entryContext` against the primary and skips the decrement
+    //    when they don't match.
+    let bLease = await pool.getPage('B');
+
+    let aPrimaryAfter = pool
+      .getSharedContextSnapshot()
+      .entries.find((s) => s.affinityKey === 'A');
+    assert.ok(
+      aPrimaryAfter,
+      "A's primary shared-context row is still present after cross-affinity steal of its supplementary tab",
+    );
+    assert.strictEqual(
+      aPrimaryAfter?.pageCount,
+      1,
+      "A's primary pageCount is unchanged (still 1, owned by aFirst)",
+    );
+
+    bLease.release();
+    aFirst.release();
   });
 });

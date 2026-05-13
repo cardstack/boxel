@@ -1969,7 +1969,10 @@ export class PagePool {
           );
         }
       }
-      let rollback = this.#releaseSharedContextForClosedPage(affinityKey);
+      let rollback = this.#releaseSharedContextForClosedPage(
+        affinityKey,
+        shared.context,
+      );
       if (rollback) {
         await rollback.catch(() => {
           // close error is logged inside the helper
@@ -2092,8 +2095,16 @@ export class PagePool {
     // `#releaseSharedContextForClosedPage` on the old key (which would
     // close the context when pageCount hit zero and take the moving
     // page down with it).
+    //
+    // The entry's context is passed in so `#transferSharedContextBookkeeping`
+    // can verify it's actually the old affinity's primary. With CS-11140's
+    // supplementary-tab guard in `#assignStandbyToAffinity`, an entry on
+    // a multi-tab affinity may have a context that's NOT the affinity's
+    // primary shared context. Decrementing the primary's `pageCount` in
+    // that case would wrongly evict the primary's bookkeeping while
+    // some other (sibling) entry is still using it.
     if (oldAffinityKey) {
-      this.#transferSharedContextBookkeeping(oldAffinityKey);
+      this.#transferSharedContextBookkeeping(oldAffinityKey, entry.context);
     }
     entry.affinityKey = affinityKey;
     // Re-tagging path: pageId is unchanged, so the CDP runtime-
@@ -2124,9 +2135,24 @@ export class PagePool {
   // Drop the old affinity's shared-context row without closing the
   // underlying BrowserContext — used by `#reassignAffinityTab` when a
   // page moves between affinities but keeps its context.
-  #transferSharedContextBookkeeping(oldAffinityKey: string): void {
+  //
+  // The `entryContext` argument is the moving entry's `BrowserContext`.
+  // The bookkeeping only decrements if that context IS the old
+  // affinity's primary shared context — supplementary tabs (whose
+  // contexts aren't tracked in `#sharedContexts`, per CS-11140's
+  // `#assignStandbyToAffinity` guard) leave the primary untouched.
+  #transferSharedContextBookkeeping(
+    oldAffinityKey: string,
+    entryContext: BrowserContext,
+  ): void {
     let shared = this.#sharedContexts.get(oldAffinityKey);
     if (!shared) return;
+    if (shared.context !== entryContext) {
+      // The moving entry was supplementary to the old affinity's
+      // primary shared context — its context wasn't contributing to
+      // `pageCount`. Leave the primary's bookkeeping intact.
+      return;
+    }
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount === 0) {
@@ -2213,8 +2239,10 @@ export class PagePool {
             await entry.page.close();
           } finally {
             if (affinityKey) {
-              closePromise =
-                this.#releaseSharedContextForClosedPage(affinityKey);
+              closePromise = this.#releaseSharedContextForClosedPage(
+                affinityKey,
+                entry.context,
+              );
             }
           }
           if (closePromise) {
@@ -2256,11 +2284,28 @@ export class PagePool {
   // so step-5's standby-adoption path can reuse it on the next
   // same-affinity getPage and inherit the realm's HTTP cache +
   // localStorage.
+  //
+  // `entryContext` is the closing entry's `BrowserContext`. If a
+  // concurrent caller replaced the affinity's map entry with a fresh
+  // context (e.g. `disposeAffinity` race where the old primary is
+  // mid-`page.close()` and a sibling caller registered a new primary
+  // for the same affinity), the entry we're closing and the entry in
+  // `#sharedContexts` no longer refer to the same context. Skip the
+  // decrement in that case — `disposeAffinity`'s snapshot-based
+  // cleanup path is responsible for the old primary, and the new
+  // primary's `pageCount` must stay intact.
   #releaseSharedContextForClosedPage(
     affinityKey: string,
+    entryContext: BrowserContext,
   ): Promise<void> | undefined {
     let shared = this.#sharedContexts.get(affinityKey);
     if (!shared) return;
+    if (shared.context !== entryContext) {
+      // Map entry was replaced — leave the new primary's bookkeeping
+      // alone. The closing context is being torn down by whichever
+      // path owned the snapshot (typically `disposeAffinity`).
+      return;
+    }
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount !== 0) return;
