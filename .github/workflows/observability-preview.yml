@@ -61,9 +61,15 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch PR base ref
+        # Ensure origin/<base> is fully available — no `--depth=1`.
+        # A shallow base makes `git diff origin/<base>...HEAD` fail with
+        # "no merge base" whenever main has advanced past the PR's true
+        # merge base (i.e., any PR in flight long enough for a merge to
+        # land on main). Unbounded fetch is cheap against the full repo
+        # the checkout step already pulled (fetch-depth: 0).
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --no-tags --depth=1 origin "${PR_BASE_REF}"
+        run: git fetch --no-tags origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl

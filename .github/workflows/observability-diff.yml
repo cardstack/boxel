@@ -83,13 +83,17 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch PR base ref
-        # Belt-and-suspenders: even with `fetch-depth: 0`, ensure the
-        # PR base ref is available as `origin/<base>` so diff.sh's
-        # `git rev-parse --verify` succeeds. Cheap on already-fetched
-        # history; idempotent if the ref is already up to date.
+        # Ensure the PR base ref is available as `origin/<base>` so
+        # diff.sh's `git rev-parse --verify` and `git diff <base>...HEAD`
+        # both succeed. NOTE: no `--depth=1` here. A shallow fetch makes
+        # origin/<base> an orphan with no parent history; when main has
+        # advanced past the PR's actual merge base (any non-trivial PR
+        # in flight long enough for main to move), `git diff <base>...HEAD`
+        # then fails with "no merge base". Unbounded fetch is cheap
+        # against an already-full repo (`fetch-depth: 0` on checkout).
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --no-tags --depth=1 origin "${PR_BASE_REF}"
+        run: git fetch --no-tags origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
