@@ -1,25 +1,36 @@
-import { setupTest } from 'ember-qunit';
+import type { RenderingTestContext } from '@ember/test-helpers';
+
 import { module, test } from 'qunit';
 
-import { __testOnlyUpsertTranspileCacheRow } from '@cardstack/runtime-common';
+import type { Realm } from '@cardstack/runtime-common';
 
-import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
-
-import { getDbAdapter, testRealmURL } from '../helpers';
+import {
+  getDbAdapter,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupRealmCacheTeardown,
+  testRealmURL,
+  withCachedRealmSetup,
+} from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
+import { setupRenderingTest } from '../helpers/setup';
 
 module('Unit | module-transpile-cache', function (hooks) {
-  let adapter: SQLiteAdapter;
-  setupTest(hooks);
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+  setupRealmCacheTeardown(hooks);
 
-  hooks.before(async function () {
-    adapter = await getDbAdapter();
+  let realm: Realm;
+
+  hooks.beforeEach(async function (this: RenderingTestContext) {
+    let result = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({ mockMatrixUtils, contents: {} }),
+    );
+    realm = result.realm;
   });
 
-  hooks.beforeEach(async function () {
-    await adapter.reset();
-  });
-
-  test('UPSERT runs against sqlite and persists the row', async function (assert) {
+  test('Realm.__testOnlyUpsertTranspileCacheRow persists a row via the production writer', async function (assert) {
     let canonicalPath = `${testRealmURL}example.gts`;
     let headers = {
       'Content-Type': 'application/javascript',
@@ -27,8 +38,7 @@ module('Unit | module-transpile-cache', function (hooks) {
     };
     let dependencyKeys = ['https://cardstack.com/base/card-api'];
 
-    await __testOnlyUpsertTranspileCacheRow(adapter, {
-      realmUrl: testRealmURL,
+    await realm.__testOnlyUpsertTranspileCacheRow({
       canonicalPath,
       body: 'export const x = 1;',
       headers,
@@ -36,6 +46,7 @@ module('Unit | module-transpile-cache', function (hooks) {
       capturedGeneration: 0,
     });
 
+    let adapter = await getDbAdapter();
     let rows = (await adapter.execute(
       `SELECT body, headers, dependency_keys, generation
          FROM module_transpile_cache
@@ -48,6 +59,9 @@ module('Unit | module-transpile-cache', function (hooks) {
       generation: number;
     }[];
 
+    // The row's presence is the assertion that matters: if
+    // #writeTranspileCacheRow's SQL chokes on SQLite the writer
+    // swallows the error and the row never lands.
     assert.strictEqual(rows.length, 1, 'one row was inserted');
     assert.strictEqual(rows[0].body, 'export const x = 1;', 'body persisted');
     assert.deepEqual(
@@ -63,20 +77,18 @@ module('Unit | module-transpile-cache', function (hooks) {
     assert.strictEqual(Number(rows[0].generation), 0, 'generation persisted');
   });
 
-  test('UPSERT on existing row updates body when EXCLUDED.generation >= current', async function (assert) {
+  test('a higher-generation UPSERT overwrites the existing row', async function (assert) {
     let canonicalPath = `${testRealmURL}example.gts`;
     let headers = { 'Content-Type': 'application/javascript' };
 
-    await __testOnlyUpsertTranspileCacheRow(adapter, {
-      realmUrl: testRealmURL,
+    await realm.__testOnlyUpsertTranspileCacheRow({
       canonicalPath,
       body: 'first',
       headers,
       dependencyKeys: [],
       capturedGeneration: 0,
     });
-    await __testOnlyUpsertTranspileCacheRow(adapter, {
-      realmUrl: testRealmURL,
+    await realm.__testOnlyUpsertTranspileCacheRow({
       canonicalPath,
       body: 'second',
       headers,
@@ -84,6 +96,7 @@ module('Unit | module-transpile-cache', function (hooks) {
       capturedGeneration: 1,
     });
 
+    let adapter = await getDbAdapter();
     let rows = (await adapter.execute(
       `SELECT body, generation FROM module_transpile_cache
         WHERE realm_url = $1 AND canonical_path = $2`,
