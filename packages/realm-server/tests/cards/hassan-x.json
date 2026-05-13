@@ -13,7 +13,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4202/node-test/friend-with-used-link",
+        "module": "https://localhost:4202/node-test/friend-with-used-link",
         "name": "FriendWithUsedLink"
       }
     }
