@@ -241,31 +241,19 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUnpublishRealm(args),
   );
 
-  // GET registrations are the legacy Grafana-link dashboards; POST
-  // registrations are the Grafana-button-panel dashboards from CS-10987,
-  // which carry auth in an `Authorization: Bearer <token>` header rather
-  // than a querystring. Both verbs share the same handler + auth check —
-  // handlers read params from `ctxt.URL.searchParams`, which Koa
-  // populates the same way for both GET and POST. The dual registration
-  // is intentional for the CS-10987 cutover; once every operator has
-  // pulled the new dashboards (one release cycle), drop the GETs and
-  // the convertAuthHeaderQueryParam middleware in one cleanup PR.
+  // Grafana operator-action endpoints. All POST-only with
+  // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
+  // Handlers read params from `ctxt.URL.searchParams` (Grafana button
+  // panels POST with the params on the querystring, not in a JSON body).
   let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
-    let auth = grafanaAuthorization(args.grafanaSecret);
-    router.get(path, auth, handler);
-    router.post(path, auth, handler);
+    router.post(path, grafanaAuthorization(args.grafanaSecret), handler);
   };
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
-  // POST-only, Bearer-only — this endpoint is new in CS-10987-era
-  // (Grafana button-panel form) and never had the legacy GET +
-  // `?authHeader=` link form, so skip `registerGrafanaEndpoint`'s dual
-  // GET/POST registration.
-  router.post(
+  registerGrafanaEndpoint(
     '/_grafana-upsert-realm-user-permission',
-    grafanaAuthorization(args.grafanaSecret),
     handleUpsertRealmUserPermission(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
