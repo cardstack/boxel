@@ -221,19 +221,28 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
 
       let primaryCalls = 0;
       let secondaryCalls = 0;
-      let originalPrimarySearch = testRealm.search.bind(testRealm);
-      let originalSecondarySearch = secondaryRealm.search.bind(secondaryRealm);
-      (testRealm as unknown as { search: typeof testRealm.search }).search = (
-        ...args: Parameters<typeof testRealm.search>
-      ) => {
-        primaryCalls++;
-        return originalPrimarySearch(...args);
-      };
+      // Capture the original prototype method references (unbound), so
+      // the `finally` cleanup can `delete` the per-instance spy and
+      // restore prototype lookup — assigning the bound wrapper back
+      // would leave a permanent own-property masking the prototype.
+      let primaryProto = testRealm.search;
+      let secondaryProto = secondaryRealm.search;
+      (testRealm as unknown as { search: typeof testRealm.search }).search =
+        function (
+          this: typeof testRealm,
+          ...args: Parameters<typeof testRealm.search>
+        ) {
+          primaryCalls++;
+          return primaryProto.apply(this, args);
+        };
       (
         secondaryRealm as unknown as { search: typeof secondaryRealm.search }
-      ).search = (...args: Parameters<typeof secondaryRealm.search>) => {
+      ).search = function (
+        this: typeof secondaryRealm,
+        ...args: Parameters<typeof secondaryRealm.search>
+      ) {
         secondaryCalls++;
-        return originalSecondarySearch(...args);
+        return secondaryProto.apply(this, args);
       };
 
       try {
@@ -305,11 +314,8 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           'different jobId re-queried secondaryRealm',
         );
       } finally {
-        (testRealm as unknown as { search: typeof testRealm.search }).search =
-          originalPrimarySearch;
-        (
-          secondaryRealm as unknown as { search: typeof secondaryRealm.search }
-        ).search = originalSecondarySearch;
+        delete (testRealm as unknown as { search?: unknown }).search;
+        delete (secondaryRealm as unknown as { search?: unknown }).search;
       }
     });
 
