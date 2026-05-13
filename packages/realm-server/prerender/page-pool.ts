@@ -939,14 +939,22 @@ export class PagePool {
     // and a no-op when the pool is configured at a legacy fixed size
     // (`#minPages === #maxBurstPages === #highPriorityMaxPages`).
     this.#maybeExpandUnderSaturation(priority);
-    let startupStart = Date.now();
-    try {
-      await this.#ensureStandbyPool();
-    } catch (e) {
-      releaseAdmission?.();
-      throw e;
-    }
-    let tabStartupMs = Date.now() - startupStart;
+    // Standby refill is fire-and-forget. The dedup'd `#ensuringStandbys`
+    // promise used to be awaited synchronously here, which meant any
+    // concurrent `getPage` caller paid the worst-case refill time even
+    // when they would have ended up on a warm reused tab (CS-11139 — a
+    // single slow `page.close()` on a stuck LRU eviction stalled the
+    // refill for >120s and propagated to every caller on the server,
+    // including reused-tab callers in unrelated affinities).
+    //
+    // `#selectEntryForAffinity` only needs a standby when all warm-tab /
+    // orphan-claim / cross-affinity-steal paths fail, and it awaits the
+    // refill itself in that case (returning the wait time as
+    // `tabStartupMs`). Callers that find a warm tab or orphan never
+    // touch `#ensuringStandbys` at all.
+    void this.#ensureStandbyPool().catch((e) => {
+      log.debug('background standby refill failed:', e);
+    });
     try {
       throwIfAborted(signal);
     } catch (e) {
@@ -957,18 +965,25 @@ export class PagePool {
     let entry: PoolEntry;
     let reused: boolean;
     let releaseTab: () => void;
+    let tabStartupMs: number;
     try {
-      ({ entry, reused, releaseTab } = await this.#selectEntryForAffinity(
-        affinityKey,
-        queue,
-        signal,
-        priority,
-      ));
+      ({ entry, reused, releaseTab, tabStartupMs } =
+        await this.#selectEntryForAffinity(
+          affinityKey,
+          queue,
+          signal,
+          priority,
+        ));
     } catch (e) {
       releaseAdmission?.();
       throw e;
     }
-    let tabQueueMs = Date.now() - tabQueueStart;
+    // `tabQueueMs` is the time spent waiting on the per-affinity tab
+    // queue / orphan-spawn / cross-affinity-steal selection — i.e. the
+    // wall time inside `#selectEntryForAffinity` MINUS any standby-
+    // refill wait the function performed (which is reported separately
+    // as `tabStartupMs`).
+    let tabQueueMs = Math.max(0, Date.now() - tabQueueStart - tabStartupMs);
     // Race between the tab being acquired and the signal firing:
     // if the signal fired while `#selectEntryForAffinity` was
     // resolving, release the tab we just got so the next
@@ -1680,7 +1695,24 @@ export class PagePool {
     queue: PrerenderQueue,
     signal?: AbortSignal,
     priority: number = 0,
-  ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
+  ): Promise<{
+    entry: PoolEntry;
+    reused: boolean;
+    releaseTab: () => void;
+    // Time this call spent awaiting the standby-refill machinery
+    // (`#ensureStandbyPool`). Non-zero only on the paths that needed
+    // a fresh standby because no warm tab / orphan / cross-affinity
+    // tab was available. Reported to `getPage` so the caller's
+    // `tabStartupMs` only attributes the wait actually paid for —
+    // dedup-amplified waits from unrelated callers no longer leak in.
+    tabStartupMs: number;
+  }> {
+    let tabStartupMs = 0;
+    let awaitStandbyPool = async () => {
+      let startedAt = Date.now();
+      await this.#ensureStandbyPool();
+      tabStartupMs += Date.now() - startedAt;
+    };
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
@@ -1689,7 +1721,7 @@ export class PagePool {
     if (idle.length > 0) {
       let entry = this.#selectLRUTab(idle);
       let releaseTab = await entry.queue.acquire(signal, priority);
-      return { entry, reused: true, releaseTab };
+      return { entry, reused: true, releaseTab, tabStartupMs };
     }
     // Per-affinity spawn gate. Two paths to admission here:
     //
@@ -1725,12 +1757,13 @@ export class PagePool {
         return {
           ...(await this.#spawnPoolEntryInSharedContext(shared, affinityKey)),
           reused: false,
+          tabStartupMs,
         };
       }
       let commandeered = this.#commandeerDormantTab(affinityKey);
       if (commandeered) {
         let releaseTab = await commandeered.queue.acquire(signal, priority);
-        return { entry: commandeered, reused: false, releaseTab };
+        return { entry: commandeered, reused: false, releaseTab, tabStartupMs };
       }
       // No orphan, no commandeer-able tab/standby. If we got here
       // through the dynamic-expansion escape hatch, drive an
@@ -1738,18 +1771,18 @@ export class PagePool {
       // sub-render isn't forced to queue behind the file render
       // it's blocking.
       if (canExpandPastAffinityCap && this.#tryExpand(priority)) {
-        await this.#ensureStandbyPool();
+        await awaitStandbyPool();
         let after = this.#commandeerDormantTab(affinityKey);
         if (after) {
           let releaseTab = await after.queue.acquire(signal, priority);
-          return { entry: after, reused: false, releaseTab };
+          return { entry: after, reused: false, releaseTab, tabStartupMs };
         }
       }
     }
     if (entryList.length > 0) {
       let entry = this.#selectLeastPendingTab(entryList);
       let releaseTab = await entry.queue.acquire(signal, priority);
-      return { entry, reused: true, releaseTab };
+      return { entry, reused: true, releaseTab, tabStartupMs };
     }
     let fallbackShared = this.#tryClaimOrphanContext(affinityKey);
     if (fallbackShared) {
@@ -1759,12 +1792,13 @@ export class PagePool {
           affinityKey,
         )),
         reused: false,
+        tabStartupMs,
       };
     }
     let fallback = this.#commandeerDormantTab(affinityKey);
     if (fallback) {
       let releaseTab = await fallback.queue.acquire(signal, priority);
-      return { entry: fallback, reused: false, releaseTab };
+      return { entry: fallback, reused: false, releaseTab, tabStartupMs };
     }
     if (entryList.length === 0) {
       let crossAffinityEntries: PoolEntry[] = [];
@@ -1781,12 +1815,43 @@ export class PagePool {
         entry.transitioning = true;
         try {
           let releaseTab = await entry.queue.acquire(signal, priority);
-          return { entry, reused: false, releaseTab };
+          return { entry, reused: false, releaseTab, tabStartupMs };
         } catch (error) {
           entry.transitioning = false;
           throw error;
         }
       }
+    }
+    // Last-resort: every fast path missed (no warm tab on this
+    // affinity, no orphan to claim, no commandeer-able standby or
+    // cross-affinity tab). The previous shape pre-warmed standbys
+    // synchronously in `getPage` so this case implied a misconfigured
+    // pool; now the standby refill is fire-and-forget, so we await
+    // it here once and retry the standby/orphan paths before giving
+    // up. Doing the await only on this branch means callers that
+    // already had a warm tab never pay this cost.
+    await awaitStandbyPool();
+    throwIfAborted(signal);
+    let retryShared = this.#tryClaimOrphanContext(affinityKey);
+    if (retryShared) {
+      return {
+        ...(await this.#spawnPoolEntryInSharedContext(
+          retryShared,
+          affinityKey,
+        )),
+        reused: false,
+        tabStartupMs,
+      };
+    }
+    let retryCommandeered = this.#commandeerDormantTab(affinityKey);
+    if (retryCommandeered) {
+      let releaseTab = await retryCommandeered.queue.acquire(signal, priority);
+      return {
+        entry: retryCommandeered,
+        reused: false,
+        releaseTab,
+        tabStartupMs,
+      };
     }
     throw new Error('No standby page available for prerender');
   }
