@@ -4652,7 +4652,6 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'https://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
@@ -4718,6 +4717,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
@@ -4803,7 +4803,6 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'https://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/apps',
@@ -4881,6 +4880,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
