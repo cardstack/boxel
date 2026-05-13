@@ -14,9 +14,25 @@ import {
 // correctness.
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
 
+// Hard cap on total entries across all jobs. When the cap is reached
+// the FIFO-oldest entry is evicted to make room. Cap exists to bound
+// worst-case memory: the `jobId` header is sanitized to a digits-only
+// shape but the cache otherwise accepts any well-formed
+// `(jobId, query, opts)` tuple from an authenticated caller, so a
+// reader who mints synthetic jobIds and varied queries could otherwise
+// grow the cache without bound for the full TTL window. Picked to
+// comfortably accommodate the busiest realistic workload (a from-
+// scratch reindex of a piranha-class realm fires hundreds of distinct
+// queries within one job) while keeping worst-case footprint bounded
+// to ~tens of MB.
+const DEFAULT_MAX_ENTRIES = 5000;
+
 type CachedEntry = {
   result: LinkableCollectionDocument;
   timer: ReturnType<typeof setTimeout>;
+  // Position in the FIFO eviction ring. Stored on the entry so a
+  // cache hit doesn't need a separate map lookup to know its slot.
+  fifoSeq: number;
 };
 
 // Same-realm read cache used during indexing. Each entry is keyed by
@@ -54,10 +70,18 @@ type CachedEntry = {
 // benefit of sequential dedup, which is the win this cache exists for.
 export class JobScopedSearchCache {
   #byJob = new Map<string, Map<string, CachedEntry>>();
+  // FIFO ring keyed by an ever-incrementing sequence so eviction
+  // ordering survives the (jobId, innerKey) name space. The oldest
+  // surviving sequence number is `#evictionCursor`; advances as the
+  // entry it points at is evicted (either via cap or its own TTL).
+  #fifo = new Map<number, { jobId: string; innerKey: string }>();
+  #nextFifoSeq = 0;
   readonly #ttlMs: number;
+  readonly #maxEntries: number;
 
-  constructor(opts?: { ttlMs?: number }) {
+  constructor(opts?: { ttlMs?: number; maxEntries?: number }) {
     this.#ttlMs = opts?.ttlMs ?? DEFAULT_TTL_MS;
+    this.#maxEntries = opts?.maxEntries ?? DEFAULT_MAX_ENTRIES;
   }
 
   async getOrPopulate(args: {
@@ -88,23 +112,56 @@ export class JobScopedSearchCache {
     let prior = currentJobMap.get(innerKey);
     if (prior) {
       clearTimeout(prior.timer);
+      this.#fifo.delete(prior.fifoSeq);
     }
+    let fifoSeq = this.#nextFifoSeq++;
     let timer = setTimeout(() => {
-      let jm = this.#byJob.get(args.jobId);
-      if (!jm) return;
-      let entry = jm.get(innerKey);
-      if (entry?.timer === timer) {
-        jm.delete(innerKey);
-        if (jm.size === 0) {
-          this.#byJob.delete(args.jobId);
-        }
-      }
+      this.#evictByKey(args.jobId, innerKey, timer);
     }, this.#ttlMs);
     if (typeof (timer as { unref?: () => void }).unref === 'function') {
       (timer as { unref: () => void }).unref();
     }
-    currentJobMap.set(innerKey, { result, timer });
+    currentJobMap.set(innerKey, { result, timer, fifoSeq });
+    this.#fifo.set(fifoSeq, { jobId: args.jobId, innerKey });
+
+    // Cap enforcement: evict FIFO-oldest until under the limit. Map
+    // preserves insertion order, so the first key is the oldest. We
+    // skip-over any keys whose entries are already gone (TTL fired)
+    // without rewriting the ring.
+    while (this.#fifo.size > this.#maxEntries) {
+      let oldestSeq = this.#fifo.keys().next().value;
+      if (oldestSeq === undefined) break;
+      let slot = this.#fifo.get(oldestSeq)!;
+      this.#fifo.delete(oldestSeq);
+      let jm = this.#byJob.get(slot.jobId);
+      let entry = jm?.get(slot.innerKey);
+      if (entry?.fifoSeq === oldestSeq) {
+        clearTimeout(entry.timer);
+        jm!.delete(slot.innerKey);
+        if (jm!.size === 0) {
+          this.#byJob.delete(slot.jobId);
+        }
+      }
+    }
+
     return result;
+  }
+
+  #evictByKey(
+    jobId: string,
+    innerKey: string,
+    expectedTimer: ReturnType<typeof setTimeout>,
+  ): void {
+    let jm = this.#byJob.get(jobId);
+    if (!jm) return;
+    let entry = jm.get(innerKey);
+    if (entry?.timer === expectedTimer) {
+      this.#fifo.delete(entry.fifoSeq);
+      jm.delete(innerKey);
+      if (jm.size === 0) {
+        this.#byJob.delete(jobId);
+      }
+    }
   }
 
   // Drop every entry for a given job. Wired in by the NOTIFY-driven
@@ -115,6 +172,7 @@ export class JobScopedSearchCache {
     if (!jobMap) return;
     for (let entry of jobMap.values()) {
       clearTimeout(entry.timer);
+      this.#fifo.delete(entry.fifoSeq);
     }
     this.#byJob.delete(jobId);
   }

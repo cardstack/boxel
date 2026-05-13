@@ -255,6 +255,66 @@ module(basename(__filename), function () {
       assert.strictEqual(cache.size(), 0, 'entry evicted after TTL');
     });
 
+    test('maxEntries cap FIFO-evicts oldest when full', async function (assert) {
+      let cache = new JobScopedSearchCache({ maxEntries: 3 });
+      let populate = async (label: string) => makeDoc(label);
+
+      // Fill exactly to capacity.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('A'),
+        opts: undefined,
+        populate: () => populate('A'),
+      });
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('B'),
+        opts: undefined,
+        populate: () => populate('B'),
+      });
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('C'),
+        opts: undefined,
+        populate: () => populate('C'),
+      });
+      assert.strictEqual(cache.size(), 3, 'at-capacity entry count');
+
+      // One more triggers FIFO eviction of the oldest (A).
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('D'),
+        opts: undefined,
+        populate: () => populate('D'),
+      });
+      assert.strictEqual(cache.size(), 3, 'still at cap after overflow');
+
+      // Re-requesting A re-populates (cache miss); B and C remain hits.
+      let aCalls = 0;
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('A'),
+        opts: undefined,
+        populate: async () => {
+          aCalls++;
+          return populate('A');
+        },
+      });
+      assert.strictEqual(aCalls, 1, 'A was re-populated (it was evicted)');
+
+      let bCalls = 0;
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        query: makeQuery('B'),
+        opts: undefined,
+        populate: async () => {
+          bCalls++;
+          return populate('B');
+        },
+      });
+      assert.strictEqual(bCalls, 0, 'B was a cache hit (not evicted)');
+    });
+
     test('opts variance produces distinct entries', async function (assert) {
       let cache = new JobScopedSearchCache();
       let calls = 0;
@@ -280,11 +340,12 @@ module(basename(__filename), function () {
     });
 
     // Cross-realm-bypass is enforced by handle-search, not by the cache
-    // class itself — the cache stays oblivious to realm topology. The
-    // handler-level integration test below covers the gate; here we
-    // just verify the cache stores whatever (jobId, query, opts)
+    // class itself — the cache stays oblivious to realm topology. Here
+    // we just verify the cache stores whatever (jobId, query, opts)
     // tuple a caller passes, regardless of what realm the query
-    // mentions internally.
+    // mentions internally. End-to-end coverage of the
+    // `realms === [consumingRealm]` HTTP-layer gate is TODO — a
+    // `realm-endpoints/search-test.ts` case is the right home for it.
     test('cache is realm-agnostic — the gate lives in handle-search', async function (assert) {
       let cache = new JobScopedSearchCache();
       let calls = 0;

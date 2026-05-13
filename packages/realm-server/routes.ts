@@ -121,8 +121,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   let router = new Router();
   // One job-scoped same-realm search cache per realm-server process.
   // Lives for the life of the process; TTL-evicts entries 10 min after
-  // last touch. Future work wires NOTIFY-driven eviction so a job
-  // completion releases its entries immediately.
+  // their initial populate (hits do NOT refresh the TTL — tying it to
+  // populate time bounds the leak deterministically, where touch-
+  // refresh would let a hot entry survive indefinitely past job
+  // completion). Future work wires NOTIFY-driven eviction so a job
+  // completion releases its entries immediately. Hard-capped to bound
+  // worst-case memory under a synthetic-jobId flood.
   let searchCache = new JobScopedSearchCache();
 
   router.get(
