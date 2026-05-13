@@ -62,6 +62,7 @@ export default config as {
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
   defaultSystemCardId?: string;
+  defaultFieldSpecId?: string;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
 } & Record<string, unknown>;

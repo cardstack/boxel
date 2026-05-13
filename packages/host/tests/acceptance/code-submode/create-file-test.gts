@@ -173,6 +173,46 @@ const files: Record<string, any> = {
       },
     },
   },
+  'fields/biginteger-field.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardTitle: 'Bigint Field',
+        cardDescription: 'A field that captures big int values',
+        specType: 'field',
+        ref: {
+          module: `${baseRealm.url}big-integer`,
+          name: 'default',
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${baseRealm.url}spec`,
+          name: 'Spec',
+        },
+      },
+    },
+  },
+  'fields/field.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardTitle: 'General Field',
+        cardDescription: 'A FieldDef spec',
+        specType: 'field',
+        ref: {
+          module: `${baseRealm.url}card-api`,
+          name: 'FieldDef',
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${baseRealm.url}spec`,
+          name: 'Spec',
+        },
+      },
+    },
+  },
 };
 
 const filesB: Record<string, any> = {
@@ -989,10 +1029,10 @@ export class TestCard extends Person {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
 
@@ -1031,10 +1071,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
       await fillIn(
