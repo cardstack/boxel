@@ -85,7 +85,7 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 12,
+          "w": 8,
           "x": 0,
           "y": 0
         },
@@ -187,8 +187,8 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 12,
-          "x": 12,
+          "w": 8,
+          "x": 8,
           "y": 0
         },
         "id": 22,
@@ -232,6 +232,106 @@
           }
         ],
         "title": "Users",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Concurrent users right now: count of distinct Matrix users seen on the Synapse Sliding Sync endpoint within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how the active-user count moved over the range. Sourced from Synapse access logs via Loki — matches `Processed request` lines hitting the MSC3575 Sliding Sync path (`simplified_msc3575/sync`) and extracts the `@user:server` token from the log prefix. Path is on the unstable MSC3575 namespace and may shift when sliding-sync stabilises upstream.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Synapse dashboard",
+                "url": "/d/000000012",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Concurrent Users"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 0
+        },
+        "id": 30,
+        "links": [
+          {
+            "title": "Open Synapse dashboard",
+            "url": "/d/000000012",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |~ \"Processed request.*simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
+            "queryType": "range",
+            "legendFormat": "Concurrent Users",
+            "refId": "A"
+          }
+        ],
+        "title": "Concurrent Users",
         "type": "stat"
       },
       {
