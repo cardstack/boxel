@@ -334,6 +334,16 @@ export class PagePool {
   #disableStandbyRefill: boolean;
   #ensuringStandbys: Promise<void> | null = null;
   #creatingStandbys = 0;
+  // Entries that have been logically removed from `#affinityPages`
+  // (so routing skips them — they no longer appear in
+  // `getWarmAffinities`, `#poolEntryCount`, or `#selectEntryForAffinity`)
+  // but whose `page.close()` / `BrowserContext.close()` work is
+  // still in flight. Counted against `#totalContextCount` so the
+  // pool doesn't oversubscribe by creating a fresh standby while
+  // the old contexts are still alive in memory. Decremented when
+  // each entry's close settles in `disposeAffinity`'s per-entry
+  // `.finally`.
+  #closingPoolEntriesCount = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
   // the bucket so it's cleared in lockstep on resetConsoleErrors /
@@ -1100,25 +1110,31 @@ export class PagePool {
       }
       await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
-      // Don't eagerly delete from `#affinityPages` — keep entries
-      // visible to `#poolEntryCount` until their close completes.
-      // Routing already skips them via the `entry.closing` filter
-      // in `#selectEntryForAffinity`, and counting them prevents
-      // `#prepareSlotForStandby` from oversubscribing the pool with
-      // a fresh standby while old contexts are still in memory.
-      // The per-entry `.finally` removes each entry from
-      // `#affinityPages` once Chrome has actually released it.
+      // Synchronously remove the affinity from `#affinityPages` so
+      // `getWarmAffinities` and `#selectEntryForAffinity` see it as
+      // gone immediately. The actual `page.close()` work continues
+      // in the background — important for CS-11140 because
+      // pre-fix the caller blocked on Chrome acknowledging the
+      // close of a potentially-stuck page.
+      //
+      // Each in-flight close is counted via
+      // `#closingPoolEntriesCount` so `#totalContextCount` still
+      // reflects real memory pressure (the contexts aren't gone yet)
+      // and `#prepareSlotForStandby` won't oversubscribe the pool
+      // with a fresh standby while the old contexts are still alive.
+      // Decremented in the per-entry `.finally` once Chrome has
+      // actually released the page.
+      this.#affinityPages.delete(affinityKey);
       let closePromises: Promise<void>[] = [];
       if (entries) {
         for (let entry of entries) {
           entry.closing = true;
+          this.#closingPoolEntriesCount++;
           let p = this.#closeEntry(entry, retainConsoleErrors).finally(() => {
-            let currentEntries = this.#affinityPages.get(affinityKey);
-            if (!currentEntries) return;
-            currentEntries.delete(entry);
-            if (currentEntries.size === 0) {
-              this.#affinityPages.delete(affinityKey);
-            }
+            this.#closingPoolEntriesCount = Math.max(
+              0,
+              this.#closingPoolEntriesCount - 1,
+            );
           });
           closePromises.push(p);
           void p;
@@ -1203,6 +1219,7 @@ export class PagePool {
     this.#fileAdmission.clear();
     this.#ensuringStandbys = null;
     this.#creatingStandbys = 0;
+    this.#closingPoolEntriesCount = 0;
   }
 
   async #ensureStandbyPool(): Promise<void> {
@@ -1250,7 +1267,10 @@ export class PagePool {
 
   #totalContextCount(): number {
     return (
-      this.#poolEntryCount() + this.#standbys.size + this.#creatingStandbys
+      this.#poolEntryCount() +
+      this.#standbys.size +
+      this.#creatingStandbys +
+      this.#closingPoolEntriesCount
     );
   }
 

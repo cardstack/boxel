@@ -134,17 +134,26 @@ module(basename(__filename), function (hooks) {
     await pool.disposeAffinity('A', { awaitIdle: false });
     let elapsed = Date.now() - started;
 
-    // Contract — `disposeAffinity(awaitIdle: false)` returns without
-    // waiting for the affinity's `BrowserContext.close()` to
-    // complete. Pre-CS-11140 `#evictLRUAffinity` used the default
-    // `awaitIdle: true` and this `await` blocked for the full
-    // `BrowserContext.close()` duration — under a stuck page, that
-    // stretches to render-timeout-budget territory. The
-    // non-blocking eviction is what unblocks the standby-refill
-    // loop on a wedged container.
+    // Contract 1 — `disposeAffinity(awaitIdle: false)` returns
+    // without waiting for the affinity's `BrowserContext.close()`
+    // to complete.
     assert.true(
       elapsed < 100,
       `disposeAffinity returned in ${elapsed}ms despite blocked context.close`,
+    );
+
+    // Contract 2 — the affinity is removed from `#affinityPages`
+    // synchronously, so `getWarmAffinities` and routing decisions
+    // see it as gone immediately. The actual `BrowserContext.close`
+    // continues in the background (still gated on
+    // `blockContextClose`), counted against `#totalContextCount` via
+    // `#closingPoolEntriesCount` so a refill cycle can't
+    // oversubscribe by creating a fresh standby past
+    // `maxPages + 1`.
+    assert.deepEqual(
+      pool.getWarmAffinities(),
+      [],
+      "affinity 'A' is gone from getWarmAffinities synchronously, even though context.close is still blocked in the background",
     );
 
     // The background context.close was started but is held by the
@@ -161,19 +170,12 @@ module(basename(__filename), function (hooks) {
     );
 
     // Unblock and confirm the background close eventually
-    // completes — the affinity's entries are then removed from
-    // `#affinityPages` (the per-entry `.finally` runs as each
-    // close settles), so the pool returns to a clean state.
+    // completes.
     control.blockContextClose = false;
     await new Promise<void>((r) => setTimeout(r, 50));
     assert.true(
       control.contextCloseCompletes > preCompletes,
       'background context.close eventually completes',
-    );
-    assert.deepEqual(
-      pool.getWarmAffinities(),
-      [],
-      "affinity 'A' is gone from #affinityPages once its context.close finishes",
     );
   });
 
