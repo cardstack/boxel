@@ -82,6 +82,14 @@ jobs:
         run: |
           set -euo pipefail
           TAG="boxel-cli-v${VERSION}"
+          # Guard against an orphan tag from a prior failed promotion. If the
+          # tag exists, the previous run pushed it but failed before publish —
+          # operator needs to delete the orphan (`git push origin :refs/tags/$TAG`)
+          # and verify npm state before re-running.
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists. A prior promotion likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
+            exit 1
+          fi
           git add packages/boxel-cli/package.json
           git commit -m "Release @cardstack/boxel-cli v${VERSION} [skip ci]"
           git tag "$TAG"

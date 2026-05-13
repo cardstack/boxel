@@ -14,7 +14,10 @@ on:
     types: [opened, edited, synchronize, reopened]
     paths:
       - "packages/boxel-cli/**"
-  merge_group:
+  # Note: no `merge_group:` trigger — `paths:` is not honored on merge_group
+  # events, so adding it would block unrelated PRs in the merge queue on a
+  # boxel-cli-scoped title check. If merge queues are adopted and this needs
+  # to gate them, add a changed-files step inside the job instead.
 
 permissions:
   pull-requests: read

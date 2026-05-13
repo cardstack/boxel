@@ -246,11 +246,30 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-function changedFilesAgainstHead1(): string[] {
-  const out = execSync(
+function changedFilesAgainstHead1(root: string): string[] {
+  // Union PR-committed files (HEAD^..HEAD) with working-tree changes. The
+  // on-main workflow regenerates plugin/skills/ before invoking this script,
+  // and that regen lives in the working tree — invisible to HEAD^..HEAD.
+  // Without the union, a `feat:` PR adding a new command in src/ would bump
+  // npm but not plugin.json, leaving the marketplace cache key stale.
+  //
+  // We force cwd to the repo root because Git resolves pathspec relatively
+  // and the workflow invokes this script from `packages/boxel-cli/`, where
+  // the literal `packages/boxel-cli/` pathspec resolves to a non-existent
+  // nested directory and matches nothing.
+  const opts = { cwd: root };
+  const committed = execSync(
     'git diff --name-only HEAD^ -- packages/boxel-cli/',
+    opts,
   ).toString();
-  return out.split('\n').filter(Boolean);
+  const workingTree = execSync(
+    'git diff --name-only -- packages/boxel-cli/',
+    opts,
+  ).toString();
+  const set = new Set(
+    [...committed.split('\n'), ...workingTree.split('\n')].filter(Boolean),
+  );
+  return [...set];
 }
 
 function prereleaseCount(stableTag: string): number {
@@ -291,7 +310,7 @@ function main(): void {
   );
   const stableBase = lastStableTag();
   const prereleaseN = prereleaseCount(stableBase);
-  const changedFiles = changedFilesAgainstHead1();
+  const changedFiles = changedFilesAgainstHead1(root);
 
   const result = computeRelease({
     prTitle,
