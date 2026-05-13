@@ -1,4 +1,5 @@
-import proxy from 'koa-proxies';
+import http from 'http';
+import https from 'https';
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   logger as getLogger,
@@ -31,56 +32,72 @@ export function proxyAsset(
   opts?: ProxyOptions,
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
-  let inner = proxy(from, {
-    target: assetsURL.href.replace(/$\//, ''),
-    changeOrigin: true,
-    rewrite: () => {
-      return `/${filename}`;
-    },
-    events: {
-      proxyReq: (proxyReq) => {
-        for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
-          proxyReq.setHeader(key, value);
-        }
-      },
-      proxyRes: (_proxyRes, _req, res) => {
-        for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
-          res.setHeader(key, value);
-        }
-      },
-    },
-  });
+  let upstreamPath = `${assetsURL.pathname.replace(/\/$/, '')}/${filename}`;
+  let client = assetsURL.protocol === 'https:' ? https : http;
+  // Direct upstream proxy. Replaces the previous koa-proxies + http-proxy
+  // stack which forwarded `req.headers` verbatim into Node's
+  // `http.ClientRequest`; under HTTP/2 that included pseudo-headers
+  // (`:method`, `:path`, …) and tripped `ERR_INVALID_HTTP_TOKEN`. By
+  // building the upstream request ourselves we choose exactly which
+  // headers to forward, so the h2 / h1 callers share one code path.
   return async (ctxt, next) => {
-    // HTTP/2's compat layer attaches pseudo-headers (`:method`, `:scheme`,
-    // `:path`, `:authority`) to `req.headers`. http-proxy forwards every
-    // header verbatim into Node's `new http.ClientRequest(...)`, which
-    // throws `ERR_INVALID_HTTP_TOKEN` for any name starting with `:` —
-    // every proxied h2 request becomes a 500. Shadow `req.headers` with
-    // a filtered copy for the inner proxy call. Mutating the original
-    // would clobber Node's internal headers map (it's the same object
-    // returned by the `req.headers` getter), and `req.method` / `req.url`
-    // read from that map too — so deleting `:method` / `:path` would
-    // null them out and break Koa's `ctx.path` lookup.
-    let original = ctxt.req.headers;
-    let filtered: Record<string, string | string[] | undefined> = {};
-    for (let [name, value] of Object.entries(original)) {
-      if (!name.startsWith(':')) {
-        filtered[name] = value;
+    if (ctxt.path !== from) {
+      return next();
+    }
+
+    let forwardedHeaders: Record<string, string> = {};
+    for (let [name, value] of Object.entries(ctxt.req.headers)) {
+      if (name.startsWith(':')) continue;
+      // Node's http.ClientRequest rejects connection-specific hop-by-hop
+      // headers when targeting an HTTP/1.1 upstream.
+      if (name === 'host') continue;
+      if (typeof value === 'string') {
+        forwardedHeaders[name] = value;
+      } else if (Array.isArray(value)) {
+        forwardedHeaders[name] = value.join(', ');
       }
     }
-    Object.defineProperty(ctxt.req, 'headers', {
-      value: filtered,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-    try {
-      return await inner(ctxt, next);
-    } finally {
-      // Restore the prototype getter so downstream middleware (and any
-      // later request-scoped logic) sees Node's original h2 headers map.
-      delete (ctxt.req as { headers?: unknown }).headers;
+    for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
+      forwardedHeaders[key] = value;
     }
+
+    let upstreamRes = await new Promise<http.IncomingMessage>(
+      (resolve, reject) => {
+        let upstreamReq = client.request(
+          {
+            method: ctxt.method,
+            hostname: assetsURL.hostname,
+            port: assetsURL.port || (client === https ? 443 : 80),
+            path: upstreamPath,
+            headers: forwardedHeaders,
+          },
+          resolve,
+        );
+        upstreamReq.on('error', reject);
+        upstreamReq.end();
+      },
+    );
+
+    ctxt.status = upstreamRes.statusCode ?? 502;
+    for (let [name, value] of Object.entries(upstreamRes.headers)) {
+      if (value == null) continue;
+      // Don't forward hop-by-hop headers from the upstream — Node manages
+      // them per-connection. `host` is irrelevant on the response side.
+      let lower = name.toLowerCase();
+      if (
+        lower === 'connection' ||
+        lower === 'keep-alive' ||
+        lower === 'transfer-encoding' ||
+        lower === 'upgrade'
+      ) {
+        continue;
+      }
+      ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
+    }
+    for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
+      ctxt.set(key, value);
+    }
+    ctxt.body = upstreamRes;
   };
 }
 
