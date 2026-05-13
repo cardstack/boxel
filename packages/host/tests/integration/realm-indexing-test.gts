@@ -349,7 +349,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -372,7 +372,7 @@ module(`Integration | realm indexing`, function (hooks) {
           [
             `${testRealmURL}Person/owner`,
             `${testRealmURL}Person/owner.json`,
-            'http://localhost:4202/test/pet',
+            'https://localhost:4202/test/pet',
           ].sort(),
           'error deps are correct',
         );
@@ -390,7 +390,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/person'),
+              module: rri('https://localhost:4202/test/person'),
               name: 'Person',
             },
           },
@@ -425,7 +425,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -469,7 +469,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -489,7 +489,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -525,7 +525,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           realmURL: ri('http://test-realm/test/'),
@@ -583,7 +583,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
             realmURL: ri('http://test-realm/test/'),
@@ -623,7 +623,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -643,7 +643,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -695,7 +695,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -714,7 +714,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -741,7 +741,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -762,7 +762,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -798,7 +798,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -841,7 +841,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -862,7 +862,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -896,7 +896,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2298,7 +2298,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/vendor`,
+                module: `https://localhost:4202/test/vendor`,
                 name: 'Vendor',
               },
             },
@@ -2312,7 +2312,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain`,
+                module: `https://localhost:4202/test/chain`,
                 name: 'Chain',
               },
             },
@@ -2326,7 +2326,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain`,
+                module: `https://localhost:4202/test/chain`,
                 name: 'Chain',
               },
             },
@@ -2393,7 +2393,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`http://localhost:4202/test/vendor`),
+              module: rri(`https://localhost:4202/test/vendor`),
               name: 'Vendor',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2439,7 +2439,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`http://localhost:4202/test/chain`),
+                module: rri(`https://localhost:4202/test/chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2481,7 +2481,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`http://localhost:4202/test/chain`),
+                module: rri(`https://localhost:4202/test/chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2523,7 +2523,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Boom/boom`,
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/card-with-error',
+                module: 'https://localhost:4202/test/card-with-error',
                 name: 'Boom',
               },
             },
@@ -2537,7 +2537,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -2606,7 +2606,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -2670,7 +2670,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/post',
+                module: 'https://localhost:4202/test/post',
                 name: 'Post',
               },
             },
@@ -2690,7 +2690,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/post',
+                module: 'https://localhost:4202/test/post',
                 name: 'Post',
               },
             },
@@ -2821,7 +2821,7 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Spec for Booking',
               specType: 'card',
               ref: {
-                module: 'http://localhost:4202/test/booking',
+                module: 'https://localhost:4202/test/booking',
                 name: 'Booking',
               },
             },
@@ -2844,10 +2844,10 @@ module(`Integration | realm indexing`, function (hooks) {
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
       specType: 'card',
-      moduleHref: 'http://localhost:4202/test/booking',
+      moduleHref: 'https://localhost:4202/test/booking',
       containedExamples: null,
       linkedExamples: null,
-      ref: 'http://localhost:4202/test/booking/Booking',
+      ref: 'https://localhost:4202/test/booking/Booking',
       cardTitle: 'Booking',
       isCard: true,
       isComponent: false,
@@ -3377,7 +3377,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3399,7 +3399,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3422,7 +3422,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3458,7 +3458,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/friend'),
+            module: rri('https://localhost:4202/test/friend'),
             name: 'Friend',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3542,7 +3542,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3568,7 +3568,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3610,7 +3610,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3662,7 +3662,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('http://localhost:4202/test/friend'),
+                module: rri('https://localhost:4202/test/friend'),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3760,7 +3760,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3812,7 +3812,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('http://localhost:4202/test/friend'),
+                module: rri('https://localhost:4202/test/friend'),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3898,7 +3898,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3940,7 +3940,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -4652,7 +4652,7 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'http://localhost:4202/test/person',
+        'https://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
@@ -4803,7 +4803,7 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'http://localhost:4202/test/person',
+        'https://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/apps',

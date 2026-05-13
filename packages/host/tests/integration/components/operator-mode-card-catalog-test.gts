@@ -1062,7 +1062,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-open-search-field]`);
     await fillIn(
       '[data-test-search-field]',
-      'http://localhost:4202/test/nonexistent',
+      'https://localhost:4202/test/nonexistent',
     );
     await waitFor(`[data-test-search-label]`);
     assert.dom('[data-test-search-sheet-empty]').exists();
