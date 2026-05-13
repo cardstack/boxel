@@ -35,7 +35,7 @@ env:
   # `--ignore-certificate-errors` + mkcert leaf cert + h2 streams) are the
   # cause of Host Tests warmup hangs. Revert once the hypothesis is
   # confirmed or refuted. See packages/realm-server/server.ts.
-  BOXEL_REALM_FORCE_HTTP1: '1'
+  BOXEL_REALM_FORCE_HTTP1: "1"
 
 jobs:
   check-percy:

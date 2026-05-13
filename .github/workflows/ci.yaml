@@ -22,7 +22,7 @@ env:
   # cause of Host Tests warmup hangs and other downstream test failures.
   # Revert once the hypothesis is confirmed or refuted. See
   # packages/realm-server/server.ts.
-  BOXEL_REALM_FORCE_HTTP1: '1'
+  BOXEL_REALM_FORCE_HTTP1: "1"
 
 jobs:
   change-check:
