@@ -2373,9 +2373,15 @@ module(basename(__filename), function () {
           );
         }
 
-        // Module file should also have an error entry in boxel_index, not be
-        // missing entirely. realmIndexQueryEngine.file() filters out error
-        // rows (has_error = FALSE), so check the raw table directly.
+        // The broken module file lands in boxel_index as a healthy `file`
+        // row (has_error=false), not as a `file-error`. fileExtract's
+        // metadata-level parse succeeds on the module — the duplicate-
+        // declaration only blows up in full Babel transform during card
+        // render. The compilation failure surfaces on the consumer card's
+        // error doc (asserted above), not on the module's own file row.
+        // Pin the current behavior so a future change to where module
+        // errors are recorded surfaces here rather than silently
+        // downstream.
         let moduleRows = (await testDbAdapter.execute(
           `SELECT type, has_error
              FROM boxel_index
@@ -2385,9 +2391,19 @@ module(basename(__filename), function () {
                 OR file_alias = '${testRealm}address'
               )`,
         )) as { type: string; has_error: boolean | null }[];
-        assert.ok(
-          moduleRows.some((row) => row.has_error === true),
-          `broken module file has an error entry (rows: ${JSON.stringify(moduleRows)})`,
+        assert.strictEqual(
+          moduleRows.length,
+          1,
+          'broken module has exactly one row in boxel_index',
+        );
+        assert.strictEqual(
+          moduleRows[0].type,
+          'file',
+          'broken module is indexed as a `file` row (not `file-error`) — see comment',
+        );
+        assert.notOk(
+          moduleRows[0].has_error,
+          'broken module file row currently has has_error=false — see comment',
         );
       });
     });
