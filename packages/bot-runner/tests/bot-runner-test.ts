@@ -1,10 +1,9 @@
 import { module, test } from 'qunit';
-import {
-  toBranchName,
-  type DBAdapter,
-  type ExecuteOptions,
-  type PgPrimitive,
-  type QueuePublisher,
+import type {
+  DBAdapter,
+  ExecuteOptions,
+  PgPrimitive,
+  QueuePublisher,
 } from '@cardstack/runtime-common';
 import type {
   MatrixClient,
@@ -305,6 +304,7 @@ module('timeline handler', () => {
               roomId: '!abc123:localhost',
               listingId: 'http://localhost:4201/test/Listing/1',
               listingName: 'My Listing',
+              branchName: 'a1b2c3-my-listing',
             },
             realm: 'http://localhost:4201/test/',
             userId: '@alice:localhost',
@@ -344,7 +344,7 @@ module('timeline handler', () => {
       write.branch?.toString().includes('my-listing'),
       'commit branch includes listing slug',
     );
-    let folder = toBranchName('!abc123:localhost', 'My Listing').split('/')[0];
+    let folder = 'a1b2c3-my-listing';
     assert.deepEqual(
       write.files,
       [
@@ -359,7 +359,7 @@ module('timeline handler', () => {
           isBinary: false,
         },
       ],
-      'commit payload wraps parsed files in room-<base64> folder',
+      'commit payload wraps parsed files in {hash}-{slug} folder',
     );
     assert.true(
       write.message

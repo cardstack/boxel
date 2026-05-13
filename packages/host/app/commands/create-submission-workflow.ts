@@ -79,9 +79,9 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
     });
     let roomId = createRoomResult.roomId;
 
-    // Branch name is derived from (roomId, listingName) and persisted so
-    // retry doesn't have to reconstruct it from the display title.
-    let branchName = toBranchName(roomId, listingName ?? 'UntitledListing');
+    // Branch name is generated once and persisted on the workflow card so
+    // retries reuse the same GitHub branch.
+    let branchName = toBranchName(listingName ?? 'UntitledListing');
 
     // Cleanup window covers everything between "room exists" and "workflow
     // card persisted with roomId baked in". Once the card exists, leaving

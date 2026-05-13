@@ -258,6 +258,7 @@ module('command runner', () => {
           listingName: 'My Listing Name',
           listingSummary: 'My listing Summary',
           workflowCardUrl: submissionCardUrl,
+          branchName: 'a1b2c3-my-listing-name',
         },
       },
       'bot-registration-2',
@@ -321,7 +322,7 @@ module('command runner', () => {
         command: '@cardstack/catalog/commands/create-pr-card/default',
         commandInput: {
           realm: SUBMISSION_REALM_URL,
-          branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name',
+          branchName: 'a1b2c3-my-listing-name',
           submittedBy: '@alice:localhost',
           prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Workflow Card: [${submissionCardUrl}](${submissionCardUrl})`,
           allFileContents: [
@@ -800,7 +801,7 @@ module('command runner', () => {
                             // retry must NOT derive branchName from it.
                             title: 'Submit My Listing',
                             branchName:
-                              'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
+                              'a1b2c3-my-listing',
                           },
                           relationships: {
                             listing: {
@@ -950,7 +951,7 @@ module('command runner', () => {
     // any previous commits/PR.
     assert.strictEqual(
       (createdBranches[0] as { branch: string }).branch,
-      'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
+      'a1b2c3-my-listing',
       'retry uses the persisted branchName from the workflow card',
     );
   });
