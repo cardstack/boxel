@@ -56,7 +56,11 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
-import { fallbackShim } from '@cardstack/runtime-common/package-shim-handler';
+import { registerCardReferencePrefix } from '@cardstack/runtime-common/card-reference-resolver';
+import {
+  PACKAGES_FAKE_ORIGIN,
+  fallbackShim,
+} from '@cardstack/runtime-common/package-shim-handler';
 
 import { shimHostCommands } from '../commands';
 
@@ -81,6 +85,16 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
+  // Spec cards published for boxel-ui components use the bare specifier
+  // `@cardstack/boxel-ui/components` in their `ref.module`. resolveCardReference
+  // needs a prefix mapping to translate that into the fake-packages URL form
+  // the rest of the runtime already accepts (see `isGloballyPublicDependency`
+  // in runtime-common/realm.ts). The shimModule calls above register the JS
+  // module; this registers the resolver prefix so CodeRef.moduleHref resolves.
+  registerCardReferencePrefix(
+    '@cardstack/boxel-ui/',
+    `${PACKAGES_FAKE_ORIGIN}@cardstack/boxel-ui/`,
+  );
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
   virtualNetwork.shimModule('@ember/component', emberComponent);

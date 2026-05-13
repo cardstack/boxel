@@ -93,6 +93,12 @@ export interface IssueLoopWiringConfig {
    * running the loop. Sets priority to critical for immediate pickup.
    */
   retryBlocked?: boolean;
+  /**
+   * Feature flag — enables the boxel-ui-component-discovery skill and the
+   * system-prompt catalog-search exception. When omitted, the agent has no
+   * awareness of boxel-ui components. See CS-10527.
+   */
+  enableBoxelUiDiscovery?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,9 +133,12 @@ export async function runFactoryIssueLoop(
     realmUrl: targetRealm,
   });
   let contextBuilder = new ContextBuilder({
-    skillResolver: new DefaultSkillResolver(),
+    skillResolver: new DefaultSkillResolver({
+      enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
+    }),
     skillLoader: new SkillLoader(),
     issueLoader,
+    enableBoxelUiDiscovery: config.enableBoxelUiDiscovery === true,
   });
 
   // 3. Tool infrastructure

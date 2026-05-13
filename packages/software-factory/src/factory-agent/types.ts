@@ -242,6 +242,13 @@ export interface AgentContext {
   validationContext?: string;
   /** Brief URL for bootstrap issues. */
   briefUrl?: string;
+  /**
+   * Feature flag — when true, the system prompt enables the catalog-search
+   * exception for boxel-ui component discovery and `boxel-ui-component-discovery`
+   * is among the loaded skills. When false, neither is visible to the agent.
+   * See CS-10527.
+   */
+  enableBoxelUiDiscovery?: boolean;
 }
 
 export interface AgentAction {

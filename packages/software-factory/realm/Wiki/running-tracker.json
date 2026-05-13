@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["fitness", "running", "tracker"],
+      "content": "## Overview\n\nA `RunningTracker` card that logs running workouts and reports a few summary stats. The isolated view lets the user add a new workout, see the list of past workouts, delete one, and glance at totals at the top.\n\n## What a workout captures\n\nThe usual stuff — when it happened, how far, how long, and maybe a short note. Pick a sensible field shape.\n\n## What the isolated view should do\n\n- Show a summary panel: total distance, total time, number of runs, and one or two derived stats you think a runner would actually care about (average pace, longest run, this-week distance — your call).\n- Show the list of workouts, most recent first. Each entry has a delete control.\n- Let the user add a new workout from the same view. Form, modal, inline — your call.\n- Empty state when there are no workouts yet.\n\n## Design direction\n\nClean, friendly, runner-app vibe. Use the design system; no custom palette.\n\n## Out of scope\n\n- Editing existing workouts (delete + re-add is fine for v1).\n- Charts. Numbers are enough.\n- Goals, plans, streaks, social features.\n- **Real QUnit rendering tests.** Write a single-line placeholder `.test.gts` — `module(...)` with one `test('placeholder', (assert) => { assert.ok(true); })`. Do NOT import host test helpers; do NOT `new` the card. Real rendering tests are a follow-up.",
+      "cardInfo": {
+        "name": "Running Tracker",
+        "notes": null,
+        "summary": "Logs running workouts and shows summary stats. Add, list, delete; pick the field shape and the UI layout yourself.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
