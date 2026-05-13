@@ -119,9 +119,27 @@ jobs:
             --env staging \
             > "$OUT_FILE"
           echo "out_file=$OUT_FILE" >> "$GITHUB_OUTPUT"
+          if [[ -s "$OUT_FILE" ]]; then
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+          fi
           echo "::group::Preview summary"
           cat "$OUT_FILE"
           echo "::endgroup::"
+
+      - name: Cleanup stale preview (no changes left)
+        # When the current head of the PR has no dashboard changes vs base,
+        # apply-preview emits empty output and pushes nothing. But a prior
+        # push to the same PR may have already applied a preview that's
+        # still live in staging — revert/rebase scenarios. Run cleanup so
+        # the PR's staging footprint matches its current head; otherwise
+        # the daily sweep wouldn't catch this until PR close.
+        if: steps.apply.outputs.empty == 'true'
+        working-directory: packages/observability
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
 
       - name: Post sticky PR comment
         # Pinned to SHA (matches observability-diff.yml's reasoning):
@@ -138,58 +156,8 @@ jobs:
 
             const raw = fs.readFileSync(process.env.OUT_FILE, 'utf8').trim();
 
-            let body;
-            if (!raw) {
-              // render-preview.sh exits 0 with empty stdout when no
-              // dashboards changed. Render an explicit "no preview"
-              // comment so reviewers don't wonder if the workflow ran.
-              body = [
-                marker,
-                '## Grafana preview',
-                '',
-                'No dashboard changes detected — nothing to preview.',
-                '',
-                'Data-source / alert-rule / home-dashboard changes are file-provisioned at',
-                'Grafana startup and can\'t be previewed per-PR; see the diff comment for those.',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            } else {
-              const folders = [];
-              const dashboards = [];
-              for (const line of raw.split('\n')) {
-                // Format: `<KIND>:<uid>:<title>` (title may contain `:`).
-                const m = line.match(/^(FOLDER|DASHBOARD):([^:]+):(.*)$/);
-                if (!m) continue;
-                const [, kind, uid, title] = m;
-                (kind === 'FOLDER' ? folders : dashboards).push({ uid, title });
-              }
-
-              const folderLines = folders.map(f =>
-                `- **Folder:** [${f.title}](${grafanaBase}/dashboards/f/${f.uid}/)`,
-              );
-              const dashboardLines = dashboards.map(d =>
-                `- [${d.title}](${grafanaBase}/d/${d.uid}/)`,
-              );
-
-              body = [
-                marker,
-                '## Grafana preview',
-                '',
-                `Preview deployed for **${dashboards.length} dashboard${dashboards.length === 1 ? '' : 's'}** in the staging Grafana.`,
-                'Cross-dashboard drill-throughs still point at the canonical staging dashboards.',
-                '',
-                ...folderLines,
-                '',
-                '**Dashboards:**',
-                ...dashboardLines,
-                '',
-                'Preview is torn down automatically when this PR is closed or merged.',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            }
-
+            // Find any prior preview sticky on this PR; we either update or
+            // delete it based on whether there's anything to preview now.
             const comments = await github.paginate(
               github.rest.issues.listComments,
               {
@@ -202,6 +170,59 @@ jobs:
             const existing = comments.find(
               c => c.body && c.body.startsWith(marker),
             );
+
+            if (!raw) {
+              // No dashboards changed at this HEAD. Don't post a "nothing
+              // to see" comment — if a prior push left a sticky behind,
+              // delete it so the PR's comment stream matches its current
+              // state. (Stale preview *resources* from a prior push are
+              // handled by the "Cleanup stale preview" step above.)
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+                core.info(`Deleted stale sticky comment ${existing.id}`);
+              } else {
+                core.info('No dashboard changes — nothing to post.');
+              }
+              return;
+            }
+
+            const folders = [];
+            const dashboards = [];
+            for (const line of raw.split('\n')) {
+              // Format: `<KIND>:<uid>:<title>` (title may contain `:`).
+              const m = line.match(/^(FOLDER|DASHBOARD):([^:]+):(.*)$/);
+              if (!m) continue;
+              const [, kind, uid, title] = m;
+              (kind === 'FOLDER' ? folders : dashboards).push({ uid, title });
+            }
+
+            const folderLines = folders.map(f =>
+              `- **Folder:** [${f.title}](${grafanaBase}/dashboards/f/${f.uid}/)`,
+            );
+            const dashboardLines = dashboards.map(d =>
+              `- [${d.title}](${grafanaBase}/d/${d.uid}/)`,
+            );
+
+            const body = [
+              marker,
+              '## Grafana preview',
+              '',
+              `Preview deployed for **${dashboards.length} dashboard${dashboards.length === 1 ? '' : 's'}** in the staging Grafana.`,
+              'Cross-dashboard drill-throughs still point at the canonical staging dashboards.',
+              '',
+              ...folderLines,
+              '',
+              '**Dashboards:**',
+              ...dashboardLines,
+              '',
+              'Preview is torn down automatically when this PR is closed or merged.',
+              '',
+              `_(Run: ${runUrl})_`,
+            ].join('\n');
 
             if (existing) {
               await github.rest.issues.updateComment({
@@ -263,21 +284,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
 
-      - name: Update sticky PR comment
+      - name: Delete sticky PR comment
+        # After cleanup, there's nothing left to point at — delete the
+        # sticky entirely rather than leaving a "preview cleaned up"
+        # gravestone. Matches the apply-time policy of not posting a
+        # comment when there's nothing to show.
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const marker = process.env.PREVIEW_MARKER;
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-
-            const body = [
-              marker,
-              '## Grafana preview',
-              '',
-              'Preview cleaned up after PR close.',
-              '',
-              `_(Run: ${runUrl})_`,
-            ].join('\n');
 
             const comments = await github.paginate(
               github.rest.issues.listComments,
@@ -293,16 +308,12 @@ jobs:
             );
 
             if (existing) {
-              await github.rest.issues.updateComment({
+              await github.rest.issues.deleteComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 comment_id: existing.id,
-                body,
               });
-              core.info(`Updated sticky comment ${existing.id}`);
+              core.info(`Deleted sticky comment ${existing.id}`);
             } else {
-              // No prior preview comment (PR never had a preview) — nothing
-              // to update. Don't create a comment just to say "cleaned up
-              // nothing". Surface it in the run log instead.
-              core.info('No preview comment to update — skipping.');
+              core.info('No preview comment to delete — skipping.');
             }
