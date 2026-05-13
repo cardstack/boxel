@@ -29,6 +29,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   });
 
   setupPermissionedRealmCached(hooks, {
+    fixture: 'blank',
     permissions: {
       '*': ['read'],
     },

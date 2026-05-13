@@ -262,6 +262,7 @@ const ALL_TEST_FILES: string[] = [
   './command-parsing-utils-test',
   './query-matches-filter-test',
   './matches-filter-integration-test',
+  './search-in-flight-key-test',
   './delete-boxel-claimed-domain-test',
   './realm-auth-test',
   './queries-test',

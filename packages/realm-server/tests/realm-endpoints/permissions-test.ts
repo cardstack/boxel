@@ -1,8 +1,6 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, basename } from 'path';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync } from 'fs-extra';
+import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import {
@@ -15,32 +13,24 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | _permissions', function (hooks) {
+  module('Realm-specific Endpoints | _permissions', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       request: SuperTest<Test>;
       dbAdapter: PgAdapter;
-      dir: DirResult;
     }) {
       testRealm = args.testRealm;
       request = args.request;
       dbAdapter = args.dbAdapter;
-      dir = args.dir;
     }
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
-    });
 
     module('permissions requests', function (hooks) {
       setupPermissionedRealmCached(hooks, {
-        fileSystem: {},
+        fixture: 'blank',
         permissions: {
           mary: ['read', 'write', 'realm-owner'],
           bob: ['read', 'write'],
