@@ -26,7 +26,7 @@ function makeDoc(label: string): LinkableCollectionDocument {
 
 module(basename(__filename), function () {
   module('JobScopedSearchCache', function () {
-    test('cache hit when (jobId, query, opts) match', async function (assert) {
+    test('cache hit when (jobId, realms, query, opts) match', async function (assert) {
       let cache = new JobScopedSearchCache();
       let calls = 0;
       let populate = async () => {
@@ -36,12 +36,14 @@ module(basename(__filename), function () {
 
       let a = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       let b = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -62,12 +64,14 @@ module(basename(__filename), function () {
 
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '43.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -91,12 +95,14 @@ module(basename(__filename), function () {
 
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('Mango'),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('Vango'),
         opts: undefined,
         populate,
@@ -120,18 +126,21 @@ module(basename(__filename), function () {
 
       let a = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       let b = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       let c = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -168,12 +177,14 @@ module(basename(__filename), function () {
 
       let aP = cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       let bP = cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -193,6 +204,7 @@ module(basename(__filename), function () {
       // last in the cache. (Last-write-wins; either is valid.)
       let c = await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -216,18 +228,21 @@ module(basename(__filename), function () {
 
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('A'),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('B'),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '43.1',
+        realms: [realmA],
         query: makeQuery('A'),
         opts: undefined,
         populate,
@@ -245,6 +260,7 @@ module(basename(__filename), function () {
 
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -263,18 +279,21 @@ module(basename(__filename), function () {
       // C (2). All three under jobId 42.1.
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('A'),
         opts: undefined,
         populate: () => populate('A'),
       });
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('B'),
         opts: undefined,
         populate: () => populate('B'),
       });
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('C'),
         opts: undefined,
         populate: () => populate('C'),
@@ -285,6 +304,7 @@ module(basename(__filename), function () {
       // Map now holds B, C, D (seqs 1, 2, 3).
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('D'),
         opts: undefined,
         populate: () => populate('D'),
@@ -296,6 +316,7 @@ module(basename(__filename), function () {
       let aCalls = 0;
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('A'),
         opts: undefined,
         populate: async () => {
@@ -314,6 +335,7 @@ module(basename(__filename), function () {
       let dCalls = 0;
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('D'),
         opts: undefined,
         populate: async () => {
@@ -329,6 +351,7 @@ module(basename(__filename), function () {
       let bCalls = 0;
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery('B'),
         opts: undefined,
         populate: async () => {
@@ -349,12 +372,14 @@ module(basename(__filename), function () {
 
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '42.1',
+        realms: [realmA],
         query: makeQuery(),
         opts: { loadLinks: true },
         populate,
@@ -363,39 +388,79 @@ module(basename(__filename), function () {
       assert.strictEqual(calls, 2, 'different opts shapes did not coalesce');
     });
 
-    // Cross-realm-bypass is enforced by handle-search, not by the cache
-    // class itself — the cache stays oblivious to realm topology. Here
-    // we just verify the cache stores whatever (jobId, query, opts)
-    // tuple a caller passes, regardless of what realm the query
-    // mentions internally. End-to-end coverage of the
-    // `realms === [consumingRealm]` HTTP-layer gate is TODO — a
-    // `realm-endpoints/search-test.ts` case is the right home for it.
-    test('cache is realm-agnostic — the gate lives in handle-search', async function (assert) {
+    test('cross-realm: same realm set coalesces, different set does not', async function (assert) {
       let cache = new JobScopedSearchCache();
       let calls = 0;
       let populate = async () => {
         calls++;
-        return makeDoc('cross');
+        return makeDoc(`call-${calls}`);
       };
 
-      // Two queries that both happen to mention realmB via a contained
-      // filter still get coalesced if their (jobId, normalized query,
-      // opts) match. The gate that prevents cross-realm caching is
-      // applied BEFORE getOrPopulate at the handler layer.
+      // Two identical cross-realm calls — same (jobId, realms, query,
+      // opts) — coalesce. This is the win the cross-realm expansion
+      // exists for: a cohort card that fires the same broad search
+      // multiple times during a single batch pays for the populate
+      // exactly once.
       await cache.getOrPopulate({
         jobId: '42.1',
-        query: { filter: { eq: { realm: realmB } } } as Query,
+        realms: [realmA, realmB],
+        query: makeQuery(),
         opts: undefined,
         populate,
       });
       await cache.getOrPopulate({
         jobId: '42.1',
-        query: { filter: { eq: { realm: realmB } } } as Query,
+        realms: [realmA, realmB],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      assert.strictEqual(calls, 1, 'identical cross-realm sets coalesce');
+
+      // A query against a different realm set under the same job
+      // produces a distinct entry.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      assert.strictEqual(calls, 2, 'different realm sets do not coalesce');
+      assert.strictEqual(cache.size(), 2, 'two entries under the same job');
+    });
+
+    test('cross-realm: realm order and duplicates are normalized away', async function (assert) {
+      let cache = new JobScopedSearchCache();
+      let calls = 0;
+      let populate = async () => {
+        calls++;
+        return makeDoc(`call-${calls}`);
+      };
+
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA, realmB],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      // Different array shape, same set — sorted-deduped key collapses
+      // these so the second call is a hit.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmB, realmA, realmA],
+        query: makeQuery(),
         opts: undefined,
         populate,
       });
 
-      assert.strictEqual(calls, 1, 'second call hit the cache');
+      assert.strictEqual(
+        calls,
+        1,
+        'reordered + duplicated realm arrays normalize to the same key',
+      );
+      assert.strictEqual(cache.size(), 1, 'one entry stored');
     });
   });
 });

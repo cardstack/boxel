@@ -35,24 +35,34 @@ type CachedEntry = {
   fifoSeq: number;
 };
 
-// Same-realm read cache used during indexing. Each entry is keyed by
-// `(jobId, normalizedQuery, normalizedOpts)` and represents one
-// `_federated-search` populate computed during the lifetime of one
-// indexing job. Safe because within an indexing batch the writer
-// touches `boxel_index_working`, not `boxel_index` — so every read of
-// the same realm's `boxel_index` returns identical bytes until the
-// batch's `applyBatchUpdates` swap fires. The job-id boundary scopes
-// the cache to a single batch; a subsequent job hashes to different
-// keys and never reuses a stale value.
+// Per-batch read cache used during indexing. Each entry is keyed by
+// `(jobId, normalizedRealms, normalizedQuery, normalizedOpts)` and
+// represents one `_federated-search` populate computed during the
+// lifetime of one indexing job. The job-id boundary scopes the cache
+// to a single batch; a subsequent job hashes to different keys and
+// never reuses a stale value.
 //
-// The handler gates entry into this cache on three conditions all
-// holding: `x-boxel-job-id` present, `x-boxel-consuming-realm` present,
-// and the request's `realms` array is exactly `[consumingRealm]`.
-// Cross-realm reads bypass the cache because peer realms can swap
-// independently — a cached read against a foreign realm could freeze
-// a stale snapshot. Anonymous (no jobId) reads also bypass: those
-// callers are not inside the batch's snapshot-stable read window and
-// must always see live state.
+// Same-realm reads are safe by construction: within an indexing batch
+// the writer touches `boxel_index_working`, not `boxel_index`, so
+// every read of the consuming realm's `boxel_index` returns identical
+// bytes until the batch's `applyBatchUpdates` swap fires (at which
+// point `Realm.update`'s onInvalidation tears down the cache via
+// `clearInFlightSearch`, Phase 1's path — unchanged here).
+//
+// Cross-realm reads accept a different staleness contract: within one
+// jobId, results are pinned to the *first* observation regardless of
+// whether a peer realm has swapped since. The rationale is "one
+// consolidated view of the realm-server's state per batch" — repeated
+// reads of the same broad cross-realm query during one batch are
+// strictly better when they all see the same snapshot than when they
+// each chase whatever a peer realm has just published. The bound is
+// the job's lifetime; a subsequent job re-observes.
+//
+// The handler gates entry into this cache on two conditions:
+// `x-boxel-job-id` present and well-formed, and
+// `x-boxel-consuming-realm` present and well-formed. Both headers are
+// only stamped by indexer-driven prerender requests, so user-facing
+// API callers always bypass and see live state.
 //
 // Entries store the *resolved* doc, not the in-flight promise.
 // Concurrent same-key callers each run their own `populate` (Phase 1's
@@ -86,11 +96,12 @@ export class JobScopedSearchCache {
 
   async getOrPopulate(args: {
     jobId: string;
+    realms: string[];
     query: Query;
     opts: unknown | undefined;
     populate: () => Promise<LinkableCollectionDocument>;
   }): Promise<LinkableCollectionDocument> {
-    let innerKey = buildInnerKey(args.query, args.opts);
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
     let jobMap = this.#byJob.get(args.jobId);
     let existing = jobMap?.get(innerKey);
     if (existing) {
@@ -193,12 +204,18 @@ export class JobScopedSearchCache {
 
 // Compose the per-job inner key. Excludes jobId since the outer Map is
 // already partitioned by jobId — this keeps inner-key length bounded
-// regardless of how the call site formats the jobId. Excludes the
-// realms array (the cache gate already enforces same-realm-only), so
-// two requests with `realms: [R]` produce the same inner key
-// regardless of array identity.
-function buildInnerKey(query: Query, opts: unknown | undefined): string {
+// regardless of how the call site formats the jobId. The realms array
+// is sorted + deduped so two requests targeting the same realm set in
+// different orderings (or with accidental duplicates) coalesce; two
+// requests targeting different sets stay distinct.
+function buildInnerKey(
+  realms: string[],
+  query: Query,
+  opts: unknown | undefined,
+): string {
+  let normalizedRealms = [...new Set(realms)].sort();
   return JSON.stringify([
+    normalizedRealms,
     normalizeQueryForSignature(query),
     opts ? sortKeysDeep(opts) : null,
   ]);
