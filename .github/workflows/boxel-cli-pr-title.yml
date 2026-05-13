@@ -1,0 +1,43 @@
+name: PR Title Check [boxel-cli]
+
+# Validates that PRs touching packages/boxel-cli/** use a conventional-commit
+# title (feat:, fix:, chore:, etc.). The boxel-cli-on-main.yml workflow reads
+# the merged PR's title to decide the unstable version bump level, so this
+# check is the contract that keeps that flow working.
+#
+# Path-scoped — does NOT run for PRs that don't touch boxel-cli. Don't mark
+# this as a required status check in branch protection: required checks on
+# path-filtered workflows leave non-boxel-cli PRs pending indefinitely.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    paths:
+      - "packages/boxel-cli/**"
+  merge_group:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            chore
+            docs
+            test
+            build
+            ci
+            style
+          requireScope: false
+          subjectPattern: ^.+$
