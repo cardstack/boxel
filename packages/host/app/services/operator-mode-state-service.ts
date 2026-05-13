@@ -170,7 +170,7 @@ export default class OperatorModeStateService extends Service {
   @tracked profileSettingsOpen = false;
   @tracked createListingModalPayload?: CreateListingModalPayload;
 
-  // Per-card expanded-mode intent. Keyed by stack-item id so the
+  // Per-card expanded-mode intent. Keyed by stack-item instance id so the
   // user's expand intent survives bury/pop cycles within a stack:
   // when a card is pushed deeper, stack-item reads isTopCard=false
   // and renders normally; when it pops back to the top, the stored
@@ -182,6 +182,9 @@ export default class OperatorModeStateService extends Service {
   }
   setStackItemExpanded(itemKey: string, value: boolean) {
     if (value) {
+      // Only one card can be expanded at a time — clear all others so
+      // the same card open in two stacks can't leave both expanded.
+      this.expandedStackItems.clear();
       this.expandedStackItems.set(itemKey, true);
     } else {
       this.expandedStackItems.delete(itemKey);
@@ -208,7 +211,7 @@ export default class OperatorModeStateService extends Service {
     if (this.expandedStackItems.size === 0) return false;
     return this._state.stacks.some((stack) => {
       const top = stack[stack.length - 1];
-      return top && this.expandedStackItems.has(top.id);
+      return top && this.expandedStackItems.has(top.instanceId);
     });
   }
 

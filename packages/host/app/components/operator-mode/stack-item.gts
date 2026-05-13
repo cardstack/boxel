@@ -34,7 +34,7 @@ import {
   getContrastColor,
   toMenuItems,
 } from '@cardstack/boxel-ui/helpers';
-import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
+import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 
@@ -304,7 +304,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private closeItem = () => this._closeItem.perform();
 
   // Per-card expanded state. Persisted on operatorModeStateService
-  // (keyed by stack-item id) so the user's expand intent survives:
+  // (keyed by stack-item instance) so the user's expand intent survives:
   //   - When this card is buried (pushed deeper in the stack),
   //     isExpanded reads as false (we render normally), but the
   //     stored intent is preserved.
@@ -312,7 +312,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   //     again from storage and the card re-expands.
   // Only available when the card opts in via `prefersWideFormat`.
   private get itemExpandKey(): string {
-    return this.args.item.id;
+    return this.args.item.instanceId;
   }
   private get isExpandedIntent(): boolean {
     return this.operatorModeStateService.isStackItemExpanded(
@@ -919,13 +919,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
     <div
-      class='item
-        {{if this.isBuried "buried"}}
-        {{if this.isExpanded "expanded"}}
-        {{if this.doOpeningAnimation "opening-animation"}}
-        {{if this.doClosingAnimation "closing-animation"}}
-        {{if this.doMovingForwardAnimation "move-forward-animation"}}
-        {{if this.isTesting "testing"}}'
+      class={{cn
+        'item'
+        buried=this.isBuried
+        expanded=this.isExpanded
+        opening-animation=this.doOpeningAnimation
+        closing-animation=this.doClosingAnimation
+        move-forward-animation=this.doMovingForwardAnimation
+        testing=this.isTesting
+      }}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
       {{! In order to support scrolling cards into view

@@ -159,7 +159,11 @@ export default class CardHeader extends Component<Signature> {
                   @icon={{Maximize}}
                   @label={{if @isExpanded 'Restore' 'Expand'}}
                   {{on 'click' @onExpand}}
-                  data-test-expand-button
+                  data-test-expand-button={{if
+                    @isExpanded
+                    'active'
+                    'not-active'
+                  }}
                 />
               </:trigger>
               <:content>

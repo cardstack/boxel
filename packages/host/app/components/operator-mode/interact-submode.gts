@@ -1025,6 +1025,13 @@ export default class InteractSubmode extends Component {
         > :deep(.operator-mode-stack:last-child) {
         padding-right: 0;
       }
+      /* In a multi-stack layout, collapse the stack that doesn't hold
+         the expanded card so the expanded card fills the full width. */
+      .interact-submode.has-expanded-card
+        .stacks
+        > :deep(.operator-mode-stack:not(:has(.item.expanded))) {
+        display: none;
+      }
       .stack-trigger-right {
         right: 2px;
       }
