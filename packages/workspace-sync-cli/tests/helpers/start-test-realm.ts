@@ -23,8 +23,22 @@ export async function startTestRealmServer(
   // Use unique test database name like isolated-realm-server
   const testDbName = `test_db_${Math.floor(10000000 * Math.random())}`;
 
+  // Strip the dev TLS env vars exported by env-vars.sh when CI's init
+  // action provisions the cert. The integration tests below drive plain
+  // `http://localhost:4205/test/` URLs; if the spawned realm-server picks
+  // up the cert and binds the HTTPS+HTTP/2 dispatcher, every CLI command
+  // gets 301-redirected to https and the workspace-sync CLI (which
+  // doesn't follow redirects through its session handshake) breaks with
+  // "expected 'Authorization' header" errors.
+  const { REALM_SERVER_TLS_CERT_FILE, REALM_SERVER_TLS_KEY_FILE, ...rest } =
+    process.env;
+  // Reference the destructured names so eslint doesn't flag them as
+  // unused — the act of pulling them out of `rest` is the whole point.
+  void REALM_SERVER_TLS_CERT_FILE;
+  void REALM_SERVER_TLS_KEY_FILE;
+
   const env = {
-    ...process.env,
+    ...rest,
     PGHOST: 'localhost',
     PGPORT: '5435', // Test port, not 5432
     PGUSER: 'postgres',
