@@ -1016,9 +1016,15 @@ export default class Room extends Component<Signature> {
 
   private sendReadReceipt(message: Message) {
     if (this.matrixService.profile.userId === message.author.userId) {
+      console.log(
+        `[read-receipt-trace] skip self event=${message.eventId} room=${this.args.roomId}`,
+      );
       return;
     }
     if (this.matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      console.log(
+        `[read-receipt-trace] skip already-acked event=${message.eventId} room=${this.args.roomId}`,
+      );
       return;
     }
 
@@ -1031,10 +1037,16 @@ export default class Room extends Component<Signature> {
       getTs: () => message.created.getTime(),
     };
 
+    console.log(
+      `[read-receipt-trace] schedule event=${message.eventId} room=${this.args.roomId}`,
+    );
     // Without scheduling this after render, this produces the "attempted to
     // update value, but it had already been used previously in the same
     // computation" error
     schedule('afterRender', () => {
+      console.log(
+        `[read-receipt-trace] dispatch event=${message.eventId} room=${this.args.roomId}`,
+      );
       this.matrixService.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }

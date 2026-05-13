@@ -282,6 +282,7 @@ export default class MatrixService extends Service {
   }
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+    console.log(`[read-receipt-trace] arrived event=${eventId}`);
     this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
