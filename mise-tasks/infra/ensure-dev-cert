@@ -87,7 +87,8 @@ fi
 # --ignore-certificate-errors flag and Node clients via
 # NODE_EXTRA_CA_CERTS, and only the manual browser keeps showing
 # warnings until the dev opts in later.
-if ! mkcert -install 2>/dev/null; then
+echo "[ensure-dev-cert] Running mkcert -install"
+if ! mkcert -install; then
   cat >&2 <<'EOF'
 [ensure-dev-cert] `mkcert -install` did not complete (sudo declined or
 not available). The cert is still generated below; indexing and Node
@@ -97,6 +98,14 @@ warnings in your manual browser later, run:
   mkcert -install      # one-time, requires sudo
 
 EOF
+fi
+# Sanity check: did mkcert add its root CA to Chromium's NSS DB? On a
+# fresh CI runner this is the load-bearing trust path for h2 — the
+# system trust store doesn't reach Chromium on Linux. List the CAs so
+# the CI log shows whether the install actually landed.
+if command -v certutil >/dev/null 2>&1 && [ -d "$HOME/.pki/nssdb" ]; then
+  echo "[ensure-dev-cert] NSS DB contents after mkcert -install:"
+  certutil -d "sql:$HOME/.pki/nssdb" -L 2>&1 | sed 's/^/  /' || true
 fi
 
 # Idempotent skip when the leaf cert already exists and isn't within
