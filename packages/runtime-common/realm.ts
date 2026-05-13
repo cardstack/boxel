@@ -64,6 +64,7 @@ import {
   unixTime,
   query,
   param,
+  dbExpression,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -2835,13 +2836,15 @@ export class Realm {
         param(result.body),
         ',',
         param(JSON.stringify(result.headers)),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         // Persist the full deps set computed once at the transpile
         // boundary so a cross-process L2 reader can populate its L1
         // entry directly instead of re-running extractModuleDependencyKeys
         // on the bytes.
         param(JSON.stringify([...result.dependencyKeys])),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         param(capturedGeneration),
         ',',
         param(Date.now()),
