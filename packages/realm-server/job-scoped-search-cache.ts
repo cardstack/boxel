@@ -205,17 +205,20 @@ export class JobScopedSearchCache {
 // Compose the per-job inner key. Excludes jobId since the outer Map is
 // already partitioned by jobId — this keeps inner-key length bounded
 // regardless of how the call site formats the jobId. The realms array
-// is sorted + deduped so two requests targeting the same realm set in
-// different orderings (or with accidental duplicates) coalesce; two
-// requests targeting different sets stay distinct.
+// is included verbatim (no sort, no dedupe): `_federated-search`
+// preserves input order in its `data` array and first-occurrence
+// `included`, so `[A, B]` and `[B, A]` are *different* responses and
+// must hash to different cache entries. A duplicated realm entry
+// likewise contributes duplicate per-realm searches at the handler
+// layer — preserve that observable shape too rather than silently
+// canonicalising it here.
 function buildInnerKey(
   realms: string[],
   query: Query,
   opts: unknown | undefined,
 ): string {
-  let normalizedRealms = [...new Set(realms)].sort();
   return JSON.stringify([
-    normalizedRealms,
+    realms,
     normalizeQueryForSignature(query),
     opts ? sortKeysDeep(opts) : null,
   ]);

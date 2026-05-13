@@ -430,7 +430,12 @@ module(basename(__filename), function () {
       assert.strictEqual(cache.size(), 2, 'two entries under the same job');
     });
 
-    test('cross-realm: realm order and duplicates are normalized away', async function (assert) {
+    test('cross-realm: realm order is part of the key (not normalized)', async function (assert) {
+      // `_federated-search` is order-preserving — `searchRealms`
+      // queries each realm in the input order and `combineSearchResults`
+      // concatenates `data` (and first-occurrence `included`) in that
+      // same order. So `[A, B]` and `[B, A]` are *different* responses,
+      // and the cache must not coalesce them.
       let cache = new JobScopedSearchCache();
       let calls = 0;
       let populate = async () => {
@@ -445,11 +450,9 @@ module(basename(__filename), function () {
         opts: undefined,
         populate,
       });
-      // Different array shape, same set — sorted-deduped key collapses
-      // these so the second call is a hit.
       await cache.getOrPopulate({
         jobId: '42.1',
-        realms: [realmB, realmA, realmA],
+        realms: [realmB, realmA],
         query: makeQuery(),
         opts: undefined,
         populate,
@@ -457,10 +460,10 @@ module(basename(__filename), function () {
 
       assert.strictEqual(
         calls,
-        1,
-        'reordered + duplicated realm arrays normalize to the same key',
+        2,
+        'reordered realm arrays produce distinct cache entries',
       );
-      assert.strictEqual(cache.size(), 1, 'one entry stored');
+      assert.strictEqual(cache.size(), 2, 'one entry per ordering');
     });
   });
 });
