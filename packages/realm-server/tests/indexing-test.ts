@@ -2305,6 +2305,91 @@ module(basename(__filename), function () {
           'error_doc is SQL NULL after recovery',
         );
       });
+
+      test('handles babel duplicate-export error in a consumed module without crashing', async function (assert) {
+        await testDbAdapter.execute('DELETE FROM modules');
+
+        // The consumed module has the same top-level class declared twice.
+        // Babel rejects this with "Identifier 'X' has already been declared" —
+        // this is the exact failure shape we see in staging job 388477 against
+        // crypto-portfolio.gts.
+        await realm.write(
+          'address.gts',
+          `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          export class AddressField extends FieldDef {
+            @field address = contains(StringField);
+          }
+          // duplicate top-level declaration — Babel parse error
+          export class AddressField extends FieldDef {
+            @field other = contains(StringField);
+          }
+        `,
+        );
+
+        await realm.write(
+          'trade.json',
+          JSON.stringify({
+            data: {
+              attributes: {
+                title: 'Trade card depending on broken AddressField module',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./address'),
+                  name: 'AddressField',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        // Instance should be in an error state, not stale / missing.
+        let entry = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}trade`),
+        );
+        assert.strictEqual(
+          entry?.type,
+          'instance-error',
+          'instance is in error state when its consumed module has a Babel parse error',
+        );
+        if (entry?.type === 'instance-error') {
+          let combinedMessages = [
+            String(entry.error.message ?? ''),
+            ...(Array.isArray(entry.error.additionalErrors)
+              ? entry.error.additionalErrors.map((e: { message?: string }) =>
+                  String(e?.message ?? ''),
+                )
+              : []),
+          ].join(' || ');
+          assert.ok(
+            combinedMessages.includes('already been declared'),
+            `error chain mentions the duplicate declaration. saw: ${combinedMessages}`,
+          );
+          assert.ok(
+            entry.error.deps?.some((d) => d.includes('address')),
+            'error deps include the broken module',
+          );
+        }
+
+        // Module file should also have an error entry in boxel_index, not be
+        // missing entirely. realmIndexQueryEngine.file() filters out error
+        // rows (has_error = FALSE), so check the raw table directly.
+        let moduleRows = (await testDbAdapter.execute(
+          `SELECT type, has_error
+             FROM boxel_index
+            WHERE realm_url = '${testRealm}'
+              AND (
+                url = '${testRealm}address.gts'
+                OR file_alias = '${testRealm}address'
+              )`,
+        )) as { type: string; has_error: boolean | null }[];
+        assert.ok(
+          moduleRows.some((row) => row.has_error === true),
+          `broken module file has an error entry (rows: ${JSON.stringify(moduleRows)})`,
+        );
+      });
     });
 
     module('additive writes', function (hooks) {
