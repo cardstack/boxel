@@ -34,12 +34,16 @@
 
 exports.shorthands = undefined;
 
-// Cheap pre-check: realm_registry is a small table whose `url` column
-// holds the canonical realm URL. If no row there matches the old
-// localhost canonicals, no other table will either, so we exit before
-// touching the larger tables. Avoids full-column scans on
-// production/staging databases where the canonical realm URLs are real
-// hostnames and `localhost` never appears.
+// Cheap pre-check: realm_user_permissions is a small table seeded with
+// the canonical localhost realm URLs by earlier migrations
+// (1726671342065_backfill-realm-owners + siblings). If no row there
+// matches the old localhost canonicals, no other table will either, so
+// we exit before touching the larger tables. Avoids full-column scans
+// on production/staging databases where the canonical realm URLs are
+// real hostnames and `localhost` never appears. (We can't use
+// realm_registry — it's populated by the realm-server's runtime
+// bootstrap, not by migrations, so on a fresh install it's empty when
+// this migration runs.)
 const REWRITE_BLOCK = `
 DO $$
 DECLARE
@@ -51,8 +55,9 @@ DECLARE
   i int;
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM realm_registry
-    WHERE url LIKE 'http://localhost:4201/%' OR url LIKE 'http://localhost:4202/%'
+    SELECT 1 FROM realm_user_permissions
+    WHERE realm_url LIKE 'http://localhost:4201/%'
+       OR realm_url LIKE 'http://localhost:4202/%'
     LIMIT 1
   ) THEN
     RETURN;
