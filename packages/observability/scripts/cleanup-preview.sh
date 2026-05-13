@@ -3,8 +3,12 @@
 #
 # Pulls the live state of `dashboards` and `folders` from the target Grafana,
 # filters to resources whose UID begins with `pr<n>-` (the prefix render-
-# preview.sh stamps), and deletes them in a single `grafanactl resources
-# delete` call.
+# preview.sh stamps), and deletes them in two `grafanactl resources delete`
+# passes: dashboards first, then the folder containing them. The two-pass
+# split is mandatory — Grafana refuses to delete a non-empty folder
+# ("400 BadRequest: Folder cannot be deleted: folder is not empty"), and
+# a single delete invocation processes selectors in argv order with no
+# dependency awareness, so we'd hit that error every time.
 #
 # Usage:
 #   ./scripts/cleanup-preview.sh --pr <n> [--env staging|local|production]
@@ -13,9 +17,13 @@
 # 0 (the `on-error=ignore` setting below makes grafanactl tolerate missing
 # selectors so we don't have to re-read live state and diff).
 #
-# This script is what the observability-preview.yml workflow calls on
-# pull_request `closed`. It is also what the observability-preview-sweep
-# workflow calls for PRs the sweeper has decided are stale.
+# Callers:
+#   - apply-preview.sh runs this before every push, so a PR that shrinks
+#     its changed-dashboard set (e.g. reverts one of two prior edits)
+#     gets the old preview resources removed before the new tree lands.
+#   - observability-preview.yml runs this on pull_request `closed`.
+#   - observability-preview-sweep.yml runs this for PRs the daily sweep
+#     has decided are stale.
 set -eo pipefail
 
 usage_error() { echo "error: $1" >&2; exit 2; }

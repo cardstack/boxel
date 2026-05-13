@@ -81,9 +81,20 @@ trap 'rm -rf "$rendered"' EXIT
 cfg="$(./scripts/render-config.sh "$env_name")"
 trap 'rm -rf "$rendered"; rm -f "$cfg"' EXIT
 
-# Push the preview tree. `resources push` is upsert-only — re-running on
-# the same PR (e.g. after a force-push) overwrites the previous preview
-# UIDs in-place, no cleanup needed between pushes.
+# Clean up any pr<n>-* resources from a previous apply BEFORE pushing the
+# new set. `resources push` is upsert-only — it won't delete a dashboard
+# that was in the prior render but isn't in this one. So if a PR push
+# reduces the changed-dashboard set (e.g. a later commit reverts one of
+# two earlier dashboard edits), the dropped dashboard would otherwise
+# linger in staging until PR close. cleanup-preview.sh is idempotent on
+# an empty preview state — first-time applies pay the cost of one extra
+# `grafanactl resources pull` for a no-op delete.
+./scripts/cleanup-preview.sh --pr "$pr_number" --env "$env_name" >&2
+
+# Push the preview tree. `resources push` is upsert-only, which combined
+# with the cleanup above gives us full state replacement: the only
+# pr<n>-* resources in Grafana after this step are exactly those in the
+# rendered tree.
 #
 # Suppress stdout so the workflow comment captures only our structured
 # summary below; stderr still surfaces in the run log on failure.

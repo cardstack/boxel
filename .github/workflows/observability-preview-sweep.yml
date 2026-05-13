@@ -25,6 +25,12 @@ on:
 permissions:
   contents: read
   id-token: write
+  # `gh pr view` calls in the sweep step need read access to the repo's
+  # pull requests. Without this, every PR-state lookup would return 403
+  # and the sweep would either delete previews for genuinely open PRs
+  # (legacy behavior) or — after the indeterminate-state guard below —
+  # abort the sweep entirely.
+  pull-requests: read
 
 concurrency:
   # The sweeper is idempotent, but running two at once would do redundant
@@ -84,9 +90,12 @@ jobs:
             resources pull dashboards folders --path "$remote" >/dev/null
 
           # Extract the set of unique PR numbers present in preview UIDs.
+          # `grep ... || true` because `set -eo pipefail` would otherwise
+          # abort the step when grep finds no matches — that's the legitimate
+          # "no previews live in staging" path, not an error.
           pr_numbers="$(find "$remote" -type f -name '*.json' \
             -exec jq -r '.metadata.name // ""' {} \; \
-            | grep -E '^pr[0-9]+-' \
+            | { grep -E '^pr[0-9]+-' || true; } \
             | sed -E 's/^pr([0-9]+)-.*/\1/' \
             | sort -u)"
 
@@ -98,23 +107,54 @@ jobs:
 
           echo "found previews for PR(s): $(echo "$pr_numbers" | tr '\n' ' ')"
 
-          # For each PR number, ask GitHub whether it's still open. `gh pr view`
-          # returns nonzero when the PR doesn't exist; we treat that as
-          # "delete" (the PR was deleted from the repo). Open PRs are kept;
-          # everything else (closed, merged, missing) gets swept.
+          # For each PR number, ask GitHub whether it's still open. Use
+          # `gh api` directly (rather than `gh pr view`) so we can
+          # distinguish a real 404 ("PR was deleted from the repo —
+          # safe to sweep") from any other failure ("transient API
+          # error / rate limit / auth glitch — DO NOT sweep, fail the
+          # step so a human can investigate"). Treating every nonzero
+          # exit as "PR doesn't exist → delete its preview" would let
+          # a GitHub outage wipe previews for legitimately open PRs.
           stale=""
           while IFS= read -r pr; do
             [[ -n "$pr" ]] || continue
-            if state="$(gh pr view "$pr" --repo "$REPO" --json state -q .state 2>/dev/null)"; then
-              if [[ "$state" == "OPEN" ]]; then
-                echo "  PR #${pr}: OPEN — keep"
-                continue
-              fi
-              echo "  PR #${pr}: ${state} — sweep"
+            api_out="$(mktemp)"
+            api_err="$(mktemp)"
+            if gh api "repos/${REPO}/pulls/${pr}" \
+                 --jq '.state' \
+                 > "$api_out" 2> "$api_err"; then
+              state="$(cat "$api_out")"
+              rm -f "$api_out" "$api_err"
+              case "$state" in
+                open)
+                  echo "  PR #${pr}: open — keep"
+                  ;;
+                closed)
+                  echo "  PR #${pr}: closed — sweep"
+                  stale="${stale}${pr} "
+                  ;;
+                *)
+                  echo "::error::PR #${pr}: unexpected state '${state}' — aborting sweep"
+                  exit 1
+                  ;;
+              esac
             else
-              echo "  PR #${pr}: not found — sweep"
+              # `gh api` writes the HTTP status in the error body for
+              # non-2xx responses. A 404 is the unambiguous "PR was
+              # deleted from the repo" signal; anything else (network,
+              # rate-limit, 5xx, 403) is indeterminate and we refuse
+              # to sweep on it.
+              err_body="$(cat "$api_err")"
+              rm -f "$api_out" "$api_err"
+              if grep -q 'HTTP 404' <<< "$err_body"; then
+                echo "  PR #${pr}: 404 — sweep (PR deleted from repo)"
+                stale="${stale}${pr} "
+              else
+                echo "::error::PR #${pr}: indeterminate gh-api failure — aborting sweep"
+                echo "::error::${err_body}"
+                exit 1
+              fi
             fi
-            stale="${stale}${pr} "
           done <<< "$pr_numbers"
 
           echo "stale_prs=${stale}" >> "$GITHUB_OUTPUT"
