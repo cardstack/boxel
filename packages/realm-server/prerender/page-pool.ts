@@ -1718,25 +1718,20 @@ export class PagePool {
     tabStartupMs: number;
   }> {
     let tabStartupMs = 0;
-    let awaitStandbyPool = async () => {
-      // Fast path: if the refill loop has nothing to do (e.g.
-      // `disableStandbyRefill` is on with an active tab, or the
-      // pool is already at desired capacity), skip the await
-      // entirely. This avoids an extra microtask hop on the
-      // cross-affinity-steal fallback path — without it, a sibling
-      // caller hitting the simpler same-affinity `least-pending`
-      // branch can queue on the busy tab one microtask earlier,
-      // inflating `pendingCount` past the cross-affinity scan's
-      // `> 1` filter and forcing this caller to throw
-      // `'No standby page available for prerender'` despite a
-      // valid stealable candidate existing.
-      if (this.#currentStandbyCount() >= this.#desiredStandbyCount()) {
-        return;
-      }
-      let startedAt = Date.now();
-      await this.#ensureStandbyPool();
-      tabStartupMs += Date.now() - startedAt;
-    };
+    // The two standby-refill await sites below are intentionally
+    // INLINED as `if (current < desired) { await ... }` rather than
+    // pulled into a helper. `await asyncHelper()` yields one
+    // microtask even when the helper returns synchronously (the
+    // resolved Promise still rounds through the microtask queue).
+    // That extra hop shifts the relative microtask order against a
+    // sibling caller hitting the simpler same-affinity
+    // `least-pending` branch — the sibling reaches
+    // `entry.queue.acquire` earlier, inflates `pendingCount` past
+    // the cross-affinity scan's `> 1` filter, and forces this
+    // caller to throw `'No standby page available for prerender'`
+    // despite a valid stealable candidate existing. Inlining the
+    // check keeps the no-op path strictly synchronous so the
+    // relative ordering matches the pre-CS-11139 shape.
     let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
@@ -1795,7 +1790,11 @@ export class PagePool {
       // sub-render isn't forced to queue behind the file render
       // it's blocking.
       if (canExpandPastAffinityCap && this.#tryExpand(priority)) {
-        await awaitStandbyPool();
+        if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
+          let startedAt = Date.now();
+          await this.#ensureStandbyPool();
+          tabStartupMs += Date.now() - startedAt;
+        }
         let after = this.#commandeerDormantTab(affinityKey);
         if (after) {
           let releaseTab = await after.queue.acquire(signal, priority);
@@ -1835,7 +1834,11 @@ export class PagePool {
       // #ensureStandbyPool()` in `getPage` made this ordering implicit;
       // now we make it explicit here so brand-new affinities still get
       // a fresh standby in preference to busy-tab queueing.
-      await awaitStandbyPool();
+      if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
+      }
       throwIfAborted(signal);
       let retryShared = this.#tryClaimOrphanContext(affinityKey);
       if (retryShared) {
