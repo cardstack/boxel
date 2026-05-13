@@ -7,6 +7,20 @@ import QUnit from 'qunit';
 
 const PERCY_PAUSE_PARAMETER = 'percypause';
 
+// Cap how long we'll wait for the Percy upload inside a single test. Percy's
+// local SDK retries page navigation on a 30 s budget per attempt, so a single
+// flaky network hiccup can stack two 30 s retries inside one `await
+// percySnapshot(...)` — well past QUnit's 60 s test budget. When QUnit times
+// out the test, the still-pending `await` here eventually resolves, the lines
+// of test code AFTER `await percySnapshot(...)` run, and any `assert.dom(...)`
+// they push lands on a test QUnit already marked dead. QUnit surfaces that as
+// "Assertion occurred after test finished" — attached to whichever test is
+// currently running. That contaminates the next test (or two) and looks like a
+// flake in unrelated tests, but the actual cause is always upstream: a slow
+// Percy snapshot that overran the test budget. Capping well below 60 s lets
+// the test continue and exit cleanly even when Percy is misbehaving.
+const PERCY_SNAPSHOT_BUDGET_MS = 25_000;
+
 QUnit.config.urlConfig.push({
   id: PERCY_PAUSE_PARAMETER,
   label: 'Pause on Percy snapshot',
@@ -15,7 +29,10 @@ QUnit.config.urlConfig.push({
 export default async function percySnapshot(
   ...args: Parameters<typeof originalPercySnapshot>
 ) {
+  const overallStart = performance.now();
+  const settledStart = performance.now();
   await settled();
+  const settledMs = Math.round(performance.now() - settledStart);
 
   // Load every @font-face the page has declared, not just a hard-coded list.
   // This covers IBM Plex Sans, IBM Plex Mono (used by Monaco), IBM Plex Serif
@@ -29,10 +46,12 @@ export default async function percySnapshot(
   // the load-bearing assertion: if the font that actually moves Percy pixels
   // is missing, fail there with a clear message.
   let faces = Array.from(document.fonts);
+  const fontStart = performance.now();
   let fontResults = await Promise.allSettled(
     faces.map((f) => f.load().then(() => f)),
   );
   await document.fonts.ready;
+  const fontMs = Math.round(performance.now() - fontStart);
 
   let failedFonts = fontResults.flatMap((result, idx) => {
     if (result.status !== 'rejected') {
@@ -87,6 +106,10 @@ export default async function percySnapshot(
   // aren't registered as Ember test waiters. Percy would then capture a frame
   // where some images have painted and others haven't — exactly the "card
   // icon inconsistencies" false-positive class.
+  const imageStart = performance.now();
+  const pendingImageCount = Array.from(document.images).filter(
+    (img) => !img.complete,
+  ).length;
   await Promise.all(
     Array.from(document.images)
       .filter((img) => !img.complete)
@@ -98,6 +121,7 @@ export default async function percySnapshot(
           }),
       ),
   );
+  const imageMs = Math.round(performance.now() - imageStart);
 
   // Give the browser one full paint after fonts/images settle. CSS custom
   // properties (e.g. --icon-color cascading from an ancestor) resolve at
@@ -115,7 +139,79 @@ export default async function percySnapshot(
     await pauseTest();
   }
 
-  await originalPercySnapshot(...args);
+  // Race the actual Percy upload against `PERCY_SNAPSHOT_BUDGET_MS`. Errors
+  // that surface BEFORE the budget elapses are real upload failures (Percy
+  // server unreachable, malformed call, etc.) — those propagate through
+  // `Promise.race` and fail the test. The side `.catch` only swallows
+  // rejections that arrive AFTER we've already abandoned the upload, so a
+  // late rejection can't surface as an unhandled rejection in a later test.
+  const snapshotName = describeSnapshot(args);
+  const percyStart = performance.now();
+  let abandoned = false;
+  const upload = originalPercySnapshot(...args) as Promise<void>;
+  upload.catch((err) => {
+    if (abandoned) {
+      console.warn(
+        `[percy-snapshot] late rejection from abandoned snapshot "${snapshotName}":`,
+        err,
+      );
+    }
+    // If `abandoned` is false here, the rejection already surfaced via
+    // `Promise.race` below — nothing more to do.
+  });
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<void>((resolve) => {
+    timeoutHandle = setTimeout(() => {
+      abandoned = true;
+      resolve();
+    }, PERCY_SNAPSHOT_BUDGET_MS);
+  });
+  try {
+    await Promise.race([upload, timeoutPromise]);
+  } finally {
+    // Race settled (upload resolved, upload rejected, or budget fired). In
+    // every case we no longer need the timer — leaving it would fire mid-way
+    // through a later test, mutating a stale `abandoned` closure for no
+    // benefit and holding the snapshot's locals live for 25 s longer.
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
+  const timedOut = abandoned;
+  const percyMs = Math.round(performance.now() - percyStart);
+  const totalMs = Math.round(performance.now() - overallStart);
+
+  if (timedOut) {
+    console.warn(
+      `[percy-snapshot] "${snapshotName}" abandoned after ${percyMs}ms ` +
+        `(budget ${PERCY_SNAPSHOT_BUDGET_MS}ms; settled=${settledMs}ms, ` +
+        `fonts=${fontMs}ms, images=${imageMs}ms over ${pendingImageCount} ` +
+        `pending; total=${totalMs}ms). Percy is likely retrying internally — ` +
+        `letting the test continue so it can exit cleanly before the QUnit ` +
+        `timeout. The visual diff for this test may be missing.`,
+    );
+  } else if (totalMs > 5000) {
+    console.log(
+      `[percy-snapshot] "${snapshotName}" completed in ${totalMs}ms ` +
+        `(settled=${settledMs}ms, fonts=${fontMs}ms, ` +
+        `images=${imageMs}ms over ${pendingImageCount} pending, ` +
+        `percy=${percyMs}ms)`,
+    );
+  }
+}
+
+function describeSnapshot(
+  args: Parameters<typeof originalPercySnapshot>,
+): string {
+  const first = args[0] as unknown;
+  if (first && typeof first === 'object') {
+    const test = (
+      first as { test?: { module?: { name?: string }; testName?: string } }
+    ).test;
+    if (test?.module?.name && test?.testName) {
+      return `${test.module.name} | ${test.testName}`;
+    }
+  }
+  if (typeof first === 'string') return first;
+  return '<unnamed>';
 }
 
 function describeFontLoadError(reason: unknown): string {
