@@ -272,6 +272,52 @@ export function createRemotePrerenderer(
       );
     },
     // Release this batch's ownership of an affinity (CS-10758 step 3).
+    // CS-11043. Called by the publish-realm handler after the FS swap
+    // to tear down puppeteer pages whose host-app Loaders may have
+    // cached old module bytes. Routed through the manager so disposal
+    // fans out to every server currently assigned this affinity. Best-
+    // effort: a network failure is logged but not rethrown — the
+    // publish completes regardless; LRU rotation will eventually
+    // recycle stale pages, the publish handler just doesn't want to
+    // wait for that.
+    async disposeAffinity({ affinityType, affinityValue }) {
+      let endpoint = new URL('dispose-affinity', prerenderURL);
+      let ac = new AbortController();
+      let timer = setTimeout(() => ac.abort(), requestTimeoutMs);
+      (timer as any).unref?.();
+      try {
+        let response = await fetch(endpoint, {
+          method: 'POST',
+          headers: jsonApiHeaders,
+          body: JSON.stringify({
+            data: {
+              type: 'dispose-affinity-request',
+              attributes: { affinityType, affinityValue },
+            },
+          }),
+          signal: ac.signal,
+        });
+        if (!response.ok) {
+          log.warn(
+            `disposeAffinity for ${affinityType}:${affinityValue} returned ${response.status}`,
+          );
+        }
+      } catch (e) {
+        if ((e as { name?: string })?.name === 'AbortError') {
+          log.warn(
+            `disposeAffinity for ${affinityType}:${affinityValue} timed out after ${requestTimeoutMs}ms`,
+          );
+        } else {
+          log.warn(
+            `disposeAffinity for ${affinityType}:${affinityValue} network error:`,
+            e,
+          );
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+
     // Routed through the manager so the release fans out to every server
     // currently assigned this affinity (any of which could hold local
     // ownership from a prior visit). Best-effort: a network-level failure

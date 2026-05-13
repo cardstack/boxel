@@ -1353,6 +1353,102 @@ export function buildPrerenderManagerApp(options?: {
     }
   });
 
+  // CS-11043. Broadcast a dispose-affinity to every server currently
+  // assigned to the requested affinity. The publish-realm handler
+  // calls this through RemotePrerenderer after its FS swap so that
+  // every assigned server tears down the puppeteer pages whose
+  // host-app Loaders may still serve old module bytes. A server
+  // that's no longer assigned no-ops the request; assigned servers
+  // dispose their pages and the next render starts fresh.
+  router.post('/dispose-affinity', async (ctxt) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+      let attrs = body?.data?.attributes ?? {};
+      let affinityType = attrs.affinityType;
+      let affinityValue = attrs.affinityValue;
+      if (
+        (affinityType !== 'realm' && affinityType !== 'user') ||
+        typeof affinityValue !== 'string' ||
+        affinityValue.trim().length === 0
+      ) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message:
+                'Missing or invalid attributes: affinityType, affinityValue',
+            },
+          ],
+        };
+        return;
+      }
+      let affinityKey = toAffinityKey({
+        affinityType: affinityType as AffinityType,
+        affinityValue,
+      });
+      let targets = [...(registry.affinities.get(affinityKey) ?? [])];
+      log.info(
+        `broadcasting dispose-affinity for ${affinityKey} to ${targets.length} assigned server(s)`,
+      );
+      await Promise.all(
+        targets.map(async (target) => {
+          let targetURL = `${normalizeURL(target)}/dispose-affinity`;
+          let ac = new AbortController();
+          let timer = setTimeout(() => ac.abort(), proxyTimeoutMs);
+          (timer as any).unref?.();
+          try {
+            let res = await fetch(targetURL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/vnd.api+json',
+                Accept: 'application/vnd.api+json',
+              },
+              body: raw,
+              signal: ac.signal,
+            });
+            if (!res.ok) {
+              log.warn(
+                `dispose-affinity on ${target} for ${affinityKey} returned ${res.status}`,
+              );
+            }
+          } catch (err) {
+            if ((err as { name?: string })?.name === 'AbortError') {
+              log.warn(
+                `dispose-affinity on ${target} for ${affinityKey} timed out after ${proxyTimeoutMs}ms`,
+              );
+            } else {
+              log.warn(
+                `dispose-affinity on ${target} for ${affinityKey} network error:`,
+                err,
+              );
+            }
+          } finally {
+            clearTimeout(timer);
+          }
+        }),
+      );
+      ctxt.status = 204;
+    } catch (err: any) {
+      log.error('Unhandled error in /dispose-affinity broadcast:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
+      };
+    }
+  });
+
   let verboseManagerLogs =
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
