@@ -144,7 +144,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
     // and the persisted card attribute all use the exact same string.
     let branchName =
       optionalString(input.branchName) ??
-      toBranchName(roomId, listingName ?? 'UntitledListing');
+      toBranchName(listingName ?? 'UntitledListing');
 
     return {
       runAs,
@@ -157,7 +157,10 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       workflowCardUrl,
       workflowCardRealm,
       branchName,
-      syntheticCreateEvent: eventContent,
+      syntheticCreateEvent: {
+        ...eventContent,
+        input: { ...(input as Record<string, unknown>), branchName },
+      },
       existingPrCardUrl: null,
     };
   }
@@ -203,7 +206,7 @@ export class PrListingWorkflowHandler implements BotCommandHandler {
       stripSubmitPrefix(optionalString(attrs.title));
     let branchName =
       optionalString(attrs.branchName) ??
-      toBranchName(roomId, listingName ?? 'UntitledListing');
+      toBranchName(listingName ?? 'UntitledListing');
     let rawPrCardSelf = optionalString(rels.prCard?.links?.self);
     let existingPrCardUrl = rawPrCardSelf
       ? new URL(rawPrCardSelf, workflowCardUrl).href

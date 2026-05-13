@@ -58,7 +58,13 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
+        // Uses `realistic` because tests in this module depend on
+        // multiple Person instances (pagination), FileDef instances
+        // beyond person.gts (file-meta queries), and the kitchen-sink
+        // content variety (sparse-fieldsets backward-compat). Sibling
+        // modules below only ever query for Mango and stay on `simple`.
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             '*': ['read'],
           },
@@ -803,6 +809,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read'],
           },
@@ -879,6 +886,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -936,6 +944,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
       module('search query validation', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

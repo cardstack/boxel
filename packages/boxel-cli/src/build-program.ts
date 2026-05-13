@@ -1,11 +1,13 @@
 import { Command } from 'commander';
 import { profileCommand } from './commands/profile';
+import { registerConsolidateWorkspacesCommand } from './commands/consolidate-workspaces';
 import { registerReadTranspiledCommand } from './commands/read-transpiled';
 import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
 import { registerSearchCommand } from './commands/search';
 import { setQuiet } from './lib/cli-log';
+import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths';
 
 /**
  * Construct the boxel CLI program with every command registered. Pure builder
@@ -30,6 +32,7 @@ export function buildBoxelProgram(version: string): Command {
       if (opts.quiet) {
         setQuiet(true);
       }
+      warnIfMisplacedLocalRealmDirs(process.cwd());
     });
 
   program
@@ -86,6 +89,7 @@ Environment variables (for 'add'):
   registerRunCommand(program);
   registerSearchCommand(program);
   registerReadTranspiledCommand(program);
+  registerConsolidateWorkspacesCommand(program);
 
   return program;
 }
