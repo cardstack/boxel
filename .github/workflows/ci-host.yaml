@@ -29,6 +29,12 @@ permissions:
   id-token: write
   pull-requests: read
 
+env:
+  # DIAGNOSTIC: bind http2 secure server directly (no byte-peek
+  # dispatcher) so we can isolate whether the dispatcher pattern is
+  # interfering with ALPN h2 negotiation. See server.ts.
+  BOXEL_REALM_NO_DISPATCHER: "1"
+
 jobs:
   check-percy:
     name: Check if Percy is needed

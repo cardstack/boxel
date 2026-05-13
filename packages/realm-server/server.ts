@@ -130,6 +130,16 @@ export function createListener(
     );
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
+  // BOXEL_REALM_NO_DISPATCHER=1 binds the http2 secure server directly,
+  // skipping the byte-peek dispatcher and the same-port HTTP→HTTPS
+  // redirect. Diagnostic toggle for isolating whether the dispatcher's
+  // `pauseOnConnect` + `socket.unshift(firstByte)` +
+  // `tlsServer.emit('connection', socket)` pattern is interfering with
+  // ALPN h2 negotiation or stream multiplexing.
+  if (process.env.BOXEL_REALM_NO_DISPATCHER === '1') {
+    log.info('HTTPS dispatcher: BOXEL_REALM_NO_DISPATCHER=1 (h2 direct)');
+    return { server: tlsServer, proto: 'https/h2' };
+  }
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
   // this, `dispatcher.close()` waits for active HTTP/2 sessions and
