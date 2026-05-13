@@ -2815,47 +2815,14 @@ export class Realm {
     capturedGeneration: number,
   ): Promise<void> {
     try {
-      // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
-      // if the row's current generation is still <= capturedGeneration.
-      // If an invalidate has tombstoned-and-bumped the row past that
-      // value, the WHERE clause rejects the UPDATE and the stale
-      // transpile is discarded. capturedGeneration may legitimately be
-      // 0 (row absent at read time, tombstone never created) — in
-      // that case the WHERE 0 <= 0 still allows a no-op same-gen
-      // overwrite which is benign because the bytes are deterministic
-      // for the same source.
-      await query(this.#dbAdapter, [
-        'INSERT INTO',
-        MODULE_TRANSPILE_CACHE_TABLE,
-        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
-        'VALUES (',
-        param(this.url),
-        ',',
-        param(canonicalPath),
-        ',',
-        param(result.body),
-        ',',
-        param(JSON.stringify(result.headers)),
-        dbExpression({ pg: '::jsonb' }),
-        ',',
-        // Persist the full deps set computed once at the transpile
-        // boundary so a cross-process L2 reader can populate its L1
-        // entry directly instead of re-running extractModuleDependencyKeys
-        // on the bytes.
-        param(JSON.stringify([...result.dependencyKeys])),
-        dbExpression({ pg: '::jsonb' }),
-        ',',
-        param(capturedGeneration),
-        ',',
-        param(Date.now()),
-        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
-        'body = EXCLUDED.body,',
-        'headers = EXCLUDED.headers,',
-        'dependency_keys = EXCLUDED.dependency_keys,',
-        'generation = EXCLUDED.generation,',
-        'created_at = EXCLUDED.created_at',
-        `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
-      ]);
+      await __testOnlyUpsertTranspileCacheRow(this.#dbAdapter, {
+        realmUrl: this.url,
+        canonicalPath,
+        body: result.body,
+        headers: result.headers,
+        dependencyKeys: result.dependencyKeys,
+        capturedGeneration,
+      });
     } catch (err: unknown) {
       // L2 persistence is best-effort. A transient pg failure must not
       // break the response the caller is about to serve — they already
@@ -6314,6 +6281,65 @@ export class Realm {
       } ${request.headers.get('Accept') ?? ''}`,
     );
   }
+}
+
+// Shared module_transpile_cache UPSERT body, factored out of
+// Realm#writeTranspileCacheRow so the host-side SQLite regression test can
+// run the same SQL the production writer does. Realm's private method is
+// the only production caller and wraps this in the best-effort try/catch +
+// log; tests call this directly so the SQL is the single source of truth.
+export async function __testOnlyUpsertTranspileCacheRow(
+  dbAdapter: DBAdapter,
+  args: {
+    realmUrl: string;
+    canonicalPath: string;
+    body: string;
+    headers: Record<string, string>;
+    dependencyKeys: Iterable<string>;
+    capturedGeneration: number;
+  },
+): Promise<void> {
+  // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
+  // if the row's current generation is still <= capturedGeneration.
+  // If an invalidate has tombstoned-and-bumped the row past that
+  // value, the WHERE clause rejects the UPDATE and the stale
+  // transpile is discarded. capturedGeneration may legitimately be
+  // 0 (row absent at read time, tombstone never created) — in
+  // that case the WHERE 0 <= 0 still allows a no-op same-gen
+  // overwrite which is benign because the bytes are deterministic
+  // for the same source.
+  await query(dbAdapter, [
+    'INSERT INTO',
+    MODULE_TRANSPILE_CACHE_TABLE,
+    '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+    'VALUES (',
+    param(args.realmUrl),
+    ',',
+    param(args.canonicalPath),
+    ',',
+    param(args.body),
+    ',',
+    param(JSON.stringify(args.headers)),
+    dbExpression({ pg: '::jsonb' }),
+    ',',
+    // Persist the full deps set computed once at the transpile
+    // boundary so a cross-process L2 reader can populate its L1
+    // entry directly instead of re-running extractModuleDependencyKeys
+    // on the bytes.
+    param(JSON.stringify([...args.dependencyKeys])),
+    dbExpression({ pg: '::jsonb' }),
+    ',',
+    param(args.capturedGeneration),
+    ',',
+    param(Date.now()),
+    ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+    'body = EXCLUDED.body,',
+    'headers = EXCLUDED.headers,',
+    'dependency_keys = EXCLUDED.dependency_keys,',
+    'generation = EXCLUDED.generation,',
+    'created_at = EXCLUDED.created_at',
+    `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
+  ]);
 }
 
 export type Kind = 'file' | 'directory';

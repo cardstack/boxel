@@ -1,65 +1,11 @@
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import { dbExpression, param, query } from '@cardstack/runtime-common';
+import { __testOnlyUpsertTranspileCacheRow } from '@cardstack/runtime-common';
 
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import { getDbAdapter, testRealmURL } from '../helpers';
-
-// Mirrors Realm#writeTranspileCacheRow in packages/runtime-common/realm.ts.
-// The production writer is private, so this test re-issues the same UPSERT
-// shape to guarantee the SQL it produces is valid against the host's
-// SQLiteAdapter. The earlier regression hard-coded '::jsonb' next to two
-// param placeholders; on SQLite that landed as `$4 ::jsonb, $5 ::jsonb,`
-// which the parser rejected on the leading `:`. The error was swallowed by
-// the writer's best-effort try/catch and surfaced only as console noise.
-async function upsertTranspileCacheRow(
-  adapter: SQLiteAdapter,
-  {
-    realmUrl,
-    canonicalPath,
-    body,
-    headers,
-    dependencyKeys,
-    generation,
-  }: {
-    realmUrl: string;
-    canonicalPath: string;
-    body: string;
-    headers: Record<string, string>;
-    dependencyKeys: string[];
-    generation: number;
-  },
-) {
-  await query(adapter, [
-    'INSERT INTO module_transpile_cache',
-    '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
-    'VALUES (',
-    param(realmUrl),
-    ',',
-    param(canonicalPath),
-    ',',
-    param(body),
-    ',',
-    param(JSON.stringify(headers)),
-    dbExpression({ pg: '::jsonb' }),
-    ',',
-    param(JSON.stringify(dependencyKeys)),
-    dbExpression({ pg: '::jsonb' }),
-    ',',
-    param(generation),
-    ',',
-    param(Date.now()),
-    ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
-    'body = EXCLUDED.body,',
-    'headers = EXCLUDED.headers,',
-    'dependency_keys = EXCLUDED.dependency_keys,',
-    'generation = EXCLUDED.generation,',
-    'created_at = EXCLUDED.created_at',
-    'WHERE module_transpile_cache.generation <= EXCLUDED.generation',
-  ]);
-}
 
 module('Unit | module-transpile-cache', function (hooks) {
   let adapter: SQLiteAdapter;
@@ -73,7 +19,7 @@ module('Unit | module-transpile-cache', function (hooks) {
     await adapter.reset();
   });
 
-  test('UPSERT in the shape used by Realm#writeTranspileCacheRow runs against sqlite', async function (assert) {
+  test('UPSERT runs against sqlite and persists the row', async function (assert) {
     let canonicalPath = `${testRealmURL}example.gts`;
     let headers = {
       'Content-Type': 'application/javascript',
@@ -81,13 +27,13 @@ module('Unit | module-transpile-cache', function (hooks) {
     };
     let dependencyKeys = ['https://cardstack.com/base/card-api'];
 
-    await upsertTranspileCacheRow(adapter, {
+    await __testOnlyUpsertTranspileCacheRow(adapter, {
       realmUrl: testRealmURL,
       canonicalPath,
       body: 'export const x = 1;',
       headers,
       dependencyKeys,
-      generation: 0,
+      capturedGeneration: 0,
     });
 
     let rows = (await adapter.execute(
@@ -121,21 +67,21 @@ module('Unit | module-transpile-cache', function (hooks) {
     let canonicalPath = `${testRealmURL}example.gts`;
     let headers = { 'Content-Type': 'application/javascript' };
 
-    await upsertTranspileCacheRow(adapter, {
+    await __testOnlyUpsertTranspileCacheRow(adapter, {
       realmUrl: testRealmURL,
       canonicalPath,
       body: 'first',
       headers,
       dependencyKeys: [],
-      generation: 0,
+      capturedGeneration: 0,
     });
-    await upsertTranspileCacheRow(adapter, {
+    await __testOnlyUpsertTranspileCacheRow(adapter, {
       realmUrl: testRealmURL,
       canonicalPath,
       body: 'second',
       headers,
       dependencyKeys: [],
-      generation: 1,
+      capturedGeneration: 1,
     });
 
     let rows = (await adapter.execute(
