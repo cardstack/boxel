@@ -294,15 +294,18 @@ jobs:
       - name: Call post-deployment endpoint on realm server
         run: |
           if [ "${{ inputs.environment }}" = "production" ]; then
-            URL="https://app.boxel.ai/_post-deployment?authHeader=${{ secrets.PRODUCTION_REALM_SERVER_SECRET }}"
+            URL="https://app.boxel.ai/_post-deployment"
+            SECRET="${{ secrets.PRODUCTION_REALM_SERVER_SECRET }}"
           elif [ "${{ inputs.environment }}" = "staging" ]; then
-            URL="https://realms-staging.stack.cards/_post-deployment?authHeader=${{ secrets.STAGING_REALM_SERVER_SECRET }}"
+            URL="https://realms-staging.stack.cards/_post-deployment"
+            SECRET="${{ secrets.STAGING_REALM_SERVER_SECRET }}"
           else
             echo "Unknown environment: ${{ inputs.environment }}"
             exit 1
           fi
 
-          response=$(curl -s -w "\n%{http_code}" -X POST "$URL")
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            -H "Authorization: $SECRET" "$URL")
           response_body=$(echo "$response" | head -n -1)
           response_code=$(echo "$response" | tail -n 1)
 
