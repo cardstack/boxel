@@ -70,9 +70,27 @@ fi
 
 mkdir -p "$CERT_DIR"
 
+# Initialize the user's Chromium/Firefox NSS DB before `mkcert -install`.
+# mkcert installs into the NSS DB only if it already exists; on a fresh
+# CI runner (and many fresh Linux installs) `~/.pki/nssdb/` is absent,
+# so mkcert silently skips it. Chrome then doesn't trust the leaf cert
+# natively, and `--ignore-certificate-errors` is only partially honored
+# on HTTP/2 streams — leaving the h2 path broken even though h1 works.
+# Creating the empty NSS DB up front lets `mkcert -install` add its root
+# CA, so Chromium trusts the cert end-to-end across h1 and h2.
+if command -v certutil >/dev/null 2>&1; then
+  NSSDB_DIR="$HOME/.pki/nssdb"
+  if [ ! -d "$NSSDB_DIR" ]; then
+    mkdir -p "$NSSDB_DIR"
+    # `-d sql:<dir>` creates an SQLite-backed NSS DB; empty password.
+    certutil -d "sql:$NSSDB_DIR" -N --empty-password >/dev/null 2>&1 || true
+  fi
+fi
+
 # Best-effort trust install. On a fresh machine this prompts for sudo
 # once and adds mkcert's root CA to /etc/ssl/certs (Linux) or the system
-# keychain (macOS). On subsequent runs it's a no-op. If the prompt is
+# keychain (macOS), and — if the NSS DB above exists — to Chromium's
+# trust store. On subsequent runs it's a no-op. If the prompt is
 # declined, we still proceed — the cert is generated, indexing works
 # via puppeteer's --ignore-certificate-errors flag and Node clients
 # via NODE_EXTRA_CA_CERTS, and only the manual browser keeps showing
