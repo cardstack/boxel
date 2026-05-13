@@ -93,7 +93,30 @@ export class RealmFileChangesListener {
         `invalidateCache failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
       );
     }
+    // `.realm.json` writes change the realm's name / icon / iconURL /
+    // showAsCatalog and bump `cachedRealmInfoHash`, which is folded into
+    // every card+json ETag. The writer side handles this locally in
+    // `_batchWrite` (see runtime-common/realm.ts where the post-write
+    // `addedFiles`/`updatedFiles` set is checked for the same filenames),
+    // but peers see the change only through this NOTIFY. Without this hook
+    // a peer would keep serving the pre-rename realmInfo until restart and
+    // respond 304 Not Modified against pre-rename ETags forever. CS-11127.
+    if (isRealmConfigPath(parsed.path)) {
+      try {
+        realm.invalidateCachedRealmInfo();
+      } catch (err: unknown) {
+        log.warn(
+          `invalidateCachedRealmInfo failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
+        );
+      }
+    }
   }
+}
+
+// Matches the local-path check in Realm._batchWrite that decides whether
+// to invalidate cachedRealmInfo on the writer side — keep the two in sync.
+function isRealmConfigPath(path: string): boolean {
+  return path === '.realm.json' || path === 'realm.json';
 }
 
 // Payload shape: `<realmURL>:<localPath>`. Realm URLs always carry a

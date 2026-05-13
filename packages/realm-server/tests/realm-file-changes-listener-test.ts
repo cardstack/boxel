@@ -8,16 +8,21 @@ import {
   parsePayload,
 } from '../lib/realm-file-changes-listener';
 
-// Minimal fake `Realm` — the listener only calls `.url` (via lookup) and
-// `.invalidateCache(path)`, so that's all we need to stub.
+// Minimal fake `Realm` — the listener calls `.url` (via lookup),
+// `.invalidateCache(path)`, and (for `.realm.json` / `realm.json` paths)
+// `.invalidateCachedRealmInfo()`. Stub all three.
 function makeFakeRealm(
   url: string,
   onInvalidate: (path: string) => void,
+  onInvalidateRealmInfo?: () => void,
 ): Realm {
   return {
     url,
     invalidateCache(path: string) {
       onInvalidate(path);
+    },
+    invalidateCachedRealmInfo() {
+      onInvalidateRealmInfo?.();
     },
   } as unknown as Realm;
 }
@@ -139,6 +144,78 @@ module(basename(__filename), function () {
       listener.handleNotification(undefined);
       listener.handleNotification('');
       assert.ok(true, 'empty payload did not throw');
+    });
+
+    test('handleNotification invalidates cachedRealmInfo when path is .realm.json (CS-11127)', function (assert) {
+      const realmInfoInvalidations: string[] = [];
+      const byteCacheInvalidations: string[] = [];
+      const url = 'http://x.test/a/';
+      const realmA = makeFakeRealm(
+        url,
+        (path) => byteCacheInvalidations.push(path),
+        () => realmInfoInvalidations.push(url),
+      );
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (u) => (u === url ? realmA : undefined),
+      });
+
+      listener.handleNotification(`${url}:.realm.json`);
+
+      assert.deepEqual(
+        byteCacheInvalidations,
+        ['.realm.json'],
+        'byte caches are still invalidated alongside realmInfo',
+      );
+      assert.deepEqual(
+        realmInfoInvalidations,
+        [url],
+        'cachedRealmInfo invalidated for the .realm.json path',
+      );
+    });
+
+    test('handleNotification invalidates cachedRealmInfo when path is realm.json (alternate name)', function (assert) {
+      const realmInfoInvalidations: string[] = [];
+      const url = 'http://x.test/a/';
+      const realmA = makeFakeRealm(
+        url,
+        () => {},
+        () => realmInfoInvalidations.push(url),
+      );
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (u) => (u === url ? realmA : undefined),
+      });
+
+      listener.handleNotification(`${url}:realm.json`);
+
+      assert.deepEqual(realmInfoInvalidations, [url]);
+    });
+
+    test('handleNotification does NOT invalidate cachedRealmInfo for non-config paths', function (assert) {
+      const realmInfoInvalidations: string[] = [];
+      const byteCacheInvalidations: string[] = [];
+      const url = 'http://x.test/a/';
+      const realmA = makeFakeRealm(
+        url,
+        (path) => byteCacheInvalidations.push(path),
+        () => realmInfoInvalidations.push(url),
+      );
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (u) => (u === url ? realmA : undefined),
+      });
+
+      // A nested path that happens to end in `.realm.json` must not trigger
+      // realmInfo invalidation — only the realm-root config file does.
+      listener.handleNotification(`${url}:cards/foo.gts`);
+      listener.handleNotification(`${url}:nested/.realm.json`);
+
+      assert.deepEqual(byteCacheInvalidations, [
+        'cards/foo.gts',
+        'nested/.realm.json',
+      ]);
+      assert.deepEqual(realmInfoInvalidations, []);
     });
   });
 
