@@ -48,28 +48,25 @@ function getEnvSlug() {
     .replace(/^-|-$/g, '');
 }
 
-function environmentDefaults(environment) {
+function environmentDefaults() {
   if (!process.env.BOXEL_ENVIRONMENT) {
-    // Test environment uses the host-internal `http://test-realm/...`
-    // origin and the in-memory VirtualNetwork — there is no real
-    // realm-server on the wire, and the test fixtures hardcode the
-    // http://localhost:4201/... canonicals in many places. Keep the
-    // defaults on http for tests so those hardcoded comparisons keep
-    // matching.
-    //
-    // For development the realm-server speaks HTTPS+HTTP/2. The dev
-    // cert is mandatory (see `infra:ensure-dev-cert`); there is no HTTP
-    // fallback. See the repo-root README "Local HTTPS dev access".
-    let scheme = environment === 'test' ? 'http' : 'https';
+    // Local realm-server speaks HTTPS+HTTP/2 in every environment
+    // (dev + Host Tests + Live Tests). The dev cert is mandatory (see
+    // `infra:ensure-dev-cert`); there is no HTTP fallback. Test mode
+    // still uses these defaults — the host's in-memory test-realm
+    // registry intercepts `http://test-realm/...` fetches before they
+    // hit the wire, while fetches to the realm-server's real wire URL
+    // need to go to https to match the actual listener. See the
+    // repo-root README "Local HTTPS dev access".
     return {
-      realmServerURL: `${scheme}://localhost:4201/`,
+      realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
-      baseRealmURL: `${scheme}://localhost:4201/base/`,
-      catalogRealmURL: `${scheme}://localhost:4201/catalog/`,
-      legacyCatalogRealmURL: `${scheme}://localhost:4201/legacy-catalog/`,
-      skillsRealmURL: `${scheme}://localhost:4201/skills/`,
-      openRouterRealmURL: `${scheme}://localhost:4201/openrouter/`,
+      baseRealmURL: 'https://localhost:4201/base/',
+      catalogRealmURL: 'https://localhost:4201/catalog/',
+      legacyCatalogRealmURL: 'https://localhost:4201/legacy-catalog/',
+      skillsRealmURL: 'https://localhost:4201/skills/',
+      openRouterRealmURL: 'https://localhost:4201/openrouter/',
     };
   }
   let slug = getEnvSlug();
@@ -87,7 +84,7 @@ function environmentDefaults(environment) {
 }
 
 module.exports = function (environment) {
-  let defaults = environmentDefaults(environment);
+  let defaults = environmentDefaults();
   let skipCatalog = process.env.SKIP_CATALOG === 'true';
 
   const ENV = {

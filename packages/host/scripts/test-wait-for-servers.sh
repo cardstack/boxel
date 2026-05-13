@@ -15,17 +15,17 @@ to_wait_url() {
   esac
 }
 
-DEFAULT_BASE_REALM_URL='http://localhost:4201/base/'
-DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
-DEFAULT_SKILLS_REALM_URL='http://localhost:4201/skills/'
+DEFAULT_BASE_REALM_URL='https://localhost:4201/base/'
+DEFAULT_CATALOG_REALM_URL='https://localhost:4201/catalog/'
+DEFAULT_SKILLS_REALM_URL='https://localhost:4201/skills/'
 
 BASE_REALM_URL=$(ensure_trailing_slash "${RESOLVED_BASE_REALM_URL:-$DEFAULT_BASE_REALM_URL}")
 CATALOG_REALM_URL=$(ensure_trailing_slash "${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}")
 SKILLS_REALM_URL=$(ensure_trailing_slash "${RESOLVED_SKILLS_REALM_URL:-$DEFAULT_SKILLS_REALM_URL}")
 SKIP_CATALOG="${SKIP_CATALOG:-}"
 
-NODE_TEST_REALM="http-get://localhost:4202/node-test/"
-TEST_REALM="http-get://localhost:4202/test/"
+NODE_TEST_REALM="https-get://localhost:4202/node-test/"
+TEST_REALM="https-get://localhost:4202/test/"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
