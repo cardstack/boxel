@@ -36,7 +36,12 @@ import type {
   RealmResourceIdentifier,
   RealmIdentifier,
 } from './card-reference-resolver';
-import type { Filter, Query } from './query';
+import {
+  normalizeQueryForSignature,
+  sortKeysDeep,
+  type Filter,
+  type Query,
+} from './query';
 import { CardError, type SerializedError } from './error';
 import {
   isCodeRef,
@@ -117,6 +122,28 @@ type QueryFieldErrorDetail = {
   status?: number;
 };
 
+// Stable digest key for searchCards in-flight dedup. Returns undefined if
+// the inputs can't be serialized deterministically — caller falls back to
+// running uncoalesced so dedup is best-effort, never a correctness boundary.
+export function searchInFlightKey(
+  realmURL: string,
+  query: Query,
+  opts: Options | undefined,
+): string | undefined {
+  // Encode the tuple as a JSON array (not a delimited string) so user-supplied
+  // values inside query/opts — e.g. a `matches: 'a|b'` string — can never
+  // collide with the delimiter and cause unrelated searches to coalesce.
+  try {
+    return JSON.stringify([
+      realmURL,
+      normalizeQueryForSignature(query),
+      opts ? sortKeysDeep(opts) : null,
+    ]);
+  } catch {
+    return undefined;
+  }
+}
+
 function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
@@ -140,6 +167,40 @@ export class RealmIndexQueryEngine {
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
   #log = logger('realm:index-query-engine');
+  // In-flight dedup for searchCards: concurrent callers asking for the same
+  // (realm, query, opts) share one in-flight promise instead of each running
+  // an independent SQL + loadLinks walk.
+  //
+  // Safety: this layer is user-agnostic. Per-realm read authorization is
+  // enforced by realm-server middleware (multiRealmAuthorization) BEFORE the
+  // request reaches Realm.search → searchCards; once we're here, every
+  // authorized caller for the same (realm, query, opts) is entitled to the
+  // same bytes. The key intentionally omits caller identity. If per-card
+  // visibility-by-user is ever added at this layer, this key must grow to
+  // include the caller's identity, or the dedup must be moved up the stack
+  // to where auth-equivalence is established.
+  //
+  // The shared resolved document is treated as read-only by all callers
+  // (Realm.search → JSON.stringify → HTTP response). Do not mutate the
+  // returned doc.
+  #inFlightSearch = new Map<string, Promise<LinkableCollectionDocument>>();
+
+  // Drop every pending in-flight entry. Callers that registered before the
+  // drop continue to await their existing promise (the underlying SQL was
+  // already in motion); only *new* callers after the drop will miss the map
+  // and fire a fresh search against the now-current index. Wire this to any
+  // event that means "boxel_index has just moved" — typically a worker's
+  // batch.done() swap reaching this realm-server process.
+  //
+  // The clear is local-process only. Cross-process invalidation (peer
+  // realm-server replicas serving live `_search` while a different worker
+  // commits a swap) is closed by Phase 2's NOTIFY-driven eviction. Within a
+  // single process — which covers dev, single-instance deployments, and the
+  // realm-server-drives-its-own-indexing path — this method closes the
+  // post-swap-staleness window.
+  clearInFlightSearch(): void {
+    this.#inFlightSearch.clear();
+  }
 
   constructor({
     realm,
@@ -169,6 +230,31 @@ export class RealmIndexQueryEngine {
   }
 
   async searchCards(
+    query: Query,
+    opts?: Options,
+  ): Promise<LinkableCollectionDocument> {
+    let key = searchInFlightKey(this.#realm.url, query, opts);
+    if (key !== undefined) {
+      let existing = this.#inFlightSearch.get(key);
+      if (existing) {
+        return await existing;
+      }
+      let pending = this.searchCardsUncoalesced(query, opts).finally(() => {
+        // Identity-check before deletion: a concurrent invalidation path
+        // could in principle replace the entry. Only clean up if the map
+        // still points at *this* pending promise. Mirrors
+        // CachingDefinitionLookup#inFlight.
+        if (this.#inFlightSearch.get(key) === pending) {
+          this.#inFlightSearch.delete(key);
+        }
+      });
+      this.#inFlightSearch.set(key, pending);
+      return await pending;
+    }
+    return await this.searchCardsUncoalesced(query, opts);
+  }
+
+  private async searchCardsUncoalesced(
     query: Query,
     opts?: Options,
   ): Promise<LinkableCollectionDocument> {

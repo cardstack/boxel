@@ -38,6 +38,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import handleFederatedTypes from './handlers/handle-federated-types';
@@ -118,6 +119,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
+  // One job-scoped same-realm search cache per realm-server process.
+  // Lives for the life of the process; TTL-evicts entries 10 min after
+  // their initial populate (hits do NOT refresh the TTL — tying it to
+  // populate time bounds the leak deterministically, where touch-
+  // refresh would let a hot entry survive indefinitely past job
+  // completion). Future work wires NOTIFY-driven eviction so a job
+  // completion releases its entries immediately. Hard-capped to bound
+  // worst-case memory under a synthetic-jobId flood.
+  let searchCache = new JobScopedSearchCache();
 
   router.get(
     '/',
@@ -178,7 +188,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch(),
+    handleSearch({ searchCache }),
   );
   router.all(
     '/_federated-info',
@@ -241,31 +251,19 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUnpublishRealm(args),
   );
 
-  // GET registrations are the legacy Grafana-link dashboards; POST
-  // registrations are the Grafana-button-panel dashboards from CS-10987,
-  // which carry auth in an `Authorization: Bearer <token>` header rather
-  // than a querystring. Both verbs share the same handler + auth check —
-  // handlers read params from `ctxt.URL.searchParams`, which Koa
-  // populates the same way for both GET and POST. The dual registration
-  // is intentional for the CS-10987 cutover; once every operator has
-  // pulled the new dashboards (one release cycle), drop the GETs and
-  // the convertAuthHeaderQueryParam middleware in one cleanup PR.
+  // Grafana operator-action endpoints. All POST-only with
+  // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
+  // Handlers read params from `ctxt.URL.searchParams` (Grafana button
+  // panels POST with the params on the querystring, not in a JSON body).
   let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
-    let auth = grafanaAuthorization(args.grafanaSecret);
-    router.get(path, auth, handler);
-    router.post(path, auth, handler);
+    router.post(path, grafanaAuthorization(args.grafanaSecret), handler);
   };
   registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
   registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
   registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
   registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
-  // POST-only, Bearer-only — this endpoint is new in CS-10987-era
-  // (Grafana button-panel form) and never had the legacy GET +
-  // `?authHeader=` link form, so skip `registerGrafanaEndpoint`'s dual
-  // GET/POST registration.
-  router.post(
+  registerGrafanaEndpoint(
     '/_grafana-upsert-realm-user-permission',
-    grafanaAuthorization(args.grafanaSecret),
     handleUpsertRealmUserPermission(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));

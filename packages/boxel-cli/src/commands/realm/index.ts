@@ -7,6 +7,7 @@ import { registerMilestoneCommand } from './milestone';
 import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
 import { registerRemoveCommand } from './remove';
+import { registerStatusCommand } from './status';
 import { registerSyncCommand } from './sync';
 import { registerWaitForReadyCommand } from './wait-for-ready';
 import { registerWatchCommand } from './watch';
@@ -24,7 +25,8 @@ export function registerRealmCommand(program: Command): void {
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerRemoveCommand(realm);
-  registerSyncCommand(realm);
+  const sync = registerSyncCommand(realm);
+  registerStatusCommand(sync);
   registerWaitForReadyCommand(realm);
   registerWatchCommand(realm);
 }

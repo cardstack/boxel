@@ -5,11 +5,12 @@
  * tool). Keeping the card modules, examples, and specs in one place ensures
  * the two surfaces are exercised against identical inputs.
  */
-import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { specRef } from '@cardstack/runtime-common/constants';
-import { expect } from '@playwright/test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join } from 'node:path';
 
-import { retryWithPoll } from '../../src/retry-with-poll';
+import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { expect } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Card modules
@@ -99,6 +100,36 @@ export function brokenTagsExampleJson(): string {
   );
 }
 
+/**
+ * A well-formed `TagsCard` example with an empty tags array. Seeded to
+ * the realm so the indexer's `linkedExamples` walk on the Spec succeeds
+ * cleanly and the Spec actually surfaces in `_federated-search`. The
+ * test then overwrites the *workspace* copy with `brokenTagsExampleJson`
+ * before the validation step reads it — the bad shape never reaches
+ * realm-side indexing.
+ */
+export function validTagsExampleJson(): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'Tags Card Placeholder',
+          tags: [],
+        },
+        meta: {
+          adoptsFrom: {
+            module: '../tags-card',
+            name: 'TagsCard',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export function validCardSpecJson(): string {
   return JSON.stringify(
     {
@@ -154,116 +185,51 @@ export function tagsCardSpecJson(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Write a file + await the realm to ack it back via GET. The file is
- * readable here, but realm-side search-index ingestion happens out-of-band
- * — `awaitSpecSearchable` covers that separately for the Spec card the
- * downstream `InstantiateValidationStep` queries for.
- */
-async function writeAndAwaitIndex(
-  client: BoxelCLIClient,
-  realmUrl: string,
-  path: string,
-  content: string,
-): Promise<void> {
-  let writeResult = await client.write(realmUrl, path, content);
-  expect(writeResult.ok, `write ${path} failed: ${writeResult.error}`).toBe(
-    true,
-  );
-  let indexed = await client.waitForFile(realmUrl, path, {
-    pollMs: 300,
-    timeoutMs: 30_000,
-  });
-  expect(indexed, `waiting for ${path} to be indexed timed out`).toBe(true);
-}
-
-/**
- * Diagnostic gate: poll federated search until the just-seeded Spec card
- * surfaces as a Spec-type result, with a generous budget. `waitForFile`
- * only guarantees the file is GET-able; realm-side source POST indexing
- * is async, so there's a window where the file is readable but
- * `client.search({type: spec})` still returns an empty list. The
- * downstream `InstantiateValidationStep`'s 30s discovery poll has been
- * observed timing out in CI under load (the test falls into the
- * "modules exist but no Spec cards" branch, where `result.details` is
- * undefined, and the e2e assertion that triggered this skill's
- * investigation trips on it).
+ * Stage the given files in a fresh temp dir and push them to the realm
+ * with `client.sync(..., { preferLocal: true, waitForIndex: true })`.
+ * The `_atomic` upload appends `?waitForIndex=true`, so the realm-server
+ * returns only after the indexer has processed every uploaded file.
  *
- * Important: this gate is SOFT. If polling times out, we log a
- * diagnostic dump (current search hits, realm file listing, file
- * readability checks) and return — the test then proceeds to its real
- * assertions. The reason: CI evidence shows the realm sometimes never
- * surfaces the Spec for this fixture's containsMany card no matter how
- * long we wait (likely an indexer bug interacting with the broken
- * example's error_doc state). A hard gate just shifts the failure
- * upstream without adding information. The log it emits on the way out
- * is the real value here — pairs with the warn-log in
- * `InstantiateValidationStep` when its discovery poll also comes back
- * empty.
+ * Why this shape instead of per-file `client.write` + a search-poll
+ * gate: realm-side source POST indexing is async, so writing files
+ * one-by-one and waiting for the realm to ack with GET (or for the
+ * downstream `_federated-search` to surface them) is a polling race —
+ * which is exactly the flake this skill was filed to address. CI
+ * evidence on PR #4782 (run 25768256725) showed even a 90s poll
+ * sometimes never sees the Spec surface in search. The `_atomic`
+ * waitForIndex query param is the realm-server's first-class hook for
+ * read-after-write consistency in tests; using it here trades a
+ * one-shot push latency for a deterministic "indexer is settled"
+ * boundary.
  */
-async function awaitSpecSearchable(
+async function seedFilesAndWaitForIndex(
   client: BoxelCLIClient,
   realmUrl: string,
-  specPath: string,
+  files: { path: string; content: string }[],
 ): Promise<void> {
-  let expectedSuffix = specPath.replace(/\.json$/, '');
-  let totalWaitMs = 90_000;
-  let startedAt = Date.now();
-  let result = await retryWithPoll(
-    () => client.search(realmUrl, { filter: { type: specRef } }),
-    (r) => {
-      if (!r.ok) return false;
-      let found = (r.data ?? []).some((card) => {
-        let id = (card as { id?: unknown }).id;
-        return typeof id === 'string' && id.endsWith(expectedSuffix);
-      });
-      return !found;
-    },
-    { totalWaitMs, pollMs: 250 },
-  );
-  let elapsedMs = Date.now() - startedAt;
-
-  if (!result.ok) {
-    console.warn(
-      `[awaitSpecSearchable] search for ${specPath} returned not-ok after ${elapsedMs}ms: ${result.error ?? '(no error message)'}`,
-    );
-    return;
+  let stagingDir = mkdtempSync(join(tmpdir(), 'sf-instantiate-seed-'));
+  try {
+    for (let { path, content } of files) {
+      if (isAbsolute(path) || path.split('/').includes('..')) {
+        throw new Error(
+          `seedFilesAndWaitForIndex path must be a realm-relative path under the staging dir; got ${JSON.stringify(path)}`,
+        );
+      }
+      let absolute = join(stagingDir, path);
+      mkdirSync(dirname(absolute), { recursive: true });
+      writeFileSync(absolute, content);
+    }
+    let syncResult = await client.sync(realmUrl, stagingDir, {
+      preferLocal: true,
+      waitForIndex: true,
+    });
+    expect(
+      syncResult.hasError,
+      `seed sync to ${realmUrl} reported an error: ${syncResult.error ?? '(no error message)'}`,
+    ).toBe(false);
+  } finally {
+    rmSync(stagingDir, { recursive: true, force: true });
   }
-  let cardIds = (result.data ?? []).map(
-    (c) => (c as { id?: unknown }).id ?? '(no id)',
-  );
-  let found = cardIds.some(
-    (id) => typeof id === 'string' && id.endsWith(expectedSuffix),
-  );
-  if (found) {
-    return;
-  }
-
-  // Soft-fail diagnostic dump. The test will likely fail downstream
-  // when InstantiateValidationStep can't find the Spec either — at
-  // which point this log shows the realm's actual state at the time
-  // we gave up waiting.
-  let readSpecFile = await client.read(realmUrl, specPath).catch((err) => ({
-    ok: false,
-    error: err instanceof Error ? err.message : String(err),
-  }));
-  let listing = await client.listFiles(realmUrl).catch((err) => ({
-    filenames: [] as string[],
-    error: err instanceof Error ? err.message : String(err),
-  }));
-  let specLikeFilenames = (listing.filenames ?? []).filter(
-    (f) =>
-      f.endsWith('.json') && (f.startsWith('Spec/') || f.includes('-spec')),
-  );
-  console.warn(
-    `[awaitSpecSearchable] Spec ${specPath} did not surface in search within ${elapsedMs}ms. ` +
-      `realm=${realmUrl} searchHits=${JSON.stringify(cardIds)} ` +
-      `specSourceFileReadable=${(readSpecFile as { ok?: boolean }).ok ?? false} ` +
-      `totalFiles=${(listing.filenames ?? []).length} ` +
-      `specLikeFilenames=${JSON.stringify(specLikeFilenames)}` +
-      ((listing as { error?: string }).error
-        ? ` listFilesError=${(listing as { error?: string }).error}`
-        : ''),
-  );
 }
 
 /**
@@ -274,58 +240,51 @@ export async function seedValidCardWithSpec(
   client: BoxelCLIClient,
   realmUrl: string,
 ): Promise<void> {
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'instantiate-test-card.gts',
-    VALID_MODULE_GTS,
-  );
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'ValidCard/example-1.json',
-    validExampleJson(),
-  );
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'Spec/valid-card-spec.json',
-    validCardSpecJson(),
-  );
-  await awaitSpecSearchable(client, realmUrl, 'Spec/valid-card-spec.json');
+  await seedFilesAndWaitForIndex(client, realmUrl, [
+    { path: 'instantiate-test-card.gts', content: VALID_MODULE_GTS },
+    { path: 'ValidCard/example-1.json', content: validExampleJson() },
+    { path: 'Spec/valid-card-spec.json', content: validCardSpecJson() },
+  ]);
 }
 
 /**
- * Seed `tags-card.gts` + the Spec (written first so it's indexed cleanly)
- * + the broken example. Instantiating the example surfaces a field-shape
- * error.
+ * Seed `tags-card.gts`, a well-formed `TagsCard/bad-example.json`, and
+ * a Spec linking to that file. The realm-side example is intentionally
+ * the WELL-FORMED placeholder (`validTagsExampleJson`) — the test
+ * substitutes the broken shape into the workspace copy after
+ * `client.pull` via `overwriteTagsExampleWithBadShape`.
+ *
+ * Why this two-step shape: the realm indexer drops a Spec from
+ * `_federated-search` whenever its `linkedExamples` `loadLinks` walk
+ * can't resolve a target — either the file is missing entirely or the
+ * card is in error_doc state. Writing the broken `containsMany` shape
+ * straight to the realm puts the example in error_doc and silently
+ * disqualifies the Spec from search, which is the original flake this
+ * skill chased. The validation pipeline reads example JSON from the
+ * workspace path (not the realm index), so the bad shape only needs
+ * to live in the workspace at the moment the step reads it.
  */
 export async function seedTagsCardWithBrokenExampleAndSpec(
   client: BoxelCLIClient,
   realmUrl: string,
 ): Promise<void> {
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'tags-card.gts',
-    TAGS_CARD_MODULE_GTS,
-  );
-  // Write the Spec BEFORE the bad example. Reordering was attempted to
-  // give the indexer a stable Spec target; locally and in CI both
-  // orderings produced the same flake (Spec never surfaces in search
-  // within the budget), so the historic order stands and the
-  // diagnostic gate below documents what we saw when it didn't.
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'Spec/tags-card-spec.json',
-    tagsCardSpecJson(),
-  );
-  await awaitSpecSearchable(client, realmUrl, 'Spec/tags-card-spec.json');
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'TagsCard/bad-example.json',
-    brokenTagsExampleJson(),
-  );
+  await seedFilesAndWaitForIndex(client, realmUrl, [
+    { path: 'tags-card.gts', content: TAGS_CARD_MODULE_GTS },
+    { path: 'TagsCard/bad-example.json', content: validTagsExampleJson() },
+    { path: 'Spec/tags-card-spec.json', content: tagsCardSpecJson() },
+  ]);
+}
+
+/**
+ * Overwrite the workspace copy of `TagsCard/bad-example.json` with the
+ * broken-shape data the test actually wants to exercise. Call after
+ * `client.pull` (so the pull doesn't immediately overwrite this) and
+ * before constructing the validation step / running runInstantiate. See
+ * `seedTagsCardWithBrokenExampleAndSpec` for why the realm-side copy
+ * stays well-formed.
+ */
+export function overwriteTagsExampleWithBadShape(workspaceDir: string): void {
+  let absolute = join(workspaceDir, 'TagsCard', 'bad-example.json');
+  mkdirSync(dirname(absolute), { recursive: true });
+  writeFileSync(absolute, brokenTagsExampleJson());
 }

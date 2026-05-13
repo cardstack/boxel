@@ -61,6 +61,14 @@ services:
       BOXEL_DB_NAME: ${BOXEL_DB_NAME:-boxel}
       BOXEL_DB_USER: ${BOXEL_DB_USER:-postgres}
       BOXEL_DB_PASSWORD: ${BOXEL_DB_PASSWORD:-postgres}
+      # Substituted into provisioning/alerting/worker-status-group.json at
+      # startup (CS-11107). Defaults to staging so the rule loads with a
+      # real-shaped value; local Grafana has no AWS creds so the rule will
+      # never actually evaluate against CloudWatch — substituting empty
+      # strings here would just put a malformed-looking ARN into the rule
+      # body, which Grafana would log at startup.
+      WORKER_LOG_GROUP_NAME: ${WORKER_LOG_GROUP_NAME:-ecs-boxel-worker-staging}
+      WORKER_LOG_GROUP_ACCOUNT_ID: ${WORKER_LOG_GROUP_ACCOUNT_ID:-680542703984}
     extra_hosts:
       # Lets the Grafana container reach the host's Postgres
       # (boxel-pg on 5435) for the local postgres data source.
