@@ -167,7 +167,7 @@ export default class CardHeader extends Component<Signature> {
                 />
               </:trigger>
               <:content>
-                {{if @isExpanded 'Restore' 'Expand to full width'}}
+                {{if @isExpanded 'Restore' 'Expand to Full Width'}}
               </:content>
             </Tooltip>
           {{/if}}

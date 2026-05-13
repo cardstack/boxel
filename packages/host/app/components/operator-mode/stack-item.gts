@@ -649,9 +649,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
 
     if (this.isTopCard && !this.isExpanded) {
-      items.unshift(
+      items.push(
         new MenuItem({
-          label: 'Expand to full width',
+          label: 'Expand to Full Width',
           icon: Maximize,
           action: this.toggleExpanded,
         }),

@@ -798,14 +798,14 @@ module('Integration | operator-mode | basics', function (hooks) {
       assert.dom('[data-test-expand-button]').doesNotExist();
 
       await click('[data-test-more-options-button]');
-      await click('[data-test-boxel-menu-item-text="Expand to full width"]');
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
       assert
         .dom(`[data-test-stack-card="${personCard}"]`)
         .hasClass('expanded', 'stack card has expanded class');
 
       await click('[data-test-more-options-button]');
       assert
-        .dom('[data-test-boxel-menu-item-text="Expand to full width"]')
+        .dom('[data-test-boxel-menu-item-text="Expand to Full Width"]')
         .doesNotExist(
           '"Expand to full width" is no longer in the menu after expansion',
         );

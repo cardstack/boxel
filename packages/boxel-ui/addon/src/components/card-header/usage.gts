@@ -39,6 +39,7 @@ const Captions: TemplateOnlyComponent<CardTypeIconSignature> = <template>
 </template>;
 
 export default class CardHeaderUsage extends Component {
+  @tracked cardTitle = 'Quarterly Review';
   @tracked cardTypeDisplayName = 'My Card Type';
   @tracked cardTypeIcon: ComponentLike<CardTypeIconSignature> = Captions;
   @tracked detail = undefined;
@@ -64,11 +65,15 @@ export default class CardHeaderUsage extends Component {
     }),
   ];
   @tracked isEditing = false;
+  @tracked isExpanded = false;
   onEdit = () => {
     this.isEditing = true;
   };
   onFinishEditing = () => {
     this.isEditing = false;
+  };
+  onExpand = () => {
+    this.isExpanded = !this.isExpanded;
   };
 
   @tracked utilityMenu?: CardHeaderUtilityMenu = {
@@ -137,15 +142,18 @@ export default class CardHeaderUsage extends Component {
         <:example>
           <CardContainer>
             <CardHeader
+              @cardTitle={{this.cardTitle}}
               @cardTypeDisplayName={{this.cardTypeDisplayName}}
               @cardTypeIcon={{this.cardTypeIcon}}
               @headerColor={{this.headerColor}}
+              @isExpanded={{this.isExpanded}}
               @isSaving={{this.isSaving}}
               @isTopCard={{this.isTopCard}}
               @lastSavedMessage={{this.lastSavedMessage}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{this.realmInfo}}
               @onEdit={{unless this.isEditing this.onEdit}}
+              @onExpand={{this.onExpand}}
               @onFinishEditing={{if this.isEditing this.onFinishEditing}}
               @onClose={{this.close}}
               @utilityMenu={{this.utilityMenu}}
@@ -153,6 +161,12 @@ export default class CardHeaderUsage extends Component {
           </CardContainer>
         </:example>
         <:api as |Args|>
+          <Args.String
+            @name='cardTitle'
+            @description='optional card title shown after the card type display name'
+            @value={{this.cardTitle}}
+            @onInput={{fn (mut this.cardTitle)}}
+          />
           <Args.String
             @name='cardTypeDisplayName'
             @description='card type display name, shown in the center of the header'
@@ -171,6 +185,12 @@ export default class CardHeaderUsage extends Component {
             @description='background color of the header'
             @value={{this.headerColor}}
             @onInput={{fn (mut this.headerColor)}}
+          />
+          <Args.Bool
+            @name='isExpanded'
+            @description='controls the visual active state of the expand/restore button'
+            @value={{this.isExpanded}}
+            @onInput={{fn (mut this.isExpanded)}}
           />
           <Args.Bool
             @name='isSaving'
@@ -202,8 +222,24 @@ export default class CardHeaderUsage extends Component {
           />
           <Args.Object
             @name='utilityMenu'
-            @description='when present, renders as a dropdown menu'
+            @description='when present, renders a utility dropdown with { triggerText, menuItems }'
             @value={{this.utilityMenu}}
+          />
+          <Args.Action
+            @name='onExpand'
+            @description='when present, renders an expand/restore button and invokes this action when clicked'
+          />
+          <Args.Action
+            @name='onEdit'
+            @description='when present, renders the edit button'
+          />
+          <Args.Action
+            @name='onFinishEditing'
+            @description='when present, renders the finish editing button instead of relying only on @onEdit'
+          />
+          <Args.Action
+            @name='onClose'
+            @description='when present, renders the close button'
           />
         </:api>
         <:cssVars as |Css|>

@@ -1063,7 +1063,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
       );
-      await click('[data-test-boxel-menu-item-text="Expand to full width"]');
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
 
       assert
         .dom(
@@ -1097,7 +1097,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
       );
-      await click('[data-test-boxel-menu-item-text="Expand to full width"]');
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
 
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
