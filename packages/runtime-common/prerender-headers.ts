@@ -1,0 +1,42 @@
+// `<jobId>.<reservationId>` of the indexing job that triggered a
+// prerender visit. Originates at the worker (`pg-queue`), tagged
+// onto outbound prerender requests by `remote-prerenderer`, echoed
+// through prerender-manager → prerender-server, and (new in CS-11115
+// Phase 2) injected into the rendered host as `window.__boxelJobId`
+// so the host's `_federated-search` fetch wrapper can re-stamp it on
+// outbound calls. Lives in runtime-common alongside the consuming-
+// realm header so the host SPA can import it without taking a
+// dependency on the realm-server package. realm-server's
+// `prerender-constants.ts` re-exports this as `PRERENDER_JOB_ID_HEADER`
+// for backwards-compatibility with existing imports.
+export const X_BOXEL_JOB_ID_HEADER = 'x-boxel-job-id';
+
+// HTTP header sent by the host's `_federated-search` fetch wrapper while
+// rendering inside a prerender tab. Carries the URL of the realm whose
+// card is currently being rendered (the "consuming" realm). The realm-
+// server's search-cache layer pairs this with `x-boxel-job-id` to decide
+// whether a search is safe to serve from the job-scoped cache: the cache
+// is only consulted when the request's `realms` array is exactly
+// `[consumingRealm]`, since same-realm reads against the post-swap
+// `boxel_index` are stable for the lifetime of a single indexing batch
+// (the writer touches `boxel_index_working` until `applyBatchUpdates`
+// commits). Cross-realm reads bypass the cache — peer realms can swap
+// independently and a cached read would freeze a stale snapshot.
+//
+// Lives in runtime-common (not realm-server/prerender) so both the host
+// SPA and the realm-server can import it without cross-package coupling.
+export const X_BOXEL_CONSUMING_REALM_HEADER = 'x-boxel-consuming-realm';
+
+// Sanitize the inbound consuming-realm header value. Echoed into log
+// lines + used as a cache-key prefix, so reject anything that isn't a
+// plausible `http(s)://…` URL string, has whitespace, or is too long.
+// 2048 is a defensive ceiling, comfortably above real realm URLs.
+const REALM_URL_PATTERN = /^https?:\/\/[!-~]{1,2048}$/;
+export function sanitizeConsumingRealmHeader(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  return REALM_URL_PATTERN.test(trimmed) ? trimmed : null;
+}
