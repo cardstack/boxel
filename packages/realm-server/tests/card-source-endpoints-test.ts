@@ -73,7 +73,7 @@ module(basename(__filename), function () {
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -495,7 +495,7 @@ module(basename(__filename), function () {
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -570,7 +570,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
-          fixture: 'simple',
+          fixture: 'realistic',
           realmURL,
           permissions: {
             john: ['read', 'write'],

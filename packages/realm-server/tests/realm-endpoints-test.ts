@@ -116,7 +116,7 @@ module(basename(__filename), function () {
     }
 
     setupPermissionedRealmCached(hooks, {
-      fixture: 'simple',
+      fixture: 'realistic',
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
@@ -1657,7 +1657,7 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     setupPermissionedRealmCached(hooks, {
-      fixture: 'simple',
+      fixture: 'realistic',
       permissions: { '*': ['read'] },
       onRealmSetup(args) {
         request = args.request;

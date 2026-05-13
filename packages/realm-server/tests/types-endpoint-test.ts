@@ -66,7 +66,7 @@ module(basename(__filename), function () {
     }
 
     setupPermissionedRealmCached(hooks, {
-      fixture: 'simple',
+      fixture: 'realistic',
       permissions: {
         '*': ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'write', 'realm-owner'],
