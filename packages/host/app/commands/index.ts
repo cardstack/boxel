@@ -4,6 +4,7 @@ import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-defi
 import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplyMarkdownEditCommandModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
+import * as AskAiCommandModule from './ask-ai';
 import * as AuthedFetchCommandModule from './authed-fetch';
 import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
@@ -102,6 +103,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/add-field-to-card-definition',
     AddFieldToCardDefinitionCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/ask-ai',
+    AskAiCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/authed-fetch',
@@ -490,6 +495,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AddFieldToCardDefinitionCommandModule.default,
   ApplySearchReplaceBlockCommandModule.default,
   ApplyMarkdownEditCommandModule.default,
+  AskAiCommandModule.default,
   CopyCardAsMarkdownCommandModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
