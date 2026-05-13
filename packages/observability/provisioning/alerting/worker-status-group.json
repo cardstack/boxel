@@ -36,9 +36,9 @@
                 "label": "",
                 "logGroups": [
                   {
-                    "accountId": "680542703984",
-                    "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                    "name": "ecs-boxel-worker-staging"
+                    "accountId": "${WORKER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${WORKER_LOG_GROUP_ACCOUNT_ID}:log-group:${WORKER_LOG_GROUP_NAME}",
+                    "name": "${WORKER_LOG_GROUP_NAME}"
                   }
                 ],
                 "matchExact": true,
@@ -184,9 +184,9 @@
                 "label": "",
                 "logGroups": [
                   {
-                    "accountId": "680542703984",
-                    "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                    "name": "ecs-boxel-worker-staging"
+                    "accountId": "${WORKER_LOG_GROUP_ACCOUNT_ID}",
+                    "arn": "arn:aws:logs:us-east-1:${WORKER_LOG_GROUP_ACCOUNT_ID}:log-group:${WORKER_LOG_GROUP_NAME}",
+                    "name": "${WORKER_LOG_GROUP_NAME}"
                   }
                 ],
                 "matchExact": true,
