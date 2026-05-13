@@ -4271,31 +4271,10 @@ module(basename(__filename), function () {
             actual.error.errorDetail.isCardError,
             'error is marked as a card error',
           );
-          // Since CS-11043, the prerender's Loader is reset on every
-          // render in a sticky-clearCache batch, which means an
-          // incremental that touches a deleted module re-fetches it
-          // on each render — the browser logs the 404 to the
-          // console and the runtime exception capture surfaces it as
-          // an entry in `additionalErrors`. That entry is a
-          // duplicate signal of the structured "missing file" error
-          // already asserted above, so we filter it out before
-          // checking the remainder. Any OTHER additional error
-          // would still fail this assertion, which is the property
-          // the test was originally guarding.
-          let missingModuleUrl = `${testRealm}post`;
-          let unrelatedAdditional = (
-            actual.error.errorDetail.additionalErrors ?? []
-          ).filter(
-            (err: { title?: string; message?: string }) =>
-              !(
-                err.title === 'Console error' &&
-                err.message?.includes(missingModuleUrl)
-              ),
-          );
-          assert.deepEqual(
-            unrelatedAdditional,
-            [],
-            'no unrelated dependency errors are present (duplicate-404 console error for the missing module is allowed since CS-11043)',
+          assert.strictEqual(
+            actual.error.errorDetail.additionalErrors,
+            null,
+            'no additional dependency errors are present',
           );
           assert.strictEqual(
             actual.error.errorDetail.message,

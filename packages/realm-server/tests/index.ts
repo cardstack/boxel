@@ -164,7 +164,6 @@ const ALL_TEST_FILES: string[] = [
   './card-dependencies-endpoint-test',
   './card-endpoints-test',
   './card-source-endpoints-test',
-  './clear-cache-tracker-test',
   './definition-lookup-test',
   './file-watcher-events-test',
   './full-reindex-test',
