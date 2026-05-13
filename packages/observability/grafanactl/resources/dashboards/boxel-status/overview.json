@@ -248,8 +248,8 @@
             "decimals": 0,
             "links": [
               {
-                "title": "Open Synapse dashboard",
-                "url": "/d/000000012",
+                "title": "Open Users dashboard",
+                "url": "/d/boxelusers0001",
                 "targetBlank": false
               }
             ],
@@ -288,7 +288,7 @@
           ]
         },
         "gridPos": {
-          "h": 8,
+          "h": 5,
           "w": 8,
           "x": 16,
           "y": 0
@@ -296,8 +296,8 @@
         "id": 30,
         "links": [
           {
-            "title": "Open Synapse dashboard",
-            "url": "/d/000000012",
+            "title": "Open Users dashboard",
+            "url": "/d/boxelusers0001",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -333,6 +333,126 @@
         ],
         "title": "Concurrent Users",
         "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Matrix user IDs seen on the Synapse Sliding Sync endpoint within the last 5 minutes. Click a user to open the Users dashboard focused on them.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 120
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "user"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Matrix User"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open in Users dashboard",
+                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text}",
+                      "targetBlank": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 8,
+          "x": 16,
+          "y": 5
+        },
+        "id": 31,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": false,
+          "sortBy": [
+            {
+              "desc": false,
+              "displayName": "Matrix User"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |~ \"Processed request.*simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
+            "queryType": "instant",
+            "legendFormat": "{{user}}",
+            "refId": "A"
+          }
+        ],
+        "title": "",
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "filterFieldsByName",
+            "options": {
+              "include": {
+                "pattern": "^user$"
+              }
+            }
+          }
+        ],
+        "type": "table"
       },
       {
         "datasource": {
@@ -2096,7 +2216,7 @@
           ]
         },
         "gridPos": {
-          "h": 4,
+          "h": 7,
           "w": 4,
           "x": 16,
           "y": 16
@@ -2112,6 +2232,10 @@
           "minVizHeight": 10,
           "maxVizHeight": 300,
           "sizing": "auto",
+          "text": {
+            "titleSize": 22,
+            "valueSize": 21
+          },
           "reduceOptions": {
             "calcs": [
               "lastNotNull"
