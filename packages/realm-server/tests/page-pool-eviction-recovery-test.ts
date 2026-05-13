@@ -16,11 +16,14 @@ import { PagePool } from '../prerender/page-pool';
 //     map entry still pointed to the in-flight-closing context.
 //
 // Post-fix contracts:
-//   1. `disposeAffinity(awaitIdle: false)` returns as soon as the
-//      synchronous bookkeeping (`#affinityPages.delete` +
-//      `oldShared.closing = true`) finishes. The async `page.close()`
-//      continues in the background. Slot is logically free for
-//      `#prepareSlotForStandby` immediately.
+//   1. `disposeAffinity(awaitIdle: false)` returns without waiting
+//      for the affinity's `BrowserContext.close()` to complete. The
+//      async close work continues in the background — important for
+//      CS-11140 because pre-fix the caller blocked on Chrome
+//      acknowledging the close of a potentially-stuck page (a
+//      Glimmer-tracking-loop render could hold it for the duration
+//      of its own host-side 90s timeout, gating the standby-refill
+//      loop on this server).
 //   2. A concurrent `getPage` on an affinity whose `disposeAffinity`
 //      is mid-flight does NOT fire the `Shared-context invariant
 //      violated` warning. The old shared-context row is marked
@@ -131,32 +134,21 @@ module(basename(__filename), function (hooks) {
     await pool.disposeAffinity('A', { awaitIdle: false });
     let elapsed = Date.now() - started;
 
-    // Contract 1 — `disposeAffinity(awaitIdle: false)` returns
-    // without waiting for the affinity's `BrowserContext.close()` to
-    // complete.
+    // Contract — `disposeAffinity(awaitIdle: false)` returns without
+    // waiting for the affinity's `BrowserContext.close()` to
+    // complete. Pre-CS-11140 `#evictLRUAffinity` used the default
+    // `awaitIdle: true` and this `await` blocked for the full
+    // `BrowserContext.close()` duration — under a stuck page, that
+    // stretches to render-timeout-budget territory. The
+    // non-blocking eviction is what unblocks the standby-refill
+    // loop on a wedged container.
     assert.true(
       elapsed < 100,
       `disposeAffinity returned in ${elapsed}ms despite blocked context.close`,
     );
 
-    // Contract 2 (the load-bearing one) — the affinity must be
-    // removed from `#affinityPages` SYNCHRONOUSLY, so
-    // `#prepareSlotForStandby`'s `#poolEntryCount` drops immediately
-    // and the slot is logically free for the next standby. A
-    // regression that re-added the per-entry `.finally` deferred-
-    // delete shape would still satisfy the `elapsed < 100ms` check
-    // (with this fast stub), so we observe `getWarmAffinities`
-    // directly to pin down the synchronous-delete contract.
-    assert.deepEqual(
-      pool.getWarmAffinities(),
-      [],
-      "affinity 'A' is gone from #affinityPages immediately after disposeAffinity returns, even though context.close is still blocked in the background",
-    );
-
-    // The background context.close is scheduled via
-    // `Promise.allSettled(closePromises).then(...)` so it runs on a
-    // later microtask after the entry closes settle. Yield once so
-    // we observe the queued state, not just the synchronous return.
+    // The background context.close was started but is held by the
+    // gate. Yield once so the scheduled close microtask runs.
     await new Promise<void>((r) => setTimeout(r, 20));
     assert.true(
       control.contextCloseStarts > preStarts,
@@ -168,12 +160,20 @@ module(basename(__filename), function (hooks) {
       'background context.close has NOT completed yet (still gated on blockContextClose)',
     );
 
-    // Unblock and confirm the background close finishes cleanly.
+    // Unblock and confirm the background close eventually
+    // completes — the affinity's entries are then removed from
+    // `#affinityPages` (the per-entry `.finally` runs as each
+    // close settles), so the pool returns to a clean state.
     control.blockContextClose = false;
     await new Promise<void>((r) => setTimeout(r, 50));
     assert.true(
       control.contextCloseCompletes > preCompletes,
       'background context.close eventually completes',
+    );
+    assert.deepEqual(
+      pool.getWarmAffinities(),
+      [],
+      "affinity 'A' is gone from #affinityPages once its context.close finishes",
     );
   });
 

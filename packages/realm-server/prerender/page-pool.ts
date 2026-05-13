@@ -1100,21 +1100,26 @@ export class PagePool {
       }
       await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
-      // Eagerly remove the affinity from `#affinityPages` so
-      // `#poolEntryCount()` drops immediately. The actual
-      // `page.close()` work continues in the background — important
-      // for CS-11140: a stuck page's `page.close()` can wait for
-      // Chrome to acknowledge for seconds-to-minutes, which is far
-      // too long to block the standby-refill loop. Pre-CS-11140 the
-      // per-entry `.finally` deferred the `#affinityPages.delete`
-      // until each close had completed, so the slot stayed occupied
-      // for the same duration.
-      this.#affinityPages.delete(affinityKey);
+      // Don't eagerly delete from `#affinityPages` — keep entries
+      // visible to `#poolEntryCount` until their close completes.
+      // Routing already skips them via the `entry.closing` filter
+      // in `#selectEntryForAffinity`, and counting them prevents
+      // `#prepareSlotForStandby` from oversubscribing the pool with
+      // a fresh standby while old contexts are still in memory.
+      // The per-entry `.finally` removes each entry from
+      // `#affinityPages` once Chrome has actually released it.
       let closePromises: Promise<void>[] = [];
       if (entries) {
         for (let entry of entries) {
           entry.closing = true;
-          let p = this.#closeEntry(entry, retainConsoleErrors);
+          let p = this.#closeEntry(entry, retainConsoleErrors).finally(() => {
+            let currentEntries = this.#affinityPages.get(affinityKey);
+            if (!currentEntries) return;
+            currentEntries.delete(entry);
+            if (currentEntries.size === 0) {
+              this.#affinityPages.delete(affinityKey);
+            }
+          });
           closePromises.push(p);
           void p;
         }
