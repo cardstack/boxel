@@ -1,6 +1,6 @@
+import Maximize from '@cardstack/boxel-icons/maximize';
 import type { MenuDivider } from '@cardstack/boxel-ui/helpers.ts';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
-import Maximize from '@cardstack/boxel-icons/maximize';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
@@ -152,7 +152,10 @@ export default class CardHeader extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <ContextButton
-                  class={{cn 'icon-button icon-button--maximize' is-active=@isExpanded}}
+                  class={{cn
+                    'icon-button icon-button--maximize'
+                    is-active=@isExpanded
+                  }}
                   @icon={{Maximize}}
                   @label={{if @isExpanded 'Restore' 'Expand'}}
                   {{on 'click' @onExpand}}

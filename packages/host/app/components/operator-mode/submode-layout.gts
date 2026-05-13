@@ -407,9 +407,11 @@ export default class SubmodeLayout extends Component<Signature> {
   <template>
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
-      class='submode-layout
-        {{this.aiAssistantVisibilityClass}}
-        {{if this.operatorModeStateService.hasAnyStackItemExpanded "has-expanded-card"}}'
+      class={{cn
+        'submode-layout'
+        this.aiAssistantVisibilityClass
+        has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
+      }}
       data-test-submode-layout
       ...attributes
     >
@@ -665,7 +667,8 @@ export default class SubmodeLayout extends Component<Signature> {
          left-justified type/title. Reuses CardHeader's existing
          actions structure; just re-skinned via this class. */
       :global(.expanded-card-header-pill) {
-        --inner-boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        --inner-boxel-card-header-padding: var(--boxel-sp-4xs)
+          var(--boxel-sp-xs);
         --boxel-card-header-actions-min-width: max-content;
         --boxel-card-header-icon-container-min-width: max-content;
         height: var(--container-button-size);
