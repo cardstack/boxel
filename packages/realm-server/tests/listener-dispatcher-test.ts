@@ -84,10 +84,8 @@ async function startListener(opts: {
   } else {
     process.env.REALM_SERVER_TLS_KEY_FILE = opts.key;
   }
-  let { server, isHttp2 } = createListener(
-    logger('test:dispatcher'),
-    makeApp(),
-  );
+  let { server, proto } = createListener(logger('test:dispatcher'), makeApp());
+  let isHttp2 = proto === 'https/h2';
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   let port = (server.address() as AddressInfo).port;
   let close = async () => {
@@ -182,15 +180,24 @@ function h2Request(opts: {
 }
 
 module(basename(__filename), function (hooks) {
+  let priorForceHttp1: string | undefined;
   hooks.before(function () {
     tmpCertDir = mkdtempSync(join(tmpdir(), 'realm-listener-test-'));
     let pair = makeCert(tmpCertDir);
     certFile = pair.cert;
     keyFile = pair.key;
+    // The diagnostic toggle in CI workflows sets BOXEL_REALM_FORCE_HTTP1=1
+    // globally; that breaks this module's h2-mode assertions. Clear it for
+    // the scope of this module and restore on teardown.
+    priorForceHttp1 = process.env.BOXEL_REALM_FORCE_HTTP1;
+    delete process.env.BOXEL_REALM_FORCE_HTTP1;
   });
 
   hooks.after(function () {
     rmSync(tmpCertDir, { recursive: true, force: true });
+    if (priorForceHttp1 !== undefined) {
+      process.env.BOXEL_REALM_FORCE_HTTP1 = priorForceHttp1;
+    }
   });
 
   test('TLS h2 path returns 200', async function (assert) {

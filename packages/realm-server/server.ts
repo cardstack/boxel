@@ -2,6 +2,7 @@ import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
 import http from 'http';
+import https from 'https';
 import http2 from 'http2';
 import net from 'net';
 import { readFileSync } from 'fs';
@@ -84,6 +85,7 @@ const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 
 export type RealmHttpServer =
   | http.Server
+  | https.Server
   | http2.Http2SecureServer
   | net.Server;
 
@@ -97,11 +99,11 @@ export type RealmHttpServer =
 export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
-): { server: RealmHttpServer; isHttp2: boolean } {
+): { server: RealmHttpServer; proto: 'http' | 'https/h1' | 'https/h2' } {
   let certFile = process.env[TLS_CERT_FILE_ENV];
   let keyFile = process.env[TLS_KEY_FILE_ENV];
   if (!certFile || !keyFile) {
-    return { server: http.createServer(app.callback()), isHttp2: false };
+    return { server: http.createServer(app.callback()), proto: 'http' };
   }
   let cert: Buffer;
   let key: Buffer;
@@ -115,20 +117,31 @@ export function createListener(
       keyFile,
       (e as Error).message,
     );
-    return { server: http.createServer(app.callback()), isHttp2: false };
+    return { server: http.createServer(app.callback()), proto: 'http' };
   }
-  let tlsServer: http2.Http2SecureServer;
+  // BOXEL_REALM_FORCE_HTTP1=1 binds plain HTTPS+HTTP/1.1 instead of
+  // ALPN h2. Diagnostic toggle for isolating whether HTTP/2-specific
+  // issues (e.g. Chromium's `--ignore-certificate-errors` not fully
+  // covering h2 streams with a mkcert leaf cert) explain the Host Tests
+  // warmup hangs. Default: h2.
+  let forceHttp1 = process.env.BOXEL_REALM_FORCE_HTTP1 === '1';
+  let tlsServer: http2.Http2SecureServer | https.Server;
   try {
-    tlsServer = http2.createSecureServer(
-      { cert, key, allowHTTP1: true },
-      app.callback(),
-    );
+    if (forceHttp1) {
+      tlsServer = https.createServer({ cert, key }, app.callback());
+      log.info(`HTTPS dispatcher: BOXEL_REALM_FORCE_HTTP1=1 (h1 only)`);
+    } else {
+      tlsServer = http2.createSecureServer(
+        { cert, key, allowHTTP1: true },
+        app.callback(),
+      );
+    }
   } catch (e) {
     log.warn(
       `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
       (e as Error).message,
     );
-    return { server: http.createServer(app.callback()), isHttp2: false };
+    return { server: http.createServer(app.callback()), proto: 'http' };
   }
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
@@ -199,7 +212,10 @@ export function createListener(
     }
     activeSockets.clear();
   };
-  return { server: dispatcher, isHttp2: true };
+  return {
+    server: dispatcher,
+    proto: forceHttp1 ? 'https/h1' : 'https/h2',
+  };
 }
 
 // Same-port 301 redirect for plain-text HTTP requests that land on the
@@ -440,7 +456,7 @@ export class RealmServer {
   }
 
   listen(port: number): RealmHttpServer {
-    let { server: instance, isHttp2 } = createListener(this.log, this.app);
+    let { server: instance, proto } = createListener(this.log, this.app);
     instance.listen(port);
     instance.on('listening', () => {
       let actualPort =
@@ -448,7 +464,7 @@ export class RealmServer {
       this.log.info(
         `Realm server listening on port %s (%s)\n`,
         actualPort,
-        isHttp2 ? 'https/h2' : 'http',
+        proto,
       );
     });
     return instance;

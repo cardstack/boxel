@@ -15,6 +15,15 @@ permissions:
   id-token: write
   pull-requests: write
 
+env:
+  # DIAGNOSTIC: bind realm-server as plain HTTPS+HTTP/1.1 (no ALPN h2) so
+  # we can isolate whether HTTP/2-specific interactions (Chromium
+  # `--ignore-certificate-errors` + mkcert leaf cert + h2 streams) are the
+  # cause of Host Tests warmup hangs and other downstream test failures.
+  # Revert once the hypothesis is confirmed or refuted. See
+  # packages/realm-server/server.ts.
+  BOXEL_REALM_FORCE_HTTP1: '1'
+
 jobs:
   change-check:
     name: Check which packages changed

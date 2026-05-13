@@ -36,6 +36,11 @@ permissions:
   id-token: write
   pull-requests: write
 
+env:
+  # DIAGNOSTIC: see ci.yaml for context — bind realm-server as plain
+  # HTTPS+HTTP/1.1 so we can isolate HTTP/2-specific test failures.
+  BOXEL_REALM_FORCE_HTTP1: '1'
+
 jobs:
   test-web-assets:
     name: Build test web assets
