@@ -47,7 +47,7 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 ## Running the Factory
 
-Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
+Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `https://localhost:4201/software-factory/Wiki/sticky-note`).
 
 Set up your profile:
 
@@ -61,8 +61,8 @@ Then run the factory (default backend is Claude via the Agent SDK):
 cd packages/software-factory
 
 pnpm factory:go \
-  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm http://localhost:4201/your-username/my-test-realm/ \
+  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm https://localhost:4201/your-username/my-test-realm/ \
   --debug
 ```
 
@@ -90,15 +90,15 @@ To skip retrying blocked issues, use `--no-retry-blocked`:
 
 ```bash
 pnpm factory:go \
-  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm http://localhost:4201/your-username/my-test-realm/ \
+  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm https://localhost:4201/your-username/my-test-realm/ \
   --no-retry-blocked
 ```
 
 ### What to expect on the command line
 
 ```
-[factory:go] brief=http://localhost:4201/software-factory/Wiki/sticky-note
+[factory:go] brief=https://localhost:4201/software-factory/Wiki/sticky-note
 [factory:go] Starting seed issue + issue-driven loop...
 [factory-seed] Creating seed issue at Issues/bootstrap-seed.json
 [issue-loop] Starting issue loop: targetRealm=..., maxIterationsPerIssue=5

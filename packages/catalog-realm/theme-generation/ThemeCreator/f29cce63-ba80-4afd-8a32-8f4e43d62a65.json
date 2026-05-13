@@ -8,7 +8,7 @@
     },
     "type": "card",
     "attributes": {
-      "realm": "http://localhost:4201/experiments/",
+      "realm": "https://localhost:4201/experiments/",
       "prompt": "Create a theme in deep crimson, with bold contrast, minimal typography, and clean UI surfaces suitable for dashboards.",
       "codeRef": {
         "name": "default",
