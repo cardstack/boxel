@@ -56,20 +56,6 @@ EOF
   exit 1
 fi
 
-# Idempotent skip when the cert already exists and isn't within 7 days of
-# expiry. openssl's `-checkend` returns 0 if the cert is valid for at
-# least the given number of seconds. Sequenced after the mkcert check so
-# we never let a stale cert slip past while mkcert is uninstalled —
-# env-vars.sh needs `mkcert -CAROOT` to wire `NODE_EXTRA_CA_CERTS`.
-if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
-  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
-    exit 0
-  fi
-  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
-fi
-
-mkdir -p "$CERT_DIR"
-
 # Initialize the user's Chromium/Firefox NSS DB before `mkcert -install`.
 # mkcert installs into the NSS DB only if it already exists; on a fresh
 # CI runner (and many fresh Linux installs) `~/.pki/nssdb/` is absent,
@@ -78,6 +64,9 @@ mkdir -p "$CERT_DIR"
 # on HTTP/2 streams — leaving the h2 path broken even though h1 works.
 # Creating the empty NSS DB up front lets `mkcert -install` add its root
 # CA, so Chromium trusts the cert end-to-end across h1 and h2.
+# Sequenced before the cert idempotent-skip so re-runs (where the leaf
+# cert already exists from the first invocation) still get the chance
+# to install the root CA into a freshly-created NSS DB on this runner.
 if command -v certutil >/dev/null 2>&1; then
   NSSDB_DIR="$HOME/.pki/nssdb"
   if [ ! -d "$NSSDB_DIR" ]; then
@@ -90,10 +79,13 @@ fi
 # Best-effort trust install. On a fresh machine this prompts for sudo
 # once and adds mkcert's root CA to /etc/ssl/certs (Linux) or the system
 # keychain (macOS), and — if the NSS DB above exists — to Chromium's
-# trust store. On subsequent runs it's a no-op. If the prompt is
-# declined, we still proceed — the cert is generated, indexing works
-# via puppeteer's --ignore-certificate-errors flag and Node clients
-# via NODE_EXTRA_CA_CERTS, and only the manual browser keeps showing
+# trust store. mkcert -install is internally idempotent (checks for the
+# already-installed CA), so running it on every invocation is safe.
+# Sequenced before the cert idempotent-skip so re-runs install the root
+# CA into the NSS DB we just created above. If sudo is declined, we
+# still proceed — the cert is generated, indexing works via puppeteer's
+# --ignore-certificate-errors flag and Node clients via
+# NODE_EXTRA_CA_CERTS, and only the manual browser keeps showing
 # warnings until the dev opts in later.
 if ! mkcert -install 2>/dev/null; then
   cat >&2 <<'EOF'
@@ -106,6 +98,20 @@ warnings in your manual browser later, run:
 
 EOF
 fi
+
+# Idempotent skip when the leaf cert already exists and isn't within
+# 7 days of expiry. openssl's `-checkend` returns 0 if the cert is
+# valid for at least the given number of seconds. Sequenced AFTER
+# `mkcert -install` so the trust step always runs, then we short-
+# circuit cert generation on re-runs.
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
+    exit 0
+  fi
+  echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
+fi
+
+mkdir -p "$CERT_DIR"
 
 echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
 mkcert \
