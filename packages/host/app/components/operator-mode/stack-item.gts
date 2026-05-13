@@ -317,22 +317,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.operatorModeStateService.isStackItemExpanded(this.itemExpandKey);
   }
   private get isExpanded(): boolean {
-    return this.isTopCard && this.canExpand && this.isExpandedIntent;
-  }
-  private get canExpand(): boolean {
-    return this.isTopCard && !this.isCardsGridCard;
-  }
-  // Cards-grid (the Workspace's "All Cards" view) opts out of expand
-  // mode — its grid layout assumes scrollable, non-fullscreen content;
-  // forcing it into expanded mode causes child card tiles to overlap.
-  private get isCardsGridCard(): boolean {
-    const ctor = this.card?.constructor as
-      | { displayName?: string }
-      | undefined;
-    return ctor?.displayName === 'Cards Grid';
+    return this.isTopCard && this.isExpandedIntent;
   }
   private toggleExpanded = () => {
-    if (!this.canExpand) return;
+    if (!this.isTopCard) return;
     const cardEl = this.itemEl;
     const cardFrom = cardEl?.getBoundingClientRect();
 
@@ -982,7 +970,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     this.canEdit
                     (fn this.cardCrudFunctions.editCard this.card)
                   }}
-                  @onExpand={{if this.canExpand this.toggleExpanded}}
+                  @onExpand={{if this.isTopCard this.toggleExpanded}}
                   @isExpanded={{this.isExpanded}}
                   @onFinishEditing={{if this.isEditing this.doneEditing}}
                   @onClose={{unless this.isBuried this.closeItem}}
@@ -1005,7 +993,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 this.canEdit
                 (fn this.cardCrudFunctions.editCard this.card)
               }}
-              @onExpand={{if this.canExpand this.toggleExpanded}}
+              @onExpand={{if this.isTopCard this.toggleExpanded}}
               @isExpanded={{this.isExpanded}}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried this.closeItem}}
