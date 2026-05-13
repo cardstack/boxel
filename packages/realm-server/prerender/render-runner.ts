@@ -787,9 +787,8 @@ export class RenderRunner {
       // visit's job id into the next render.
       await page
         .evaluate((id: string | undefined) => {
-          (
-            globalThis as unknown as { __boxelJobId?: string }
-          ).__boxelJobId = id;
+          (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
+            id;
         }, jobId)
         .catch(() => {
           // best-effort: a transient page/CDP error here doesn't break
