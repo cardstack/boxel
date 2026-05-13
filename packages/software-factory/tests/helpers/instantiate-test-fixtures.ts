@@ -10,7 +10,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { specRef } from '@cardstack/runtime-common/constants';
 import { expect } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
@@ -87,6 +86,36 @@ export function brokenTagsExampleJson(): string {
         attributes: {
           name: 'Bad Tags Card',
           tags: 'not-an-array',
+        },
+        meta: {
+          adoptsFrom: {
+            module: '../tags-card',
+            name: 'TagsCard',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * A well-formed `TagsCard` example with an empty tags array. Seeded to
+ * the realm so the indexer's `linkedExamples` walk on the Spec succeeds
+ * cleanly and the Spec actually surfaces in `_federated-search`. The
+ * test then overwrites the *workspace* copy with `brokenTagsExampleJson`
+ * before the validation step reads it — the bad shape never reaches
+ * realm-side indexing.
+ */
+export function validTagsExampleJson(): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'Tags Card Placeholder',
+          tags: [],
         },
         meta: {
           adoptsFrom: {
@@ -193,32 +222,6 @@ async function seedFilesAndWaitForIndex(
       syncResult.hasError,
       `seed sync to ${realmUrl} reported an error: ${syncResult.error ?? '(no error message)'}`,
     ).toBe(false);
-    console.log(
-      `[seedFilesAndWaitForIndex] realm=${realmUrl} pushed=${JSON.stringify(syncResult.pushed)} skipped=${JSON.stringify(syncResult.skippedConflicts)}`,
-    );
-    // Confirm the realm sees the freshly-seeded Spec in search before
-    // returning. waitForIndex on `_atomic` returns once `performIndex()`
-    // resolves, but the test fixture's `_federated-search` callers
-    // sometimes still get an empty list immediately after — log what
-    // the realm actually has under those conditions.
-    let listing = await client.listFiles(realmUrl).catch((err) => ({
-      filenames: [] as string[],
-      error: err instanceof Error ? err.message : String(err),
-    }));
-    let search = await client
-      .search(realmUrl, { filter: { type: specRef } })
-      .catch((err) => ({
-        ok: false,
-        data: undefined,
-        error: err instanceof Error ? err.message : String(err),
-      }));
-    let cardIds = (search.data ?? []).map(
-      (c) => (c as { id?: unknown }).id ?? '(no id)',
-    );
-    console.log(
-      `[seedFilesAndWaitForIndex] post-sync state: realmFiles=${JSON.stringify(listing.filenames ?? [])} ` +
-        `searchOk=${search.ok ?? false} specHits=${JSON.stringify(cardIds)}`,
-    );
   } finally {
     rmSync(stagingDir, { recursive: true, force: true });
   }
@@ -240,9 +243,21 @@ export async function seedValidCardWithSpec(
 }
 
 /**
- * Seed `tags-card.gts` + the Spec (written first so it's indexed cleanly)
- * + the broken example. Instantiating the example surfaces a field-shape
- * error.
+ * Seed `tags-card.gts`, a well-formed `TagsCard/bad-example.json`, and
+ * a Spec linking to that file. The realm-side example is intentionally
+ * the WELL-FORMED placeholder (`validTagsExampleJson`) — the test
+ * substitutes the broken shape into the workspace copy after
+ * `client.pull` via `overwriteTagsExampleWithBadShape`.
+ *
+ * Why this two-step shape: the realm indexer drops a Spec from
+ * `_federated-search` whenever its `linkedExamples` `loadLinks` walk
+ * can't resolve a target — either the file is missing entirely or the
+ * card is in error_doc state. Writing the broken `containsMany` shape
+ * straight to the realm puts the example in error_doc and silently
+ * disqualifies the Spec from search, which is the original flake this
+ * skill chased. The validation pipeline reads example JSON from the
+ * workspace path (not the realm index), so the bad shape only needs
+ * to live in the workspace at the moment the step reads it.
  */
 export async function seedTagsCardWithBrokenExampleAndSpec(
   client: BoxelCLIClient,
@@ -250,7 +265,21 @@ export async function seedTagsCardWithBrokenExampleAndSpec(
 ): Promise<void> {
   await seedFilesAndWaitForIndex(client, realmUrl, [
     { path: 'tags-card.gts', content: TAGS_CARD_MODULE_GTS },
-    { path: 'TagsCard/bad-example.json', content: brokenTagsExampleJson() },
+    { path: 'TagsCard/bad-example.json', content: validTagsExampleJson() },
     { path: 'Spec/tags-card-spec.json', content: tagsCardSpecJson() },
   ]);
+}
+
+/**
+ * Overwrite the workspace copy of `TagsCard/bad-example.json` with the
+ * broken-shape data the test actually wants to exercise. Call after
+ * `client.pull` (so the pull doesn't immediately overwrite this) and
+ * before constructing the validation step / running runInstantiate. See
+ * `seedTagsCardWithBrokenExampleAndSpec` for why the realm-side copy
+ * stays well-formed.
+ */
+export function overwriteTagsExampleWithBadShape(workspaceDir: string): void {
+  let absolute = join(workspaceDir, 'TagsCard', 'bad-example.json');
+  mkdirSync(dirname(absolute), { recursive: true });
+  writeFileSync(absolute, brokenTagsExampleJson());
 }
