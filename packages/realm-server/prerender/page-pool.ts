@@ -1801,6 +1801,46 @@ export class PagePool {
       return { entry: fallback, reused: false, releaseTab, tabStartupMs };
     }
     if (entryList.length === 0) {
+      // Brand-new affinity: no warm tabs of its own to fall back on.
+      // Wait once on the fire-and-forget refill before considering
+      // cross-affinity steals — queueing behind another realm's in-
+      // flight render would serialize this caller against unrelated
+      // work, and a fresh standby is typically much faster than
+      // whatever a busy donor tab is currently rendering. Pre-fix
+      // (CS-11139), the upfront synchronous `await
+      // #ensureStandbyPool()` in `getPage` made this ordering implicit;
+      // now we make it explicit here so brand-new affinities still get
+      // a fresh standby in preference to busy-tab queueing.
+      await awaitStandbyPool();
+      throwIfAborted(signal);
+      let retryShared = this.#tryClaimOrphanContext(affinityKey);
+      if (retryShared) {
+        return {
+          ...(await this.#spawnPoolEntryInSharedContext(
+            retryShared,
+            affinityKey,
+          )),
+          reused: false,
+          tabStartupMs,
+        };
+      }
+      let retryCommandeered = this.#commandeerDormantTab(affinityKey);
+      if (retryCommandeered) {
+        let releaseTab = await retryCommandeered.queue.acquire(
+          signal,
+          priority,
+        );
+        return {
+          entry: retryCommandeered,
+          reused: false,
+          releaseTab,
+          tabStartupMs,
+        };
+      }
+      // Refill couldn't produce a tab (e.g. `createBrowserContext`
+      // exhausted retries). Fall back to cross-affinity steal so the
+      // caller has *some* path to a tab — better than throwing while
+      // there are idle tabs on other affinities.
       let crossAffinityEntries: PoolEntry[] = [];
       for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
         if (assignedAffinity === affinityKey) continue;
@@ -1821,37 +1861,6 @@ export class PagePool {
           throw error;
         }
       }
-    }
-    // Last-resort: every fast path missed (no warm tab on this
-    // affinity, no orphan to claim, no commandeer-able standby or
-    // cross-affinity tab). The previous shape pre-warmed standbys
-    // synchronously in `getPage` so this case implied a misconfigured
-    // pool; now the standby refill is fire-and-forget, so we await
-    // it here once and retry the standby/orphan paths before giving
-    // up. Doing the await only on this branch means callers that
-    // already had a warm tab never pay this cost.
-    await awaitStandbyPool();
-    throwIfAborted(signal);
-    let retryShared = this.#tryClaimOrphanContext(affinityKey);
-    if (retryShared) {
-      return {
-        ...(await this.#spawnPoolEntryInSharedContext(
-          retryShared,
-          affinityKey,
-        )),
-        reused: false,
-        tabStartupMs,
-      };
-    }
-    let retryCommandeered = this.#commandeerDormantTab(affinityKey);
-    if (retryCommandeered) {
-      let releaseTab = await retryCommandeered.queue.acquire(signal, priority);
-      return {
-        entry: retryCommandeered,
-        reused: false,
-        releaseTab,
-        tabStartupMs,
-      };
     }
     throw new Error('No standby page available for prerender');
   }
