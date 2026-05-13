@@ -673,6 +673,7 @@ module('Acceptance | host mode tests', function (hooks) {
       await visit('/test/Whitepaper/index.json');
       await waitFor('[data-test-whitepaper]');
 
+      assert.dom('[data-host-mode-card-scroll-container]').exists();
       let cardContainer = document.querySelector(
         '[data-host-mode-card-scroll-container]',
       ) as HTMLElement;
@@ -683,6 +684,9 @@ module('Acceptance | host mode tests', function (hooks) {
       );
     } finally {
       document.querySelector('[data-test-scroll-override]')?.remove();
+      start.remove();
+      end.remove();
+      fakeContainer.remove();
     }
   });
 

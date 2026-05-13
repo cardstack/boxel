@@ -67,7 +67,7 @@ export default class HostModeCard extends Component<Signature> {
 
     let timer: ReturnType<typeof next> | undefined;
     let attempts = 0;
-    let maxAttempts = 10;
+    const maxAttempts = 10;
 
     let restore = () => {
       attempts++;

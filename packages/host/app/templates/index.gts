@@ -241,10 +241,15 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     // up and apply it once the card content has rendered and the container is
     // scrollable.
     if (scrollTop > 0) {
-      let meta = document.createElement('meta');
-      meta.setAttribute('name', 'boxel-restore-scroll');
+      let meta = document.head.querySelector(
+        'meta[name="boxel-restore-scroll"]',
+      );
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'boxel-restore-scroll');
+        document.head.appendChild(meta);
+      }
       meta.setAttribute('content', String(scrollTop));
-      document.head.appendChild(meta);
     }
   });
 
