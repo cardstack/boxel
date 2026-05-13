@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-import { scheduleOnce } from '@ember/runloop';
+
 import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -206,21 +206,6 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
-  // Holds the scroll offset captured just before prerendered markup is
-  // removed, so it can be restored on the Ember-rendered card container.
-  #prehydrateScrollTop = 0;
-
-  private restorePrehydrateScrollTop() {
-    if (this.#prehydrateScrollTop === 0) {
-      return;
-    }
-    let cardContainer = document.querySelector('[data-host-mode-card]');
-    if (cardContainer instanceof HTMLElement) {
-      cardContainer.scrollTop = this.#prehydrateScrollTop;
-    }
-    this.#prehydrateScrollTop = 0;
-  }
-
   // TODO: remove in CS-9977, with rehydration
   removeIsolatedMarkup = modifier(() => {
     if (typeof document === 'undefined') {
@@ -235,7 +220,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     // Before hydration the page scrolls at window level; after hydration the
     // card container becomes the scroll host. Capture both so we cover
     // whichever is non-zero.
-    let scrollTop = window.scrollY;
+    let scrollTop = 0;
     let prerenderedContainer = start.nextElementSibling;
     if (
       prerenderedContainer instanceof HTMLElement &&
@@ -243,6 +228,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     ) {
       scrollTop = Math.max(scrollTop, prerenderedContainer.scrollTop);
     }
+    scrollTop = Math.max(scrollTop, window.scrollY);
 
     let node = start.nextSibling;
     while (node && node !== end) {
@@ -251,9 +237,14 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       node = next;
     }
 
+    // Stash the captured offset in a meta element so HostModeCard can pick it
+    // up and apply it once the card content has rendered and the container is
+    // scrollable.
     if (scrollTop > 0) {
-      this.#prehydrateScrollTop = scrollTop;
-      scheduleOnce('afterRender', this, this.restorePrehydrateScrollTop);
+      let meta = document.createElement('meta');
+      meta.setAttribute('name', 'boxel-restore-scroll');
+      meta.setAttribute('content', String(scrollTop));
+      document.head.appendChild(meta);
     }
   });
 
