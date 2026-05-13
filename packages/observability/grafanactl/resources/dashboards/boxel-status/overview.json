@@ -69,7 +69,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "realms"
+                "options": "Realms"
               },
               "properties": [
                 {
@@ -125,7 +125,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub UNION ALL SELECT NOW(), (SELECT COUNT(DISTINCT realm_url) FROM realm_meta) ORDER BY 1;",
+            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"Realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub UNION ALL SELECT NOW(), (SELECT COUNT(DISTINCT realm_url) FROM realm_meta) ORDER BY 1;",
             "refId": "A"
           }
         ],
@@ -171,7 +171,7 @@
             {
               "matcher": {
                 "id": "byName",
-                "options": "users"
+                "options": "Users"
               },
               "properties": [
                 {
@@ -227,7 +227,7 @@
             "editorMode": "code",
             "format": "time_series",
             "rawQuery": true,
-            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"users\" FROM users UNION ALL SELECT NOW(), (SELECT COUNT(*) FROM users) ORDER BY 1;",
+            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"Users\" FROM users UNION ALL SELECT NOW(), (SELECT COUNT(*) FROM users) ORDER BY 1;",
             "refId": "A"
           }
         ],
@@ -239,7 +239,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Realm-server HTTP throughput and error rate. Lines from httpLogging exit (`--> METHOD ACCEPT URL: STATUS`) for total request rate; lines matching `error|exception|fatal` for error rate. Legend shows the mean over the visible time range.",
+        "description": "Realm-server HTTP throughput, errors, and target response time. Throughput / errors come from Loki (`httpLogging` exit lines `--> METHOD ACCEPT URL: STATUS` and any line matching `error|exception|fatal`). p50 / p95 / p99 come from the realm-server ALB's `AWS/ApplicationELB.TargetResponseTime` metric (CloudWatch ExtendedStatistic) on the right axis in seconds — locally these read 'No data' but throughput/errors keep working. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -323,6 +323,42 @@
                   }
                 }
               ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p50"
+              },
+              "properties": [
+                {"id": "unit", "value": "s"},
+                {"id": "custom.axisPlacement", "value": "right"},
+                {"id": "custom.fillOpacity", "value": 0},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#73bf69"}}
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p95"
+              },
+              "properties": [
+                {"id": "unit", "value": "s"},
+                {"id": "custom.axisPlacement", "value": "right"},
+                {"id": "custom.fillOpacity", "value": 0},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#ff9830"}}
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p99"
+              },
+              "properties": [
+                {"id": "unit", "value": "s"},
+                {"id": "custom.axisPlacement", "value": "right"},
+                {"id": "custom.fillOpacity", "value": 0},
+                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#f2495c"}}
+              ]
             }
           ]
         },
@@ -368,6 +404,45 @@
             "queryType": "range",
             "legendFormat": "HTTP err/min",
             "refId": "B"
+          },
+          {
+            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "statistic": "p50",
+            "period": "",
+            "region": "default",
+            "label": "p50",
+            "refId": "C"
+          },
+          {
+            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "statistic": "p95",
+            "period": "",
+            "region": "default",
+            "label": "p95",
+            "refId": "D"
+          },
+          {
+            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "statistic": "p99",
+            "period": "",
+            "region": "default",
+            "label": "p99",
+            "refId": "E"
           }
         ],
         "title": "Web Requests",
@@ -476,7 +551,7 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Synapse send-event rate — `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse access logs. Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
+        "description": "Synapse send-event rate — `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse INFO-level access logs (`Processed request: ... \"PUT .../send/... HTTP/1.1\"`). Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -585,7 +660,7 @@
               "type": "loki",
               "uid": "loki"
             },
-            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"Received request: PUT .*/send/\" [5m])) or vector(0)",
+            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"\\\"PUT [^\\\"]*/send/\" [5m])) or vector(0)",
             "queryType": "range",
             "legendFormat": "Events/min",
             "refId": "A"
@@ -599,7 +674,7 @@
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-realm-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "description": "ECS CPU and memory utilisation for `boxel-realm-server-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -705,51 +780,11 @@
                   }
                 }
               ]
-            },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "C"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Tasks"
-                },
-                {
-                  "id": "unit",
-                  "value": "short"
-                },
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "red",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "max",
-                  "value": 10
-                }
-              ]
             }
           ]
         },
         "gridPos": {
-          "h": 6,
+          "h": 4,
           "w": 4,
           "x": 0,
           "y": 16
@@ -810,7 +845,102 @@
             "period": "",
             "region": "default",
             "refId": "B"
+          }
+        ],
+        "title": "Realm Server",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-realm-server-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
           },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Need"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 2,
+          "w": 4,
+          "x": 0,
+          "y": 20
+        },
+        "id": 23,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
           {
             "datasource": {
               "type": "cloudwatch",
@@ -827,18 +957,36 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "C"
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B"
           }
         ],
-        "title": "Realm Server",
-        "type": "bargauge"
+        "title": "Tasks",
+        "type": "stat"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-prerender-server-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "description": "ECS CPU and memory utilisation for `boxel-prerender-server-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -944,51 +1092,11 @@
                   }
                 }
               ]
-            },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "C"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Tasks"
-                },
-                {
-                  "id": "unit",
-                  "value": "short"
-                },
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "red",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "max",
-                  "value": 10
-                }
-              ]
             }
           ]
         },
         "gridPos": {
-          "h": 6,
+          "h": 4,
           "w": 4,
           "x": 4,
           "y": 16
@@ -1049,7 +1157,102 @@
             "period": "",
             "region": "default",
             "refId": "B"
+          }
+        ],
+        "title": "Prerender",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-prerender-server-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
           },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Need"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 2,
+          "w": 4,
+          "x": 4,
+          "y": 20
+        },
+        "id": 24,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
           {
             "datasource": {
               "type": "cloudwatch",
@@ -1066,18 +1269,36 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "C"
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B"
           }
         ],
-        "title": "Prerender",
-        "type": "bargauge"
+        "title": "Tasks",
+        "type": "stat"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-prerender-manager-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "description": "ECS CPU and memory utilisation for `boxel-prerender-manager-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1183,51 +1404,11 @@
                   }
                 }
               ]
-            },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "C"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Tasks"
-                },
-                {
-                  "id": "unit",
-                  "value": "short"
-                },
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "red",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "max",
-                  "value": 10
-                }
-              ]
             }
           ]
         },
         "gridPos": {
-          "h": 6,
+          "h": 4,
           "w": 4,
           "x": 8,
           "y": 16
@@ -1288,7 +1469,102 @@
             "period": "",
             "region": "default",
             "refId": "B"
+          }
+        ],
+        "title": "Prerender Mgr",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-prerender-manager-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
           },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Need"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 2,
+          "w": 4,
+          "x": 8,
+          "y": 20
+        },
+        "id": 25,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
           {
             "datasource": {
               "type": "cloudwatch",
@@ -1305,18 +1581,36 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "C"
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B"
           }
         ],
-        "title": "Prerender Mgr",
-        "type": "bargauge"
+        "title": "Tasks",
+        "type": "stat"
       },
       {
         "datasource": {
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
-        "description": "ECS resource utilisation for `boxel-worker-${env}` on cluster `${env}`. CPU and memory are average over the panel refresh window; Tasks is the latest RunningTaskCount. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "description": "ECS CPU and memory utilisation for `boxel-worker-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1422,51 +1716,11 @@
                   }
                 }
               ]
-            },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "C"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Tasks"
-                },
-                {
-                  "id": "unit",
-                  "value": "short"
-                },
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "red",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "max",
-                  "value": 10
-                }
-              ]
             }
           ]
         },
         "gridPos": {
-          "h": 6,
+          "h": 4,
           "w": 4,
           "x": 12,
           "y": 16
@@ -1527,7 +1781,102 @@
             "period": "",
             "region": "default",
             "refId": "B"
+          }
+        ],
+        "title": "Worker",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-worker-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
           },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Run"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Need"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 2,
+          "w": 4,
+          "x": 12,
+          "y": 20
+        },
+        "id": 26,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
           {
             "datasource": {
               "type": "cloudwatch",
@@ -1544,18 +1893,36 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "C"
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B"
           }
         ],
-        "title": "Worker",
-        "type": "bargauge"
+        "title": "Tasks",
+        "type": "stat"
       },
       {
         "datasource": {
           "type": "prometheus",
           "uid": "bes7ustjf8w74b"
         },
-        "description": "Synapse process metrics scraped from /\\_synapse/metrics via the synapse-prometheus datasource (local Prometheus locally; AMP in staging/production). CPU is rate over 5m as a percentage of one core; Mem is process_resident_memory_bytes; Up counts healthy scrape targets (analogous to RunningTaskCount).",
+        "description": "Synapse process metrics scraped from /\\_synapse/metrics via the synapse-prometheus datasource (local Prometheus locally; AMP in staging/production). CPU is rate over 5m as a percentage of one core; Mem is process_resident_memory_bytes.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1657,51 +2024,11 @@
                   "value": 8589934592
                 }
               ]
-            },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "C"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "Up"
-                },
-                {
-                  "id": "unit",
-                  "value": "short"
-                },
-                {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "red",
-                        "value": 0
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
-                },
-                {
-                  "id": "max",
-                  "value": 1
-                }
-              ]
             }
           ]
         },
         "gridPos": {
-          "h": 6,
+          "h": 4,
           "w": 4,
           "x": 16,
           "y": 16
@@ -1746,16 +2073,6 @@
             "legendFormat": "Mem",
             "instant": true,
             "refId": "B"
-          },
-          {
-            "datasource": {
-              "type": "prometheus",
-              "uid": "bes7ustjf8w74b"
-            },
-            "expr": "count(up{job=\"synapse\"} == 1)",
-            "legendFormat": "Up",
-            "instant": true,
-            "refId": "C"
           }
         ],
         "title": "Synapse",
@@ -1842,7 +2159,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 22
+          "y": 32
         },
         "id": 6,
         "options": {
@@ -1907,7 +2224,7 @@
           "h": 4,
           "w": 6,
           "x": 0,
-          "y": 30
+          "y": 22
         },
         "id": 7,
         "options": {
@@ -1975,7 +2292,7 @@
           "h": 4,
           "w": 6,
           "x": 6,
-          "y": 30
+          "y": 22
         },
         "id": 8,
         "options": {
@@ -2052,7 +2369,7 @@
           "h": 4,
           "w": 6,
           "x": 12,
-          "y": 30
+          "y": 22
         },
         "id": 9,
         "options": {
@@ -2124,7 +2441,7 @@
           "h": 4,
           "w": 6,
           "x": 18,
-          "y": 30
+          "y": 22
         },
         "id": 10,
         "options": {
@@ -2268,7 +2585,7 @@
           "h": 6,
           "w": 24,
           "x": 0,
-          "y": 34
+          "y": 26
         },
         "id": 11,
         "options": {
@@ -2357,6 +2674,21 @@
           "query": "__ENV__",
           "skipUrlSync": true,
           "type": "constant"
+        },
+        {
+          "current": {},
+          "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+          "definition": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "hide": 2,
+          "includeAll": false,
+          "name": "realm_server_alb",
+          "options": [],
+          "query": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "refresh": 1,
+          "regex": "/^(?<value>app\\/boxel-realm-server-${env}\\/[a-f0-9]+)$/",
+          "skipUrlSync": true,
+          "sort": 1,
+          "type": "query"
         }
       ]
     },

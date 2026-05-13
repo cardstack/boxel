@@ -112,8 +112,7 @@ jobs:
           echo "expected:                       https://${EXPECTED_GRAFANA_HOSTNAME}"
           if [[ "$ACTUAL" != "https://${EXPECTED_GRAFANA_HOSTNAME}" ]]; then
             echo "::error::config.yaml's production context server URL doesn't match expected hostname." >&2
-            echo "If this is intentional (e.g., Phase 6 cutover renaming to dashboard.boxel.ai)," >&2
-            echo "update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
+            echo "If this is an intentional rename, update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
             exit 1
           fi
 

@@ -39,6 +39,7 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type Prerenderer,
+  type PopulateCoordinator,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
@@ -1000,6 +1001,7 @@ export async function createRealm({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  transpileCoordinator,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1016,6 +1018,12 @@ export async function createRealm({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  // CS-11030: optional cross-process transpile coordinator. Tests that
+  // simulate two peer realms need each peer to hold its own coordinator
+  // pointing at the same dbAdapter so the advisory-lock + NOTIFY plumbing
+  // is the only thing serializing them — that's the behavior we want to
+  // exercise.
+  transpileCoordinator?: PopulateCoordinator;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1083,6 +1091,7 @@ export async function createRealm({
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
       ),
+    transpileCoordinator,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -1380,6 +1389,7 @@ type InternalPermissionedRealmsSetupOptions = {
     realmURL: string;
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    fixture?: RealmFixtureName;
   }[];
   prerenderer?: Prerenderer;
 };
@@ -1393,14 +1403,26 @@ async function startPermissionedRealmsFixture(
   let realms: PermissionedRealmsFixtureRealm[] = [];
 
   for (let realmArg of realmConfigs.values()) {
+    if (realmArg.fileSystem && realmArg.fixture) {
+      throw new Error(
+        'setupPermissionedRealms: pass either `fileSystem` or `fixture` per realm, not both',
+      );
+    }
+    let testRealmDir = dirSync().name;
+    if (!realmArg.fileSystem) {
+      // The plural helper has historically left the disk empty by default;
+      // preserve that — only copy a fixture onto disk when one is named.
+      if (realmArg.fixture) {
+        copySync(fixtureDir(realmArg.fixture), testRealmDir);
+      }
+    }
     let {
-      testRealmDir: realmPath,
       testRealm: realm,
       testRealmHttpServer: realmHttpServer,
       testRealmAdapter: realmAdapter,
     } = await runTestRealmServer({
       virtualNetwork: await createVirtualNetwork(),
-      testRealmDir: dirSync().name,
+      testRealmDir,
       realmsRootPath: dirSync().name,
       realmURL: new URL(realmArg.realmURL),
       fileSystem: realmArg.fileSystem,
@@ -1413,7 +1435,7 @@ async function startPermissionedRealmsFixture(
     });
     realms.push({
       realm,
-      realmPath,
+      realmPath: testRealmDir,
       realmHttpServer,
       realmAdapter,
     });
@@ -1445,6 +1467,7 @@ export function setupPermissionedRealms(
       realmURL: string;
       permissions: RealmPermissions;
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
+      fixture?: RealmFixtureName;
     }[];
     prerenderer?: Prerenderer;
     // Internal hook used by cached setup wrappers
@@ -1778,10 +1801,34 @@ function realmEventIsIndex(
   return event.eventName === 'index';
 }
 
+// The three realm fixtures available under tests/fixtures/. See CS-10009.
+//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//                with no card content.
+//   simple     — one card def (Person), one instance, one non-card file; for
+//                tests that need *some* indexed content but nothing exotic.
+//   realistic  — the historical tests/cards/ kitchen sink; for tests that
+//                lean on specific instances, cyclic imports, error cases,
+//                Unicode filenames, etc. To be renamed to fixtures/realistic
+//                in a follow-up; until then `fixtureDir('realistic')` points
+//                at the old path.
+export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
+
+export function fixtureDir(name: RealmFixtureName): string {
+  switch (name) {
+    case 'blank':
+      return join(__dirname, '..', 'fixtures', 'blank');
+    case 'simple':
+      return join(__dirname, '..', 'fixtures', 'simple');
+    case 'realistic':
+      return join(__dirname, '..', 'cards');
+  }
+}
+
 type InternalPermissionedRealmSetupOptions = {
   permissions: RealmPermissions;
   realmURL?: URL;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  fixture?: RealmFixtureName;
   subscribeToRealmEvents?: boolean;
   prerenderer?: Prerenderer;
   published?: boolean;
@@ -1797,6 +1844,7 @@ async function startPermissionedRealmFixture(
     permissions,
     realmURL,
     fileSystem,
+    fixture,
     subscribeToRealmEvents = false,
     prerenderer,
     published = false,
@@ -1808,6 +1856,11 @@ async function startPermissionedRealmFixture(
   request: SuperTest<Test>;
   dir: DirResult;
 }> {
+  if (fileSystem && fixture) {
+    throw new Error(
+      'setupPermissionedRealm: pass either `fileSystem` or `fixture`, not both',
+    );
+  }
   let resolvedRealmURL = realmURL ?? testRealmURL;
   let dir = dirSync();
 
@@ -1839,9 +1892,12 @@ async function startPermissionedRealmFixture(
 
   ensureDirSync(testRealmDir);
 
-  // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+  // If a fileSystem is provided, the realm is populated through createRealm
+  // from that object. Otherwise copy a fixture folder onto disk. Default to
+  // `realistic` to preserve existing behavior until the final PR of CS-10009
+  // flips it to `blank`.
   if (!fileSystem) {
-    copySync(join(__dirname, '..', 'cards'), testRealmDir);
+    copySync(fixtureDir(fixture ?? 'realistic'), testRealmDir);
   }
 
   let virtualNetwork = createVirtualNetwork();
@@ -1918,6 +1974,7 @@ export function setupPermissionedRealm(
     permissions,
     realmURL,
     fileSystem,
+    fixture,
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
@@ -1930,6 +1987,7 @@ export function setupPermissionedRealm(
     permissions: RealmPermissions;
     realmURL?: URL;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    fixture?: RealmFixtureName;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
@@ -1971,6 +2029,7 @@ export function setupPermissionedRealm(
       } = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
         realmURL,
         fileSystem,
+        fixture,
         permissions,
         subscribeToRealmEvents,
         prerenderer,
@@ -2010,12 +2069,21 @@ function permissionedRealmTemplateCacheKey(
   options: SetupPermissionedRealmCachedOptions,
 ): string {
   let resolvedRealmURL = options.realmURL ?? testRealmURL;
+  // Canonicalize the fixture choice so callers that omit `fixture` (and
+  // implicitly get 'realistic') share a cache with callers that pass
+  // `fixture: 'realistic'` explicitly. When `fileSystem` is provided, the
+  // fixture choice is irrelevant — fileSystem's own hash carries the
+  // content.
+  let resolvedFixture = options.fileSystem
+    ? null
+    : (options.fixture ?? 'realistic');
   return hashCacheKeyPayload({
     version: 1,
     type: 'permissioned-realm',
     realmURL: resolvedRealmURL.href,
     permissions: options.permissions,
     fileSystem: options.fileSystem ?? null,
+    fixture: resolvedFixture,
     subscribeToRealmEvents: Boolean(options.subscribeToRealmEvents),
     published: Boolean(options.published),
     cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
@@ -2059,6 +2127,7 @@ async function buildPermissionedRealmTemplate(
       {
         realmURL: options.realmURL,
         fileSystem: options.fileSystem,
+        fixture: options.fixture,
         permissions: options.permissions,
         subscribeToRealmEvents: options.subscribeToRealmEvents,
         prerenderer: options.prerenderer,
@@ -2151,6 +2220,20 @@ export function setupPermissionedRealmCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmCachedOptions,
 ) {
+  // Validate before the cache lookup. The cache key canonicalizes
+  // `fixture` to `null` when `fileSystem` is present (see
+  // permissionedRealmTemplateCacheKey), so an invalid call passing
+  // both would hash the same as a valid `fileSystem`-only call and
+  // silently reuse that template — the throw in
+  // startPermissionedRealmFixture only fires later at beforeEach,
+  // after the misleading reuse. Mirror the same check up front so
+  // an invalid combo errors at test-module load time, before any
+  // cache work runs.
+  if (options.fileSystem && options.fixture) {
+    throw new Error(
+      'setupPermissionedRealmCached: pass either `fileSystem` or `fixture`, not both',
+    );
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {
@@ -2302,6 +2385,16 @@ export function setupPermissionedRealmsCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmsCachedOptions,
 ) {
+  // Same up-front validation as setupPermissionedRealmCached so the
+  // per-realm fileSystem/fixture conflict errors at test-module load
+  // time rather than at beforeEach inside startPermissionedRealmsFixture.
+  for (let realm of options.realms) {
+    if (realm.fileSystem && realm.fixture) {
+      throw new Error(
+        `setupPermissionedRealmsCached: realm "${realm.realmURL}" passed both \`fileSystem\` and \`fixture\` — pass one or the other, not both`,
+      );
+    }
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {

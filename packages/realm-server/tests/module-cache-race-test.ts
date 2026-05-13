@@ -1,12 +1,26 @@
 import { module, test } from 'qunit';
-import { basename } from 'path';
+import { basename, join } from 'path';
+import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
 import type { Server } from 'http';
 import type { Realm } from '@cardstack/runtime-common';
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  CachingDefinitionLookup,
+  SupportedMimeType,
+  param,
+  query,
+} from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
+import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
 import {
   setupPermissionedRealmCached,
+  setupDB,
   createJWT,
+  createRealm,
+  createVirtualNetwork,
+  getTestPrerenderer,
+  testCreatePrerenderAuth,
   withRealmPath,
   type RealmRequest,
 } from './helpers';
@@ -521,9 +535,13 @@ module(basename(__filename), function () {
       testRealm.__testOnlyClearCaches();
 
       // Independent gates per call so A and B can be released
-      // separately. The hook captures `currentGate` by reference each
-      // time the delay is invoked, so swapping after firing A but
-      // before firing B routes B to a fresh gate.
+      // separately. The hook routes by call index rather than a
+      // mutable `currentGate` reference — `waitForInflight` only
+      // confirms the in-flight slot is set, which happens BEFORE the
+      // transpile hook fires, so A may still be racing toward the
+      // hook when the test swaps the gate. Call-index routing plus
+      // explicit hook-entry signals make the test order deterministic
+      // under CI load.
       let releaseA: () => void = () => {};
       let gateA = new Promise<void>((r) => {
         releaseA = r;
@@ -532,12 +550,36 @@ module(basename(__filename), function () {
       let gateB = new Promise<void>((r) => {
         releaseB = r;
       });
-      let currentGate = gateA;
-      testRealm.__testOnlyDelayTranspile(() => currentGate);
+      let signalAEntered: () => void = () => {};
+      let aEntered = new Promise<void>((r) => {
+        signalAEntered = r;
+      });
+      let signalBEntered: () => void = () => {};
+      let bEntered = new Promise<void>((r) => {
+        signalBEntered = r;
+      });
+      let hookCalls = 0;
+      testRealm.__testOnlyDelayTranspile(() => {
+        hookCalls += 1;
+        if (hookCalls === 1) {
+          signalAEntered();
+          return gateA;
+        }
+        signalBEntered();
+        return gateB;
+      });
 
       try {
         let pendingA = fireRequest(modulePath);
-        await waitForInflight(1);
+        // Wait until A is actually parked at gateA — not just until
+        // the in-flight slot is set. Otherwise the invalidate below
+        // can race A's hook invocation.
+        await aEntered;
+        assert.strictEqual(
+          testRealm.__testOnlyGetInFlightTranspileCount(),
+          1,
+          'A installed its in-flight entry',
+        );
 
         // Invalidate drops A from the map. A is still parked at gateA.
         testRealm.invalidateCache(modulePath);
@@ -547,9 +589,8 @@ module(basename(__filename), function () {
           'invalidate dropped A from the map',
         );
 
-        currentGate = gateB;
         let pendingB = fireRequest(modulePath);
-        await waitForInflight(1);
+        await bEntered;
         assert.strictEqual(
           testRealm.__testOnlyGetInFlightTranspileCount(),
           1,
@@ -621,6 +662,498 @@ module(basename(__filename), function () {
         2,
         'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
       );
+    });
+  });
+
+  // CS-11030: the L2 cross-process cache lives in module_transpile_cache.
+  // A request that misses L1 (in-memory) writes the transpiled bytes to
+  // L2 after babel finishes; a peer realm-server with its own in-memory
+  // miss can read the row instead of re-running babel. Invalidation
+  // paths drop the L2 row alongside L1. These tests exercise the read /
+  // write / delete paths from one realm — the coordinator's two-instance
+  // coalesce behavior is exercised by module-cache-coordination-test.ts
+  // and reused via the shared MODULE_CACHE_POPULATED_CHANNEL.
+  module(
+    'Realm.#moduleCache L2 module_transpile_cache (DB-backed)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      const transpilerHeavySource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class L2Card extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-l2><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      // Count rows that are NOT tombstones — `body IS NULL` indicates a
+      // tombstone left behind by invalidateCache or the bulk wipe, and
+      // we want the test to reason about "is the L2 entry usable" not
+      // "does any row exist for this path."
+      async function countL2LiveRows(canonicalUrl: string): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND canonical_path =',
+          param(canonicalUrl),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function readL2Generation(
+        canonicalUrl: string,
+      ): Promise<number | undefined> {
+        let rows = (await query(dbAdapter, [
+          'SELECT generation FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND canonical_path =',
+          param(canonicalUrl),
+        ])) as { generation: string | number }[];
+        if (!rows.length) {
+          return undefined;
+        }
+        let g = rows[0].generation;
+        return typeof g === 'string' ? Number(g) : g;
+      }
+
+      test('a fresh transpile populates module_transpile_cache', async function (assert) {
+        let modulePath = 'l2-populate.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        // Best-effort bulk DELETE is fire-and-forget — give it a moment
+        // to land before we count.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'precondition: L2 row absent after __testOnlyClearCaches',
+        );
+
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        assert.strictEqual(response.status, 200);
+
+        // L2 write is awaited inside #transpileWithLayers, so by the
+        // time the response returns the row is already committed.
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'L2 row written by the transpile completion path',
+        );
+      });
+
+      test('L2 row serves a subsequent reader after L1 wipe (without re-transpile)', async function (assert) {
+        let modulePath = 'l2-serve.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+        let authHdr = authHeader();
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let first = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHdr);
+        assert.strictEqual(first.status, 200);
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'first request seeded L2',
+        );
+
+        let countBefore = testRealm.__testOnlyGetTranspileCallCount();
+
+        // X-Boxel-Disable-Module-Cache bypasses L1 — both the read AND
+        // the set are skipped — so the request goes through the
+        // L2-aware #transpileWithLayers path. With the L2 row already
+        // seeded from `first`, the second request should find the row
+        // and return without invoking transpileJS again. This stands in
+        // for the cross-process scenario where peer B's L1 is empty
+        // because peer A produced the row.
+        let second = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHdr)
+          .set('X-Boxel-Disable-Module-Cache', 'true');
+        assert.strictEqual(second.status, 200);
+        let countAfter = testRealm.__testOnlyGetTranspileCallCount();
+        assert.strictEqual(
+          countAfter - countBefore,
+          0,
+          'second request was served from L2 — no new transpileJS call',
+        );
+      });
+
+      test('invalidateCache tombstones the L2 row and bumps generation', async function (assert) {
+        let modulePath = 'l2-invalidate.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          1,
+          'L2 row seeded (live, non-tombstone)',
+        );
+        let preInvalidateGen = await readL2Generation(canonicalUrl);
+
+        testRealm.invalidateCache(modulePath);
+        // Tombstone is fire-and-forget — short wait to let it land.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'invalidateCache tombstoned the L2 row — body is NULL so readers miss',
+        );
+        let postInvalidateGen = await readL2Generation(canonicalUrl);
+        assert.notStrictEqual(
+          preInvalidateGen,
+          undefined,
+          'generation populated on the pre-invalidate row',
+        );
+        assert.notStrictEqual(
+          postInvalidateGen,
+          undefined,
+          'generation populated on the post-invalidate tombstone row',
+        );
+        assert.ok(
+          postInvalidateGen! > preInvalidateGen!,
+          `invalidateCache bumped generation from ${preInvalidateGen} to ${postInvalidateGen} — concurrent in-flight writers with the captured pre-invalidate gen will be rejected by the OCC WHERE clause`,
+        );
+      });
+
+      test('in-flight transpile that completes after invalidate cannot resurrect the L2 row (OCC guard)', async function (assert) {
+        // Direct exercise of the L2 OCC WHERE clause. We simulate an
+        // in-flight transpile that captured a pre-invalidate generation,
+        // race an invalidate that tombstones-and-bumps the row, then
+        // attempt the writer's UPSERT with the captured value. The
+        // WHERE module_transpile_cache.generation <= captured must
+        // reject the UPSERT — otherwise a stale transpile would
+        // resurrect the row.
+        //
+        // Assertions are gen-delta based rather than absolute: realm
+        // setup + write + __testOnlyClearCaches each fire their own
+        // tombstone-and-bump on this path, so the row's starting gen is
+        // unpredictable. What matters is that the explicit tombstone
+        // here bumps it once, and the stale write that follows leaves
+        // it unchanged.
+        let modulePath = 'l2-occ-guard.gts';
+        let canonicalUrl = new URL(modulePath, realmURL).href;
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let preTombstoneGen = (await readL2Generation(canonicalUrl)) ?? 0;
+        // Tombstone-and-bump (mimics what invalidateCache does post-
+        // capture).
+        await query(dbAdapter, [
+          'INSERT INTO module_transpile_cache',
+          '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+          'VALUES (',
+          param(realmURL.href),
+          ',',
+          param(canonicalUrl),
+          ',',
+          'NULL, NULL, NULL, 1,',
+          param(Date.now()),
+          ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+          'body = NULL, headers = NULL, dependency_keys = NULL,',
+          'generation = module_transpile_cache.generation + 1,',
+          'created_at = EXCLUDED.created_at',
+        ]);
+        let postTombstoneGen = await readL2Generation(canonicalUrl);
+        assert.notStrictEqual(
+          postTombstoneGen,
+          undefined,
+          'tombstone row carries a generation value',
+        );
+        assert.ok(
+          postTombstoneGen! > preTombstoneGen,
+          `tombstone bumped generation (${preTombstoneGen} → ${postTombstoneGen})`,
+        );
+
+        // Stale write attempt: captures generation 0 (the pre-invalidate
+        // value), tries to UPSERT body. The WHERE clause must reject.
+        await query(dbAdapter, [
+          'INSERT INTO module_transpile_cache',
+          '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+          'VALUES (',
+          param(realmURL.href),
+          ',',
+          param(canonicalUrl),
+          ',',
+          param('STALE BODY BYTES'),
+          ',',
+          param('{}'),
+          '::jsonb,',
+          param('[]'),
+          '::jsonb,',
+          param(0),
+          ',',
+          param(Date.now()),
+          ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+          'body = EXCLUDED.body, headers = EXCLUDED.headers,',
+          'dependency_keys = EXCLUDED.dependency_keys,',
+          'generation = EXCLUDED.generation, created_at = EXCLUDED.created_at',
+          'WHERE module_transpile_cache.generation <= EXCLUDED.generation',
+        ]);
+
+        assert.strictEqual(
+          await countL2LiveRows(canonicalUrl),
+          0,
+          'stale write rejected by OCC WHERE clause — row remains a tombstone',
+        );
+
+        let finalGen = await readL2Generation(canonicalUrl);
+        assert.strictEqual(
+          finalGen,
+          postTombstoneGen,
+          'generation unchanged after the rejected stale write — OCC WHERE clause held',
+        );
+      });
+    },
+  );
+
+  // CS-11030 two-instance integration coverage. The single-realm tests
+  // above prove the row is written / read / tombstoned correctly through
+  // one Realm's plumbing; these tests prove that two peer Realms — each
+  // with its own ModuleCacheCoordinator, both pointing at the same
+  // realm_url + pg — actually coalesce on babel through the L2 row and
+  // the advisory-lock + NOTIFY channel. Mirrors the
+  // CachingDefinitionLookup two-instance test in
+  // module-cache-coordination-test.ts but exercises the transpile flow.
+  module('Realm.#moduleCache L2 cross-instance coalesce', function (hooks) {
+    let dbAdapter: PgAdapter;
+    let publisher: import('@cardstack/runtime-common').QueuePublisher;
+    let runner: import('@cardstack/runtime-common').QueueRunner;
+    setupDB(hooks, {
+      beforeEach: async (adapter, pub, run) => {
+        dbAdapter = adapter;
+        publisher = pub;
+        runner = run;
+      },
+    });
+
+    const peerRealmURL = 'http://127.0.0.1:5555/peer/';
+    const peerCardSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class PeerCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-peer><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+    async function buildPeerRealm(args: {
+      dir: string;
+      coordinator: ModuleCacheCoordinator;
+    }): Promise<Realm> {
+      let virtualNetwork = createVirtualNetwork();
+      let prerenderer = await getTestPrerenderer();
+      let definitionLookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      let { realm } = await createRealm({
+        dir: args.dir,
+        definitionLookup,
+        realmURL: peerRealmURL,
+        permissions: { '*': ['read', 'write'] },
+        virtualNetwork,
+        publisher,
+        runner,
+        dbAdapter,
+        transpileCoordinator: args.coordinator,
+      });
+      return realm;
+    }
+
+    async function setupTwoPeers(): Promise<{
+      realmA: Realm;
+      realmB: Realm;
+      coordA: ModuleCacheCoordinator;
+      coordB: ModuleCacheCoordinator;
+      cardPath: string;
+      canonicalUrl: string;
+    }> {
+      let tmp = dirSync();
+      let testRealmDir = join(tmp.name, 'peer-realm');
+      ensureDirSync(testRealmDir);
+      // Minimal .realm.json so the Realm bootstraps a name + readable
+      // visibility; the test only ever asks for module GETs.
+      writeJSONSync(join(testRealmDir, '.realm.json'), {
+        name: 'Peer Realm',
+      });
+      let cardPath = 'peer-card.gts';
+      writeFileSync(join(testRealmDir, cardPath), peerCardSource);
+
+      let coordA = new ModuleCacheCoordinator({ dbAdapter });
+      await coordA.start();
+      let coordB = new ModuleCacheCoordinator({ dbAdapter });
+      await coordB.start();
+      // Give both coordinators a moment to issue their LISTEN before
+      // the test fires NOTIFY traffic — matches the 100ms pause in
+      // module-cache-coordination-test.ts.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      let realmA = await buildPeerRealm({
+        dir: testRealmDir,
+        coordinator: coordA,
+      });
+      let realmB = await buildPeerRealm({
+        dir: testRealmDir,
+        coordinator: coordB,
+      });
+
+      // Drop anything either realm filled during construction so the
+      // test's request is the only thing that can drive the counter.
+      realmA.__testOnlyClearCaches();
+      realmB.__testOnlyClearCaches();
+      // __testOnlyClearCaches fire-and-forgets the L2 bulk wipe; wait
+      // for it to land before reads.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      let canonicalUrl = new URL(cardPath, peerRealmURL).href;
+      return { realmA, realmB, coordA, coordB, cardPath, canonicalUrl };
+    }
+
+    function moduleRequest(realm: Realm, cardPath: string): Request {
+      return new Request(new URL(cardPath, peerRealmURL).href, {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.All,
+          Authorization: `Bearer ${createJWT(realm, 'user', ['read'])}`,
+        },
+      });
+    }
+
+    test('L2 row written by peer A is served from L2 by peer B without re-running babel', async function (assert) {
+      let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers();
+      try {
+        let respA = await realmA.handle(moduleRequest(realmA, cardPath));
+        assert.strictEqual(respA?.status, 200, 'peer A served the module');
+        assert.strictEqual(
+          realmA.__testOnlyGetTranspileCallCount(),
+          1,
+          'peer A ran babel exactly once',
+        );
+
+        let bCountBefore = realmB.__testOnlyGetTranspileCallCount();
+        let respB = await realmB.handle(moduleRequest(realmB, cardPath));
+        assert.strictEqual(respB?.status, 200, 'peer B served the module');
+        assert.strictEqual(
+          realmB.__testOnlyGetTranspileCallCount() - bCountBefore,
+          0,
+          'peer B served from the L2 row peer A wrote — no babel ran on peer B',
+        );
+      } finally {
+        await coordA.shutDown();
+        await coordB.shutDown();
+      }
+    });
+
+    test('two peers concurrently transpiling the same path coalesce through the coordinator: exactly one babel call across both', async function (assert) {
+      let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers();
+      try {
+        // Gate babel on both realms so whichever one wins the
+        // advisory lock parks inside transpileJS, holding the lock
+        // open. The loser's tryAcquireAndRun returns acquired:false
+        // BEFORE the runner fn is invoked, so the loser never reaches
+        // the delay — only the winner waits on the gate.
+        let releaseGate!: () => void;
+        let gate = new Promise<void>((resolve) => {
+          releaseGate = resolve;
+        });
+        realmA.__testOnlyDelayTranspile(() => gate);
+        realmB.__testOnlyDelayTranspile(() => gate);
+
+        // Stagger A → B by 100ms so A reliably takes the pg advisory
+        // lock first; B then contends and observes acquired:false.
+        // Mirrors the staggered start in the CachingDefinitionLookup
+        // two-instance test.
+        let pA = realmA.handle(moduleRequest(realmA, cardPath));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        let pB = realmB.handle(moduleRequest(realmB, cardPath));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // At this point: A is parked inside materializeAndTranspile
+        // awaiting the gate (transpile counter hasn't bumped yet —
+        // the delay hook runs before the count). B has observed
+        // acquired:false and is parked on waitForKey waiting for the
+        // NOTIFY A will emit when its tx commits.
+        releaseGate();
+        let [respA, respB] = await Promise.all([pA, pB]);
+        assert.strictEqual(respA?.status, 200, 'peer A served 200');
+        assert.strictEqual(respB?.status, 200, 'peer B served 200');
+
+        let aTotal = realmA.__testOnlyGetTranspileCallCount();
+        let bTotal = realmB.__testOnlyGetTranspileCallCount();
+        assert.strictEqual(
+          aTotal + bTotal,
+          1,
+          'exactly one babel call across both peers — the L2 winner wrote and the loser read',
+        );
+      } finally {
+        realmA.__testOnlyDelayTranspile(undefined);
+        realmB.__testOnlyDelayTranspile(undefined);
+        await coordA.shutDown();
+        await coordB.shutDown();
+      }
     });
   });
 });
