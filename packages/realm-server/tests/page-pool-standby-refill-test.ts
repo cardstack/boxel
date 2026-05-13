@@ -103,7 +103,11 @@ module(basename(__filename), function (hooks) {
     }
   });
 
-  function makePool(opts: { maxPages: number; browserManager: any }): PagePool {
+  function makePool(opts: {
+    maxPages: number;
+    browserManager: any;
+    disableStandbyRefill?: boolean;
+  }): PagePool {
     let pool = new PagePool({
       maxPages: opts.maxPages,
       serverURL: 'http://localhost',
@@ -111,6 +115,7 @@ module(basename(__filename), function (hooks) {
       boxelHostURL: 'http://localhost:4200',
       standbyTimeoutMs: 500,
       disableFileAdmission: true,
+      disableStandbyRefill: opts.disableStandbyRefill ?? false,
     });
     pools.push(pool);
     return pool;

@@ -1719,6 +1719,20 @@ export class PagePool {
   }> {
     let tabStartupMs = 0;
     let awaitStandbyPool = async () => {
+      // Fast path: if the refill loop has nothing to do (e.g.
+      // `disableStandbyRefill` is on with an active tab, or the
+      // pool is already at desired capacity), skip the await
+      // entirely. This avoids an extra microtask hop on the
+      // cross-affinity-steal fallback path — without it, a sibling
+      // caller hitting the simpler same-affinity `least-pending`
+      // branch can queue on the busy tab one microtask earlier,
+      // inflating `pendingCount` past the cross-affinity scan's
+      // `> 1` filter and forcing this caller to throw
+      // `'No standby page available for prerender'` despite a
+      // valid stealable candidate existing.
+      if (this.#currentStandbyCount() >= this.#desiredStandbyCount()) {
+        return;
+      }
       let startedAt = Date.now();
       await this.#ensureStandbyPool();
       tabStartupMs += Date.now() - startedAt;
