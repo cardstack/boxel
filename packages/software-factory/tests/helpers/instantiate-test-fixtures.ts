@@ -7,7 +7,7 @@
  */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { expect } from '@playwright/test';
@@ -210,6 +210,11 @@ async function seedFilesAndWaitForIndex(
   let stagingDir = mkdtempSync(join(tmpdir(), 'sf-instantiate-seed-'));
   try {
     for (let { path, content } of files) {
+      if (isAbsolute(path) || path.split('/').includes('..')) {
+        throw new Error(
+          `seedFilesAndWaitForIndex path must be a realm-relative path under the staging dir; got ${JSON.stringify(path)}`,
+        );
+      }
       let absolute = join(stagingDir, path);
       mkdirSync(dirname(absolute), { recursive: true });
       writeFileSync(absolute, content);
