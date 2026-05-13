@@ -23,6 +23,7 @@ Use this skill for Boxel card and app development. Keep the top-level guidance l
 
 These three files establish the data model, the `contains` vs `linksTo` rule, required formats, inherited fields, and common import patterns.
 
+
 ## Load By Task
 
 - Card structure and safe patterns:

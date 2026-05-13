@@ -58,11 +58,12 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder';
+import { deriveCatalogRealmUrl } from '../factory-target-realm';
 import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter';
 import { logger } from '../logger';
 
 const MCP_SERVER_NAME = 'factory';
-const MAX_TOOL_USE_TURNS = 50;
+const MAX_TOOL_USE_TURNS = 100;
 
 /**
  * Built-in Claude Code tools the factory exposes to the model on the
@@ -290,7 +291,9 @@ export class ClaudeCodeFactoryAgent implements LoopAgent {
 
     let base = this.promptLoader.load('system', {
       targetRealm: context.targetRealm,
+      catalogRealm: deriveCatalogRealmUrl(context.targetRealm),
       darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
+      enableBoxelUiDiscovery: context.enableBoxelUiDiscovery === true,
       skills,
     });
 

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["ui", "boxel-ui", "modal", "button", "delete-confirmation"],
+      "content": "## Overview\n\nA `DeleteConfirmableNote` card — a simple note with a confirmation flow before destruction. The card itself is small (a title and a body); the value of this brief is the **UI implementation**, which must compose existing boxel-ui primitives rather than hand-rolling its own dialog and button markup.\n\n## Fields\n\n- `title` — a single-line string. Required.\n- `body` — a markdown block. Optional.\n\n## Required UI in the isolated view\n\nWhen the card renders in its **isolated** format, the template must:\n\n1. Display the `title` as a heading and the `body` as rendered markdown beneath it.\n2. Render a **Delete button** below the body, styled as a destructive action (red / danger). Clicking it must NOT delete anything directly — it must open a confirmation dialog.\n3. The dialog is a **modal overlay** (renderless, dimmed background). It must show:\n   - A short heading like `\"Delete this note?\"`.\n   - One sentence of body text confirming the irreversible nature of the action.\n   - Two buttons in a row: a secondary **Cancel** button (closes the modal, does nothing else) and a primary destructive **Delete** button.\n4. Clicking **Cancel** or the modal's overlay must close the modal without side effects.\n5. Clicking **Delete** inside the modal must call a `deleteNote` action on the card (a stub — `console.log('deleting:', this.args.model.id)` is fine for this brief) and then close the modal.\n\n## Implementation requirements\n\n- **Use existing `@cardstack/boxel-ui` components for the buttons and the modal.** Do not write a custom `<button>` element, do not write a custom dialog `<div>`. Search the catalog for `specType: \"component\"` and reuse the published Specs. The `boxel-ui-component-discovery` skill walks through this end-to-end.\n- Button color variants must match the boxel-ui `@kind` API (no inline `style=\"background-color: …\"` overrides).\n- The modal must wire `@isOpen`, `@onClose`, and any required arguments per its API; do not improvise argument names.\n\n## Out of scope\n\n- Real deletion against the store (stub the action).\n- Edit-format UI (only the isolated view is required by this brief).\n- Styling beyond what boxel-ui defaults provide.\n- **Real QUnit rendering tests.** This brief tests boxel-ui component discovery, not the test-helper surface. Write the smallest possible placeholder `.test.gts` file alongside the card to satisfy the factory's standard test requirement — a single `module(...)` with one `test('placeholder', (assert) => { assert.ok(true); })` is fine. Do NOT import `setupRenderingTest`, `setupBaseRealm`, `renderCard`, or any other host test helpers; do NOT instantiate the card with `new`. Real rendering tests for this card are a follow-up.",
+      "cardInfo": {
+        "name": "Delete-Confirmable Note",
+        "notes": null,
+        "summary": "A note card whose isolated view exposes a Delete button and a confirmation modal — implemented by reusing boxel-ui's Button and Modal component specs from the catalog.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
