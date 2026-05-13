@@ -8,6 +8,7 @@ import { runInstantiateInMemory } from '../src/instantiate-execution';
 import {
   seedTagsCardWithBrokenExampleAndSpec,
   seedValidCardWithSpec,
+  overwriteTagsExampleWithBadShape,
 } from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
@@ -88,6 +89,7 @@ test.describe('runInstantiateInMemory e2e', () => {
 
       let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
+      overwriteTagsExampleWithBadShape(workspace.dir);
 
       let result = await runInstantiateInMemory({
         targetRealm: realmUrl,
@@ -216,6 +218,7 @@ test.describe('runInstantiateInMemory e2e', () => {
 
       let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
+      overwriteTagsExampleWithBadShape(workspace.dir);
 
       let cleanOnly = await runInstantiateInMemory({
         targetRealm: realmUrl,
