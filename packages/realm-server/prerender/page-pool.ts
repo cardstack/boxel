@@ -1261,8 +1261,8 @@ export class PagePool {
   }
 
   async #evictLRUAffinity(): Promise<void> {
-    let candidate = this.#selectEvictionCandidate();
-    if (!candidate) {
+    let lruAffinity = this.#lru.values().next().value as string | undefined;
+    if (!lruAffinity) {
       return;
     }
     // CS-11140: use `awaitIdle: false`. The synchronous bookkeeping
@@ -1277,42 +1277,7 @@ export class PagePool {
     // duration of its own host-side 90s timeout, gating the entire
     // standby-refill loop on this server (CS-11139 then amplified
     // that wait to every concurrent `getPage` caller).
-    await this.disposeAffinity(candidate, { awaitIdle: false });
-  }
-
-  // Pick the next affinity to evict. Prefer affinities whose entries
-  // are all idle (no in-flight render or queued waiter); a busy
-  // affinity is the worst eviction target because its `page.close()`
-  // waits for Chrome to acknowledge the close of a render-in-progress
-  // — which under load is the exact scenario CS-11140 is trying to
-  // avoid blocking on. LRU order is preserved within both buckets:
-  // first idle in LRU order, then busy in LRU order if no idle
-  // candidate qualifies.
-  #selectEvictionCandidate(): string | undefined {
-    let lruOrder = [...this.#lru];
-    if (lruOrder.length === 0) return undefined;
-    for (let key of lruOrder) {
-      let entries = this.#affinityPages.get(key);
-      if (!entries || entries.size === 0) continue;
-      let allIdle = true;
-      for (let entry of entries) {
-        if (entry.closing || entry.transitioning) continue;
-        if (entry.currentQueue !== undefined) {
-          allIdle = false;
-          break;
-        }
-        if (entry.queue.pendingCount > 0) {
-          allIdle = false;
-          break;
-        }
-      }
-      if (allIdle) return key;
-    }
-    // No idle candidate — fall back to plain LRU. With CS-11140's
-    // `awaitIdle: false` switch in `#evictLRUAffinity` the actual
-    // close work doesn't block the caller anyway, so evicting a
-    // busy affinity is now a softer cost than it was pre-fix.
-    return lruOrder[0];
+    await this.disposeAffinity(lruAffinity, { awaitIdle: false });
   }
 
   async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {

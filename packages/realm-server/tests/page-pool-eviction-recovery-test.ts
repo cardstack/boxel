@@ -16,19 +16,19 @@ import { PagePool } from '../prerender/page-pool';
 //     map entry still pointed to the in-flight-closing context.
 //
 // Post-fix contracts:
-//   1. Eviction returns as soon as the synchronous bookkeeping
-//      (`#affinityPages.delete` + `oldShared.closing = true`)
-//      finishes. The async `page.close()` continues in the
-//      background. Slot is logically free for `#prepareSlotForStandby`
-//      immediately.
-//   2. Candidate selection prefers an affinity whose entries are all
-//      idle over one with an in-flight render — busy pages are the
-//      worst eviction targets because their close is the slowest.
-//   3. A concurrent `getPage` on an affinity whose `disposeAffinity`
+//   1. `disposeAffinity(awaitIdle: false)` returns as soon as the
+//      synchronous bookkeeping (`#affinityPages.delete` +
+//      `oldShared.closing = true`) finishes. The async `page.close()`
+//      continues in the background. Slot is logically free for
+//      `#prepareSlotForStandby` immediately.
+//   2. A concurrent `getPage` on an affinity whose `disposeAffinity`
 //      is mid-flight does NOT fire the `Shared-context invariant
 //      violated` warning. The old shared-context row is marked
 //      `closing` upfront so `#recordSharedContextForFirstPage` takes
 //      the replace-cleanly branch.
+//   3. Cross-affinity reuse of a supplementary tab (entry-owned,
+//      not the donor affinity's primary) does NOT decrement the
+//      donor's primary `pageCount` — its bookkeeping stays intact.
 
 interface CloseControl {
   blockContextClose: boolean;
@@ -131,17 +131,26 @@ module(basename(__filename), function (hooks) {
     await pool.disposeAffinity('A', { awaitIdle: false });
     let elapsed = Date.now() - started;
 
-    // disposeAffinity returned without waiting for the affinity's
-    // BrowserContext.close to complete. Operationally this means
-    // `#prepareSlotForStandby`'s `#poolEntryCount` drops as soon as
-    // the affinity is gone from `#affinityPages`, freeing the slot
-    // for the next standby. Pre-CS-11140 (`awaitIdle: true` default
-    // in `#evictLRUAffinity`), this `await` would have waited the
-    // full `BrowserContext.close` duration — which under a stuck
-    // page can stretch to render-timeout-budget territory.
+    // Contract 1 — `disposeAffinity(awaitIdle: false)` returns
+    // without waiting for the affinity's `BrowserContext.close()` to
+    // complete.
     assert.true(
       elapsed < 100,
       `disposeAffinity returned in ${elapsed}ms despite blocked context.close`,
+    );
+
+    // Contract 2 (the load-bearing one) — the affinity must be
+    // removed from `#affinityPages` SYNCHRONOUSLY, so
+    // `#prepareSlotForStandby`'s `#poolEntryCount` drops immediately
+    // and the slot is logically free for the next standby. A
+    // regression that re-added the per-entry `.finally` deferred-
+    // delete shape would still satisfy the `elapsed < 100ms` check
+    // (with this fast stub), so we observe `getWarmAffinities`
+    // directly to pin down the synchronous-delete contract.
+    assert.deepEqual(
+      pool.getWarmAffinities(),
+      [],
+      "affinity 'A' is gone from #affinityPages immediately after disposeAffinity returns, even though context.close is still blocked in the background",
     );
 
     // The background context.close is scheduled via
