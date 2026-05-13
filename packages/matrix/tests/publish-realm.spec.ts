@@ -239,7 +239,7 @@ test.describe('Publish realm', () => {
     ).toBeVisible();
   });
 
-  test('re-publishing reflects updated source content on the published URL (CS-11043)', async ({
+  test('republishing reflects updated source content on the published URL (CS-11043)', async ({
     page,
   }) => {
     // CS-11043 regression net. The bug was: a republish reported success
