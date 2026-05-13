@@ -720,6 +720,7 @@ export class Prerenderer {
               fileData,
               types,
               priority,
+              jobId,
               signal,
               onTabAcquired,
             });
