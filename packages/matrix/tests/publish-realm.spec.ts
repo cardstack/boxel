@@ -363,7 +363,6 @@ test.describe('Publish realm', () => {
     // The publish handler awaits sourceRealm.indexing() before doing the
     // copy, so we don't need a manual settle here — the click below
     // serializes behind any pending incremental indexing on the source.
-    await page.locator('[data-test-default-domain-checkbox]').click();
     let publishButton = page.locator('[data-test-publish-button]');
     // Set up the network wait BEFORE clicking — the handler awaits the
     // full reindex before returning 202, so when this resolves we
