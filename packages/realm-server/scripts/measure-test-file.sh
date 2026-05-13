@@ -72,7 +72,7 @@ for i in $(seq 1 "$RUNS"); do
       PGPORT=55436 \
       STRIPE_WEBHOOK_SECRET=stripe-webhook-secret \
       STRIPE_API_KEY=stripe-api-key \
-      MATRIX_REGISTRATION_SHARED_SECRET=fake \
+      MATRIX_REGISTRATION_SHARED_SECRET="${MATRIX_REGISTRATION_SHARED_SECRET:-fake}" \
       TEST_FILES="$TEST_FILES_ARG" \
     "$QUNIT" --require ts-node/register/transpile-only tests/index.ts \
     >/dev/null 2>"$timing"
