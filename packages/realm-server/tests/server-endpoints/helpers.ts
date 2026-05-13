@@ -9,7 +9,11 @@ import type {
 import type { Server } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
-import { setupPermissionedRealmCached, testPort } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  testPort,
+  type RealmFixtureName,
+} from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
@@ -34,7 +38,7 @@ type ServerEndpointsTestOptions = {
   // content out of the testRealm and want the lightest possible
   // template build. Tests that DO read the kitchen sink (e.g.
   // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
-  fixture?: 'blank' | 'simple' | 'realistic';
+  fixture?: RealmFixtureName;
 };
 
 export function setupServerEndpointsTest(

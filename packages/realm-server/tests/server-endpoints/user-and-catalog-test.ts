@@ -14,8 +14,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     function (hooks) {
       // `_catalog-realms` asserts the realm's `name === "Test Realm"`,
       // which comes from tests/cards/realm.json's RealmConfig instance
-      // — only present in `realistic`. Same pattern as info-test in
-      // PR 2 (#4790).
+      // — only present in `realistic`.
       let context = setupServerEndpointsTest(hooks, { fixture: 'realistic' });
       let originalLowCreditThreshold: string | undefined;
 
