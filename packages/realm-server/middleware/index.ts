@@ -31,7 +31,7 @@ export function proxyAsset(
   opts?: ProxyOptions,
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
-  return proxy(from, {
+  let inner = proxy(from, {
     target: assetsURL.href.replace(/$\//, ''),
     changeOrigin: true,
     rewrite: () => {
@@ -50,6 +50,22 @@ export function proxyAsset(
       },
     },
   });
+  return async (ctxt, next) => {
+    // HTTP/2's compat layer attaches pseudo-headers (`:method`, `:scheme`,
+    // `:path`, `:authority`) to `req.headers`. http-proxy forwards every
+    // header verbatim into Node's `new http.ClientRequest(...)`, which
+    // throws `ERR_INVALID_HTTP_TOKEN` for any name starting with `:` —
+    // every proxied h2 request becomes a 500. Strip the pseudo-headers
+    // off the request object before handing it to the inner proxy
+    // middleware; the URL and method are already read from ctxt.
+    let headers = ctxt.req.headers as Record<string, unknown>;
+    for (let name of Object.keys(headers)) {
+      if (name.startsWith(':')) {
+        delete headers[name];
+      }
+    }
+    return inner(ctxt, next);
+  };
 }
 
 // Add middleware to handle method override for QUERY
