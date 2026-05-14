@@ -232,6 +232,85 @@ module(basename(__filename), function () {
           );
         });
 
+        // CS-11043. clearLocalCaches() is the public surface the
+        // publish-realm handler invokes after the FS swap so that the
+        // pre-swap bytes living in #sourceCache / #moduleCache don't get
+        // served to the reindex job (which would then write stale
+        // isolated_html into boxel_index). Functionally equivalent to
+        // __testOnlyClearCaches minus the test-only transpile-counter
+        // reset.
+        test('clearLocalCaches drops cached source bytes', async function (assert) {
+          let cacheTestPath = 'clear-local-caches.gts';
+          await testRealm.write(
+            cacheTestPath,
+            '// clear-local-caches initial content',
+          );
+
+          await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          let warmed = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            warmed.headers['x-boxel-cache'],
+            'hit',
+            'precondition: second fetch hits the source cache',
+          );
+
+          testRealm.clearLocalCaches();
+
+          let afterClear = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            afterClear.headers['x-boxel-cache'],
+            'miss',
+            'fetch after clearLocalCaches is a miss — the #sourceCache entry was dropped',
+          );
+        });
+
+        // CS-11043. Chromium applies heuristic caching to responses that
+        // arrive without Cache-Control or Last-Modified, which led the
+        // prerender server's puppeteer pages to reuse stale module bytes
+        // across publishes. Asserting `no-store` on source responses
+        // documents the contract the publish flow now depends on.
+        test('source response sets Cache-Control: no-store', async function (assert) {
+          let cacheTestPath = 'cache-control-no-store.gts';
+          await testRealm.write(
+            cacheTestPath,
+            '// cache-control: no-store test content',
+          );
+
+          let missResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            missResponse.headers['x-boxel-cache'],
+            'miss',
+            'precondition: first fetch is a cache miss',
+          );
+          assert.strictEqual(
+            missResponse.headers['cache-control'],
+            'no-store',
+            'miss-path source response carries Cache-Control: no-store',
+          );
+
+          let hitResponse = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            hitResponse.headers['x-boxel-cache'],
+            'hit',
+            'precondition: second fetch is a cache hit',
+          );
+          assert.strictEqual(
+            hitResponse.headers['cache-control'],
+            'no-store',
+            'hit-path source response also carries Cache-Control: no-store (propagated from the cached defaultHeaders)',
+          );
+        });
+
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
