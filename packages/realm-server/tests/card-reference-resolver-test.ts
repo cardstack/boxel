@@ -223,6 +223,47 @@ module(basename(__filename), function () {
       );
     });
 
+    // CS-11145: catalog Listings have a thumbnail relationship like
+    // `cardInfo.cardThumbnail.links.self = "../ListingThumbnails/foo.png"`.
+    // The relationship is stored on the primary card resource, so a round trip
+    // through `relativizeDocument` and back through `resolveCardReference`
+    // against the card's own URL must yield the original absolute URL.
+    test('round-trips a relationship link relative to a deep card path', async function (assert) {
+      let cardURL = 'http://test-host/my-realm/room-XYZ/CardListing/listing-1';
+      let doc: SingleCardDocument = {
+        data: {
+          id: rri(cardURL),
+          type: 'card' as const,
+          attributes: { name: 'Listing' },
+          relationships: {
+            'cardInfo.cardThumbnail': {
+              links: {
+                self: '../ListingThumbnails/foo.png',
+              },
+            },
+          },
+          links: { self: cardURL },
+          meta: {
+            adoptsFrom: {
+              module: rri('../listing'),
+              name: 'CardListing',
+            },
+          },
+        },
+      };
+
+      let realmURL = new URL('http://test-host/my-realm/');
+      relativizeDocument(doc, realmURL);
+
+      let rel = doc.data.relationships?.['cardInfo.cardThumbnail'] as any;
+      let resolved = resolveCardReference(rel.links.self, cardURL);
+      assert.strictEqual(
+        resolved,
+        'http://test-host/my-realm/room-XYZ/ListingThumbnails/foo.png',
+        'round-trip resolves to the original absolute URL (not a doubled path)',
+      );
+    });
+
     test('succeeds when resource ID is a regular URL', async function (assert) {
       let doc: SingleCardDocument = {
         data: {
