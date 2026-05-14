@@ -94,10 +94,45 @@ async function main() {
       1,
       Math.min(PER_ATTEMPT_TIMEOUT_MS, TOTAL_TIMEOUT_MS - (Date.now() - start)),
     );
+  // Verbose mode forwards every chrome console message + every failed
+  // network request from the standby probe page to our own stdout, so
+  // when the probe hangs in CI we can see what URL the page is choking
+  // on (TLS-handshake failures, h2 stream resets, cross-origin denials,
+  // etc.). On by default while we hunt the intermittent
+  // CI-only "frame got detached" failure that's cratering ~35% of
+  // host-test shards — flip `WAIT_FOR_HOST_STANDBY_VERBOSE=0` to mute.
+  let verbose = process.env.WAIT_FOR_HOST_STANDBY_VERBOSE !== '0';
   try {
     while (Date.now() - start < TOTAL_TIMEOUT_MS) {
       attempt++;
       let page = await browser.newPage();
+      if (verbose) {
+        page.on('console', (msg) =>
+          log(`[chrome console.${msg.type()}] ${msg.text()}`),
+        );
+        page.on('pageerror', (err: unknown) =>
+          log(
+            `[chrome pageerror] ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          ),
+        );
+        page.on('requestfailed', (req) =>
+          log(
+            `[chrome requestfailed] ${req.method()} ${req.url()} — ${
+              req.failure()?.errorText ?? 'unknown'
+            }`,
+          ),
+        );
+        page.on('response', (resp) => {
+          if (resp.status() >= 400) {
+            log(`[chrome response ${resp.status()}] ${resp.url()}`);
+          }
+        });
+        page.on('framedetached', (frame) =>
+          log(`[chrome framedetached] url=${frame.url()}`),
+        );
+      }
       try {
         // Mirror page-pool.ts's #loadStandbyPage: each phase gets its own
         // PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only covers
@@ -105,14 +140,17 @@ async function main() {
         // `#standby-ready` is a separate clock because on a cold vite
         // cache the script tag's module fetch can spin while the
         // optimizer is still bundling its dep graph.
+        if (verbose) log(`attempt ${attempt}: page.goto(${standbyUrl})`);
         let response = await page.goto(standbyUrl, {
           waitUntil: 'domcontentloaded',
           timeout: phaseBudgetMs(),
         });
         let status = response?.status();
+        if (verbose) log(`attempt ${attempt}: goto resolved status=${status}`);
         if (status != null && status >= 400) {
           throw new Error(`HTTP ${status}`);
         }
+        if (verbose) log(`attempt ${attempt}: waiting for #standby-ready`);
         await page.waitForFunction(
           () => !!document.querySelector('#standby-ready'),
           { timeout: phaseBudgetMs() },
