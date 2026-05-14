@@ -183,7 +183,16 @@ function startWithTraefik({ subcommand, defaultPort, label, nodeMemory }) {
   const BOXEL_ENVIRONMENT = process.env.BOXEL_ENVIRONMENT;
 
   if (!BOXEL_ENVIRONMENT) {
-    if (isLocalHttpsDevModeEnabled()) {
+    // Same-port http→https redirect dispatcher is only useful for `vite`
+    // (dev) where humans type `http://localhost:4200` in a browser bar.
+    // For `vite preview` (production build, used by CI and serve:dist),
+    // skip the dispatcher and let vite bind the public port directly with
+    // HTTPS. The dispatcher's byte-peek + cross-process TCP pipe pattern
+    // races chrome's TLS handshake under load and produces
+    // ERR_CONNECTION_CLOSED in CI prerender probes, while curl over the
+    // same port succeeds — symptom of an ALPN/h2 framing issue inside
+    // the pipe that we don't need to solve for the preview path.
+    if (isLocalHttpsDevModeEnabled() && subcommand !== 'preview') {
       runViteBehindRedirectDispatcher({
         subcommand,
         publicPort: defaultPort,
