@@ -1806,22 +1806,13 @@ function realmEventIsIndex(
 //                with no card content.
 //   simple     — one card def (Person), one instance, one non-card file; for
 //                tests that need *some* indexed content but nothing exotic.
-//   realistic  — the historical tests/cards/ kitchen sink; for tests that
-//                lean on specific instances, cyclic imports, error cases,
-//                Unicode filenames, etc. To be renamed to fixtures/realistic
-//                in a follow-up; until then `fixtureDir('realistic')` points
-//                at the old path.
+//   realistic  — kitchen-sink fixture with the full set of card defs,
+//                instances, cyclic imports, error cases, Unicode filenames,
+//                etc.; for tests that lean on that specific content.
 export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
 
 export function fixtureDir(name: RealmFixtureName): string {
-  switch (name) {
-    case 'blank':
-      return join(__dirname, '..', 'fixtures', 'blank');
-    case 'simple':
-      return join(__dirname, '..', 'fixtures', 'simple');
-    case 'realistic':
-      return join(__dirname, '..', 'cards');
-  }
+  return join(__dirname, '..', 'fixtures', name);
 }
 
 type InternalPermissionedRealmSetupOptions = {
@@ -1894,10 +1885,10 @@ async function startPermissionedRealmFixture(
 
   // If a fileSystem is provided, the realm is populated through createRealm
   // from that object. Otherwise copy a fixture folder onto disk. Default to
-  // `realistic` to preserve existing behavior until the final PR of CS-10009
-  // flips it to `blank`.
+  // `blank` — tests that need card content must opt in to `simple` or
+  // `realistic`.
   if (!fileSystem) {
-    copySync(fixtureDir(fixture ?? 'realistic'), testRealmDir);
+    copySync(fixtureDir(fixture ?? 'blank'), testRealmDir);
   }
 
   let virtualNetwork = createVirtualNetwork();
@@ -2070,13 +2061,13 @@ function permissionedRealmTemplateCacheKey(
 ): string {
   let resolvedRealmURL = options.realmURL ?? testRealmURL;
   // Canonicalize the fixture choice so callers that omit `fixture` (and
-  // implicitly get 'realistic') share a cache with callers that pass
-  // `fixture: 'realistic'` explicitly. When `fileSystem` is provided, the
+  // implicitly get 'blank') share a cache with callers that pass
+  // `fixture: 'blank'` explicitly. When `fileSystem` is provided, the
   // fixture choice is irrelevant — fileSystem's own hash carries the
   // content.
   let resolvedFixture = options.fileSystem
     ? null
-    : (options.fixture ?? 'realistic');
+    : (options.fixture ?? 'blank');
   return hashCacheKeyPayload({
     version: 1,
     type: 'permissioned-realm',

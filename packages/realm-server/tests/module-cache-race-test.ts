@@ -695,6 +695,7 @@ module(basename(__filename), function () {
       }
 
       setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
         realmURL,
         permissions: {
           '*': ['read', 'write'],
