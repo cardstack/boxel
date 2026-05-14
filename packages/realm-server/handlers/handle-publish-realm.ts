@@ -233,6 +233,7 @@ export default function handlePublishRealm({
   realmsRootPath,
   getMatrixRegistrationSecret,
   domainsForPublishedRealms,
+  definitionLookup,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -528,12 +529,34 @@ export default function handlePublishRealm({
           // it up.
           ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
 
-          // Clear stale modules cache for the published realm so that
-          // error entries from a previous publish don't persist
-          await query(dbAdapter, [
-            `DELETE FROM modules WHERE resolved_realm_url =`,
-            param(publishedRealmURL),
-          ]);
+          // CS-11043 / CS-11153. For a republish, every realm-server
+          // instance with this realm mounted is holding pre-swap bytes
+          // in its in-process #sourceCache / #moduleCache and a
+          // pre-swap row in the cross-process `modules` table. The
+          // reindex enqueued below fans source fetches through HTTP to
+          // whichever realm-server instance the worker's _fetch
+          // resolves to; without invalidation those fetches return the
+          // stale cached bytes and the indexer writes them into
+          // boxel_index.isolated_html. The NodeAdapter file-watcher is
+          // disabled in staging/production so the post-swap FS events
+          // don't fire — invalidation has to be explicit.
+          //
+          // `clearRealmCache` handles all of that as one operation:
+          // bumps the local CachingDefinitionLookup realm generation,
+          // drops in-flight prerenders for the realm, DELETEs the
+          // realm's rows from `modules`, and emits the
+          // `module_cache_invalidated` `k:'realm'` NOTIFY. Every
+          // listener (this instance and any sibling) responds by
+          // bumping its own generation AND calling
+          // `Realm.invalidateAll()` on the locally-mounted realm —
+          // see `ModuleCacheInvalidationListener#handleNotification`.
+          // No publish-handler-side reach into Realm internals.
+          //
+          // For a new publish the realm isn't mounted anywhere yet, so
+          // the local `invalidateAll()` is a no-op and the NOTIFY is
+          // dropped on instances that haven't lazy-mounted. The
+          // generation bump still applies and is correct.
+          await definitionLookup.clearRealmCache(publishedRealmURL);
 
           let lastPublishedAt = Date.now().toString();
           try {
@@ -550,31 +573,6 @@ export default function handlePublishRealm({
             // FS swap that we just put in place.
             removeSync(publishedRealmPath);
             throw dbError;
-          }
-
-          // CS-11043. For a republish, the realm is already mounted on
-          // this realm-server with its #sourceCache holding the
-          // pre-swap bytes. The reindex enqueued just below fans out
-          // module fetches through HTTP to this same realm-server, and
-          // without an explicit invalidation those fetches would hit
-          // the cached old bytes — producing a fresh reindex against
-          // STALE source, which then gets written to
-          // boxel_index.isolated_html and served forever. Neither the
-          // Cache-Control: no-store header nor the DB modules DELETE
-          // above reach into the realm-server's per-Realm byte cache.
-          // The Phase-3-PR-2 comment above relies on the NodeAdapter
-          // file watcher to invalidate via change events, but that's
-          // an async race against the immediately-enqueued reindex.
-          // Force the invalidation synchronously here.
-          //
-          // For a new publish, lookupOrMount mounts the realm fresh
-          // (registry row was just upserted above); the cache is
-          // empty so clearLocalCaches is a no-op. Either way the
-          // reindex below sees correct source.
-          let mountedRealmForCacheClear =
-            await reconciler.lookupOrMount(publishedRealmURL);
-          if (mountedRealmForCacheClear) {
-            mountedRealmForCacheClear.clearLocalCaches();
           }
 
           // Refresh the index. For a new publish this is redundant

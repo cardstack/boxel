@@ -905,11 +905,13 @@ module(basename(__filename), function () {
       // file-watcher catches up (potentially many hours later in
       // production), the published URL keeps serving stale HTML.
       //
-      // The fix (handle-publish-realm calling Realm.clearLocalCaches()
-      // before enqueueing the reindex) is verified end-to-end by the
-      // matrix Playwright test, but the data-layer invariant is faster
-      // to assert here: after republish, the boxel_index row for the
-      // published instance reflects the NEW title, not the initial.
+      // The fix (handle-publish-realm calling
+      // CachingDefinitionLookup.clearRealmCache(), whose NOTIFY drives
+      // Realm.invalidateAll() on every replica with the realm mounted)
+      // is verified end-to-end by the matrix Playwright test, but the
+      // data-layer invariant is faster to assert here: after republish,
+      // the boxel_index row for the published instance reflects the
+      // NEW title, not the initial.
       test('republishing reflects updated source content in boxel_index (CS-11043)', async function (assert) {
         let sourceRealmURL = new URL(sourceRealmUrlString);
         let sourceRealmFsPath = join(

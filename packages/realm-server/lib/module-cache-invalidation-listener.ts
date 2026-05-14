@@ -2,6 +2,7 @@ import {
   logger,
   MODULE_CACHE_INVALIDATED_CHANNEL,
   type CachingDefinitionLookup,
+  type Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
@@ -28,6 +29,13 @@ const log = logger('realm-server:module-cache-invalidation-listener');
 export interface ModuleCacheInvalidationListenerDeps {
   dbAdapter: PgAdapter;
   definitionLookup: CachingDefinitionLookup;
+  // CS-11153. Optional resolver from realm URL to a mounted Realm on
+  // this instance. Used by `k:'realm'` dispatch to drop the realm's
+  // in-process #sourceCache / #moduleCache when a peer (or this
+  // instance's own publish handler) broadcasts a realm-scope
+  // invalidation. Unmounted → no-op. Omitted in test stubs that
+  // exercise only the CachingDefinitionLookup generation bumps.
+  lookupMountedRealm?: (url: string) => Realm | undefined;
 }
 
 export type ParsedModuleCacheInvalidation =
@@ -111,6 +119,19 @@ export class ModuleCacheInvalidationListener {
           this.#deps.definitionLookup.bumpRealmGeneration(
             parsed.resolvedRealmURL,
           );
+          // CS-11153. Also drop the locally-mounted Realm's
+          // #sourceCache / #moduleCache so a follow-up reindex
+          // re-reads the swapped source bytes from disk instead of
+          // serving pre-swap bytes out of the in-process cache. If
+          // the realm isn't mounted here (or no lookup function was
+          // provided), nothing to do — the CachingDefinitionLookup
+          // bump above still applies.
+          {
+            const realm = this.#deps.lookupMountedRealm?.(
+              parsed.resolvedRealmURL,
+            );
+            realm?.invalidateAll();
+          }
           return;
         case 'global':
           this.#deps.definitionLookup.bumpGlobalGeneration();

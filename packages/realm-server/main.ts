@@ -613,9 +613,17 @@ const getIndexHTML = async () => {
   // observe the invalidation at persist time and discard stale results.
   // Self-notify is harmless — the emitter already bumped synchronously
   // before the DELETE; a second bump from the listener loop is idempotent.
+  //
+  // CS-11153. The `k:'realm'` dispatch additionally drops the locally
+  // mounted Realm's #sourceCache / #moduleCache via
+  // `Realm.invalidateAll()`, so the publish-realm flow can broadcast a
+  // single NOTIFY (via CachingDefinitionLookup.clearRealmCache) and
+  // every replica with the realm mounted invalidates its in-memory
+  // caches in time for the next reindex's source fetches to read disk.
   moduleCacheInvalidationListener = new ModuleCacheInvalidationListener({
     dbAdapter,
     definitionLookup,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await moduleCacheInvalidationListener.start();
 

@@ -7,6 +7,7 @@ import {
   param,
   query,
   type Prerenderer,
+  type Realm,
   type VirtualNetwork,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
@@ -291,6 +292,80 @@ module(basename(__filename), function () {
       assert.deepEqual(recorder.realm, ['http://x.test/r/']);
       assert.deepEqual(recorder.module, []);
       assert.strictEqual(recorder.global, 0);
+    });
+
+    test('handleNotification with realm payload also invalidateAlls the locally-mounted realm', function (assert) {
+      const recorder = newRecorder();
+      let invalidateAllCount = 0;
+      const realmURL = 'http://x.test/realm-invalidate/';
+      const fakeRealm = {
+        url: realmURL,
+        invalidateAll() {
+          invalidateAllCount++;
+        },
+      } as unknown as Realm;
+      const listener = new ModuleCacheInvalidationListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        definitionLookup: makeStubLookup(recorder),
+        lookupMountedRealm: (url) => (url === realmURL ? fakeRealm : undefined),
+      });
+
+      listener.handleNotification(JSON.stringify({ k: 'realm', r: realmURL }));
+
+      assert.strictEqual(
+        invalidateAllCount,
+        1,
+        'k:realm dispatched to invalidateAll on the locally-mounted realm',
+      );
+      assert.deepEqual(
+        recorder.realm,
+        [realmURL],
+        'k:realm still bumps the definition-lookup generation',
+      );
+    });
+
+    test('handleNotification with realm payload no-ops when realm is not mounted', function (assert) {
+      const recorder = newRecorder();
+      let invalidateAllCount = 0;
+      const listener = new ModuleCacheInvalidationListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        definitionLookup: makeStubLookup(recorder),
+        lookupMountedRealm: () => undefined,
+      });
+
+      listener.handleNotification(
+        JSON.stringify({ k: 'realm', r: 'http://x.test/unmounted/' }),
+      );
+
+      assert.strictEqual(
+        invalidateAllCount,
+        0,
+        'no invalidateAll attempted when lookupMountedRealm returns undefined',
+      );
+      assert.deepEqual(
+        recorder.realm,
+        ['http://x.test/unmounted/'],
+        'generation bump still applies even when the realm is not mounted',
+      );
+    });
+
+    test('handleNotification with realm payload skips invalidateAll when no lookup function is provided', function (assert) {
+      const recorder = newRecorder();
+      const listener = new ModuleCacheInvalidationListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        definitionLookup: makeStubLookup(recorder),
+        // lookupMountedRealm omitted — older deployments / test stubs.
+      });
+
+      listener.handleNotification(
+        JSON.stringify({ k: 'realm', r: 'http://x.test/no-lookup/' }),
+      );
+
+      assert.deepEqual(
+        recorder.realm,
+        ['http://x.test/no-lookup/'],
+        'generation bump still applies without a lookup function',
+      );
     });
 
     test('handleNotification with global payload bumps bumpGlobalGeneration', function (assert) {

@@ -1339,19 +1339,16 @@ export class Realm {
     this.#transpileCallCount = 0;
   }
 
-  // CS-11043. Bulk-invalidate this realm's in-process byte caches.
-  // Called by the publish-realm handler after the FS swap, BEFORE the
-  // reindex enqueues — so that subsequent source reads (which the
-  // reindex's prerender fans out across many of) bypass any
-  // pre-swap bytes the realm still has in `#sourceCache` /
-  // `#moduleCache`. The Phase-3-PR-2 publish flow relies on the
-  // NodeAdapter file-watcher to pick up the swap, but that's an
-  // async-event race against the immediately-enqueued reindex; this
-  // method makes the invalidation synchronous from the publish
-  // handler's vantage point. Different from `__testOnlyClearCaches`
-  // in that it does NOT reset the transpile counter (which is
-  // test-only diagnostic state, unrelated to byte-correctness).
-  clearLocalCaches(): void {
+  // CS-11153. Drop this realm's in-process byte caches (#sourceCache
+  // and #moduleCache). Companion to `invalidateCache(path)` — that
+  // method handles a single-path receive on the `realm_file_changes`
+  // channel, this method handles a realm-scope receive on
+  // `module_cache_invalidated` (`k:'realm'` payload). Called by
+  // `ModuleCacheInvalidationListener` after a publish-handler emits
+  // a NOTIFY via `CachingDefinitionLookup.clearRealmCache`. Different
+  // from `__testOnlyClearCaches` in that it does NOT reset the
+  // transpile counter (which is test-only diagnostic state).
+  invalidateAll(): void {
     this.#sourceCache.clear();
     this.#dropAllModuleCacheEntries();
   }

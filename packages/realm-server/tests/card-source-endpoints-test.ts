@@ -234,18 +234,18 @@ module(basename(__filename), function () {
           );
         });
 
-        // CS-11043. clearLocalCaches() is the public surface the
-        // publish-realm handler invokes after the FS swap so that the
-        // pre-swap bytes living in #sourceCache / #moduleCache don't get
-        // served to the reindex job (which would then write stale
-        // isolated_html into boxel_index). Functionally equivalent to
-        // __testOnlyClearCaches minus the test-only transpile-counter
-        // reset.
-        test('clearLocalCaches drops cached source bytes', async function (assert) {
-          let cacheTestPath = 'clear-local-caches.gts';
+        // CS-11153. invalidateAll() is the listener-side action that
+        // ModuleCacheInvalidationListener dispatches when it receives a
+        // `k:'realm'` payload on `module_cache_invalidated` — the same
+        // signal the publish handler emits via
+        // CachingDefinitionLookup.clearRealmCache(). Functionally
+        // equivalent to __testOnlyClearCaches minus the test-only
+        // transpile-counter reset.
+        test('invalidateAll drops cached source bytes', async function (assert) {
+          let cacheTestPath = 'invalidate-all.gts';
           await testRealm.write(
             cacheTestPath,
-            '// clear-local-caches initial content',
+            '// invalidate-all initial content',
           );
 
           await request
@@ -260,7 +260,7 @@ module(basename(__filename), function () {
             'precondition: second fetch hits the source cache',
           );
 
-          testRealm.clearLocalCaches();
+          testRealm.invalidateAll();
 
           let afterClear = await request
             .get(`/${cacheTestPath}`)
@@ -268,7 +268,7 @@ module(basename(__filename), function () {
           assert.strictEqual(
             afterClear.headers['x-boxel-cache'],
             'miss',
-            'fetch after clearLocalCaches is a miss — the #sourceCache entry was dropped',
+            'fetch after invalidateAll is a miss — the #sourceCache entry was dropped',
           );
         });
 
