@@ -897,6 +897,156 @@ module(basename(__filename), function () {
         );
       });
 
+      // CS-11043 regression. The production failure mode was:
+      // republish completes (status 202), but the reindex it kicks off
+      // serves PRE-swap source bytes out of the realm-server's
+      // per-Realm #sourceCache, producing a fresh boxel_index row whose
+      // head_html / isolated_html reflects the OLD card. Until the
+      // file-watcher catches up (potentially many hours later in
+      // production), the published URL keeps serving stale HTML.
+      //
+      // The fix (handle-publish-realm calling Realm.clearLocalCaches()
+      // before enqueueing the reindex) is verified end-to-end by the
+      // matrix Playwright test, but the data-layer invariant is faster
+      // to assert here: after republish, the boxel_index row for the
+      // published instance reflects the NEW title, not the initial.
+      test('republishing reflects updated source content in boxel_index (CS-11043)', async function (assert) {
+        let sourceRealmURL = new URL(sourceRealmUrlString);
+        let sourceRealmFsPath = join(
+          dir.name,
+          'realm_server_3',
+          ...sourceRealmURL.pathname.split('/').filter(Boolean),
+        );
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
+        let cardFilename = 'sentinel-card.json';
+        let initialName = `sentinel-initial-${uuidv4()}`;
+        let updatedName = `sentinel-updated-${uuidv4()}`;
+        // cardInfo.name feeds the computed cardTitle field on CardDef,
+        // which is what shows up in search_doc / head_html. Plain
+        // `attributes.title` is not a CardDef field and would be
+        // silently dropped during serialization.
+        let buildCardJson = (name: string) => ({
+          data: {
+            type: 'card',
+            id: `${sourceRealmUrlString}sentinel-card`,
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        });
+
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(initialName),
+        );
+
+        let publishHeaders = {
+          Authorization: `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        };
+        let publishBody = JSON.stringify({
+          sourceRealmURL: sourceRealmUrlString,
+          publishedRealmURL,
+        });
+
+        let firstResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', publishHeaders.Authorization)
+          .send(publishBody);
+        assert.strictEqual(firstResponse.status, 202, 'first publish accepted');
+
+        // The publish handler upserts the registry row asynchronously
+        // and enqueues a from-scratch index — drive a reconcile so the
+        // realm-server picks up the new published realm before we wait
+        // on boxel_index. search_doc is jsonb; cast to text and use a
+        // substring match so we don't have to encode the exact JSON
+        // path (cardInfo.name vs the computed cardTitle).
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index
+                 WHERE realm_url = $1
+                   AND type = 'instance'
+                   AND search_doc::text LIKE '%' || $2 || '%'
+                 LIMIT 1`,
+              { bind: [publishedRealmURL, initialName] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'initial sentinel never appeared in boxel_index.search_doc for published realm',
+          },
+        );
+
+        // Rewrite the source instance with a fresh sentinel string.
+        // After republish, boxel_index for the published realm must
+        // reflect updatedName (and the cached initialName row must be
+        // gone). If the realm-server's #sourceCache is not invalidated
+        // before the reindex, the reindex re-reads the OLD bytes and
+        // the assertion below times out, exactly as the production bug
+        // would have it.
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(updatedName),
+        );
+
+        let secondResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', publishHeaders.Authorization)
+          .send(publishBody);
+        assert.strictEqual(secondResponse.status, 202, 'republish accepted');
+
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index
+                 WHERE realm_url = $1
+                   AND type = 'instance'
+                   AND search_doc::text LIKE '%' || $2 || '%'
+                 LIMIT 1`,
+              { bind: [publishedRealmURL, updatedName] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'updated sentinel never appeared in boxel_index.search_doc for published realm — republish served pre-swap source bytes (CS-11043)',
+          },
+        );
+
+        // Belt-and-suspenders: the row that previously held the
+        // initial sentinel should no longer reference it.
+        let staleRows = await dbAdapter.execute(
+          `SELECT 1 FROM boxel_index
+             WHERE realm_url = $1
+               AND type = 'instance'
+               AND search_doc::text LIKE '%' || $2 || '%'`,
+          { bind: [publishedRealmURL, initialName] },
+        );
+        assert.strictEqual(
+          staleRows.length,
+          0,
+          'no boxel_index instance rows still reference the initial sentinel after republish',
+        );
+      });
+
       test('POST /_unpublish-realm can unpublish realm successfully', async function (assert) {
         // First publish a realm
         let publishResponse = await request
