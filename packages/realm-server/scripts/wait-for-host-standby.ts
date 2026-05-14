@@ -43,8 +43,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const elapsedSec = (start: number) => Math.round((Date.now() - start) / 1000);
 
 async function main() {
+  // env-vars.sh flips HOST_URL to https://localhost:4200 when the
+  // mkcert leaf is present and vite is running with `server.https`. If
+  // a stale shell hasn't picked that up yet, fall back to inspecting
+  // REALM_SERVER_TLS_CERT_FILE directly so the probe matches the
+  // scheme vite actually binds.
+  let defaultHostUrl =
+    process.env.REALM_SERVER_TLS_CERT_FILE &&
+    process.env.REALM_SERVER_TLS_KEY_FILE
+      ? 'https://localhost:4200'
+      : 'http://localhost:4200';
   let hostUrl =
-    process.argv[2] || process.env.HOST_URL || 'http://localhost:4200';
+    process.argv[2] || process.env.HOST_URL || defaultHostUrl;
   let standbyUrl = `${hostUrl}/_standby`;
 
   let launchArgs: string[] = [];
@@ -53,6 +63,13 @@ async function main() {
     process.env.PUPPETEER_DISABLE_SANDBOX === 'true'
   ) {
     launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+  }
+  // Match the prerender server's BrowserManager: relax cert checks for
+  // the local mkcert leaf. The wait probe was failing silently with
+  // ERR_CERT_AUTHORITY_INVALID against `https://localhost:4200` until
+  // every retry timed out, with no obvious explanation in the log.
+  if (hostUrl.startsWith('https://')) {
+    launchArgs.push('--ignore-certificate-errors');
   }
 
   log(`probing ${standbyUrl} (max ${TOTAL_TIMEOUT_MS / 1000}s)...`);

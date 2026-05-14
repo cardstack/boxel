@@ -85,12 +85,22 @@ export class Prerenderer {
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
+    // Local HTTPS dev (vite on https://localhost:4200 with HTTP/2) needs
+    // a more generous standby navigation timeout than the 30s default.
+    // The host bundle's first cold-start over h2 multiplexes ~1000+
+    // module requests through vite's optimizer; on a cold runner the
+    // initial `_standby` load can comfortably exceed 30s even though
+    // the server is healthy. Configurable via env so production /
+    // hosted runners can keep the tighter default.
+    let standbyTimeoutMs =
+      parseInt(process.env.PRERENDER_STANDBY_TIMEOUT_MS ?? '', 10) || undefined;
     this.#pagePool = new PagePool({
       maxPages,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
+      ...(standbyTimeoutMs ? { standbyTimeoutMs } : {}),
       onAffinityDisposed: (affinityKey) => {
         // Affinity tear-down implies the warm loader is gone, so any
         // owner entry for that affinity is now meaningless. Clear it
