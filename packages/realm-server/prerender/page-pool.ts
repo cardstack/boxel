@@ -1064,6 +1064,24 @@ export class PagePool {
     let awaitIdle = options?.awaitIdle !== false;
     let retainConsoleErrors = options?.retainConsoleErrors ?? false;
     let retainSharedContext = options?.retainSharedContext === true;
+    // Snapshot the shared-context entry we're tearing down BEFORE
+    // any await. Marking `closing = true` synchronously here is the
+    // key to closing the orphan-claim race: a concurrent
+    // `#assignStandbyToAffinity` that arrives during the in-flight
+    // close sees `existing.closing === true` in
+    // `#recordSharedContextForFirstPage` and falls through to the
+    // `set` branch, replacing the closing entry with its fresh
+    // context. Pre-CS-11140, the closing flag was only set inside
+    // `#closeSharedContext` at the very end of `disposeAffinity` —
+    // long after the entry-close loop had given concurrent callers
+    // plenty of microtask slots to enter and trigger the
+    // `Shared-context invariant violated` warning.
+    let oldShared = !retainSharedContext
+      ? this.#sharedContexts.get(affinityKey)
+      : undefined;
+    if (oldShared) {
+      oldShared.closing = true;
+    }
     if (awaitIdle) {
       this.#affinityPages.delete(affinityKey);
       if (entries) {
@@ -1071,14 +1089,42 @@ export class PagePool {
           await this.#closeEntry(entry, retainConsoleErrors);
         }
       }
-      if (!retainSharedContext) {
-        await this.#closeSharedContext(affinityKey);
+      if (oldShared) {
+        // Close the specific BrowserContext we snapshotted, not
+        // whatever is currently in `#sharedContexts` for this
+        // affinity. A concurrent caller may have overwritten the map
+        // entry with a fresh context (above), and `#closeEntry`'s
+        // `entryOwnsContext` path also closed `oldShared.context`
+        // directly if the map had been overwritten. `BrowserContext.close`
+        // is idempotent, so the duplicate close in that case is a
+        // no-op or a benign protocol-error caught here.
+        try {
+          await oldShared.context.close();
+        } catch (e) {
+          log.warn(`Error closing shared context for ${affinityKey}:`, e);
+        }
+        // Clean up the map entry only if it still points to our
+        // snapshot. If overwritten by a concurrent caller, the new
+        // entry stays in place — the affinity is live again under a
+        // fresh context.
+        if (this.#sharedContexts.get(affinityKey) === oldShared) {
+          this.#sharedContexts.delete(affinityKey);
+        }
       }
       await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
+      // Keep entries in `#affinityPages` until their close
+      // completes — `entry.closing = true` filters them from
+      // routing via `#selectEntryForAffinity`, and counting them
+      // toward `#poolEntryCount` prevents `#prepareSlotForStandby`
+      // from oversubscribing the pool by creating a fresh standby
+      // while the old contexts are still alive in memory.
+      // The per-entry `.finally` removes each entry from
+      // `#affinityPages` once Chrome has actually released it.
       let closePromises: Promise<void>[] = [];
       if (entries) {
         for (let entry of entries) {
+          entry.closing = true;
           let p = this.#closeEntry(entry, retainConsoleErrors).finally(() => {
             let currentEntries = this.#affinityPages.get(affinityKey);
             if (!currentEntries) return;
@@ -1091,14 +1137,21 @@ export class PagePool {
           void p;
         }
       }
-      if (!retainSharedContext) {
-        // Close the orphan after all page-closes settle so a concurrent
-        // `#spawnPoolEntryInSharedContext` on the same affinity is not
-        // racing a mid-flight context.close() (Codex P1 review #1 on
-        // PR #4465).
-        void Promise.allSettled(closePromises).then(() =>
-          this.#closeSharedContext(affinityKey),
-        );
+      if (oldShared) {
+        // Same race-closure as the awaitIdle path, just sequenced
+        // after the async close-promise settle: close the snapshotted
+        // context (idempotent) and clean up the map entry only if
+        // it's still our snapshot.
+        void Promise.allSettled(closePromises).then(async () => {
+          try {
+            await oldShared.context.close();
+          } catch (e) {
+            log.warn(`Error closing shared context for ${affinityKey}:`, e);
+          }
+          if (this.#sharedContexts.get(affinityKey) === oldShared) {
+            this.#sharedContexts.delete(affinityKey);
+          }
+        });
       }
       void this.#notifyManagerAffinityEvicted(affinityKey);
     }
@@ -1242,6 +1295,18 @@ export class PagePool {
     if (!lruAffinity) {
       return;
     }
+    // Default `awaitIdle: true` is intentional: the refill loop
+    // here serializes on the eviction's `page.close()`. Concurrent
+    // `getPage` callers awaiting the shared `#ensuringStandbys`
+    // promise see the completed post-close state — including a
+    // fresh standby — so cross-affinity-steal racing on a single
+    // remaining tab is avoided. Pre-CS-11139, that dedup leaked
+    // the wait to every caller fleet-wide; CS-11139's structural
+    // fix keeps independent callers off this critical section, so
+    // only the refill loop pays for the stuck-page close, which is
+    // the right tradeoff. The CS-11140 wins (orphan-claim race fix,
+    // supplementary-tab bookkeeping) still apply through the
+    // `disposeAffinity` body.
     await this.disposeAffinity(lruAffinity);
   }
 
@@ -1983,7 +2048,10 @@ export class PagePool {
           );
         }
       }
-      let rollback = this.#releaseSharedContextForClosedPage(affinityKey);
+      let rollback = this.#releaseSharedContextForClosedPage(
+        affinityKey,
+        shared.context,
+      );
       if (rollback) {
         await rollback.catch(() => {
           // close error is logged inside the helper
@@ -2058,11 +2126,24 @@ export class PagePool {
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
-    // CS-10817 step 2: record this page's context as the affinity's
-    // shared context if we don't have one yet. Subsequent steps start
-    // reusing this context; for now it's purely bookkeeping — behavior
-    // is unchanged from main.
-    this.#recordSharedContextForFirstPage(standby.context, affinityKey);
+    // Register the standby's BrowserContext as the affinity's primary
+    // shared context — but ONLY when the affinity doesn't already have
+    // an active one. A second concurrent caller on the same affinity
+    // (typical: `file` render + same-affinity `module` sub-call) used
+    // to register its standby's context unconditionally here, which:
+    //   1. Fired `Shared-context invariant violated` because the
+    //      already-tracked primary differed from the standby's context.
+    //   2. Inflated `pageCount` on the existing primary every time,
+    //      permanently preventing orphan-claim recovery for the
+    //      affinity (CS-11140).
+    // The standby's context is still owned by this entry — `#closeEntry`'s
+    // `entryOwnsContext` path closes it directly when the entry is torn
+    // down — but it's not the affinity's *shared* context for
+    // bookkeeping purposes.
+    let existing = this.#sharedContexts.get(affinityKey);
+    if (!existing || existing.closing) {
+      this.#recordSharedContextForFirstPage(standby.context, affinityKey);
+    }
     return entry;
   }
 
@@ -2109,8 +2190,16 @@ export class PagePool {
     // `#releaseSharedContextForClosedPage` on the old key (which would
     // close the context when pageCount hit zero and take the moving
     // page down with it).
+    //
+    // The entry's context is passed in so `#transferSharedContextBookkeeping`
+    // can verify it's actually the old affinity's primary. With CS-11140's
+    // supplementary-tab guard in `#assignStandbyToAffinity`, an entry on
+    // a multi-tab affinity may have a context that's NOT the affinity's
+    // primary shared context. Decrementing the primary's `pageCount` in
+    // that case would wrongly evict the primary's bookkeeping while
+    // some other (sibling) entry is still using it.
     if (oldAffinityKey) {
-      this.#transferSharedContextBookkeeping(oldAffinityKey);
+      this.#transferSharedContextBookkeeping(oldAffinityKey, entry.context);
     }
     entry.affinityKey = affinityKey;
     // Re-tagging path: pageId is unchanged, so the CDP runtime-
@@ -2124,7 +2213,16 @@ export class PagePool {
     entry.page.removeAllListeners('console');
     this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
     this.#addAffinityEntry(affinityKey, entry);
-    this.#recordSharedContextForFirstPage(entry.context, affinityKey);
+    // Same supplementary-context guard as `#assignStandbyToAffinity`:
+    // only register this entry's BrowserContext as the new affinity's
+    // primary when no active primary exists. The reassigned entry's
+    // context is owned by the entry; `#closeEntry`'s `entryOwnsContext`
+    // path handles its teardown without affecting whichever primary
+    // shared context the new affinity already has.
+    let existing = this.#sharedContexts.get(affinityKey);
+    if (!existing || existing.closing) {
+      this.#recordSharedContextForFirstPage(entry.context, affinityKey);
+    }
     entry.lastUsedAt = Date.now();
     return entry;
   }
@@ -2132,9 +2230,24 @@ export class PagePool {
   // Drop the old affinity's shared-context row without closing the
   // underlying BrowserContext — used by `#reassignAffinityTab` when a
   // page moves between affinities but keeps its context.
-  #transferSharedContextBookkeeping(oldAffinityKey: string): void {
+  //
+  // The `entryContext` argument is the moving entry's `BrowserContext`.
+  // The bookkeeping only decrements if that context IS the old
+  // affinity's primary shared context — supplementary tabs (whose
+  // contexts aren't tracked in `#sharedContexts`, per CS-11140's
+  // `#assignStandbyToAffinity` guard) leave the primary untouched.
+  #transferSharedContextBookkeeping(
+    oldAffinityKey: string,
+    entryContext: BrowserContext,
+  ): void {
     let shared = this.#sharedContexts.get(oldAffinityKey);
     if (!shared) return;
+    if (shared.context !== entryContext) {
+      // The moving entry was supplementary to the old affinity's
+      // primary shared context — its context wasn't contributing to
+      // `pageCount`. Leave the primary's bookkeeping intact.
+      return;
+    }
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount === 0) {
@@ -2221,8 +2334,10 @@ export class PagePool {
             await entry.page.close();
           } finally {
             if (affinityKey) {
-              closePromise =
-                this.#releaseSharedContextForClosedPage(affinityKey);
+              closePromise = this.#releaseSharedContextForClosedPage(
+                affinityKey,
+                entry.context,
+              );
             }
           }
           if (closePromise) {
@@ -2264,11 +2379,28 @@ export class PagePool {
   // so step-5's standby-adoption path can reuse it on the next
   // same-affinity getPage and inherit the realm's HTTP cache +
   // localStorage.
+  //
+  // `entryContext` is the closing entry's `BrowserContext`. If a
+  // concurrent caller replaced the affinity's map entry with a fresh
+  // context (e.g. `disposeAffinity` race where the old primary is
+  // mid-`page.close()` and a sibling caller registered a new primary
+  // for the same affinity), the entry we're closing and the entry in
+  // `#sharedContexts` no longer refer to the same context. Skip the
+  // decrement in that case — `disposeAffinity`'s snapshot-based
+  // cleanup path is responsible for the old primary, and the new
+  // primary's `pageCount` must stay intact.
   #releaseSharedContextForClosedPage(
     affinityKey: string,
+    entryContext: BrowserContext,
   ): Promise<void> | undefined {
     let shared = this.#sharedContexts.get(affinityKey);
     if (!shared) return;
+    if (shared.context !== entryContext) {
+      // Map entry was replaced — leave the new primary's bookkeeping
+      // alone. The closing context is being torn down by whichever
+      // path owned the snapshot (typically `disposeAffinity`).
+      return;
+    }
     shared.pageCount = Math.max(0, shared.pageCount - 1);
     shared.lastUsedAt = Date.now();
     if (shared.pageCount !== 0) return;
