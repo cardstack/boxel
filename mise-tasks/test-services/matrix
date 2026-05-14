@@ -18,7 +18,10 @@ case "$REALM_BASE_URL" in
 esac
 BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
 
+# NODE_TLS_REJECT_UNAUTHORIZED=0 scopes to the wait-on readiness probe so it
+# can connect to the self-signed mkcert leaf on https://localhost:4200|4201.
 WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 SKIP_SUBMISSION=true \
+  NODE_TLS_REJECT_UNAUTHORIZED=0 \
   start-server-and-test \
     'run-p -ln start:pg start:icons start:host-dist start:prerender-dev start:prerender-manager-dev start:worker-base start:base' \
     "${BASE_REALM_READY}|${ICONS_URL}|${HOST_URL}" \

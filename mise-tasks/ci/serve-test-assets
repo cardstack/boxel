@@ -12,13 +12,20 @@ export PATH="./node_modules/.bin:$PATH"
 # If both services are already running (e.g. local dev), skip startup entirely.
 # start-server-and-test fails if run-p exits immediately, which happens when
 # start:icons and start:host-dist both detect existing servers and exit 0.
-if curl --fail --silent "$ICONS_URL" >/dev/null 2>&1 && \
-   curl --fail --silent "$HOST_URL" >/dev/null 2>&1; then
+# -k tolerates the self-signed mkcert leaf the dev stack now serves on HOST_URL.
+if curl -k --fail --silent "$ICONS_URL" >/dev/null 2>&1 && \
+   curl -k --fail --silent "$HOST_URL" >/dev/null 2>&1; then
   echo "Icons and host already running, nothing to start"
   exec sleep 100000000
 fi
 
-WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 \
+# Skip TLS validation in the readiness probe only. The host now serves
+# HTTPS with the mkcert leaf, and wait-on (the start-server-and-test
+# readiness checker) doesn't pick up NODE_EXTRA_CA_CERTS reliably in
+# the start-server-and-test/wait-on subprocess on CI runners. Disabling
+# rejectUnauthorized here only affects this probe — the actual servers
+# under test still serve a real cert.
+WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 NODE_TLS_REJECT_UNAUTHORIZED=0 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist' \
     "${ICONS_URL}|${HOST_URL}" \

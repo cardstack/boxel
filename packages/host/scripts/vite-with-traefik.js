@@ -82,25 +82,33 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
         socket.destroy();
         return;
       }
-      socket.unshift(firstByte);
 
       if (firstByte[0] === 0x16) {
         // TLS ClientHello — forward raw bytes to vite, which terminates
-        // TLS itself with the cert it loaded in vite.config.mjs.
+        // TLS itself with the cert it loaded in vite.config.mjs. Write the
+        // peeked byte explicitly on 'connect' rather than relying on
+        // socket.unshift()+pipe(): the unshift pattern races the upstream
+        // socket's connect handshake (the rest of the ClientHello can arrive
+        // and be written before the unshifted byte gets flushed, leaving
+        // vite with a corrupt handshake and the client with
+        // ERR_CONNECTION_CLOSED).
         let upstream = net.connect(viteInternalPort, '127.0.0.1');
         upstream.on('error', () => socket.destroy());
-        socket.on('end', () => upstream.end());
-        upstream.on('end', () => socket.end());
-        socket.pipe(upstream);
-        upstream.pipe(socket);
-        socket.resume();
+        upstream.once('connect', () => {
+          upstream.write(firstByte);
+          socket.pipe(upstream);
+          upstream.pipe(socket);
+          socket.resume();
+        });
         return;
       }
 
       // Plain HTTP — read enough to extract the request-target, then
       // 301 to the https:// version on the same authority. The
       // request-target lives between the first and second SP on the
-      // start-line, e.g. `GET /foo HTTP/1.1\r\n`.
+      // start-line, e.g. `GET /foo HTTP/1.1\r\n`. The peeked byte
+      // never gets pushed back into the buffer; we just prepend it
+      // to the buffered chunks here.
       let chunks = [firstByte];
       let length = firstByte.length;
       let onData = (chunk) => {
