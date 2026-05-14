@@ -124,7 +124,12 @@ async function waitForPortFree(
           }
         });
       });
-      server.listen(port, '127.0.0.1', () => {
+      // Bind wildcard so we don't return "free" while the port is still
+      // bound on a different interface (e.g. the previous worker-manager
+      // listened on `::port`; a 127.0.0.1-only probe would succeed and
+      // the next test could allocate that same port, then EADDRINUSE
+      // when its child also binds `::port`).
+      server.listen(port, () => {
         server.close((closeError) => {
           if (closeError) {
             reject(closeError);

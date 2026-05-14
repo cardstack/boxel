@@ -27,6 +27,7 @@ import {
   DEFAULT_PG_PORT,
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
+  diagnosePortConflict,
   findAndHoldAvailablePort,
   FIXTURE_REALM_SERVER_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -86,6 +87,24 @@ async function resolvePortReservation(
   }
   // Caller supplied a PortReservation — we own releasing it at spawn time.
   return { port: passed.port, releaseHolder: () => passed.release() };
+}
+
+// Recognize the EADDRINUSE failure we want to retry. The child's stderr
+// from Node's `listen()` error path contains both the error code and
+// the port number, e.g. `Error: listen EADDRINUSE: address already in
+// use :::34301`. We match on either substring AND the port we just
+// tried, so an unrelated EADDRINUSE deeper in the realm-server's
+// startup doesn't trigger a misleading retry.
+function looksLikePortBindFailure(
+  error: unknown,
+  logs: string,
+  port: number,
+): boolean {
+  let combined = `${logs}\n${error instanceof Error ? error.message : String(error)}`;
+  if (!combined.includes('EADDRINUSE')) {
+    return false;
+  }
+  return combined.includes(`:${port}`) || combined.includes(`port: ${port}`);
 }
 
 async function readIncomingRequestBody(
@@ -523,30 +542,88 @@ export async function startIsolatedRealmStack({
       workerArgs.splice(5, 0, '--migrateDB');
     }
 
-    // Release the worker-manager port holder right before the child binds.
-    await workerManagerPortInfo.releaseHolder();
-    let workerManager = spawn('ts-node', workerArgs, {
-      cwd: realmServerDir,
-      env,
-      stdio: managedProcessStdio,
-    }) as SpawnedProcess;
-    let getWorkerLogs = captureProcessLogs(workerManager);
-    workerManager.on('exit', (code, signal) => {
-      if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
-        return;
+    // Worker-manager spawn with one EADDRINUSE retry. The retry only
+    // applies to the dynamically-allocated case: when the caller pinned
+    // the port explicitly we have nowhere else to put it, so a bind
+    // failure has to surface. The first attempt's port-conflict
+    // diagnostic is logged either way so a flake leaves a trail.
+    let workerManagerPortWasExplicit =
+      explicitWorkerManagerPort != null && explicitWorkerManagerPort !== 0;
+    let attempt = 0;
+    let workerManager!: SpawnedProcess;
+    let getWorkerLogs!: () => string;
+    let workerManagerRuntime!: { pid: number; port: number; url: string };
+    for (;;) {
+      attempt++;
+      // Release the worker-manager port holder right before the child binds.
+      await workerManagerPortInfo.releaseHolder();
+      workerManager = spawn('ts-node', workerArgs, {
+        cwd: realmServerDir,
+        env,
+        stdio: managedProcessStdio,
+      }) as SpawnedProcess;
+      getWorkerLogs = captureProcessLogs(workerManager);
+      let capturedLogs = getWorkerLogs;
+      let capturedPort = actualWorkerManagerPort;
+      workerManager.on('exit', (code, signal) => {
+        if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
+          return;
+        }
+        realmLog.warn(
+          `worker manager exited unexpectedly on port ${capturedPort} (code: ${code}, signal: ${signal})\n${capturedLogs()}`,
+        );
+      });
+      try {
+        workerManagerRuntime = await waitForJsonFile<{
+          pid: number;
+          port: number;
+          url: string;
+        }>(workerManagerMetadataFile, getWorkerLogs, {
+          label: 'worker manager',
+          process: workerManager,
+        });
+        break;
+      } catch (error) {
+        let logs = getWorkerLogs();
+        let isPortBindFailure = looksLikePortBindFailure(
+          error,
+          logs,
+          actualWorkerManagerPort,
+        );
+        if (isPortBindFailure) {
+          let diagnostic = await diagnosePortConflict(actualWorkerManagerPort);
+          realmLog.warn(
+            `worker manager EADDRINUSE on port ${actualWorkerManagerPort} (attempt ${attempt}). ${diagnostic}`,
+          );
+        }
+        await stopManagedProcess(workerManager).catch(() => {});
+        let canRetry =
+          isPortBindFailure && !workerManagerPortWasExplicit && attempt === 1;
+        if (!canRetry) {
+          throw error;
+        }
+        // Allocate a fresh port and rewrite the `--port=...` slot in
+        // workerArgs so the second spawn binds somewhere else. Locate
+        // the slot by prefix rather than index so a future workerArgs
+        // refactor doesn't silently retry on the wrong flag.
+        let nextReservation = await findAndHoldAvailablePort();
+        actualWorkerManagerPort = nextReservation.port;
+        let portArgIndex = workerArgs.findIndex((a) => a.startsWith('--port='));
+        if (portArgIndex < 0) {
+          throw new Error(
+            'worker-manager retry could not locate --port= flag in workerArgs',
+          );
+        }
+        workerArgs[portArgIndex] = `--port=${actualWorkerManagerPort}`;
+        workerManagerPortInfo = {
+          port: actualWorkerManagerPort,
+          releaseHolder: () => nextReservation.release(),
+        };
+        realmLog.warn(
+          `worker manager retrying spawn on port ${actualWorkerManagerPort} after EADDRINUSE`,
+        );
       }
-      realmLog.warn(
-        `worker manager exited unexpectedly (code: ${code}, signal: ${signal})\n${getWorkerLogs()}`,
-      );
-    });
-    let workerManagerRuntime = await waitForJsonFile<{
-      pid: number;
-      port: number;
-      url: string;
-    }>(workerManagerMetadataFile, getWorkerLogs, {
-      label: 'worker manager',
-      process: workerManager,
-    });
+    }
 
     let serverArgs = [
       '--transpileOnly',

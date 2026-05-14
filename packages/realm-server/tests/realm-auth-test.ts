@@ -21,6 +21,7 @@ module(basename(__filename), function () {
     const matrixUserId = '@firsttimer:localhost';
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
       permissions: {
         '*': ['read'],
         [matrixUserId]: ['read', 'write'],

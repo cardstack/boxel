@@ -20,6 +20,7 @@ export type {
 export {
   buildRealmToken,
   buildServerToken,
+  diagnosePortConflict,
   findAndHoldAvailablePort,
   isFactorySupportContext,
   type PortReservation,

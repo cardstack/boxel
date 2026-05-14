@@ -882,6 +882,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let request!: SuperTest<Test>;
 
       setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
         realmURL: rootTestRealmURL,
         permissions: {
           '*': ['read', 'write'],
