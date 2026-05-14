@@ -5,25 +5,17 @@
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
 # Run the dev-cert prerequisite UPFRONT — before we spawn the host app
-# or the parallel server stack. ensure-dev-cert exits non-zero with a
-# clear "run `mkcert -install` once" message when the root CA is
-# missing, but inside the multiplexed `start-server-and-test` /
+# or the parallel server stack. ensure-dev-cert fails fast with a clear
+# "run `mise run infra:trust-dev-cert` once" message when the root CA
+# is missing, but inside the multiplexed `start-server-and-test` /
 # `run-p -ln` output that message is one of hundreds of buffered lines
 # the user has to scroll past, and the cascade of downstream failures
-# (vite restart, prerender / worker-manager teardown) buries it
-# completely. Run it here so it's the first thing a dev sees when the
-# cert isn't installed; if it passes, the inner `mise run` invocations
-# that depend on it are fast no-ops (idempotent leaf-cert check).
+# (vite restart, prerender / worker-manager teardown) buries it. Run
+# it here so it's the first thing a dev sees when the cert isn't
+# installed; if it passes, the inner `mise run` invocations that
+# depend on it are fast no-ops (idempotent leaf-cert check).
 echo "[dev-all] Verifying dev TLS cert prerequisite…"
 if ! mise run infra:ensure-dev-cert; then
-  cat >&2 <<'EOF'
-
-[dev-all] -------------------------------------------------------------
-[dev-all] Aborting: dev TLS cert prerequisite failed.
-[dev-all] Address the message printed above by infra:ensure-dev-cert,
-[dev-all] then re-run `mise run dev-all`.
-[dev-all] -------------------------------------------------------------
-EOF
   exit 1
 fi
 

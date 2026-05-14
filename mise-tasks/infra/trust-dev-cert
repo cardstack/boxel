@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#MISE description="Install mkcert's root CA into the system trust store + NSS DB (one-time, prompts for sudo)"
+#
+# One-time setup partner for `infra:ensure-dev-cert`. ensure-dev-cert
+# refuses to invoke `mkcert -install` itself because the sudo prompt
+# stalls `mise run dev-all`'s parallel runner — it just verifies the
+# root CA is already trusted and fails fast otherwise. This task is
+# what the dev runs to satisfy that prerequisite.
+#
+# What it does:
+#   1. Creates ~/.pki/nssdb if missing, so `mkcert -install` lands its
+#      root CA in Chromium/Firefox's trust store on Linux (mkcert
+#      silently skips NSS install when the DB doesn't already exist).
+#   2. Runs `mkcert -install` — adds the root CA to /etc/ssl/certs
+#      (Linux) or the system keychain (macOS) and to the NSS DB.
+#
+# Both steps are idempotent — re-running is safe.
+
+set -euo pipefail
+
+if ! command -v mkcert >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[trust-dev-cert] mkcert is not installed. Install it first:
+
+  Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
+  Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
+  macOS (Homebrew):      brew install mkcert nss
+
+Then re-run `mise run infra:trust-dev-cert`.
+EOF
+  exit 1
+fi
+
+# Create the NSS DB up front so `mkcert -install` adds its root CA to
+# Chromium/Firefox. mkcert skips NSS install when the DB doesn't yet
+# exist, which on a fresh Linux user account is the default state.
+if command -v certutil >/dev/null 2>&1; then
+  NSSDB_DIR="$HOME/.pki/nssdb"
+  if [ ! -d "$NSSDB_DIR" ]; then
+    echo "[trust-dev-cert] Creating empty NSS DB at $NSSDB_DIR"
+    mkdir -p "$NSSDB_DIR"
+    certutil -d "sql:$NSSDB_DIR" -N --empty-password >/dev/null 2>&1 || true
+  fi
+fi
+
+echo "[trust-dev-cert] Running mkcert -install (will prompt for sudo)"
+mkcert -install
+echo "[trust-dev-cert] Done. Re-run \`mise run dev-all\` to start the dev stack."

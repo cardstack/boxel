@@ -21,14 +21,14 @@
 #   2. The leaf cert it generates is short-lived and replaceable; it
 #      lives under the dev's home dir and is never committed.
 #
-# This task does NOT run `mkcert -install` for you — it only verifies
-# the root CA is already trusted (system store + NSS DB) and fails fast
-# with instructions otherwise. The reason: `mkcert -install` prompts
-# for sudo, and `mise run dev-all`'s parallel runner multiplexes child
-# stdout into a single stream where that prompt is unsendable. The
-# whole stack would deadlock and then collapse with a SIGTERM cascade.
-# First-time setup: run `mkcert -install` once interactively. After
-# that this task is a fast no-op on every invocation.
+# This task verifies the mkcert root CA is already trusted (system
+# store + NSS DB) and fails fast with instructions otherwise. It does
+# NOT run `mkcert -install` itself, because that prompts for sudo and
+# `mise run dev-all`'s parallel runner multiplexes child stdout into
+# one stream where the prompt is unsendable — the whole stack would
+# deadlock and SIGTERM-cascade. The companion task
+# `mise run infra:trust-dev-cert` handles the one-time install. After
+# that, this task is a fast no-op on every invocation.
 
 set -euo pipefail
 
@@ -59,39 +59,12 @@ EOF
   exit 1
 fi
 
-# Initialize the user's Chromium/Firefox NSS DB before `mkcert -install`.
-# mkcert installs into the NSS DB only if it already exists; on a fresh
-# CI runner (and many fresh Linux installs) `~/.pki/nssdb/` is absent,
-# so mkcert silently skips it. Chrome then doesn't trust the leaf cert
-# natively, and `--ignore-certificate-errors` is only partially honored
-# on HTTP/2 streams — leaving the h2 path broken even though h1 works.
-# Creating the empty NSS DB up front lets `mkcert -install` add its root
-# CA, so Chromium trusts the cert end-to-end across h1 and h2.
-# Sequenced before the cert idempotent-skip so re-runs (where the leaf
-# cert already exists from the first invocation) still get the chance
-# to install the root CA into a freshly-created NSS DB on this runner.
-if command -v certutil >/dev/null 2>&1; then
-  NSSDB_DIR="$HOME/.pki/nssdb"
-  if [ ! -d "$NSSDB_DIR" ]; then
-    mkdir -p "$NSSDB_DIR"
-    # `-d sql:<dir>` creates an SQLite-backed NSS DB; empty password.
-    certutil -d "sql:$NSSDB_DIR" -N --empty-password >/dev/null 2>&1 || true
-  fi
-fi
-
-# Best-effort trust install. On a fresh machine this prompts for sudo
-# once and adds mkcert's root CA to /etc/ssl/certs (Linux) or the system
-# keychain (macOS), and — if the NSS DB above exists — to Chromium's
-# trust store. mkcert -install is internally idempotent — but the sudo
-# probe still blocks on a password prompt every invocation, and that
-# blocks the whole `mise run dev-all` parallel stack when it's run
-# inside `start-server-and-test`'s child shells (stdout flows to mise's
-# log multiplexer, the password prompt does not). Pre-check whether the
-# root CA is already trusted by both the system store and the user's
-# NSS DB, and skip the mkcert -install call entirely when it is. We
-# only invoke mkcert (with its sudo prompt) when there's actual work
-# to do. Sequenced before the leaf-cert idempotent-skip so re-runs
-# still get the chance to land the root CA in a freshly-created NSS DB.
+# Verify the mkcert root CA is already trusted in both the system store
+# and the user's NSS DB. If either is missing, fail fast and point at
+# `infra:trust-dev-cert` to install it. Sequenced before the leaf-cert
+# idempotent-skip so re-runs still surface a trust regression (e.g.
+# someone deleted the cert from /etc/ssl/certs) rather than booting a
+# realm-server with a half-wired trust chain.
 CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
 ROOT_CA_FILE=""
 if [ -n "$CAROOT" ] && [ -f "$CAROOT/rootCA.pem" ]; then
@@ -125,41 +98,37 @@ nss_db_has_root_ca() {
 }
 
 if ! system_trust_has_root_ca || ! nss_db_has_root_ca; then
-  missing=()
-  system_trust_has_root_ca || missing+=("the system trust store")
-  nss_db_has_root_ca || missing+=("the Chromium/Firefox NSS DB (~/.pki/nssdb)")
-  missing_joined=$(printf "%s, " "${missing[@]}")
-  missing_joined="${missing_joined%, }"
-  cat >&2 <<EOF
-[ensure-dev-cert] mkcert's root CA is missing from: ${missing_joined}.
+  # CI runners have passwordless sudo, so we can run the install
+  # ourselves without ever prompting — that path is load-bearing for
+  # `./.github/actions/init` to set the cert up on a fresh runner.
+  # `sudo -n true` succeeds silently when sudo won't prompt for a
+  # password (passwordless config or a cached credential), and exits
+  # non-zero otherwise. We only auto-install when it succeeds — on a
+  # dev's machine where sudo would prompt, we fail fast with a clear
+  # message pointing at `infra:trust-dev-cert`, because letting the
+  # prompt fire from inside `mise run dev` / `dev-all`'s parallel
+  # stack would deadlock the whole stack on unsendable stdin.
+  if sudo -n true 2>/dev/null; then
+    echo "[ensure-dev-cert] mkcert root CA missing; running trust-dev-cert (passwordless sudo available)"
+    mise run infra:trust-dev-cert
+  else
+    cat >&2 <<'EOF'
+[ensure-dev-cert] The mkcert dev root CA is not installed on this machine.
 
-This task can't install it for you — invoking \`mkcert -install\`
-inside \`mise run dev-all\` would prompt for sudo through the parallel
-runner's multiplexed output, and that prompt is unsendable. Run it
-once manually, then re-run \`mise run dev-all\`:
+Run this once to install it (prompts for sudo):
 
-  mkcert -install      # one-time, prompts for sudo
+  mise run infra:trust-dev-cert
 
-After that the root CA is trusted system-wide and this task becomes a
-no-op.
+Then re-run the command you just ran.
 EOF
-  exit 1
+    exit 1
+  fi
 fi
-echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB) — skipping mkcert -install"
-# Sanity check: did mkcert add its root CA to Chromium's NSS DB? On a
-# fresh CI runner this is the load-bearing trust path for h2 — the
-# system trust store doesn't reach Chromium on Linux. List the CAs so
-# the CI log shows whether the install actually landed.
-if command -v certutil >/dev/null 2>&1 && [ -d "$HOME/.pki/nssdb" ]; then
-  echo "[ensure-dev-cert] NSS DB contents after mkcert -install:"
-  certutil -d "sql:$HOME/.pki/nssdb" -L 2>&1 | sed 's/^/  /' || true
-fi
+echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
 
 # Idempotent skip when the leaf cert already exists and isn't within
 # 7 days of expiry. openssl's `-checkend` returns 0 if the cert is
-# valid for at least the given number of seconds. Sequenced AFTER
-# `mkcert -install` so the trust step always runs, then we short-
-# circuit cert generation on re-runs.
+# valid for at least the given number of seconds.
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
     exit 0

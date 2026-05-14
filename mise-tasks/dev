@@ -4,6 +4,18 @@
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
+# Run the dev-cert prerequisite UPFRONT — before the parallel stack
+# starts. ensure-dev-cert fails fast with a clear "run
+# `mise run infra:trust-dev-cert` once" message when the root CA is
+# missing, but inside the multiplexed `start-server-and-test` output
+# that message is buried under hundreds of buffered lines from the
+# other services and the downstream failure cascade. Run it here so
+# the message is the first and only thing on screen if it fails.
+echo "[dev] Verifying dev TLS cert prerequisite…"
+if ! mise run infra:ensure-dev-cert; then
+  exit 1
+fi
+
 # Enable job control so backgrounded subprocesses run in their own process
 # group. Without this, Ctrl-C is delivered to the whole foreground group;
 # npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
