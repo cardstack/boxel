@@ -14,14 +14,16 @@ export const X_BOXEL_JOB_ID_HEADER = 'x-boxel-job-id';
 // HTTP header sent by the host's `_federated-search` fetch wrapper while
 // rendering inside a prerender tab. Carries the URL of the realm whose
 // card is currently being rendered (the "consuming" realm). The realm-
-// server's search-cache layer pairs this with `x-boxel-job-id` to decide
-// whether a search is safe to serve from the job-scoped cache: the cache
-// is only consulted when the request's `realms` array is exactly
-// `[consumingRealm]`, since same-realm reads against the post-swap
-// `boxel_index` are stable for the lifetime of a single indexing batch
-// (the writer touches `boxel_index_working` until `applyBatchUpdates`
-// commits). Cross-realm reads bypass the cache — peer realms can swap
-// independently and a cached read would freeze a stale snapshot.
+// server's search-cache layer pairs this with `x-boxel-job-id` as the
+// indexer-traffic gate: both headers are only stamped by indexer-driven
+// prerender requests, so user-facing API callers always bypass the
+// cache and see live state. Within a single jobId, cache entries are
+// keyed by `(jobId, normalizedRealms, normalizedQuery, normalizedOpts)`
+// and cover both same-realm and cross-realm reads. Cross-realm reads
+// accept "first observation pinned for the batch's lifetime" as their
+// staleness contract; same-realm reads are tighter — the consuming
+// realm's own swap fires `clearInFlightSearch` and the cache is torn
+// down on `Realm.update`'s onInvalidation path.
 //
 // Lives in runtime-common (not realm-server/prerender) so both the host
 // SPA and the realm-server can import it without cross-package coupling.

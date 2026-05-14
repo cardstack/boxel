@@ -63,32 +63,39 @@ export default function handleSearch(opts?: {
         searchOpts,
       );
 
-    // Job-scoped same-realm cache. Gated on all three:
+    // Job-scoped cache. Gated on:
     //   (a) `x-boxel-job-id` is present and well-formed (only the
     //       indexer worker stamps this; live user / API callers never
     //       carry it and therefore always see fresh data),
     //   (b) `x-boxel-consuming-realm` is present and well-formed (the
-    //       host's render route only sets it during prerender),
-    //   (c) the request's `realms` list is exactly `[consumingRealm]`
-    //       — cross-realm reads bypass the cache because a peer
-    //       realm can swap its `boxel_index` mid-batch and the cached
-    //       value would freeze a stale snapshot.
+    //       host's render route only sets it during prerender).
+    //
+    // Cross-realm reads participate too. The contract is "one
+    // consolidated view of the realm-server's state per indexing
+    // batch": within a single jobId we pin search results to the
+    // first observation, even if a peer realm swaps its `boxel_index`
+    // mid-batch. A batch producing one consistent snapshot is more
+    // valuable than chasing post-swap state across repeated reads of
+    // the same query. Same-process writes (this batch's own swap)
+    // still trip `Realm.update`'s onInvalidation → clearInFlightSearch
+    // (Phase 1 path), so the cache only freezes *peer-realm* swaps
+    // within the job's lifetime.
+    //
+    // `multiRealmAuthorization` has already validated read access to
+    // every entry of `realmList` for this caller, so the cache cannot
+    // surface results across an authorization boundary.
     let jobId = searchCache
       ? sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER))
       : null;
     let consumingRealm = searchCache
       ? sanitizeConsumingRealmHeader(ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER))
       : null;
-    let cacheable =
-      searchCache &&
-      jobId &&
-      consumingRealm &&
-      realmList.length === 1 &&
-      realmList[0] === consumingRealm;
+    let cacheable = searchCache && jobId && consumingRealm;
 
     let combined = cacheable
       ? await searchCache!.getOrPopulate({
           jobId: jobId!,
+          realms: realmList,
           query: cardsQuery,
           opts: searchOpts,
           populate: runSearch,
