@@ -86,6 +86,7 @@
     "typescript-memoize": "catalog:",
     "undici": "catalog:",
     "uuid": "catalog:",
+    "vitest": "catalog:",
     "wait-for-localhost-cli": "catalog:",
     "wait-on": "^9.0.4",
     "yaml": "catalog:",
@@ -94,6 +95,8 @@
   "scripts": {
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
+    "test:vitest": "vitest run",
+    "codemod:qunit-to-vitest": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/codemods/qunit-to-vitest.ts",
     "bench:realm": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-realm/bench.ts",
     "bench:realm:check": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/bench-realm/check.ts",
     "migrate": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-migrations.ts",
