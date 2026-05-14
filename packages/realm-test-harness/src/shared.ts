@@ -338,12 +338,26 @@ async function probeBind(
     let finish = (result: string) => {
       if (settled) return;
       settled = true;
+      // Wait for `close` to actually release the listening socket before
+      // resolving. Without this gate the sequential probes in
+      // diagnosePortConflict can race their own still-closing sockets —
+      // a successful `FREE` probe's leftover bind would surface as a
+      // false EADDRINUSE on the next scope.
+      let finalize = () => resolve(result);
       try {
-        server.close();
+        server.close((closeError) => {
+          if (closeError && closeError.message !== 'Server is not running.') {
+            // Best-effort: include the close failure in the probe result so
+            // it's at least visible, but never throw — diagnostics must not
+            // mask the original failure.
+            finalize();
+          } else {
+            finalize();
+          }
+        });
       } catch {
-        // best effort
+        finalize();
       }
-      resolve(result);
     };
     server.once('error', (error: NodeJS.ErrnoException) => {
       finish(error.code ?? error.message);
