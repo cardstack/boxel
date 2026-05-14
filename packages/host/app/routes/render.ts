@@ -167,6 +167,7 @@ export default class RenderRoute extends Route<Model> {
     (globalThis as any).__waitForRenderLoadStability = undefined;
     window.removeEventListener('boxel-render-error', this.handleRenderError);
     this.#detachWindowErrorListeners();
+    this.#removePrerenderBaseHref();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
     this.lastRenderErrorSignature = undefined;
@@ -214,6 +215,9 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    // Without this, relative `<img src>` in a card template resolves against
+    // the /render/... synthetic URL and 404s. CS-11146.
+    this.#installPrerenderBaseHref(id);
     // Stamp the "consuming realm" — the realm that owns the card being
     // rendered — onto a global the store-service's federated-search
     // wrapper reads. The realm-server's job-scoped search cache pairs
@@ -1507,6 +1511,46 @@ export default class RenderRoute extends Route<Model> {
       }
     } while (current && !id);
     return id;
+  }
+
+  #installPrerenderBaseHref(id: string): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let baseHref: string;
+    try {
+      baseHref = new URL('./', this.#normalizeCardId(id)).href;
+    } catch {
+      return;
+    }
+    let head = document.head;
+    if (!head) {
+      return;
+    }
+    let existing = head.querySelector(
+      'base[data-prerender-base]',
+    ) as HTMLBaseElement | null;
+    if (existing) {
+      if (existing.href !== baseHref) {
+        existing.href = baseHref;
+      }
+      return;
+    }
+    let baseEl = document.createElement('base');
+    baseEl.setAttribute('data-prerender-base', '');
+    baseEl.href = baseHref;
+    if (head.firstChild) {
+      head.insertBefore(baseEl, head.firstChild);
+    } else {
+      head.appendChild(baseEl);
+    }
+  }
+
+  #removePrerenderBaseHref(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    document.head?.querySelector('base[data-prerender-base]')?.remove();
   }
 
   #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
