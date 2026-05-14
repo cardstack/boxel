@@ -233,7 +233,6 @@ export default function handlePublishRealm({
   realmsRootPath,
   getMatrixRegistrationSecret,
   domainsForPublishedRealms,
-  prerenderer,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -536,41 +535,6 @@ export default function handlePublishRealm({
             param(publishedRealmURL),
           ]);
 
-          // CS-11043. The DB-level cache above is necessary but not
-          // sufficient: the prerender server's puppeteer pages for
-          // this realm's affinity hold an in-process host-app
-          // `Loader` that caches evaluated modules by URL. After a
-          // republish swaps new bytes onto disk, those Loaders would
-          // still hand back the OLD module on subsequent renders —
-          // the realm-server's Cache-Control: no-store on source
-          // responses prevents Chromium from caching the HTTP layer
-          // but does not reach into the host's module cache. The
-          // production failure mode (nyuitp2026.boxel.site rendering
-          // stale wordmark for ~37h after publishing the new img
-          // form) was exactly this. Disposing the affinity tears
-          // down the puppeteer pages so the next render against the
-          // realm spawns a fresh page that fetches modules from disk.
-          //
-          // Optional method on the Prerenderer interface — local /
-          // remote stubs may not implement it. Best-effort: a failure
-          // here is logged but doesn't fail the publish, since the
-          // page-pool will eventually rotate via LRU anyway; we just
-          // want to avoid the long staleness window.
-          if (prerenderer?.disposeAffinity) {
-            try {
-              await prerenderer.disposeAffinity({
-                affinityType: 'realm',
-                affinityValue: publishedRealmURL,
-              });
-            } catch (e) {
-              log.warn(
-                `disposeAffinity failed for ${publishedRealmURL}: ${
-                  e instanceof Error ? e.message : String(e)
-                } — continuing with publish; stale Loader cache may persist until LRU rotation`,
-              );
-            }
-          }
-
           let lastPublishedAt = Date.now().toString();
           try {
             await upsertPublishedRealmInRegistry(dbAdapter, {
@@ -595,10 +559,9 @@ export default function handlePublishRealm({
           // without an explicit invalidation those fetches would hit
           // the cached old bytes — producing a fresh reindex against
           // STALE source, which then gets written to
-          // boxel_index.isolated_html and served forever (this was the
-          // staging-CI failure even after disposeAffinity + the
-          // Cache-Control: no-store + the DB modules DELETE — none of
-          // those reach into the realm-server's per-Realm byte cache).
+          // boxel_index.isolated_html and served forever. Neither the
+          // Cache-Control: no-store header nor the DB modules DELETE
+          // above reach into the realm-server's per-Realm byte cache.
           // The Phase-3-PR-2 comment above relies on the NodeAdapter
           // file watcher to invalidate via change events, but that's
           // an async race against the immediately-enqueued reindex.
