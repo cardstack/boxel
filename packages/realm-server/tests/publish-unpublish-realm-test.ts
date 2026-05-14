@@ -27,6 +27,7 @@ import {
   runTestRealmServer,
   closeServer,
   createVirtualNetwork,
+  fixtureDir,
   realmSecretSeed,
   matrixURL,
   waitUntil,
@@ -53,6 +54,7 @@ module(basename(__filename), function () {
     let dir: DirResult;
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'simple',
       permissions: {
         '*': ['read', 'write'],
       },
@@ -61,7 +63,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
+      copySync(fixtureDir('simple'), dir.name);
     });
 
     async function startRealmServer(
@@ -102,7 +104,7 @@ module(basename(__filename), function () {
         runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_3', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
         await startRealmServer(dbAdapter, publisher, runner);
       },
       afterEach: async () => {
