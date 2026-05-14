@@ -93,15 +93,35 @@ function lookupToken(url) {
   return matchedToken;
 }
 
-async function requestTokenFromClient(requestURL) {
+async function pickClientToAsk(initiatingClientId) {
+  // Prefer the client that initiated the fetch. With skipWaiting() +
+  // clients.claim() multiple tabs can be controlled by this SW where
+  // some still run an older bundle without the request-realm-token
+  // listener; if we always ask the "first" window we can hang waiting
+  // for a client that cannot answer.
+  if (initiatingClientId) {
+    try {
+      let initiating = await self.clients.get(initiatingClientId);
+      if (initiating && initiating.type === 'window') {
+        return initiating;
+      }
+    } catch {
+      // ignore and fall through to broadcast
+    }
+  }
+  let clientList = await self.clients.matchAll({ type: 'window' });
+  return clientList[0];
+}
+
+async function requestTokenFromClient(requestURL, initiatingClientId) {
   // Single-flight per request URL
   let existing = inflightTokenRequests.get(requestURL);
   if (existing) {
     return existing;
   }
   let promise = (async () => {
-    let clientList = await self.clients.matchAll({ type: 'window' });
-    if (clientList.length === 0) {
+    let client = await pickClientToAsk(initiatingClientId);
+    if (!client) {
       return undefined;
     }
     return new Promise((resolve) => {
@@ -125,9 +145,7 @@ async function requestTokenFromClient(requestURL) {
           resolve(undefined);
         }
       };
-      // Ask the first window client. If multiple are open, any one of them
-      // can answer from the shared localStorage / session state.
-      clientList[0].postMessage({ type: 'request-realm-token', requestURL }, [
+      client.postMessage({ type: 'request-realm-token', requestURL }, [
         channel.port2,
       ]);
     });
@@ -182,22 +200,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // No token in the map. Only attempt the on-miss client fallback when the
-  // request is to a host we've ever held a realm token for — that keeps the
-  // round-trip cost off every unrelated cross-origin asset request.
+  // No token in the map. Attempt the on-miss client fallback when either
+  // (a) the SW has not yet learned any realm hosts (cold-start: SW just
+  // activated and the page hasn't synced yet — exactly when we want the
+  // fallback to recover from a stale empty cache), or (b) the request
+  // origin matches a host we have ever held a token for. Skip the
+  // fallback for clearly-unrelated cross-origin assets once realmHosts
+  // is populated.
   let requestOrigin;
   try {
     requestOrigin = new URL(url).origin;
   } catch {
     return;
   }
-  if (!realmHosts.has(requestOrigin)) {
+  if (realmHosts.size > 0 && !realmHosts.has(requestOrigin)) {
     return;
   }
 
   event.respondWith(
     (async () => {
-      let token = await requestTokenFromClient(url);
+      let token = await requestTokenFromClient(url, event.clientId);
       if (token) {
         return fetch(buildAuthedRequest(request, token));
       }
