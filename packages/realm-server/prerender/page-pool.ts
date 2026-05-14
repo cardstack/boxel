@@ -1779,7 +1779,9 @@ export class PagePool {
           tabStartupMs,
         };
       }
-      let commandeered = this.#commandeerDormantTab(affinityKey);
+      let commandeered = this.#commandeerDormantTab(affinityKey, {
+        standbyOnly: true,
+      });
       if (commandeered) {
         let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab, tabStartupMs };
@@ -1795,7 +1797,9 @@ export class PagePool {
           await this.#ensureStandbyPool();
           tabStartupMs += Date.now() - startedAt;
         }
-        let after = this.#commandeerDormantTab(affinityKey);
+        let after = this.#commandeerDormantTab(affinityKey, {
+          standbyOnly: true,
+        });
         if (after) {
           let releaseTab = await after.queue.acquire(signal, priority);
           return { entry: after, reused: false, releaseTab, tabStartupMs };
@@ -1818,7 +1822,9 @@ export class PagePool {
         tabStartupMs,
       };
     }
-    let fallback = this.#commandeerDormantTab(affinityKey);
+    let fallback = this.#commandeerDormantTab(affinityKey, {
+      standbyOnly: true,
+    });
     if (fallback) {
       let releaseTab = await fallback.queue.acquire(signal, priority);
       return { entry: fallback, reused: false, releaseTab, tabStartupMs };
@@ -1851,7 +1857,9 @@ export class PagePool {
           tabStartupMs,
         };
       }
-      let retryCommandeered = this.#commandeerDormantTab(affinityKey);
+      let retryCommandeered = this.#commandeerDormantTab(affinityKey, {
+        standbyOnly: true,
+      });
       if (retryCommandeered) {
         let releaseTab = await retryCommandeered.queue.acquire(
           signal,
@@ -1985,11 +1993,27 @@ export class PagePool {
     }
   }
 
-  #commandeerDormantTab(affinityKey: string): PoolEntry | undefined {
+  #commandeerDormantTab(
+    affinityKey: string,
+    opts?: { standbyOnly?: boolean },
+  ): PoolEntry | undefined {
     if (this.#standbys.size > 0) {
       let standby = this.#selectLRUTab([...this.#standbys]);
       this.#standbys.delete(standby);
       return this.#assignStandbyToAffinity(standby, affinityKey);
+    }
+    // CS-11139: `standbyOnly: true` in the eager step-2 path so a
+    // caller doesn't preemptively cross-affinity-steal an idle tab
+    // from another realm whose runtime state (cached modules,
+    // localStorage, deps tracking) would leak into this caller's
+    // prerender. The pre-CS-11139 upfront `await
+    // #ensureStandbyPool()` in `getPage` made this implicit — by
+    // the time `commandeerDormantTab` ran, a fresh standby was
+    // always available. Now cross-affinity steal is reserved for
+    // the awaited-refill fallback in `#selectEntryForAffinity`'s
+    // entryList===0 branch.
+    if (opts?.standbyOnly) {
+      return undefined;
     }
 
     let idleCandidates: PoolEntry[] = [];
