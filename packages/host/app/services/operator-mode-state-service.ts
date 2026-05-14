@@ -112,6 +112,11 @@ interface CardItem {
   useBaseTemplate?: boolean;
 }
 
+interface SerializedExpandedStackItem {
+  id: string;
+  stackIndex: number;
+}
+
 export type FileView = 'inspector' | 'browser';
 
 type SerializedItem = CardItem;
@@ -130,6 +135,7 @@ export type SerializedState = {
   moduleInspector?: ModuleInspectorView;
   cardPreviewFormat?: Format;
   workspaceChooserOpened?: boolean;
+  expandedStackItem?: SerializedExpandedStackItem;
 };
 
 interface OpenFileSubscriber {
@@ -174,8 +180,7 @@ export default class OperatorModeStateService extends Service {
   // user's expand intent survives bury/pop cycles within a stack:
   // when a card is pushed deeper, stack-item reads isTopCard=false
   // and renders normally; when it pops back to the top, the stored
-  // intent re-applies and the card re-expands. Only set/read when
-  // the card opts in via `prefersWideFormat`.
+  // intent re-applies and the card re-expands.
   private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
   isStackItemExpanded(itemKey: string): boolean {
     return this.expandedStackItems.get(itemKey) ?? false;
@@ -189,6 +194,7 @@ export default class OperatorModeStateService extends Service {
     } else {
       this.expandedStackItems.delete(itemKey);
     }
+    this.schedulePersist();
   }
   // Drop ALL expand intents — called when a new card lands on any
   // stack so the expanded surface doesn't end up under the new card
@@ -196,6 +202,7 @@ export default class OperatorModeStateService extends Service {
   // background, see addItemToStack).
   clearAllStackItemExpanded() {
     this.expandedStackItems.clear();
+    this.schedulePersist();
   }
   // True when at least one stack's TOP card has expand intent — used
   // to drive the bar's glass-morphism + .has-expanded-card class. Only
@@ -331,6 +338,7 @@ export default class OperatorModeStateService extends Service {
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
     this.createListingModalPayload = undefined;
+    this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
@@ -1055,6 +1063,11 @@ export default class OperatorModeStateService extends Service {
       state.stacks.push(serializedStack);
     }
 
+    let expandedStackItem = this.serializedExpandedStackItem;
+    if (expandedStackItem) {
+      state.expandedStackItem = expandedStackItem;
+    }
+
     return state;
   }
 
@@ -1086,6 +1099,8 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   deserialize(rawState: SerializedState): OperatorModeState {
+    this.expandedStackItems.clear();
+
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -1141,7 +1156,35 @@ export default class OperatorModeStateService extends Service {
       stackIndex++;
     }
 
+    let expandedStackItem = rawState.expandedStackItem;
+    if (expandedStackItem) {
+      let stack = newState.stacks[expandedStackItem.stackIndex];
+      let item = stack?.find(
+        (candidate) => candidate.id === expandedStackItem.id,
+      );
+      if (item) {
+        this.expandedStackItems.set(item.instanceId, true);
+      }
+    }
+
     return newState;
+  }
+
+  private get serializedExpandedStackItem():
+    | SerializedExpandedStackItem
+    | undefined {
+    for (let [stackIndex, stack] of this._state.stacks.entries()) {
+      for (let item of stack) {
+        if (item.id && this.expandedStackItems.has(item.instanceId)) {
+          return {
+            id: item.id,
+            stackIndex,
+          };
+        }
+      }
+    }
+
+    return undefined;
   }
 
   get openDirs() {
