@@ -43,18 +43,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const elapsedSec = (start: number) => Math.round((Date.now() - start) / 1000);
 
 async function main() {
-  // env-vars.sh flips HOST_URL to https://localhost:4200 when the
-  // mkcert leaf is present and vite is running with `server.https`. If
-  // a stale shell hasn't picked that up yet, fall back to inspecting
-  // REALM_SERVER_TLS_CERT_FILE directly so the probe matches the
-  // scheme vite actually binds.
-  let defaultHostUrl =
-    process.env.REALM_SERVER_TLS_CERT_FILE &&
-    process.env.REALM_SERVER_TLS_KEY_FILE
-      ? 'https://localhost:4200'
-      : 'http://localhost:4200';
+  // Vite serves HTTPS on localhost:4200 in local dev (the realm-server
+  // requires the mkcert leaf and vite reads the same cert). Default
+  // accordingly so a stale shell that hasn't re-exported HOST_URL
+  // still probes the right scheme.
   let hostUrl =
-    process.argv[2] || process.env.HOST_URL || defaultHostUrl;
+    process.argv[2] || process.env.HOST_URL || 'https://localhost:4200';
   let standbyUrl = `${hostUrl}/_standby`;
 
   let launchArgs: string[] = [];

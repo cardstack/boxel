@@ -83,14 +83,14 @@ To build the entire repository and run the application, follow these steps:
    Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
 10. Host App
-    - Visit http://localhost:4200/
+    - Visit https://localhost:4200/
     - Enter the registration flow and create a Boxel Account
     - When prompted for an authentication token, type in "dev-token"
 
 11. Validate email for login
     - Visit SMTP UI at http://localhost:5001/
     - Validate email
-    - Go back to Host http://localhost:4200/ and login
+    - Go back to Host https://localhost:4200/ and login
 
 12. Perform "Setup up Secure Payment Method" flow
     - More detailed steps can be found in our [README](README.md) Payment Setup section

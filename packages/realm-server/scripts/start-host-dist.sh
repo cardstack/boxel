@@ -2,7 +2,7 @@
 # Start host dist server, skipping if already running.
 # Mirrors the pattern in start-icons.sh.
 
-HOST_URL="${HOST_URL:-http://localhost:4200}"
+HOST_URL="${HOST_URL:-https://localhost:4200}"
 
 # Vite serves HTTPS in local dev when the mkcert leaf is present
 # (vite.config.mjs reads REALM_SERVER_TLS_CERT_FILE / _KEY_FILE). curl

@@ -6,8 +6,8 @@ Live tests run directly against a realm server. Test modules are `*.test.gts` fi
 
 Requires servers to already be running.
 
-- Experiments realm: `http://localhost:4200/tests/index.html?liveTest=true&realmURL=https://localhost:4201/experiments/&hidepassed`
-- Catalog realm: `http://localhost:4200/tests/index.html?liveTest=true&realmURL=https://localhost:4201/catalog/&hidepassed`
+- Experiments realm: `https://localhost:4200/tests/index.html?liveTest=true&realmURL=https://localhost:4201/experiments/&hidepassed`
+- Catalog realm: `https://localhost:4200/tests/index.html?liveTest=true&realmURL=https://localhost:4201/catalog/&hidepassed`
 
 ## Run as a Script
 

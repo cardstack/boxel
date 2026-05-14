@@ -129,7 +129,7 @@ let {
     : `http://localhost:${port}`,
   distURL = isEnvironmentMode()
     ? serviceURL('host')
-    : (process.env.HOST_URL ?? 'http://localhost:4200'),
+    : (process.env.HOST_URL ?? 'https://localhost:4200'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,

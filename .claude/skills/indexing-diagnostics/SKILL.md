@@ -929,7 +929,7 @@ Slot-by-slot:
   | `realms-staging.stack.cards`            | `https://boxel-host-staging.stack.cards`                |
   | `realms.stack.cards`                    | `https://boxel-host.stack.cards`                        |
   | `realm-server.<slug>.localhost`         | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
-  | `localhost` or `*.localhost` (standard) | `http://localhost:4200`                                 |
+  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                 |
 
   If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
 
@@ -1001,7 +1001,7 @@ Then re-mint with `--permissions read,write,realm-owner` (or whatever the column
 
 For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
 
-- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `https://localhost:4201/...`, host-app at `http://localhost:4200`.
+- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `https://localhost:4201/...`, host-app at `https://localhost:4200`.
 - **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host-app at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`).
 
 Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. The host-app URL Claude needs to build the `/render` URL is derived from the realm URL per the table in the URL recipe section above. If you've configured a non-default matrix `server_name`, pass `--user` to the script explicitly.
@@ -1103,7 +1103,7 @@ The render URL format is what the indexer uses and what `prerenderer-reproduce` 
 <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0
 ```
 
-- `<boxel-host>` — `HOST_URL` / whichever host the realm server points its prerender at (usually `http://localhost:4200` locally).
+- `<boxel-host>` — `HOST_URL` / whichever host the realm server points its prerender at (usually `https://localhost:4200` locally).
 - `<encoded-card-id>` — `encodeURIComponent(url)`; e.g. `http%3A%2F%2Flocalhost%3A4201%2Fuser%2Fmyrealm%2FProduct%2F1.json`.
 - `<nonce>` — monotonically-incremented per prerender call; `1` is fine for manual replays.
 - `<encoded-options>` — `encodeURIComponent(JSON.stringify(renderOptions))`; `%7B%7D` (`{}`) works.

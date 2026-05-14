@@ -97,11 +97,11 @@ You can develop the host application locally backed by the staging or production
 ```
 scripts/start-host production
 …
-Build successful (27238ms) – Serving on http://localhost:4200/
+Build successful (27238ms) – Serving on https://localhost:4200/
 …
 ```
 
-Visit `http://localhost:4200` and log in with your staging or production credentials.
+Visit `https://localhost:4200` and log in with your staging or production credentials.
 
 ### ember-cli Hosted App
 
@@ -112,7 +112,7 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
-3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
+3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `https://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
 
 Alternatively, you can run everything with a single command from the repo root:
 
@@ -122,7 +122,7 @@ mise run dev-all
 
 This starts the host app first, waits for it to be ready, then starts the realm server and all supporting services.
 
-The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
+The app is available at https://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
 When you are done running the app you can stop the synapse server:
 
@@ -137,7 +137,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-The recommended way to view a realm's app is the host vite dev server at `http://localhost:4200` — open it and navigate via the workspace chooser. The realm-server itself terminates HTTPS+HTTP/2 on `https://localhost:4201` (see "Local HTTPS dev access" below for the one-time cert setup), and the in-browser host on `:4200` makes its realm fetches over that https origin so the indexing path multiplexes per Chrome's HTTP/2 connection rules. Visiting `https://localhost:4201/<realm>` directly does work but will surface mixed-content warnings, because the host bundle and icons it loads are still served over plain HTTP on `:4200`/`:4206`.
+The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate via the workspace chooser. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -304,7 +304,7 @@ store; Node clients pick up the cert via `NODE_EXTRA_CA_CERTS`.
 
 #### Using `mise run services:realm-server`
 
-You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. Visit `http://localhost:4200` (the vite host) to navigate the workspace — the host bundle there fetches realm data over the realm-server's https origin on `:4201`. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
+You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. Visit `https://localhost:4200` (the vite host) to navigate the workspace — the host bundle there fetches realm data over the realm-server's https origin on `:4201`. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
 
 #### Indexing dashboard
 
@@ -342,7 +342,7 @@ Each additional server spawns its own headless Chrome on an OS-assigned port and
 Prerender server:
 
 - REALM_SECRET_SEED (required): Secret used to create session tokens for realms.
-- BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
+- BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to https://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
 - PRERENDER_COUNT (optional): Number of prerender server instances to start. Each gets its own headless Chrome. Default 1.
 - PRERENDER_PAGE_POOL_MIN (optional): Idle floor for the dynamic page pool. The pool boots at this size and contracts back to it after sustained idle. Default 4 in dev (set in `mise-tasks/lib/env-vars.sh`).
@@ -600,7 +600,7 @@ To run the `packages/host/` workspace tests start the following servers:
 1. `mise run dev` from the repo root to serve _both_ the base realm and the realm that serves the test cards
 2. `pnpm start` in the `packages/host/` workspace to serve ember
 
-The tests are available at `http://localhost:4200/tests`
+The tests are available at `https://localhost:4200/tests`
 
 ### Realm Server Node tests
 

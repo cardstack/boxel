@@ -34,7 +34,7 @@ import {
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
-  : 'http://localhost:4200';
+  : 'https://localhost:4200';
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
