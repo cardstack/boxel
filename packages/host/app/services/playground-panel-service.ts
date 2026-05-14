@@ -8,7 +8,12 @@ import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
-import { isCardInstance, localId, isLocalId } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  localId,
+  isLocalId,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
@@ -26,7 +31,7 @@ import type ResetService from './reset';
 import type StoreService from './store';
 
 export interface PlaygroundSelection {
-  cardId: string; // for fields, this is their corresponding spec card's id, since fields do not have a card id
+  cardId: RealmResourceIdentifier; // for fields, this is their corresponding spec card's id, since fields do not have a card id
   format: Format; // default is 'isolated' for cards, 'embedded' for fields
   fieldIndex?: number;
   /* fieldIndex `undefined` means we are previewing a card instances. fields MUST have a corresponding index
@@ -73,7 +78,7 @@ export default class PlaygroundPanelService extends Service {
 
   persistSelections = (
     moduleId: string,
-    cardId: string,
+    cardId: RealmResourceIdentifier,
     format: Format,
     fieldIndex: number | undefined,
   ) => {

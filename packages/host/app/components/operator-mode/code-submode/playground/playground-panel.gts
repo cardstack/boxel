@@ -703,7 +703,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     this.playgroundPanelService.persistSelections(
       this.moduleId,
-      trimJsonExtension(selectedCardId),
+      rri(trimJsonExtension(selectedCardId)),
       selectedFormat,
       index, // `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing

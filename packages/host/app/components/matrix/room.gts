@@ -36,7 +36,10 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type {
+  RealmResourceIdentifier,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   baseFileRef,
   formattedError,
@@ -1608,7 +1611,7 @@ export default class Room extends Component<Signature> {
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
-      ]);
+      ]) as Set<RealmResourceIdentifier>;
       let context =
         await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {
