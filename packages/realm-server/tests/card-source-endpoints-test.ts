@@ -281,6 +281,11 @@ module(basename(__filename), function () {
             cacheTestPath,
             '// cache-control: no-store test content',
           );
+          // Indexer's post-write source read populates #sourceCache, so
+          // without this clear the "first" client GET would already be a
+          // hit. Drop the warm entry so the assertion below exercises
+          // the genuine miss-path defaultHeaders.
+          testRealm.__testOnlyClearCaches();
 
           let missResponse = await request
             .get(`/${cacheTestPath}`)

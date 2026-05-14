@@ -917,13 +917,17 @@ module(basename(__filename), function () {
         );
         let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
         let cardFilename = 'sentinel-card.json';
-        let initialTitle = `sentinel-initial-${uuidv4()}`;
-        let updatedTitle = `sentinel-updated-${uuidv4()}`;
-        let buildCardJson = (title: string) => ({
+        let initialName = `sentinel-initial-${uuidv4()}`;
+        let updatedName = `sentinel-updated-${uuidv4()}`;
+        // cardInfo.name feeds the computed cardTitle field on CardDef,
+        // which is what shows up in search_doc / head_html. Plain
+        // `attributes.title` is not a CardDef field and would be
+        // silently dropped during serialization.
+        let buildCardJson = (name: string) => ({
           data: {
             type: 'card',
             id: `${sourceRealmUrlString}sentinel-card`,
-            attributes: { title },
+            attributes: { cardInfo: { name } },
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -935,7 +939,7 @@ module(basename(__filename), function () {
 
         writeJsonSync(
           join(sourceRealmFsPath, cardFilename),
-          buildCardJson(initialTitle),
+          buildCardJson(initialName),
         );
 
         let publishHeaders = {
@@ -960,18 +964,19 @@ module(basename(__filename), function () {
         // The publish handler upserts the registry row asynchronously
         // and enqueues a from-scratch index — drive a reconcile so the
         // realm-server picks up the new published realm before we wait
-        // on boxel_index.
+        // on boxel_index. search_doc is jsonb; cast to text and use a
+        // substring match so we don't have to encode the exact JSON
+        // path (cardInfo.name vs the computed cardTitle).
         await testRealmServer.testingOnlyReconcile();
         await waitUntil(
           async () => {
             let rows = await dbAdapter.execute(
-              `SELECT head_html FROM boxel_index
+              `SELECT 1 FROM boxel_index
                  WHERE realm_url = $1
                    AND type = 'instance'
-                   AND head_html IS NOT NULL
-                   AND head_html LIKE '%' || $2 || '%'
+                   AND search_doc::text LIKE '%' || $2 || '%'
                  LIMIT 1`,
-              { bind: [publishedRealmURL, initialTitle] },
+              { bind: [publishedRealmURL, initialName] },
             );
             return rows.length > 0 ? rows : undefined;
           },
@@ -979,20 +984,20 @@ module(basename(__filename), function () {
             timeout: 30_000,
             interval: 100,
             timeoutMessage:
-              'initial title never appeared in boxel_index for published realm',
+              'initial sentinel never appeared in boxel_index.search_doc for published realm',
           },
         );
 
         // Rewrite the source instance with a fresh sentinel string.
         // After republish, boxel_index for the published realm must
-        // reflect updatedTitle (and the cached initialTitle row must be
+        // reflect updatedName (and the cached initialName row must be
         // gone). If the realm-server's #sourceCache is not invalidated
         // before the reindex, the reindex re-reads the OLD bytes and
         // the assertion below times out, exactly as the production bug
         // would have it.
         writeJsonSync(
           join(sourceRealmFsPath, cardFilename),
-          buildCardJson(updatedTitle),
+          buildCardJson(updatedName),
         );
 
         let secondResponse = await request
@@ -1007,13 +1012,12 @@ module(basename(__filename), function () {
         await waitUntil(
           async () => {
             let rows = await dbAdapter.execute(
-              `SELECT head_html FROM boxel_index
+              `SELECT 1 FROM boxel_index
                  WHERE realm_url = $1
                    AND type = 'instance'
-                   AND head_html IS NOT NULL
-                   AND head_html LIKE '%' || $2 || '%'
+                   AND search_doc::text LIKE '%' || $2 || '%'
                  LIMIT 1`,
-              { bind: [publishedRealmURL, updatedTitle] },
+              { bind: [publishedRealmURL, updatedName] },
             );
             return rows.length > 0 ? rows : undefined;
           },
@@ -1021,19 +1025,19 @@ module(basename(__filename), function () {
             timeout: 30_000,
             interval: 100,
             timeoutMessage:
-              'updated title never appeared in boxel_index for published realm — republish served pre-swap source bytes (CS-11043)',
+              'updated sentinel never appeared in boxel_index.search_doc for published realm — republish served pre-swap source bytes (CS-11043)',
           },
         );
 
         // Belt-and-suspenders: the row that previously held the
         // initial sentinel should no longer reference it.
-        let staleRows = (await dbAdapter.execute(
-          `SELECT head_html FROM boxel_index
+        let staleRows = await dbAdapter.execute(
+          `SELECT 1 FROM boxel_index
              WHERE realm_url = $1
                AND type = 'instance'
-               AND head_html LIKE '%' || $2 || '%'`,
-          { bind: [publishedRealmURL, initialTitle] },
-        )) as { head_html: string }[];
+               AND search_doc::text LIKE '%' || $2 || '%'`,
+          { bind: [publishedRealmURL, initialName] },
+        );
         assert.strictEqual(
           staleRows.length,
           0,
