@@ -25,7 +25,6 @@ import {
   buildQueryParamValue,
   parseSearchURL,
   ri,
-  rri,
   RealmPaths,
   runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
@@ -304,7 +303,7 @@ export class SearchResource<
       .map((realm) => {
         let realmPath = new RealmPaths(ri(realm));
         let cards = this.instances.filter((card) =>
-          realmPath.inRealm(rri(card.id)),
+          realmPath.inRealm(card.id),
         );
         return { realm, cards };
       })

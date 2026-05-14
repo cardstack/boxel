@@ -14,6 +14,7 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   hasExecutableExtension,
+  rri,
   trimJsonExtension,
   type Realm,
   cardDefFormats,
@@ -664,7 +665,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       removePlaygroundSelections();
       setPlaygroundSelections({
         [`${testRealmURL}head-preview/HeadPreview`]: {
-          cardId: `${testRealmURL}HeadPreview/example`,
+          cardId: rri(`${testRealmURL}HeadPreview/example`),
           format: 'head',
         },
       });
@@ -1357,11 +1358,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       const authorModuleId = `${testRealmURL}author/Author`;
       const categoryModuleId = `${testRealmURL}blog-post/Category`;
       const blogPostModuleId = `${testRealmURL}blog-post/BlogPost`;
-      const authorId = `${testRealmURL}Author/jane-doe`;
-      const categoryId1 = `${testRealmURL}Category/city-design`;
-      const categoryId2 = `${testRealmURL}Category/future-tech`;
-      const blogPostId1 = `${testRealmURL}BlogPost/mad-hatter`;
-      const blogPostId2 = `${testRealmURL}BlogPost/remote-work`;
+      const authorId = rri(`${testRealmURL}Author/jane-doe`);
+      const categoryId1 = rri(`${testRealmURL}Category/city-design`);
+      const categoryId2 = rri(`${testRealmURL}Category/future-tech`);
+      const blogPostId1 = rri(`${testRealmURL}BlogPost/mad-hatter`);
+      const blogPostId2 = rri(`${testRealmURL}BlogPost/remote-work`);
 
       setPlaygroundSelections({
         [`${authorModuleId}`]: {
@@ -1989,7 +1990,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
       setPlaygroundSelections({
         [`${testRealmURL}boom-pet/BoomPet`]: {
-          cardId: `${testRealmURL}BoomPet/cassidy`,
+          cardId: rri(`${testRealmURL}BoomPet/cassidy`),
           format: 'isolated',
         },
       });
@@ -2180,7 +2181,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it can render stale card in edit format when the server is in an error state for the card', async function (assert) {
-      const cardId = `${testRealmURL}Person/delilah`;
+      const cardId = rri(`${testRealmURL}Person/delilah`);
       setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
@@ -2260,7 +2261,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         }),
       );
 
-      const cardId = `${testRealmURL}Person/delilah`;
+      const cardId = rri(`${testRealmURL}Person/delilah`);
       setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
@@ -2318,7 +2319,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('it renders error message for missing file', async function (assert) {
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
-          cardId: `${testRealmURL}Person/chef-mike`,
+          cardId: rri(`${testRealmURL}Person/chef-mike`),
           format: 'isolated',
         },
       });
@@ -2360,7 +2361,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
-          cardId: `${testRealmURL}Person/chef-mike`,
+          cardId: rri(`${testRealmURL}Person/chef-mike`),
           format: 'isolated',
         },
       });

@@ -1511,7 +1511,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ]);
       setPlaygroundSelections({
         [`${testRealmURL}Pet/mango.json`]: {
-          cardId: `${testRealmURL}Pet/mango.json`,
+          cardId: rri(`${testRealmURL}Pet/mango.json`),
           format: 'edit',
         },
       });

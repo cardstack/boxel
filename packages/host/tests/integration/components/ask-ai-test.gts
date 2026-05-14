@@ -5,7 +5,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, rri } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -189,7 +189,7 @@ module('Integration | ask-ai', function (hooks) {
   });
 
   test('can send message to AI Assistant in code submode', async function (assert) {
-    const marcoId = `${testRealmURL}Pet/marco`;
+    const marcoId = rri(`${testRealmURL}Pet/marco`);
     const mangoId = `${testRealmURL}Pet/mango`;
     const petCardId = `${testRealmURL}pet.gts`;
     operatorModeStateService.restore({
