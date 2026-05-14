@@ -24,7 +24,7 @@
         }
       ]
     },
-    "description": "Top-level health view. Service-health stats use Loki log volume over the dashboard time range as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Narrow the time picker to ~5m for strict liveness; widen to surface bursty local-dev activity. Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard.",
+    "description": "Top-level health view. Service-health stats use Loki log volume over the dashboard time range as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Narrow the time picker to ~5m for strict liveness; widen to surface bursty local-dev activity. Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard. [diff-test sentinel — revert before merge]",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
