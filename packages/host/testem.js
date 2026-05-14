@@ -36,7 +36,12 @@ if (typeof module !== 'undefined') {
           // CA in headless Chrome's trust store, so relax cert checks
           // for the realm fetches the tests make. Safe — the URL is
           // fixed by the host config and the connection is loopback.
+          // Chrome 144+ silently demotes `--ignore-certificate-errors`
+          // to a dev-only flag unless paired with
+          // `--allow-insecure-localhost`; without the pair, every
+          // realm fetch fails with `TypeError: Failed to fetch`.
           '--ignore-certificate-errors',
+          '--allow-insecure-localhost',
         ].filter(Boolean),
       },
     },

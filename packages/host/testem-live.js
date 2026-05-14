@@ -41,8 +41,11 @@ const config = {
         // trust store, so relax cert checks for the realm fetches that
         // the live-test runner makes. Safe — the URL is fixed by
         // REALM_URL (default https://localhost:4201/catalog/) and the
-        // connection is loopback.
+        // connection is loopback. Chrome 144+ requires the
+        // `--allow-insecure-localhost` companion or it silently demotes
+        // `--ignore-certificate-errors` and TLS validation still fails.
         '--ignore-certificate-errors',
+        '--allow-insecure-localhost',
       ].filter(Boolean),
     },
   },
