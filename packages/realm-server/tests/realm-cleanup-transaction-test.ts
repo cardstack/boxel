@@ -13,7 +13,6 @@ import {
   deleteRegistryRowByUrl,
   insertSourceRealmInRegistry,
 } from '../lib/realm-registry-writes';
-import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 // CS-10898 regression test: an injected error after a registry-row delete
 // (but before the lock-holder transaction commits) must roll back BOTH the
@@ -64,7 +63,7 @@ module(basename(__filename), function () {
       );
 
       await assert.rejects(
-        withRealmWriteLock(dbAdapter, realmURL, async (txQuerier) => {
+        dbAdapter.withWriteLock(realmURL, async (txQuerier) => {
           // First DELETE — runs on the lock-holder's pinned querier so it
           // joins the BEGIN/COMMIT tx instead of auto-committing.
           await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
@@ -91,7 +90,7 @@ module(basename(__filename), function () {
       await seedSourceRealm(realmURL, '@cs10898both:localhost', 'disk-both');
 
       await assert.rejects(
-        withRealmWriteLock(dbAdapter, realmURL, async (txQuerier) => {
+        dbAdapter.withWriteLock(realmURL, async (txQuerier) => {
           await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
           await removeRealmPermissions(dbAdapter, new URL(realmURL), txQuerier);
           // Throw after both DELETEs — both should roll back atomically.
@@ -114,7 +113,7 @@ module(basename(__filename), function () {
       const realmURL = 'http://localhost:4201/cs10898/commit/';
       await seedSourceRealm(realmURL, '@cs10898ok:localhost', 'disk-commit');
 
-      await withRealmWriteLock(dbAdapter, realmURL, async (txQuerier) => {
+      await dbAdapter.withWriteLock(realmURL, async (txQuerier) => {
         await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
         await removeRealmPermissions(dbAdapter, new URL(realmURL), txQuerier);
       });

@@ -137,6 +137,7 @@ module('timeline handler', () => {
     },
     close: async () => {},
     getColumnNames: async () => [],
+    withWriteLock: async (_url, fn) => fn(undefined),
   } as DBAdapter;
 
   queuePublisher = {

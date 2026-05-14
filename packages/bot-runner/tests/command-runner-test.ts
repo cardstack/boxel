@@ -98,6 +98,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -243,6 +244,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -464,6 +466,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -559,6 +562,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -697,6 +701,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -910,6 +915,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -1030,6 +1036,7 @@ module('command runner', () => {
       },
       close: async () => {},
       getColumnNames: async () => [],
+      withWriteLock: async (_url, fn) => fn(undefined),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
