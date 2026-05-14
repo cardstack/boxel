@@ -63,7 +63,7 @@ while true; do
     echo "ERROR: Host app process died." >&2
     exit 1
   fi
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
+  if [ "$(curl -ks -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
     break
   fi
   sleep 2

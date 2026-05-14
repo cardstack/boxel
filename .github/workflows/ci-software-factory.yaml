@@ -83,7 +83,7 @@ jobs:
       - name: Serve test assets (icons + host dist)
         run: |
           mise run ci:serve-test-assets &
-          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
+          timeout 180 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
         working-directory: packages/software-factory
