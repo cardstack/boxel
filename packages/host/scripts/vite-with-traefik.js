@@ -114,12 +114,13 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
         }
         socket.removeListener('data', onData);
         let startLine =
-          lineEnd === -1 ? buf.toString('utf8') : buf.slice(0, lineEnd).toString('utf8');
+          lineEnd === -1
+            ? buf.toString('utf8')
+            : buf.slice(0, lineEnd).toString('utf8');
         let parts = startLine.split(' ');
         let requestTarget = parts[1] || '/';
         if (!requestTarget.startsWith('/')) requestTarget = '/' + requestTarget;
-        let body =
-          `The Boxel dev server speaks HTTPS — redirecting to https://localhost:${publicPort}${requestTarget}\n`;
+        let body = `The Boxel dev server speaks HTTPS — redirecting to https://localhost:${publicPort}${requestTarget}\n`;
         let response =
           `HTTP/1.1 301 Moved Permanently\r\n` +
           `Location: https://localhost:${publicPort}${requestTarget}\r\n` +
