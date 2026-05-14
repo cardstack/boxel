@@ -243,9 +243,6 @@ test.describe('Publish realm', () => {
     page,
     request,
   }) => {
-    let t0 = Date.now();
-    let step = (msg: string) =>
-      console.log(`[CS-11043 ${Date.now() - t0}ms] ${msg}`);
     // CS-11043 regression net. The bug was: a republish reported success
     // server-side but the published URL kept serving the previous publish's
     // rendered HTML, sometimes for tens of hours. Every existing
@@ -338,8 +335,6 @@ test.describe('Publish realm', () => {
     // Close the modal so we can re-open it cleanly for the second publish.
     await page.locator('[data-test-close-modal]').click();
 
-    step('first publish + sentinel verified, updating source for republish');
-
     // Change the index card's sentinel value. This is the "user edits
     // their realm between publishes" step.
     let updatedSentinel = `sentinel-updated-${Date.now()}`;
@@ -362,11 +357,13 @@ test.describe('Publish realm', () => {
       ),
     );
 
-    // DIAGNOSTIC: GET the source URL we just wrote to. If postCardSource
-    // silently failed (auth, 4xx, etc.), the source still has the
-    // initial value and the rest of the test is doomed to fail in
-    // exactly the way we've been seeing. We assert the source has the
-    // updated content before continuing.
+    // Guard against the failure mode where `postCardSource` silently
+    // returns non-ok and the source still has the initial bytes —
+    // without this, the test below would fail with a misleading
+    // "expected updated, received initial" sentinel assertion and the
+    // root cause (a failed write) would be invisible. Read the source
+    // back via the realm-server's source-MIME endpoint and assert the
+    // new sentinel landed before continuing to the publish step.
     let sourceAuthToken = await page.evaluate(
       (realmURL) =>
         JSON.parse(window.localStorage['boxel-session'])[realmURL] as string,
@@ -378,38 +375,29 @@ test.describe('Publish realm', () => {
         authorization: sourceAuthToken,
       },
     });
-    let sourceBody = await sourceCheck.text();
-    step(
-      `source index.json: status=${sourceCheck.status()} ` +
-        `contains-updated=${sourceBody.includes(updatedSentinel)} ` +
-        `contains-initial=${sourceBody.includes(initialSentinel)}`,
-    );
     expect(
-      sourceBody.includes(updatedSentinel),
+      (await sourceCheck.text()).includes(updatedSentinel),
       'source index.json should contain the updated sentinel after postCardSource',
     ).toBeTruthy();
 
     // Re-open the publish modal and re-trigger publish. The
     // default-domain checkbox can lose its selection on modal close,
-    // so click it again before clicking publish — otherwise the
+    // so check its state and click only when needed — otherwise the
     // publish button is disabled (`!hasSelectedPublishedRealmURLs`)
     // and the click silently no-ops.
     await page.locator('[data-test-publish-realm-button]').click();
-    step('publish modal reopened');
     let domainCheckbox = page.locator('[data-test-default-domain-checkbox]');
-    let domainCheckboxChecked = await domainCheckbox.isChecked();
-    step(`default-domain-checkbox.isChecked=${domainCheckboxChecked}`);
-    if (!domainCheckboxChecked) {
+    if (!(await domainCheckbox.isChecked())) {
       await domainCheckbox.click();
-      step('clicked default-domain-checkbox to select');
     }
     let publishButton = page.locator('[data-test-publish-button]');
-    let publishButtonDisabled = await publishButton.isDisabled();
-    step(`publish-button.isDisabled=${publishButtonDisabled}`);
 
-    // Set up the network wait BEFORE clicking — the handler awaits the
-    // full reindex before returning 202, so when this resolves we know
-    // the publish is fully done.
+    // Set up the network wait BEFORE clicking — the handler awaits
+    // the full reindex before returning 202, so when this resolves we
+    // know the publish is fully done. Caught so a transient hiccup
+    // downgrades to null rather than throwing; the published-URL
+    // assertion below has its own retry budget and is the
+    // load-bearing check either way.
     let publishResponsePromise = page
       .waitForResponse(
         (r) =>
@@ -417,44 +405,15 @@ test.describe('Publish realm', () => {
           r.request().method() === 'POST',
         { timeout: 180_000 },
       )
-      .catch((err) => {
-        step(`waitForResponse rejected/timed-out: ${err.message}`);
-        return null;
-      });
+      .catch(() => null);
     await publishButton.click();
-    step('clicked publish button (second time)');
     let publishResponse = await publishResponsePromise;
     if (publishResponse) {
-      step(
-        `/_publish-realm responded status=${publishResponse.status()} ` +
-          `url=${publishResponse.url()}`,
-      );
       expect(
         publishResponse.status(),
         'second publish should succeed',
       ).toBeLessThan(300);
-    } else {
-      step(
-        'WARNING: /_publish-realm response was NOT observed — publish may not have fired',
-      );
     }
-
-    // DIAGNOSTIC: fetch the published URL directly via plain HTTP
-    // BEFORE opening the popup. This decouples "what the server
-    // currently serves" from "what the browser tab renders". If the
-    // direct fetch already shows the updated sentinel, but the popup
-    // shows the initial, we have a browser-cache problem. If both
-    // show the initial, the publish pipeline itself didn't propagate.
-    let publishedRealmRootURL = `${serverURL.protocol}//${user.username}.${serverURL.host}/new-workspace/`;
-    let directFetch = await request.get(publishedRealmRootURL);
-    let directBody = await directFetch.text();
-    step(
-      `direct HTTP fetch of published URL ${publishedRealmRootURL}: ` +
-        `status=${directFetch.status()} ` +
-        `bodyLen=${directBody.length} ` +
-        `contains-updated=${directBody.includes(updatedSentinel)} ` +
-        `contains-initial=${directBody.includes(initialSentinel)}`,
-    );
 
     // Open the published URL again and verify the UPDATED sentinel
     // renders — and the initial sentinel does NOT. This is the
@@ -467,17 +426,6 @@ test.describe('Publish realm', () => {
       .click();
     let secondTab = await secondTabPromise;
     await secondTab.waitForLoadState();
-    step(`popup opened, URL=${secondTab.url()}`);
-    // Log the actual rendered sentinel-output text up front so a
-    // failure has the value visible in the test log, not just the
-    // assertion message.
-    let sentinelLocator = secondTab.locator('[data-test-sentinel-output]');
-    let sentinelCount = await sentinelLocator.count();
-    let sentinelText =
-      sentinelCount > 0 ? await sentinelLocator.first().textContent() : null;
-    step(
-      `popup [data-test-sentinel-output]: count=${sentinelCount} text=${JSON.stringify(sentinelText)}`,
-    );
     // Generous retry budget: if waitForResponse above was downgraded
     // to null, the publish may not yet be done by the time we land on
     // the published URL. The assertion retries until the sentinel
