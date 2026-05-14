@@ -238,18 +238,26 @@ jobs:
                 '',
                 `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
                 '',
+                '<details><summary>Show diff</summary>',
+                '',
                 '```diff',
                 truncated,
                 '```',
+                '',
+                '</details>',
               ].join('\n');
             } else {
               body = [
                 marker,
                 '## Observability diff (vs staging)',
                 '',
+                '<details><summary>Show diff</summary>',
+                '',
                 '```diff',
                 diff,
                 '```',
+                '',
+                '</details>',
                 '',
                 `_(Run: ${runUrl})_`,
               ].join('\n');
