@@ -11,7 +11,7 @@
  * binds HTTPS on an internal port and we layer a tiny same-port
  * dispatcher in front. The dispatcher peeks the first byte of each
  * incoming connection: a TLS ClientHello (0x16) gets piped through to
- * vite untouched, anything else gets a 301 redirect to the https://
+ * vite untouched, anything else gets a 308 redirect to the https://
  * URL. Mirrors the realm-server dispatcher pattern. Dev UX: typing
  * `http://localhost:4200/foo` now lands on `https://localhost:4200/foo`
  * instead of failing with `ERR_CONNECTION_REFUSED`.
@@ -158,7 +158,7 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
       `[vite-dispatcher] Listening on http(s)://localhost:${publicPort} → vite at 127.0.0.1:${viteInternalPort}`,
     );
     console.log(
-      `[vite-dispatcher] Plain http://localhost:${publicPort}/* requests will 301 to https://`,
+      `[vite-dispatcher] Plain http://localhost:${publicPort}/* requests will 308 to https://`,
     );
   });
   return server;

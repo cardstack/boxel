@@ -284,7 +284,7 @@ module(basename(__filename), function (hooks) {
     }
   });
 
-  test('plain HTTP request gets 301 redirect to https', async function (assert) {
+  test('plain HTTP request gets 308 redirect to https', async function (assert) {
     let { port, close } = await startListener({
       cert: certFile,
       key: keyFile,
@@ -296,7 +296,7 @@ module(basename(__filename), function (hooks) {
         path: '/_alive',
         scheme: 'http',
       });
-      assert.strictEqual(res.status, 301, 'plain http GET returns 301');
+      assert.strictEqual(res.status, 308, 'plain http GET returns 308');
       let location =
         typeof res.headers.location === 'string' ? res.headers.location : '';
       assert.true(
@@ -334,8 +334,8 @@ module(basename(__filename), function (hooks) {
       let location = locMatch?.[1] ?? '';
       let statusLine = response.split('\n')[0]?.trim() ?? '';
       assert.true(
-        /^HTTP\/1\.[01] 301\b/.test(statusLine),
-        `got 301 — first line was "${statusLine}"`,
+        /^HTTP\/1\.[01] 308\b/.test(statusLine),
+        `got 308 — first line was "${statusLine}"`,
       );
       assert.true(
         location.startsWith('https://127.0.0.1:'),

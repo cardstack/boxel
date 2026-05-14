@@ -4,7 +4,7 @@
 // `env-vars.sh` exports these whenever the local mkcert cert exists, which
 // is now the CI default. Without this delete, in-process fixture servers
 // would bind the HTTPS+HTTP/2 dispatcher on their random `127.0.0.1:444X`
-// ports and the dispatcher's plain-HTTP branch would 301-redirect every
+// ports and the dispatcher's plain-HTTP branch would 308-redirect every
 // supertest request to `https://…`, breaking every assertion that expects
 // `200`/`4xx`. In-process tests don't need TLS — they speak HTTP/1.1 to
 // supertest directly.

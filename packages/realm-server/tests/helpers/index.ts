@@ -1108,7 +1108,7 @@ export async function createRealm({
 // is now the CI default (the init action provisions it). Without this
 // delete, an in-process fixture would bind the HTTPS+HTTP/2 dispatcher
 // on its random `127.0.0.1:444X` port and supertest / direct-fetch
-// callers in tests that connect plain HTTP would get 301-redirected to
+// callers in tests that connect plain HTTP would get 308-redirected to
 // `https://…`, breaking every assertion that expects `200`/`4xx`.
 // The qunit-runner-driven realm-server tests already do this in their
 // own `tests/index.ts`; this call covers callers like the boxel-cli and
