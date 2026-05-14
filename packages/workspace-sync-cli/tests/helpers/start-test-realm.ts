@@ -23,22 +23,17 @@ export async function startTestRealmServer(
   // Use unique test database name like isolated-realm-server
   const testDbName = `test_db_${Math.floor(10000000 * Math.random())}`;
 
-  // Strip the dev TLS env vars exported by env-vars.sh when CI's init
-  // action provisions the cert. The integration tests below drive plain
-  // `http://localhost:4205/test/` URLs; if the spawned realm-server picks
-  // up the cert and binds the HTTPS+HTTP/2 dispatcher, every CLI command
-  // gets 301-redirected to https and the workspace-sync CLI (which
-  // doesn't follow redirects through its session handshake) breaks with
-  // "expected 'Authorization' header" errors.
-  const { REALM_SERVER_TLS_CERT_FILE, REALM_SERVER_TLS_KEY_FILE, ...rest } =
-    process.env;
-  // Reference the destructured names so eslint doesn't flag them as
-  // unused — the act of pulling them out of `rest` is the whole point.
-  void REALM_SERVER_TLS_CERT_FILE;
-  void REALM_SERVER_TLS_KEY_FILE;
-
+  // Inherit REALM_SERVER_TLS_CERT_FILE / _KEY_FILE so the spawned
+  // realm-server speaks HTTPS+HTTP/2 on :4205, matching the production
+  // wire and the matrix harness's isolated stack. The integration tests
+  // below now drive `https://localhost:4205/test/` URLs end-to-end; the
+  // mkcert leaf (provisioned by infra:ensure-dev-cert) covers
+  // `localhost` so cert validation works for the canonical realm URL,
+  // and the WSC CLI gets `NODE_TLS_REJECT_UNAUTHORIZED=0` via the
+  // process env below to keep this harness independent of the global
+  // NODE_EXTRA_CA_CERTS chain.
   const env = {
-    ...rest,
+    ...process.env,
     PGHOST: 'localhost',
     PGPORT: '5435', // Test port, not 5432
     PGUSER: 'postgres',
@@ -51,6 +46,11 @@ export async function startTestRealmServer(
     NODE_ENV: 'test',
     NODE_NO_WARNINGS: '1',
     LOW_CREDIT_THRESHOLD: '2000',
+    // The WSC CLI under test makes its own Node-side fetches against
+    // the spawned realm-server. Disable strict TLS on this harness so
+    // the integration suite doesn't depend on whether mise's
+    // env-vars.sh has populated NODE_EXTRA_CA_CERTS in the test shell.
+    NODE_TLS_REJECT_UNAUTHORIZED: '0',
   };
 
   // Minimal stub prerender server to satisfy required args without needing full prerender stack
@@ -103,13 +103,13 @@ export async function startTestRealmServer(
     'worker-manager',
     '--port=4212',
     '--matrixURL=http://localhost:8008',
-    `--distURL=${process.env.HOST_URL ?? 'http://localhost:4200'}`,
+    `--distURL=${process.env.HOST_URL ?? 'https://localhost:4200'}`,
     `--prerendererUrl=http://localhost:${prerenderPort}`,
     '--migrateDB',
-    '--fromUrl=http://localhost:4205/test/',
-    '--toUrl=http://localhost:4205/test/',
+    '--fromUrl=https://localhost:4205/test/',
+    '--toUrl=https://localhost:4205/test/',
     '--fromUrl=https://cardstack.com/base/',
-    '--toUrl=http://localhost:4201/base/',
+    '--toUrl=https://localhost:4201/base/',
   ];
 
   const workerProcess = spawn('ts-node', workerArgs, {
@@ -150,10 +150,10 @@ export async function startTestRealmServer(
     '--useRegistrationSecretFunction',
     `--path=${realmPath}`,
     '--username=test_realm',
-    '--fromUrl=http://localhost:4205/test/',
-    '--toUrl=http://localhost:4205/test/',
+    '--fromUrl=https://localhost:4205/test/',
+    '--toUrl=https://localhost:4205/test/',
     '--fromUrl=https://cardstack.com/base/',
-    '--toUrl=http://localhost:4201/base/',
+    '--toUrl=https://localhost:4201/base/',
   ];
 
   const realmProcess = spawn('ts-node', serverArgs, {
