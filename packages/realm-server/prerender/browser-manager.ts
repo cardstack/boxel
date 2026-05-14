@@ -36,8 +36,20 @@ export class BrowserManager {
     // its own NSS DB that mkcert doesn't always touch, so we relax cert
     // checks unconditionally for the prerender path. Safe: the origin is
     // fixed by REALM_BASE_URL and the connection is loopback-only.
+    //
+    // Chrome 144+ silently demotes `--ignore-certificate-errors` to a
+    // dev-only flag unless paired with a writeable `--user-data-dir`
+    // and `--allow-insecure-localhost`. Without those three together
+    // every TLS connection to localhost gets terminated with
+    // ERR_CONNECTION_CLOSED (visible upstream as a hung
+    // wait-for-host-standby probe). The user-data-dir is intentionally
+    // ephemeral — BrowserManager already manages its own pool of
+    // throwaway profiles, so it picks the path itself.
     if (process.env.REALM_BASE_URL?.startsWith('https://')) {
-      launchArgs.push('--ignore-certificate-errors');
+      launchArgs.push(
+        '--ignore-certificate-errors',
+        '--allow-insecure-localhost',
+      );
     }
 
     let extraArgs =

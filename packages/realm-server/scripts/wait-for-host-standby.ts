@@ -59,11 +59,16 @@ async function main() {
     launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
   }
   // Match the prerender server's BrowserManager: relax cert checks for
-  // the local mkcert leaf. The wait probe was failing silently with
-  // ERR_CERT_AUTHORITY_INVALID against `https://localhost:4200` until
-  // every retry timed out, with no obvious explanation in the log.
+  // the local mkcert leaf. Chrome 144+ silently demotes
+  // `--ignore-certificate-errors` to a dev-only flag — pair it with
+  // `--allow-insecure-localhost` so the dev cert is actually accepted
+  // (otherwise the TLS handshake closes with ERR_CONNECTION_CLOSED and
+  // every retry times out with no obvious explanation in the log).
   if (hostUrl.startsWith('https://')) {
-    launchArgs.push('--ignore-certificate-errors');
+    launchArgs.push(
+      '--ignore-certificate-errors',
+      '--allow-insecure-localhost',
+    );
   }
 
   log(`probing ${standbyUrl} (max ${TOTAL_TIMEOUT_MS / 1000}s)...`);
