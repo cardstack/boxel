@@ -3,7 +3,9 @@ import Plus from '@cardstack/boxel-icons/plus';
 import Trash from '@cardstack/boxel-icons/trash-2';
 import XIcon from '@cardstack/boxel-icons/x';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { concat } from '@ember/helper';
 
+import cn from '../../helpers/cn.ts';
 import { IconPencil, ThreeDotsHorizontal } from '../../icons.gts';
 import type { Icon } from '../../icons/types.ts';
 import type { BoxelButtonSize } from '../button/index.gts';
@@ -49,6 +51,8 @@ interface Signature {
     disabled?: boolean;
     height?: string; // iconHeight
     icon?: ContextButtonIcon; // defaults to horizontal 'content-menu'
+    isActive?: boolean;
+    isToggle?: boolean;
     label: string; // aria-label for icon button (required)
     loading?: boolean;
     size?: BoxelButtonSize;
@@ -90,7 +94,11 @@ function getVariant(variant: ContextButtonVariant = 'highlight') {
 const DropdownButton: TemplateOnlyComponent<Signature> = <template>
   {{#let (getVariant @variant) (getIcon @icon) as |variant icon|}}
     <IconButton
-      class='boxel-context-button boxel-context-button--{{variant}}'
+      class={{cn
+        'boxel-context-button'
+        (concat 'boxel-context-button--' variant)
+        boxel-context-button--active=@isActive
+      }}
       @icon={{icon}}
       @size={{if @size @size 'base'}}
       @loading={{@loading}}
@@ -98,6 +106,8 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
       @width={{@width}}
       @height={{@height}}
       aria-label={{@label}}
+      aria-pressed={{if @isToggle (if @isActive 'true' 'false')}}
+      data-active={{if @isActive 'true' 'false'}}
       ...attributes
     />
   {{/let}}
@@ -112,7 +122,12 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
         color: var(--primary, var(--boxel-highlight));
       }
       .boxel-context-button--highlight:hover,
+      .boxel-context-button--highlight.boxel-context-button--active,
       .boxel-context-button--highlight-icon:hover {
+        color: var(--primary-foreground, var(--boxel-dark));
+        background-color: var(--primary, var(--boxel-highlight));
+      }
+      .boxel-context-button--highlight-icon.boxel-context-button--active {
         color: var(--primary-foreground, var(--boxel-dark));
         background-color: var(--primary, var(--boxel-highlight));
       }
@@ -129,6 +144,9 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
       .boxel-context-button--ghost:hover {
         background-color: color-mix(in oklab, currentColor 10%, transparent);
       }
+      .boxel-context-button--ghost.boxel-context-button--active {
+        background-color: color-mix(in oklab, currentColor 10%, transparent);
+      }
       .boxel-context-button--ghost[aria-expanded='true'] {
         background-color: color-mix(in oklab, currentColor 25%, transparent);
       }
@@ -137,7 +155,12 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
         color: var(--destructive, var(--boxel-danger));
       }
       .boxel-context-button--destructive:hover,
+      .boxel-context-button--destructive.boxel-context-button--active,
       .boxel-context-button--destructive-icon:hover {
+        color: var(--destructive-foreground, var(--boxel-light-100));
+        background-color: var(--destructive, var(--boxel-danger));
+      }
+      .boxel-context-button--destructive-icon.boxel-context-button--active {
         color: var(--destructive-foreground, var(--boxel-light-100));
         background-color: var(--destructive, var(--boxel-danger));
       }

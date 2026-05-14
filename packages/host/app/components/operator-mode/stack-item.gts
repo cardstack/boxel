@@ -1290,15 +1290,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         text-align: left;
         text-box-trim: trim-both;
       }
-      /* Expanded mode editing — DO NOT flip the whole pill green;
-         only the pencil button lights up (rule below). Overrides
-         CardHeader's default header.is-editing green-bar treatment,
-         which is correct for stacked cards but not for the expanded
-         pill (we want the pill to stay white in the bar). */
-      .expanded-card-header-pill.is-editing {
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-      }
       /* Pencil button in expanded edit mode — solid green with dark
          icon for contrast (matches the active expand button). */
       .expanded-card-header-pill :deep(.icon-save),

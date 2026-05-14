@@ -152,11 +152,10 @@ export default class CardHeader extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <ContextButton
-                  class={{cn
-                    'icon-button icon-button--maximize'
-                    is-active=@isExpanded
-                  }}
+                  class='icon-button icon-button--maximize'
                   @icon={{Maximize}}
+                  @isActive={{@isExpanded}}
+                  @isToggle={{true}}
                   @label={{if @isExpanded 'Restore' 'Expand'}}
                   {{on 'click' @onExpand}}
                   data-test-expand-button={{if
@@ -388,13 +387,6 @@ export default class CardHeader extends Component<Signature> {
            up so the expand icon visually matches the pencil weight. */
         .icon-button--maximize :deep(svg) {
           stroke-width: 3.2;
-        }
-        /* Active expand button — solid green pill with dark icon
-           for contrast. Toggle via @isExpanded on CardHeader. */
-        .icon-button.is-active,
-        .icon-button.is-active:hover {
-          background-color: var(--boxel-highlight);
-          color: var(--boxel-dark);
         }
 
         /* Pencil button in a stacked (non-expanded) editing card.
