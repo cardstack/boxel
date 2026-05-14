@@ -3421,20 +3421,6 @@ export class Realm {
       let createdAt = await this.getCreatedTime(handle.path);
       let defaultHeaders: Record<string, string> = {
         'content-type': inferContentType(handle.path),
-        // CS-11043. The publish-republish failure mode was Chromium's
-        // process-level HTTP cache holding stale module bytes across
-        // publishes — the realm-server previously sent these
-        // responses with no `Cache-Control` and no `Last-Modified`,
-        // so Chromium applied heuristic caching and reused old bytes
-        // even after the on-disk file changed under a republish.
-        // `no-store` evicts the heuristic-cache vector entirely:
-        // every source/module fetch from the puppeteer page (and
-        // any other HTTP consumer) goes back to the realm-server,
-        // which then serves whichever bytes are current on EFS.
-        // Cost: no browser cache reuse for unchanged files, but
-        // these are typically prerendered into `boxel_index.isolated_html`
-        // by the indexer and not re-fetched per page view anyway.
-        'cache-control': 'no-store',
         ...(createdAt != null
           ? { 'x-created': formatRFC7231(createdAt * 1000) }
           : {}),

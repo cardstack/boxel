@@ -270,52 +270,6 @@ module(basename(__filename), function () {
           );
         });
 
-        // CS-11043. Chromium applies heuristic caching to responses that
-        // arrive without Cache-Control or Last-Modified, which led the
-        // prerender server's puppeteer pages to reuse stale module bytes
-        // across publishes. Asserting `no-store` on source responses
-        // documents the contract the publish flow now depends on.
-        test('source response sets Cache-Control: no-store', async function (assert) {
-          let cacheTestPath = 'cache-control-no-store.gts';
-          await testRealm.write(
-            cacheTestPath,
-            '// cache-control: no-store test content',
-          );
-          // Indexer's post-write source read populates #sourceCache, so
-          // without this clear the "first" client GET would already be a
-          // hit. Drop the warm entry so the assertion below exercises
-          // the genuine miss-path defaultHeaders.
-          testRealm.__testOnlyClearCaches();
-
-          let missResponse = await request
-            .get(`/${cacheTestPath}`)
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(
-            missResponse.headers['x-boxel-cache'],
-            'miss',
-            'precondition: first fetch is a cache miss',
-          );
-          assert.strictEqual(
-            missResponse.headers['cache-control'],
-            'no-store',
-            'miss-path source response carries Cache-Control: no-store',
-          );
-
-          let hitResponse = await request
-            .get(`/${cacheTestPath}`)
-            .set('Accept', 'application/vnd.card+source');
-          assert.strictEqual(
-            hitResponse.headers['x-boxel-cache'],
-            'hit',
-            'precondition: second fetch is a cache hit',
-          );
-          assert.strictEqual(
-            hitResponse.headers['cache-control'],
-            'no-store',
-            'hit-path source response also carries Cache-Control: no-store (propagated from the cached defaultHeaders)',
-          );
-        });
-
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
