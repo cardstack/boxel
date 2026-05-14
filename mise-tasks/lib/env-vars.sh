@@ -162,6 +162,13 @@ else
   if [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
     export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
     export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
+    # Vite's dev server terminates TLS using the same cert (see
+    # packages/host/vite.config.mjs). Flip HOST_URL to https so every
+    # consumer (browser, realm-server distURL rewriter, prerender
+    # standby probe) hits the same scheme — mixing http + https
+    # between vite and realm-server triggers CORS preflight failures
+    # ("Redirect is not allowed for a preflight request").
+    export HOST_URL="https://localhost:4200"
     if command -v mkcert >/dev/null 2>&1; then
       _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
       if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
