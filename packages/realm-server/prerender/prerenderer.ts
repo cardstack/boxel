@@ -32,9 +32,13 @@ import {
 } from './render-settlement';
 
 const log = logger('prerenderer');
+// Local dev default falls back to the same scheme/origin the rest of
+// the dev stack uses (mise-tasks/lib/env-vars.sh flips HOST_URL to
+// https://localhost:4200 when the mkcert leaf is present, otherwise
+// http). Test harnesses pass BOXEL_HOST_URL explicitly.
 const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
-  : 'http://localhost:4200';
+  : (process.env.HOST_URL ?? 'http://localhost:4200');
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 

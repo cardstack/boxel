@@ -117,7 +117,27 @@ if ! system_trust_has_root_ca || ! nss_db_has_root_ca; then
     # to ensure-dev-cert itself, which is the most likely command when
     # someone invoked this task directly.
     invoked_as="${BOXEL_DEV_INVOKED_AS:-mise run infra:ensure-dev-cert}"
-    cat >&2 <<EOF
+    if [ "$(uname -s)" = "Linux" ] && ! command -v certutil >/dev/null 2>&1; then
+      # System store may already be trusted but Chromium needs the NSS
+      # DB path, which requires certutil. Call this out specifically —
+      # the generic "not installed" message would have a dev re-run
+      # `trust-dev-cert` and get the same warning mkcert prints.
+      cat >&2 <<EOF
+[ensure-dev-cert] The mkcert dev root CA can't be trusted in Chromium/Firefox
+on this machine — \`certutil\` (from libnss3-tools) is not installed, so
+mkcert can't populate the NSS DB at ~/.pki/nssdb. Chromium reads NSS,
+not the system trust store, so without this Chromium will reject the
+dev cert and h2 fetches will hang.
+
+Install the NSS tools, then run trust-dev-cert (prompts for sudo):
+
+  sudo apt install -y libnss3-tools      # or: sudo dnf install -y nss-tools
+  mise run infra:trust-dev-cert
+
+Then re-run \`${invoked_as}\`.
+EOF
+    else
+      cat >&2 <<EOF
 [ensure-dev-cert] The mkcert dev root CA is not installed on this machine.
 
 Run this once to install it (prompts for sudo):
@@ -126,6 +146,7 @@ Run this once to install it (prompts for sudo):
 
 Then re-run \`${invoked_as}\`.
 EOF
+    fi
     exit 1
   fi
 fi
