@@ -126,7 +126,7 @@ let {
   serviceName = 'realm-server',
   serverURL = isEnvironmentMode()
     ? serviceURL(serviceName)
-    : `http://localhost:${port}`,
+    : `https://localhost:${port}`,
   distURL = isEnvironmentMode()
     ? serviceURL('host')
     : (process.env.HOST_URL ?? 'https://localhost:4200'),

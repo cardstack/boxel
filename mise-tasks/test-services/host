@@ -52,11 +52,12 @@ NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
 
-# NODE_TLS_REJECT_UNAUTHORIZED=0 only affects the wait-on readiness probe
-# (which runs in-process inside start-server-and-test). The probe needs to
-# tolerate the self-signed mkcert leaf the realm-server / vite now serve on
-# https://localhost:4201|4202|4200. The actual services under test still
-# present a real cert and chrome validates it normally.
+# START_SERVER_AND_TEST_INSECURE=1 scopes to the wait-on readiness probe.
+# The realm-server / vite now serve the self-signed mkcert leaf on
+# https://localhost:4201|4202|4200; start-server-and-test forces
+# strictSSL:true on wait-on (overriding NODE_TLS_REJECT_UNAUTHORIZED), so
+# the documented INSECURE flag is the right escape hatch. Does not affect
+# the actual services under test.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG="$SKIP_CATALOG" \
@@ -65,7 +66,7 @@ WAIT_ON_TIMEOUT=900000 \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
   LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
   NODE_NO_WARNINGS=1 \
-  NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
     "${BASE_REALM_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
