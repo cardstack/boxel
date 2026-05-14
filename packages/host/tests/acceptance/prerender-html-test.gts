@@ -550,6 +550,21 @@ module('Acceptance | prerender | html', function (hooks) {
       .containsText('Paper', 'isolated format is rendered');
   });
 
+  test('prerender installs a <base href> pointing at the card directory', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(renderPath(url, '/html/isolated/0'));
+    let baseEl = document.head.querySelector(
+      'base[data-prerender-base]',
+    ) as HTMLBaseElement | null;
+    assert.ok(baseEl, '<base data-prerender-base> is present in <head>');
+    let expectedDir = new URL('./', url.replace(/\.json$/, '')).href;
+    assert.strictEqual(
+      baseEl?.href,
+      expectedDir,
+      '<base href> resolves to the card containing directory',
+    );
+  });
+
   test('prerender embedded html', async function (assert) {
     let url = `${testRealmURL}Cat/paper.json`;
     await visit(renderPath(url, '/html/embedded/0'));

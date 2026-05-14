@@ -940,6 +940,10 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__renderModel = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
+      // Same reason as the globals above: in tests the owner can be
+      // destroyed without deactivate firing, which would leak the
+      // injected <base> into the next route/test.
+      this.#removePrerenderBaseHref();
     });
   }
 
