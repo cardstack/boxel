@@ -648,13 +648,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
 
     if (this.isTopCard && !this.isExpanded) {
-      items.push(
-        new MenuItem({
-          label: 'Expand to Full Width',
-          icon: Maximize,
-          action: this.toggleExpanded,
-        }),
+      let expandItem = new MenuItem({
+        label: 'Expand to Full Width',
+        icon: Maximize,
+        action: this.toggleExpanded,
+      });
+      let copyAsMarkdownIndex = items.findIndex(
+        (item) => item.label === 'Copy as Markdown',
       );
+
+      if (copyAsMarkdownIndex > -1) {
+        items.splice(copyAsMarkdownIndex + 1, 0, expandItem);
+      } else {
+        items.push(expandItem);
+      }
     }
 
     return items;
