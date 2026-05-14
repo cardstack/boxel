@@ -62,6 +62,7 @@ module(basename(__filename), function () {
       }
 
       setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
         realmURL,
         permissions: {
           '*': ['read', 'write'],
@@ -312,6 +313,7 @@ module(basename(__filename), function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
       realmURL,
       permissions: {
         '*': ['read', 'write'],
