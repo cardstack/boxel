@@ -57,7 +57,8 @@ DECLARE
   rec RECORD;
   patterns text[][] := ARRAY[
     ARRAY['${oldScheme}://localhost:4201', '${newScheme}://localhost:4201'],
-    ARRAY['${oldScheme}://localhost:4202', '${newScheme}://localhost:4202']
+    ARRAY['${oldScheme}://localhost:4202', '${newScheme}://localhost:4202'],
+    ARRAY['${oldScheme}://localhost:4205', '${newScheme}://localhost:4205']
   ];
   i int;
 BEGIN
@@ -65,6 +66,7 @@ BEGIN
     SELECT 1 FROM realm_user_permissions
     WHERE realm_url LIKE '${oldScheme}://localhost:4201/%'
        OR realm_url LIKE '${oldScheme}://localhost:4202/%'
+       OR realm_url LIKE '${oldScheme}://localhost:4205/%'
     LIMIT 1
   ) THEN
     RETURN;
