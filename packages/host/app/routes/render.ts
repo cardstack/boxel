@@ -215,9 +215,14 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
-    // Without this, relative `<img src>` in a card template resolves against
-    // the /render/... synthetic URL and 404s. CS-11146.
-    this.#installPrerenderBaseHref(id);
+    if (!isTesting()) {
+      // Without this, relative `<img src>` in a card template resolves
+      // against the /render/... synthetic URL and 404s. Skipped in tests:
+      // <base href> is document-wide, and the test harness loads libraries
+      // (e.g. Monaco) that resolve their worker URLs against document.baseURI.
+      // Real prerender headless browsers don't load Monaco. CS-11146.
+      this.#installPrerenderBaseHref(id);
+    }
     // Stamp the "consuming realm" — the realm that owns the card being
     // rendered — onto a global the store-service's federated-search
     // wrapper reads. The realm-server's job-scoped search cache pairs
