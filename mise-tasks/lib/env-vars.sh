@@ -179,4 +179,34 @@ else
     fi
   fi
   unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
+
+  # Puppeteer 24.35 (and the lockfile's tree) bundles Chrome 143, which
+  # has a known h2 stream-window bug that hangs the dev prerender forever
+  # on the first cold-start fetch of vite's large pre-optimized
+  # `indexeddb-crypto-store` chunk (matrix-js-sdk). Newer Chrome (148+)
+  # doesn't hit the bug. Both prerender's BrowserManager and the
+  # standby-warmup probe (`scripts/wait-for-host-standby.ts`) already
+  # honor `PUPPETEER_EXECUTABLE_PATH`, so just point them at the system
+  # chrome when one's installed. Devs without google-chrome installed
+  # keep the bundled puppeteer chromium — they'll see the hang stall
+  # longer until vite's optimizer cache warms up.
+  if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+    # Explicit checks (not a for-loop) so the macOS path's embedded space
+    # doesn't get word-split by /bin/sh — env-vars.sh runs under whatever
+    # shell mise invokes, and POSIX sh handles backslash-escapes in for-
+    # loop word lists inconsistently across implementations.
+    if [ -x /usr/bin/google-chrome ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+    elif [ -x /usr/bin/google-chrome-stable ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+    elif [ -x /usr/bin/chromium ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    elif [ -x /usr/bin/chromium-browser ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+      export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then
+      export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
+    fi
+  fi
 fi
