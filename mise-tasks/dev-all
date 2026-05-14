@@ -15,7 +15,7 @@
 # installed; if it passes, the inner `mise run` invocations that
 # depend on it are fast no-ops (idempotent leaf-cert check).
 echo "[dev-all] Verifying dev TLS cert prerequisite…"
-if ! mise run infra:ensure-dev-cert; then
+if ! BOXEL_DEV_INVOKED_AS='mise run dev-all' mise run infra:ensure-dev-cert; then
   exit 1
 fi
 

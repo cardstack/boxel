@@ -12,7 +12,7 @@
 # other services and the downstream failure cascade. Run it here so
 # the message is the first and only thing on screen if it fails.
 echo "[dev] Verifying dev TLS cert prerequisite…"
-if ! mise run infra:ensure-dev-cert; then
+if ! BOXEL_DEV_INVOKED_AS='mise run dev' mise run infra:ensure-dev-cert; then
   exit 1
 fi
 

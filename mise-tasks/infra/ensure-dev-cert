@@ -112,14 +112,19 @@ if ! system_trust_has_root_ca || ! nss_db_has_root_ca; then
     echo "[ensure-dev-cert] mkcert root CA missing; running trust-dev-cert (passwordless sudo available)"
     mise run infra:trust-dev-cert
   else
-    cat >&2 <<'EOF'
+    # `BOXEL_DEV_INVOKED_AS` is set by the dev / dev-all wrappers so we
+    # can name the outer command exactly in the rerun hint. Falls back
+    # to ensure-dev-cert itself, which is the most likely command when
+    # someone invoked this task directly.
+    invoked_as="${BOXEL_DEV_INVOKED_AS:-mise run infra:ensure-dev-cert}"
+    cat >&2 <<EOF
 [ensure-dev-cert] The mkcert dev root CA is not installed on this machine.
 
 Run this once to install it (prompts for sudo):
 
   mise run infra:trust-dev-cert
 
-Then re-run the command you just ran.
+Then re-run \`${invoked_as}\`.
 EOF
     exit 1
   fi
