@@ -1134,10 +1134,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: inherit;
         z-index: 0;
         pointer-events: none;
+        transition:
+          margin-top var(--boxel-transition),
+          width var(--boxel-transition);
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
-        transition: margin-top var(--boxel-transition);
       }
       .item.closing-animation {
         animation: fadeOut 0.2s forwards;

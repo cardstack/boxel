@@ -272,7 +272,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --operator-mode-left-column: calc(
-          21.5rem - var(--submode-new-file-button-width)
+          21.5rem - var(--new-file-button-width)
         );
         background-color: var(--host-submode-background);
       }

@@ -102,10 +102,13 @@ type PanelWidths = {
   minWidth: number | null;
 };
 
+const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 56;
+
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
   @tracked private topBarCenterElement: Element | null = null;
+  @tracked private topBarButtonsCollapsed = false;
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -143,6 +146,12 @@ export default class SubmodeLayout extends Component<Signature> {
 
   // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
+    let rootFontSize = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
+    this.topBarButtonsCollapsed =
+      windowWidth <= COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM * rootFontSize;
+
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {
       aiPanelDefaultWidthInPixels = windowWidth;
@@ -441,6 +450,7 @@ export default class SubmodeLayout extends Component<Signature> {
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
+                @isCollapsed={{this.topBarButtonsCollapsed}}
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
@@ -451,6 +461,7 @@ export default class SubmodeLayout extends Component<Signature> {
                   @initiallyOpened={{bool
                     this.operatorModeStateService.state.newFileDropdownOpen
                   }}
+                  @isCollapsed={{this.topBarButtonsCollapsed}}
                 />
               {{/if}}
               <div
@@ -606,6 +617,7 @@ export default class SubmodeLayout extends Component<Signature> {
         position: relative;
         width: 100%;
         max-width: 100%;
+        container-type: inline-size;
         /* Lock outer box to exactly var(--stack-padding-top) — the
            same value .operator-mode-stack uses for its padding-top
            offset. Any content the bar contains (workspace button,
@@ -666,7 +678,7 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
-        width: var(--submode-new-file-button-width);
+        flex-shrink: 0;
       }
 
       .profile-icon-button {

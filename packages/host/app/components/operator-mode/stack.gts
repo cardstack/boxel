@@ -155,6 +155,9 @@ export default class OperatorModeStack extends Component<Signature> {
         padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
         z-index: 0;
+        transition:
+          padding-top var(--boxel-transition),
+          padding-inline var(--boxel-transition);
       }
       .stack-medium-padding-top:not(:has(.item.expanded)) {
         --stack-padding-top: var(--stack-md-padding-top);
