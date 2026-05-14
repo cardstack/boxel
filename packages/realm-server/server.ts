@@ -50,7 +50,6 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import type { Prerenderer } from '@cardstack/runtime-common';
 import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
 import { insertSourceRealmInRegistry } from './lib/realm-registry-writes';
-import { withRealmWriteLock } from './lib/realm-advisory-locks';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 import {
   indexURLCandidates,
@@ -1042,12 +1041,12 @@ export class RealmServer {
       publishable: true,
     };
 
-    // Serialize against any other caller of withRealmWriteLock for this
+    // Serialize against any other caller of withWriteLock for this
     // same URL (concurrent createRealm for the same endpoint, or a
     // concurrent publish/unpublish/delete). This is almost never a real
     // concurrency concern — the endpoint was already checked above for
     // collision.
-    await withRealmWriteLock(this.dbAdapter, url, async () => {
+    await this.dbAdapter.withWriteLock(url, async () => {
       await insertPermissions(this.dbAdapter, new URL(url), {
         [ownerUserId]: DEFAULT_PERMISSIONS,
       });
