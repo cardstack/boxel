@@ -64,6 +64,7 @@ import {
   unixTime,
   query,
   param,
+  dbExpression,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -2835,13 +2836,15 @@ export class Realm {
         param(result.body),
         ',',
         param(JSON.stringify(result.headers)),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         // Persist the full deps set computed once at the transpile
         // boundary so a cross-process L2 reader can populate its L1
         // entry directly instead of re-running extractModuleDependencyKeys
         // on the bytes.
         param(JSON.stringify([...result.dependencyKeys])),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         param(capturedGeneration),
         ',',
         param(Date.now()),
@@ -2862,6 +2865,34 @@ export class Realm {
         `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );
     }
+  }
+
+  // Test seam: lets host SQLite tests verify that #writeTranspileCacheRow
+  // produces dialect-correct SQL without re-issuing the UPSERT in a
+  // parallel build. Production code must never call this — go through
+  // the private method directly. The wrapper just forwards arguments;
+  // the swallow-and-log behavior of the private method means the test
+  // confirms success by reading the row back, not by exception.
+  async __testOnlyUpsertTranspileCacheRow(args: {
+    canonicalPath: string;
+    body: string;
+    headers: Record<string, string>;
+    dependencyKeys: Iterable<string>;
+    capturedGeneration: number;
+  }): Promise<void> {
+    let { canonicalPath, body, headers, dependencyKeys, capturedGeneration } =
+      args;
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      {
+        kind: 'module',
+        canonicalPath,
+        body,
+        headers,
+        dependencyKeys: new Set(dependencyKeys),
+      },
+      capturedGeneration,
+    );
   }
 
   async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {
