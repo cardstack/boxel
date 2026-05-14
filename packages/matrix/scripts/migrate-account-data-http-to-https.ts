@@ -1,23 +1,25 @@
-// One-off migration: rewrite `app.boxel.realms` account_data entries that
-// reference `http://localhost:42XX/...` to the new canonical `https://`
-// scheme. Companion to the `1779100257124_canonical-url-http-to-https`
-// postgres migration — that one rewrites the realm-server DB; this one
-// rewrites the per-user state synapse holds for every Boxel user (the
-// list of workspaces the host bundle reads via `getAccountDataFromServer`
-// on app boot). Without this migration, a logged-in user's app keeps
-// fetching the http:// realm URLs, the realm-server's dispatcher 301-
-// redirects every request to https://, and the browser blocks the CORS
-// preflight ("Redirect is not allowed for a preflight request").
+// One-off migration: rewrite `app.boxel.realms` account_data entries
+// that reference `http://localhost:42XX/...` to the new canonical
+// `https://` scheme — or the reverse if `--reverse` is passed.
+// Companion to the `1779100257124_canonical-url-http-to-https`
+// postgres migration — that one rewrites the realm-server DB; this
+// one rewrites the per-user state synapse holds for every Boxel user
+// (the list of workspaces the host bundle reads via
+// `getAccountDataFromServer` on app boot). Without this migration, a
+// logged-in user's app keeps fetching the http:// realm URLs, the
+// realm-server's dispatcher 301-redirects every request to https://,
+// and the browser blocks the CORS preflight ("Redirect is not allowed
+// for a preflight request").
 //
-// The script logs in as the local synapse admin user, lists every user,
-// admin-impersonates each one to get an access token (the standard
-// account_data endpoint requires the user's own token — synapse admin
-// can read but not write other users' account_data), reads
-// `app.boxel.realms`, rewrites any matching URLs in-place, and PUTs the
-// updated list back.
+// The script logs in as the local synapse admin user, lists every
+// user, admin-impersonates each one to get an access token (the
+// standard account_data endpoint requires the user's own token —
+// synapse admin can read but not write other users' account_data),
+// reads `app.boxel.realms`, rewrites any matching URLs in-place, and
+// PUTs the updated list back.
 //
-// Safe to re-run: rows that are already https are left untouched, and
-// the PUT only fires when at least one URL actually changed.
+// Safe to re-run: rows already in the target scheme are left
+// untouched, and the PUT only fires when at least one URL changed.
 
 import { getSynapseURL } from '../helpers/environment-config';
 
@@ -25,13 +27,19 @@ const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'password';
 const ACCOUNT_DATA_TYPE = 'app.boxel.realms';
 
+// Default direction is http → https (forward). `--reverse` flips it to
+// https → http, e.g. for `pnpm migrate down` on the postgres migration.
+const REVERSE = process.argv.includes('--reverse');
+const FROM_SCHEME = REVERSE ? 'https' : 'http';
+const TO_SCHEME = REVERSE ? 'http' : 'https';
+
 // Only flip the two known localhost realm-server canonicals. Production
 // / staging realm URLs are real hostnames and would never appear in a
 // local synapse, so a broader regex would just create the opportunity
 // to corrupt unrelated data.
 const URL_PREFIXES_TO_FLIP = [
-  'http://localhost:4201/',
-  'http://localhost:4202/',
+  `${FROM_SCHEME}://localhost:4201/`,
+  `${FROM_SCHEME}://localhost:4202/`,
 ];
 
 interface LoginResponse {
@@ -169,7 +177,7 @@ function rewriteURLs(urls: string[]): { urls: string[]; changedCount: number } {
     for (let prefix of URL_PREFIXES_TO_FLIP) {
       if (url.startsWith(prefix)) {
         changedCount++;
-        return `https://${url.slice('http://'.length)}`;
+        return `${TO_SCHEME}://${url.slice(`${FROM_SCHEME}://`.length)}`;
       }
     }
     return url;
@@ -179,7 +187,9 @@ function rewriteURLs(urls: string[]): { urls: string[]; changedCount: number } {
 
 async function main(): Promise<void> {
   let synapseURL = getSynapseURL();
-  console.log(`[migrate-account-data] Connecting to ${synapseURL}`);
+  console.log(
+    `[migrate-account-data] Connecting to ${synapseURL} (${FROM_SCHEME} → ${TO_SCHEME})`,
+  );
 
   let adminToken = await loginAsAdmin(synapseURL);
   let userIds = await listAllUsers(synapseURL, adminToken);
@@ -188,7 +198,7 @@ async function main(): Promise<void> {
   let migratedUsers = 0;
   let totalURLsChanged = 0;
   let skippedNoData = 0;
-  let skippedAlreadyHttps = 0;
+  let skippedAlreadyOnTargetScheme = 0;
 
   for (let userId of userIds) {
     // The admin can't impersonate itself ("Cannot use admin API to login
@@ -214,7 +224,7 @@ async function main(): Promise<void> {
 
     let { urls: rewritten, changedCount } = rewriteURLs(data.realms);
     if (changedCount === 0) {
-      skippedAlreadyHttps++;
+      skippedAlreadyOnTargetScheme++;
       continue;
     }
 
@@ -230,10 +240,10 @@ async function main(): Promise<void> {
   }
 
   console.log(`[migrate-account-data] Done.`);
-  console.log(`  Users migrated:    ${migratedUsers}`);
-  console.log(`  URLs rewritten:    ${totalURLsChanged}`);
-  console.log(`  Skipped (no data): ${skippedNoData}`);
-  console.log(`  Skipped (https):   ${skippedAlreadyHttps}`);
+  console.log(`  Users migrated:       ${migratedUsers}`);
+  console.log(`  URLs rewritten:       ${totalURLsChanged}`);
+  console.log(`  Skipped (no data):    ${skippedNoData}`);
+  console.log(`  Skipped (${TO_SCHEME.padEnd(5)}):${' '.repeat(8 - TO_SCHEME.length)}${skippedAlreadyOnTargetScheme}`);
 }
 
 main().catch((err) => {

@@ -44,20 +44,27 @@ exports.shorthands = undefined;
 // realm_registry — it's populated by the realm-server's runtime
 // bootstrap, not by migrations, so on a fresh install it's empty when
 // this migration runs.)
-const REWRITE_BLOCK = `
+// Build the in-place REPLACE block. `oldScheme` and `newScheme` flip
+// between 'http' and 'https' depending on direction. The pre-check
+// gates on `realm_user_permissions` containing rows that match the
+// `oldScheme` localhost canonicals; production realms use real
+// hostnames (never `localhost`) so the pre-check is always false there
+// and the body is a no-op in either direction.
+function rewriteBlock({ oldScheme, newScheme }) {
+  return `
 DO $$
 DECLARE
   rec RECORD;
   patterns text[][] := ARRAY[
-    ARRAY['http://localhost:4201', 'https://localhost:4201'],
-    ARRAY['http://localhost:4202', 'https://localhost:4202']
+    ARRAY['${oldScheme}://localhost:4201', '${newScheme}://localhost:4201'],
+    ARRAY['${oldScheme}://localhost:4202', '${newScheme}://localhost:4202']
   ];
   i int;
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM realm_user_permissions
-    WHERE realm_url LIKE 'http://localhost:4201/%'
-       OR realm_url LIKE 'http://localhost:4202/%'
+    WHERE realm_url LIKE '${oldScheme}://localhost:4201/%'
+       OR realm_url LIKE '${oldScheme}://localhost:4202/%'
     LIMIT 1
   ) THEN
     RETURN;
@@ -102,14 +109,18 @@ BEGIN
   END LOOP;
 END $$;
 `;
+}
 
 exports.up = (pgm) => {
-  pgm.sql(REWRITE_BLOCK);
+  pgm.sql(rewriteBlock({ oldScheme: 'http', newScheme: 'https' }));
 };
 
+// Symmetric reverse: rewrite https://localhost:42XX → http://localhost:42XX
+// for the same set of text/JSONB columns. Same `realm_user_permissions`
+// pre-check (looking for https rows this time) means production is still
+// a no-op — production realms never have `localhost` in their canonicals.
+// Required for the Postgres Migration CI job, which validates that every
+// migration is reversible (up → down → up).
 exports.down = (pgm) => {
-  // Reversing the http→https rewrite would re-corrupt any data that was
-  // legitimately https before this migration. Not safe to do
-  // automatically; leave the rewritten rows in place if someone rolls
-  // back the migration tracker.
+  pgm.sql(rewriteBlock({ oldScheme: 'https', newScheme: 'http' }));
 };
