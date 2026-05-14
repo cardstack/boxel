@@ -310,7 +310,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   //     stored intent is preserved.
   //   - When the card pops back to the top, isExpanded reads true
   //     again from storage and the card re-expands.
-  // Only available when the card opts in via `prefersWideFormat`.
   private get itemExpandKey(): string {
     return this.args.item.instanceId;
   }
@@ -1154,24 +1153,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --realm-icon-border-radius: 4px;
       }
 
-      /* Expanded mode — pinned to all edges of .inner (the stack's
-         positioned content box). .operator-mode-stack supplies
-         padding-top: var(--stack-padding-top) so .inner's top edge
-         already sits flush below the floating bar — same offset host-
-         mode gets from its in-flow bar above. inset: 0 inherits that
-         offset; no calc, no !important, no measurement. The :has
-         rule in stack.gts zeroes inline + bottom padding so the
-         card's right/bottom edges land at viewport edges. z-index
-         250 sits above stack background + workspace chooser (200),
-         below search sheet (300) and the floating bar (700). */
       .item.expanded {
         top: 0;
         left: 0;
         width: 100%;
-        max-width: 100%;
-        height: 100%;
-        margin-top: 0;
-        z-index: 250;
         pointer-events: auto;
       }
       /* Propagate height through the chain so bottom-docked chrome
@@ -1278,6 +1263,48 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
+      }
+
+      /* The portaled CardHeader inside takes pill styling — white
+         rounded box, realm icon left-docked, actions right-docked,
+         left-justified type/title. Reuses CardHeader's existing
+         actions structure; just re-skinned via this class. */
+      .expanded-card-header-pill {
+        --inner-boxel-card-header-padding: var(--boxel-sp-4xs)
+          var(--boxel-sp-xs);
+        --boxel-card-header-actions-min-width: max-content;
+        --boxel-card-header-icon-container-min-width: max-content;
+        height: var(--container-button-size);
+        max-width: 100%;
+        width: 100%;
+        gap: var(--boxel-sp-2xs);
+        background: var(--boxel-light);
+        border-radius: var(--boxel-border-radius-2xl);
+        box-shadow: var(--submode-bar-item-box-shadow);
+        outline: var(--submode-bar-item-outline);
+      }
+      /* Title in the expanded pill stays left-justified inside the
+         center column (overrides CardHeader's default text-align: center). */
+      .expanded-card-header-pill :deep(.card-type-display-name) {
+        padding-inline: var(--boxel-sp-4xs);
+        text-align: left;
+        text-box-trim: trim-both;
+      }
+      /* Expanded mode editing — DO NOT flip the whole pill green;
+         only the pencil button lights up (rule below). Overrides
+         CardHeader's default header.is-editing green-bar treatment,
+         which is correct for stacked cards but not for the expanded
+         pill (we want the pill to stay white in the bar). */
+      .expanded-card-header-pill.is-editing {
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+      }
+      /* Pencil button in expanded edit mode — solid green with dark
+         icon for contrast (matches the active expand button). */
+      .expanded-card-header-pill :deep(.icon-save),
+      .expanded-card-header-pill :deep(.icon-save:hover) {
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
       }
     </style>
 

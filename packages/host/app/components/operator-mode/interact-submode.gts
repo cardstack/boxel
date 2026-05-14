@@ -16,13 +16,7 @@ import { consume } from 'ember-provide-consume-context';
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import {
-  cn,
-  eq,
-  gte,
-  MenuItem,
-  MenuDivider,
-} from '@cardstack/boxel-ui/helpers';
+import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
 import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -613,6 +607,7 @@ export default class InteractSubmode extends Component {
   // (there is a single stack with at least one card in it)
   private get canCreateNeighborStack() {
     return (
+      !this.operatorModeStateService.hasAnyStackItemExpanded &&
       this.allStackItems.length > 0 &&
       this.stacks.length === 1 &&
       !this.operatorModeStateService.workspaceChooserOpened
@@ -851,11 +846,10 @@ export default class InteractSubmode extends Component {
       as |search|
     >
       <div
-        class='interact-submode
-          {{if
-            this.operatorModeStateService.hasAnyStackItemExpanded
-            "has-expanded-card"
-          }}'
+        class={{cn
+          'interact-submode'
+          has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
+        }}
         style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
         {{! Bind Ctrl+E on every platform — Mac users get Ctrl+E too,
@@ -873,7 +867,7 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <div class='stacks'>
+        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
               (get
@@ -885,9 +879,8 @@ export default class InteractSubmode extends Component {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
+                  'stack'
                   stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                  stack-medium-padding-top=(eq stack.length 2)
-                  stack-small-padding-top=(gte stack.length 3)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -974,12 +967,6 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
       }
-      .stacks > :deep(.operator-mode-stack:first-child) {
-        padding-left: var(--boxel-sp-lg);
-      }
-      .stacks > :deep(.operator-mode-stack:last-child) {
-        padding-right: var(--boxel-sp-lg);
-      }
       .stack-with-bg-image:before {
         content: ' ';
         height: 100%;
@@ -993,37 +980,27 @@ export default class InteractSubmode extends Component {
       .stack-with-bg-image:first-child:before {
         display: none;
       }
-      .stack-medium-padding-top {
-        padding-top: calc(var(--stack-padding-top) / 2);
-      }
-      .stack-small-padding-top {
-        padding-top: var(--operator-mode-spacing);
-      }
       .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
         position: absolute;
         z-index: var(--boxel-layer-floating-button);
       }
-      /* Hide neighbor-stack-trigger arrows when any card is expanded
-         — the focused expanded view shouldn't be cluttered with stack-
-         creation chrome at the edges. */
-      .interact-submode.has-expanded-card .neighbor-stack-trigger {
-        display: none;
+      /* Glass-morphism effect on the background */
+      .interact-submode.has-expanded-card {
+        background-color: var(--boxel-light-hover-35);
+        backdrop-filter: blur(10px) saturate(160%);
+        -webkit-backdrop-filter: blur(10px) saturate(160%);
       }
-      /* Drop the edge padding the .stacks container applies to its
-         first/last stack so an expanded card spans viewport edge to
-         edge — pixel-identical to host-mode's .host-mode-content.is-wide
-         (padding: 0). */
-      .interact-submode.has-expanded-card
-        .stacks
-        > :deep(.operator-mode-stack:first-child) {
-        padding-left: 0;
+      .interact-submode:not(.has-expanded-card)
+        .stacks.is-multi-stack
+        .stack:first-of-type {
+        padding-right: var(--operator-mode-spacing);
       }
-      .interact-submode.has-expanded-card
-        .stacks
-        > :deep(.operator-mode-stack:last-child) {
-        padding-right: 0;
+      .interact-submode:not(.has-expanded-card)
+        .stacks.is-multi-stack
+        .stack:last-of-type {
+        padding-left: var(--operator-mode-spacing);
       }
       /* In a multi-stack layout, collapse the stack that doesn't hold
          the expanded card so the expanded card fills the full width. */

@@ -5,6 +5,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { provide } from 'ember-provide-consume-context';
 
+import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
+
 import {
   CardCrudFunctionsContextName,
   type CommandContext,
@@ -105,7 +107,14 @@ export default class OperatorModeStack extends Component<Signature> {
   };
 
   <template>
-    <div class='operator-mode-stack' ...attributes>
+    <div
+      class={{cn
+        'operator-mode-stack'
+        stack-medium-padding-top=(eq @stackItems.length 2)
+        stack-small-padding-top=(gte @stackItems.length 3)
+      }}
+      ...attributes
+    >
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
@@ -125,44 +134,37 @@ export default class OperatorModeStack extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --stack-padding-top: calc(
+        --stack-lg-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
+        --stack-md-padding-top: calc(var(--stack-lg-padding-top) / 2);
+        --stack-sm-padding-top: var(--operator-mode-spacing);
+
+        --stack-padding-top: var(--stack-lg-padding-top);
         --stack-padding-bottom: var(--boxel-sp-lg);
+        --stack-padding-inline: var(--boxel-sp-lg);
       }
       .operator-mode-stack {
-        z-index: 0;
+        position: relative;
         height: 100%;
         width: 100%;
         background-position: center;
         background-size: cover;
         padding-top: var(--stack-padding-top);
-        padding-inline: var(--operator-mode-spacing);
+        padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
-        position: relative;
+        z-index: 0;
       }
-      /* When an item is expanded, drop the stack's inline + bottom
-         padding so the expanded card fills the area below the bar
-         edge-to-edge. Top padding is FORCED back to var(--stack-
-         padding-top) — the .stack-item-card "tray" anchors at this
-         offset (right below the floating bar), with its other three
-         edges flush to viewport edges. This is the magic-move target:
-         every animation tick keeps tray-edges aligned with the inner
-         content. */
+      .stack-medium-padding-top:not(:has(.item.expanded)) {
+        --stack-padding-top: var(--stack-md-padding-top);
+      }
+      .stack-small-padding-top:not(:has(.item.expanded)) {
+        --stack-padding-top: var(--stack-sm-padding-top);
+      }
       .operator-mode-stack:has(.item.expanded) {
-        padding-top: var(--stack-padding-top);
-        padding-inline: 0;
-        padding-bottom: 0;
-      }
-      /* .inner is display: flex with no explicit width — when its
-         flex children are all position: absolute (the .item rules),
-         flex sees an empty row and collapses .inner to width 0. The
-         expanded .item using inset: 0 then resolves to a 0-width
-         box (containing-block width = 0). Force .inner to fill the
-         stack so inset: 0 spans the viewport. */
-      .operator-mode-stack:has(.item.expanded) .inner {
-        width: 100%;
+        --stack-padding-inline: 0;
+        --stack-padding-bottom: 0;
       }
       .operator-mode-stack
         :deep(.field-component-card.fitted-format .missing-template) {
@@ -172,6 +174,7 @@ export default class OperatorModeStack extends Component<Signature> {
         border-bottom-right-radius: var(--boxel-form-control-border-radius);
       }
       .inner {
+        width: 100%;
         height: 100%;
         position: relative;
         display: flex;

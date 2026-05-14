@@ -407,11 +407,7 @@ export default class SubmodeLayout extends Component<Signature> {
   <template>
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
-      class={{cn
-        'submode-layout'
-        this.aiAssistantVisibilityClass
-        has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
-      }}
+      class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}
       data-test-submode-layout
       ...attributes
     >
@@ -628,16 +624,6 @@ export default class SubmodeLayout extends Component<Signature> {
         align-items: center;
         gap: var(--operator-mode-spacing);
       }
-      /* Subtle glass-morphism behind the top bar when a card is
-         expanded: blurs what's behind, slight white tint, and casts
-         a small drop shadow onto the card's top edge so the toolbar
-         area reads as a distinct layer above the expanded surface. */
-      .submode-layout.has-expanded-card .submode-layout-top-bar {
-        background-color: rgba(255, 255, 255, 0.35);
-        backdrop-filter: blur(10px) saturate(160%);
-        -webkit-backdrop-filter: blur(10px) saturate(160%);
-        box-shadow: 0 2px 6px -2px rgba(15, 23, 42, 0.12);
-      }
 
       .submode-layout-top-bar-center {
         flex: 1;
@@ -659,51 +645,8 @@ export default class SubmodeLayout extends Component<Signature> {
         align-items: center;
         justify-content: center;
         min-width: 0;
-        max-width: 800px;
+        max-width: 50rem; /* same as `stackItemMaxWidth` in stack-item.gts */
         margin: 0 auto;
-      }
-      /* The portaled CardHeader inside takes pill styling — white
-         rounded box, realm icon left-docked, actions right-docked,
-         left-justified type/title. Reuses CardHeader's existing
-         actions structure; just re-skinned via this class. */
-      :global(.expanded-card-header-pill) {
-        --inner-boxel-card-header-padding: var(--boxel-sp-4xs)
-          var(--boxel-sp-xs);
-        --boxel-card-header-actions-min-width: max-content;
-        --boxel-card-header-icon-container-min-width: max-content;
-        height: var(--container-button-size);
-        max-width: 100%;
-        width: 100%;
-        gap: var(--boxel-sp-xxs);
-        background: var(--boxel-light);
-        /* Match the other floating-bar elements (Interact, +New,
-           profile avatar): full pill shape (radius: 999px), submode-
-           bar shadow + outline. */
-        border-radius: 999px;
-        box-shadow: var(--submode-bar-item-box-shadow);
-        outline: var(--submode-bar-item-outline);
-      }
-      /* Title in the expanded pill stays left-justified inside the
-         center column (overrides CardHeader's default text-align: center). */
-      :global(.expanded-card-header-pill .card-type-display-name) {
-        text-align: left;
-        padding-left: var(--boxel-sp-xs);
-      }
-      /* Expanded mode editing — DO NOT flip the whole pill green;
-         only the pencil button lights up (rule below). Overrides
-         CardHeader's default header.is-editing green-bar treatment,
-         which is correct for stacked cards but not for the expanded
-         pill (we want the pill to stay white in the bar). */
-      :global(.expanded-card-header-pill.is-editing) {
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
-      }
-      /* Pencil button in expanded edit mode — solid green with dark
-         icon for contrast (matches the active expand button). */
-      :global(.expanded-card-header-pill .icon-save),
-      :global(.expanded-card-header-pill .icon-save:hover) {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-dark);
       }
 
       .submode-switcher {
