@@ -285,11 +285,51 @@ const SOURCE_ETAG_VARIANT = 'source';
 const CARD_JSON_ETAG_VARIANT = 'card';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
-// #moduleCache entries on file writes. Payload shape is `<realmURL>:<path>`.
+// #moduleCache entries on file writes. Two payload shapes:
+//
+//   `<realmURL>:<path>` — invalidate a single path's cached source +
+//      (for executable extensions) module entry. Emitted by every
+//      single-file write/delete via Realm.#notifyFileChange. Receiver
+//      calls Realm.invalidateCache(path).
+//   `<realmURL>:*`      — bulk-invalidate every cached path for this
+//      realm. Emitted by the publish-realm / unpublish-realm /
+//      delete-realm handlers after the FS swap or removal, so peer
+//      replicas (which do NOT receive the file-watcher events that
+//      drive single-file invalidation in-process) drop pre-swap bytes
+//      from `#sourceCache` / `#moduleCache` before serving the next
+//      source read. Receiver calls Realm.clearLocalCaches(). See
+//      CS-11156. (`*` is reserved as the wildcard sentinel; real
+//      LocalPath values never contain it.)
+//
 // See docs/db-authoritative-realm-registry.md §6 "Cache invalidation channel"
 // and §9 "Cache-invalidation NOTIFY missed" for the semantics (best-effort,
 // missed-NOTIFY is a cache-staleness window, not data corruption).
 export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
+export const REALM_FILE_CHANGES_WILDCARD = '*';
+
+// Standalone form of `Realm.notifyAllFileChanges()`. Use when the caller
+// has a DBAdapter + realm URL but no mounted `Realm` instance — e.g.
+// the delete-realm handler runs after the realm has already been torn
+// down, so it cannot route through an instance method. Same best-effort
+// semantics as `Realm.#notifyFileChange`: failures are logged and
+// swallowed (missed NOTIFY is a bounded staleness window, not data
+// corruption). See CS-11156.
+export async function notifyAllFileChanges(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<void> {
+  try {
+    await dbAdapter.notify(
+      REALM_FILE_CHANGES_CHANNEL,
+      `${realmURL}:${REALM_FILE_CHANGES_WILDCARD}`,
+    );
+  } catch (err: unknown) {
+    logger('realm').warn(
+      `notify ${REALM_FILE_CHANGES_CHANNEL} (bulk) failed for ${realmURL}: ${String(err)}`,
+    );
+  }
+}
+
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -1515,6 +1555,17 @@ export class Realm {
         `notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
       );
     }
+  }
+
+  // Bulk variant of `#notifyFileChange` — broadcast "drop every cached path
+  // for this realm" to peer realm-server instances. The publish-realm /
+  // unpublish-realm / delete-realm handlers emit this after the FS swap or
+  // removal so peer replicas (which do NOT see the local file-watcher events
+  // that drive single-file invalidation) drop pre-swap bytes from
+  // `#sourceCache` / `#moduleCache` before the next source read. Receiver
+  // calls `Realm.clearLocalCaches()`. See CS-11156.
+  async notifyAllFileChanges(): Promise<void> {
+    return notifyAllFileChanges(this.#dbAdapter, this.url);
   }
 
   createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
