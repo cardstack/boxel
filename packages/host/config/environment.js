@@ -184,6 +184,7 @@ module.exports = function (environment) {
     ENV.resolvedCatalogRealmURL = undefined;
     ENV.resolvedLegacyCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
+    ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }
 
   if (environment === 'production') {
@@ -194,6 +195,10 @@ module.exports = function (environment) {
   if (ENV.resolvedCatalogRealmURL) {
     ENV.defaultSystemCardId = new URL(
       'SystemCard/default',
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
+    ENV.defaultFieldSpecId = new URL(
+      'Spec/fields/field',
       withTrailingSlash(ENV.resolvedCatalogRealmURL),
     ).href;
   }

@@ -741,6 +741,14 @@ export function buildPrerenderApp(options: {
           ? rawBatchId
           : undefined;
 
+      // Indexer job correlation id. Already carried on the inbound
+      // `x-boxel-job-id` header for log-tagging; forward it to the
+      // prerenderer so it can be exposed to the host SPA via a global
+      // (`__boxelJobId`) — the host's `_federated-search` fetch
+      // wrapper reads it and re-stamps the header on outbound calls
+      // so `handle-search` can gate the job-scoped search cache.
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+
       let start = Date.now();
       let execPromise = prerenderer
         .prerenderVisit({
@@ -754,6 +762,7 @@ export function buildPrerenderApp(options: {
           ...(Array.isArray(types) ? { types } : {}),
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
+          ...(jobId ? { jobId } : {}),
           signal: ac.signal,
         })
         .then((result) => ({ result }));

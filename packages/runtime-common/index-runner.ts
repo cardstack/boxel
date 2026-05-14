@@ -34,7 +34,9 @@ import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
+import { canonicalURL } from './index-runner/dependency-url';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
+import { isScopedCSSRequest } from './scoped-css';
 import {
   discoverInvalidations,
   type DiscoverInvalidationsResult,
@@ -201,6 +203,7 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    await current.preWarmModulesTable(invalidations);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -351,6 +354,7 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
+    await current.preWarmModulesTable(invalidations);
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
@@ -527,6 +531,138 @@ export class IndexRunner {
       authUserId: isPublic ? '' : this.#realmOwnerUserId,
     };
     return this.#moduleCacheContext;
+  }
+
+  // Populate the `modules` table for every module the upcoming visit
+  // loop is likely to need, before the file-visit phase fires.
+  //
+  // Why: a file render that fires a `_federated-search` calling
+  // `populateQueryFields` → `lookupDefinition` for a definition not
+  // in the modules cache triggers a nested prerender. That nested
+  // prerender enters the same affinity-scoped tab queue the original
+  // render is occupying, deadlocking the pool (PR #4777 papered over
+  // this with `cacheOnlyDefinitions:true`). Pre-warming the modules
+  // table before the visit loop fires means `lookupDefinition` hits
+  // a populated row instead of spawning a sub-prerender.
+  //
+  // Signal sources, in priority order:
+  //   1. Existing `boxel_index.deps` — the runtime-captured dep list
+  //      from the URL's prior successful render. Strongest signal.
+  //   2. `adoptsFrom.module` read from disk — used for novel `.json`
+  //      URLs without a prior `deps` row.
+  //   3. The URL itself — used for novel executable files; the file
+  //      IS a module, pre-warm it directly.
+  //
+  // Cache hits are O(1) DB reads inside DefinitionLookup. Cache
+  // misses go through the read-through path
+  // (loadModuleCacheEntryUncached → getModuleDefinitionsViaPrerenderer
+  // → persistModuleCacheEntry), the same flow `lookupDefinition`
+  // uses; DefinitionLookup owns the in-flight dedup and the cross-
+  // process coalescer, so two callers asking for the same URL share
+  // one prerender.
+  //
+  // Phase 1: serial. Validates that pre-warm as a concept clears the
+  // deadlock without concurrency-driven variability. Phase 2 will
+  // bound-parallelize this loop.
+  //
+  // Failures here are warned but do not fail the batch — a mid-render
+  // sub-prerender will still fire on demand if pre-warm misses a
+  // module.
+  private async preWarmModulesTable(invalidations: URL[]): Promise<void> {
+    if (invalidations.length === 0) {
+      return;
+    }
+    let preWarmStart = Date.now();
+    let hrefs = invalidations.map((u) => u.href);
+    let existingRows = await this.batch.getDependencyRows(hrefs);
+    let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
+    for (let row of existingRows) {
+      // Prefer rows that actually carry deps so the lookup below
+      // returns the strongest signal available for each URL.
+      let existing = bestByUrl.get(row.url);
+      if (!existing || (!existing.deps?.length && row.deps?.length)) {
+        bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
+      }
+    }
+
+    let toWarm = new Set<string>();
+    let novelJsonUrls: URL[] = [];
+    for (let url of invalidations) {
+      // Module files in the invalidation set are deps that instances
+      // in the same batch will consume — pre-warm them directly. This
+      // covers from-scratch and atomic-update batches where most rows
+      // have no prior `deps` data yet.
+      if (hasExecutableExtension(url.href)) {
+        toWarm.add(url.href);
+      }
+      let row = bestByUrl.get(url.href);
+      if (row?.deps?.length) {
+        for (let dep of row.deps) {
+          let resolved = canonicalURL(dep, url.href);
+          // `.json` marks an instance dep and `.glimmer-scoped.css`
+          // marks an inline-styles artifact; everything else in the
+          // deps array is a module URL (stored extensionless after
+          // normalizeModuleURL / normalizeDependency).
+          if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
+            toWarm.add(resolved);
+          }
+        }
+      } else if (url.href.endsWith('.json')) {
+        novelJsonUrls.push(url);
+      }
+    }
+    for (let url of novelJsonUrls) {
+      let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
+      // adoptsFrom.module is always a module reference. The most common
+      // form is relative + extensionless (e.g. `"../author"`), which
+      // canonicalizes to an extensionless URL; gating on
+      // hasExecutableExtension would drop those entirely and leave
+      // pre-warm missing exactly the module it is supposed to prime.
+      if (adoptsFromModule) {
+        toWarm.add(adoptsFromModule);
+      }
+    }
+
+    if (toWarm.size === 0) {
+      return;
+    }
+
+    let failed = 0;
+    for (let moduleUrl of toWarm) {
+      try {
+        await this.#definitionLookup.getModuleCacheEntry(moduleUrl);
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
+      );
+    }
+
+    this.#perfLog.debug(
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+    );
+  }
+
+  async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
+    try {
+      let fileRef = await this.#reader.readFile(url);
+      if (!fileRef?.content) {
+        return undefined;
+      }
+      let doc = JSON.parse(fileRef.content) as {
+        data?: { meta?: { adoptsFrom?: { module?: unknown } } };
+      };
+      let module = doc?.data?.meta?.adoptsFrom?.module;
+      if (typeof module !== 'string') {
+        return undefined;
+      }
+      return canonicalURL(module, url.href);
+    } catch {
+      return undefined;
+    }
   }
 
   #scheduleClearCacheForNextRender() {

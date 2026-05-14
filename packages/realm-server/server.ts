@@ -414,8 +414,16 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
+          // Cache the preflight response for 24 h. Without this @koa/cors
+          // omits Access-Control-Max-Age and Chrome falls back to its
+          // ~5 s default, which forces a fresh OPTIONS round-trip in front
+          // of nearly every cross-origin QUERY the host fires during a
+          // long indexing run. The doubled HTTP-arrival count translates
+          // directly to wall-clock since each preflight is a serial RTT
+          // blocking the QUERY behind it.
+          maxAge: 86400,
         }),
       )
       .use(async (ctx, next) => {
@@ -1082,6 +1090,7 @@ export class RealmServer {
             config.resolvedOpenRouterRealmURL,
           ),
           defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
+          defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
           cardSizeLimitBytes: this.cardSizeLimitBytes,
           fileSizeLimitBytes: this.fileSizeLimitBytes,
           publishedRealmDomainOverrides:

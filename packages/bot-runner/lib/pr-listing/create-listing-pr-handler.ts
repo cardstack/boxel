@@ -61,7 +61,7 @@ function getCreateListingPRContext(
       ? input.branchName.trim()
       : '';
   let headBranch =
-    explicitBranchName || toBranchName(roomId, listingDisplayName);
+    explicitBranchName || toBranchName(listingDisplayName);
 
   if (!headBranch) {
     throw new Error('pr-listing-create trigger must include a valid branch');
@@ -256,10 +256,7 @@ export class CreateListingPRHandler {
 }
 
 function buildSubmissionFolderName(context: CreateListingPRContext): string {
-  // Wrap files under the room segment of the branch path
-  // ("room-<base64-roomId>"). Each PR is scoped to one branch, so the room
-  // segment alone uniquely identifies the submission's location on disk.
-  return context.head.split('/')[0];
+  return context.head;
 }
 
 function mapOpenPullRequestResult(

@@ -338,6 +338,46 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
               },
             },
           },
+          'fields/biginteger-field.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Bigint Field',
+                cardDescription: 'A field that captures big int values',
+                specType: 'field',
+                ref: {
+                  module: `${baseRealm.url}big-integer`,
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'fields/date-field.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Date Field',
+                cardDescription: 'A field that captures date values',
+                specType: 'field',
+                ref: {
+                  module: `${baseRealm.url}date`,
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
           'index.json': {
             data: {
               type: 'card',
@@ -662,10 +702,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -692,11 +732,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
     );
 
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -766,10 +806,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
@@ -946,10 +986,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');

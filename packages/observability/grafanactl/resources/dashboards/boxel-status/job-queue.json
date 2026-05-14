@@ -57,7 +57,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "All jobs waiting for a worker (status='unfulfilled', no active reservation). Counts every job_type \u2014 for indexing-only see the Indexing dashboard.",
+        "description": "All jobs waiting for a worker (status='unfulfilled', no active reservation). Counts every job_type — for indexing-only see the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -127,7 +127,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "All jobs currently held by a worker. Counts every job_type \u2014 workers acquire a job_reservations row with locked_until > NOW().",
+        "description": "All jobs currently held by a worker. Counts every job_type — workers acquire a job_reservations row with locked_until > NOW().",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -189,7 +189,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Age of the oldest job sitting unworked (any job_type). Yellow at 1 minute, red at 5 minutes \u2014 sustained age usually means workers are saturated or stuck.",
+        "description": "Age of the oldest job sitting unworked (any job_type). Yellow at 1 minute, red at 5 minutes — sustained age usually means workers are saturated or stuck.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -259,7 +259,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Jobs that finished with status='rejected' in the last hour. Quick health check for the queue \u2014 a non-zero number is worth opening the Finished Jobs table to see what failed.",
+        "description": "Jobs that finished with status='rejected' in the last hour. Quick health check for the queue — a non-zero number is worth opening the Finished Jobs table to see what failed.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -542,7 +542,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Average time between a job's creation and its first reservation by a worker, bucketed by 1m and broken down by job_type. Captures pickup latency only \u2014 execution time isn't included.",
+        "description": "Average time between a job's creation and its first reservation by a worker, bucketed by 1m and broken down by job_type. Captures pickup latency only — execution time isn't included.",
         "fieldConfig": {
           "defaults": {
             "color": {
