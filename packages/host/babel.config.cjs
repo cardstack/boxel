@@ -28,6 +28,7 @@ module.exports = {
         ],
       },
     ],
+    'ember-concurrency/async-arrow-task-transform',
     [
       'module:decorator-transforms',
       {
