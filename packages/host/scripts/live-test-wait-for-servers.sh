@@ -31,7 +31,13 @@ else
   READY_URLS="$BASE_REALM_READY|$CATALOG_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 fi
 
-WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 REALM_URL="${REALM_URL:-}" start-server-and-test \
+# See test-wait-for-servers.sh for the rationale on
+# START_SERVER_AND_TEST_INSECURE=1 — wait-on against
+# https-get://localhost:42XX needs the strictSSL escape hatch under
+# start-server-and-test, otherwise the readiness probe flakes against
+# the self-signed mkcert leaf.
+WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
+  REALM_URL="${REALM_URL:-}" start-server-and-test \
   'pnpm run wait' \
   "$READY_URLS" \
   'ember test --config-file testem-live.js --path ./dist'

@@ -43,7 +43,16 @@ if [ "$SKIP_CATALOG" != "true" ]; then
   READY_URLS="$READY_URLS|$CATALOG_REALM_READY"
 fi
 
-WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 start-server-and-test \
+# START_SERVER_AND_TEST_INSECURE=1 disables wait-on's `strictSSL` for the
+# https-get://localhost:42XX readiness probes. start-server-and-test
+# passes `strictSSL: !isInsecure()` into wait-on options (overriding the
+# global NODE_TLS_REJECT_UNAUTHORIZED and even NODE_EXTRA_CA_CERTS when
+# the wait-on subprocess inherits them unevenly under CI load) — the
+# documented INSECURE flag is the right escape hatch. Scopes to the
+# readiness probe only; the test runner itself still validates TLS
+# normally.
+WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
+  start-server-and-test \
   'pnpm run wait' \
   "$READY_URLS" \
   'ember-test-pre-built'
