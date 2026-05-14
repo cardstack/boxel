@@ -19,6 +19,16 @@ if ! BOXEL_DEV_INVOKED_AS='mise run dev-all' mise run infra:ensure-dev-cert; the
   exit 1
 fi
 
+# `mise run dev-all` sources env-vars.sh once on entry. If
+# infra:ensure-dev-cert just provisioned the cert (first-run case), this
+# shell's env still lacks REALM_SERVER_TLS_CERT_FILE / _KEY_FILE, and
+# the next `pnpm --filter @cardstack/host start` inherits that gap and
+# brings vite up plain-HTTP — but HOST_URL is already
+# `https://localhost:4200`, so the readiness curl probe times out.
+# Re-source env-vars.sh so the TLS vars get picked up now that the cert
+# exists. Idempotent in the steady-state case.
+. "$(cd "$(dirname "$0")" && pwd)/lib/env-vars.sh"
+
 # Enable job control so backgrounded subprocesses run in their own process
 # group. Without this, Ctrl-C is delivered to the whole foreground group;
 # npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its

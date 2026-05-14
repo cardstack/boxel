@@ -38,6 +38,8 @@ const PER_ATTEMPT_TIMEOUT_MS = 30_000;
 const MAX_BACKOFF_MS = 5_000;
 const TOTAL_TIMEOUT_MS = 600_000;
 
+import { isHttpsLoopback } from '../lib/is-https-loopback';
+
 const log = (msg: string) => console.log(`[wait-for-host-standby] ${msg}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const elapsedSec = (start: number) => Math.round((Date.now() - start) / 1000);
@@ -64,7 +66,12 @@ async function main() {
   // `--allow-insecure-localhost` so the dev cert is actually accepted
   // (otherwise the TLS handshake closes with ERR_CONNECTION_CLOSED and
   // every retry times out with no obvious explanation in the log).
-  if (hostUrl.startsWith('https://')) {
+  //
+  // Gated on https + a loopback hostname so the relaxation only fires
+  // in local dev / CI (where the cert is the mkcert leaf). Production
+  // hits a real hostname with a real CA-signed cert, where we want
+  // strict validation.
+  if (isHttpsLoopback(hostUrl)) {
     launchArgs.push(
       '--ignore-certificate-errors',
       '--allow-insecure-localhost',

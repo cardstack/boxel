@@ -104,11 +104,16 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
       }
 
       // Plain HTTP — read enough to extract the request-target, then
-      // 301 to the https:// version on the same authority. The
+      // 308 to the https:// version on the same authority. The
       // request-target lives between the first and second SP on the
       // start-line, e.g. `GET /foo HTTP/1.1\r\n`. The peeked byte
       // never gets pushed back into the buffer; we just prepend it
       // to the buffered chunks here.
+      //
+      // 308 (vs 301): preserves the request method and body, so a
+      // browser POST or fetch() with a body that hits the http://
+      // origin gets a clean replay against https:// instead of
+      // silently downgrading to GET.
       let chunks = [firstByte];
       let length = firstByte.length;
       let onData = (chunk) => {
@@ -129,7 +134,7 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
         if (!requestTarget.startsWith('/')) requestTarget = '/' + requestTarget;
         let body = `The Boxel dev server speaks HTTPS — redirecting to https://localhost:${publicPort}${requestTarget}\n`;
         let response =
-          `HTTP/1.1 301 Moved Permanently\r\n` +
+          `HTTP/1.1 308 Permanent Redirect\r\n` +
           `Location: https://localhost:${publicPort}${requestTarget}\r\n` +
           `Content-Type: text/plain; charset=utf-8\r\n` +
           `Content-Length: ${Buffer.byteLength(body)}\r\n` +
@@ -137,7 +142,7 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
           `\r\n` +
           body;
         socket.end(response);
-        // Suppress noise from clients that pipeline more bytes after our 301.
+        // Suppress noise from clients that pipeline more bytes after our 308.
         socket.on('error', () => {});
       };
       socket.on('data', onData);

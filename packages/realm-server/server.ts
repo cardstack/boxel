@@ -248,11 +248,19 @@ export function createListener(
   return { server: dispatcher, proto: 'https/h2' };
 }
 
-// Same-port 301 redirect for plain-text HTTP requests that land on the
+// Same-port 308 redirect for plain-text HTTP requests that land on the
 // HTTPS port. The dispatcher binds a single port so the inbound and
 // target ports agree; we just rewrite the scheme. Parses via URL so
 // bracketed IPv6 authorities (`[::1]:4201`) round-trip cleanly instead
 // of being mangled by string-level regex.
+//
+// 308 (vs 301): preserves the request method and body across the
+// redirect. Local scripts that POST to `http://localhost:4201/...`
+// (matrix registration/setup writes `/_server-session`, `/_user`,
+// webhook endpoints) need that — a 301 makes fetch downgrade the
+// follow-up to GET and drops the body, breaking those calls. 308 is
+// also semantically correct: this redirect is a permanent property of
+// the wire protocol, not a temporary handler decision.
 function redirectToHttps(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -269,7 +277,7 @@ function redirectToHttps(
     authority = hostFromSocket(req);
   }
   let location = `https://${authority}${path}`;
-  res.writeHead(301, {
+  res.writeHead(308, {
     Location: location,
     'Content-Type': 'text/plain; charset=utf-8',
   });
