@@ -15,6 +15,10 @@ function createServiceWorkerEnv(
     clientTokenLookup?: (
       requestURL: string,
     ) => Promise<{ realmURL: string; token: string } | undefined>;
+    // Mirrors the SW's TOKEN_REQUEST_TIMEOUT_MS. When `clientTokenLookup`
+    // does not settle within this timeout, the scaffold resolves to
+    // `undefined` just like the real SW would.
+    tokenRequestTimeoutMs?: number;
   } = {},
 ) {
   const realmTokens = new Map<string, string>();
@@ -81,7 +85,18 @@ function createServiceWorkerEnv(
     if (existing) return existing;
     let promise = (async () => {
       if (!opts.clientTokenLookup) return undefined;
-      let reply = await opts.clientTokenLookup(requestURL);
+      let lookup = opts.clientTokenLookup(requestURL);
+      let reply: { realmURL: string; token: string } | undefined;
+      if (typeof opts.tokenRequestTimeoutMs === 'number') {
+        reply = await Promise.race([
+          lookup,
+          new Promise<undefined>((resolve) =>
+            setTimeout(() => resolve(undefined), opts.tokenRequestTimeoutMs),
+          ),
+        ]);
+      } else {
+        reply = await lookup;
+      }
       if (reply && reply.realmURL && reply.token) {
         realmTokens.set(reply.realmURL, reply.token);
         recordRealmHost(reply.realmURL);
@@ -127,7 +142,7 @@ function createServiceWorkerEnv(
     } catch {
       return 'pass-through';
     }
-    if (!realmHosts.has(origin)) {
+    if (realmHosts.size > 0 && !realmHosts.has(origin)) {
       return 'pass-through';
     }
 
@@ -404,13 +419,17 @@ module('Unit | auth-service-worker', function () {
       );
     });
 
-    test('returns pass-through when no tokens or hosts are known', async function (assert) {
+    test('falls through (does not pass-through) at cold start with no client available', async function (assert) {
+      // realmHosts is empty so the SW does not know which origins are realm
+      // hosts and must try the on-miss client lookup. With no client and no
+      // token, the SW lands in the unauthed-refetch path rather than
+      // skipping interception entirely.
       let sw = createServiceWorkerEnv();
 
       let request = new Request('http://localhost:4201/user/realm/image.png');
       let result = await sw.processFetch(request);
 
-      assert.strictEqual(result, 'pass-through');
+      assert.strictEqual(result, 'fallthrough-fetch');
     });
   });
 
@@ -504,6 +523,57 @@ module('Unit | auth-service-worker', function () {
 
       let result = await sw.processFetch(
         new Request('http://localhost:4201/unknown/image.png'),
+      );
+      assert.strictEqual(result, 'fallthrough-fetch');
+    });
+
+    test('asks the client at cold start when realmHosts is empty', async function (assert) {
+      // SW just activated, page has not synced yet: realmHosts is empty.
+      // The page may still hold valid tokens in localStorage, so the SW
+      // must reach out instead of silently passing through.
+      let sw = createServiceWorkerEnv({
+        clientTokenLookup: async (requestURL) => {
+          assert.strictEqual(
+            requestURL,
+            'http://localhost:4201/realm/image.png',
+          );
+          return {
+            realmURL: 'http://localhost:4201/realm/',
+            token: 'late-synced-token',
+          };
+        },
+      });
+
+      let result = await sw.processFetch(
+        new Request('http://localhost:4201/realm/image.png'),
+      );
+
+      assert.ok(result instanceof Request);
+      assert.strictEqual(
+        (result as Request).headers.get('Authorization'),
+        'Bearer late-synced-token',
+      );
+      assert.true(
+        sw.realmHosts.has('http://localhost:4201'),
+        'realmHosts is populated after the cold-start lookup',
+      );
+    });
+
+    test('times out and falls through when the client never replies', async function (assert) {
+      // Simulates an old controlled tab that has no request-realm-token
+      // listener installed. The SW must not hang waiting for it.
+      let sw = createServiceWorkerEnv({
+        tokenRequestTimeoutMs: 10,
+        clientTokenLookup: () => new Promise(() => {}),
+      });
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: 'http://localhost:4201/seed/',
+        token: 'seed',
+      });
+
+      let result = await sw.processFetch(
+        new Request('http://localhost:4201/r/image.png'),
       );
       assert.strictEqual(result, 'fallthrough-fetch');
     });
