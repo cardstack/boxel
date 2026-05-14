@@ -4702,7 +4702,7 @@ export class Realm {
         });
         if (instanceEntry === undefined) {
           if (await this.nonJsonFileExists(localPath)) {
-            return unsupportedMediaType(request, requestContext);
+            return this.fallbackHandle(request, requestContext);
           } else {
             return notFound(request, requestContext);
           }
@@ -4746,7 +4746,7 @@ export class Realm {
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          return unsupportedMediaType(request, requestContext);
+          return this.fallbackHandle(request, requestContext);
         } else {
           return notFound(request, requestContext);
         }
