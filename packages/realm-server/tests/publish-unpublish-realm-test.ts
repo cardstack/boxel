@@ -955,11 +955,7 @@ module(basename(__filename), function () {
           .set('Content-Type', 'application/json')
           .set('Authorization', publishHeaders.Authorization)
           .send(publishBody);
-        assert.strictEqual(
-          firstResponse.status,
-          202,
-          'first publish accepted',
-        );
+        assert.strictEqual(firstResponse.status, 202, 'first publish accepted');
 
         // The publish handler upserts the registry row asynchronously
         // and enqueues a from-scratch index — drive a reconcile so the
