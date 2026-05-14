@@ -33,13 +33,16 @@ const REVERSE = process.argv.includes('--reverse');
 const FROM_SCHEME = REVERSE ? 'https' : 'http';
 const TO_SCHEME = REVERSE ? 'http' : 'https';
 
-// Only flip the two known localhost realm-server canonicals. Production
-// / staging realm URLs are real hostnames and would never appear in a
-// local synapse, so a broader regex would just create the opportunity
-// to corrupt unrelated data.
+// Only flip the three known localhost realm-server canonicals (mirrors
+// the postgres migration `1779100257124_canonical-url-http-to-https.js`,
+// which covers :4201, :4202, and :4205). Production / staging realm URLs
+// are real hostnames and would never appear in a local synapse, so a
+// broader regex would just create the opportunity to corrupt unrelated
+// data.
 const URL_PREFIXES_TO_FLIP = [
   `${FROM_SCHEME}://localhost:4201/`,
   `${FROM_SCHEME}://localhost:4202/`,
+  `${FROM_SCHEME}://localhost:4205/`,
 ];
 
 interface LoginResponse {

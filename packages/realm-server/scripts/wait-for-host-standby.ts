@@ -96,12 +96,11 @@ async function main() {
     );
   // Verbose mode forwards every chrome console message + every failed
   // network request from the standby probe page to our own stdout, so
-  // when the probe hangs in CI we can see what URL the page is choking
-  // on (TLS-handshake failures, h2 stream resets, cross-origin denials,
-  // etc.). On by default while we hunt the intermittent
-  // CI-only "frame got detached" failure that's cratering ~35% of
-  // host-test shards — flip `WAIT_FOR_HOST_STANDBY_VERBOSE=0` to mute.
-  let verbose = process.env.WAIT_FOR_HOST_STANDBY_VERBOSE !== '0';
+  // when the probe hangs we can see what URL the page is choking on
+  // (TLS-handshake failures, h2 stream resets, cross-origin denials,
+  // etc.). Off by default — healthy runs don't need the noise. Flip
+  // `WAIT_FOR_HOST_STANDBY_VERBOSE=1` when investigating a probe hang.
+  let verbose = process.env.WAIT_FOR_HOST_STANDBY_VERBOSE === '1';
   try {
     while (Date.now() - start < TOTAL_TIMEOUT_MS) {
       attempt++;

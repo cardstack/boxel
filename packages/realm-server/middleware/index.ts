@@ -21,6 +21,22 @@ import {
 
 const REQUEST_BODY_STATE = 'requestBody';
 
+// HTTP/2 forbids connection-specific (hop-by-hop) headers (RFC 9113
+// §8.2.2). Sending any of them on an h2 response makes Node's http2
+// compat layer either strip them silently or — worse — drop the stream
+// mid-flight. We also strip them from the upstream-asset response in
+// `proxyAsset` for the same reason: even when the host-dist upstream
+// is plain HTTP/1.1, we re-emit its response through the realm-server's
+// (potentially h2) response and the forbidden list applies there too.
+const H2_FORBIDDEN_RESPONSE_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'upgrade',
+  'proxy-connection',
+  'http2-settings',
+]);
+
 interface ProxyOptions {
   requestHeaders?: Record<string, string>;
   responseHeaders?: Record<string, string>;
@@ -40,6 +56,10 @@ export function proxyAsset(
   // (`:method`, `:path`, …) and tripped `ERR_INVALID_HTTP_TOKEN`. By
   // building the upstream request ourselves we choose exactly which
   // headers to forward, so the h2 / h1 callers share one code path.
+  //
+  // GET-only — `upstreamReq.end()` fires without a body. Add request-
+  // body piping if you need to reuse this for POST/PUT/PATCH; the only
+  // current caller is the host-dist asset hand-off (`/auth-service-worker.js`).
   return async (ctxt, next) => {
     if (ctxt.path !== from) {
       return next();
@@ -67,6 +87,8 @@ export function proxyAsset(
           {
             method: ctxt.method,
             hostname: assetsURL.hostname,
+            // `assetsURL.port` is the empty string for default-port URLs;
+            // fall through to the protocol default.
             port: assetsURL.port || (client === https ? 443 : 80),
             path: upstreamPath,
             headers: forwardedHeaders,
@@ -81,15 +103,10 @@ export function proxyAsset(
     ctxt.status = upstreamRes.statusCode ?? 502;
     for (let [name, value] of Object.entries(upstreamRes.headers)) {
       if (value == null) continue;
-      // Don't forward hop-by-hop headers from the upstream — Node manages
-      // them per-connection. `host` is irrelevant on the response side.
-      let lower = name.toLowerCase();
-      if (
-        lower === 'connection' ||
-        lower === 'keep-alive' ||
-        lower === 'transfer-encoding' ||
-        lower === 'upgrade'
-      ) {
+      // Strip hop-by-hop headers (Node manages them per-connection) plus
+      // anything else the h2 response layer will reject. `host` is
+      // irrelevant on the response side.
+      if (H2_FORBIDDEN_RESPONSE_HEADERS.has(name.toLowerCase())) {
         continue;
       }
       ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
@@ -397,19 +414,6 @@ export async function setContextResponse(
   let { status, statusText, headers, body, nodeStream } = response;
   ctxt.status = status;
   ctxt.message = statusText;
-  // HTTP/2 forbids connection-specific (hop-by-hop) headers — sending any
-  // of them on an h2 response causes Node's http2 compat layer to either
-  // strip them silently or, worse, drop the stream mid-flight. Filter
-  // them out before forwarding the realm's WHATWG Response headers to
-  // Koa's response. RFC 9113 §8.2.2.
-  const H2_FORBIDDEN_RESPONSE_HEADERS = new Set([
-    'connection',
-    'keep-alive',
-    'transfer-encoding',
-    'upgrade',
-    'proxy-connection',
-    'http2-settings',
-  ]);
   for (let [header, value] of headers.entries()) {
     if (H2_FORBIDDEN_RESPONSE_HEADERS.has(header.toLowerCase())) continue;
     ctxt.set(header, value);

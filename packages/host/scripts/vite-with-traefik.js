@@ -115,7 +115,6 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
         chunks.push(chunk);
         length += chunk.length;
         let buf = Buffer.concat(chunks, length);
-        let headerEnd = buf.indexOf('\r\n\r\n');
         let lineEnd = buf.indexOf('\r\n');
         if (lineEnd === -1 && length < 8192) {
           return; // wait for more
@@ -140,9 +139,6 @@ function startSamePortRedirectDispatcher({ publicPort, viteInternalPort }) {
         socket.end(response);
         // Suppress noise from clients that pipeline more bytes after our 301.
         socket.on('error', () => {});
-        if (headerEnd === -1 && length >= 8192) {
-          // Defensive — reading >8 KiB of headers is hostile.
-        }
       };
       socket.on('data', onData);
       socket.resume();

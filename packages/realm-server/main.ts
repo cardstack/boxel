@@ -523,9 +523,11 @@ const getIndexHTML = async () => {
     if (isEnvironmentMode()) {
       deregisterEnvironment();
     }
-    // http.Server has closeAllConnections() for force-close. The
-    // Http2SecureServer used when TLS is enabled does not expose it —
-    // graceful close() is sufficient for dev shutdown.
+    // Both the plain `http.Server` and the TLS-mode `net.Server`
+    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
+    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them
+    // — without it `close()` can hang for a tab-keep-alive lifetime.
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
