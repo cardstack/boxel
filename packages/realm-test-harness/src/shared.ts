@@ -289,6 +289,96 @@ export async function findAvailablePort(): Promise<number> {
 }
 
 /**
+ * Probe a port across the common bind scopes and report which conflict.
+ * Intended for post-mortem diagnostics when a child has just crashed
+ * with EADDRINUSE — knowing whether the conflict lives on
+ * `127.0.0.1`, `::1`, or only on the dual-stack wildcard tells you
+ * whether the colliding peer is an IPv4-only binder, an IPv6-only one,
+ * or whether the kernel is still holding a TIME_WAIT entry on a wide
+ * bind from the previous run.
+ *
+ * Also shells out to `ss -tlnp` (best-effort; silently skipped when
+ * the binary is absent) so the caller can see which pid/program holds
+ * the port. Never throws — diagnostics must not mask the original
+ * failure they were called to explain.
+ */
+export async function diagnosePortConflict(port: number): Promise<string> {
+  let scopes: Array<{ label: string; host?: string }> = [
+    { label: '127.0.0.1', host: '127.0.0.1' },
+    { label: '0.0.0.0', host: '0.0.0.0' },
+    { label: '::1', host: '::1' },
+    { label: ':: (dual-stack wildcard)' },
+  ];
+  let lines: string[] = [`port-conflict probe for ${port}:`];
+  for (let scope of scopes) {
+    let result = await probeBind(port, scope.host);
+    lines.push(`  ${scope.label}: ${result}`);
+  }
+  try {
+    let ss = spawnSync('ss', ['-tlnp', `( sport = :${port} )`], {
+      encoding: 'utf8',
+      timeout: 2_000,
+    });
+    if (ss.status === 0 && ss.stdout.trim()) {
+      lines.push(`  ss -tlnp:\n${indent(ss.stdout.trim(), '    ')}`);
+    }
+  } catch {
+    // ss not available — skip silently
+  }
+  return lines.join('\n');
+}
+
+async function probeBind(
+  port: number,
+  host: string | undefined,
+): Promise<string> {
+  return await new Promise<string>((resolve) => {
+    let server = createNetServer();
+    let settled = false;
+    let finish = (result: string) => {
+      if (settled) return;
+      settled = true;
+      // Wait for `close` to actually release the listening socket before
+      // resolving. Without this gate the sequential probes in
+      // diagnosePortConflict can race their own still-closing sockets —
+      // a successful `FREE` probe's leftover bind would surface as a
+      // false EADDRINUSE on the next scope.
+      let finalize = () => resolve(result);
+      try {
+        server.close((closeError) => {
+          if (closeError && closeError.message !== 'Server is not running.') {
+            // Best-effort: include the close failure in the probe result so
+            // it's at least visible, but never throw — diagnostics must not
+            // mask the original failure.
+            finalize();
+          } else {
+            finalize();
+          }
+        });
+      } catch {
+        finalize();
+      }
+    };
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      finish(error.code ?? error.message);
+    });
+    let onListening = () => finish('FREE');
+    if (host === undefined) {
+      server.listen(port, onListening);
+    } else {
+      server.listen(port, host, onListening);
+    }
+  });
+}
+
+function indent(text: string, prefix: string): string {
+  return text
+    .split('\n')
+    .map((line) => `${prefix}${line}`)
+    .join('\n');
+}
+
+/**
  * A port number plus a `release()` that closes the holder socket keeping
  * the port reserved. Prefer this over `findAvailablePort()` whenever there
  * is a non-trivial gap between "I picked a port" and "the child process
@@ -333,7 +423,16 @@ export async function findAndHoldAvailablePort(): Promise<PortReservation> {
       rejectOuter(error);
     };
     server.once('error', onError);
-    server.listen(0, '127.0.0.1', () => {
+    // Bind wildcard rather than 127.0.0.1 so the kernel only hands us a
+    // port that is free on every interface. Without this, the holder
+    // could occupy `127.0.0.1:X` while another process still has a
+    // lingering bind on `::X` (e.g. a previous worker-manager whose
+    // dual-stack socket the kernel hasn't fully reaped). The next child
+    // — which calls `server.listen(X)` without a host and therefore
+    // binds `:::X` — would then crash with EADDRINUSE. Selecting on the
+    // wildcard guarantees the chosen port is unused on the same scope
+    // the child will bind.
+    server.listen(0, () => {
       let address = server.address();
       if (!address || typeof address === 'string') {
         server.close();

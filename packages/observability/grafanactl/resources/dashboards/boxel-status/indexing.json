@@ -120,7 +120,7 @@
               "type": "button",
               "title": "",
               "buttonLabel": "Reindex ALL realms",
-              "tooltip": "POST /_grafana-full-reindex. Disabled while a `full-reindex` orchestration job is already pending or running. Long-running \u2014 every realm is reindexed.",
+              "tooltip": "POST /_grafana-full-reindex. Disabled while a `full-reindex` orchestration job is already pending or running. Long-running — every realm is reindexed.",
               "labelWidth": 28,
               "section": "actions",
               "show": "form",
@@ -353,7 +353,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Age of the oldest pending indexing job. Red after 5 minutes \u2014 sustained values here usually mean workers are saturated or stuck.",
+        "description": "Age of the oldest pending indexing job. Red after 5 minutes — sustained values here usually mean workers are saturated or stuck.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -423,7 +423,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Indexing-job flow rates. Three series \u2014 `arrived` (jobs queued), `started` (a worker reserved them), `completed` (jobs.finished_at set). Bucketed by 30s. A persistent gap between arrived and completed indicates worker saturation.",
+        "description": "Indexing-job flow rates. Three series — `arrived` (jobs queued), `started` (a worker reserved them), `completed` (jobs.finished_at set). Bucketed by 30s. A persistent gap between arrived and completed indicates worker saturation.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -519,7 +519,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Stocks of indexing jobs over time. `pending` = queued, no live reservation; `in_flight` = a worker has an open reservation; `completed` = cumulative finished. Bucketed at 1 minute over the panel's time range. Cost: O(buckets \u00d7 indexing-jobs in window) per refresh \u2014 if this gets slow, switch to a snapshot/materialized table.",
+        "description": "Stocks of indexing jobs over time. `pending` = queued, no live reservation; `in_flight` = a worker has an open reservation; `completed` = cumulative finished. Bucketed at 1 minute over the panel's time range. Cost: O(buckets × indexing-jobs in window) per refresh — if this gets slow, switch to a snapshot/materialized table.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -633,7 +633,8 @@
                   "id": "custom.cellOptions",
                   "value": {
                     "type": "gauge",
-                    "mode": "gradient"
+                    "mode": "gradient",
+                    "valueDisplayMode": "hidden"
                   }
                 },
                 {
@@ -647,6 +648,42 @@
                 {
                   "id": "max",
                   "value": 100
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pct"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                },
+                {
+                  "id": "displayName",
+                  "value": " "
+                },
+                {
+                  "id": "custom.align",
+                  "value": "left"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 70
+                },
+                {
+                  "id": "custom.width",
+                  "value": 70
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
                 }
               ]
             },
@@ -770,7 +807,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  j.id AS job_id,\n  RTRIM(REGEXP_REPLACE(j.concurrency_group, '^indexing:https?://[^/]+/', ''), '/') AS realm,\n  COALESCE(j.args->>'realmURL','') AS realm_url,\n  j.job_type,\n  COALESCE(jp.files_completed, 0) AS files_completed,\n  COALESCE(jp.total_files, 0) AS total_files,\n  CASE WHEN COALESCE(jp.total_files, 0) > 0\n    THEN (jp.files_completed::float / jp.total_files) * 100\n    ELSE 0\n  END AS percent,\n  EXTRACT(EPOCH FROM (NOW() - jr.created_at)) AS elapsed_seconds,\n  jr.created_at AS started_at,\n  jr.worker_id,\n  jr.id AS reservation_id\n FROM jobs j\n JOIN job_reservations jr ON jr.job_id = j.id\n   AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n LEFT JOIN job_progress jp ON jp.job_id = j.id\n WHERE j.job_type IN ('from-scratch-index','incremental-index')\n   AND j.finished_at IS NULL\n ORDER BY jr.created_at DESC;",
+            "rawSql": "SELECT\n  job_id,\n  realm,\n  realm_url,\n  job_type,\n  files_completed,\n  total_files,\n  percent,\n  percent AS pct,\n  elapsed_seconds,\n  started_at,\n  worker_id,\n  reservation_id\nFROM (\n  SELECT\n    j.id AS job_id,\n    COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    ) AS realm,\n    COALESCE(j.args->>'realmURL','') AS realm_url,\n    j.job_type,\n    COALESCE(jp.files_completed, 0) AS files_completed,\n    COALESCE(jp.total_files, 0) AS total_files,\n    CASE WHEN COALESCE(jp.total_files, 0) > 0\n      THEN (jp.files_completed::float / jp.total_files) * 100\n      ELSE 0\n    END AS percent,\n    EXTRACT(EPOCH FROM (NOW() - jr.created_at)) AS elapsed_seconds,\n    jr.created_at AS started_at,\n    jr.worker_id,\n    jr.id AS reservation_id\n  FROM jobs j\n  JOIN job_reservations jr ON jr.job_id = j.id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n  LEFT JOIN job_progress jp ON jp.job_id = j.id\n  WHERE j.job_type IN ('from-scratch-index','incremental-index')\n    AND j.finished_at IS NULL\n) active\nORDER BY started_at DESC;",
             "refId": "A"
           }
         ],
@@ -902,7 +939,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT\n  RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/') AS realm,\n  COALESCE(j.args->>'realmURL','') AS realm_url,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL) AS pending,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NOT NULL) AS in_flight,\n  MAX(j.finished_at) AS last_completed_at,\n  EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at)\n    FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL))) AS oldest_pending_seconds\n FROM jobs j\n LEFT JOIN job_reservations jr ON j.id = jr.job_id\n   AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.job_type IN ('from-scratch-index','incremental-index')\n GROUP BY j.args->>'realmURL'\n ORDER BY pending DESC, in_flight DESC, last_completed_at DESC NULLS LAST\n LIMIT 200;",
+            "rawSql": "SELECT\n  COALESCE(\n    NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n    REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n  ) AS realm,\n  COALESCE(j.args->>'realmURL','') AS realm_url,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL) AS pending,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NOT NULL) AS in_flight,\n  MAX(j.finished_at) AS last_completed_at,\n  EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at)\n    FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL))) AS oldest_pending_seconds\n FROM jobs j\n LEFT JOIN job_reservations jr ON j.id = jr.job_id\n   AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.job_type IN ('from-scratch-index','incremental-index')\n GROUP BY j.args->>'realmURL'\n ORDER BY pending DESC, in_flight DESC, last_completed_at DESC NULLS LAST\n LIMIT 200;",
             "refId": "A"
           }
         ],
@@ -1037,7 +1074,7 @@
             "editorMode": "code",
             "format": "table",
             "rawQuery": true,
-            "rawSql": "SELECT \n  j.id, \n  j.priority, \n  j.job_type, \n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n j.id as job_id\n\nFROM \n  jobs j\n  \nLEFT JOIN \n  job_reservations jr ON j.id = jr.job_id\n\nWHERE\njr.job_id IS NULL AND j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') \n  \nORDER BY \n  j.created_at ASC\nLIMIT 500;",
+            "rawSql": "SELECT \n  j.id, \n  j.priority, \n  j.job_type, \n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n j.id as job_id\n\nFROM \n  jobs j\n  \nLEFT JOIN \n  job_reservations jr ON j.id = jr.job_id\n\nWHERE\njr.job_id IS NULL AND j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') \n  \nORDER BY \n  j.created_at ASC\nLIMIT 500;",
             "refId": "A",
             "sql": {
               "columns": [
@@ -1060,7 +1097,281 @@
         ],
         "title": "Queued Indexing Jobs",
         "type": "table",
-        "description": "Indexing jobs (from-scratch-index, incremental-index) waiting on a worker. Same query as Job Queue \u2192 Waiting Jobs, narrowed to indexing job types."
+        "description": "Indexing jobs (from-scratch-index, incremental-index) waiting on a worker. Same query as Job Queue → Waiting Jobs, narrowed to indexing job types."
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Top 10 from-scratch-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Use this to spot realms whose full reindex is regressing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 0,
+          "y": 54
+        },
+        "id": 20,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "run_seconds"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'from-scratch-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
+            "refId": "A"
+          }
+        ],
+        "title": "Longest from-scratch-index jobs (24h)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Top 10 incremental-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Outliers here usually mean a heavy invalidation fan-out from a single edit.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 12,
+          "y": 54
+        },
+        "id": 21,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "run_seconds"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'incremental-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
+            "refId": "A"
+          }
+        ],
+        "title": "Longest incremental-index jobs (24h)",
+        "type": "table"
       }
     ],
     "refresh": "5s",

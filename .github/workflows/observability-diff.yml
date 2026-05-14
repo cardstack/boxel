@@ -83,13 +83,17 @@ jobs:
           fetch-depth: 0
 
       - name: Fetch PR base ref
-        # Belt-and-suspenders: even with `fetch-depth: 0`, ensure the
-        # PR base ref is available as `origin/<base>` so diff.sh's
-        # `git rev-parse --verify` succeeds. Cheap on already-fetched
-        # history; idempotent if the ref is already up to date.
+        # Ensure the PR base ref is available as `origin/<base>` so
+        # diff.sh's `git rev-parse --verify` and `git diff <base>...HEAD`
+        # both succeed. NOTE: no `--depth=1` here. A shallow fetch makes
+        # origin/<base> an orphan with no parent history; when main has
+        # advanced past the PR's actual merge base (any non-trivial PR
+        # in flight long enough for main to move), `git diff <base>...HEAD`
+        # then fails with "no merge base". Unbounded fetch is cheap
+        # against an already-full repo (`fetch-depth: 0` on checkout).
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: git fetch --no-tags --depth=1 origin "${PR_BASE_REF}"
+        run: git fetch --no-tags origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
@@ -184,47 +188,6 @@ jobs:
             const diffBytes = Buffer.byteLength(diff, 'utf8');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
-            let body;
-            if (!diff.trim()) {
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                'No dashboard / folder changes detected against the staging Grafana.',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            } else if (diffBytes > maxBytes) {
-              // Truncate by bytes, not characters. Walk back from a
-              // character boundary so we don't slice mid-codepoint and
-              // produce invalid UTF-8.
-              const buf = Buffer.from(diff, 'utf8');
-              let cut = maxBytes;
-              while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
-              const truncated = buf.slice(0, cut).toString('utf8');
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
-                '',
-                '```diff',
-                truncated,
-                '```',
-              ].join('\n');
-            } else {
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                '```diff',
-                diff,
-                '```',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            }
-
             // Find existing sticky comment. Paginate so we don't miss
             // the marker on PRs with >100 comments (would otherwise
             // create duplicates on every push).
@@ -240,6 +203,65 @@ jobs:
             const existing = comments.find(
               (c) => c.body && c.body.startsWith(marker)
             );
+
+            if (!diff.trim()) {
+              // No drift between the PR's committed state and live staging.
+              // Don't post a "nothing changed" comment — but if a prior push
+              // left a sticky behind (the PR used to touch dashboards and
+              // now doesn't), delete it so the PR's comment stream matches
+              // its current state.
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+                core.info(`Deleted stale sticky comment ${existing.id}`);
+              } else {
+                core.info('No diff vs staging — nothing to post.');
+              }
+              return;
+            }
+
+            let body;
+            if (diffBytes > maxBytes) {
+              // Truncate by bytes, not characters. Walk back from a
+              // character boundary so we don't slice mid-codepoint and
+              // produce invalid UTF-8.
+              const buf = Buffer.from(diff, 'utf8');
+              let cut = maxBytes;
+              while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
+              const truncated = buf.slice(0, cut).toString('utf8');
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
+                '',
+                '<details><summary>Show diff</summary>',
+                '',
+                '```diff',
+                truncated,
+                '```',
+                '',
+                '</details>',
+              ].join('\n');
+            } else {
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                '<details><summary>Show diff</summary>',
+                '',
+                '```diff',
+                diff,
+                '```',
+                '',
+                '</details>',
+                '',
+                `_(Run: ${runUrl})_`,
+              ].join('\n');
+            }
 
             if (existing) {
               await github.rest.issues.updateComment({

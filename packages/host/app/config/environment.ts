@@ -55,7 +55,6 @@ export default config as {
   assetsURL: string;
   stripePaymentLink: string;
   featureFlags?: {
-    SHOW_ASK_AI?: boolean;
     AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
   };
   publishedRealmDomainOverrides: string;

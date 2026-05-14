@@ -57,7 +57,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "All jobs waiting for a worker (status='unfulfilled', no active reservation). Counts every job_type \u2014 for indexing-only see the Indexing dashboard.",
+        "description": "All jobs waiting for a worker (status='unfulfilled', no active reservation). Counts every job_type — for indexing-only see the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -127,7 +127,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "All jobs currently held by a worker. Counts every job_type \u2014 workers acquire a job_reservations row with locked_until > NOW().",
+        "description": "All jobs currently held by a worker. Counts every job_type — workers acquire a job_reservations row with locked_until > NOW().",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -189,7 +189,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Age of the oldest job sitting unworked (any job_type). Yellow at 1 minute, red at 5 minutes \u2014 sustained age usually means workers are saturated or stuck.",
+        "description": "Age of the oldest job sitting unworked (any job_type). Yellow at 1 minute, red at 5 minutes — sustained age usually means workers are saturated or stuck.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -259,7 +259,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Jobs that finished with status='rejected' in the last hour. Quick health check for the queue \u2014 a non-zero number is worth opening the Finished Jobs table to see what failed.",
+        "description": "Jobs that finished with status='rejected' in the last hour. Quick health check for the queue — a non-zero number is worth opening the Finished Jobs table to see what failed.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -542,7 +542,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Average time between a job's creation and its first reservation by a worker, bucketed by 1m and broken down by job_type. Captures pickup latency only \u2014 execution time isn't included.",
+        "description": "Average time between a job's creation and its first reservation by a worker, bucketed by 1m and broken down by job_type. Captures pickup latency only — execution time isn't included.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -1114,280 +1114,6 @@
           }
         ],
         "title": "Finished Jobs (limit 500)",
-        "type": "table"
-      },
-      {
-        "datasource": {
-          "type": "grafana-postgresql-datasource",
-          "uid": "cef5v5sl9k7i8f"
-        },
-        "description": "Top 10 from-scratch-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Use this to spot realms whose full reindex is regressing.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "custom": {
-              "align": "left",
-              "cellOptions": {
-                "type": "auto"
-              },
-              "filterable": true,
-              "inspect": false,
-              "minWidth": 150
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green"
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "run_seconds"
-              },
-              "properties": [
-                {
-                  "id": "unit",
-                  "value": "s"
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "worker_id"
-              },
-              "properties": [
-                {
-                  "id": "links",
-                  "value": [
-                    {
-                      "targetBlank": true,
-                      "title": "View logs",
-                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
-                    }
-                  ]
-                },
-                {
-                  "id": "mappings",
-                  "value": [
-                    {
-                      "options": {
-                        "pattern": "^(.{6}).*$",
-                        "result": {
-                          "index": 0,
-                          "text": "View logs ($1)"
-                        }
-                      },
-                      "type": "regex"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "reservation_id"
-              },
-              "properties": [
-                {
-                  "id": "custom.hidden",
-                  "value": true
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 10,
-          "w": 12,
-          "x": 0,
-          "y": 58
-        },
-        "id": 20,
-        "options": {
-          "cellHeight": "sm",
-          "footer": {
-            "countRows": false,
-            "enablePagination": false,
-            "fields": "",
-            "reducer": [
-              "sum"
-            ],
-            "show": false
-          },
-          "showHeader": true,
-          "sortBy": [
-            {
-              "desc": true,
-              "displayName": "run_seconds"
-            }
-          ]
-        },
-        "pluginVersion": "10.4.1",
-        "targets": [
-          {
-            "datasource": {
-              "type": "grafana-postgresql-datasource",
-              "uid": "cef5v5sl9k7i8f"
-            },
-            "editorMode": "code",
-            "format": "table",
-            "rawQuery": true,
-            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '')\n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '')\n    ELSE j.concurrency_group\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'from-scratch-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
-            "refId": "A"
-          }
-        ],
-        "title": "Longest from-scratch-index jobs (24h)",
-        "type": "table"
-      },
-      {
-        "datasource": {
-          "type": "grafana-postgresql-datasource",
-          "uid": "cef5v5sl9k7i8f"
-        },
-        "description": "Top 10 incremental-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Outliers here usually mean a heavy invalidation fan-out from a single edit.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "custom": {
-              "align": "left",
-              "cellOptions": {
-                "type": "auto"
-              },
-              "filterable": true,
-              "inspect": false,
-              "minWidth": 150
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green"
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            }
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "run_seconds"
-              },
-              "properties": [
-                {
-                  "id": "unit",
-                  "value": "s"
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "worker_id"
-              },
-              "properties": [
-                {
-                  "id": "links",
-                  "value": [
-                    {
-                      "targetBlank": true,
-                      "title": "View logs",
-                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
-                    }
-                  ]
-                },
-                {
-                  "id": "mappings",
-                  "value": [
-                    {
-                      "options": {
-                        "pattern": "^(.{6}).*$",
-                        "result": {
-                          "index": 0,
-                          "text": "View logs ($1)"
-                        }
-                      },
-                      "type": "regex"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "matcher": {
-                "id": "byName",
-                "options": "reservation_id"
-              },
-              "properties": [
-                {
-                  "id": "custom.hidden",
-                  "value": true
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 10,
-          "w": 12,
-          "x": 12,
-          "y": 58
-        },
-        "id": 21,
-        "options": {
-          "cellHeight": "sm",
-          "footer": {
-            "countRows": false,
-            "enablePagination": false,
-            "fields": "",
-            "reducer": [
-              "sum"
-            ],
-            "show": false
-          },
-          "showHeader": true,
-          "sortBy": [
-            {
-              "desc": true,
-              "displayName": "run_seconds"
-            }
-          ]
-        },
-        "pluginVersion": "10.4.1",
-        "targets": [
-          {
-            "datasource": {
-              "type": "grafana-postgresql-datasource",
-              "uid": "cef5v5sl9k7i8f"
-            },
-            "editorMode": "code",
-            "format": "table",
-            "rawQuery": true,
-            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '')\n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '')\n    ELSE j.concurrency_group\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'incremental-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
-            "refId": "A"
-          }
-        ],
-        "title": "Longest incremental-index jobs (24h)",
         "type": "table"
       }
     ],

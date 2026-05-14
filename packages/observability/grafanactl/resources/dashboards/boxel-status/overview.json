@@ -85,7 +85,7 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 12,
+          "w": 8,
           "x": 0,
           "y": 0
         },
@@ -105,9 +105,7 @@
           "justifyMode": "auto",
           "orientation": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -187,8 +185,8 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 12,
-          "x": 12,
+          "w": 8,
+          "x": 8,
           "y": 0
         },
         "id": 22,
@@ -207,9 +205,7 @@
           "justifyMode": "auto",
           "orientation": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -233,6 +229,226 @@
         ],
         "title": "Users",
         "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Concurrent users right now: count of distinct Matrix users seen on the Synapse Sliding Sync endpoint within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how the active-user count moved over the range. Sourced from Synapse access logs via Loki — matches `Processed request` lines hitting the MSC3575 Sliding Sync path (`simplified_msc3575/sync`) and extracts the `@user:server` token from the log prefix. Path is on the unstable MSC3575 namespace and may shift when sliding-sync stabilises upstream.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Users dashboard",
+                "url": "/d/boxelusers0001?${__url_time_range}",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Concurrent Users"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 8,
+          "x": 16,
+          "y": 0
+        },
+        "id": 30,
+        "links": [
+          {
+            "title": "Open Users dashboard",
+            "url": "/d/boxelusers0001?${__url_time_range}",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
+            "queryType": "range",
+            "legendFormat": "Concurrent Users",
+            "refId": "A"
+          }
+        ],
+        "title": "Concurrent Users",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Matrix user IDs seen on the Synapse Sliding Sync endpoint within the last 5 minutes. Click a user to open the Users dashboard focused on them.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 120
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "user"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Matrix User"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open in Users dashboard",
+                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
+                      "targetBlank": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 8,
+          "x": 16,
+          "y": 5
+        },
+        "id": 31,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": false,
+          "sortBy": [
+            {
+              "desc": false,
+              "displayName": "Matrix User"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
+            "queryType": "instant",
+            "legendFormat": "{{user}}",
+            "refId": "A"
+          }
+        ],
+        "title": "",
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "filterFieldsByName",
+            "options": {
+              "include": {
+                "pattern": "^user$"
+              }
+            }
+          }
+        ],
+        "type": "table"
       },
       {
         "datasource": {
@@ -330,10 +546,13 @@
                 "options": "p50"
               },
               "properties": [
-                {"id": "unit", "value": "s"},
-                {"id": "custom.axisPlacement", "value": "right"},
-                {"id": "custom.fillOpacity", "value": 0},
-                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#73bf69"}}
+                { "id": "unit", "value": "s" },
+                { "id": "custom.axisPlacement", "value": "right" },
+                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "color",
+                  "value": { "mode": "fixed", "fixedColor": "#73bf69" }
+                }
               ]
             },
             {
@@ -342,10 +561,13 @@
                 "options": "p95"
               },
               "properties": [
-                {"id": "unit", "value": "s"},
-                {"id": "custom.axisPlacement", "value": "right"},
-                {"id": "custom.fillOpacity", "value": 0},
-                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#ff9830"}}
+                { "id": "unit", "value": "s" },
+                { "id": "custom.axisPlacement", "value": "right" },
+                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "color",
+                  "value": { "mode": "fixed", "fixedColor": "#ff9830" }
+                }
               ]
             },
             {
@@ -354,10 +576,13 @@
                 "options": "p99"
               },
               "properties": [
-                {"id": "unit", "value": "s"},
-                {"id": "custom.axisPlacement", "value": "right"},
-                {"id": "custom.fillOpacity", "value": 0},
-                {"id": "color", "value": {"mode": "fixed", "fixedColor": "#f2495c"}}
+                { "id": "unit", "value": "s" },
+                { "id": "custom.axisPlacement", "value": "right" },
+                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "color",
+                  "value": { "mode": "fixed", "fixedColor": "#f2495c" }
+                }
               ]
             }
           ]
@@ -371,9 +596,7 @@
         "id": 1,
         "options": {
           "legend": {
-            "calcs": [
-              "mean"
-            ],
+            "calcs": ["mean"],
             "displayMode": "list",
             "placement": "bottom",
             "showLegend": true
@@ -406,12 +629,12 @@
             "refId": "B"
           },
           {
-            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "dimensions": { "LoadBalancer": "$realm_server_alb" },
             "statistic": "p50",
             "period": "",
             "region": "default",
@@ -419,12 +642,12 @@
             "refId": "C"
           },
           {
-            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "dimensions": { "LoadBalancer": "$realm_server_alb" },
             "statistic": "p95",
             "period": "",
             "region": "default",
@@ -432,12 +655,12 @@
             "refId": "D"
           },
           {
-            "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": {"LoadBalancer": "$realm_server_alb"},
+            "dimensions": { "LoadBalancer": "$realm_server_alb" },
             "statistic": "p99",
             "period": "",
             "region": "default",
@@ -520,9 +743,7 @@
           "justifyMode": "auto",
           "orientation": "vertical",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -641,9 +862,7 @@
         ],
         "options": {
           "legend": {
-            "calcs": [
-              "mean"
-            ],
+            "calcs": ["mean"],
             "displayMode": "list",
             "placement": "bottom",
             "showLegend": true
@@ -666,7 +885,7 @@
             "refId": "A"
           }
         ],
-        "title": "Synapse",
+        "title": "Matrix Events",
         "type": "timeseries"
       },
       {
@@ -801,9 +1020,7 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           }
@@ -861,61 +1078,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -930,13 +1120,11 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -957,7 +1145,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -975,7 +1164,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1113,9 +1320,7 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           }
@@ -1173,61 +1378,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1242,13 +1420,11 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1269,7 +1445,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1287,7 +1464,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1425,9 +1620,7 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           }
@@ -1485,61 +1678,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1554,13 +1720,11 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1581,7 +1745,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1599,7 +1764,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -1737,9 +1920,7 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           }
@@ -1797,61 +1978,34 @@
             "color": {
               "mode": "thresholds"
             },
-            "decimals": 0,
-            "mappings": [],
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2"
+                  }
+                }
+              }
+            ],
             "thresholds": {
               "mode": "absolute",
               "steps": [
                 {
-                  "color": "transparent",
+                  "color": "red",
                   "value": null
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "A"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": " "
                 },
                 {
-                  "id": "thresholds",
-                  "value": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "red",
-                        "value": null
-                      },
-                      {
-                        "color": "green",
-                        "value": 1
-                      }
-                    ]
-                  }
+                  "color": "green",
+                  "value": 1
                 }
               ]
             },
-            {
-              "matcher": {
-                "id": "byFrameRefID",
-                "options": "B"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "/"
-                }
-              ]
-            }
-          ]
+            "unit": "none"
+          },
+          "overrides": []
         },
         "gridPos": {
           "h": 3,
@@ -1866,13 +2020,11 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
-          "textMode": "value_and_name",
+          "textMode": "value",
           "wideLayout": true
         },
         "pluginVersion": "12.4.3",
@@ -1893,7 +2045,8 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "A"
+            "refId": "A",
+            "hide": true
           },
           {
             "datasource": {
@@ -1911,7 +2064,25 @@
             "statistic": "Maximum",
             "period": "",
             "region": "default",
-            "refId": "B"
+            "refId": "B",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "A + B/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
           }
         ],
         "title": "Tasks",
@@ -2028,12 +2199,21 @@
           ]
         },
         "gridPos": {
-          "h": 4,
+          "h": 7,
           "w": 4,
           "x": 16,
           "y": 16
         },
         "id": 17,
+        "links": [
+          {
+            "title": "Open Synapse dashboard",
+            "url": "/d/000000012",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
         "options": {
           "displayMode": "gradient",
           "orientation": "horizontal",
@@ -2044,10 +2224,12 @@
           "minVizHeight": 10,
           "maxVizHeight": 300,
           "sizing": "auto",
+          "text": {
+            "titleSize": 22,
+            "valueSize": 21
+          },
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           }
@@ -2075,7 +2257,7 @@
             "refId": "B"
           }
         ],
-        "title": "Synapse",
+        "title": "Synapse Process",
         "type": "bargauge"
       },
       {
@@ -2128,9 +2310,7 @@
           "justifyMode": "auto",
           "orientation": "vertical",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -2233,9 +2413,7 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -2301,9 +2479,7 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -2378,9 +2554,7 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -2450,9 +2624,7 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
+            "calcs": ["lastNotNull"],
             "fields": "",
             "values": false
           },
@@ -2663,9 +2835,7 @@
     ],
     "refresh": "30s",
     "schemaVersion": 42,
-    "tags": [
-      "overview"
-    ],
+    "tags": ["overview"],
     "templating": {
       "list": [
         {
@@ -2677,7 +2847,7 @@
         },
         {
           "current": {},
-          "datasource": {"type": "cloudwatch", "uid": "cef5x9o3yzawwf"},
+          "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
           "definition": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
           "hide": 2,
           "includeAll": false,
