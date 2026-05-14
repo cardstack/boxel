@@ -1178,6 +1178,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      // Asserts on `data-test-home-card` rendered HTML, which only
+      // exists in home.gts of the `realistic` fixture.
+      fixture: 'realistic',
       realmURL,
       permissions: {
         '*': ['read'],

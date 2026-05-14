@@ -153,9 +153,7 @@ module.exports = function (environment) {
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
-    featureFlags: {
-      SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
-    },
+    featureFlags: {},
   };
 
   if (environment === 'test') {
@@ -176,9 +174,7 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {
-      SHOW_ASK_AI: true,
-    };
+    ENV.featureFlags = {};
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;

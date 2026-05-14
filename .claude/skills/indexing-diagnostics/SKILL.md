@@ -651,7 +651,13 @@ WHERE timing_diagnostics->>'requestId' = '<request-id>';
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
     "admissionMs": 0,            //   └ waiting on the per-affinity file-admission cap (= affinity tab max − 1)
     "tabQueueMs": 200,           //   └ waiting behind a same-affinity tab already rendering
-    "tabStartupMs": 20           //   └ warming a fresh tab / standby
+    "tabStartupMs": 20           //   └ warming a fresh tab / standby. Per-caller — only non-zero when
+                                 //     `#selectEntryForAffinity` itself awaited `#ensureStandbyPool`
+                                 //     because warm-tab / orphan / commandeer / cross-affinity paths
+                                 //     all missed. A `tabReused: true` row should have `tabStartupMs ≈ 0`;
+                                 //     a non-trivial value on a reused-tab row is a regression and
+                                 //     means the dedup'd `#ensuringStandbys` promise is leaking through
+                                 //     to callers that didn't need a fresh standby (the CS-11139 shape).
   },
   "renderElapsedMs": 71280,      // time inside withTimeout()
   "totalElapsedMs": 90000,       // launch + render (matches the timeout on errored rows)

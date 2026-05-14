@@ -31,7 +31,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     }
 
     setupPermissionedRealmCached(hooks, {
-      fileSystem: {},
+      fixture: 'blank',
       permissions: {
         '@test_realm:localhost': ['read', 'realm-owner'],
       },

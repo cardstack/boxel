@@ -12,7 +12,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
-      let context = setupServerEndpointsTest(hooks);
+      // `_catalog-realms` asserts the realm's `name === "Test Realm"`,
+      // which comes from the realm.json RealmConfig instance
+      // — only present in `realistic`.
+      let context = setupServerEndpointsTest(hooks, { fixture: 'realistic' });
       let originalLowCreditThreshold: string | undefined;
 
       hooks.beforeEach(function () {

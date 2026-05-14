@@ -8,6 +8,7 @@ import {
   insertUser,
   runTestRealmServer,
   createVirtualNetwork,
+  fixtureDir,
   matrixURL,
   closeServer,
   realmSecretSeed,
@@ -41,7 +42,7 @@ module(basename(__filename), function () {
         dbAdapter = _dbAdapter;
         let testRealmDir = join(dir.name, 'realm_server_5', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
 
         testRealmServer = (
           await runTestRealmServer({

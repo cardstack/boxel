@@ -30,6 +30,7 @@ import {
   setupDB,
   setupMatrixRoom,
   createRealm,
+  fixtureDir,
   realmServerTestMatrix,
   realmServerSecretSeed,
   realmSecretSeed,
@@ -115,6 +116,7 @@ module(basename(__filename), function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'realistic',
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
@@ -158,7 +160,7 @@ module(basename(__filename), function () {
         runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_2', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
         await startRealmServer(dbAdapter2, publisher, runner);
       },
       afterEach: async () => {
@@ -1655,6 +1657,7 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'realistic',
       permissions: { '*': ['read'] },
       onRealmSetup(args) {
         request = args.request;
@@ -2049,13 +2052,15 @@ module(basename(__filename), function () {
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
     const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
-      '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
-      'realm.json': readJSONSync(join(__dirname, 'cards', 'realm.json')),
+      '.realm.json': readJSONSync(join(fixtureDir('realistic'), '.realm.json')),
+      'realm.json': readJSONSync(join(fixtureDir('realistic'), 'realm.json')),
       'person.gts': readFileSync(
-        join(__dirname, 'cards', 'person.gts'),
+        join(fixtureDir('realistic'), 'person.gts'),
         'utf8',
       ),
-      'person-1.json': readJSONSync(join(__dirname, 'cards', 'person-1.json')),
+      'person-1.json': readJSONSync(
+        join(fixtureDir('realistic'), 'person-1.json'),
+      ),
     };
 
     hooks.beforeEach(async function () {
@@ -2170,6 +2175,7 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'simple',
       permissions: { '*': ['read'] },
       realmURL: new URL('http://127.0.0.1:4446/demo/'),
       onRealmSetup(args) {

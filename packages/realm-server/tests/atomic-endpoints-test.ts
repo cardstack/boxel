@@ -122,6 +122,7 @@ module(basename(__filename), function () {
 
       module('writes', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },
@@ -893,6 +894,7 @@ module(basename(__filename), function () {
       });
       module('error handling', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1115,6 +1117,7 @@ module(basename(__filename), function () {
       });
       module('validation', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },
