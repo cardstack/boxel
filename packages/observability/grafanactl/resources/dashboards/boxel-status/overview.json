@@ -1083,9 +1083,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1185,6 +1196,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1385,9 +1410,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1487,6 +1523,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1687,9 +1737,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1789,6 +1850,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1989,9 +2064,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -2091,6 +2177,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
