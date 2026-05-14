@@ -1132,7 +1132,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "Value",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -1459,7 +1459,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "Value",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -1786,7 +1786,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "Value",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -2113,7 +2113,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "Value",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
