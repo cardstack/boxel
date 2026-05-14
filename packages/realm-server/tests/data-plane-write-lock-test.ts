@@ -170,13 +170,16 @@ module(basename(__filename), function () {
             },
           ],
         });
+        // `?waitForIndex=true` makes the POST return only once indexing
+        // has caught up to the write. Without it, `/_atomic` resolves on
+        // durability and the GET below races the indexer (404 or stale).
         let postA = request
-          .post('/_atomic')
+          .post('/_atomic?waitForIndex=true')
           .set('Accept', SupportedMimeType.JSONAPI)
           .set('Authorization', auth)
           .send(JSON.stringify(makeAddBody('AddA')));
         let postB = request
-          .post('/_atomic')
+          .post('/_atomic?waitForIndex=true')
           .set('Accept', SupportedMimeType.JSONAPI)
           .set('Authorization', auth)
           .send(JSON.stringify(makeAddBody('AddB')));
@@ -191,7 +194,8 @@ module(basename(__filename), function () {
         );
 
         // The card that did land must come from the winning request,
-        // not a torn write.
+        // not a torn write. Both POSTs above used waitForIndex=true so
+        // the read here is deterministic.
         let winning = respA.status === 201 ? 'AddA' : 'AddB';
         let finalResponse = await request
           .get('/concurrent-add')

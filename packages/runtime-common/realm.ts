@@ -4160,10 +4160,7 @@ export class Realm {
           let foreignDeps = this.hasForeignRealmDeps(entry.deps);
           let etag = foreignDeps
             ? undefined
-            : buildCardJsonEtag(
-                entry.indexedAt,
-                this.getCachedRealmInfoHash(),
-              );
+            : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
           return createResponse({
             body: JSON.stringify(existingDoc, null, 2),
             init: {
