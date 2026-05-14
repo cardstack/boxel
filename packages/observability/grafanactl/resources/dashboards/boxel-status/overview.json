@@ -1083,9 +1083,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1121,7 +1132,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -1146,6 +1157,7 @@
             "period": "",
             "region": "default",
             "refId": "A",
+            "id": "a",
             "hide": true
           },
           {
@@ -1165,6 +1177,7 @@
             "period": "",
             "region": "default",
             "refId": "B",
+            "id": "b",
             "hide": true
           },
           {
@@ -1172,7 +1185,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "expression": "A + B/100",
+            "expression": "a + b/100",
             "metricQueryType": 0,
             "metricEditorMode": 1,
             "namespace": "",
@@ -1183,6 +1196,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1383,9 +1410,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1421,7 +1459,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -1446,6 +1484,7 @@
             "period": "",
             "region": "default",
             "refId": "A",
+            "id": "a",
             "hide": true
           },
           {
@@ -1465,6 +1504,7 @@
             "period": "",
             "region": "default",
             "refId": "B",
+            "id": "b",
             "hide": true
           },
           {
@@ -1472,7 +1512,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "expression": "A + B/100",
+            "expression": "a + b/100",
             "metricQueryType": 0,
             "metricEditorMode": 1,
             "namespace": "",
@@ -1483,6 +1523,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1683,9 +1737,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -1721,7 +1786,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -1746,6 +1811,7 @@
             "period": "",
             "region": "default",
             "refId": "A",
+            "id": "a",
             "hide": true
           },
           {
@@ -1765,6 +1831,7 @@
             "period": "",
             "region": "default",
             "refId": "B",
+            "id": "b",
             "hide": true
           },
           {
@@ -1772,7 +1839,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "expression": "A + B/100",
+            "expression": "a + b/100",
             "metricQueryType": 0,
             "metricEditorMode": 1,
             "namespace": "",
@@ -1783,6 +1850,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
@@ -1983,9 +2064,20 @@
               {
                 "type": "regex",
                 "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
                   "pattern": "^(\\d+)\\.0*(\\d+)$",
                   "result": {
-                    "text": "$1 / $2"
+                    "text": "$1 / $2",
+                    "color": "green"
                   }
                 }
               }
@@ -2021,7 +2113,7 @@
           "orientation": "horizontal",
           "reduceOptions": {
             "calcs": ["lastNotNull"],
-            "fields": "",
+            "fields": "e1",
             "values": false
           },
           "textMode": "value",
@@ -2046,6 +2138,7 @@
             "period": "",
             "region": "default",
             "refId": "A",
+            "id": "a",
             "hide": true
           },
           {
@@ -2065,6 +2158,7 @@
             "period": "",
             "region": "default",
             "refId": "B",
+            "id": "b",
             "hide": true
           },
           {
@@ -2072,7 +2166,7 @@
               "type": "cloudwatch",
               "uid": "cef5x9o3yzawwf"
             },
-            "expression": "A + B/100",
+            "expression": "a + b/100",
             "metricQueryType": 0,
             "metricEditorMode": 1,
             "namespace": "",
@@ -2083,6 +2177,20 @@
             "region": "default",
             "refId": "e1",
             "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
           }
         ],
         "title": "Tasks",
