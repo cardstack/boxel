@@ -195,9 +195,6 @@
     "Integration | ai-assistant-panel | skills": {
       "delta_mb": 37.5
     },
-    "Integration | ask-ai": {
-      "delta_mb": 11.3
-    },
     "Integration | card api (Usage of publicAPI actions)": {
       "delta_mb": 0.3
     },
