@@ -6,7 +6,7 @@ import { setupServerEndpointsTest, testRealmURL } from './helpers';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('/_screenshot-card endpoint', function (hooks) {
-    // References `Person/fadhlan` from tests/cards/.
+    // References `Person/fadhlan` from the `realistic` fixture.
     let context = setupServerEndpointsTest(hooks, { fixture: 'realistic' });
 
     test('requires auth', async function (assert) {
