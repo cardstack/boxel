@@ -42,6 +42,10 @@ export type ServeIndexDeps = {
 export type ServeIndexHandlers = {
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
+  // Exposed for tests that exercise the index-HTML rewriting in
+  // isolation. Same closure backs `serveIndex` / `serveHostApp` so the
+  // production cache behaviour is preserved.
+  retrieveIndexHTML: () => Promise<string>;
 };
 
 const log = logger('realm-server');
@@ -450,7 +454,7 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     );
   };
 
-  return { serveIndex, serveHostApp };
+  return { serveIndex, serveHostApp, retrieveIndexHTML };
 }
 
 function truncateLogLines(value: string, maxLines = 3): string {
