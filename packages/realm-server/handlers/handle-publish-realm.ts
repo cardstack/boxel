@@ -572,13 +572,11 @@ export default function handlePublishRealm({
           let mountedRealmForCacheClear =
             await reconciler.lookupOrMount(publishedRealmURL);
           if (mountedRealmForCacheClear) {
-            // Sync local clear before the reindex enqueue: this replica's
-            // own prerender fetches must bypass the pre-swap cache. The
-            // broadcast below covers the same staleness on peer replicas
-            // (CS-11156) — self-receive is a no-op since clearLocalCaches
-            // is idempotent.
-            mountedRealmForCacheClear.clearLocalCaches();
-            await mountedRealmForCacheClear.notifyAllFileChanges();
+            // Sync local clear + cross-replica NOTIFY in one call. The
+            // local clear is what this replica's reindex fan-out needs;
+            // the broadcast (CS-11156) covers peers that still have the
+            // realm mounted with pre-swap bytes.
+            await mountedRealmForCacheClear.clearLocalCachesAndBroadcast();
           }
 
           // Refresh the index. For a new publish this is redundant

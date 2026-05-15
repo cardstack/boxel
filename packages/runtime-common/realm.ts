@@ -307,10 +307,15 @@ const CARD_JSON_ETAG_VARIANT = 'card';
 export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const REALM_FILE_CHANGES_WILDCARD = '*';
 
-// Standalone form of `Realm.notifyAllFileChanges()`. Use when the caller
-// has a DBAdapter + realm URL but no mounted `Realm` instance — e.g.
-// the delete-realm handler runs after the realm has already been torn
-// down, so it cannot route through an instance method. Same best-effort
+// Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
+// peer realm-server replicas drop every cached path for this realm. Use
+// directly when the caller has a DBAdapter + realm URL but isn't keeping
+// the realm running locally (the unpublish-realm and delete-realm
+// handlers — the realm is about to be torn down, so this replica's own
+// in-process cache will be garbage-collected with the Realm instance).
+// When the caller wants the SAME local cache wipe AND the broadcast
+// — i.e. its own next read must not hit pre-swap bytes — call
+// `Realm.clearLocalCachesAndBroadcast()` instead. Same best-effort
 // semantics as `Realm.#notifyFileChange`: failures are logged and
 // swallowed (missed NOTIFY is a bounded staleness window, not data
 // corruption). See CS-11156.
@@ -1557,15 +1562,22 @@ export class Realm {
     }
   }
 
-  // Bulk variant of `#notifyFileChange` — broadcast "drop every cached path
-  // for this realm" to peer realm-server instances. The publish-realm /
-  // unpublish-realm / delete-realm handlers emit this after the FS swap or
-  // removal so peer replicas (which do NOT see the local file-watcher events
-  // that drive single-file invalidation) drop pre-swap bytes from
-  // `#sourceCache` / `#moduleCache` before the next source read. Receiver
-  // calls `Realm.clearLocalCaches()`. See CS-11156.
-  async notifyAllFileChanges(): Promise<void> {
-    return notifyAllFileChanges(this.#dbAdapter, this.url);
+  // Drop this replica's own `#sourceCache` / `#moduleCache` AND broadcast
+  // the same wipe to peer replicas. Used by the publish-realm handler
+  // before the reindex enqueue: this replica's own prerender fan-out must
+  // bypass its cache (sync local clear), and peer replicas must drop
+  // their pre-swap bytes too (cross-instance NOTIFY). Self-receive of the
+  // NOTIFY is a no-op since `clearLocalCaches()` is idempotent.
+  //
+  // Bundles local + broadcast in one call, mirroring
+  // `CachingDefinitionLookup.clearRealmCache(url)` — handlers don't have
+  // to remember both steps. Callers that only need the peer broadcast
+  // (because their own Realm instance is about to be unmounted anyway —
+  // unpublish/delete handlers) use the standalone `notifyAllFileChanges`
+  // free function above instead.
+  async clearLocalCachesAndBroadcast(): Promise<void> {
+    this.clearLocalCaches();
+    await notifyAllFileChanges(this.#dbAdapter, this.url);
   }
 
   createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
