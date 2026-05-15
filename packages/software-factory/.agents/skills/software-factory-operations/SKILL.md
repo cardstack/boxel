@@ -13,6 +13,15 @@ files in the workspace mirror of the target realm, push them, run
 validators against the realm, fix anything they catch, and flip the
 Issue status when you're done.
 
+## Prerequisite: dev `boxel` CLI must be wired up
+
+Every command in this skill uses `boxel <subcommand>`. Phase 1 does
+**not** assume `boxel` is on PATH — the CLI is run from the
+in-monorepo dev source. Before running any `boxel <cmd>` below,
+complete the wiring block in the `software-factory-scheduling`
+skill (or the equivalent block in `software-factory-bootstrap`).
+The block is idempotent; running it again here is safe and cheap.
+
 ## Realm roles
 
 - **Source realm** (`packages/software-factory/realm/` published at

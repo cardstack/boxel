@@ -23,6 +23,43 @@ factory backlog. You are about to:
   skill, depending on `issueType`), then mark it `done` or `blocked`.
 - Repeat until no eligible issues remain.
 
+## First: wire up the dev `boxel` CLI
+
+**Do not assume `boxel` is on PATH.** During Phase 1, the `boxel`
+CLI is always run from the in-monorepo development source at
+`<monorepo>/packages/boxel-cli/bin/boxel.js`. Wire it up before
+any `boxel <cmd>` invocation in this skill (or the bootstrap /
+operations skills you'll hand off to). The block below is
+idempotent — safe to run at the start of every session, even if
+something else already symlinked it:
+
+```bash
+MONOREPO="$(git rev-parse --show-toplevel)"
+BOXEL_BIN="$MONOREPO/packages/boxel-cli/bin/boxel.js"
+
+# If `dist/` is present it may be stale (missing `boxel lint` /
+# `boxel parse` / `boxel test`). Rename it so the bin shim falls
+# back to the live TS source via ts-node.
+if [ -d "$MONOREPO/packages/boxel-cli/dist" ]; then
+  mv "$MONOREPO/packages/boxel-cli/dist" \
+     "$MONOREPO/packages/boxel-cli/dist.stale.$(date +%s)"
+fi
+
+mkdir -p "$HOME/.local/bin"
+ln -sf "$BOXEL_BIN" "$HOME/.local/bin/boxel"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac
+
+boxel --version
+boxel --help    # confirm `lint`, `parse`, `test` appear
+```
+
+If `boxel --help` does **not** list `lint`, `parse`, or `test`,
+something is still running an older version — most likely an older
+`dist/` re-appeared. Repeat the rename step.
+
+Phase 1 only — once boxel-cli ships properly, the wiring step
+disappears and `boxel` is just installed globally.
+
 ## Picking the next issue
 
 1. **Search the target realm for every Issue card.** The Issue

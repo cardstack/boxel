@@ -25,39 +25,42 @@ The user has handed you (or the seed Issue carries) two URLs:
 
 Your `cwd` is the local workspace mirror of the target realm.
 
-## First: verify the `boxel` CLI works
+## First: wire up the dev `boxel` CLI
 
-Before doing anything else, run `boxel --version`. If it succeeds
-you're ready. If `boxel` is **not on PATH**, you're running against
-an in-development boxel-cli — fall back to the dev binary at:
-
-```
-<monorepo>/packages/boxel-cli/bin/boxel.js
-```
-
-That script auto-falls-back to `ts-node` against the TS source when
-`packages/boxel-cli/dist/` is missing or stale, so it always has
-the latest commands. Two safe ways to use it:
+**Do not assume `boxel` is on PATH.** During Phase 1, the `boxel`
+CLI is always run from the in-monorepo development source at
+`<monorepo>/packages/boxel-cli/bin/boxel.js`. Wire it up before
+doing anything else, then use `boxel <command>` throughout the
+rest of this skill and the operations / scheduling skills.
 
 ```bash
-# Option A — invoke directly with node
-node /Users/jurgen/development/boxel/packages/boxel-cli/bin/boxel.js --version
+# Find the monorepo root from any sub-directory inside it.
+MONOREPO="$(git rev-parse --show-toplevel)"
+BOXEL_BIN="$MONOREPO/packages/boxel-cli/bin/boxel.js"
 
-# Option B — symlink onto PATH for the rest of the session
-ln -sf /Users/jurgen/development/boxel/packages/boxel-cli/bin/boxel.js \
-       ~/.local/bin/boxel    # or any other dir on PATH
-boxel --version
+# If `dist/` is present it may be stale (missing `boxel lint` /
+# `boxel parse` / `boxel test`). Rename it so the `bin/boxel.js`
+# shim falls back to the live TS source via ts-node.
+if [ -d "$MONOREPO/packages/boxel-cli/dist" ]; then
+  mv "$MONOREPO/packages/boxel-cli/dist" \
+     "$MONOREPO/packages/boxel-cli/dist.stale.$(date +%s)"
+fi
+
+# Symlink onto PATH so every subsequent `boxel <cmd>` works.
+mkdir -p "$HOME/.local/bin"
+ln -sf "$BOXEL_BIN" "$HOME/.local/bin/boxel"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac
+
+boxel --version    # confirm; non-empty version string means we're set
+boxel --help       # confirm `lint`, `parse`, `test` are listed
 ```
 
-If `dist/` exists but is stale (missing the validator commands like
-`boxel lint` / `boxel parse` / `boxel test`), either rebuild
-(`pnpm --filter @cardstack/boxel-cli build`) or rename `dist/` to
-something like `dist.stale/` so the shim falls back to the live TS
-source. Otherwise old code without the new commands will be
-executed and validators won't work.
+If `boxel --help` does **not** list `lint`, `parse`, or `test`,
+something is still running an older version — most likely an
+older `dist/` re-appeared. Repeat the rename step and re-check.
 
-This setup wrinkle is Phase 1 only — once boxel-cli ships
-end-to-end the dev workaround goes away.
+This setup is a Phase 1 workaround. When boxel-cli ships properly
+the wiring goes away and `boxel` is just on PATH globally.
 
 ## Creating the target realm
 
@@ -65,15 +68,17 @@ If the target realm does not already exist, create it before
 writing anything into the workspace. Confirm by attempting to read
 the realm or its `_mtimes` endpoint; a 404 means "not yet created."
 
+The realm-creation command is a native boxel-cli subcommand
+(not `boxel run-command`):
+
 ```bash
-boxel run-command create-realm \
-  --realm <realm-server-url> \
-  --input '{"endpoint":"<username>/<realm-name>","name":"<Display Name>"}'
+boxel realm create <realm-endpoint> "<Display Name>"
+# e.g. boxel realm create user/factory-test-stickynote "Factory Test Sticky Note"
 ```
 
-(Exact flag names and realm-creation surface vary by `boxel-cli`
-version — see the `realm-sync` skill for the canonical command.
-`boxel realm create` may be available as a sugar variant.)
+`<realm-endpoint>` is the URL path segment (e.g. `user/my-realm`).
+The active profile's realm-server URL is used as the origin. See
+the `realm-sync` skill for the full surface (auth, icon URL, etc.).
 
 Once the realm exists, set up the workspace mirror for it:
 
