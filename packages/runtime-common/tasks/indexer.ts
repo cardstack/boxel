@@ -55,7 +55,18 @@ export interface IncrementalDoneResult extends IncrementalResult {
   clientRequestId: string | null;
 }
 
-export type FromScratchArgs = WorkerArgs;
+export interface FromScratchArgs extends WorkerArgs {
+  // True when the caller cleared `boxel_index.last_modified` for the
+  // realm before publishing. The worker doesn't need to act on this
+  // (the clear already happened in the DB) — it's surfaced in args
+  // so the coalesce decision can refuse to attach a clearing publish
+  // to an already-running same-realm from-scratch whose
+  // `Batch.getModifiedTimes` snapshot pre-dates the clear, which would
+  // otherwise let the running job report success without re-rendering
+  // the swapped files. Always present (non-optional) so the args
+  // object satisfies WorkerArgs's JSON-shape index signature.
+  clearLastModified: boolean;
+}
 
 export interface FromScratchResult extends JSONTypes.Object {
   invalidations: string[];
@@ -271,13 +282,27 @@ function chooseFromScratchCoalesceDecision(
   // forces the second to insert a fresh row at its own priority, even
   // though the in-flight job will produce exactly the result the second
   // caller wanted.
-  for (let candidate of inFlightCandidates) {
-    if (candidate.jobType === incoming.jobType) {
-      return { type: 'join', jobId: candidate.id };
+  //
+  // Exception: a publish carrying `clearLastModified: true` has already
+  // nulled `boxel_index.last_modified` for the realm so the next
+  // from-scratch pass re-renders every row even where mtimes didn't
+  // change. An already-running from-scratch read its mtimes snapshot
+  // before that clear, so attaching this publish to it would let the
+  // caller observe a successful job that did NOT actually re-render
+  // the swapped files. Force a fresh row instead.
+  if (!incomingClearsLastModified(incoming.args)) {
+    for (let candidate of inFlightCandidates) {
+      if (candidate.jobType === incoming.jobType) {
+        return { type: 'join', jobId: candidate.id };
+      }
     }
   }
 
   return { type: 'insert' };
+}
+
+function incomingClearsLastModified(args: unknown): boolean {
+  return isObjectLike(args) && args.clearLastModified === true;
 }
 
 registerQueueJobDefinition({

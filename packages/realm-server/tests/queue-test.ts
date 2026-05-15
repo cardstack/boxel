@@ -54,7 +54,9 @@ module(basename(__filename), function () {
     });
 
     async function publishFromScratchIndexJob(args: {
-      args: FromScratchArgs;
+      args: Omit<FromScratchArgs, 'clearLastModified'> & {
+        clearLastModified?: boolean;
+      };
       priority: number;
     }) {
       return await publisher.publish<FromScratchResult>({
@@ -62,7 +64,7 @@ module(basename(__filename), function () {
         concurrencyGroup: `indexing:${args.args.realmURL}`,
         timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
         priority: args.priority,
-        args: args.args,
+        args: { clearLastModified: false, ...args.args },
       });
     }
 
@@ -397,6 +399,86 @@ module(basename(__filename), function () {
           rows.length,
           1,
           'only one from-scratch-index row exists; duplicate did not enqueue a second job',
+        );
+
+        release.fulfill();
+        await Promise.all([first.done, second.done]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('from-scratch dedup: a clearLastModified publish does NOT attach to an in-flight from-scratch', async function (assert) {
+      // A clearLastModified publish has already nulled
+      // boxel_index.last_modified for the realm so the next from-scratch
+      // pass re-renders every row. An already-running from-scratch read
+      // its mtimes snapshot before that clear, so joining the running
+      // job would let the caller observe a successful job that did NOT
+      // re-render the swapped files (e.g. a publish-realm caller would
+      // return ok despite never having indexed the new content).
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-clear-last-modified/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-clear-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+
+        let first = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner' },
+        });
+        await started.promise;
+
+        // Second publish flags clearLastModified — must not coalesce
+        // onto the running first job.
+        let second = await publishFromScratchIndexJob({
+          priority: userInitiatedPriority,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+            clearLastModified: true,
+          },
+        });
+
+        assert.notStrictEqual(
+          first.id,
+          second.id,
+          'clearLastModified publish does not attach to the in-flight job',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id, status
+             FROM jobs
+             WHERE concurrency_group = $1
+             ORDER BY id`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number; status: string }[];
+        assert.strictEqual(
+          rows.length,
+          2,
+          'a fresh row is inserted for the clearLastModified publish',
         );
 
         release.fulfill();
