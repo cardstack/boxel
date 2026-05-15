@@ -41,6 +41,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # TEMPORARY (PR #4638): force Percy on so the reject-on-failure
+          # step has a real build to reject. Remove this block before merge.
+          echo "percy_needed=true" >> "$GITHUB_OUTPUT"
+          echo "TEMP: Forcing Percy on for reject-on-failure verification"
+          exit 0
+
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "percy_needed=true" >> "$GITHUB_OUTPUT"
             echo "Not a pull request — Percy will always run"
@@ -243,6 +249,15 @@ jobs:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
         working-directory: packages/host
 
+      # TEMPORARY (PR #4638): deliberately fail shard 1 after Percy has
+      # already received its snapshots, so the reject-on-failure step in
+      # host-percy-finalize has something to reject. Remove before merge.
+      - name: TEMP — force shard 1 failure to exercise Percy reject path
+        if: matrix.shardIndex == 1
+        run: |
+          echo "::warning::TEMP: failing shard 1 deliberately to verify the percy build:reject step"
+          exit 1
+
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
@@ -352,11 +367,41 @@ jobs:
       - uses: ./.github/actions/init
 
       - name: Finalise Percy
-        run: npx percy build:finalize
+        id: finalize
+        run: |
+          set -eo pipefail
+          npx percy build:finalize 2>&1 | tee /tmp/percy-finalize.log
+          # Percy URLs look like https://percy.io/<org>/<product>/<project>/builds/<id>
+          # — three path segments before /builds. Allow 1–3 to be defensive
+          # against future structure changes, and tolerate no-match so a
+          # parse failure here doesn't sink the whole step (the reject step
+          # is gated on a non-empty build_id anyway).
+          BUILD_URL=$(grep -oE 'https://percy\.io/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+){1,3}/builds/[0-9]+' /tmp/percy-finalize.log | tail -1) || true
+          BUILD_ID="${BUILD_URL##*/}"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "build_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+          if [ -z "$BUILD_ID" ]; then
+            echo "::warning::Could not parse Percy build ID from finalize output; reject step will be skipped."
+          fi
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Auto-approve is enabled on `main`, so a Percy build that finalises
+      # without the snapshots from a failed shard would otherwise lock in a
+      # partial baseline — and the next clean build would surface the missing
+      # snapshots as "new" diffs on PRs. Reject the build when any shard
+      # didn't succeed so it can't become a baseline.
+      - name: Reject Percy build when any host shard failed
+        if: needs.host-test.result != 'success' && steps.finalize.outputs.build_id != ''
+        run: |
+          set -e
+          npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
+          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} because at least one host-test shard did not succeed (host-test result: ${{ needs.host-test.result }}). Partial baselines would otherwise have been auto-approved on main."
+        working-directory: packages/host
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
