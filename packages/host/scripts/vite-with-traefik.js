@@ -21,7 +21,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
 
-function runVite({ subcommand, port, allHosts, extraEnv, nodeMemory }) {
+function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
   const args = ['vite'];
   if (subcommand) args.push(subcommand);
   args.push('--port', String(port), '--strictPort');
@@ -30,6 +30,8 @@ function runVite({ subcommand, port, allHosts, extraEnv, nodeMemory }) {
     // vite via host.docker.internal:<port>. Vite's default is 127.0.0.1
     // only, which is unreachable from inside the container.
     args.push('--host');
+  } else if (host) {
+    args.push('--host', host);
   }
   const env = { ...process.env, ...(extraEnv || {}) };
   if (nodeMemory) {
@@ -170,12 +172,18 @@ async function runViteBehindRedirectDispatcher({
   nodeMemory,
 }) {
   // Vite binds the internal port; the dispatcher owns the public one.
+  // Force vite onto 127.0.0.1 to match the dispatcher's upstream
+  // net.connect target. Without `--host`, vite default-binds to
+  // `localhost`, which on macOS / Node 17+ resolves to ::1 first — the
+  // dispatcher then can't reach it on 127.0.0.1 and the TLS handshake
+  // dies as ERR_CONNECTION_CLOSED in the browser.
   let viteInternalPort = await pickInternalPort();
   startSamePortRedirectDispatcher({ publicPort, viteInternalPort });
   runVite({
     subcommand,
     port: viteInternalPort,
     allHosts: false,
+    host: '127.0.0.1',
     nodeMemory,
   });
 }
