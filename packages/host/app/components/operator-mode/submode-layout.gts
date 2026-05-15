@@ -33,8 +33,6 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
-import config from '@cardstack/host/config/environment';
-
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -43,8 +41,6 @@ import { AiAssistantPanelWidth } from '@cardstack/host/utils/local-storage-keys'
 import SearchSheet, { SearchSheetModes } from '../search-sheet';
 
 import SubmodeSwitcher, { Submodes } from '../submode-switcher';
-
-import AskAiContainer from './ask-ai-container';
 
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
@@ -496,12 +492,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.aiAssistantPanelService.isOpen}}
             @onViewInChatClick={{this.aiAssistantPanelService.openPanel}}
           />
-          {{#if config.featureFlags.SHOW_ASK_AI}}
-            {{#if (not this.aiAssistantPanelService.isOpen)}}
-              <AskAiContainer />
-            {{/if}}
-          {{/if}}
-          {{#if (not this.aiAssistantPanelService.isAiAssistantHidden)}}
+          {{#unless this.aiAssistantPanelService.isAiAssistantHidden}}
             <AiAssistantButton
               class='chat-btn'
               @isActive={{this.aiAssistantPanelService.isOpen}}
@@ -514,7 +505,7 @@ export default class SubmodeLayout extends Component<Signature> {
                 )
               }}
             />
-          {{/if}}
+          {{/unless}}
           {{#if this.profileSummaryOpened}}
             <ProfileInfoPopover
               {{onClickOutside

@@ -56,7 +56,7 @@ NODE_ENV=test \
   $WORKER_MANAGER_ARG \
   $SERVICE_NAME_ARG \
   \
-  --path='./tests/cards' \
+  --path='./tests/fixtures/realistic' \
   --username='node-test_realm' \
   --fromUrl="${REALM_TEST_URL}/node-test/" \
   --toUrl="${REALM_TEST_URL}/node-test/" \

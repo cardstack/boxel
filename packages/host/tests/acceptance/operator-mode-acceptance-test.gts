@@ -505,7 +505,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       .doesNotExist('grid cards do not show other grid cards');
     await click('[data-test-open-ai-assistant]');
     await click('[data-test-close-ai-assistant]');
-    assert.dom('[data-test-ask-ai-input]').exists();
 
     await percySnapshot(assert);
 

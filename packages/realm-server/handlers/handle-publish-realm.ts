@@ -42,7 +42,6 @@ import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
-import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
 
@@ -398,8 +397,7 @@ export default function handlePublishRealm({
       // mounts the (re-)published realm on its first request. The
       // response is 202 Accepted with status:'pending'; the client polls
       // /<publishedRealmURL>/_readiness-check to learn when it's ready.
-      let { lastPublishedAt, publishedRealmId } = await withRealmWriteLock(
-        dbAdapter,
+      let { lastPublishedAt, publishedRealmId } = await dbAdapter.withWriteLock(
         publishedRealmURL,
         async () => {
           let existingRows = (await query(dbAdapter, [
@@ -550,6 +548,31 @@ export default function handlePublishRealm({
             // FS swap that we just put in place.
             removeSync(publishedRealmPath);
             throw dbError;
+          }
+
+          // CS-11043. For a republish, the realm is already mounted on
+          // this realm-server with its #sourceCache holding the
+          // pre-swap bytes. The reindex enqueued just below fans out
+          // module fetches through HTTP to this same realm-server, and
+          // without an explicit invalidation those fetches would hit
+          // the cached old bytes — producing a fresh reindex against
+          // STALE source, which then gets written to
+          // boxel_index.isolated_html and served forever. Neither the
+          // Cache-Control: no-store header nor the DB modules DELETE
+          // above reach into the realm-server's per-Realm byte cache.
+          // The Phase-3-PR-2 comment above relies on the NodeAdapter
+          // file watcher to invalidate via change events, but that's
+          // an async race against the immediately-enqueued reindex.
+          // Force the invalidation synchronously here.
+          //
+          // For a new publish, lookupOrMount mounts the realm fresh
+          // (registry row was just upserted above); the cache is
+          // empty so clearLocalCaches is a no-op. Either way the
+          // reindex below sees correct source.
+          let mountedRealmForCacheClear =
+            await reconciler.lookupOrMount(publishedRealmURL);
+          if (mountedRealmForCacheClear) {
+            mountedRealmForCacheClear.clearLocalCaches();
           }
 
           // Refresh the index. For a new publish this is redundant

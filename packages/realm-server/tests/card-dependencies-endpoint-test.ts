@@ -30,6 +30,7 @@ module(basename(__filename), function () {
     module('card dependencies GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             '*': ['read'],
           },
@@ -100,6 +101,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

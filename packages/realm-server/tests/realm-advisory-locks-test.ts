@@ -1,11 +1,10 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import type { PgAdapter } from '@cardstack/postgres';
-import { setupDB } from './helpers';
 import {
   hashRealmUrlForAdvisoryLock,
-  withRealmWriteLock,
-} from '../lib/realm-advisory-locks';
+  type PgAdapter,
+} from '@cardstack/postgres';
+import { setupDB } from './helpers';
 
 module(basename(__filename), function () {
   module('hashRealmUrlForAdvisoryLock', function () {
@@ -42,7 +41,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('withRealmWriteLock', function (hooks) {
+  module('PgAdapter.withWriteLock', function (hooks) {
     let dbAdapter: PgAdapter;
     setupDB(hooks, {
       beforeEach: async (adapter) => {
@@ -51,8 +50,7 @@ module(basename(__filename), function () {
     });
 
     test('runs the callback and returns its value', async function (assert) {
-      const result = await withRealmWriteLock(
-        dbAdapter,
+      const result = await dbAdapter.withWriteLock(
         'http://localhost:4201/x/',
         async () => 42,
       );
@@ -67,14 +65,14 @@ module(basename(__filename), function () {
       // tries to acquire concurrently and should only run after the first
       // releases. We verify by appending to a shared array in a specific
       // order and checking the final ordering.
-      const p1 = withRealmWriteLock(dbAdapter, url, async () => {
+      const p1 = dbAdapter.withWriteLock(url, async () => {
         events.push('1-start');
         await new Promise((r) => setTimeout(r, 150));
         events.push('1-end');
       });
       // Give p1 a head start so it actually holds the lock first.
       await new Promise((r) => setTimeout(r, 20));
-      const p2 = withRealmWriteLock(dbAdapter, url, async () => {
+      const p2 = dbAdapter.withWriteLock(url, async () => {
         events.push('2-start');
         events.push('2-end');
       });
@@ -91,8 +89,7 @@ module(basename(__filename), function () {
     test('runs concurrent callers for different URLs in parallel', async function (assert) {
       const events: string[] = [];
 
-      const p1 = withRealmWriteLock(
-        dbAdapter,
+      const p1 = dbAdapter.withWriteLock(
         'http://localhost:4201/a/',
         async () => {
           events.push('a-start');
@@ -100,8 +97,7 @@ module(basename(__filename), function () {
           events.push('a-end');
         },
       );
-      const p2 = withRealmWriteLock(
-        dbAdapter,
+      const p2 = dbAdapter.withWriteLock(
         'http://localhost:4201/b/',
         async () => {
           events.push('b-start');
@@ -126,14 +122,14 @@ module(basename(__filename), function () {
     test('releases the lock when the callback throws', async function (assert) {
       const url = 'http://localhost:4201/throw/';
       await assert.rejects(
-        withRealmWriteLock(dbAdapter, url, async () => {
+        dbAdapter.withWriteLock(url, async () => {
           throw new Error('deliberate failure');
         }),
         /deliberate failure/,
       );
       // A second acquisition should succeed immediately — if the lock leaked,
       // this would block forever (test timeout would fire).
-      const result = await withRealmWriteLock(dbAdapter, url, async () => 'ok');
+      const result = await dbAdapter.withWriteLock(url, async () => 'ok');
       assert.strictEqual(result, 'ok', 'lock released after prior failure');
     });
   });
