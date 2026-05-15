@@ -6,7 +6,8 @@ import { setupServerEndpointsTest, testRealmURL } from './helpers';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('/_screenshot-card endpoint', function (hooks) {
-    let context = setupServerEndpointsTest(hooks);
+    // Auth / body-validation only — the cardId never has to resolve, so use `blank`.
+    let context = setupServerEndpointsTest(hooks, { fixture: 'blank' });
 
     test('requires auth', async function (assert) {
       let response = await context.request

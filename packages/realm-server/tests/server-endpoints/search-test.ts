@@ -208,6 +208,117 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.strictEqual(response.body.data.length, 1, 'found one card');
     });
 
+    // Verifies the per-batch search cache (CS-11115 Phase 2 + CS-11133
+    // cross-realm expansion) hits at the HTTP handler boundary.
+    // Counts populates by spying on each realm's `search` method —
+    // a cache hit short-circuits before `searchRealms` reaches the
+    // realm, so spy invocations are the unambiguous tell.
+    test('QUERY /_federated-search caches cross-realm reads under one jobId and bypasses other jobs', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let primaryCalls = 0;
+      let secondaryCalls = 0;
+      // Capture the original prototype method references (unbound), so
+      // the `finally` cleanup can `delete` the per-instance spy and
+      // restore prototype lookup — assigning the bound wrapper back
+      // would leave a permanent own-property masking the prototype.
+      let primaryProto = testRealm.search;
+      let secondaryProto = secondaryRealm.search;
+      (testRealm as unknown as { search: typeof testRealm.search }).search =
+        function (
+          this: typeof testRealm,
+          ...args: Parameters<typeof testRealm.search>
+        ) {
+          primaryCalls++;
+          return primaryProto.apply(this, args);
+        };
+      (
+        secondaryRealm as unknown as { search: typeof secondaryRealm.search }
+      ).search = function (
+        this: typeof secondaryRealm,
+        ...args: Parameters<typeof secondaryRealm.search>
+      ) {
+        secondaryCalls++;
+        return secondaryProto.apply(this, args);
+      };
+
+      try {
+        let query: Query = {
+          filter: {
+            on: baseCardRef,
+            eq: { cardTitle: 'Shared Card' },
+          },
+        };
+        let searchURL = new URL('/_federated-search', testRealm.url);
+        let post = (jobId: string) =>
+          request
+            .post(`${searchURL.pathname}${searchURL.search}`)
+            .set('Accept', 'application/vnd.card+json')
+            .set('Content-Type', 'application/json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .set('Authorization', `Bearer ${realmServerToken}`)
+            .set('x-boxel-job-id', jobId)
+            .set('x-boxel-consuming-realm', testRealm.url)
+            .send({ ...query, realms: [testRealm.url, secondaryRealm.url] });
+
+        let first = await post('42.1');
+        assert.strictEqual(first.status, 200, 'first request: HTTP 200');
+        assert.strictEqual(
+          first.body.data.length,
+          2,
+          'first request returns both realms’ results',
+        );
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'first request hit testRealm exactly once',
+        );
+        assert.strictEqual(
+          secondaryCalls,
+          1,
+          'first request hit secondaryRealm exactly once',
+        );
+
+        let second = await post('42.1');
+        assert.strictEqual(second.status, 200, 'second request: HTTP 200');
+        assert.strictEqual(
+          second.body.data.length,
+          2,
+          'second request returns the cached result',
+        );
+        assert.strictEqual(
+          primaryCalls,
+          1,
+          'second request was a cache hit (testRealm not re-queried)',
+        );
+        assert.strictEqual(
+          secondaryCalls,
+          1,
+          'second request was a cache hit (secondaryRealm not re-queried)',
+        );
+
+        // A different jobId is a different batch — fresh populate.
+        let third = await post('43.1');
+        assert.strictEqual(third.status, 200, 'third request: HTTP 200');
+        assert.strictEqual(
+          primaryCalls,
+          2,
+          'different jobId re-queried testRealm',
+        );
+        assert.strictEqual(
+          secondaryCalls,
+          2,
+          'different jobId re-queried secondaryRealm',
+        );
+      } finally {
+        delete (testRealm as unknown as { search?: unknown }).search;
+        delete (secondaryRealm as unknown as { search?: unknown }).search;
+      }
+    });
+
     test('GET /_federated-search returns 400 for unsupported method', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },

@@ -64,6 +64,7 @@ import {
   unixTime,
   query,
   param,
+  dbExpression,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -1336,6 +1337,23 @@ export class Realm {
     // delta. Production never reads this counter — only the CS-11029
     // dedup tests do (CS-11029).
     this.#transpileCallCount = 0;
+  }
+
+  // CS-11043. Bulk-invalidate this realm's in-process byte caches.
+  // Called by the publish-realm handler after the FS swap, BEFORE the
+  // reindex enqueues — so that subsequent source reads (which the
+  // reindex's prerender fans out across many of) bypass any
+  // pre-swap bytes the realm still has in `#sourceCache` /
+  // `#moduleCache`. The Phase-3-PR-2 publish flow relies on the
+  // NodeAdapter file-watcher to pick up the swap, but that's an
+  // async-event race against the immediately-enqueued reindex; this
+  // method makes the invalidation synchronous from the publish
+  // handler's vantage point. Different from `__testOnlyClearCaches`
+  // in that it does NOT reset the transpile counter (which is
+  // test-only diagnostic state, unrelated to byte-correctness).
+  clearLocalCaches(): void {
+    this.#sourceCache.clear();
+    this.#dropAllModuleCacheEntries();
   }
 
   // CS-11029 test seams: tests need to assert "N concurrent same-path
@@ -2835,13 +2853,15 @@ export class Realm {
         param(result.body),
         ',',
         param(JSON.stringify(result.headers)),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         // Persist the full deps set computed once at the transpile
         // boundary so a cross-process L2 reader can populate its L1
         // entry directly instead of re-running extractModuleDependencyKeys
         // on the bytes.
         param(JSON.stringify([...result.dependencyKeys])),
-        '::jsonb,',
+        dbExpression({ pg: '::jsonb' }),
+        ',',
         param(capturedGeneration),
         ',',
         param(Date.now()),
@@ -2862,6 +2882,34 @@ export class Realm {
         `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );
     }
+  }
+
+  // Test seam: lets host SQLite tests verify that #writeTranspileCacheRow
+  // produces dialect-correct SQL without re-issuing the UPSERT in a
+  // parallel build. Production code must never call this — go through
+  // the private method directly. The wrapper just forwards arguments;
+  // the swallow-and-log behavior of the private method means the test
+  // confirms success by reading the row back, not by exception.
+  async __testOnlyUpsertTranspileCacheRow(args: {
+    canonicalPath: string;
+    body: string;
+    headers: Record<string, string>;
+    dependencyKeys: Iterable<string>;
+    capturedGeneration: number;
+  }): Promise<void> {
+    let { canonicalPath, body, headers, dependencyKeys, capturedGeneration } =
+      args;
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      {
+        kind: 'module',
+        canonicalPath,
+        body,
+        headers,
+        dependencyKeys: new Set(dependencyKeys),
+      },
+      capturedGeneration,
+    );
   }
 
   async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {

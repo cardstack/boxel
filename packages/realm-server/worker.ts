@@ -31,6 +31,7 @@ import {
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
 
 let log = logger('worker');
 
@@ -198,6 +199,50 @@ let autoMigrate = migrateDB || undefined;
     if (message === 'stop') {
       shutdown(); // warning this is async
     }
+  });
+
+  // Fatal-error backstop. Without these handlers a child that hits an
+  // unhandled promise rejection or uncaught exception exits silently,
+  // and the parent's `worker.on('exit')` finalizes the in-flight
+  // reservation as 'interrupted' — which the per-job reservation cap
+  // explicitly excludes. The result is an infinite respawn loop on any
+  // deterministic crash that doesn't surface through pg-queue's own
+  // catch path.
+  //
+  // We log, capture, and best-effort mark our reservation as a real
+  // failure ('completed'), then exit so the parent can spawn a
+  // replacement. The 5-second cap on the finalize race prevents a
+  // damaged DB connection from blocking exit indefinitely.
+  let isFatalHandlerRunning = false;
+  const fatalExit = (reason: unknown, source: string) => {
+    if (isFatalHandlerRunning || isShuttingDown) {
+      return;
+    }
+    isFatalHandlerRunning = true;
+    log.error(`Fatal ${source} in worker child ${workerId}:`, reason as Error);
+    try {
+      Sentry.captureException(reason);
+    } catch {
+      // best-effort
+    }
+    (async () => {
+      try {
+        await Promise.race([
+          finalizeChildReservationAsFailure(dbAdapter, workerId),
+          new Promise<void>((r) => setTimeout(r, 5000).unref()),
+        ]);
+      } catch (e) {
+        log.error(`Fatal handler finalize failed for ${workerId}:`, e);
+      } finally {
+        process.exit(1);
+      }
+    })();
+  };
+  process.on('unhandledRejection', (reason) => {
+    fatalExit(reason, 'unhandledRejection');
+  });
+  process.on('uncaughtException', (err) => {
+    fatalExit(err, 'uncaughtException');
   });
 })().catch((e: any) => {
   Sentry.captureException(e);
