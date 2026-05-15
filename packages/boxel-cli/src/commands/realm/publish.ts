@@ -217,13 +217,23 @@ async function safeReadResponseText(response: Response): Promise<string> {
   }
 }
 
-interface PublishCliOptions {
+export interface PublishCliOptions {
   // Commander exposes `--no-wait` / `--no-republish` on the positive
   // keys (`wait` / `republish`), defaulting to `true` and flipping to
   // `false` when the negated flag is passed.
   wait?: boolean;
   timeout?: number;
   republish?: boolean;
+}
+
+export function publishCliOptsToOptions(
+  opts: PublishCliOptions,
+): PublishOptions {
+  return {
+    waitForReady: opts.wait !== false,
+    timeoutMs: opts.timeout,
+    republish: opts.republish !== false,
+  };
 }
 
 export function registerPublishCommand(realm: Command): void {
@@ -254,11 +264,11 @@ export function registerPublishCommand(realm: Command): void {
         opts: PublishCliOptions,
       ) => {
         try {
-          let result = await publishRealm(sourceRealmURL, publishedRealmURL, {
-            waitForReady: opts.wait !== false,
-            timeoutMs: opts.timeout,
-            republish: opts.republish !== false,
-          });
+          let result = await publishRealm(
+            sourceRealmURL,
+            publishedRealmURL,
+            publishCliOptsToOptions(opts),
+          );
           console.log(
             `${FG_GREEN}Published:${RESET} ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
           );
