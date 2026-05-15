@@ -14,11 +14,9 @@ The user has done the following outside Claude Code:
   profile points at the target realm server. `boxel profile list`
   shows the active profile.
 
-  **Phase 1 dev setup note.** During Phase 1 the `boxel` CLI is
-  not always available as a globally-installed binary. The dev
-  binary lives at
-  `<monorepo>/packages/boxel-cli/bin/boxel.js` — symlink it onto
-  your PATH:
+  **Dev `boxel` CLI setup.** The `boxel` CLI ships with the
+  monorepo; until it's released as a standalone binary, symlink
+  the dev script onto your PATH:
 
   ```bash
   cd /path/to/boxel/packages/boxel-cli
@@ -27,11 +25,10 @@ The user has done the following outside Claude Code:
   boxel --version                                     # confirm
   ```
 
-  If `packages/boxel-cli/dist/` exists but is **stale** (older
-  than the validator-CLI commits on this branch), `boxel lint` /
-  `parse` / `test` will be missing. Either rebuild (`pnpm build`)
-  or rename `dist/` to `dist.stale/` so the bin shim falls back to
-  the live TS source.
+  If `packages/boxel-cli/dist/` exists but is stale (missing
+  `boxel lint` / `parse` / `test` in `--help` output), either
+  rebuild (`pnpm build`) or rename `dist/` to `dist.stale/` so
+  the bin shim falls back to the live TS source via ts-node.
 
 
 - Installed Claude Code and run `/login` so the session is
@@ -144,108 +141,9 @@ There are no factory MCP tools. `signal_done` and
 field directly (`done` / `blocked`) and appending to its `comments[]`
 array.
 
-## Gaps blocking Phase 1
+## Follow-up work
 
-### CLI commands to add to `boxel-cli`
-
-All three validator CLIs have been added; the only remaining work is
-skill content. The commands and their constraints:
-
-1. **`boxel lint [path] --realm <url>`** — runs ESLint + Prettier
-   with the `@cardstack/boxel` config via the realm's `_lint`
-   endpoint. Without a path, lints every `.gts` / `.gjs` / `.ts` /
-   `.js` file in the realm; with a realm-relative path, lints just
-   that file. Works against any realm (no monorepo dependency).
-2. **`boxel parse [path] --realm <url>`** — runs glint (`ember-tsc`)
-   over `.gts` / `.gjs` / `.ts` files and validates the document
-   structure of any `.json` files linked as `Spec.linkedExamples`.
-   **Monorepo-only**: type-path mappings (`packages/base`,
-   `packages/host`, `packages/boxel-ui`) and the `ember-tsc` binary
-   are resolved relative to this CLI's location. Not usable from a
-   published `boxel-cli` outside the monorepo. Long-term, the right
-   shape is a realm-server `_parse` endpoint mirroring `_lint`; that
-   is deferred as a separate Phase 2 ticket.
-3. **`boxel test --realm <url>`** — runs the realm's QUnit suite by
-   driving headless Chromium against the host app's compiled
-   `dist/`. **Monorepo-only** for the same reason as parse: the
-   host dist directory is discovered relative to this CLI (or via
-   `TEST_HARNESS_HOST_DIST_PACKAGE_DIR`). The host app must have
-   been built (`pnpm --filter @cardstack/host build`) before
-   running.
-
-The other validators (`evaluate`, `instantiate`) and `get-card-schema`
-are already host commands reachable via `boxel run-command`. Optional
-sugar (`boxel evaluate`, `boxel instantiate`, `boxel get-card-schema`)
-would shorten the skill text but is not blocking.
-
-### Skill content to add / rewrite
-
-1. **`software-factory-bootstrap`** — exists, needs rewrite:
-   - Drop references to `signal_done`, `get_card_schema`,
-     `request_clarification`.
-   - Replace `get_card_schema(...)` calls with
-     `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default ...` (with the module+name wrapped in `codeRef`).
-   - Add a "creating the target realm" section (currently the
-     orchestrator does this before the agent runs).
-   - Add the **tracker module URL discovery** rule. Today the
-     orchestrator inferDarkfactoryModuleUrl()s it and puts it in the
-     system prompt. The agent needs to discover it itself — typically
-     `<source-realm>/darkfactory` published from the
-     `packages/software-factory/realm` source realm, but the agent
-     should confirm via `boxel search` or by reading the brief's
-     containing realm.
-
-2. **`software-factory-operations`** — exists, needs rewrite:
-   - Drop the `run_*` factory-tool descriptions; replace with the
-     `boxel lint/parse/test/run-command evaluate-module/...` CLI
-     forms.
-   - Drop `signal_done` / `request_clarification`; describe writing
-     `status: "done"` (after validators pass) or `status: "blocked"`
-     plus a comment.
-   - Drop the "do not set status to done" rule — the agent owns that
-     transition now.
-
-3. **`software-factory-scheduling`** — new. Picks the next unblocked
-   issue from a realm. Encodes the rules currently in
-   `packages/software-factory/src/issue-scheduler.ts`:
-   - Eligibility: status in {`backlog`, `in_progress`}, every blocker
-     has status `done`.
-   - Ordering: `in_progress` first, then priority
-     (critical > high > medium > low), then `order` ascending.
-   - Status transitions the agent now performs: backlog →
-     in_progress on pickup; in_progress → done on validation pass;
-     in_progress → blocked when stuck.
-
-4. **`software-factory-context`** — new (or fold into scheduling).
-   How to traverse an issue's `project` and `relatedKnowledge`
-   relationships to load the Project card and Knowledge Article
-   bodies for context. Currently
-   `packages/software-factory/src/factory-context-builder.ts`.
-
-### Phase 1 includes validation artifact cards
-
-After each validator runs, the agent writes a corresponding card
-into the target realm's `Validations/` folder — `LintResult`,
-`ParseResult`, `EvalResult`, `InstantiateResult`, `TestRun`. This
-gives the human a sortable audit trail in the Boxel host UI,
-matching what the SDK orchestrator produced. The card types,
-filename conventions (`Validations/<type>_<issue-slug>-<n>.json`),
-and schema-discovery flow are documented in the
-`software-factory-operations` skill.
-
-### Things explicitly NOT in Phase 1
-
-- **Retry semantics on blocked issues.** The orchestrator's
-  `--retry-blocked` flag is moot; the user (or Phase 2 automation)
-  decides whether to re-prompt on a blocked issue.
-- **Iteration limits.** The orchestrator caps inner iterations at 8 and
-  outer cycles at 50. Phase 1 puts the user in charge of stopping;
-  Phase 2 can re-introduce limits.
-
-## What follow-up work looks like
-
-The single-prompt form proved out the loop, which means a few of
-the rough edges that remain are now Phase 2 / follow-up work:
+A few rough edges remain — not blocking, but worth tracking:
 
 - **`/factory-run` slash command** — wrap the single prompt above
   as a slash command (or a `boxel factory run` CLI that spawns
@@ -259,9 +157,9 @@ the rough edges that remain are now Phase 2 / follow-up work:
   agent runs at the start of every session (find monorepo, rename
   stale `dist/`, symlink to PATH) should collapse into a single
   per-machine prerequisite, not per-session boilerplate.
-- **Orchestrator retirement** — once Phase 1 has shipped and run
-  in production for long enough, delete `issue-loop.ts`,
-  `factory-agent/`, etc.
+- **Orchestrator retirement** — once this runbook has shipped and
+  run in production for long enough, delete the SDK orchestrator
+  code (`issue-loop.ts`, `factory-agent/`, etc.).
 
 ## Expected output
 
