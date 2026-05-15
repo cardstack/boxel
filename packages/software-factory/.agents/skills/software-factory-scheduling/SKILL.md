@@ -111,7 +111,7 @@ orchestrator to flip statuses for you.
 | -------------------------------- | ------------------------------------------------------------------------------- |
 | `backlog` → `in_progress`        | The moment you pick the issue up, **before** doing any work on it.              |
 | `in_progress` → `done`           | All required validators have passed AND the workspace has synced cleanly.       |
-| `in_progress` → `blocked`        | You cannot make progress: ambiguous brief, validator failure outside your scope, missing dependency, or you've hit your own retry ceiling. Always append a comment explaining why. |
+| `in_progress` → `blocked`        | You cannot make progress: ambiguous brief, missing dependency, or you've hit one of the validator-loop bail-out limits documented in `software-factory-operations` ("Bailing out" section — 8 iterations per Issue, 3 identical consecutive validator failures, or 5 distinct fix attempts on the same validator without a pass). Always append a comment explaining which limit you hit and what you tried. |
 | `blocked` → `backlog`            | The user (or a future you) decides to retry — out of this skill's scope.        |
 
 **Always push the workspace after a status change.** The

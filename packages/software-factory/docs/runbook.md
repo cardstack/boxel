@@ -94,14 +94,24 @@ Follow docs/interactive-runbook.md end-to-end:
         the previous ones.
      d. Repeat (a)–(c) until every validator returns
         `status: "passed"`. Only then mark the Issue `done`.
-5. Loop step 4 until no eligible Issues remain.
-6. When the backlog is empty and every Issue is done, set the
-   Project's `projectStatus` to "completed" and push.
+   Honor the bail-out limits in software-factory-operations'
+   "Bailing out" section — stop iterating if you hit 8 total
+   iterations on the Issue, or 3 consecutive identical failures
+   from the same validator, or 5 distinct fix attempts without
+   a single pass. When you bail out: set the Issue to
+   `blocked` with a comment summarizing what failed and what
+   you tried, push, then move on. Do NOT keep grinding past
+   those limits.
+5. Loop step 4 until no eligible Issues remain (either all
+   `done`, or the remaining ones are `blocked` per step 4).
+6. When the backlog is empty: if every Issue is `done`, set
+   the Project's `projectStatus` to `completed` and push. If
+   some Issues are `blocked`, leave `projectStatus` as
+   `active` and report which ones are stuck and why.
 
-Stop and report only if you hit something genuinely unrecoverable
-(e.g. the brief is ambiguous beyond your scope, or a validator
-failure you can't diagnose). Otherwise, complete the project in
-this one session.
+Stop and report only if you hit a bail-out limit on every
+remaining Issue. Otherwise, complete the project in this one
+session.
 ```
 
 > **Working through multiple prompts instead.** If you'd rather

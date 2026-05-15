@@ -382,8 +382,8 @@ QUnit card tests" below.
    from `https://cardstack.com/base/spec` / `Spec`. Link sample
    instances via `relationships.linkedExamples`.
 6. **Push the workspace** to the target realm.
-7. **Run the validators and iterate until all five pass.** Each
-   pass through the loop:
+7. **Run the validators and iterate until all five pass — or
+   until you hit a bail-out limit.** Each pass through the loop:
    1. Run each validator (in this order — cheap to expensive):
       `boxel lint <changed-file>`, `boxel parse <changed-file>`,
       `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
@@ -401,19 +401,74 @@ QUnit card tests" below.
       next sequence number (`<type>_<issue-slug>-2.json`,
       `-3.json`, …) — do NOT overwrite the previous ones. The
       historical sequence is the audit trail.
-   4. Stop iterating only when every validator's most recent
+   4. Stop iterating when every validator's most recent
       artifact card has `status: "passed"`. A single fix-up
       that resolves multiple validators can land in one
       iteration; you don't have to re-fail before each retry.
 
    **Do not mark the Issue done until every validator passes.**
    "Most failed but a few passed, good enough" is not the bar.
+
+   **Bail-out limits — don't spiral.** The validator loop must
+   terminate. If you hit any of these, stop iterating and
+   proceed to "Bailing out" below instead of marking the Issue
+   done:
+
+   - **8 total iterations per Issue.** If after 8 passes through
+     the validator loop you still don't have all five validators
+     green, stop. (This matches the orchestrator's old
+     `maxIterationsPerIssue` default.)
+   - **3 consecutive failures of the same validator with the
+     same error.** Compare the latest 3 artifact cards for the
+     failing validator. If the failure message (or the first
+     line of the stack) is identical, your fix isn't working —
+     stop. Continuing past this point burns context for no gain.
+   - **5 distinct fix attempts on the same validator without a
+     single pass.** Look across the artifact-card sequence: if a
+     validator has 5+ failed cards and no passed card, the
+     problem is outside this Issue's scope.
+
 8. **Push the workspace** so the final validation cards land on
    the realm.
-9. **Mark the Issue done** by editing
-   `Issues/<slug>.json:data.attributes.status` to `"done"` and
-   pushing. (See `software-factory-scheduling` for the full
-   status-transition rules.)
+9. **Either mark done or bail out.**
+
+   - If all five validators passed: edit
+     `Issues/<slug>.json:data.attributes.status` to `"done"` and
+     push. (See `software-factory-scheduling` for the full
+     status-transition rules.)
+   - If you hit a bail-out limit: see "Bailing out" below.
+
+## Bailing out (when validators won't go green)
+
+Some failures aren't fixable in one agent session — a brief
+ambiguity, a runtime error rooted outside the workspace, a flaky
+host-app dependency. Don't keep retrying past the limits in
+step 7.
+
+When you stop:
+
+1. Set the Issue's `status` to `"blocked"` (not `"done"`, not
+   `"in_progress"`).
+2. Append a comment to the Issue (see "Adding a comment to an
+   existing Issue") summarizing:
+   - Which validator(s) you couldn't get green.
+   - The most recent failure message(s), copied verbatim from
+     the artifact card.
+   - A brief enumeration of what you tried, keyed to the artifact
+     card sequence numbers (e.g. "Iteration 1: added missing
+     field. Iteration 2: changed type. Iteration 3: ...").
+   - Which bail-out limit you hit (8 iterations / 3 identical
+     failures / 5 distinct attempts).
+3. Push so the status flip + comment land on the realm.
+4. Hand back to `software-factory-scheduling` — pick the next
+   eligible Issue and work it. **Do not** mark the Project
+   `projectStatus: completed` if any Issues are blocked; finish
+   what's still workable, then stop and report.
+
+The artifact cards under `Validations/` already capture the
+detailed evidence (per-validator output, sequence of failures).
+The Issue comment is the human-readable summary on top of that
+audit trail.
 
 If you cannot make progress at any step, set the Issue's `status`
 to `"blocked"`, append a comment explaining what's stuck, push, and
