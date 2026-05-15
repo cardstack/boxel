@@ -1,10 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
-import type {
-  LooseSingleCardDocument,
-  Realm,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from './helpers';
 
 // CS-10054 TDD: pin the desired behavior of Realm.getHostRoutingMap before
