@@ -76,9 +76,9 @@ writing any tracker JSON file (Project / Issue / KnowledgeArticle /
 Board) or a Spec card, introspect the live schema:
 
 ```bash
-boxel run-command get-card-type-schema \
+boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
   --realm <target-realm-url> \
-  --input '{"module": "<module-url>", "name": "<card-name>"}'
+  --input '{"codeRef": {"module": "<module-url>", "name": "<card-name>"}}'
 ```
 
 The command returns `{ attributes, relationships? }` JSON Schema for
@@ -131,9 +131,9 @@ Spec cards (`Spec/<slug>.json`) adopt from
 `https://cardstack.com/base/spec` / `Spec`. Fetch the live schema:
 
 ```bash
-boxel run-command get-card-type-schema \
+boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
   --realm <target-realm-url> \
-  --input '{"module": "https://cardstack.com/base/spec", "name": "Spec"}'
+  --input '{"codeRef": {"module": "https://cardstack.com/base/spec", "name": "Spec"}}'
 ```
 
 What the schema does **not** tell you and you must supply for

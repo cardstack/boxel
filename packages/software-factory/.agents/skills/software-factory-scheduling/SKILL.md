@@ -85,7 +85,7 @@ push would read stale state.
 **Never set `status` to a value not listed above** (e.g. `"running"`,
 `"completed"`, custom strings). The Issue schema enforces an enum;
 introspect it with
-`boxel run-command get-card-type-schema --realm <url> --input '{"module": "<tracker-module-url>", "name": "Issue"}'`
+`boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef": {"module": "<tracker-module-url>", "name": "Issue"}}'`
 if you need the exact allowed values for the realm you're working
 against.
 
@@ -143,9 +143,9 @@ prompt. You now find it yourself:
 - Verify the URL is reachable by introspecting one of its exports
   before relying on it:
   ```bash
-  boxel run-command get-card-type-schema \
+  boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
     --realm <target-realm-url> \
-    --input '{"module": "<tracker-module-url>", "name": "Issue"}'
+    --input '{"codeRef": {"module": "<tracker-module-url>", "name": "Issue"}}'
   ```
   If this returns a schema, you have the right URL. If it 404s or
   returns "module not found", check the source realm — the brief

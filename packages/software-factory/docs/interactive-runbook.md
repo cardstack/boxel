@@ -16,6 +16,27 @@ The user has done the following outside Claude Code:
 - Installed `boxel-cli` and run `boxel profile add` so the active
   profile points at the target realm server. `boxel profile list`
   shows the active profile.
+
+  **Phase 1 dev setup note.** During Phase 1 the `boxel` CLI is
+  not always available as a globally-installed binary. The dev
+  binary lives at
+  `<monorepo>/packages/boxel-cli/bin/boxel.js` — symlink it onto
+  your PATH:
+
+  ```bash
+  cd /path/to/boxel/packages/boxel-cli
+  pnpm build                                          # build fresh dist/
+  ln -sf "$(pwd)/bin/boxel.js" ~/.local/bin/boxel     # or any PATH dir
+  boxel --version                                     # confirm
+  ```
+
+  If `packages/boxel-cli/dist/` exists but is **stale** (older
+  than the validator-CLI commits on this branch), `boxel lint` /
+  `parse` / `test` will be missing. Either rebuild (`pnpm build`)
+  or rename `dist/` to `dist.stale/` so the bin shim falls back to
+  the live TS source.
+
+
 - Installed Claude Code and run `/login` so the session is
   subscription-billed. `ANTHROPIC_API_KEY` is **not** set in the shell
   Claude Code launched from (it would override subscription auth — see
@@ -55,7 +76,7 @@ Please:
 4. Follow the software-factory-bootstrap skill to create the Project,
    IssueTracker, Knowledge Articles, and one Issue per entry-point
    card described in the brief. Use the live card-type schemas (fetch
-   them via `boxel run-command get-card-type-schema`) — do not guess
+   them via `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default`, wrapping the module+name inside a `codeRef` field) — do not guess
    field names.
 5. Push the workspace to the target realm.
 6. Stop and report what you created. Do not start implementing any
@@ -116,7 +137,7 @@ the project is complete or that nothing is left to do.
 | Realm creation            | `boxel run-command create-realm` (or `boxel realm create`)                          |
 | Workspace pull / push     | `boxel pull` / `boxel push` (realm-sync skill)                                      |
 | Federated search          | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                     |
-| Card-type schema          | `boxel run-command get-card-type-schema --realm <url> --input '{module,name}'`      |
+| Card-type schema          | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'` |
 | Lint                      | `boxel lint [path] --realm <url>` (whole-realm or single-file)                      |
 | Parse / type-check        | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)        |
 | Evaluate module           | `boxel run-command evaluate-module --realm <url> --input '{path}'`                  |
@@ -171,7 +192,7 @@ would shorten the skill text but is not blocking.
    - Drop references to `signal_done`, `get_card_schema`,
      `request_clarification`.
    - Replace `get_card_schema(...)` calls with
-     `boxel run-command get-card-type-schema ...`.
+     `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default ...` (with the module+name wrapped in `codeRef`).
    - Add a "creating the target realm" section (currently the
      orchestrator does this before the agent runs).
    - Add the **tracker module URL discovery** rule. Today the
