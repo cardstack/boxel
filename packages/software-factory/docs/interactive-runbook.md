@@ -6,12 +6,6 @@ agent through bootstrap, per-issue implementation, validation, and
 project completion in a single end-to-end loop. There is no
 orchestrator process; the agent does every step itself.
 
-> **Status:** working end-to-end on `software-factory/Wiki/sticky-note`
-> and `software-factory/Wiki/recipe` as of 2026-05-15 (CS-11149
-> Phase 1). The single-prompt form below is the default; the
-> three-prompt mode the earlier draft documented is no longer
-> needed.
-
 ## Prerequisites
 
 The user has done the following outside Claude Code:
@@ -56,8 +50,9 @@ The user has done the following outside Claude Code:
 
 The user also knows:
 
-- The brief URL (e.g. `http://localhost:4201/software-factory/Wiki/sticky-note`).
-- The target realm URL they want the factory to create
+- The **brief URL** — a card in the source realm describing what to
+  build (e.g. `http://localhost:4201/software-factory/Wiki/<brief-slug>`).
+- The **target realm URL** they want the factory to create
   (e.g. `http://localhost:4201/<username>/<realm-name>/`).
 
 ## The prompt
@@ -252,19 +247,27 @@ the rough edges that remain are now Phase 2 / follow-up work:
   in production for long enough, delete `issue-loop.ts`,
   `factory-agent/`, etc.
 
-## Validation plan
+## Expected output
 
-The runbook is validated end-to-end against:
+A successful run produces, in the target realm:
 
-- `http://localhost:4201/software-factory/Wiki/sticky-note` —
-  single-card brief, simplest exerciser.
-- `http://localhost:4201/software-factory/Wiki/recipe` — richer
-  brief (nested fields, multiple sample instances).
-
-Both runs are expected to produce a populated target realm with
-Project / IssueTracker / Knowledge Articles / Issues (including
-the `bootstrap-seed` Issue) / card `.gts` and `.test.gts` /
-sample instances / Catalog Spec / a populated `Validations/`
-folder with one of each artifact card type per validator run. The
-Playwright suite in `packages/software-factory/tests/` encodes the
-sticky-note expectations as the regression check.
+- `Projects/<slug>.json` — the Project card (`projectStatus` ends
+  up at `completed`).
+- `Boards/<slug>.json` — the IssueTracker board linked back to the
+  Project.
+- `Knowledge Articles/<slug>-brief-context.json` and
+  `<slug>-agent-onboarding.json` — at minimum; more if the brief
+  warrants.
+- `Issues/bootstrap-seed.json` — the bootstrap anchor Issue
+  (status `done`, issueType `bootstrap`).
+- `Issues/<slug>-<card-name>.json` — one Issue per entry-point
+  card the brief describes (status `done` once implemented).
+- `<card-name>.gts` and `<card-name>.test.gts` — the card
+  definition and its co-located QUnit tests.
+- `<CardType>/<instance>.json` — one or more sample instances.
+- `Spec/<card-name>.json` — the Catalog Spec card linking the
+  sample instances via `linkedExamples`.
+- `Validations/lint_<issue-slug>-<n>.json`,
+  `parse_…`, `eval_…`, `instantiate_…`, `test_…` — one validation
+  artifact card per validator per iteration (sequence numbers
+  increment on retry; old cards are kept).
