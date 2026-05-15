@@ -219,12 +219,14 @@ export async function createRealm(
     virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
   }
 
-  // Phase 3: enqueue the from-scratch-index job at userInitiatedPriority
-  // so the canonical (post-coalesce) job carries that priority — even
-  // if reconciler.lookupOrMount below also enqueues one at the default
-  // systemInitiatedPriority via realm.start(). The chooseFromScratch
-  // coalesce JOINs same-realm jobs and keeps maxPriority.
-  await enqueueReindexRealmJob(
+  // Enqueue exactly one from-scratch-index job for this new realm, at
+  // userInitiatedPriority so a backed-up queue of system-priority jobs
+  // (e.g. a deploy-triggered reindex storm) does not stall realm
+  // creation. lookupOrMount is told to skip its own from-scratch
+  // enqueue via skipFromScratchIndex so this remains the only job —
+  // independent of whether the from-scratch coalesce would have caught
+  // a duplicate.
+  let indexJob = await enqueueReindexRealmJob(
     url,
     ownerUsername,
     queue,
@@ -232,22 +234,27 @@ export async function createRealm(
     userInitiatedPriority,
   );
 
-  // Synchronously mount + start the realm on the *handling* instance.
-  // The 202 response with status:'pending' is for sibling instances —
-  // they pick up the realm via NOTIFY realm_registry and lazy-mount
-  // on first request. On this instance the realm is fully ready by
-  // the time we return: ensureMounted publishes into realms[] /
-  // virtualNetwork via prepareRealmFromRow and awaits realm.start(),
-  // which awaits the from-scratch-index job. Mounting eagerly here
-  // also drains the queue locally so the test framework's teardown
-  // (close server → drain runner → close DB) doesn't race a worker
-  // mid-fetch on the now-closed HTTP listener.
-  let realm = await reconciler.lookupOrMount(url);
+  // Synchronously mount the realm on the *handling* instance. The 202
+  // response with status:'pending' is for sibling instances — they
+  // pick up the realm via NOTIFY realm_registry and lazy-mount on
+  // first request. Mounting eagerly here also drains the queue
+  // locally so the test framework's teardown (close server → drain
+  // runner → close DB) doesn't race a worker mid-fetch on the now-
+  // closed HTTP listener.
+  let realm = await reconciler.lookupOrMount(url, {
+    skipFromScratchIndex: true,
+  });
   if (!realm) {
     throw new Error(
       `expected realm ${url} to be mounted after createRealm — registry row missing or mount failed`,
     );
   }
+
+  // Wait for the priority-10 job to complete so the realm is fully
+  // indexed by the time we return — preserving the prior "fully ready
+  // on this instance" contract without the duplicate-enqueue
+  // workaround.
+  await indexJob.done;
 
   return { url, realm, info };
 }

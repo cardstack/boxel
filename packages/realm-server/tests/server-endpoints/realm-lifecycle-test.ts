@@ -133,13 +133,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let jobs = (await context.dbAdapter.execute(
           `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${json.data.id}'`,
         )) as { priority: number }[];
-        assert.ok(
-          jobs.length > 0,
-          'found from-scratch index job for created realm',
-        );
-        assert.ok(
-          jobs.some((j) => j.priority === userInitiatedPriority),
-          'user initiated realm indexing uses high priority queue',
+        // Contract: realm creation enqueues exactly one
+        // from-scratch-index job, at userInitiatedPriority. A second
+        // job at default priority would block creation behind any
+        // backlog of lower-priority indexing work.
+        assert.deepEqual(
+          jobs.map((j) => j.priority),
+          [userInitiatedPriority],
+          'realm creation enqueues exactly one from-scratch index job at userInitiatedPriority',
         );
 
         let permissions = await fetchRealmPermissions(

@@ -1296,8 +1296,13 @@ export class Realm {
     });
   }
 
-  async start() {
-    this.#startedUp.fulfill((() => this.#startup())());
+  // `skipFromScratchIndex` lets a caller that has already enqueued a
+  // from-scratch-index job for this realm mount the realm without
+  // `#startup` enqueuing its own duplicate. The realm still mounts,
+  // its #startedUp promise still resolves, and request handlers can
+  // route to it — but indexing is then the caller's responsibility.
+  async start(opts?: { skipFromScratchIndex?: boolean }) {
+    this.#startedUp.fulfill((() => this.#startup(opts))());
 
     if (this.#adapter.fileWatcherEnabled) {
       await this.startFileWatcher();
@@ -2174,7 +2179,7 @@ export class Realm {
     await completed;
   }
 
-  async #startup() {
+  async #startup(opts?: { skipFromScratchIndex?: boolean }) {
     await Promise.resolve();
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
@@ -2185,7 +2190,7 @@ export class Realm {
         sourceRealmURL: this.#copiedFromRealm.href,
         realmURL: this.url,
       });
-    } else {
+    } else if (!opts?.skipFromScratchIndex) {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
         let promise = this.#realmIndexUpdater.fullIndex(
