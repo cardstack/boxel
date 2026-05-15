@@ -60,14 +60,15 @@ ENV PUPPETEER_CHROME_ARGS="--disable-dev-shm-usage"
 
 RUN mkdir -p /home/pptruser/Downloads "${PUPPETEER_CACHE_DIR}"
 
-COPY pnpm-lock.yaml ./
-
+# Cache-friendly dependency fetch: this layer only re-runs when the lockfile
+# (or patches it references) changes, not on every source edit. `pnpm fetch`
+# populates the global pnpm store in $HOME from the lockfile alone, so the
+# subsequent `pnpm install --offline` doesn't need the registry.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches/ ./patches
-COPY vendor/ ./vendor
-
-ADD . ./
-
 RUN CI=1 pnpm fetch
+
+COPY . ./
 RUN CI=1 pnpm install -r --offline
 RUN chown -R pptruser:pptruser /home/pptruser /realm-server
 
