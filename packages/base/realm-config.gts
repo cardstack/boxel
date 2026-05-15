@@ -4,7 +4,6 @@ import {
   field,
   contains,
   containsMany,
-  linksTo,
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
@@ -19,9 +18,14 @@ export class RoutingRuleField extends FieldDef {
     description: 'Static path within the realm, e.g. "/" or "/pricing"',
   });
 
-  @field instance = linksTo(CardDef, {
+  // Card URL of the instance to render when the realm is navigated at
+  // `path`. Stored as a string (rather than a `linksTo`) so the rule
+  // serializes flat alongside `path` inside `attributes` — no JSON:API
+  // relationships split. Relative URLs (e.g. `./whitepaper`) are
+  // resolved against the realm root by the routing-map reader.
+  @field instance = contains(StringField, {
     description:
-      'Card instance to render when the realm is navigated at the given path',
+      'Card URL to render at this path. Relative URLs are resolved against the realm root.',
   });
 }
 
