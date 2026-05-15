@@ -39,9 +39,9 @@ The block is idempotent; running it again here is safe and cheap.
 Your `cwd` is the local mirror of the target realm. Use the **native**
 `Read`, `Write`, `Edit`, `Glob`, `Grep`, and `Bash` tools on these
 files; realm-relative paths resolve directly. After you write, push
-the workspace to the realm with `boxel push` (or whatever sync
-command your `boxel-cli` profile uses) — the validators that touch
-the realm need the realm to reflect your latest writes.
+the workspace to the realm with `boxel realm push <local-dir>
+<target-realm-url>` — the validators that touch the realm need the
+realm to reflect your latest writes.
 
 Files that live in the workspace:
 
@@ -230,12 +230,15 @@ local workspace). After writing files in the workspace, push them to
 the realm before running any validator:
 
 ```bash
-boxel push --realm <target-realm-url>
-# or: boxel sync --realm <target-realm-url>
+boxel realm push <local-dir> <target-realm-url>
+# e.g. boxel realm push . http://localhost:4201/user/my-realm/
+
+# Or two-way sync (resolves conflicts via --prefer-local etc.):
+boxel realm sync <local-dir> <target-realm-url> --prefer-local
 ```
 
-(Exact command depends on the boxel-cli surface in your version —
-see the `realm-sync` skill.)
+See the `realm-sync` skill for the full surface (flags, conflict
+resolution, watch mode).
 
 ### `boxel lint [path] --realm <url>`
 
@@ -535,4 +538,4 @@ export function runTests() {
   `.gts` actually look like".
 - `boxel-api` — full `boxel search` query syntax.
 - `boxel-command` — programmatic surface for `boxel run-command`.
-- `realm-sync` — `boxel push` / `boxel pull` / workspace sync.
+- `realm-sync` — `boxel realm push` / `boxel realm pull` / `boxel realm sync` / workspace sync.

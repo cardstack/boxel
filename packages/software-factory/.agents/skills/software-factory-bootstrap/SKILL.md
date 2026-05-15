@@ -83,12 +83,14 @@ the `realm-sync` skill for the full surface (auth, icon URL, etc.).
 Once the realm exists, set up the workspace mirror for it:
 
 ```bash
-boxel pull --realm <target-realm-url>
+boxel realm pull <target-realm-url> <local-dir>
+# e.g. boxel realm pull http://localhost:4201/user/my-realm/ .
 ```
 
 A freshly-created realm is empty, so the pull is a no-op except to
-establish the cwd → realm mapping. All subsequent writes happen in
-the workspace and propagate via `boxel push` when you sync.
+establish the local-dir ↔ realm mapping. All subsequent writes
+happen in the workspace and propagate via
+`boxel realm push <local-dir> <realm-url>` when you sync.
 
 ## Discover the tracker module URL
 
@@ -393,7 +395,8 @@ Knowledge Articles, and one Issue per entry-point card):
 1. **Push the workspace** to the target realm.
 
    ```bash
-   boxel push --realm <target-realm-url>
+   boxel realm push <local-dir> <target-realm-url>
+   # e.g. boxel realm push . http://localhost:4201/user/my-realm/
    ```
 
 2. **Flip the bootstrap Issue's `status` from `in_progress` to
@@ -416,5 +419,5 @@ Knowledge Articles, and one Issue per entry-point card):
   `.test.gts` / instances / Spec, run validators, fix failures,
   mark done).
 - `boxel-development` — `.gts` card authoring patterns.
-- `realm-sync` — `boxel push` / `boxel pull` / realm-creation
+- `realm-sync` — `boxel realm push` / `boxel realm pull` / `boxel realm sync` / realm-creation
   surface.

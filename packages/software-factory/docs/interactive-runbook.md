@@ -135,7 +135,7 @@ the project is complete or that nothing is left to do.
 | Capability                | How the agent invokes it                                                            |
 | ------------------------- | ----------------------------------------------------------------------------------- |
 | Realm creation            | `boxel run-command create-realm` (or `boxel realm create`)                          |
-| Workspace pull / push     | `boxel pull` / `boxel push` (realm-sync skill)                                      |
+| Workspace pull / push     | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)  |
 | Federated search          | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                     |
 | Card-type schema          | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'` |
 | Lint                      | `boxel lint [path] --realm <url>` (whole-realm or single-file)                      |

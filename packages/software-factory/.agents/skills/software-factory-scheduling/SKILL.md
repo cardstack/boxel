@@ -115,9 +115,9 @@ orchestrator to flip statuses for you.
 | `blocked` → `backlog`            | The user (or a future you) decides to retry — out of this skill's scope.        |
 
 **Always push the workspace after a status change.** The
-status flip is local until `boxel push` (or whatever sync command
-you used) lands it on the realm. Running another search before the
-push would read stale state.
+status flip is local until `boxel realm push <local-dir>
+<target-realm-url>` lands it on the realm. Running another search
+before the push would read stale state.
 
 **Never set `status` to a value not listed above** (e.g. `"running"`,
 `"completed"`, custom strings). The Issue schema enforces an enum;
