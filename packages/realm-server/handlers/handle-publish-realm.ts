@@ -223,6 +223,7 @@ function ensureRealmIndexBoilerplateOptIn(publishedRealmPath: string): void {
 
 export default function handlePublishRealm({
   dbAdapter,
+  definitionLookup,
   matrixClient,
   queue,
   realmSecretSeed,
@@ -526,12 +527,20 @@ export default function handlePublishRealm({
           // it up.
           ensureRealmIndexBoilerplateOptIn(publishedRealmPath);
 
-          // Clear stale modules cache for the published realm so that
-          // error entries from a previous publish don't persist
-          await query(dbAdapter, [
-            `DELETE FROM modules WHERE resolved_realm_url =`,
-            param(publishedRealmURL),
-          ]);
+          // Clear stale modules cache for the published realm (including
+          // error entries from a previous publish) before the reindex's
+          // prerender fan-out, so its HTTP module fetches don't hit
+          // cached pre-swap state on this replica or its peers.
+          // `clearRealmCache` bundles the DB DELETE + in-flight prerender
+          // drop + per-realm generation bump + cross-instance NOTIFY on
+          // `module_cache_invalidated` — the modules-cache analog of
+          // `clearLocalCachesAndBroadcast()` below. Without those extra
+          // steps (which a raw `DELETE FROM modules` would miss), an
+          // in-flight prerender that started before the DELETE could
+          // re-insert a stale row at persist time, and peer replicas
+          // would keep their cached rows + generation counters until
+          // their own next invalidation arrived.
+          await definitionLookup.clearRealmCache(publishedRealmURL);
 
           let lastPublishedAt = Date.now().toString();
           try {
