@@ -4,11 +4,13 @@ import { registerCreateCommand } from './create';
 import { registerHistoryCommand } from './history';
 import { registerListCommand } from './list';
 import { registerMilestoneCommand } from './milestone';
+import { registerPublishCommand } from './publish';
 import { registerPullCommand } from './pull';
 import { registerPushCommand } from './push';
 import { registerRemoveCommand } from './remove';
 import { registerStatusCommand } from './status';
 import { registerSyncCommand } from './sync';
+import { registerUnpublishCommand } from './unpublish';
 import { registerWaitForReadyCommand } from './wait-for-ready';
 import { registerWatchCommand } from './watch';
 
@@ -22,11 +24,13 @@ export function registerRealmCommand(program: Command): void {
   registerHistoryCommand(realm);
   registerListCommand(realm);
   registerMilestoneCommand(realm);
+  registerPublishCommand(realm);
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerRemoveCommand(realm);
   const sync = registerSyncCommand(realm);
   registerStatusCommand(sync);
+  registerUnpublishCommand(realm);
   registerWaitForReadyCommand(realm);
   registerWatchCommand(realm);
 }
