@@ -234,22 +234,25 @@ would shorten the skill text but is not blocking.
    bodies for context. Currently
    `packages/software-factory/src/factory-context-builder.ts`.
 
+### Phase 1 includes validation artifact cards
+
+After each validator runs, the agent writes a corresponding card
+into the target realm's `Validations/` folder — `LintResult`,
+`ParseResult`, `EvalResult`, `InstantiateResult`, `TestRun`. This
+gives the human a sortable audit trail in the Boxel host UI,
+matching what the SDK orchestrator produced. The card types,
+filename conventions (`Validations/<type>_<issue-slug>-<n>.json`),
+and schema-discovery flow are documented in the
+`software-factory-operations` skill.
+
 ### Things explicitly NOT in Phase 1
 
-- **Validation artifact cards** (`ParseResult`, `LintResult`,
-  `EvalResult`, `InstantiateResult`, `TestRun`). The orchestrator
-  persists these to the realm after every turn. Phase 1 skips them —
-  validator output goes back to the agent inline; nothing is
-  persisted. We can add a later skill that teaches the agent to write
-  a `TestRun` card after a successful run if the catalog UI expects
-  it.
 - **Retry semantics on blocked issues.** The orchestrator's
   `--retry-blocked` flag is moot; the user (or Phase 2 automation)
   decides whether to re-prompt on a blocked issue.
 - **Iteration limits.** The orchestrator caps inner iterations at 8 and
   outer cycles at 50. Phase 1 puts the user in charge of stopping;
   Phase 2 can re-introduce limits.
-- **Validator-driven artifact persistence**: same as above.
 
 ## How Phase 2 builds on this
 

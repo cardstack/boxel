@@ -220,10 +220,15 @@ filesystem.
 
 ## Validators (CLI commands)
 
-Run these against the target realm after writing files. Each is
-safe to call repeatedly — they do **not** persist any validation
-cards (TestRun, LintResult, etc.) into the realm; the result is the
-CLI output you read directly.
+Run these against the target realm after writing files. The CLI
+itself just prints results — it does **not** write validation
+cards into the realm. Persisting the audit trail (TestRun,
+LintResult, ParseResult, EvalResult, InstantiateResult into the
+`Validations/` folder) is **your** responsibility: see
+"Validation artifact cards" below for the card types, file naming,
+sequence numbers, and how to map `--json` output to the card's
+attributes. Always run each validator with `--json` so you can
+capture the structured result and convert it into the card.
 
 **Push first.** All five validators read from the realm (not your
 local workspace). After writing files in the workspace, push them to
@@ -381,14 +386,21 @@ QUnit card tests" below.
    `boxel lint <changed-file>`, `boxel parse <changed-file>`,
    `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
    `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --input '{"moduleIdentifier":"<absolute-module-url>","cardName":"<ClassName>","realmIdentifier":"<absolute-realm-url>","instanceData":"<json-string-with-absolute-adoptsFrom>"}'`,
-   `boxel test`. Fix anything that fails and re-run. (See the
-   individual validator sections above for the full input shapes
-   and the absolute-URL requirement.)
-8. **Mark the Issue done** by editing
-   `Issues/<slug>.json:data.attributes.status` to `"done"` and
-   pushing. (See `software-factory-scheduling` for the full
-   status-transition rules — never set `status` to `"done"` until
-   validators pass and the push is clean.)
+   `boxel test`. Run each with `--json` so you can capture the
+   structured result. Fix anything that fails and re-run.
+8. **Write a validation artifact card** for each validator that ran.
+   These persist into the target realm's `Validations/` folder and
+   give the human a sortable audit trail of every run. See
+   "Validation artifact cards" below for the card types, file
+   naming, and how to map the validator's `--json` output to the
+   card's `attributes`.
+9. **Push the workspace** so the validation cards land on the realm.
+10. **Mark the Issue done** by editing
+    `Issues/<slug>.json:data.attributes.status` to `"done"` and
+    pushing. (See `software-factory-scheduling` for the full
+    status-transition rules — never set `status` to `"done"` until
+    validators pass, validation cards are written, and the push is
+    clean.)
 
 If you cannot make progress at any step, set the Issue's `status`
 to `"blocked"`, append a comment explaining what's stuck, push, and
@@ -410,12 +422,109 @@ target-realm/
 │   └── project-name.json            # IssueTracker card
 ├── Issues/
 │   └── issue-slug.json              # Issue card
-└── Knowledge Articles/
-    └── article-name.json            # KnowledgeArticle card
+├── Knowledge Articles/
+│   └── article-name.json            # KnowledgeArticle card
+└── Validations/
+    ├── lint_issue-slug-1.json       # LintResult card
+    ├── parse_issue-slug-1.json      # ParseResult card
+    ├── eval_issue-slug-1.json       # EvalResult card
+    ├── instantiate_issue-slug-1.json # InstantiateResult card
+    └── test_issue-slug-1.json       # TestRun card
 ```
 
-There is no `Validations/` folder in the interactive flow — the
-validators run via CLI and don't persist artifacts.
+## Validation artifact cards
+
+After each validator runs, write a corresponding artifact card
+under `Validations/`. Together they form the audit trail the human
+sees in the Boxel host UI — a sortable history of every validation
+run for every Issue.
+
+Five card types, one per validator, all published from the source
+realm. Build each module URL from the target realm's origin (same
+pattern as the tracker module URL):
+
+| CLI                                                     | Card class           | Source module                                |
+| ------------------------------------------------------- | -------------------- | -------------------------------------------- |
+| `boxel lint`                                            | `LintResult`         | `<origin>/software-factory/lint-result`      |
+| `boxel parse`                                           | `ParseResult`        | `<origin>/software-factory/parse-result`     |
+| `boxel run-command .../evaluate-module/default`         | `EvalResult`         | `<origin>/software-factory/eval-result`      |
+| `boxel run-command .../instantiate-card/default`        | `InstantiateResult`  | `<origin>/software-factory/instantiate-result` |
+| `boxel test`                                            | `TestRun`            | `<origin>/software-factory/test-results`     |
+
+### File naming
+
+`Validations/<type>_<issue-slug>-<n>.json` where:
+
+- `<type>` ∈ `lint`, `parse`, `eval`, `instantiate`, `test`.
+- `<issue-slug>` is the Issue's slug (the part after `Issues/` in
+  its file path — e.g. `sticky-note-sticky-note` for
+  `Issues/sticky-note-sticky-note.json`).
+- `<n>` is a per-issue sequence number: 1 on first run, increment
+  for retries. Before writing, glob
+  `Validations/<type>_<issue-slug>-*.json` to find the highest
+  existing number and use `n+1`. On the first iteration the folder
+  may not exist yet — that's fine, `<type>_<issue-slug>-1.json`.
+
+### Document shape
+
+For each artifact card:
+
+1. Run the validator with `--json` and capture the structured
+   output. The CLI's JSON shape is **not** the card's attribute
+   shape — they overlap but differ.
+2. Introspect the live card schema before writing:
+
+   ```bash
+   boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default \
+     --realm <target-realm-url> \
+     --input '{"codeRef":{"module":"<source-module-url>","name":"<ClassName>"}}'
+   ```
+
+3. Map the validator's `--json` fields to the schema's attributes.
+   The naming usually matches closely (`status`, `errorCount`,
+   `durationMs`, etc.) but the schema is the source of truth for
+   field names, types, and enum values. Don't guess.
+4. Write the card via `Write` with the standard JSON:API envelope:
+
+   ```json
+   {
+     "data": {
+       "type": "card",
+       "attributes": {
+         /* mapped from the validator's --json output, per the schema */
+         "status": "passed",
+         "runAt": "2026-05-15T10:42:00.000Z",
+         /* ...other schema attributes... */
+       },
+       "relationships": {
+         /* if the schema names an issue/project relationship, link
+            back to ../Issues/<slug> / ../Projects/<slug> */
+       },
+       "meta": {
+         "adoptsFrom": {
+           "module": "<source-module-url>",
+           "name": "<ClassName>"
+         }
+       }
+     }
+   }
+   ```
+
+### Write artifact cards even on success
+
+The audit trail is the point — a green `LintResult` is just as
+valuable as a red one for showing the human what was checked.
+Always write the card after running the validator, regardless of
+pass/fail. The `status` attribute (`"passed"` / `"failed"` /
+`"error"`) carries the outcome.
+
+### Iteration semantics
+
+When fixing a validator failure, **don't overwrite the previous
+artifact**. Write a new card with the next sequence number
+(`<type>_<issue-slug>-2.json`, `-3.json`, …) so the history shows
+the full path from failure to fix. The host UI sorts by
+`sequenceNumber` (or `runAt`) and displays the latest at the top.
 
 ## Debugging runtime evaluation errors
 
