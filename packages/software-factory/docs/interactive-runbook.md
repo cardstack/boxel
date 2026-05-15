@@ -117,11 +117,11 @@ the project is complete or that nothing is left to do.
 | Workspace pull / push     | `boxel pull` / `boxel push` (realm-sync skill)                                      |
 | Federated search          | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                     |
 | Card-type schema          | `boxel run-command get-card-type-schema --realm <url> --input '{module,name}'`      |
-| Lint                      | `boxel lint [path]` ❌ does not exist yet — see gaps                                |
-| Parse / type-check        | `boxel parse [path]` ❌ does not exist yet                                          |
+| Lint                      | `boxel lint [path] --realm <url>` (whole-realm or single-file)                      |
+| Parse / type-check        | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)        |
 | Evaluate module           | `boxel run-command evaluate-module --realm <url> --input '{path}'`                  |
 | Instantiate card          | `boxel run-command instantiate-card --realm <url> --input '{path}'`                 |
-| Run QUnit tests           | `boxel test` ❌ does not exist yet                                                  |
+| Run QUnit tests           | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)               |
 | Read transpiled output    | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors) |
 | Write files               | native `Write` / `Edit`                                                             |
 | Read / search workspace   | native `Read` / `Glob` / `Grep`                                                     |
@@ -133,25 +133,32 @@ array.
 
 ## Gaps blocking Phase 1
 
-Before the prompt sequence above produces a working factory run, the
-following must exist:
-
 ### CLI commands to add to `boxel-cli`
 
-1. **`boxel lint [path]`** — runs ESLint + Prettier with the
-   `@cardstack/boxel` config. Today lives in
-   `packages/software-factory/src/lint-execution.ts:runLintInMemory`.
-   Without a flag, lints every `.gts` / `.gjs` / `.ts` / `.js` file in
-   the realm; with a path, lints just that file. Prints a structured
-   summary; non-zero exit on errors.
-2. **`boxel parse [path]`** — runs glint (ember-tsc) over `.gts` /
-   `.gjs` / `.ts` and JSON validation over Spec-linked `.json`
-   examples. Today lives in
-   `packages/software-factory/src/parse-execution.ts:runParseInMemory`.
-3. **`boxel test`** — runs the realm's QUnit suite via the host app.
-   Today lives in
-   `packages/software-factory/src/test-run-execution.ts:runTestsInMemory`.
-   Needs a host-app URL flag and a target-realm flag.
+All three validator CLIs have been added; the only remaining work is
+skill content. The commands and their constraints:
+
+1. **`boxel lint [path] --realm <url>`** — runs ESLint + Prettier
+   with the `@cardstack/boxel` config via the realm's `_lint`
+   endpoint. Without a path, lints every `.gts` / `.gjs` / `.ts` /
+   `.js` file in the realm; with a realm-relative path, lints just
+   that file. Works against any realm (no monorepo dependency).
+2. **`boxel parse [path] --realm <url>`** — runs glint (`ember-tsc`)
+   over `.gts` / `.gjs` / `.ts` files and validates the document
+   structure of any `.json` files linked as `Spec.linkedExamples`.
+   **Monorepo-only**: type-path mappings (`packages/base`,
+   `packages/host`, `packages/boxel-ui`) and the `ember-tsc` binary
+   are resolved relative to this CLI's location. Not usable from a
+   published `boxel-cli` outside the monorepo. Long-term, the right
+   shape is a realm-server `_parse` endpoint mirroring `_lint`; that
+   is deferred as a separate Phase 2 ticket.
+3. **`boxel test --realm <url>`** — runs the realm's QUnit suite by
+   driving headless Chromium against the host app's compiled
+   `dist/`. **Monorepo-only** for the same reason as parse: the
+   host dist directory is discovered relative to this CLI (or via
+   `TEST_HARNESS_HOST_DIST_PACKAGE_DIR`). The host app must have
+   been built (`pnpm --filter @cardstack/host build`) before
+   running.
 
 The other validators (`evaluate`, `instantiate`) and `get-card-schema`
 are already host commands reachable via `boxel run-command`. Optional
