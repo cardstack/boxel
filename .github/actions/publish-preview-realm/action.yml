@@ -38,9 +38,10 @@ inputs:
     required: true
   realm-server-url:
     description: |
-      Realm-server URL. Defaults inferred from matrix-url for
-      stack.cards / boxel.ai / localhost domains; supply this for any
-      other environment.
+      Realm-server URL. When empty, the action infers it from matrix-url
+      for the boxel.ai (production) and matrix-staging.stack.cards
+      (staging) cases only. Supply this explicitly for any other
+      environment, including local dev (e.g. http://localhost:4201/).
     required: false
     default: ""
   readiness-timeout-ms:
