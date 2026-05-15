@@ -26,12 +26,12 @@ import {
 } from './helpers';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
-// Realm.#moduleCache. The scenario: reader A enters fallbackHandle for
+// Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for
 // foo.gts, snapshots the module-cache generation, then awaits transpileJS
 // (50–500 ms). While A is in-flight, invalidateCache(foo.gts) runs —
 // synchronously bumping the per-path generation and clearing whatever was
 // in the cache (a no-op if A hadn't filled it yet). Without the fix A's
-// post-transpile #moduleCache.set re-fills the slot with pre-invalidation
+// post-transpile #transpiledModuleCache.set re-fills the slot with pre-invalidation
 // bytes, so the next reader sees stale code until something else triggers
 // another invalidate. The fix snapshots the generation BEFORE the first
 // await and discards the cache write when the generation moved.
@@ -46,7 +46,7 @@ import {
 // `x-boxel-cache` header — a miss proves A's cache write was discarded.
 module(basename(__filename), function () {
   module(
-    'Realm.#moduleCache invalidate-during-transpile race',
+    'Realm.#transpiledModuleCache invalidate-during-transpile race',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
@@ -123,7 +123,7 @@ module(basename(__filename), function () {
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Invalidate mid-transpile. The generation counter bumps; A's
-        // post-transpile #moduleCache.set will compare its snapshot against
+        // post-transpile #transpiledModuleCache.set will compare its snapshot against
         // the now-bumped counter and skip the write.
         testRealm.invalidateCache(modulePath);
 
@@ -211,7 +211,7 @@ module(basename(__filename), function () {
         );
 
         // The canonical request side already worked before this fix
-        // (#moduleCache.invalidate cleared the canonical entry), but
+        // (#transpiledModuleCache.invalidate cleared the canonical entry), but
         // verify it still misses so the fix doesn't regress it.
         let canonicalResponse = await request
           .get(`/${canonicalPath}`)
@@ -227,7 +227,7 @@ module(basename(__filename), function () {
       test('in-flight transpile result is dropped when testRealm.write fires concurrently (user-visible bug)', async function (assert) {
         // The original bug report: "file edited and saved, host page reload
         // serves the pre-edit module bytes." A user write goes through
-        // writeMany, which used to mutate #moduleCache directly without
+        // writeMany, which used to mutate #transpiledModuleCache directly without
         // bumping the generation counter — letting an in-flight transpile's
         // post-await cache.set silently fill the slot writeMany just
         // cleared. This test exercises the same code path the user does.
@@ -298,7 +298,7 @@ module(basename(__filename), function () {
   // tracks a monotonic transpile counter exposed via
   // __testOnlyGetTranspileCallCount so the tests can assert "exactly one
   // transpile call" directly rather than inferring it from timing.
-  module('Realm.#moduleCache in-flight transpile dedup', function (hooks) {
+  module('Realm.#transpiledModuleCache in-flight transpile dedup', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/test/');
     let testRealm: Realm;
     let request: RealmRequest;
@@ -676,7 +676,7 @@ module(basename(__filename), function () {
   // coalesce behavior is exercised by module-cache-coordination-test.ts
   // and reused via the shared MODULE_CACHE_POPULATED_CHANNEL.
   module(
-    'Realm.#moduleCache L2 module_transpile_cache (DB-backed)',
+    'Realm.#transpiledModuleCache L2 module_transpile_cache (DB-backed)',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
@@ -973,7 +973,7 @@ module(basename(__filename), function () {
   // the advisory-lock + NOTIFY channel. Mirrors the
   // CachingDefinitionLookup two-instance test in
   // module-cache-coordination-test.ts but exercises the transpile flow.
-  module('Realm.#moduleCache L2 cross-instance coalesce', function (hooks) {
+  module('Realm.#transpiledModuleCache L2 cross-instance coalesce', function (hooks) {
     let dbAdapter: PgAdapter;
     let publisher: import('@cardstack/runtime-common').QueuePublisher;
     let runner: import('@cardstack/runtime-common').QueueRunner;

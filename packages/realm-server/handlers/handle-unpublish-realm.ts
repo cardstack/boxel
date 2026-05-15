@@ -156,7 +156,7 @@ export default function handleUnpublishRealm({
 
       // CS-11156. Broadcast a bulk cache-invalidation to peer replicas so
       // any that still have this realm mounted drop their #sourceCache /
-      // #moduleCache before the reconciler unmount lands. The per-file
+      // #transpiledModuleCache before the reconciler unmount lands. The per-file
       // deleteAll above already emitted per-path NOTIFYs covering bytes
       // that existed on disk; this bulk emit closes the brief window
       // between the registry-row delete commit and the peers' reaction.

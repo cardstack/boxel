@@ -285,7 +285,7 @@ const SOURCE_ETAG_VARIANT = 'source';
 const CARD_JSON_ETAG_VARIANT = 'card';
 
 // Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
-// #moduleCache entries on file writes. Two payload shapes:
+// #transpiledModuleCache entries on file writes. Two payload shapes:
 //
 //   `<realmURL>:<path>` — invalidate a single path's cached source +
 //      (for executable extensions) module entry. Emitted by every
@@ -296,8 +296,8 @@ const CARD_JSON_ETAG_VARIANT = 'card';
 //      delete-realm handlers after the FS swap or removal, so peer
 //      replicas (which do NOT receive the file-watcher events that
 //      drive single-file invalidation in-process) drop pre-swap bytes
-//      from `#sourceCache` / `#moduleCache` before serving the next
-//      source read. Receiver calls Realm.clearLocalCaches(). See
+//      from `#sourceCache` / `#transpiledModuleCache` before serving the next
+//      source read. Receiver calls Realm.clearLocalSourceCaches(). See
 //      CS-11156. (`*` is reserved as the wildcard sentinel; real
 //      LocalPath values never contain it.)
 //
@@ -315,7 +315,7 @@ export const REALM_FILE_CHANGES_WILDCARD = '*';
 // in-process cache will be garbage-collected with the Realm instance).
 // When the caller wants the SAME local cache wipe AND the broadcast
 // — i.e. its own next read must not hit pre-swap bytes — call
-// `Realm.clearLocalCachesAndBroadcast()` instead. Same best-effort
+// `Realm.clearLocalSourceCachesAndBroadcast()` instead. Same best-effort
 // semantics as `Realm.#notifyFileChange`: failures are logged and
 // swallowed (missed NOTIFY is a bounded staleness window, not data
 // corruption). See CS-11156.
@@ -366,7 +366,7 @@ type CachedSourceRedirectEntry = {
 
 type SourceCacheEntry = CachedSourceFileEntry | CachedSourceRedirectEntry;
 
-type ModuleCacheEntry = {
+type TranspiledModuleEntry = {
   canonicalPath: LocalPath;
   body: string;
   headers: Record<string, string>;
@@ -662,29 +662,29 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #moduleCache = new AliasCache<ModuleCacheEntry>();
-  // CS-11028: per-path generation counters for #moduleCache. Bumped
+  #transpiledModuleCache = new AliasCache<TranspiledModuleEntry>();
+  // CS-11028: per-path generation counters for #transpiledModuleCache. Bumped
   // synchronously by invalidateCache(path) before any await. fallbackHandle
   // snapshots at entry and discards its post-transpile cache write if the
   // path's generation moved during the in-flight transpile — otherwise the
   // pre-invalidation bytes would re-populate the slot that invalidate just
   // cleared and serve stale code until the next invalidate of that path.
-  // #moduleCacheGlobalGeneration covers __testOnlyClearCaches, which wipes
+  // #transpiledModuleCacheGlobalGeneration covers __testOnlyClearCaches, which wipes
   // the whole map; a snapshot taken before the wipe sees its `path`
   // component reset to 0 alongside the live counter, so a global generation
   // is the only thing that reliably mismatches afterwards.
-  #moduleCacheGenerations: Map<LocalPath, number> = new Map();
-  #moduleCacheGlobalGeneration = 0;
+  #transpiledModuleCacheGenerations: Map<LocalPath, number> = new Map();
+  #transpiledModuleCacheGlobalGeneration = 0;
   // CS-11029: in-process inflight dedup for the transpile pipeline.
-  // Concurrent same-path callers that miss #moduleCache used to each call
+  // Concurrent same-path callers that miss #transpiledModuleCache used to each call
   // transpileJS independently — 50–500 ms of babel + ember-template-
   // compilation + decorator transforms wasted per duplicate. The map is
   // keyed by local path so the second-and-onward caller awaits the first
   // caller's promise instead of running babel again. Invalidation paths
   // (writeMany, invalidateCache, the full-index clear, etc.) drop the
-  // entry through the shared #dropModuleCacheEntry /
-  // #dropAllModuleCacheEntries helpers so post-invalidate callers don't
-  // join a stale transpile whose #moduleCache.set will be discarded by
+  // entry through the shared #dropTranspiledModuleEntry /
+  // #dropAllTranspiledModuleCacheEntries helpers so post-invalidate callers don't
+  // join a stale transpile whose #transpiledModuleCache.set will be discarded by
   // CS-11028's generation guard anyway. Identity-checked cleanup on
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
   // newer pending entry installed after a drop survives an older
@@ -1071,7 +1071,7 @@ export class Realm {
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
       await this.#definitionLookup.clearRealmCache(this.url);
-      this.#dropAllModuleCacheEntries();
+      this.#dropAllTranspiledModuleCacheEntries();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1383,7 +1383,7 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#dropAllModuleCacheEntries();
+    this.#dropAllTranspiledModuleCacheEntries();
     // Reset the transpile counter so each test reasons about its own
     // delta. Production never reads this counter — only the CS-11029
     // dedup tests do (CS-11029).
@@ -1395,7 +1395,7 @@ export class Realm {
   // reindex enqueues — so that subsequent source reads (which the
   // reindex's prerender fans out across many of) bypass any
   // pre-swap bytes the realm still has in `#sourceCache` /
-  // `#moduleCache`. The Phase-3-PR-2 publish flow relies on the
+  // `#transpiledModuleCache`. The Phase-3-PR-2 publish flow relies on the
   // NodeAdapter file-watcher to pick up the swap, but that's an
   // async-event race against the immediately-enqueued reindex; this
   // method makes the invalidation synchronous from the publish
@@ -1405,9 +1405,9 @@ export class Realm {
   // CS-11156 will replace the publish handler's local call here with
   // a cross-replica NOTIFY broadcast; this method stays as the
   // bulk-invalidate primitive the receiver invokes.
-  clearLocalCaches(): void {
+  clearLocalSourceCaches(): void {
     this.#sourceCache.clear();
-    this.#dropAllModuleCacheEntries();
+    this.#dropAllTranspiledModuleCacheEntries();
   }
 
   // CS-11029 test seams: tests need to assert "N concurrent same-path
@@ -1441,26 +1441,26 @@ export class Realm {
   invalidateCache(path: LocalPath): void {
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
-      this.#dropModuleCacheEntry(path);
+      this.#dropTranspiledModuleEntry(path);
     }
   }
 
   // CS-11028: shared drop helper for any in-process site that invalidates a
-  // single #moduleCache entry — writeMany, delete/deleteAll, the local
+  // single #transpiledModuleCache entry — writeMany, delete/deleteAll, the local
   // file-watcher callback, the index-updater's executable-invalidation
   // cascade, the public invalidateCache entry point, etc. Bumps the
   // per-path generation BEFORE the cache delete so a concurrent in-flight
   // transpile for the same path — already past its generation snapshot in
   // fallbackHandle — observes the new value at persist time and drops its
-  // #moduleCache.set instead of re-filling the slot we're about to empty.
-  #dropModuleCacheEntry(path: LocalPath): void {
-    this.#bumpModuleCacheGeneration(path);
-    this.#moduleCache.invalidate(path);
+  // #transpiledModuleCache.set instead of re-filling the slot we're about to empty.
+  #dropTranspiledModuleEntry(path: LocalPath): void {
+    this.#bumpTranspiledModuleCacheGeneration(path);
+    this.#transpiledModuleCache.invalidate(path);
     // CS-11029: drop the in-flight transpile entry too. Existing
     // waiters on the old promise still receive its result — their
     // requests preceded the invalidate, so pre-invalidation bytes are
     // the correct response. But a caller arriving AFTER this point
-    // must not join the stale transpile (its #moduleCache.set is
+    // must not join the stale transpile (its #transpiledModuleCache.set is
     // about to be discarded by the generation guard); they install
     // their own pending against current source instead.
     this.#inFlightTranspiles.delete(path);
@@ -1476,27 +1476,27 @@ export class Realm {
     void this.#deleteTranspileCacheRow(canonicalPath);
   }
 
-  // Wipes every #moduleCache entry and bumps the global generation so any
+  // Wipes every #transpiledModuleCache entry and bumps the global generation so any
   // in-flight transpile whose snapshot was taken before this wipe discards
   // its post-transpile cache write rather than re-populating the
   // just-cleared map (CS-11028). The per-path map is cleared because the
   // generations it held are no longer reachable — the global counter is
   // what catches in-flight snapshots after a wipe.
-  #dropAllModuleCacheEntries(): void {
-    this.#moduleCache.clear();
-    this.#moduleCacheGenerations.clear();
-    this.#moduleCacheGlobalGeneration += 1;
-    // CS-11029: same reason as #dropModuleCacheEntry — post-wipe
+  #dropAllTranspiledModuleCacheEntries(): void {
+    this.#transpiledModuleCache.clear();
+    this.#transpiledModuleCacheGenerations.clear();
+    this.#transpiledModuleCacheGlobalGeneration += 1;
+    // CS-11029: same reason as #dropTranspiledModuleEntry — post-wipe
     // callers must not join a stale transpile.
     this.#inFlightTranspiles.clear();
     // CS-11030: fire-and-forget bulk DELETE for the realm's L2 rows.
     void this.#deleteAllTranspileCacheRows();
   }
 
-  #bumpModuleCacheGeneration(path: LocalPath): void {
-    this.#moduleCacheGenerations.set(
+  #bumpTranspiledModuleCacheGeneration(path: LocalPath): void {
+    this.#transpiledModuleCacheGenerations.set(
       path,
-      (this.#moduleCacheGenerations.get(path) ?? 0) + 1,
+      (this.#transpiledModuleCacheGenerations.get(path) ?? 0) + 1,
     );
   }
 
@@ -1517,33 +1517,33 @@ export class Realm {
     global: number;
   } {
     let pathGens = new Map<LocalPath, number>();
-    pathGens.set(localPath, this.#moduleCacheGenerations.get(localPath) ?? 0);
+    pathGens.set(localPath, this.#transpiledModuleCacheGenerations.get(localPath) ?? 0);
     if (!hasExecutableExtension(localPath)) {
       for (let ext of executableExtensions) {
         let candidate = localPath + ext;
         pathGens.set(
           candidate,
-          this.#moduleCacheGenerations.get(candidate) ?? 0,
+          this.#transpiledModuleCacheGenerations.get(candidate) ?? 0,
         );
       }
     }
-    return { pathGens, global: this.#moduleCacheGlobalGeneration };
+    return { pathGens, global: this.#transpiledModuleCacheGlobalGeneration };
   }
 
-  #moduleCacheGenerationChanged(
+  #transpiledModuleCacheGenerationChanged(
     canonicalPath: LocalPath,
     snapshot: { pathGens: Map<LocalPath, number>; global: number },
   ): boolean {
-    if (this.#moduleCacheGlobalGeneration !== snapshot.global) {
+    if (this.#transpiledModuleCacheGlobalGeneration !== snapshot.global) {
       return true;
     }
     let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
-    let curGen = this.#moduleCacheGenerations.get(canonicalPath) ?? 0;
+    let curGen = this.#transpiledModuleCacheGenerations.get(canonicalPath) ?? 0;
     return curGen !== snapGen;
   }
 
   // Broadcast a file-change notification to peer realm-server instances so
-  // they can invalidate their own #sourceCache / #moduleCache entries for the
+  // they can invalidate their own #sourceCache / #transpiledModuleCache entries for the
   // same path. Best-effort — failures are logged and swallowed because the
   // local write already succeeded and a missed NOTIFY is a bounded cache-
   // staleness window (see docs §9 "Cache-invalidation NOTIFY missed"), not
@@ -1562,12 +1562,12 @@ export class Realm {
     }
   }
 
-  // Drop this replica's own `#sourceCache` / `#moduleCache` AND broadcast
+  // Drop this replica's own `#sourceCache` / `#transpiledModuleCache` AND broadcast
   // the same wipe to peer replicas. Used by the publish-realm handler
   // before the reindex enqueue: this replica's own prerender fan-out must
   // bypass its cache (sync local clear), and peer replicas must drop
   // their pre-swap bytes too (cross-instance NOTIFY). Self-receive of the
-  // NOTIFY is a no-op since `clearLocalCaches()` is idempotent.
+  // NOTIFY is a no-op since `clearLocalSourceCaches()` is idempotent.
   //
   // Bundles local + broadcast in one call, mirroring
   // `CachingDefinitionLookup.clearRealmCache(url)` — handlers don't have
@@ -1575,8 +1575,8 @@ export class Realm {
   // (because their own Realm instance is about to be unmounted anyway —
   // unpublish/delete handlers) use the standalone `notifyAllFileChanges`
   // free function above instead.
-  async clearLocalCachesAndBroadcast(): Promise<void> {
-    this.clearLocalCaches();
+  async clearLocalSourceCachesAndBroadcast(): Promise<void> {
+    this.clearLocalSourceCaches();
     await notifyAllFileChanges(this.#dbAdapter, this.url);
   }
 
@@ -2584,7 +2584,7 @@ export class Realm {
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
 
     if (!moduleCachingDisabled) {
-      let cached = this.#moduleCache.get(localPath);
+      let cached = this.#transpiledModuleCache.get(localPath);
       if (cached) {
         try {
           let etag = cached.headers.etag;
@@ -2657,12 +2657,12 @@ export class Realm {
           if (
             !moduleCachingDisabled &&
             cacheGenSnapshot &&
-            !this.#moduleCacheGenerationChanged(
+            !this.#transpiledModuleCacheGenerationChanged(
               result.canonicalPath,
               cacheGenSnapshot,
             )
           ) {
-            this.#moduleCache.set(localPath, {
+            this.#transpiledModuleCache.set(localPath, {
               canonicalPath: result.canonicalPath,
               body: result.body,
               headers: result.headers,
@@ -3697,7 +3697,7 @@ export class Realm {
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         let invalidatedPath = this.paths.local(invalidatedURL);
-        this.#dropModuleCacheEntry(invalidatedPath);
+        this.#dropTranspiledModuleEntry(invalidatedPath);
         changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
@@ -3710,7 +3710,7 @@ export class Realm {
       for (let invalidatedModuleURL of invalidatedModuleURLs) {
         try {
           let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
-          this.#dropModuleCacheEntry(invalidatedPath);
+          this.#dropTranspiledModuleEntry(invalidatedPath);
           changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         } catch (_err) {
           // ignore invalidations outside this realm
@@ -3719,15 +3719,15 @@ export class Realm {
     }
     let dependentInvalidations = collectDependentModuleCacheInvalidations(
       changedDependencyKeys,
-      this.moduleCacheDependencyEntries(),
+      this.transpiledModuleDependencyEntries(),
     );
     for (let invalidatedPath of dependentInvalidations) {
-      this.#dropModuleCacheEntry(invalidatedPath);
+      this.#dropTranspiledModuleEntry(invalidatedPath);
     }
   }
 
-  private *moduleCacheDependencyEntries() {
-    for (let [, cachedEntry] of this.#moduleCache.entries()) {
+  private *transpiledModuleDependencyEntries() {
+    for (let [, cachedEntry] of this.#transpiledModuleCache.entries()) {
       yield {
         canonicalPath: cachedEntry.canonicalPath,
         dependencyKeys: cachedEntry.dependencyKeys,

@@ -534,7 +534,7 @@ export default function handlePublishRealm({
           // `clearRealmCache` bundles the DB DELETE + in-flight prerender
           // drop + per-realm generation bump + cross-instance NOTIFY on
           // `module_cache_invalidated` — the modules-cache analog of
-          // `clearLocalCachesAndBroadcast()` below. Without those extra
+          // `clearLocalSourceCachesAndBroadcast()` below. Without those extra
           // steps (which a raw `DELETE FROM modules` would miss), an
           // in-flight prerender that started before the DELETE could
           // re-insert a stale row at persist time, and peer replicas
@@ -576,7 +576,7 @@ export default function handlePublishRealm({
           //
           // For a new publish, lookupOrMount mounts the realm fresh
           // (registry row was just upserted above); the cache is
-          // empty so clearLocalCaches is a no-op. Either way the
+          // empty so clearLocalSourceCaches is a no-op. Either way the
           // reindex below sees correct source.
           let mountedRealmForCacheClear =
             await reconciler.lookupOrMount(publishedRealmURL);
@@ -585,7 +585,7 @@ export default function handlePublishRealm({
             // local clear is what this replica's reindex fan-out needs;
             // the broadcast (CS-11156) covers peers that still have the
             // realm mounted with pre-swap bytes.
-            await mountedRealmForCacheClear.clearLocalCachesAndBroadcast();
+            await mountedRealmForCacheClear.clearLocalSourceCachesAndBroadcast();
           }
 
           // Refresh the index. For a new publish this is redundant

@@ -13,11 +13,11 @@ const log = logger('realm-server:file-changes-listener');
 // runtime-common/realm.ts), every listener subscribed on this channel looks
 // up the URL in its lookup function. If the realm is mounted locally,
 // `realm.invalidateCache(path)` clears the matching #sourceCache /
-// #moduleCache entries. If it's not mounted, the notification is dropped —
+// #transpiledModuleCache entries. If it's not mounted, the notification is dropped —
 // this instance has no stale state to clear.
 //
 // Bulk variant: when the path is the wildcard sentinel `*` (CS-11156),
-// `realm.clearLocalCaches()` drops every cached path for that realm. Emitted
+// `realm.clearLocalSourceCaches()` drops every cached path for that realm. Emitted
 // by the publish-realm / unpublish-realm / delete-realm handlers after the
 // FS swap or removal so peers (whose file-watcher events do NOT cross
 // replicas) bypass their pre-swap cached bytes on the next read.
@@ -98,7 +98,7 @@ export class RealmFileChangesListener {
     }
     try {
       if (parsed.path === REALM_FILE_CHANGES_WILDCARD) {
-        realm.clearLocalCaches();
+        realm.clearLocalSourceCaches();
       } else {
         realm.invalidateCache(parsed.path);
       }

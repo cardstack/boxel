@@ -9,7 +9,7 @@ import {
 } from '../lib/realm-file-changes-listener';
 
 // Minimal fake `Realm` — the listener calls `.url` (via lookup),
-// `.invalidateCache(path)` for per-path payloads, and `.clearLocalCaches()`
+// `.invalidateCache(path)` for per-path payloads, and `.clearLocalSourceCaches()`
 // for wildcard payloads (CS-11156). Stub both; tests pick whichever they
 // care about.
 function makeFakeRealm(
@@ -24,7 +24,7 @@ function makeFakeRealm(
     invalidateCache(path: string) {
       hooks.onInvalidate?.(path);
     },
-    clearLocalCaches() {
+    clearLocalSourceCaches() {
       hooks.onClearAll?.();
     },
   } as unknown as Realm;
@@ -122,7 +122,7 @@ module(basename(__filename), function () {
       ]);
     });
 
-    test('handleNotification with wildcard payload calls clearLocalCaches and not invalidateCache (CS-11156)', function (assert) {
+    test('handleNotification with wildcard payload calls clearLocalSourceCaches and not invalidateCache (CS-11156)', function (assert) {
       const invalidations: string[] = [];
       const clearAllCount = { value: 0 };
       const realmA = makeFakeRealm('http://x.test/a/', {
@@ -140,7 +140,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         clearAllCount.value,
         1,
-        'clearLocalCaches called exactly once',
+        'clearLocalSourceCaches called exactly once',
       );
       assert.deepEqual(
         invalidations,
@@ -229,7 +229,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('notifyAllFileChanges round-trip: emitter → NOTIFY → listener → clearLocalCaches (CS-11156)', async function (assert) {
+    test('notifyAllFileChanges round-trip: emitter → NOTIFY → listener → clearLocalSourceCaches (CS-11156)', async function (assert) {
       // Models the cross-replica case: the emitter is what the publish /
       // unpublish / delete realm handlers call after the FS swap; the
       // listener is a peer replica's subscription. End-to-end through the
@@ -253,14 +253,14 @@ module(basename(__filename), function () {
         assert.strictEqual(
           clearAllCount.value,
           1,
-          'peer-side clearLocalCaches called once after the bulk emit',
+          'peer-side clearLocalSourceCaches called once after the bulk emit',
         );
       } finally {
         await listener.shutDown();
       }
     });
 
-    test('NOTIFY realm_file_changes wildcard → listener → clearLocalCaches (CS-11156)', async function (assert) {
+    test('NOTIFY realm_file_changes wildcard → listener → clearLocalSourceCaches (CS-11156)', async function (assert) {
       const invalidations: string[] = [];
       const clearAllCount = { value: 0 };
       const realmUrl = 'http://x.test/listen-e2e-bulk/';
@@ -282,7 +282,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           clearAllCount.value,
           1,
-          'clearLocalCaches called exactly once',
+          'clearLocalSourceCaches called exactly once',
         );
         assert.deepEqual(
           invalidations,

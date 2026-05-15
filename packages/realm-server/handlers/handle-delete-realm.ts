@@ -242,7 +242,7 @@ export default function handleDeleteRealm({
 
       // CS-11156. Broadcast a bulk cache-invalidation for the source realm
       // and each removed published realm so any peer replicas that still
-      // have these realms mounted drop their #sourceCache / #moduleCache
+      // have these realms mounted drop their #sourceCache / #transpiledModuleCache
       // before the reconciler unmount lands via NOTIFY realm_registry.
       // Best-effort, fire-and-forget; missed NOTIFY is a bounded
       // staleness window resolved by the unmount itself.
