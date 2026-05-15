@@ -404,10 +404,46 @@ to Project, IssueTracker, and KnowledgeArticle — only the
 `adoptsFrom.name` and the schema-derived attributes/relationships
 change.
 
+## The bootstrap-seed Issue
+
+For visual parity with the SDK orchestrator's output and to give the
+human a clear "this is where the factory started" anchor in the
+realm UI, write **`Issues/bootstrap-seed.json`** alongside the
+implementation Issues. This Issue represents the bootstrap step
+itself, not the work it produced.
+
+Attribute shape (introspect the live `Issue` schema; common fields
+shown here):
+
+- `issueId`: `"<projectCode>-0"` (use sequence `0` so it sorts above
+  the SN-1 / SN-2 / … implementation Issues)
+- `summary`: `"Bootstrap: read the brief and create project artifacts"`
+- `description`: short markdown — the brief URL, what was created
+  (Project / IssueTracker / N Knowledge Articles / M Issues).
+  Immutable after creation, like any other Issue description.
+- `issueType`: `"bootstrap"` (use the enum value the schema returns;
+  introspect if `"bootstrap"` isn't in the enum and pick the closest
+  match)
+- `status`: `"done"` — set directly when you write the seed Issue,
+  since the work it represents (this bootstrap pass) is by
+  definition complete by the time you're persisting it
+- `priority`: `"critical"` (puts it above the implementation Issues
+  even if a scheduler ever picks it up)
+- `order`: `0`
+- `createdAt` / `updatedAt`: now
+
+Relationships:
+
+- `project` → `../Projects/<slug>`
+- knowledge-article links — the brief-context and agent-onboarding
+  articles (so the seed Issue carries the same context any
+  future-you would need to understand what the bootstrap saw)
+
 ## Completion
 
 When you've written every artifact (Project, IssueTracker,
-Knowledge Articles, and one Issue per entry-point card):
+Knowledge Articles, implementation Issues, and the bootstrap-seed
+Issue):
 
 1. **Push the workspace** to the target realm.
 
@@ -416,16 +452,19 @@ Knowledge Articles, and one Issue per entry-point card):
    # e.g. boxel realm push . http://localhost:4201/user/my-realm/
    ```
 
-2. **Flip the bootstrap Issue's `status` from `in_progress` to
-   `done`** (see `software-factory-scheduling` for the
-   read-before-write pattern).
+2. **Continue with implementation.** Hand off to the
+   `software-factory-scheduling` skill: search the realm for the
+   next unblocked Issue (the bootstrap-seed Issue is already
+   `done`, so the scheduler picks one of the freshly-created
+   implementation Issues), flip its status to `in_progress`, then
+   follow `software-factory-operations` to write the card and run
+   validators. Loop until no eligible Issues remain. The
+   scheduling skill describes the full status lifecycle and the
+   loop-termination rules.
 
-3. **Push again** so the status flip lands.
-
-4. **Stop and report** what you created. Do not start implementing
-   any of the freshly-created Issues yourself — that's the next
-   prompt's job. The user (or the next prompt) will pick the next
-   unblocked Issue and hand it to a fresh agent invocation.
+You do not stop after bootstrap. Bootstrap is one phase of a single
+end-to-end run; once the artifacts are pushed, scheduling takes
+over in the same session.
 
 ## See also
 

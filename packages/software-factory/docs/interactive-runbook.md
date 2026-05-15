@@ -1,13 +1,16 @@
-# Interactive Factory Runbook (Phase 1)
+# Interactive Factory Runbook
 
-A user runs the software factory entirely from inside a logged-in Claude
-Code session by issuing the prompts in this document, in order. There is
-no orchestrator process; the agent does every step itself.
+A user runs the software factory entirely from inside a logged-in
+Claude Code session by pasting **one prompt** that drives the
+agent through bootstrap, per-issue implementation, validation, and
+project completion in a single end-to-end loop. There is no
+orchestrator process; the agent does every step itself.
 
-> **Status:** draft — this is the Phase 1 spec for CS-11149. It
-> documents the target user experience. The gaps section at the bottom
-> tracks what is still missing (CLI commands, skill content) before the
-> prompt sequence works end-to-end against the sticky-note brief.
+> **Status:** working end-to-end on `software-factory/Wiki/sticky-note`
+> and `software-factory/Wiki/recipe` as of 2026-05-15 (CS-11149
+> Phase 1). The single-prompt form below is the default; the
+> three-prompt mode the earlier draft documented is no longer
+> needed.
 
 ## Prerequisites
 
@@ -57,82 +60,56 @@ The user also knows:
 - The target realm URL they want the factory to create
   (e.g. `http://localhost:4201/<username>/<realm-name>/`).
 
-## The prompts
+## The prompt
 
-Three prompts. The user pastes each one into the same Claude Code
-session. Prompt 2 is run once per issue the agent created; the user
-keeps issuing it until Claude reports there are no unblocked issues
-left.
-
-### Prompt 1 — Bootstrap
+A single prompt drives the entire run. The agent bootstraps the
+realm, then loops through the implementation Issues it created,
+implementing each one through validators + validation cards until
+no eligible Issues remain. The user pastes it once and lets the
+session run.
 
 ```
-I want to run the software factory on this brief:
+Run the software factory on this brief:
 
   Brief URL:    <BRIEF_URL>
   Target realm: <TARGET_REALM_URL>
+  Workspace:    <LOCAL_WORKSPACE_DIR>
 
-Please:
+Follow docs/interactive-runbook.md end-to-end:
 
-1. Create the target realm at the URL above using boxel-cli.
-2. Initialize my cwd as the local workspace mirror of that realm.
-3. Read the brief from the source realm.
-4. Follow the software-factory-bootstrap skill to create the Project,
-   IssueTracker, Knowledge Articles, and one Issue per entry-point
-   card described in the brief. Use the live card-type schemas (fetch
-   them via `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default`, wrapping the module+name inside a `codeRef` field) — do not guess
-   field names.
-5. Push the workspace to the target realm.
-6. Stop and report what you created. Do not start implementing any
-   issue yet.
+1. Wire up the dev `boxel` CLI (per the software-factory-bootstrap
+   or software-factory-scheduling skill — first action).
+2. Create the target realm at the URL above and pull it into the
+   workspace.
+3. Read the brief and follow software-factory-bootstrap to write
+   the Project, IssueTracker, Knowledge Articles, one Issue per
+   entry-point card the brief describes, plus the bootstrap-seed
+   Issue. Push the workspace.
+4. Hand off to software-factory-scheduling: pick the next
+   unblocked Issue, follow software-factory-operations to
+   implement it (.gts + .test.gts + sample instances + Catalog
+   Spec), run all five validators against the realm, write the
+   corresponding `Validations/<type>_<issue-slug>-<n>.json`
+   artifact card after each one, fix any failures (incrementing
+   the sequence number on retry), and mark the Issue done when
+   every validator passes.
+5. Loop step 4 until no eligible Issues remain.
+6. When the backlog is empty and every Issue is done, set the
+   Project's `projectStatus` to "completed" and push.
+
+Stop and report only if you hit something genuinely unrecoverable
+(e.g. the brief is ambiguous beyond your scope, or a validator
+failure you can't diagnose). Otherwise, complete the project in
+this one session.
 ```
 
-### Prompt 2 — Work the next issue
-
-```
-Now work the next unblocked issue. Follow the
-software-factory-scheduling skill to pick which one:
-
-- Search the target realm for Issue cards.
-- Eligible = status is "backlog" or "in_progress", and every Issue in
-  the issue's `blockedBy` relationship has status "done".
-- Among eligible issues, prefer in_progress, then higher priority
-  (critical > high > medium > low), then lower `order`.
-
-Once you have picked one:
-
-1. Set its status to "in_progress" and sync the workspace.
-2. Load the linked Project and `relatedKnowledge` articles for context.
-3. Follow the software-factory-operations skill to implement the issue.
-   Write .gts, .test.gts, card instances, and the Catalog Spec card.
-4. After writing, sync the workspace and run the validators:
-   `boxel lint`, `boxel parse`, `boxel evaluate`,
-   `boxel instantiate`, `boxel test`. Fix anything that fails and
-   re-run. The transpiled-output debugging guidance is in the
-   operations skill.
-5. When all validators pass, set the issue status to "done" and sync.
-6. If you cannot make progress (e.g. the brief is ambiguous, or a
-   validator failure is outside your scope to fix), set the issue
-   status to "blocked", append a comment explaining why, and stop.
-
-Report which issue you worked, what files you wrote, and the final
-status.
-```
-
-### Prompt 3 — Continue or finish
-
-```
-Continue with the next unblocked issue using the same workflow.
-If there are no unblocked issues left:
-
-- If all Issues in the target realm have status "done", set the
-  Project's projectStatus to "completed" and sync.
-- If some issues remain in "blocked" or "backlog" with unmet blockers,
-  report which ones and why.
-```
-
-The user runs Prompt 3 (or just types "continue") until Claude reports
-the project is complete or that nothing is left to do.
+> **Working through multiple prompts instead.** If you'd rather
+> drive the run interactively — pausing between bootstrap and
+> implementation, or between each Issue — paste the single prompt
+> above and ask the agent to stop after each phase. The skills
+> support both modes; the single-prompt form is the default
+> because the recipe brief proved it works end-to-end without
+> intervention.
 
 ## What the agent calls (and from where)
 
@@ -254,22 +231,40 @@ and schema-discovery flow are documented in the
   outer cycles at 50. Phase 1 puts the user in charge of stopping;
   Phase 2 can re-introduce limits.
 
-## How Phase 2 builds on this
+## What follow-up work looks like
 
-Phase 2 collapses the three prompts into a single user invocation —
-likely a `/factory-run` slash command or a single prompt that delegates
-through the same skills but loops internally until done. The skills,
-CLI commands, and gap-fills from Phase 1 are unchanged; the only Phase
-2 addition is a small "outer loop" skill that teaches the agent to
-keep working issues until exhaustion.
+The single-prompt form proved out the loop, which means a few of
+the rough edges that remain are now Phase 2 / follow-up work:
 
-## Validation plan for Phase 1
+- **`/factory-run` slash command** — wrap the single prompt above
+  as a slash command (or a `boxel factory run` CLI that spawns
+  `claude` with the prompt baked in) so the user doesn't paste
+  prose every time.
+- **Realm-server `_parse` endpoint** — replace the monorepo-bound
+  `boxel parse` with a server-side endpoint mirroring `_lint`, so
+  the published `boxel-cli` can lint AND parse without checking
+  out the repo.
+- **Dev `boxel-cli` setup automation** — the ~30 lines of bash the
+  agent runs at the start of every session (find monorepo, rename
+  stale `dist/`, symlink to PATH) should collapse into a single
+  per-machine prerequisite, not per-session boilerplate.
+- **Orchestrator retirement** — once Phase 1 has shipped and run
+  in production for long enough, delete `issue-loop.ts`,
+  `factory-agent/`, etc.
 
-The runbook is validated end-to-end against the sticky-note brief at
-`http://localhost:4201/software-factory/Wiki/sticky-note`. A
-successful run produces, in the target realm, the same artifacts the
-SDK orchestrator produces today (Project, IssueTracker, Knowledge
-Articles, 2 Issues, `sticky-note.gts`, `sticky-note.test.gts`,
-sample instances, Spec card). The Playwright suite in
-`packages/software-factory/tests/` already encodes those expectations
-and is the regression check.
+## Validation plan
+
+The runbook is validated end-to-end against:
+
+- `http://localhost:4201/software-factory/Wiki/sticky-note` —
+  single-card brief, simplest exerciser.
+- `http://localhost:4201/software-factory/Wiki/recipe` — richer
+  brief (nested fields, multiple sample instances).
+
+Both runs are expected to produce a populated target realm with
+Project / IssueTracker / Knowledge Articles / Issues (including
+the `bootstrap-seed` Issue) / card `.gts` and `.test.gts` /
+sample instances / Catalog Spec / a populated `Validations/`
+folder with one of each artifact card type per validator run. The
+Playwright suite in `packages/software-factory/tests/` encodes the
+sticky-note expectations as the regression check.
