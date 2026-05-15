@@ -1706,7 +1706,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('in-flight prerender result is dropped when clearRealmCache runs concurrently', async function (assert) {
+    test('in-flight prerender result is dropped when clearRealmDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
       let moduleURL = `${realmURL}stale-persist-clear-realm.gts`;
@@ -1752,14 +1752,14 @@ module(basename(__filename), function () {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await lookup.clearRealmCache(realmURL);
+      await lookup.clearRealmDefinitions(realmURL);
 
       releaseGate();
       let result = await Promise.allSettled([pA]);
       assert.strictEqual(
         result[0].status,
         'rejected',
-        'A rejects after clearRealmCache leaves an empty cache',
+        'A rejects after clearRealmDefinitions leaves an empty cache',
       );
       assert.strictEqual(calls, 1);
 
@@ -1770,14 +1770,14 @@ module(basename(__filename), function () {
       assert.strictEqual(
         rows.length,
         0,
-        'clearRealmCache is honored — A did not re-insert the row',
+        'clearRealmDefinitions is honored — A did not re-insert the row',
       );
     });
 
-    test('in-flight prerender result is dropped when clearAllModules runs concurrently', async function (assert) {
+    test('in-flight prerender result is dropped when clearAllDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
-      // clearAllModules drains state for every realm — including realms
+      // clearAllDefinitions drains state for every realm — including realms
       // that have never been individually invalidated. Use a fresh module
       // URL so the realm has no #generations entry going in; this guards
       // against the per-realm map missing the realm at clear time.
@@ -1824,14 +1824,14 @@ module(basename(__filename), function () {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await lookup.clearAllModules();
+      await lookup.clearAllDefinitions();
 
       releaseGate();
       let result = await Promise.allSettled([pA]);
       assert.strictEqual(
         result[0].status,
         'rejected',
-        'A rejects after clearAllModules leaves an empty cache',
+        'A rejects after clearAllDefinitions leaves an empty cache',
       );
       assert.strictEqual(calls, 1);
 
@@ -1842,7 +1842,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         rows.length,
         0,
-        'clearAllModules is honored — A did not re-insert the row',
+        'clearAllDefinitions is honored — A did not re-insert the row',
       );
     });
 
@@ -1925,7 +1925,7 @@ module(basename(__filename), function () {
 
     test('a settled in-flight promise does not delete a newer in-flight under the same key', async function (assert) {
       // Identity-check regression guard. Without the identity check in
-      // loadModuleCacheEntry's .finally, A's settle would delete B's
+      // loadDefinitionCacheEntry's .finally, A's settle would delete B's
       // freshly-installed entry and cause D to race a third prerender.
       await dbAdapter.execute('DELETE FROM modules');
 

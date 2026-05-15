@@ -683,7 +683,7 @@ export class Realm {
   // caller's promise instead of running babel again. Invalidation paths
   // (writeMany, invalidateCache, the full-index clear, etc.) drop the
   // entry through the shared #dropTranspiledModuleEntry /
-  // #dropAllTranspiledModuleCacheEntries helpers so post-invalidate callers don't
+  // #dropAllTranspiledDefinitionCacheEntries helpers so post-invalidate callers don't
   // join a stale transpile whose #transpiledModuleCache.set will be discarded by
   // CS-11028's generation guard anyway. Identity-checked cleanup on
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
@@ -1070,8 +1070,8 @@ export class Realm {
       );
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
-      await this.#definitionLookup.clearRealmCache(this.url);
-      this.#dropAllTranspiledModuleCacheEntries();
+      await this.#definitionLookup.clearRealmDefinitions(this.url);
+      this.#dropAllTranspiledDefinitionCacheEntries();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1383,7 +1383,7 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#dropAllTranspiledModuleCacheEntries();
+    this.#dropAllTranspiledDefinitionCacheEntries();
     // Reset the transpile counter so each test reasons about its own
     // delta. Production never reads this counter — only the CS-11029
     // dedup tests do (CS-11029).
@@ -1407,7 +1407,7 @@ export class Realm {
   // bulk-invalidate primitive the receiver invokes.
   clearLocalSourceCaches(): void {
     this.#sourceCache.clear();
-    this.#dropAllTranspiledModuleCacheEntries();
+    this.#dropAllTranspiledDefinitionCacheEntries();
   }
 
   // CS-11029 test seams: tests need to assert "N concurrent same-path
@@ -1482,7 +1482,7 @@ export class Realm {
   // just-cleared map (CS-11028). The per-path map is cleared because the
   // generations it held are no longer reachable — the global counter is
   // what catches in-flight snapshots after a wipe.
-  #dropAllTranspiledModuleCacheEntries(): void {
+  #dropAllTranspiledDefinitionCacheEntries(): void {
     this.#transpiledModuleCache.clear();
     this.#transpiledModuleCacheGenerations.clear();
     this.#transpiledModuleCacheGlobalGeneration += 1;
@@ -1570,7 +1570,7 @@ export class Realm {
   // NOTIFY is a no-op since `clearLocalSourceCaches()` is idempotent.
   //
   // Bundles local + broadcast in one call, mirroring
-  // `CachingDefinitionLookup.clearRealmCache(url)` — handlers don't have
+  // `CachingDefinitionLookup.clearRealmDefinitions(url)` — handlers don't have
   // to remember both steps. Callers that only need the peer broadcast
   // (because their own Realm instance is about to be unmounted anyway —
   // unpublish/delete handlers) use the standalone `notifyAllFileChanges`

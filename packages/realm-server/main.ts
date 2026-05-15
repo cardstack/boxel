@@ -339,7 +339,7 @@ const getIndexHTML = async () => {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
     log.info('Clearing modules cache...');
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
   }
 
   // Backfill realm_registry from CLI args (bootstrap), on-disk source realms,

@@ -531,7 +531,7 @@ export default function handlePublishRealm({
           // error entries from a previous publish) before the reindex's
           // prerender fan-out, so its HTTP module fetches don't hit
           // cached pre-swap state on this replica or its peers.
-          // `clearRealmCache` bundles the DB DELETE + in-flight prerender
+          // `clearRealmDefinitions` bundles the DB DELETE + in-flight prerender
           // drop + per-realm generation bump + cross-instance NOTIFY on
           // `module_cache_invalidated` — the modules-cache analog of
           // `clearLocalSourceCachesAndBroadcast()` below. Without those extra
@@ -540,7 +540,7 @@ export default function handlePublishRealm({
           // re-insert a stale row at persist time, and peer replicas
           // would keep their cached rows + generation counters until
           // their own next invalidation arrived.
-          await definitionLookup.clearRealmCache(publishedRealmURL);
+          await definitionLookup.clearRealmDefinitions(publishedRealmURL);
 
           let lastPublishedAt = Date.now().toString();
           try {
