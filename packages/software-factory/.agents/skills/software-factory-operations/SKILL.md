@@ -382,25 +382,38 @@ QUnit card tests" below.
    from `https://cardstack.com/base/spec` / `Spec`. Link sample
    instances via `relationships.linkedExamples`.
 6. **Push the workspace** to the target realm.
-7. **Run the validators** (in this order — cheap to expensive):
-   `boxel lint <changed-file>`, `boxel parse <changed-file>`,
-   `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
-   `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --input '{"moduleIdentifier":"<absolute-module-url>","cardName":"<ClassName>","realmIdentifier":"<absolute-realm-url>","instanceData":"<json-string-with-absolute-adoptsFrom>"}'`,
-   `boxel test`. Run each with `--json` so you can capture the
-   structured result. Fix anything that fails and re-run.
-8. **Write a validation artifact card** for each validator that ran.
-   These persist into the target realm's `Validations/` folder and
-   give the human a sortable audit trail of every run. See
-   "Validation artifact cards" below for the card types, file
-   naming, and how to map the validator's `--json` output to the
-   card's `attributes`.
-9. **Push the workspace** so the validation cards land on the realm.
-10. **Mark the Issue done** by editing
-    `Issues/<slug>.json:data.attributes.status` to `"done"` and
-    pushing. (See `software-factory-scheduling` for the full
-    status-transition rules — never set `status` to `"done"` until
-    validators pass, validation cards are written, and the push is
-    clean.)
+7. **Run the validators and iterate until all five pass.** Each
+   pass through the loop:
+   1. Run each validator (in this order — cheap to expensive):
+      `boxel lint <changed-file>`, `boxel parse <changed-file>`,
+      `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
+      `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --input '{"moduleIdentifier":"<absolute-module-url>","cardName":"<ClassName>","realmIdentifier":"<absolute-realm-url>","instanceData":"<json-string-with-absolute-adoptsFrom>"}'`,
+      `boxel test`. Use `--json` so the structured result is
+      available.
+   2. After each validator, write a corresponding
+      `Validations/<type>_<issue-slug>-<n>.json` artifact card
+      (see "Validation artifact cards" below). The card captures
+      this run's result — `status: "passed"` or `"failed"` —
+      regardless of outcome.
+   3. If any validator returned `"failed"` or `"error"`: fix the
+      relevant source files in the workspace, push, and re-run.
+      Write new artifact cards on the next iteration with the
+      next sequence number (`<type>_<issue-slug>-2.json`,
+      `-3.json`, …) — do NOT overwrite the previous ones. The
+      historical sequence is the audit trail.
+   4. Stop iterating only when every validator's most recent
+      artifact card has `status: "passed"`. A single fix-up
+      that resolves multiple validators can land in one
+      iteration; you don't have to re-fail before each retry.
+
+   **Do not mark the Issue done until every validator passes.**
+   "Most failed but a few passed, good enough" is not the bar.
+8. **Push the workspace** so the final validation cards land on
+   the realm.
+9. **Mark the Issue done** by editing
+   `Issues/<slug>.json:data.attributes.status` to `"done"` and
+   pushing. (See `software-factory-scheduling` for the full
+   status-transition rules.)
 
 If you cannot make progress at any step, set the Issue's `status`
 to `"blocked"`, append a comment explaining what's stuck, push, and

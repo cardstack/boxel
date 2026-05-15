@@ -83,11 +83,17 @@ Follow docs/interactive-runbook.md end-to-end:
 4. Hand off to software-factory-scheduling: pick the next
    unblocked Issue, follow software-factory-operations to
    implement it (.gts + .test.gts + sample instances + Catalog
-   Spec), run all five validators against the realm, write the
-   corresponding `Validations/<type>_<issue-slug>-<n>.json`
-   artifact card after each one, fix any failures (incrementing
-   the sequence number on retry), and mark the Issue done when
-   every validator passes.
+   Spec), then iterate the validator loop:
+     a. Run all five validators against the realm.
+     b. After each one, write a
+        `Validations/<type>_<issue-slug>-<n>.json` artifact card
+        capturing the result (passed or failed).
+     c. If any validator failed, fix the source, push, and
+        re-run the failing validator(s). Write new artifact
+        cards with the next sequence number — do NOT overwrite
+        the previous ones.
+     d. Repeat (a)–(c) until every validator returns
+        `status: "passed"`. Only then mark the Issue `done`.
 5. Loop step 4 until no eligible Issues remain.
 6. When the backlog is empty and every Issue is done, set the
    Project's `projectStatus` to "completed" and push.
