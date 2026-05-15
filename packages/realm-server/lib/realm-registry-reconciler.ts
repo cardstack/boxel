@@ -293,7 +293,7 @@ export class RealmRegistryReconciler {
   // original requester.
   async lookupOrMount(
     url: string,
-    opts?: { skipFromScratchIndex?: boolean },
+    opts?: { fromScratchIndexPriority?: number },
   ): Promise<Realm | undefined> {
     const inflight = this.pendingMounts.get(url);
     if (inflight) {
@@ -352,7 +352,7 @@ export class RealmRegistryReconciler {
   // these lines.
   async ensureMounted(
     row: RealmRegistryRow,
-    opts?: { skipFromScratchIndex?: boolean },
+    opts?: { fromScratchIndexPriority?: number },
   ): Promise<Realm> {
     // pendingMounts checked before mounted: see lookupOrMount() above.
     // The Realm is published into mounted synchronously before its

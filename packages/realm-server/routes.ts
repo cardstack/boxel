@@ -121,7 +121,6 @@ export function createRoutes(args: CreateRoutesArgs) {
     serverURL: new URL(args.serverURL),
     realms: args.realms,
     dbAdapter: args.dbAdapter,
-    queue: args.queue,
     virtualNetwork: args.virtualNetwork,
     realmsRootPath: args.realmsRootPath,
     reconciler: args.reconciler,

@@ -1296,12 +1296,13 @@ export class Realm {
     });
   }
 
-  // `skipFromScratchIndex` lets a caller that has already enqueued a
-  // from-scratch-index job for this realm mount the realm without
-  // `#startup` enqueuing its own duplicate. The realm still mounts,
-  // its #startedUp promise still resolves, and request handlers can
-  // route to it — but indexing is then the caller's responsibility.
-  async start(opts?: { skipFromScratchIndex?: boolean }) {
+  // `fromScratchIndexPriority` overrides the realm's default priority
+  // for the from-scratch-index job that `#startup` enqueues when the
+  // realm has no prior index. Callers that mount-on-demand for a
+  // user-initiated flow (e.g. realm creation) pass
+  // `userInitiatedPriority` so the resulting job jumps ahead of any
+  // backlog of system-priority indexing work.
+  async start(opts?: { fromScratchIndexPriority?: number }) {
     this.#startedUp.fulfill((() => this.#startup(opts))());
 
     if (this.#adapter.fileWatcherEnabled) {
@@ -2179,7 +2180,7 @@ export class Realm {
     await completed;
   }
 
-  async #startup(opts?: { skipFromScratchIndex?: boolean }) {
+  async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
@@ -2190,12 +2191,12 @@ export class Realm {
         sourceRealmURL: this.#copiedFromRealm.href,
         realmURL: this.url,
       });
-    } else if (!opts?.skipFromScratchIndex) {
+    } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex(
-          this.#fromScratchIndexPriority,
-        );
+        let priority =
+          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+        let promise = this.#realmIndexUpdater.fullIndex(priority);
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
           await promise;

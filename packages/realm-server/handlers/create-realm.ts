@@ -4,7 +4,6 @@ import { ensureDirSync, writeJSONSync } from 'fs-extra';
 import * as Sentry from '@sentry/node';
 import type {
   DBAdapter,
-  QueuePublisher,
   Realm,
   RealmInfo,
   VirtualNetwork,
@@ -19,7 +18,6 @@ import {
   SupportedMimeType,
   userInitiatedPriority,
 } from '@cardstack/runtime-common';
-import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
@@ -37,7 +35,6 @@ export type CreateRealmDeps = {
   serverURL: URL;
   realms: Realm[];
   dbAdapter: DBAdapter;
-  queue: QueuePublisher;
   virtualNetwork: VirtualNetwork;
   realmsRootPath: string;
   reconciler: RealmRegistryReconciler;
@@ -78,7 +75,6 @@ export async function createRealm(
     serverURL,
     realms,
     dbAdapter,
-    queue,
     virtualNetwork,
     realmsRootPath,
     reconciler,
@@ -219,16 +215,15 @@ export async function createRealm(
     virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
   }
 
-  // Mount the realm on the *handling* instance BEFORE publishing the
-  // index job. If a worker claimed the job between publish and the
-  // mount below, the worker's first `_mtimes` fetch against this
-  // server-instance would land in findOrMountRealm, whose lazy-mount
-  // path calls lookupOrMount without `skipFromScratchIndex` — and
-  // that lookupOrMount would enqueue the duplicate priority-0 job
-  // this code is trying to avoid. Mounting first means the realm is
-  // already in `realms[]` / `virtualNetwork` / the reconciler's
-  // `mounted` map by the time any worker fetch can route here, so the
-  // lazy-mount path never fires for it.
+  // Mount the realm on the *handling* instance and let the mount
+  // pipeline itself drive the one-and-only from-scratch-index, at
+  // userInitiatedPriority so a backed-up queue of system-priority
+  // jobs (e.g. a deploy-triggered reindex storm) does not stall realm
+  // creation. lookupOrMount → ensureMounted → realm.start → #startup
+  // sees `isNewIndex = true` for a freshly-registered realm and
+  // enqueues exactly one job via publishFullIndex, which also updates
+  // the realm's in-memory #stats / #ignoreData / #ignoreDataVersion
+  // when the job completes.
   //
   // The 202 response with status:'pending' is for sibling instances —
   // they pick up the realm via NOTIFY realm_registry and lazy-mount
@@ -237,29 +232,13 @@ export async function createRealm(
   // runner → close DB) doesn't race a worker mid-fetch on the now-
   // closed HTTP listener.
   let realm = await reconciler.lookupOrMount(url, {
-    skipFromScratchIndex: true,
+    fromScratchIndexPriority: userInitiatedPriority,
   });
   if (!realm) {
     throw new Error(
       `expected realm ${url} to be mounted after createRealm — registry row missing or mount failed`,
     );
   }
-
-  // Enqueue exactly one from-scratch-index job at userInitiatedPriority
-  // so a backed-up queue of system-priority jobs (e.g. a deploy-
-  // triggered reindex storm) does not stall realm creation.
-  let indexJob = await enqueueReindexRealmJob(
-    url,
-    ownerUsername,
-    queue,
-    dbAdapter,
-    userInitiatedPriority,
-  );
-
-  // Wait for the priority-10 job to complete so the realm is fully
-  // indexed by the time we return — preserving the prior "fully ready
-  // on this instance" contract.
-  await indexJob.done;
 
   return { url, realm, info };
 }
