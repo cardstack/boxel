@@ -1,0 +1,41 @@
+name: Unpublish preview realm
+description: |
+  Unpublish a preview realm via `boxel realm unpublish`. Tolerates the
+  "not currently published" case so PR-close cleanup can run
+  unconditionally without failing when an earlier run already removed it.
+
+inputs:
+  published-realm-url:
+    description: Public-facing URL of the published realm to remove.
+    required: true
+  matrix-url:
+    description: Matrix server URL.
+    required: true
+  matrix-username:
+    description: Matrix username without the leading @ or :domain suffix.
+    required: true
+  matrix-password:
+    description: Matrix password.
+    required: true
+  realm-server-url:
+    description: |
+      Realm-server URL. Defaults inferred from matrix-url for
+      stack.cards / boxel.ai / localhost domains; supply this for any
+      other environment.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: cardstack/boxel/.github/actions/_setup-boxel-cli@${{ github.action_ref }}
+      with:
+        matrix-url: ${{ inputs.matrix-url }}
+        matrix-username: ${{ inputs.matrix-username }}
+        matrix-password: ${{ inputs.matrix-password }}
+        realm-server-url: ${{ inputs.realm-server-url }}
+
+    - shell: bash
+      env:
+        PUBLISHED_URL: ${{ inputs.published-realm-url }}
+      run: boxel realm unpublish "$PUBLISHED_URL" --tolerate-missing
