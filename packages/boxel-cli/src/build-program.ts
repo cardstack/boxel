@@ -8,6 +8,7 @@ import { registerRealmCommand } from './commands/realm/index';
 import { registerFileCommand } from './commands/file/index';
 import { registerRunCommand } from './commands/run-command';
 import { registerSearchCommand } from './commands/search';
+import { registerTestCommand } from './commands/test';
 import { setQuiet } from './lib/cli-log';
 import { warnIfMisplacedLocalRealmDirs } from './lib/realm-local-paths';
 
@@ -92,6 +93,7 @@ Environment variables (for 'add'):
   registerRealmCommand(program);
   registerRunCommand(program);
   registerSearchCommand(program);
+  registerTestCommand(program);
   registerReadTranspiledCommand(program);
   registerConsolidateWorkspacesCommand(program);
 
