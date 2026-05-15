@@ -241,6 +241,12 @@ export async function removeRealmFromMatrixAccountData(
   });
   if (!putResponse.ok) {
     let text = await putResponse.text();
+    if (putResponse.status === 401 || putResponse.status === 403) {
+      throw new MatrixAuthError(
+        putResponse.status,
+        `Failed to update Matrix account data: ${putResponse.status} ${text}`,
+      );
+    }
     throw new Error(
       `Failed to update Matrix account data: ${putResponse.status} ${text}`,
     );

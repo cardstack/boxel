@@ -137,6 +137,90 @@ describe('ProfileManager', () => {
     expect(profile.matrixAccessToken).toBe('new-token');
   });
 
+  it('addProfileWithAuth clears cached realm tokens when matrixUrl changes', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setRealmServerToken('cached-server-token');
+    manager.setRealmToken('https://realms-staging.stack.cards/r/', 'realm-jwt');
+
+    await manager.addProfileWithAuth('@bob:stack.cards', {
+      ...fakeAuth('@bob:stack.cards', 'https://matrix.new-host.example'),
+      matrixUrl: 'https://matrix.new-host.example',
+    });
+
+    const profile = manager.getProfile('@bob:stack.cards')!;
+    expect(profile.matrixUrl).toBe('https://matrix.new-host.example');
+    expect(profile.realmTokens).toBeUndefined();
+    expect(profile.realmServerToken).toBeUndefined();
+  });
+
+  it('addProfileWithAuth clears cached realm tokens when realmServerUrl changes', async () => {
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setRealmServerToken('cached-server-token');
+    manager.setRealmToken('https://realms-staging.stack.cards/r/', 'realm-jwt');
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+      undefined,
+      'https://realms.new-host.example/',
+    );
+
+    const profile = manager.getProfile('@bob:stack.cards')!;
+    expect(profile.realmServerUrl).toBe('https://realms.new-host.example/');
+    expect(profile.realmTokens).toBeUndefined();
+    expect(profile.realmServerToken).toBeUndefined();
+  });
+
+  it('addProfile preserves the stored displayName when called without one on re-auth', async () => {
+    await manager.addProfile('@testuser:stack.cards', 'pass1', 'Custom Name');
+
+    await manager.addProfile('@testuser:stack.cards', 'pass2');
+
+    const profile = manager.getProfile('@testuser:stack.cards')!;
+    expect(profile.displayName).toBe('Custom Name');
+  });
+
+  it('addProfile preserves the stored URLs when re-auth omits URL args', async () => {
+    loginStub.mockImplementation(async (matrixUrl: string) =>
+      fakeAuth('@alice:custom.domain', matrixUrl),
+    );
+    await manager.addProfile(
+      '@alice:custom.domain',
+      'pass1',
+      undefined,
+      'https://matrix.custom.domain',
+      'https://app.custom.domain/',
+    );
+
+    await manager.addProfile('@alice:custom.domain', 'pass2');
+
+    const profile = manager.getProfile('@alice:custom.domain')!;
+    expect(profile.matrixUrl).toBe('https://matrix.custom.domain');
+    expect(profile.realmServerUrl).toBe('https://app.custom.domain/');
+  });
+
+  it('uses localhost defaults for @user:localhost', async () => {
+    loginStub.mockImplementationOnce(async (matrixUrl: string) =>
+      fakeAuth('@dev:localhost', matrixUrl),
+    );
+    await manager.addProfile('@dev:localhost', 'password123');
+
+    expect(loginStub).toHaveBeenCalledWith(
+      'http://localhost:8008',
+      'dev',
+      'password123',
+    );
+    const profile = manager.getProfile('@dev:localhost')!;
+    expect(profile.matrixUrl).toBe('http://localhost:8008');
+    expect(profile.realmServerUrl).toBe('http://localhost:4201/');
+  });
+
   it('adds a production profile with correct defaults', async () => {
     loginStub.mockImplementation(async (matrixUrl: string, username: string) =>
       fakeAuth(`@${username}:boxel.ai`, matrixUrl),
@@ -336,23 +420,11 @@ describe('getStoredMatrixAuth', () => {
   it('throws when no profile is active', () => {
     expect(() => manager.getStoredMatrixAuth()).toThrow(/No active profile/);
   });
-});
 
-describe('migrateLegacyProfiles', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  function seedLegacyProfile(passwordValue = 'legacy-password'): string {
-    const profilesFile = path.join(tmpDir, 'profiles.json');
+  it('throws a "re-authenticate" error for a profile with no stored access token', () => {
+    // A pre-CS-10725 profile on disk: matrix URL set but no access token.
     fs.writeFileSync(
-      profilesFile,
+      path.join(tmpDir, 'profiles.json'),
       JSON.stringify(
         {
           activeProfile: '@legacy:stack.cards',
@@ -361,7 +433,7 @@ describe('migrateLegacyProfiles', () => {
               displayName: 'Legacy',
               matrixUrl: 'https://matrix-staging.stack.cards',
               realmServerUrl: 'https://realms-staging.stack.cards/',
-              password: passwordValue,
+              password: 'old-password',
             },
           },
         },
@@ -369,81 +441,10 @@ describe('migrateLegacyProfiles', () => {
         2,
       ),
     );
-    return profilesFile;
-  }
-
-  it('runs matrixLogin for legacy profiles and replaces password with tokens on disk', async () => {
-    const profilesFile = seedLegacyProfile();
-    const loginStub = vi.fn(async () =>
-      fakeAuth('@legacy:stack.cards', 'https://matrix-staging.stack.cards'),
+    const freshManager = new ProfileManager(tmpDir);
+    expect(() => freshManager.getStoredMatrixAuth()).toThrow(
+      /no stored Matrix access token.*boxel profile add.*re-authenticate/,
     );
-    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
-
-    const result = await manager.migrateLegacyProfiles();
-
-    expect(result.migrated).toEqual(['@legacy:stack.cards']);
-    expect(result.failed).toEqual([]);
-    expect(loginStub).toHaveBeenCalledWith(
-      'https://matrix-staging.stack.cards',
-      'legacy',
-      'legacy-password',
-    );
-
-    const onDisk = JSON.parse(fs.readFileSync(profilesFile, 'utf-8'));
-    const profile = onDisk.profiles['@legacy:stack.cards'];
-    expect(profile.password).toBeUndefined();
-    expect(profile.matrixAccessToken).toBe('token-for-@legacy:stack.cards');
-    expect(profile.matrixUserId).toBe('@legacy:stack.cards');
-    expect(profile.matrixDeviceId).toBe('DEVICE__legacy_stack_cards');
-  });
-
-  it('records failures and leaves the legacy password in place when matrixLogin throws', async () => {
-    seedLegacyProfile();
-    const loginStub = vi
-      .fn()
-      .mockRejectedValue(new Error('Matrix unreachable'));
-    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const result = await manager.migrateLegacyProfiles();
-
-    expect(result.migrated).toEqual([]);
-    expect(result.failed).toEqual(['@legacy:stack.cards']);
-    const profile = manager.getProfile('@legacy:stack.cards')!;
-    expect(profile.matrixAccessToken).toBeUndefined();
-    expect((profile as { password?: string }).password).toBe('legacy-password');
-
-    warnSpy.mockRestore();
-  });
-
-  it('is a no-op for profiles that already have an access token', async () => {
-    fs.writeFileSync(
-      path.join(tmpDir, 'profiles.json'),
-      JSON.stringify(
-        {
-          activeProfile: '@new:stack.cards',
-          profiles: {
-            '@new:stack.cards': {
-              displayName: 'New',
-              matrixUrl: 'https://matrix-staging.stack.cards',
-              realmServerUrl: 'https://realms-staging.stack.cards/',
-              matrixAccessToken: 'already-have-one',
-              matrixUserId: '@new:stack.cards',
-              matrixDeviceId: 'NEWDEV',
-            },
-          },
-        },
-        null,
-        2,
-      ),
-    );
-    const loginStub = vi.fn();
-    const manager = new ProfileManager(tmpDir, { matrixLogin: loginStub });
-
-    const result = await manager.migrateLegacyProfiles();
-    expect(result.migrated).toEqual([]);
-    expect(result.failed).toEqual([]);
-    expect(loginStub).not.toHaveBeenCalled();
   });
 });
 
@@ -560,6 +561,63 @@ describe('reAuthenticate', () => {
       expect(manager.getProfile('@user:stack.cards')!.matrixAccessToken).toBe(
         'token-v1',
       );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('removeFromUserRealms recovers from a 401 on the PUT by re-authenticating once', async () => {
+    // The PUT to /account_data/.../m.boxel.realms used to throw a generic
+    // Error on 401/403, so withMatrixAuthRecovery couldn't recover. After
+    // the fix it throws MatrixAuthError and the operation retries against
+    // freshly-minted credentials.
+    let loginCount = 0;
+    const loginStub = vi.fn(async () => {
+      loginCount += 1;
+      return {
+        accessToken: `token-v${loginCount}`,
+        userId: '@user:stack.cards',
+        deviceId: `DEV${loginCount}`,
+        matrixUrl: 'https://matrix-staging.stack.cards',
+      };
+    });
+    const promptStub = vi.fn(async () => 'typed-password');
+    const manager = new ProfileManager(tmpDir, {
+      matrixLogin: loginStub,
+      promptPassword: promptStub,
+      isTty: () => true,
+    });
+    await manager.addProfileWithAuth(
+      '@user:stack.cards',
+      fakeAuth('@user:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+
+    const realmToRemove = 'https://realms.example/my-realm/';
+    let putCount = 0;
+    const fetchStub = vi.fn(async (input: any, init?: any) => {
+      const url = typeof input === 'string' ? input : input.url;
+      const method = init?.method ?? 'GET';
+      if (url.includes('/account_data/') && method === 'GET') {
+        return new Response(JSON.stringify({ realms: [realmToRemove] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/account_data/') && method === 'PUT') {
+        putCount += 1;
+        if (putCount === 1) {
+          return new Response('expired', { status: 401 });
+        }
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchStub);
+    try {
+      const removed = await manager.removeFromUserRealms(realmToRemove);
+      expect(removed).toBe(true);
+      expect(promptStub).toHaveBeenCalledOnce();
+      expect(putCount).toBe(2);
     } finally {
       vi.unstubAllGlobals();
     }
