@@ -239,29 +239,45 @@ function chooseIncrementalCoalesceDecision(
 function chooseFromScratchCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
+  let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
-  if (!sameTypeCandidate) {
-    return { type: 'insert' };
+  if (sameTypeCandidate) {
+    return {
+      type: 'join',
+      jobId: sameTypeCandidate.id,
+      update: {
+        ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        args: {
+          ...(isObjectLike(sameTypeCandidate.args)
+            ? sameTypeCandidate.args
+            : {}),
+          ...(isObjectLike(incoming.args) ? incoming.args : {}),
+          coalescedCallers: mergeCoalescedCallers(
+            getCoalescedCallers(sameTypeCandidate.args),
+            getCoalescedCallers(incoming.args),
+          ),
+        },
+      },
+    };
   }
 
-  return {
-    type: 'join',
-    jobId: sameTypeCandidate.id,
-    update: {
-      ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
-      args: {
-        ...(isObjectLike(sameTypeCandidate.args) ? sameTypeCandidate.args : {}),
-        ...(isObjectLike(incoming.args) ? incoming.args : {}),
-        coalescedCallers: mergeCoalescedCallers(
-          getCoalescedCallers(sameTypeCandidate.args),
-          getCoalescedCallers(incoming.args),
-        ),
-      },
-    },
-  };
+  // No still-pending candidate. Attach to an in-flight same-realm
+  // from-scratch instead — same concurrency group + same jobType is
+  // sufficient because a from-scratch reindex subsumes any other
+  // from-scratch for that realm by definition. Without this fallback,
+  // a worker claiming the first enqueue between two pre-claim publishes
+  // forces the second to insert a fresh row at its own priority, even
+  // though the in-flight job will produce exactly the result the second
+  // caller wanted.
+  for (let candidate of inFlightCandidates) {
+    if (candidate.jobType === incoming.jobType) {
+      return { type: 'join', jobId: candidate.id };
+    }
+  }
+
+  return { type: 'insert' };
 }
 
 registerQueueJobDefinition({

@@ -323,6 +323,90 @@ module(basename(__filename), function () {
       );
     });
 
+    test('from-scratch dedup: a duplicate publish for an in-flight from-scratch attaches as a late waiter', async function (assert) {
+      // From-scratch reindex is the maximal indexing operation for a
+      // realm: any same-realm from-scratch already running subsumes a
+      // second concurrent from-scratch by definition. A worker
+      // claiming the first publish before the second arrives must not
+      // force a second canonical row, because the second caller's
+      // result is already covered by what the in-flight job will
+      // produce.
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-in-flight-dedup/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-in-flight-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+
+        let first = await publishFromScratchIndexJob({
+          priority: 0,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+          },
+        });
+        // Wait for the worker to actually claim the job — that moves
+        // the row from `candidates` to `inFlightCandidates`, which is
+        // the precondition for the pending-candidate path to miss and
+        // the in-flight fallback to fire.
+        await started.promise;
+
+        let second = await publishFromScratchIndexJob({
+          priority: userInitiatedPriority,
+          args: {
+            realmURL,
+            realmUsername: 'owner',
+          },
+        });
+
+        assert.strictEqual(
+          first.id,
+          second.id,
+          'duplicate publish reuses the in-flight job id instead of creating a new row',
+        );
+
+        let rows = (await adapter.execute(
+          `SELECT id
+             FROM jobs
+             WHERE concurrency_group = $1
+               AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { id: number }[];
+        assert.strictEqual(
+          rows.length,
+          1,
+          'only one from-scratch-index row exists; duplicate did not enqueue a second job',
+        );
+
+        release.fulfill();
+        await Promise.all([first.done, second.done]);
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('from-scratch does not coalesce onto pending incremental in same group', async function (assert) {
       await runner.destroy();
 
