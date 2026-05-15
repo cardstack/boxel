@@ -550,17 +550,17 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Interact"]');
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Host"]');
       assert.dom('[data-test-open-ai-assistant]').doesNotExist();
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Code"]');
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();

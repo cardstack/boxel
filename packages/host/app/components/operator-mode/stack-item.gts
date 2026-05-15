@@ -647,9 +647,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }) ?? [],
     );
 
-    if (this.isTopCard && !this.isExpanded) {
+    if (this.isTopCard) {
       let expandItem = new MenuItem({
-        label: 'Expand to Full Width',
+        label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
         icon: Maximize,
         action: this.toggleExpanded,
       });
@@ -1218,13 +1218,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
       .stack-item-header {
         --boxel-card-header-padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        --boxel-card-header-background-color: var(--boxel-light);
         border-radius: 0;
         z-index: 1;
         max-width: max-content;
         height: var(--stack-item-header-height);
         min-width: 100%;
-        gap: var(--boxel-sp-xxs);
       }
 
       .stack-item-content {
@@ -1279,14 +1277,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
          left-justified type/title. Reuses CardHeader's existing
          actions structure; just re-skinned via this class. */
       .expanded-card-header-pill {
-        --inner-boxel-card-header-padding: var(--boxel-sp-4xs)
-          var(--boxel-sp-xs);
-        --boxel-card-header-actions-min-width: max-content;
-        --boxel-card-header-icon-container-min-width: max-content;
+        --boxel-card-header-padding: var(--boxel-sp-4xs)
+          var(--operator-mode-spacing);
+        --boxel-card-header-gap: var(--operator-mode-spacing);
         height: var(--container-button-size);
-        max-width: 100%;
-        width: 100%;
-        gap: var(--boxel-sp-2xs);
         background: var(--boxel-light);
         border-radius: var(--boxel-border-radius-2xl);
         box-shadow: var(--submode-bar-item-box-shadow);
@@ -1295,7 +1289,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       /* Title in the expanded pill stays left-justified inside the
          center column (overrides CardHeader's default text-align: center). */
       .expanded-card-header-pill :deep(.card-type-display-name) {
-        padding-inline: var(--boxel-sp-4xs);
         text-align: left;
         text-box-trim: trim-both;
       }

@@ -292,7 +292,7 @@ test.describe('Room messages', () => {
     const testCard = `${appURL}/hassan`;
     await page.locator(`[data-test-cards-grid-item="${testCard}"]`).click();
     await page
-      .locator(`[data-test-submode-switcher] > [data-test-boxel-button]`)
+      .locator(`[data-test-submode-switcher-button]`)
       .click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
@@ -353,7 +353,7 @@ test.describe('Room messages', () => {
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
     await page
-      .locator(`[data-test-submode-switcher] > [data-test-boxel-button]`)
+      .locator(`[data-test-submode-switcher-button]`)
       .click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 

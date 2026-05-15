@@ -256,6 +256,15 @@ export default class OperatorModeContainer extends Component<Signature> {
         justify: center;
         align-items: center;
       }
+
+      @media (max-width: 30rem) {
+        :global(:root) {
+          --operator-mode-spacing: var(--boxel-sp-3xs);
+        }
+        :deep(.neighbor-stack-trigger) {
+          display: none;
+        }
+      }
     </style>
   </template>
 }

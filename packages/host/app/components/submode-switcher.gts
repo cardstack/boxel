@@ -64,6 +64,7 @@ const SubmodeTriggerButton: TemplateOnlyComponent<TriggerButtonSignature> =
       title={{@appVersion}}
       {{on 'click' @onToggle}}
       {{@bindings}}
+      data-test-submode-switcher-button={{@submode}}
       ...attributes
     >
       <@icon width='18px' height='18px' role='presentation' />

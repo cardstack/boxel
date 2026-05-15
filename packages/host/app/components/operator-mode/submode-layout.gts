@@ -102,13 +102,25 @@ type PanelWidths = {
   minWidth: number | null;
 };
 
-const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 56;
+const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
+const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 26;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
   @tracked private topBarCenterElement: Element | null = null;
-  @tracked private topBarButtonsCollapsed = false;
+  @tracked private currentWindowWidth = 0;
+
+  private get topBarButtonsCollapsed(): boolean {
+    let rootFontSize = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
+    let threshold = this.operatorModeStateService.hasAnyStackItemExpanded
+      ? COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM
+      : COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM;
+    return this.currentWindowWidth <= threshold * rootFontSize;
+  }
+
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -146,11 +158,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
   // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
-    let rootFontSize = Number.parseFloat(
-      getComputedStyle(document.documentElement).fontSize,
-    );
-    this.topBarButtonsCollapsed =
-      windowWidth <= COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM * rootFontSize;
+    this.currentWindowWidth = windowWidth;
 
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {
