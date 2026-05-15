@@ -1,0 +1,81 @@
+name: Sync to Boxel workspace
+description: |
+  Sync a local directory to a Boxel workspace using `boxel realm push`
+  from the in-tree @cardstack/boxel-cli. Replaces hand-rolled curl /
+  boxel-cli-clone steps that boxel-home, boxel-catalog, and boxel-skills
+  each used to maintain independently.
+
+inputs:
+  workspace-url:
+    description: Target workspace URL.
+    required: true
+  matrix-url:
+    description: Matrix server URL.
+    required: true
+  matrix-username:
+    description: Matrix username without the leading @ or :domain suffix.
+    required: true
+  matrix-password:
+    description: Matrix password.
+    required: true
+  realm-server-url:
+    description: |
+      Optional realm-server URL. Defaults are inferred from matrix-url for
+      stack.cards / boxel.ai / localhost domains; supply this for any other
+      environment.
+    required: false
+    default: ""
+  source-path:
+    description: Local directory to push to the workspace.
+    required: false
+    default: "."
+  delete:
+    description: When 'true', delete remote files that do not exist locally.
+    required: false
+    default: "true"
+  dry-run:
+    description: When 'true', show what would change without writing.
+    required: false
+    default: "false"
+
+outputs:
+  sync-output:
+    description: Captured stdout/stderr from `boxel realm push`.
+    value: ${{ steps.sync.outputs.sync-output }}
+
+runs:
+  using: composite
+  steps:
+    - uses: cardstack/boxel/.github/actions/_setup-boxel-cli@${{ github.action_ref }}
+      with:
+        matrix-url: ${{ inputs.matrix-url }}
+        matrix-username: ${{ inputs.matrix-username }}
+        matrix-password: ${{ inputs.matrix-password }}
+        realm-server-url: ${{ inputs.realm-server-url }}
+
+    - id: sync
+      shell: bash
+      env:
+        SOURCE_PATH: ${{ inputs.source-path }}
+        WORKSPACE_URL: ${{ inputs.workspace-url }}
+        DELETE: ${{ inputs.delete }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        URL="${WORKSPACE_URL%/}/"
+        ARGS=(realm push "$SOURCE_PATH" "$URL")
+        if [ "$DELETE" = "true" ]; then ARGS+=(--delete); fi
+        if [ "$DRY_RUN" = "true" ]; then ARGS+=(--dry-run); fi
+
+        set +e
+        OUTPUT=$(boxel "${ARGS[@]}" 2>&1)
+        STATUS=$?
+        set -e
+        echo "$OUTPUT"
+
+        {
+          echo "sync-output<<BOXEL_EOF"
+          echo "$OUTPUT"
+          echo "BOXEL_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        exit $STATUS
