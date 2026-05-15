@@ -33,7 +33,6 @@ import {
   deletePublishedRowsBySourceUrl,
   deleteRegistryRowByUrl,
 } from '../lib/realm-registry-writes';
-import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 interface DeleteRealmJSON {
   data: {
@@ -161,7 +160,7 @@ export default function handleDeleteRealm({
       // soft-delete, source permissions + DB artifacts) commits atomically
       // or rolls back atomically. A failure halfway through no longer
       // leaves the realm half-deleted.
-      await withRealmWriteLock(dbAdapter, realmURL, async (txQuerier) => {
+      await dbAdapter.withWriteLock(realmURL, async (txQuerier) => {
         // Delete the published rows first so the RETURNING set is the
         // authoritative list of rows the tx will commit. Driving the
         // per-published cleanup off this set (instead of a pre-lock

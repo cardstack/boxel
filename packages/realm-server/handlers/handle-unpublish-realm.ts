@@ -27,7 +27,6 @@ import {
   removeRealmFiles,
 } from './realm-destruction-utils';
 import { deleteRegistryRowByUrl } from '../lib/realm-registry-writes';
-import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-unpublish');
 
@@ -137,18 +136,14 @@ export default function handleUnpublishRealm({
       // mid-cleanup rolls back both DELETEs together. realms[] /
       // virtualNetwork mutation stays in the reconciler's hands — it
       // reacts to the registry DELETE + NOTIFY emitted below.
-      await withRealmWriteLock(
-        dbAdapter,
-        publishedRealmURL,
-        async (txQuerier) => {
-          await deleteRegistryRowByUrl(dbAdapter, publishedRealmURL, txQuerier);
-          await removeRealmPermissions(
-            dbAdapter,
-            new URL(publishedRealmURL),
-            txQuerier,
-          );
-        },
-      );
+      await dbAdapter.withWriteLock(publishedRealmURL, async (txQuerier) => {
+        await deleteRegistryRowByUrl(dbAdapter, publishedRealmURL, txQuerier);
+        await removeRealmPermissions(
+          dbAdapter,
+          new URL(publishedRealmURL),
+          txQuerier,
+        );
+      });
 
       // FS removal happens after the DB transaction commits. If the rm
       // fails, the realm's row + permissions are already gone and the

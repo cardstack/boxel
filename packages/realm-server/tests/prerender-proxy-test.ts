@@ -29,6 +29,9 @@ module(basename(__filename), function () {
         async getColumnNames() {
           return [];
         },
+        async withWriteLock(_url, fn) {
+          return await fn(undefined);
+        },
       };
     }
 
