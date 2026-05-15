@@ -429,13 +429,16 @@ export default class CardHeader extends Component<Signature> {
           vertical-align: middle;
         }
 
+        @container card-header (max-width: 30rem) {
+          .card-type-display-name {
+            padding-inline: 0;
+          }
+        }
+
         @container card-header (max-width: 20rem) {
           .boxel-card-header__inner {
             --boxel-card-header-padding: var(--boxel-sp-4xs);
             --boxel-card-header-gap: var(--boxel-sp-4xs);
-          }
-          .card-type-display-name {
-            padding-inline: 0;
           }
           .card-type-display-name > :deep(svg) {
             display: none;

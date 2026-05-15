@@ -175,6 +175,12 @@ const NewFileButton: TemplateOnlyComponent<Signature> = <template>
     .new-file-menu :deep(.check-icon) {
       display: none;
     }
+    @media (max-width: 20rem) {
+      .new-file-menu {
+        min-width: 13.5rem;
+        width: fit-content;
+      }
+    }
   </style>
 </template>;
 

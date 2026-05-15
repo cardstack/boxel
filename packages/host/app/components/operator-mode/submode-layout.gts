@@ -121,6 +121,13 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.currentWindowWidth <= threshold * rootFontSize;
   }
 
+  private get submodeSwitcherCollapsed(): boolean {
+    return (
+      this.operatorModeStateService.hasAnyStackItemExpanded &&
+      this.topBarButtonsCollapsed
+    );
+  }
+
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -458,7 +465,7 @@ export default class SubmodeLayout extends Component<Signature> {
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
-                @isCollapsed={{this.topBarButtonsCollapsed}}
+                @isCollapsed={{this.submodeSwitcherCollapsed}}
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
@@ -602,6 +609,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .ai-assistant-resizable-panel {
+        max-width: 100%;
         overflow: initial;
       }
 
