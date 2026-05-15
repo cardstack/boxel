@@ -152,7 +152,6 @@ export class RealmServer {
       realms: this.realms,
       reconciler: this.reconciler,
       dbAdapter: this.dbAdapter,
-      virtualNetwork: this.virtualNetwork,
       matrixClient: this.matrixClient,
       getIndexHTML: this.getIndexHTML,
       cardSizeLimitBytes: this.cardSizeLimitBytes,

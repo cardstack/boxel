@@ -1,11 +1,7 @@
 import type Koa from 'koa';
 import { JSDOM } from 'jsdom';
 import merge from 'lodash/merge';
-import type {
-  DBAdapter,
-  Realm,
-  VirtualNetwork,
-} from '@cardstack/runtime-common';
+import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
   Deferred,
   hasExtension,
@@ -37,7 +33,6 @@ export type ServeIndexDeps = {
   realms: Realm[];
   reconciler: RealmRegistryReconciler;
   dbAdapter: DBAdapter;
-  virtualNetwork: VirtualNetwork;
   matrixClient: MatrixClient;
   getIndexHTML: () => Promise<string>;
   cardSizeLimitBytes: number;
