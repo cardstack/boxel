@@ -777,4 +777,222 @@ describe('realm watch (integration)', () => {
 
     watcher.shutdown();
   });
+
+  // CS-11062: watch must protect locally-edited files from being silently
+  // overwritten on the next remote-change tick.
+  it('skips download when the local file diverges from the sync manifest', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('diverge');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 1',
+    );
+
+    // User edits the local file post-sync. Hash now diverges from manifest.
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    let hasChanges = await watcher.poll();
+    expect(hasChanges).toBe(true);
+    let result = await watcher.flushPending();
+
+    expect(result.skipped).toContain(rel);
+    expect(result.pulled).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toBe(
+      'local edit\n',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('overwrites diverged local files when overwriteLocal is enabled', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('force');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+      overwriteLocal: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.pulled).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 2',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('skips first-run downloads when local files exist at remote paths and no manifest', async () => {
+    let localDir = makeLocalDir();
+    let collide = watchFixture('collide');
+    let onlyRemote = watchFixture('only-remote');
+
+    // Local content pre-exists with no sync manifest.
+    fs.writeFileSync(path.join(localDir, collide), 'precious local\n', 'utf8');
+
+    await writeRemoteFile(realmUrl, collide, 'export const v = 1;\n');
+    await writeRemoteFile(realmUrl, onlyRemote, 'export const r = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    // Colliding path is left alone, warned about.
+    expect(result.skipped).toContain(collide);
+    expect(result.pulled).not.toContain(collide);
+    expect(fs.readFileSync(path.join(localDir, collide), 'utf8')).toBe(
+      'precious local\n',
+    );
+
+    // Non-colliding path still pulled normally.
+    expect(result.pulled).toContain(onlyRemote);
+    expect(fs.readFileSync(path.join(localDir, onlyRemote), 'utf8')).toContain(
+      'r = 1',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('downloads when the local file still matches the manifest hash', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('clean');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    // No local edit. Bump remote.
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.pulled).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 2',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('does not delete a locally-edited file when the remote disappears', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('rescue');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await deleteRemoteFile(realmUrl, rel);
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.skipped).toContain(rel);
+    expect(result.deleted).not.toContain(rel);
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(true);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toBe(
+      'local edit\n',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('deletes the local file when the remote disappears and the local matches the manifest', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('clean-delete');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(true);
+
+    // No local edit — local hash still matches the manifest.
+    await deleteRemoteFile(realmUrl, rel);
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.deleted).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(false);
+
+    watcher.shutdown();
+  });
+
+  it('keeps re-detecting a skipped divergence on subsequent polls until resolved', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('nag');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let first = await watcher.flushPending();
+    expect(first.skipped).toContain(rel);
+
+    // No further remote change. The previous skip must not have advanced
+    // lastKnownMtimes, so the same divergence keeps surfacing.
+    await watcher.poll();
+    let second = await watcher.flushPending();
+    expect(second.skipped).toContain(rel);
+
+    watcher.shutdown();
+  });
 });
