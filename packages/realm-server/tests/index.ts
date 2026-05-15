@@ -194,6 +194,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-endpoints/dependencies-test',
   './realm-advisory-locks-test',
   './realm-cleanup-transaction-test',
+  './realm-config-card-backfill-test',
   './realm-registry-backfill-test',
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
