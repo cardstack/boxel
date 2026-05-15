@@ -8,16 +8,17 @@ name: PR Title Check [boxel-cli]
 # Path-scoped — does NOT run for PRs that don't touch boxel-cli. Don't mark
 # this as a required status check in branch protection: required checks on
 # path-filtered workflows leave non-boxel-cli PRs pending indefinitely.
+#
+# No `merge_group:` trigger — `paths:` is not honored on merge_group events,
+# so adding it would block unrelated PRs in the merge queue on a
+# boxel-cli-scoped title check. If merge queues are adopted and this needs
+# to gate them, add a changed-files step inside the job instead.
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
     paths:
       - "packages/boxel-cli/**"
-  # Note: no `merge_group:` trigger — `paths:` is not honored on merge_group
-  # events, so adding it would block unrelated PRs in the merge queue on a
-  # boxel-cli-scoped title check. If merge queues are adopted and this needs
-  # to gate them, add a changed-files step inside the job instead.
 
 permissions:
   pull-requests: read
