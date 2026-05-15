@@ -272,9 +272,7 @@ export function registerPublishCommand(realm: Command): void {
 function parseTimeoutOption(value: string): number {
   let n = Number.parseInt(value, 10);
   if (!Number.isFinite(n) || n < 0 || String(n) !== value.trim()) {
-    throw new Error(
-      '--timeout must be a non-negative integer (milliseconds).',
-    );
+    throw new Error('--timeout must be a non-negative integer (milliseconds).');
   }
   return n;
 }

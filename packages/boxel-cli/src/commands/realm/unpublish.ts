@@ -84,7 +84,11 @@ export async function unpublishRealm(
 
   if (looksLikeNotFound) {
     if (options.tolerateMissing) {
-      return { publishedRealmURL: normalized, unpublished: false, notFound: true };
+      return {
+        publishedRealmURL: normalized,
+        unpublished: false,
+        notFound: true,
+      };
     }
     return {
       publishedRealmURL: normalized,
@@ -122,27 +126,25 @@ export function registerUnpublishCommand(realm: Command): void {
       '--tolerate-missing',
       'Exit successfully when the realm is already unpublished',
     )
-    .action(
-      async (publishedRealmURL: string, opts: UnpublishCliOptions) => {
-        let result = await unpublishRealm(publishedRealmURL, {
-          tolerateMissing: opts.tolerateMissing === true,
-        });
+    .action(async (publishedRealmURL: string, opts: UnpublishCliOptions) => {
+      let result = await unpublishRealm(publishedRealmURL, {
+        tolerateMissing: opts.tolerateMissing === true,
+      });
 
-        if (result.error) {
-          console.error(`${FG_RED}Error:${RESET} ${result.error}`);
-          process.exit(1);
-        }
+      if (result.error) {
+        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+        process.exit(1);
+      }
 
-        if (result.notFound) {
-          console.log(
-            `Already unpublished: ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
-          );
-          return;
-        }
-
+      if (result.notFound) {
         console.log(
-          `${FG_GREEN}Unpublished:${RESET} ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
+          `Already unpublished: ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
         );
-      },
-    );
+        return;
+      }
+
+      console.log(
+        `${FG_GREEN}Unpublished:${RESET} ${FG_CYAN}${result.publishedRealmURL}${RESET}`,
+      );
+    });
 }
