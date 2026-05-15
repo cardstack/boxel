@@ -62,9 +62,6 @@ export interface Profile {
   matrixDeviceId: string;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
-  // Legacy field — accepted only when loading pre-CS-10725 profiles.json so
-  // `migrateLegacyProfiles()` can re-login once and replace it with tokens.
-  password?: string;
 }
 
 export interface ProfilesConfig {
@@ -241,14 +238,18 @@ export class ProfileManager implements RealmAuthenticator {
       );
     }
 
-    const defaultMatrixUrl =
-      env === 'production'
-        ? 'https://matrix.boxel.ai'
-        : 'https://matrix-staging.stack.cards';
-    const defaultRealmUrl =
-      env === 'production'
-        ? 'https://app.boxel.ai/'
-        : 'https://realms-staging.stack.cards/';
+    let defaultMatrixUrl: string;
+    let defaultRealmUrl: string;
+    if (env === 'production') {
+      defaultMatrixUrl = 'https://matrix.boxel.ai';
+      defaultRealmUrl = 'https://app.boxel.ai/';
+    } else if (env === 'local') {
+      defaultMatrixUrl = 'http://localhost:8008';
+      defaultRealmUrl = 'http://localhost:4201/';
+    } else {
+      defaultMatrixUrl = 'https://matrix-staging.stack.cards';
+      defaultRealmUrl = 'https://realms-staging.stack.cards/';
+    }
 
     const domain = getDomainFromMatrixId(matrixId);
     return {
@@ -263,7 +264,9 @@ export class ProfileManager implements RealmAuthenticator {
   // stored; the original password (if any) never reaches this function. Used
   // directly by tests, and as the "store" half of `addProfile`.
   // When re-authing an existing profile we keep its cached realm tokens \u2014 a
-  // fresh access token doesn't invalidate the realm-server JWT.
+  // fresh access token doesn't invalidate the realm-server JWT. But if the
+  // matrix or realm-server URL changed, the cached tokens were minted against
+  // the old servers and must be dropped.
   async addProfileWithAuth(
     matrixId: string,
     auth: MatrixAuth,
@@ -278,6 +281,10 @@ export class ProfileManager implements RealmAuthenticator {
     );
 
     const existing = this.config.profiles[matrixId];
+    const urlsChanged =
+      !!existing &&
+      (existing.matrixUrl !== slots.matrixUrl ||
+        existing.realmServerUrl !== slots.realmServerUrl);
     const profile: Profile = {
       displayName: slots.displayName,
       matrixUrl: slots.matrixUrl,
@@ -285,8 +292,8 @@ export class ProfileManager implements RealmAuthenticator {
       matrixAccessToken: auth.accessToken,
       matrixUserId: auth.userId,
       matrixDeviceId: auth.deviceId,
-      realmTokens: existing?.realmTokens,
-      realmServerToken: existing?.realmServerToken,
+      realmTokens: urlsChanged ? undefined : existing?.realmTokens,
+      realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
     };
 
     this.config.profiles[matrixId] = profile;
@@ -305,11 +312,14 @@ export class ProfileManager implements RealmAuthenticator {
     matrixUrl?: string,
     realmServerUrl?: string,
   ): Promise<void> {
+    // On re-auth, default omitted args to the existing profile's stored
+    // values so we don't silently reset display name or URLs to defaults.
+    const existing = this.config.profiles[matrixId];
     const slots = this.resolveProfileSlots(
       matrixId,
-      displayName,
-      matrixUrl,
-      realmServerUrl,
+      displayName ?? existing?.displayName,
+      matrixUrl ?? existing?.matrixUrl,
+      realmServerUrl ?? existing?.realmServerUrl,
     );
 
     const auth = await this.matrixLoginFn(
@@ -429,8 +439,8 @@ export class ProfileManager implements RealmAuthenticator {
 
   // Return the Matrix credentials stored for a profile. Sync — reads only
   // the in-memory `this.config`, which is populated by the constructor.
-  // Throws when the profile has no stored token yet (e.g. legacy profile
-  // that hasn't gone through `migrateLegacyProfiles()` or `addProfile`).
+  // Throws when the profile has no stored token yet (e.g. a pre-CS-10725
+  // profile still on disk from before the password→token swap).
   getStoredMatrixAuth(profileId?: string): MatrixAuth {
     const targetId = profileId ?? this.config.activeProfile ?? undefined;
     const profile = targetId ? this.config.profiles[targetId] : undefined;
@@ -440,7 +450,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (!profile.matrixAccessToken) {
       throw new Error(
         `Profile "${targetId}" has no stored Matrix access token. ` +
-          `Run \`boxel profile add ${targetId}\` to authenticate.`,
+          `Run \`boxel profile add\` to re-authenticate.`,
       );
     }
     return {
@@ -688,49 +698,6 @@ export class ProfileManager implements RealmAuthenticator {
     return this.withMatrixAuthRecovery((auth) =>
       getUserRealmsFromMatrixAccountData(auth),
     );
-  }
-
-  // Walk every loaded profile; for each one that still has the pre-CS-10725
-  // `password` field but no `matrixAccessToken`, perform a real Matrix login
-  // and replace the password with the resulting tokens. Failures are warned
-  // about and left in place so the user can re-add the profile themselves.
-  async migrateLegacyProfiles(): Promise<{
-    migrated: string[];
-    failed: string[];
-  }> {
-    const migrated: string[] = [];
-    const failed: string[] = [];
-    for (const [id, profile] of Object.entries(this.config.profiles)) {
-      if (profile.matrixAccessToken || !profile.password) {
-        continue;
-      }
-      try {
-        const username = getUsernameFromMatrixId(id);
-        const auth = await this.matrixLoginFn(
-          profile.matrixUrl,
-          username,
-          profile.password,
-        );
-        profile.matrixAccessToken = auth.accessToken;
-        profile.matrixUserId = auth.userId;
-        profile.matrixDeviceId = auth.deviceId;
-        delete profile.password;
-        migrated.push(id);
-      } catch (e) {
-        failed.push(id);
-        const msg = e instanceof Error ? e.message : String(e);
-        console.warn(
-          `${FG_YELLOW}Could not migrate stored password for ${id}: ${msg}${RESET}`,
-        );
-        console.warn(
-          `Run \`boxel profile add -u ${id} -p <password>\` to re-authenticate.`,
-        );
-      }
-    }
-    if (migrated.length > 0) {
-      this.saveConfig();
-    }
-    return { migrated, failed };
   }
 
   async migrateFromEnv(): Promise<{
