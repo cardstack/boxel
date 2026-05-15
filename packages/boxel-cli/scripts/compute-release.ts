@@ -13,6 +13,8 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { resolve } from 'path';
 
+import bumpByPrefixJson from './release-prefixes.json';
+
 export type BumpLevel = 'major' | 'minor' | 'patch' | 'none';
 
 export interface ComputeReleaseInput {
@@ -35,18 +37,7 @@ export interface ComputeReleaseOutput {
 
 const CONVENTIONAL_PREFIX_RE = /^([a-z]+)(?:\([^)]+\))?(!?):\s*/;
 
-const BUMP_BY_PREFIX: Record<string, BumpLevel> = {
-  feat: 'minor',
-  fix: 'patch',
-  perf: 'patch',
-  refactor: 'patch',
-  chore: 'none',
-  docs: 'none',
-  test: 'none',
-  build: 'none',
-  ci: 'none',
-  style: 'none',
-};
+const BUMP_BY_PREFIX = bumpByPrefixJson as Record<string, BumpLevel>;
 
 const NPM_SURFACE_PATTERNS: RegExp[] = [
   /^packages\/boxel-cli\/src\//,

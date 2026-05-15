@@ -28,20 +28,28 @@ jobs:
     name: Validate PR title
     runs-on: ubuntu-latest
     steps:
+      # Sparse-checkout just the one JSON file that is the single source of
+      # truth for allowed conventional-commit prefixes. The post-merge
+      # workflow (boxel-cli-on-main.yml) reads the same file via
+      # compute-release.ts — keeps the pre-merge gate and post-merge
+      # classifier in lockstep.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: packages/boxel-cli/scripts/release-prefixes.json
+          sparse-checkout-cone-mode: false
+
+      - id: types
+        run: |
+          {
+            echo 'list<<__EOF__'
+            node -e 'console.log(Object.keys(require("./packages/boxel-cli/scripts/release-prefixes.json")).join("\n"))'
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: amannn/action-semantic-pull-request@0723387faaf9b38adef4775cd42cfd5155ed6017 # v5.5.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          types: |
-            feat
-            fix
-            perf
-            refactor
-            chore
-            docs
-            test
-            build
-            ci
-            style
+          types: ${{ steps.types.outputs.list }}
           requireScope: false
           subjectPattern: ^.+$
