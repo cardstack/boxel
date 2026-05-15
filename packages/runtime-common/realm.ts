@@ -5695,10 +5695,11 @@ export class Realm {
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
-  // Reads searchDoc.hostRoutingRules (flat: [{ path, instance: { id } }])
-  // rather than the JSON:API form, since that's already-resolved with
-  // absolute IDs and avoids walking relationships keyed by stringified
-  // index paths.
+  // Reads searchDoc.hostRoutingRules where each rule is
+  // `{ path, instance }` — `instance` is the card URL as a string
+  // (resolved against the realm root for relative inputs like
+  // `./whitepaper`). Stored flat in attributes, so the indexed
+  // searchDoc matches the file shape one-to-one.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
@@ -5713,14 +5714,19 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return [];
       }
+      let realmBase = new URL(this.url);
       return rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
-        if (!instance || typeof instance !== 'object') return [];
-        let id = (instance as Record<string, unknown>).id;
-        if (typeof id !== 'string') return [];
+        if (typeof instance !== 'string' || instance.length === 0) return [];
+        let id: string;
+        try {
+          id = new URL(instance, realmBase).href;
+        } catch {
+          return [];
+        }
         return [{ path, id }];
       });
     } catch (e) {

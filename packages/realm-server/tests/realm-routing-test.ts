@@ -37,12 +37,9 @@ function makeRoutingFixture(): Record<
         type: 'card',
         attributes: {
           cardInfo: { name: 'Routing Test Realm' },
-          hostRoutingRules: [{ path: '/whitepaper' }],
-        },
-        relationships: {
-          'hostRoutingRules.0.instance': {
-            links: { self: './white-paper' },
-          },
+          hostRoutingRules: [
+            { path: '/whitepaper', instance: './white-paper' },
+          ],
         },
         meta: {
           adoptsFrom: {
