@@ -272,17 +272,26 @@ boxel parse --realm http://localhost:4201/alice/my-realm/
 node_modules + monorepo paths. It will fail outside the boxel
 monorepo with a clear error.
 
-### `boxel run-command evaluate-module --realm <url> --input '{...}'`
+### `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default`
 
 Evaluates an ESM module in the realm's prerenderer sandbox. Use
 right after writing a `.gts` to catch import errors, decorator
 mishaps, or anything else that fails at module load time.
 
+**Input shape** — `moduleIdentifier` is the *absolute* module URL
+(no `.gts` extension); `realmIdentifier` is the absolute target
+realm URL (used for SSRF validation):
+
 ```bash
-boxel run-command evaluate-module \
-  --realm <target-realm-url> \
-  --input '{"path": "sticky-note.gts"}'
+MODULE="http://localhost:4201/user/my-realm/sticky-note"
+REALM="http://localhost:4201/user/my-realm/"
+boxel run-command @cardstack/boxel-host/commands/evaluate-module/default \
+  --realm "$REALM" \
+  --input "$(jq -nc --arg m "$MODULE" --arg r "$REALM" \
+              '{moduleIdentifier:$m, realmIdentifier:$r}')"
 ```
+
+Result fields: `passed` (bool), and on failure `error` + `stackTrace`.
 
 When a failure reports a line/column, those numbers refer to the
 **transpiled** module — pair with `boxel read-transpiled` (see
@@ -291,25 +300,46 @@ source. **Never copy transpiled patterns back into source.**
 
 Test files (`*.test.*`) are rejected — `boxel test` handles those.
 
-### `boxel run-command instantiate-card --realm <url> --input '{...}'`
+### `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default`
 
-Instantiates a single card instance in the prerenderer sandbox.
-Use after writing a `.json` instance to catch shape mismatches or
-runtime errors in field initializers.
+Instantiates a single card in the prerenderer sandbox. Use after
+writing a `.json` instance to catch shape mismatches or runtime
+errors in field initializers.
+
+**Input shape** — `moduleIdentifier`, `cardName`, and
+`realmIdentifier` are required; `instanceData` is optional but
+needed to exercise actual field values. **All three identifiers
+must be absolute URLs.** If `instanceData` is passed, its
+`data.meta.adoptsFrom.module` must already be the same absolute URL
+(the relative form `../sticky-note` will be rejected with
+"instanceData adoptsFrom (...) does not match moduleUrl/cardName").
 
 ```bash
-boxel run-command instantiate-card \
-  --realm <target-realm-url> \
-  --input '{"path": "StickyNote/note-1.json"}'
+MODULE="http://localhost:4201/user/my-realm/sticky-note"
+REALM="http://localhost:4201/user/my-realm/"
+CARD_NAME="StickyNote"
+INSTANCE_PATH="StickyNotes/note-1.json"
+
+# Read the workspace JSON, rewrite adoptsFrom.module to the absolute URL,
+# then feed it to instantiate-card as the instanceData string.
+INSTANCE_DATA=$(jq -c --arg m "$MODULE" --arg name "$CARD_NAME" \
+  '.data.meta.adoptsFrom = {module:$m, name:$name}' "$INSTANCE_PATH")
+
+boxel run-command @cardstack/boxel-host/commands/instantiate-card/default \
+  --realm "$REALM" \
+  --input "$(jq -nc --arg m "$MODULE" --arg n "$CARD_NAME" --arg r "$REALM" --arg d "$INSTANCE_DATA" \
+              '{moduleIdentifier:$m, cardName:$n, realmIdentifier:$r, instanceData:$d}')"
 ```
 
+Result fields: `passed` (bool), and on failure `error` + `stackTrace`.
+
 **Do not** pass a `Spec/...json` path or any card whose
-`meta.adoptsFrom.module` is a base-realm URL
-(`https://cardstack.com/base/...`). Specs adopt from the base realm,
-and the prerender refuses cross-origin module loads with
+`adoptsFrom.module` is a base-realm URL
+(`https://cardstack.com/base/...`). Specs adopt from the base
+realm, and the prerender refuses cross-origin module loads with
 "moduleUrl origin does not match realmUrl origin". To validate
-Specs, run `boxel test` (which exercises the Spec's `linkedExamples`
-against the card class).
+Specs, run `boxel test` (which exercises the Spec's
+`linkedExamples` against the card class).
 
 ### `boxel test --realm <url>`
 
@@ -349,9 +379,11 @@ QUnit card tests" below.
 6. **Push the workspace** to the target realm.
 7. **Run the validators** (in this order — cheap to expensive):
    `boxel lint <changed-file>`, `boxel parse <changed-file>`,
-   `boxel run-command evaluate-module --input '{"path": "<file>"}'`,
-   `boxel run-command instantiate-card --input '{"path": "<instance>"}'`,
-   `boxel test`. Fix anything that fails and re-run.
+   `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
+   `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --input '{"moduleIdentifier":"<absolute-module-url>","cardName":"<ClassName>","realmIdentifier":"<absolute-realm-url>","instanceData":"<json-string-with-absolute-adoptsFrom>"}'`,
+   `boxel test`. Fix anything that fails and re-run. (See the
+   individual validator sections above for the full input shapes
+   and the absolute-URL requirement.)
 8. **Mark the Issue done** by editing
    `Issues/<slug>.json:data.attributes.status` to `"done"` and
    pushing. (See `software-factory-scheduling` for the full
@@ -467,7 +499,9 @@ export function runTests() {
 
     test('renders title in fitted view', async function (assert) {
       let loader = getService('loader-service').loader;
-      let { StickyNote } = await loader.import(cardModuleUrl);
+      let { StickyNote } = await loader.import<typeof import('./sticky-note')>(
+        cardModuleUrl,
+      );
       let note = new StickyNote({ title: 'Test Note', body: 'Hello' });
       await renderCard(loader, note, 'fitted');
       assert.dom('[data-test-title]').hasText('Test Note');
@@ -475,6 +509,15 @@ export function runTests() {
   });
 }
 ```
+
+**Why `loader.import<typeof import('./sticky-note')>(...)`?** The
+`loader.import()` return type is untyped by default — destructuring
+`{ StickyNote }` from it would type-check as `any` in your
+`.test.gts` and **`boxel parse` will fail with a type error**
+(loader.import returns `{}` for a generic call). Always pass the
+module's TypeScript shape via the type generic, using the same
+relative path you'd use for a direct import. This is parse-step
+table stakes; without it your tests don't get past validation.
 
 ### Key points
 

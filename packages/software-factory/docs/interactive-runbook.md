@@ -44,6 +44,10 @@ The user has done the following outside Claude Code:
 - A running realm server reachable at the URL they intend to use. For
   local work that is `mise run dev-all` in the boxel monorepo; for
   staging/prod they have credentials in their profile.
+- The host app's `dist/` is built (needed by `boxel test`):
+  `pnpm --filter @cardstack/host build`.
+- Playwright's headless Chromium is installed (also for `boxel test`):
+  `npx playwright install chromium`. One-time per machine.
 - An empty local directory chosen as the workspace. Claude Code is
   launched with that directory as cwd.
 
@@ -140,8 +144,8 @@ the project is complete or that nothing is left to do.
 | Card-type schema          | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'` |
 | Lint                      | `boxel lint [path] --realm <url>` (whole-realm or single-file)                      |
 | Parse / type-check        | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)        |
-| Evaluate module           | `boxel run-command evaluate-module --realm <url> --input '{path}'`                  |
-| Instantiate card          | `boxel run-command instantiate-card --realm <url> --input '{path}'`                 |
+| Evaluate module           | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`  |
+| Instantiate card          | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'` |
 | Run QUnit tests           | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)               |
 | Read transpiled output    | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors) |
 | Write files               | native `Write` / `Edit`                                                             |
