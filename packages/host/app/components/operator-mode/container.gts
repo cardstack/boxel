@@ -173,7 +173,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: 2.5rem;
-        --operator-mode-min-width: 20.5rem;
         --operator-mode-left-column: 21.5rem; /* 344px */
         --operator-mode-spacing: var(--boxel-sp-xs);
         --operator-mode-top-bar-item-height: var(--container-button-size);
@@ -204,7 +203,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         top: 0;
         left: 0;
         right: 0;
-        min-width: var(--operator-mode-min-width);
         height: 100%;
         position: fixed;
       }
@@ -260,8 +258,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       @media (max-width: 30rem) {
         :global(:root) {
           --operator-mode-spacing: var(--boxel-sp-3xs);
+          --stack-padding-inline: var(--boxel-sp-xs);
         }
-        :deep(.neighbor-stack-trigger) {
+        :deep(.neighbor-stack-trigger),
+        :deep(.operator-mode-stack ~ .operator-mode-stack) {
           display: none;
         }
       }

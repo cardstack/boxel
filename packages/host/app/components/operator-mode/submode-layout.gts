@@ -20,7 +20,7 @@ import {
   IconButton,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
@@ -103,7 +103,7 @@ type PanelWidths = {
 };
 
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
-const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 26;
+const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
@@ -472,11 +472,18 @@ export default class SubmodeLayout extends Component<Signature> {
                   @isCollapsed={{this.topBarButtonsCollapsed}}
                 />
               {{/if}}
-              <div
-                class='expanded-card-header-slot'
-                data-test-expanded-card-header-slot
-                {{captureElement this.storeExpandedCardHeaderElement}}
-              ></div>
+              {{#if
+                (eq this.operatorModeStateService.state.submode 'interact')
+              }}
+                <div
+                  class={{cn
+                    'expanded-card-header-slot'
+                    has-expanded=this.operatorModeStateService.hasAnyStackItemExpanded
+                  }}
+                  data-test-expanded-card-header-slot
+                  {{captureElement this.storeExpandedCardHeaderElement}}
+                ></div>
+              {{/if}}
               {{yield to='topBar'}}
             {{/if}}
 
@@ -748,6 +755,12 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.open-search-field) {
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+
+      @media (max-width: 26rem) {
+        .expanded-card-header-slot:not(.has-expanded) {
+          display: none;
+        }
       }
 
       @media print {

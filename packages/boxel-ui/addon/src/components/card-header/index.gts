@@ -311,7 +311,7 @@ export default class CardHeader extends Component<Signature> {
           font: var(--boxel-card-header-font-weight, 600)
             var(--boxel-card-header-text-font, var(--boxel-font-sm));
         }
-        header .card-type-display-name {
+        .card-type-display-name {
           max-width: var(--boxel-card-header-max-width, 100%);
           text-overflow: var(--boxel-card-header-text-overflow, ellipsis);
           overflow: hidden;
@@ -320,6 +320,7 @@ export default class CardHeader extends Component<Signature> {
           flex-shrink: 1;
           min-width: 0;
           text-align: center;
+          padding-inline: 30px;
         }
         .card-type-display-name-text {
           font: 700 var(--boxel-font-sm);

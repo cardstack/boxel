@@ -45,7 +45,7 @@ const AuthContainer: TemplateOnlyComponent<Signature> = <template>
       border: 1px solid var(--boxel-form-control-border-color);
       border-radius: var(--boxel-form-control-border-radius);
       letter-spacing: var(--boxel-lsp);
-      width: 550px;
+      max-width: 34.375rem;
       position: relative;
     }
     .header {
