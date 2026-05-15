@@ -72,13 +72,30 @@ The realm-creation command is a native boxel-cli subcommand
 (not `boxel run-command`):
 
 ```bash
-boxel realm create <realm-endpoint> "<Display Name>"
-# e.g. boxel realm create user/factory-test-stickynote "Factory Test Sticky Note"
+boxel realm create <realm-name> "<Display Name>"
+# e.g. boxel realm create factory-test-stickynote "Factory Test Sticky Note"
 ```
 
-`<realm-endpoint>` is the URL path segment (e.g. `user/my-realm`).
-The active profile's realm-server URL is used as the origin. See
-the `realm-sync` skill for the full surface (auth, icon URL, etc.).
+**`<realm-name>` is just the realm's slug** — must match
+`^[a-z0-9-]+$` (lowercase letters, numbers, hyphens). **Do not pass
+a path with a slash** (e.g. `user/my-realm`); the regex will reject
+it. The realm server prepends the user-namespace segment
+automatically based on the active profile's identity. Given the
+target realm URL the user wants, derive the slug from the final
+path segment:
+
+- target URL: `http://localhost:4201/user/factory-test-stickynote-2/`
+- realm-name to pass: `factory-test-stickynote-2`
+- server returns: `http://localhost:4201/user/factory-test-stickynote-2/`
+
+You may see a warning like
+`⚠️ Detected local realm directories at legacy local paths`.
+That's an informational notice about an unrelated directory layout
+issue in your cwd — it does **not** affect realm creation. Ignore
+it unless the command itself exits non-zero.
+
+See the `realm-sync` skill for the full surface (auth, icon URL,
+etc.).
 
 Once the realm exists, set up the workspace mirror for it:
 
