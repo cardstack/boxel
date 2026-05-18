@@ -4730,40 +4730,64 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    localPath = localPath.replace(/\.json$/, '');
-    let url = this.paths.fileURL(localPath);
-    let entry = await this.#realmIndexQueryEngine.instance(url, {
+    let trimmedLocalPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(trimmedLocalPath);
+    let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
       includeErrors: true,
     });
-    if (!entry) {
-      if (await this.nonJsonFileExists(localPath)) {
-        return unsupportedMediaType(request, requestContext);
+    if (instanceEntry) {
+      if (instanceEntry.type === 'instance-error') {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation unavailable: ${request.url} has an indexing error`,
+        );
       }
-      return notFound(request, requestContext);
-    }
-    if (entry.type === 'instance-error') {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation unavailable: ${request.url} has an indexing error`,
-      );
-    }
-    if (entry.markdown == null) {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation not available for ${request.url}`,
-      );
-    }
-    return createResponse({
-      body: entry.markdown,
-      init: {
-        headers: {
-          'content-type': 'text/markdown; charset=utf-8',
+      if (instanceEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: instanceEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
         },
-      },
-      requestContext,
-    });
+        requestContext,
+      });
+    }
+    // No instance row — for FileDef rows (e.g. `.md`, `.csv`, `.gts`) the
+    // markdown lives on the `file` entry instead. Look the unstripped local
+    // path up against the file index before giving up. Without this branch
+    // CardsGrid's "Copy as Markdown" action 415s on any non-card file.
+    let fileURL = this.paths.fileURL(localPath);
+    let fileEntry = await this.#realmIndexQueryEngine.file(fileURL);
+    if (fileEntry) {
+      if (fileEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: fileEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
+        },
+        requestContext,
+      });
+    }
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
+    return notFound(request, requestContext);
   }
 
   private async removeCard(

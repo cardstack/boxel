@@ -6,6 +6,8 @@ import type { Store, StoreReadType } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
+import { knownFileMetaUrls } from './known-file-meta-urls';
+
 interface Args {
   format: Format;
   request?: Deferred<string>;
@@ -50,7 +52,18 @@ export function detectStackItemTypeForTarget(
   let fileMetaInstanceOrError =
     store.peek(cardId, { type: 'file-meta' }) ??
     store.peekError(cardId, { type: 'file-meta' });
-  return fileMetaInstanceOrError ? 'file' : 'card';
+  if (fileMetaInstanceOrError) {
+    return 'file';
+  }
+  // CardsGrid and other prerendered-search consumers click URLs whose
+  // file-meta resources may not yet be in the store (prerendered results are
+  // HTML-only). `knownFileMetaUrls` is populated as PrerenderedCard wrappers
+  // are built, so consulting it covers the common "user clicks a file row in
+  // a freshly opened CardsGrid" path.
+  if (knownFileMetaUrls.has(cardId)) {
+    return 'file';
+  }
+  return 'card';
 }
 
 let nextInteractionSequence = 0;
@@ -96,11 +109,16 @@ export class StackItem {
       lastInteractedAt,
     } = args;
 
-    this.#id = id.replace(/\.json$/, '');
+    this.type = inferStackItemType(type);
+    // CardDef instance ids are stored without a `.json` extension, so the
+    // strip sanitizes inputs that erroneously include one. FileDef rows are
+    // a different story — their canonical URL keeps the extension
+    // (`*.json` for JsonFileDef, `*.md` for MarkdownDef, etc.) and stripping
+    // would lose the identity of `.json` FileDef rows in the store.
+    this.#id = this.type === 'file' ? id : id.replace(/\.json$/, '');
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
-    this.type = inferStackItemType(type);
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
     this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;
