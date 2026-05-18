@@ -216,6 +216,15 @@ export class IndexRunner {
     });
     try {
       let filesCompleted = 0;
+      // [ci-readiness-diag] — visit-loop heartbeat. Today the only
+      // markers between `completed invalidations in Xms` and
+      // `completed index visit in Yms` are per-file onProgress events
+      // (callback-routed, not in the worker log). A stuck visit looks
+      // like a 10-minute log gap. Emit a progress line every 25 files
+      // so the realm-server/worker artifact pinpoints WHERE the loop
+      // parked. Remove together with the other [ci-readiness-diag]
+      // blocks once the root cause is identified.
+      const VISIT_PROGRESS_INTERVAL = 25;
       for (let invalidation of invalidations) {
         // Resume guard. If a previous attempt of this same job already
         // wrote URL_X to the working table AND the EFS mtime hasn't
@@ -252,6 +261,14 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+        if (
+          filesCompleted % VISIT_PROGRESS_INTERVAL === 0 ||
+          filesCompleted === invalidations.length
+        ) {
+          current.#perfLog.info(
+            `[ci-readiness-diag] ${jobIdentity(current.#jobInfo)} visit progress ${filesCompleted}/${invalidations.length} for realm ${current.realmURL.href} (elapsedMs=${Date.now() - visitStart}, last=${invalidation.href})`,
+          );
+        }
       }
       if (resumedSkipped > 0) {
         current.#perfLog.debug(

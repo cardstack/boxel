@@ -142,8 +142,8 @@ export class RealmIndexUpdater {
     let startedAt = performance.now();
 
     this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
-    let published = (async () =>
-      await enqueueReindexRealmJob(
+    let published = (async () => {
+      let job = await enqueueReindexRealmJob(
         this.#realm.url,
         await this.#realm.getRealmOwnerUsername(),
         this.#queue,
@@ -152,7 +152,13 @@ export class RealmIndexUpdater {
         {
           clearLastModified: opts?.clearLastModified,
         },
-      ))();
+      );
+      // [ci-readiness-diag] — see also realm.ts readinessCheck + #startup
+      this.#log.info(
+        `[ci-readiness-diag] Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (queue.publish took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
+      );
+      return job;
+    })();
 
     let completed = published
       .then(async (job) => {
