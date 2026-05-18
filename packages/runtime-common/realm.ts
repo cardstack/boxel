@@ -1361,12 +1361,12 @@ export class Realm {
       { clearLastModified: opts?.clearLastModified },
     );
     await completed;
-    // Drop searchCards in-flight entries — the from-scratch swap has
-    // landed in boxel_index, so any pre-update promise must not be reused.
-    // Broadcasts via NOTIFY realm_index_updated so peer replicas drop
-    // their #inFlightSearch maps too (CS-11119).
+    // The from-scratch swap has landed in boxel_index: drop searchCards
+    // in-flight entries + the cached RealmInfo (which may have been
+    // re-parsed from /realm.json during the pass), and broadcast the
+    // same wipe to peer replicas via NOTIFY realm_index_updated so
+    // their caches don't continue serving pre-update state (CS-11119).
     await this.clearRealmIndexCachesAndBroadcast();
-    this.invalidateCachedRealmInfo();
   }
 
   async flushUpdateEvents() {
@@ -1421,25 +1421,32 @@ export class Realm {
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
 
-  // CS-11119: Drop every pending #inFlightSearch entry on this replica.
-  // Called by the realm_index_updated LISTEN handler on peer instances
-  // after a swap commits somewhere else in the fleet. Public so the
-  // realm-server process can wire the listener without reaching into
-  // private state. Callers that registered before the drop continue to
-  // await their existing promise (the underlying SQL was already in
-  // motion); only NEW callers after the drop will miss the map and fire
-  // a fresh search against the now-current index.
+  // CS-11119: Drop every read-side cache whose content derives from the
+  // realm's index — currently `#inFlightSearch` (the searchCards
+  // coalesce map) and `#cachedRealmInfo` (cached `RealmInfo` +
+  // ETag-hash; the ETag's hash component derives from indexed metadata
+  // and `realm_registry` rows, so a from-scratch reindex pass that
+  // re-reads /realm.json invalidates both). Called by the
+  // realm_index_updated LISTEN handler on peer instances after a swap
+  // commits somewhere else in the fleet. Public so the realm-server
+  // process can wire the listener without reaching into private state.
+  // Callers awaiting a pre-clear in-flight searchCards promise still
+  // receive its pre-update result (the SQL was already in motion);
+  // only NEW callers after the clear miss the map and fire a fresh
+  // search against the now-current index.
   clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
+    this.invalidateCachedRealmInfo();
   }
 
-  // Drop local #inFlightSearch AND broadcast the same wipe to peer
+  // Drop local realm-index caches AND broadcast the same wipe to peer
   // replicas via realm_index_updated. Called at every site where this
   // replica's boxel_index has just swapped — closes the post-update
   // staleness window both locally and on peers. Best-effort broadcast;
   // a missed NOTIFY is a bounded staleness window (one in-flight
-  // searchCards walk), not data corruption. Mirrors CS-11156's
-  // clearLocalSourceCachesAndBroadcast pattern for the byte-cache surface.
+  // searchCards walk + a slightly stale ETag), not data corruption.
+  // Mirrors CS-11156's clearLocalSourceCachesAndBroadcast pattern for
+  // the byte-cache surface.
   async clearRealmIndexCachesAndBroadcast(): Promise<void> {
     this.clearRealmIndexCaches();
     await notifyRealmIndexUpdated(this.#dbAdapter, this.url);
