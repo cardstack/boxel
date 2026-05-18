@@ -22,6 +22,7 @@ import NumberField from 'https://cardstack.com/base/number';
 
 import {
   FieldContainer,
+  KanbanColumnConfigSidebar,
   KanbanPlane,
   ContextButton,
   Pill,
@@ -33,6 +34,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-right-collapse';
 import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
+import SlidersHorizontal from '@cardstack/boxel-icons/sliders-horizontal';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -1050,21 +1052,23 @@ export class Project extends CardDef {
 // ── IssueTrackerIsolated ──────────────────────────────────────────────
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
+  @tracked isSidebarOpen = false;
+
   get columns(): KanbanColumnConfig[] {
-    let persistedColumns = this.args.model?.columns ?? [];
-    return buildColumnsFromStatusOptions(
-      getProjectIssueStatusOptions(this.args.model?.project),
-    ).map((col) => {
-      let persisted = persistedColumns.find((stored) => stored.key === col.key);
-      return {
-        key: col.key ?? null,
-        label: col.label ?? null,
-        color: col.color ?? null,
-        collapsed: persisted?.collapsed ?? col.collapsed ?? null,
-        sortOrder: col.sortOrder ?? null,
-        wipLimit: col.wipLimit ?? null,
-      };
-    });
+    let stored = this.args.model.columns ?? [];
+    let source = stored.length
+      ? stored
+      : buildColumnsFromStatusOptions(
+          getProjectIssueStatusOptions(this.args.model?.project),
+        );
+    return source.map((col) => ({
+      key: col.key ?? null,
+      label: col.label ?? null,
+      color: col.color ?? null,
+      collapsed: col.collapsed ?? null,
+      sortOrder: col.sortOrder ?? null,
+      wipLimit: col.wipLimit ?? null,
+    }));
   }
 
   get statusColor(): string | undefined {
@@ -1121,6 +1125,28 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   handleShowEmptyColumns = (): void => {
     this.args.model.hideEmptyColumns = false;
   };
+
+  handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
+    this.args.model.columns = newColumns.map((cfg) =>
+      Object.assign(new KanbanColumnField(), {
+        key: cfg.key,
+        label: cfg.label,
+        color: cfg.color,
+        collapsed: cfg.collapsed,
+        sortOrder: cfg.sortOrder,
+        wipLimit: cfg.wipLimit,
+      }),
+    );
+  };
+
+  toggleSidebar = (): void => {
+    this.isSidebarOpen = !this.isSidebarOpen;
+  };
+
+  closeSidebar = (): void => {
+    this.isSidebarOpen = false;
+  };
+
 
   openCard = (index: number): void => {
     let card = this.args.model.cards?.[index];
@@ -1269,41 +1295,61 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               @label='Hide empty columns'
             />
           </div>
+          <button
+            type='button'
+            class='configure-btn'
+            aria-pressed={{this.isSidebarOpen}}
+            {{on 'click' this.toggleSidebar}}
+            data-test-configure-columns-btn
+          >
+            <SlidersHorizontal width='14' height='14' />
+            Configure
+          </button>
         </div>
       </header>
-      <div class='kanban-area'>
-        <KanbanPlane
-          @columns={{this.columns}}
-          @placements={{this.placements}}
-          @hideEmpty={{@model.hideEmptyColumns}}
-          @onChange={{this.handleChange}}
-          @onOpen={{this.openCard}}
-          @onAddCard={{this.addCardTask.perform}}
-          @onToggleCollapsed={{this.handleToggleCollapsed}}
-          @onShowEmptyColumns={{this.handleShowEmptyColumns}}
-        >
-          <:card as |placement|>
-            {{#let (get @fields.cards placement.index) as |CardField|}}
-              {{#if CardField}}
-                <div
-                  class='card-wrap'
-                  data-test-issue-tracker-card={{placement.index}}
-                >
-                  <CardField @format='fitted' />
-                </div>
-              {{/if}}
-            {{/let}}
-          </:card>
-          <:ghost as |dragIdx|>
-            {{#let (get @fields.cards dragIdx) as |CardField|}}
-              {{#if CardField}}
-                <div class='card-wrap'>
-                  <CardField @format='fitted' />
-                </div>
-              {{/if}}
-            {{/let}}
-          </:ghost>
-        </KanbanPlane>
+      <div class='kanban-body'>
+        <div class='kanban-area'>
+          <KanbanPlane
+            @columns={{this.columns}}
+            @placements={{this.placements}}
+            @hideEmpty={{@model.hideEmptyColumns}}
+            @onChange={{this.handleChange}}
+            @onOpen={{this.openCard}}
+            @onAddCard={{this.addCardTask.perform}}
+            @onToggleCollapsed={{this.handleToggleCollapsed}}
+            @onShowEmptyColumns={{this.handleShowEmptyColumns}}
+          >
+            <:card as |placement|>
+              {{#let (get @fields.cards placement.index) as |CardField|}}
+                {{#if CardField}}
+                  <div
+                    class='card-wrap'
+                    data-test-issue-tracker-card={{placement.index}}
+                  >
+                    <CardField @format='fitted' />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </:card>
+            <:ghost as |dragIdx|>
+              {{#let (get @fields.cards dragIdx) as |CardField|}}
+                {{#if CardField}}
+                  <div class='card-wrap'>
+                    <CardField @format='fitted' />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </:ghost>
+          </KanbanPlane>
+        </div>
+
+        {{#if this.isSidebarOpen}}
+          <KanbanColumnConfigSidebar
+            @columns={{this.columns}}
+            @onColumnsChange={{this.handleColumnsChange}}
+            @onClose={{this.closeSidebar}}
+          />
+        {{/if}}
       </div>
     </div>
     <style scoped>
@@ -1323,10 +1369,43 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         background-color: var(--board-bg);
         color: var(--board-fg);
       }
-      .kanban-area {
+      .kanban-body {
         flex: 1;
         min-height: 0;
+        display: flex;
         overflow: hidden;
+      }
+      .kanban-area {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .configure-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.3125rem 0.625rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        font-family: inherit;
+        border: 1px solid var(--board-border);
+        border-radius: var(--radius, var(--boxel-border-radius-sm));
+        background: transparent;
+        color: var(--board-card-fg);
+        cursor: pointer;
+        transition: background-color 100ms ease;
+      }
+      .configure-btn:hover {
+        background: var(--board-muted-bg);
+      }
+      .configure-btn[aria-pressed='true'] {
+        background: var(--board-muted-bg);
+        border-color: color-mix(
+          in oklch,
+          var(--primary, var(--boxel-highlight)) 60%,
+          transparent
+        );
+        color: var(--primary, var(--boxel-highlight));
       }
       .card-wrap {
         width: 100%;
@@ -1413,8 +1492,6 @@ export class IssueTracker extends KanbanBoard {
     },
   });
 
-  @field columns = containsMany(KanbanColumnField);
-
   @field placements = containsMany(KanbanBoardPlacement);
 
   @field cardTitle = contains(StringField, {
@@ -1432,9 +1509,8 @@ export class IssueTracker extends KanbanBoard {
           <@fields.project />
         </FieldContainer>
         <p class='board-edit-note'>
-          Board columns are derived from the linked project&apos;s issue status
-          options, while board-specific UI state like collapsed columns is
-          stored on this tracker.
+          Board columns default to the linked project&apos;s issue status
+          options. Use the Configure button in the board view to customise them.
         </p>
         <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
           <@fields.hideEmptyColumns />

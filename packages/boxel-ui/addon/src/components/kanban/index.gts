@@ -1,4 +1,5 @@
 export { KanbanCard } from './card.gts';
+export { KanbanColumnConfigSidebar } from './column-config-sidebar.gts';
 export { KanbanColumnHeader } from './column-header.gts';
 export { KanbanDragManager } from './drag.gts';
 export {

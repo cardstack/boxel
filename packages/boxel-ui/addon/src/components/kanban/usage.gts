@@ -14,6 +14,7 @@ import CardContainer from '../card-container/index.gts';
 import Switch from '../switch/index.gts';
 import type { ViewItem } from '../view-selector/index.gts';
 import ViewSelector from '../view-selector/index.gts';
+import { KanbanColumnConfigSidebar } from './column-config-sidebar.gts';
 import {
   type KanbanColumnConfig,
   type KanbanPlacement,
@@ -25,6 +26,23 @@ import { KanbanPlane } from './plane.gts';
 interface DemoCard {
   kind: string;
   title: string;
+}
+
+interface DemoKeyedPlacement {
+  cardIndex: number;
+  columnKey: string | null;
+  sortOrder: number;
+}
+
+function toKeyedPlacements(
+  placements: KanbanPlacement[],
+  columns: KanbanColumnConfig[],
+): DemoKeyedPlacement[] {
+  return placements.map((p) => ({
+    columnKey: columns[p.column]?.key ?? null,
+    cardIndex: p.index,
+    sortOrder: p.sortOrder,
+  }));
 }
 
 const INITIAL_COLUMNS: KanbanColumnConfig[] = [
@@ -101,6 +119,27 @@ export default class KanbanUsage extends Component {
   @tracked cardSizeView = 'tile';
   @tracked cardSize: FittedFormatId = 'regular-tile';
 
+  // Column config sidebar demo state
+  @tracked sidebarColumns = INITIAL_COLUMNS;
+  @tracked sidebarKeyedPlacements: DemoKeyedPlacement[] = toKeyedPlacements(
+    autoPlaceKanban(INITIAL_CARDS.length, 4),
+    INITIAL_COLUMNS,
+  );
+  @tracked showSidebar = true;
+
+  get sidebarPlacements(): KanbanPlacement[] {
+    return this.sidebarKeyedPlacements
+      .map((p) => {
+        let colIdx = this.sidebarColumns.findIndex(
+          (c) => c.key === p.columnKey,
+        );
+        return colIdx === -1
+          ? null
+          : { column: colIdx, index: p.cardIndex, sortOrder: p.sortOrder };
+      })
+      .filter((p): p is KanbanPlacement => p !== null);
+  }
+
   @action handlePlacementsChange(placements: KanbanPlacement[]): void {
     this.placements = placements;
   }
@@ -155,6 +194,21 @@ export default class KanbanUsage extends Component {
 
   @action handleShowEmptyColumns(): void {
     this.hideEmpty = false;
+  }
+
+  @action handleSidebarColumnsChange(columns: KanbanColumnConfig[]): void {
+    this.sidebarColumns = columns;
+  }
+
+  @action handleSidebarPlacementsChange(placements: KanbanPlacement[]): void {
+    this.sidebarKeyedPlacements = toKeyedPlacements(
+      placements,
+      this.sidebarColumns,
+    );
+  }
+
+  @action toggleSidebar(): void {
+    this.showSidebar = !this.showSidebar;
   }
 
   @action addCard(columnKey: string | null): void {
@@ -333,6 +387,82 @@ export default class KanbanUsage extends Component {
       </:api>
     </FreestyleUsage>
 
+    <FreestyleUsage @name='Kanban Column Config Sidebar'>
+      <:description>
+        <p>
+          <code>KanbanColumnConfigSidebar</code>
+          renders a panel where users can rename columns, change their color,
+          set a WIP limit (max cards), reorder them with up/down controls, and
+          toggle individual column visibility.
+        </p>
+        <p>
+          It is a stateless component: every change is reported via
+          <code>onColumnsChange</code>
+          and the caller owns the resulting array.
+        </p>
+      </:description>
+      <:example>
+        <div class='sidebar-demo'>
+          <div class='sidebar-demo-toolbar'>
+            <label class='kanban-toggle'>
+              <span class='kanban-toggle-label'>Show sidebar</span>
+              <Switch
+                @label='Toggle column config sidebar'
+                @isEnabled={{this.showSidebar}}
+                @onChange={{this.toggleSidebar}}
+              />
+            </label>
+          </div>
+          <div class='sidebar-demo-board'>
+            <KanbanPlane
+              @columns={{this.sidebarColumns}}
+              @placements={{this.sidebarPlacements}}
+              @onChange={{this.handleSidebarPlacementsChange}}
+            >
+              <:card as |placement|>
+                {{#let (get this.cards placement.index) as |card|}}
+                  <CardContainer class='demo-card'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
+                    <h3>{{card.title}}</h3>
+                  </CardContainer>
+                {{/let}}
+              </:card>
+              <:ghost as |dragIndex|>
+                {{#let (get this.cards dragIndex) as |card|}}
+                  <CardContainer class='demo-card demo-card--ghost'>
+                    <div class='demo-card-kind'>{{card.kind}}</div>
+                    <h3>{{card.title}}</h3>
+                  </CardContainer>
+                {{/let}}
+              </:ghost>
+            </KanbanPlane>
+            {{#if this.showSidebar}}
+              <KanbanColumnConfigSidebar
+                @columns={{this.sidebarColumns}}
+                @onColumnsChange={{this.handleSidebarColumnsChange}}
+              />
+            {{/if}}
+          </div>
+        </div>
+      </:example>
+      <:api as |Args|>
+        <Args.Object
+          @name='columns'
+          @description='Array of KanbanColumnConfig objects to display and edit.'
+          @required={{true}}
+          @value={{this.sidebarColumns}}
+        />
+        <Args.Action
+          @name='onColumnsChange'
+          @description='Called with the updated columns array whenever any config changes (label, color, WIP limit, visibility, or order).'
+        />
+        <Args.Action
+          @name='onClose'
+          @description='Optional callback invoked when the close button is clicked. If omitted the close button is hidden.'
+        />
+      </:api>
+    </FreestyleUsage>
+
     <style scoped>
       .kanban-usage {
         display: grid;
@@ -386,6 +516,26 @@ export default class KanbanUsage extends Component {
         letter-spacing: 0.05em;
         text-transform: uppercase;
         color: var(--muted-foreground, var(--boxel-500));
+      }
+      .sidebar-demo {
+        display: grid;
+        gap: var(--boxel-sp);
+      }
+      .sidebar-demo-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .sidebar-demo-board {
+        display: flex;
+        height: 28rem;
+        border: 1px solid var(--border, var(--boxel-border-color));
+        border-radius: 0.75rem;
+        overflow: hidden;
+      }
+      .sidebar-demo-board .kanban-plane {
+        flex: 1;
+        min-width: 0;
       }
     </style>
   </template>
