@@ -102,16 +102,18 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-// REALM_SERVER_FULL_INDEX_ON_STARTUP is a three-state override that controls
-// whether each realm runs a from-scratch index when its process boots:
-//   - unset (default): only kind='bootstrap' realms (the ones passed via the
-//     CLI --path args, e.g. base / catalog / skills) full-index on startup.
-//     kind='source' (user realms) and kind='published' realms skip the boot
-//     reindex — a brand-new index still gets built lazily because the
-//     `isNewIndex` branch in Realm.start() is independent of this flag.
+// REALM_SERVER_FULL_INDEX_ON_STARTUP is a three-state override (resolved in
+// lib/full-index-on-startup.ts) that controls whether each realm runs a
+// from-scratch index when its process boots. The `isNewIndex` branch in
+// Realm.start() is independent of this flag, so a brand-new (empty) index
+// still builds on first boot regardless of which value is set here.
+//   - default (unset, or any value other than 'true' / 'false'): only
+//     kind='bootstrap' realms (the ones passed via the CLI --path args,
+//     e.g. base / catalog / skills) full-index on startup. kind='source'
+//     (user realms) and kind='published' realms skip the boot reindex.
 //   - 'true': every realm full-indexes on startup, regardless of kind.
-//     This matches the pre-flip behavior.
-//   - 'false': no realm full-indexes on startup, regardless of kind. Used by
+//     Matches the pre-flip behavior.
+//   - 'false': suppresses the env-driven full-index for every kind. Used by
 //     the cached-index dev flow (scripts/import-cached-index.sh) where the
 //     index tables were just restored from a recent CI snapshot.
 // The deploy-time platform-code reindex flows through a different path
