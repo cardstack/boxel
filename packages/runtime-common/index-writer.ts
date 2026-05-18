@@ -674,11 +674,22 @@ export class Batch {
   // for one kind of row in boxel_index_working — either CardDef instances or
   // FileDef files. The shape of the result rows matches `CardTypeSummary`
   // exactly, so callers can drop them straight into `realm_meta.value`.
+  //
+  // Grouping is by `code_ref` only (not also by display_name). Display name
+  // is aggregated with `MAX(...)`, which skips NULLs — so if some rows for
+  // a given code_ref carry a populated display_name (extracted by the
+  // current FileDefAttributesExtractor) and others carry an empty
+  // `display_names` array (extracted by older indexer code that hadn't
+  // shipped Step 2 yet), the rollup still produces a single summary row
+  // with the non-null label. Without this, CardsGrid's sidebar shows two
+  // entries for the same type — one labeled "Markdown", one labeled
+  // "MarkdownDef" (the CodeRef-name fallback) — that resolve to identical
+  // searches and confuse users during the transition window.
   async #fetchTypeSummary(
     indexType: BoxelIndexTable['type'],
   ): Promise<CardTypeSummary[]> {
     let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
        FROM boxel_index_working as i
           WHERE`,
       ...every([
@@ -693,8 +704,8 @@ export class Batch {
         ],
         any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
       ]),
-      `GROUP BY i.display_names->>0, i.types->>0`,
-      `ORDER BY i.display_names->>0 ASC`,
+      `GROUP BY i.types->>0`,
+      `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
     ] as Expression);
     return results as unknown as CardTypeSummary[];
   }
