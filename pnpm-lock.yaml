@@ -3340,9 +3340,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.12.4
-      '@types/qunit':
-        specifier: 'catalog:'
-        version: 2.19.14
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
@@ -3352,9 +3349,6 @@ importers:
       ignore:
         specifier: ^5.3.0
         version: 5.3.2
-      qunit:
-        specifier: ^2.24.1
-        version: 2.25.0
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
@@ -18716,7 +18710,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18733,7 +18730,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18769,7 +18769,10 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18777,7 +18780,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
