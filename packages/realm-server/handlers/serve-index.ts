@@ -131,9 +131,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
           resolvedCatalogRealmURL: rewriteRealmURL(
             config.resolvedCatalogRealmURL,
           ),
-          resolvedLegacyCatalogRealmURL: rewriteRealmURL(
-            config.resolvedLegacyCatalogRealmURL,
-          ),
           resolvedSkillsRealmURL: rewriteRealmURL(
             config.resolvedSkillsRealmURL,
           ),

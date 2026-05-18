@@ -56,7 +56,6 @@ function environmentDefaults() {
       iconsURL: 'http://localhost:4206',
       baseRealmURL: 'http://localhost:4201/base/',
       catalogRealmURL: 'http://localhost:4201/catalog/',
-      legacyCatalogRealmURL: 'http://localhost:4201/legacy-catalog/',
       skillsRealmURL: 'http://localhost:4201/skills/',
       openRouterRealmURL: 'http://localhost:4201/openrouter/',
     };
@@ -69,7 +68,6 @@ function environmentDefaults() {
     iconsURL: `http://icons.${slug}.localhost`,
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
-    legacyCatalogRealmURL: `http://${realmHost}/legacy-catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
     openRouterRealmURL: `http://${realmHost}/openrouter/`,
   };
@@ -137,10 +135,6 @@ module.exports = function (environment) {
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    resolvedLegacyCatalogRealmURL: skipCatalog
-      ? undefined
-      : process.env.RESOLVED_LEGACY_CATALOG_REALM_URL ||
-        defaults.legacyCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
@@ -170,7 +164,6 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
-    ENV.resolvedLegacyCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }
