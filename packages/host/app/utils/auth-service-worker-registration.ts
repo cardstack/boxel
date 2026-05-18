@@ -32,6 +32,23 @@ export async function registerAuthServiceWorker(): Promise<void> {
     }
   });
 
+  // Respond to on-miss token lookups from the SW. The SW asks here when it
+  // intercepts a GET to a known realm host but has no token in its in-memory
+  // map (SW activation race, post-upload window before per-realm sync lands,
+  // etc.). localStorage is the authoritative source of currently-valid
+  // tokens — the SW's map is a derived cache.
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    if (!event.data || event.data.type !== 'request-realm-token') {
+      return;
+    }
+    let port = event.ports?.[0];
+    if (!port) {
+      return;
+    }
+    let { realmURL, token } = resolveTokenForRequestURL(event.data.requestURL);
+    port.postMessage({ realmURL, token });
+  });
+
   try {
     await navigator.serviceWorker.register('/auth-service-worker.js', {
       scope: '/',
@@ -120,4 +137,34 @@ function readTokensFromStorage(): Record<string, string> | undefined {
     // ignore parse errors
   }
   return undefined;
+}
+
+// Find the longest realm-URL prefix in localStorage that matches the given
+// request URL. Returns `undefined` for both fields when nothing matches —
+// the SW will then preserve its existing pass-through behavior for that
+// request.
+function resolveTokenForRequestURL(requestURL: string | undefined): {
+  realmURL?: string;
+  token?: string;
+} {
+  if (!requestURL) {
+    return {};
+  }
+  let tokens = readTokensFromStorage();
+  if (!tokens) {
+    return {};
+  }
+  let bestRealmURL: string | undefined;
+  for (let realmURL of Object.keys(tokens)) {
+    if (
+      requestURL.startsWith(realmURL) &&
+      (!bestRealmURL || realmURL.length > bestRealmURL.length)
+    ) {
+      bestRealmURL = realmURL;
+    }
+  }
+  if (!bestRealmURL) {
+    return {};
+  }
+  return { realmURL: bestRealmURL, token: tokens[bestRealmURL] };
 }
