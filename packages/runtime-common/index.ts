@@ -645,6 +645,13 @@ export * from './pr-manifest';
 export * from './file-def-code-ref';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+// Card / field definitions live in template-bearing modules — `.gts`
+// (Glimmer + TS) or `.gjs` (Glimmer + JS) — since `CardDef` /
+// `FieldDef` components need a Glimmer template surface. Plain `.ts`
+// and `.js` cannot host a card definition and so are excluded from
+// the realm-wide pre-warm sweep that primes the modules cache before
+// the visit loop.
+export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
@@ -1001,6 +1008,15 @@ export interface CopyCardsWithCodeRef {
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
     if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasCardExtension(path: string): boolean {
+  for (let extension of cardExtensions) {
+    if (path.endsWith(extension)) {
       return true;
     }
   }
