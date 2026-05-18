@@ -455,6 +455,11 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
           },
         },
       },
+      // Raw markdown file (FileDef row, no instance row). Exercises the
+      // file-row branch of `getCardMarkdown` — without it, requesting
+      // `/note.md` with `Accept: text/markdown` would 415, because the
+      // handler only used to look up instance entries.
+      'note.md': '# Note\n\nFile-level markdown body.',
     },
     onRealmSetup,
   });
@@ -494,6 +499,29 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
       .set('Accept', SupportedMimeType.Markdown);
 
     assert.strictEqual(response.status, 404, 'HTTP 404 status');
+  });
+
+  test('GET with Accept: text/markdown on a FileDef row returns its markdown', async function (assert) {
+    // Regression for CS-11170: CardsGrid's "Copy as Markdown" on a `.md`
+    // file URL used to 415 because `getCardMarkdown` only looked up an
+    // instance entry, never a file entry.
+    let response = await request
+      .get('/note.md')
+      .set('Accept', SupportedMimeType.Markdown);
+
+    assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.true(
+      /^text\/markdown(;|$)/.test(response.headers['content-type'] ?? ''),
+      `content-type starts with text/markdown: got "${response.headers['content-type']}"`,
+    );
+    assert.true(
+      response.text.includes('# Note'),
+      'body contains the file row markdown header',
+    );
+    assert.true(
+      response.text.includes('File-level markdown body.'),
+      'body contains the file row markdown body',
+    );
   });
 
   // Case 2: Whitespace preservation
