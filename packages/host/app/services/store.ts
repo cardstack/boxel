@@ -177,8 +177,7 @@ function jobIdHeader(): Record<string, string> {
 //    render-runner build, test fixture, etc.) treat as 0 — the
 //    safe default for prerender-context work.
 //
-// 2. Outside a prerender tab (the host SPA in a real user's browser,
-//    or any external API caller that isn't a prerender visit):
+// 2. Outside a prerender tab (the host SPA in a real user's browser):
 //    stamp `userInitiatedPriority` (10). User clicks driving a
 //    search are by definition user-initiated work and should outrank
 //    background indexing on the realm-server's PagePool. Without
@@ -186,28 +185,51 @@ function jobIdHeader(): Record<string, string> {
 //    cache would fire its sub-prerender at priority 0 and queue
 //    behind concurrent indexing fan-out.
 //
-// External API callers that need a different priority (e.g. batch
-// tooling that wants explicit routing) can override
-// `globalThis.__boxelJobPriority` themselves — outside a prerender
-// tab the policy is still "stamp what's there, default to user
-// priority."
-function jobPriorityHeader(): Record<string, string> {
-  let duringPrerender = (
-    globalThis as unknown as { __boxelDuringPrerender?: boolean }
-  ).__boxelDuringPrerender;
-  let p = (globalThis as unknown as { __boxelJobPriority?: number })
-    .__boxelJobPriority;
+// External (non-host) HTTP callers — anything that doesn't run in
+// the host SPA's JS runtime — bypass this helper entirely and set
+// `X-Boxel-Job-Priority` directly on their request if they care.
+// This helper covers the host SPA only.
+//
+// Both globals are checked with `=== true` / strict-number rather
+// than truthy coercion: `__boxelDuringPrerender` is typed as a
+// boolean and a stray truthy string from a future code path
+// shouldn't silently flip the policy from "user-priority" to
+// "preserve 0."
+// Pure resolver — exported for the unit test in
+// `tests/integration/job-priority-header-test.ts`. See the comment
+// above for the policy rationale; the function is the literal
+// translation of that policy to numbers.
+export function resolveOutboundJobPriority({
+  duringPrerender,
+  jobPriority,
+}: {
+  duringPrerender: unknown;
+  jobPriority: unknown;
+}): number {
   let valid =
-    typeof p === 'number' && Number.isSafeInteger(p) && p >= 0 ? p : undefined;
-  if (duringPrerender) {
-    // Forward as-is, including 0. Fall back to 0 if the global is
-    // absent or malformed.
-    return { [X_BOXEL_JOB_PRIORITY_HEADER]: String(valid ?? 0) };
+    typeof jobPriority === 'number' &&
+    Number.isSafeInteger(jobPriority) &&
+    jobPriority >= 0
+      ? jobPriority
+      : undefined;
+  if (duringPrerender === true) {
+    return valid ?? 0;
   }
-  // Outside prerender: user-initiated unless the caller overrode the
-  // global with their own value.
+  return valid ?? userInitiatedPriority;
+}
+
+function jobPriorityHeader(): Record<string, string> {
+  let g = globalThis as unknown as {
+    __boxelDuringPrerender?: boolean;
+    __boxelJobPriority?: number;
+  };
   return {
-    [X_BOXEL_JOB_PRIORITY_HEADER]: String(valid ?? userInitiatedPriority),
+    [X_BOXEL_JOB_PRIORITY_HEADER]: String(
+      resolveOutboundJobPriority({
+        duringPrerender: g.__boxelDuringPrerender,
+        jobPriority: g.__boxelJobPriority,
+      }),
+    ),
   };
 }
 const queryFieldSeedFromSearchSymbol = Symbol.for(
