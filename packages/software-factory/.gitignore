@@ -2,3 +2,8 @@ playwright-report/
 test-results/
 playwright/
 .software-factory-cache/
+
+# Local workspace mirrors created by `boxel realm pull` during test runs.
+# These are sync copies of the target realm; the canonical data lives in
+# the realm itself.
+factory-test-*/
