@@ -16,7 +16,7 @@
     "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy s3-preview-staging --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
-    "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-http://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
+    "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types"
   },
   "devDependencies": {

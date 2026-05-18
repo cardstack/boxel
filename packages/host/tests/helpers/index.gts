@@ -102,7 +102,7 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('http://localhost:4202/test/');
+export const testModuleRealm = ri('https://localhost:4202/test/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.

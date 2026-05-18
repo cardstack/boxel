@@ -44,17 +44,17 @@
       "boardTitle": "Generic Kanban Board",
       "placements": [
         {
-          "itemId": "http://localhost:4201/experiments/Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7",
+          "itemId": "https://localhost:4201/experiments/Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7",
           "columnKey": "author",
           "sortOrder": 1
         },
         {
-          "itemId": "http://localhost:4201/experiments/Author/3a655a91-98b5-4f33-a071-b62d39218b33",
+          "itemId": "https://localhost:4201/experiments/Author/3a655a91-98b5-4f33-a071-b62d39218b33",
           "columnKey": "author",
           "sortOrder": 2
         },
         {
-          "itemId": "http://localhost:4201/experiments/Representative/880c1d41-2563-43da-999d-ef577fa3eac9",
+          "itemId": "https://localhost:4201/experiments/Representative/880c1d41-2563-43da-999d-ef577fa3eac9",
           "columnKey": "representative",
           "sortOrder": 1
         }

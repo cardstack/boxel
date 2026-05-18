@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,

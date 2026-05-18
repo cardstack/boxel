@@ -60,11 +60,11 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `https://${user.username}.localhost:4205/new-workspace/`,
     );
     await expect(
       newTab.locator(
-        `[data-test-card="http://${user.username}.localhost:4205/new-workspace/index"]`,
+        `[data-test-card="https://${user.username}.localhost:4205/new-workspace/index"]`,
       ),
     ).toBeVisible();
     await newTab.close();
@@ -119,11 +119,11 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://acceptable-subdomain.localhost:4205/',
+      'https://acceptable-subdomain.localhost:4205/',
     );
     await expect(
       newTab.locator(
-        '[data-test-card="http://acceptable-subdomain.localhost:4205/index"]',
+        '[data-test-card="https://acceptable-subdomain.localhost:4205/index"]',
       ),
     ).toBeVisible();
     await newTab.close();
@@ -452,7 +452,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `https://${user.username}.localhost:4205/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();
@@ -482,7 +482,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `https://${user.username}.localhost:4205/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();

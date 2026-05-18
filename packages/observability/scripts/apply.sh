@@ -111,7 +111,7 @@ cp -R ./grafanactl/resources/. "$rendered/"
 
 case "$env_name" in
   local)
-    realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}"
+    realm_server_url="${REALM_SERVER_URL:-https://localhost:4201/}"
     # Matches the dev default in packages/software-factory/src/harness/shared.ts
     # and the matrix test harness, so local Grafana buttons authenticate
     # against a freshly started realm-server with no extra env config.

@@ -23,8 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../../packages/realm-server"
 # Stub the env-driven globals dev-common.sh references during sourcing so
 # the script doesn't error out before we get to kill_tree.
-: "${REALM_BASE_URL:=http://localhost:4201}"
-: "${REALM_TEST_URL:=http://localhost:4202}"
+: "${REALM_BASE_URL:=https://localhost:4201}"
+: "${REALM_TEST_URL:=https://localhost:4202}"
 : "${MATRIX_URL_VAL:=http://localhost:8008}"
 : "${ICONS_URL:=http://localhost:4206}"
 export REALM_BASE_URL REALM_TEST_URL MATRIX_URL_VAL ICONS_URL

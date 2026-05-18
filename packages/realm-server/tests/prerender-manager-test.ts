@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 import {

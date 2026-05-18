@@ -385,7 +385,7 @@ jobs:
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 300 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
+          timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -906,7 +906,7 @@ jobs:
       - name: Serve test assets (icons + host dist)
         run: |
           mise run ci:serve-test-assets &
-          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
+          timeout 180 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
@@ -980,7 +980,13 @@ jobs:
       - name: Start dev stack (icons + host-dist + base realm + prerenderer)
         run: |
           mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
+          # `-k` skips cert verification (the local realm-server speaks
+          # HTTPS with the mkcert leaf cert). `-w '%{http_code}'` + grep
+          # ensures we treat 3xx as still-not-ready instead of letting
+          # `-f` return 0 on the dispatcher's redirect response, which
+          # would race the tests ahead of the base realm finishing its
+          # initial index.
+          timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli

@@ -269,7 +269,7 @@ test.describe('User Registration w/ Token', () => {
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
-      realms: [`http://localhost:4205/${firstUser.username}/personal/`],
+      realms: [`https://localhost:4205/${firstUser.username}/personal/`],
     });
   });
 
