@@ -35,10 +35,15 @@ function runVite({ subcommand, port, allHosts, extraEnv, nodeMemory }) {
   // shortcuts feature is skipped — we don't use it from `pnpm start`
   // anyway since stdin is piped through pnpm/run-p wrappers that swallow
   // keypresses before they reach vite.
+  // No `shell: true`: with a shell wrapper, `child` would be the intermediate
+  // `sh -c` process, and `child.kill(signal)` would only signal the shell —
+  // leaving the vite grandchild orphaned and still bound to port 4200 if a
+  // parent process manager signals just this wrapper instead of sweeping the
+  // whole process group. Spawning npx directly makes `child` the npx process,
+  // which forwards signals to its vite child.
   const child = spawn('npx', args, {
     stdio: ['ignore', 'inherit', 'inherit'],
     cwd: path.join(__dirname, '..'),
-    shell: true,
     env,
   });
 
