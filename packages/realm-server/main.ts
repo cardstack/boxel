@@ -37,6 +37,7 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
+import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
@@ -313,6 +314,7 @@ const getIndexHTML = async () => {
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
+  let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
@@ -572,6 +574,7 @@ const getIndexHTML = async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
+          indexUpdatedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
         ]);
@@ -656,6 +659,17 @@ const getIndexHTML = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await fileChangesListener.start();
+
+  // CS-11119: cross-instance #inFlightSearch invalidation. Sibling of
+  // fileChangesListener — same lookup function, different channel. Fires
+  // at INDEX-UPDATE time (peer's worker batch.done committed boxel_index)
+  // rather than write time, so post-update callers on this replica don't
+  // coalesce into pre-update pending promises.
+  indexUpdatedListener = new RealmIndexUpdatedListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+  });
+  await indexUpdatedListener.start();
 
   // Cross-instance module-cache invalidation (CS-10952). When a peer
   // realm-server emits NOTIFY module_cache_invalidated, replay the bump on

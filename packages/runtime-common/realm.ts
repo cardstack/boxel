@@ -307,6 +307,39 @@ const CARD_JSON_ETAG_VARIANT = 'card';
 export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const REALM_FILE_CHANGES_WILDCARD = '*';
 
+// CS-11119: Postgres NOTIFY channel announcing that a realm's index has
+// just been updated (the worker's batch.done() has committed
+// boxel_index). Payload is the realm URL.
+//
+// Distinct from REALM_FILE_CHANGES_CHANNEL (which fires at file-WRITE
+// time, before indexing has run) — this channel fires at INDEX-UPDATE
+// time, after the swap of boxel_index has landed. Peer replicas
+// subscribe and drop their RealmIndexQueryEngine.#inFlightSearch so a new
+// caller arriving after a peer's update does not coalesce into a
+// pre-update pending promise and receive pre-update data.
+//
+// Same best-effort semantics as the other realm-server NOTIFY channels: a
+// missed NOTIFY leaves a bounded staleness window (one in-flight
+// searchCards walk), not data corruption.
+export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
+
+// Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
+// post-update site inside Realm (Realm.update's onInvalidation, the
+// deferred variant, and Realm.fullReindex). Adapters without pub/sub
+// (e.g. SQLite in the host/browser context) implement notify as a no-op.
+export async function notifyRealmIndexUpdated(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<void> {
+  try {
+    await dbAdapter.notify(REALM_INDEX_UPDATED_CHANNEL, realmURL);
+  } catch (err: unknown) {
+    logger('realm').warn(
+      `notify ${REALM_INDEX_UPDATED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
+    );
+  }
+}
+
 // Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
 // peer realm-server replicas drop every cached path for this realm. Use
 // directly when the caller has a DBAdapter + realm URL but isn't keeping
@@ -1193,9 +1226,11 @@ export class Realm {
       onInvalidation: async (invalidatedURLs: URL[]) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
-        // pre-swap promises must not be coalesced into by post-swap
-        // callers.
-        this.#realmIndexQueryEngine.clearInFlightSearch();
+        // pre-update promises must not be coalesced into by post-update
+        // callers. CS-11119 also broadcasts the same wipe to peer
+        // replicas via NOTIFY realm_index_updated so their #inFlightSearch
+        // maps don't coalesce post-update callers into pre-update promises.
+        await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1240,7 +1275,7 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[]) => {
-        this.#realmIndexQueryEngine.clearInFlightSearch();
+        await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1371,10 +1406,12 @@ export class Realm {
       { clearLastModified: opts?.clearLastModified },
     );
     await completed;
-    // Drop searchCards in-flight entries — the from-scratch swap has
-    // landed in boxel_index, so any pre-swap promise must not be reused.
-    this.#realmIndexQueryEngine.clearInFlightSearch();
-    this.invalidateCachedRealmInfo();
+    // The from-scratch swap has landed in boxel_index: drop searchCards
+    // in-flight entries + the cached RealmInfo (which may have been
+    // re-parsed from /realm.json during the pass), and broadcast the
+    // same wipe to peer replicas via NOTIFY realm_index_updated so
+    // their caches don't continue serving pre-update state (CS-11119).
+    await this.clearRealmIndexCachesAndBroadcast();
   }
 
   async flushUpdateEvents() {
@@ -1433,6 +1470,37 @@ export class Realm {
     this.#testOnlyTranspileDelay = fn;
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
+
+  // CS-11119: Drop every read-side cache whose content derives from the
+  // realm's index — currently `#inFlightSearch` (the searchCards
+  // coalesce map) and `#cachedRealmInfo` (cached `RealmInfo` +
+  // ETag-hash; the ETag's hash component derives from indexed metadata
+  // and `realm_registry` rows, so a from-scratch reindex pass that
+  // re-reads /realm.json invalidates both). Called by the
+  // realm_index_updated LISTEN handler on peer instances after a swap
+  // commits somewhere else in the fleet. Public so the realm-server
+  // process can wire the listener without reaching into private state.
+  // Callers awaiting a pre-clear in-flight searchCards promise still
+  // receive its pre-update result (the SQL was already in motion);
+  // only NEW callers after the clear miss the map and fire a fresh
+  // search against the now-current index.
+  clearRealmIndexCaches(): void {
+    this.#realmIndexQueryEngine.clearInFlightSearch();
+    this.invalidateCachedRealmInfo();
+  }
+
+  // Drop local realm-index caches AND broadcast the same wipe to peer
+  // replicas via realm_index_updated. Called at every site where this
+  // replica's boxel_index has just swapped — closes the post-update
+  // staleness window both locally and on peers. Best-effort broadcast;
+  // a missed NOTIFY is a bounded staleness window (one in-flight
+  // searchCards walk + a slightly stale ETag), not data corruption.
+  // Mirrors CS-11156's clearLocalSourceCachesAndBroadcast pattern for
+  // the byte-cache surface.
+  async clearRealmIndexCachesAndBroadcast(): Promise<void> {
+    this.clearRealmIndexCaches();
+    await notifyRealmIndexUpdated(this.#dbAdapter, this.url);
+  }
 
   // Invalidate the in-memory byte caches for a single path. Called by the
   // realm_file_changes LISTEN handler on peer instances after a write lands
