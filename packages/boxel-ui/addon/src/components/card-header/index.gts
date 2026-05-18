@@ -320,7 +320,6 @@ export default class CardHeader extends Component<Signature> {
           flex-shrink: 1;
           min-width: 0;
           text-align: center;
-          padding-inline: 30px;
         }
         .card-type-display-name-text {
           font: 700 var(--boxel-font-sm);
@@ -429,9 +428,18 @@ export default class CardHeader extends Component<Signature> {
           vertical-align: middle;
         }
 
-        @container card-header (max-width: 30rem) {
+        @container card-header (min-width: 30rem) {
           .card-type-display-name {
-            padding-inline: 0;
+            padding-inline: 1.875rem;
+          }
+        }
+
+        @container card-header (min-width: 28rem) {
+          .realm-icon-container {
+            min-width: var(--boxel-card-header-icon-container-min-width);
+          }
+          .actions {
+            min-width: var(--boxel-card-header-actions-min-width);
           }
         }
 
