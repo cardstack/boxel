@@ -1,6 +1,8 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
+
 import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 
 import {
@@ -76,7 +78,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardIds: [`${testRealmURL}Pet/mango`],
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
     } as never);
 
     assert.deepEqual(operatorModeStateService.createListingModalPayload, {
@@ -85,7 +87,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardIds: [`${testRealmURL}Pet/mango`],
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
       declarationKind: 'card',
     });
   });
@@ -161,7 +163,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardIds: [`${testRealmURL}Pet/mango`],
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
     } as never);
 
     assert.ok(

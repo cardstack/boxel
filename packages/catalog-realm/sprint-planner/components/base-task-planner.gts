@@ -85,7 +85,6 @@ export type FilterType = 'status' | 'assignee';
 
 // Type definitions for the card structure
 export interface TaskCard extends CardDef {
-  id: string;
   status?: {
     label: string;
     index: number;

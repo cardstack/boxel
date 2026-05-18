@@ -78,7 +78,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       }
       this.playgroundPanelService.persistSelections(
         internalKeyFor(cardDefRef, undefined),
-        input.cardId,
+        rri(input.cardId),
         (input.format as Format) || 'isolated',
         undefined,
       );

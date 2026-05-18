@@ -27,6 +27,7 @@ import {
   CodeRef,
   APP_BOXEL_LLM_MODE,
   type LLMMode,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -191,7 +192,7 @@ export interface BoxelErrorForContext {
 
 export interface BoxelContext {
   agentId?: string;
-  openCardIds?: string[];
+  openCardIds?: RealmResourceIdentifier[];
   realmUrl?: string;
   realmPermissions?: {
     canRead: boolean;
@@ -210,7 +211,7 @@ export interface BoxelContext {
     currentFile?: string;
     moduleInspectorPanel?: string;
     previewPanelSelection?: {
-      cardId: string;
+      cardId: RealmResourceIdentifier;
       format: string;
     };
     selectedCodeRef?: CodeRef;

@@ -2356,7 +2356,7 @@ export type EditCardFn = (
   opts?: { useBaseTemplate?: boolean },
 ) => void;
 
-export type SaveCardFn = (id: string) => void;
+export type SaveCardFn = (id: RealmResourceIdentifier) => void;
 
 export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
 
@@ -2740,7 +2740,9 @@ export class FileDef extends BaseDef {
     }
   }
 
-  @field id = contains(ReadOnlyField);
+  @field id: RealmResourceIdentifier = contains(
+    ReadOnlyField,
+  ) as unknown as RealmResourceIdentifier;
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
@@ -2900,7 +2902,9 @@ export class CardDef extends BaseDef {
     // notify glimmer to rerender this card
     notifyCardTracking(this);
   }
-  @field id = contains(ReadOnlyField);
+  @field id: RealmResourceIdentifier = contains(
+    ReadOnlyField,
+  ) as unknown as RealmResourceIdentifier;
   @field cardInfo = contains(CardInfoField);
   @field cardTitle = contains(StringField, {
     computeVia: function (this: CardDef) {
@@ -3462,7 +3466,7 @@ function trackRuntimeRelationshipModuleDependencies(
   }
 }
 
-export function setId(instance: CardDef, id: string) {
+export function setId(instance: CardDef, id: RealmResourceIdentifier) {
   let field = getField(instance, 'id');
   if (field) {
     setField(instance, field, id);
