@@ -14,6 +14,7 @@ import {
 } from '../lib/profile-manager';
 import { FG_RED, FG_GREEN, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
+import { findBoxelCliRoot } from '../lib/find-package-root';
 import { listFiles } from './file/list';
 
 /**
@@ -199,7 +200,7 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       options.hostDistDir ??
       join(
         findHostDistPackageDir() ??
-          resolve(__dirname, '..', '..', '..', 'host'),
+          join(resolve(findBoxelCliRoot(__dirname), '..'), 'host'),
         'dist',
       );
 
@@ -475,9 +476,10 @@ function fileExists(path: string): boolean {
 }
 
 function findHostDistPackageDir(): string | undefined {
-  let packageRoot = resolve(__dirname, '..', '..');
-  let workspaceRoot = resolve(packageRoot, '..', '..');
-  let hostDir = resolve(packageRoot, '..', 'host');
+  let packageRoot = findBoxelCliRoot(__dirname);
+  let packagesDir = resolve(packageRoot, '..');
+  let workspaceRoot = resolve(packagesDir, '..');
+  let hostDir = join(packagesDir, 'host');
 
   let rootRepoCheckoutDir = findRootRepoCheckoutDir(workspaceRoot);
   let rootRepoHostDir =

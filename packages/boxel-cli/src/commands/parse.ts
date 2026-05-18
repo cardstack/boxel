@@ -20,6 +20,7 @@ import {
 } from '../lib/profile-manager';
 import { FG_RED, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
+import { findBoxelCliRoot } from '../lib/find-package-root';
 import { search } from './search';
 
 /**
@@ -55,12 +56,8 @@ const SPEC_TYPE = {
 const PARSEABLE_GTS_EXTENSIONS = ['.gts', '.gjs', '.ts'] as const;
 const PARSEABLE_JSON_EXTENSION = '.json';
 
-/**
- * Monorepo layout: this file lives at
- * `packages/boxel-cli/src/commands/parse.ts`. Up three levels reaches
- * `packages/`, alongside `base`, `host`, `boxel-ui`, etc.
- */
-const PACKAGES_PATH = resolve(__dirname, '..', '..', '..');
+const BOXEL_CLI_PATH = findBoxelCliRoot(__dirname);
+const PACKAGES_PATH = resolve(BOXEL_CLI_PATH, '..');
 const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
 const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
 const BOXEL_UI_PATH = join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src');
@@ -435,14 +432,7 @@ async function runGlintCheck(
 
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
-    let emberTscBin = resolve(
-      __dirname,
-      '..',
-      '..',
-      'node_modules',
-      '.bin',
-      'ember-tsc',
-    );
+    let emberTscBin = join(BOXEL_CLI_PATH, 'node_modules', '.bin', 'ember-tsc');
 
     let { output, exitedWithError } = await new Promise<{
       output: string;
