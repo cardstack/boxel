@@ -24,7 +24,6 @@ const REALM_USERS = [
   'node-test_realm',
   'skills_realm',
   'software_factory_realm',
-  'legacy_catalog_realm',
   'test_realm',
   'openrouter_realm',
 ];

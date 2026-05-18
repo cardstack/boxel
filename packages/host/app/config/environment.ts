@@ -37,7 +37,6 @@ export default config as {
   realmServerURL: string;
   resolvedBaseRealmURL: string;
   resolvedCatalogRealmURL: string | undefined;
-  resolvedLegacyCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
   resolvedOpenRouterRealmURL: string | undefined;
   hostsOwnAssets: boolean;
