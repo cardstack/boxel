@@ -1296,8 +1296,14 @@ export class Realm {
     });
   }
 
-  async start() {
-    this.#startedUp.fulfill((() => this.#startup())());
+  // `fromScratchIndexPriority` overrides the realm's default priority
+  // for the from-scratch-index job that `#startup` enqueues when the
+  // realm has no prior index. Callers that mount-on-demand for a
+  // user-initiated flow (e.g. realm creation) pass
+  // `userInitiatedPriority` so the resulting job jumps ahead of any
+  // backlog of system-priority indexing work.
+  async start(opts?: { fromScratchIndexPriority?: number }) {
+    this.#startedUp.fulfill((() => this.#startup(opts))());
 
     if (this.#adapter.fileWatcherEnabled) {
       await this.startFileWatcher();
@@ -2174,7 +2180,7 @@ export class Realm {
     await completed;
   }
 
-  async #startup() {
+  async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
@@ -2188,9 +2194,9 @@ export class Realm {
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
       if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex(
-          this.#fromScratchIndexPriority,
-        );
+        let priority =
+          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+        let promise = this.#realmIndexUpdater.fullIndex(priority);
         if (isNewIndex) {
           // we only await the full indexing at boot if this is a brand new index
           await promise;
