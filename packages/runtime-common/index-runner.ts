@@ -675,15 +675,37 @@ export class IndexRunner {
     }
 
     let failed = 0;
-    for (let moduleUrl of toWarm) {
-      try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
-          priority: this.#jobPriority,
-        });
-      } catch {
-        failed += 1;
+    // Bounded-parallel sweep. The bound matches the default
+    // `#fileAdmissionCap` of the prerender server's PagePool
+    // (`affinityTabMax − 1`, default 4). Tying it to the
+    // file-admission cap keeps the parallel pre-warm from
+    // oversubscribing the per-affinity tab budget — at most
+    // `#fileAdmissionCap` file/render tabs will be in flight in the
+    // realm's affinity, and pre-warm modules borrow the same headroom
+    // before the visit phase starts. The visit phase pays no penalty
+    // because pre-warm runs strictly before it. Concurrency above 4
+    // re-introduces the contention that motivated the original serial
+    // shape; below 4 leaves the prerender server's idle tabs unused
+    // for the duration of the sweep.
+    let prewarmConcurrency = 4;
+    let urls = [...toWarm];
+    let cursor = 0;
+    let worker = async () => {
+      while (cursor < urls.length) {
+        let i = cursor++;
+        let moduleUrl = urls[i];
+        try {
+          await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+            priority: this.#jobPriority,
+          });
+        } catch {
+          failed += 1;
+        }
       }
-    }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(prewarmConcurrency, urls.length) }, worker),
+    );
     if (failed > 0) {
       this.#log.warn(
         `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
@@ -691,7 +713,7 @@ export class IndexRunner {
     }
 
     this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed} concurrency=${prewarmConcurrency})`,
     );
   }
 
