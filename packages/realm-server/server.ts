@@ -1,6 +1,10 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
+import http from 'http';
+import http2 from 'http2';
+import net from 'net';
+import { readFileSync } from 'fs';
 import type { DefinitionLookup, Realm } from '@cardstack/runtime-common';
 import {
   logger,
@@ -30,6 +34,222 @@ import { createServeIndex } from './handlers/serve-index';
 import { findOrMountRealm } from './lib/realm-routing';
 import type { Prerenderer } from '@cardstack/runtime-common';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
+
+const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
+const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
+
+export type RealmHttpServer =
+  | http.Server
+  | http2.Http2SecureServer
+  | net.Server;
+
+// Node's HTTP/2 compat layer reports Http2Stream.writable === false on
+// server-side streams whose request method is HEAD (the protocol forbids a
+// body, so the stream is marked non-writable up front). Koa's
+// `ctx.writable` getter delegates to `res.socket.writable`, so for HEAD
+// over h2 it sees `false` and `respond()` bails silently — the response
+// headers never get sent and the client hangs until its timeout.
+// Patching the prototype getter to recognise HEAD-over-h2 streams as
+// writable (when they are otherwise healthy) restores normal HEAD
+// semantics over h2 without disturbing GET/POST or HTTP/1.1. Exported so
+// tests that build their own Koa app pick up the same fix.
+let koaResponsePatchedForH2 = false;
+export function patchKoaResponseForH2Head() {
+  if (koaResponsePatchedForH2) return;
+  // Construct a throwaway Koa instance just to find the prototype — Koa's
+  // response prototype isn't exported directly.
+  let proto = Object.getPrototypeOf(new Koa().response) as object;
+  let descriptor = Object.getOwnPropertyDescriptor(proto, 'writable');
+  let origWritable = descriptor?.get;
+  if (!origWritable) return;
+  Object.defineProperty(proto, 'writable', {
+    configurable: true,
+    get(this: Koa.Response) {
+      let res = this.res as unknown as {
+        writableEnded?: boolean;
+        req?: { method?: string };
+        stream?: { destroyed?: boolean; closed?: boolean };
+      };
+      if (res?.writableEnded) return false;
+      let stream = res?.stream;
+      if (
+        res?.req?.method === 'HEAD' &&
+        stream &&
+        !stream.destroyed &&
+        !stream.closed
+      ) {
+        return true;
+      }
+      return origWritable!.call(this);
+    },
+  });
+  koaResponsePatchedForH2 = true;
+}
+
+// In TLS mode the realm-server binds a single net.Server that peeks each
+// connection's first byte and routes TLS handshakes (0x16) to the HTTP/2
+// secure server and plain-text HTTP to a tiny 308-redirect server. This
+// gives http://localhost:4201 → https://localhost:4201 the same-port
+// redirect UX without running two listeners on different ports.
+// Exported for tests in `tests/listener-dispatcher-test.ts` — the
+// production caller is `RealmServer.listen()` below.
+export function createListener(
+  log: ReturnType<typeof logger>,
+  app: { callback: Koa['callback'] },
+): { server: RealmHttpServer; proto: 'http' | 'https/h2' } {
+  let certFile = process.env[TLS_CERT_FILE_ENV];
+  let keyFile = process.env[TLS_KEY_FILE_ENV];
+  if (!certFile || !keyFile) {
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  // We only need the patch on the h2 path — but it's idempotent and
+  // cheap, so we apply it unconditionally once cert/key are present.
+  patchKoaResponseForH2Head();
+  let cert: Buffer;
+  let key: Buffer;
+  try {
+    cert = readFileSync(certFile);
+    key = readFileSync(keyFile);
+  } catch (e) {
+    log.warn(
+      `Unable to read TLS cert/key (%s, %s): %s — falling back to HTTP/1.1`,
+      certFile,
+      keyFile,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  let tlsServer: http2.Http2SecureServer;
+  try {
+    tlsServer = http2.createSecureServer(
+      { cert, key, allowHTTP1: true },
+      app.callback(),
+    );
+  } catch (e) {
+    log.warn(
+      `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  let redirectServer = http.createServer(redirectToHttps);
+  // Track every accepted socket so shutdown can force-close them. Without
+  // this, `dispatcher.close()` waits for active HTTP/2 sessions and
+  // keep-alive HTTP/1 connections to end on their own — a single open
+  // browser tab can keep the realm-server from ever shutting down. Mirror
+  // the API surface (`closeAllConnections`) so main.ts's existing typeof
+  // guard picks this up without a special-case branch.
+  let activeSockets = new Set<net.Socket>();
+  let dispatcher = net.createServer({ pauseOnConnect: true }, (socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => activeSockets.delete(socket));
+    // Attach a per-socket error listener BEFORE doing any I/O. A peer that
+    // RSTs the connection mid-handshake (or in the half-open window before
+    // we route it) emits `'error'` on this raw socket; without a listener
+    // Node escalates that to an uncaught exception and the realm-server
+    // would crash. Logging + best-effort destroy is sufficient — the
+    // dispatcher is the realm-server's single inbound listener and must
+    // survive hostile or unlucky clients.
+    socket.on('error', (e) => {
+      log.warn(`dispatcher socket error: %s`, e.message);
+      socket.destroy();
+    });
+    socket.once('readable', () => {
+      let firstByte: Buffer | null;
+      try {
+        firstByte = socket.read(1);
+      } catch {
+        socket.destroy();
+        return;
+      }
+      if (firstByte == null) {
+        // Connection opened then closed without data — release the socket
+        // promptly instead of letting it idle in CLOSE_WAIT until the OS
+        // reaps it. Cheap defense against half-open-connection accumulators
+        // (port scanners, eager load balancers, etc.).
+        socket.destroy();
+        return;
+      }
+      socket.unshift(firstByte);
+      // 0x16 is the TLS ClientHello record type. Anything else is treated
+      // as plain HTTP (ASCII verb byte) and gets the redirect path.
+      if (firstByte[0] === 0x16) {
+        tlsServer.emit('connection', socket);
+      } else {
+        redirectServer.emit('connection', socket);
+      }
+      socket.resume();
+    });
+  });
+  // Server-level errors (e.g. `EADDRINUSE` at `listen()` time). Per-socket
+  // errors are handled inside the connection callback above.
+  dispatcher.on('error', (e) => {
+    log.warn(`dispatcher server error: %s`, e.message);
+  });
+  // Mirror http.Server's `closeAllConnections()` so shutdown can force-
+  // close in-flight TLS / HTTP/2 / keep-alive sockets without waiting for
+  // peers to close them. main.ts feature-detects this method.
+  (
+    dispatcher as net.Server & { closeAllConnections: () => void }
+  ).closeAllConnections = () => {
+    for (let s of activeSockets) {
+      try {
+        s.destroy();
+      } catch {
+        // best-effort
+      }
+    }
+    activeSockets.clear();
+  };
+  return { server: dispatcher, proto: 'https/h2' };
+}
+
+// Same-port 308 redirect for plain-text HTTP requests that land on the
+// HTTPS port. The dispatcher binds a single port so the inbound and
+// target ports agree; we just rewrite the scheme. Parses via URL so
+// bracketed IPv6 authorities (`[::1]:4201`) round-trip cleanly instead
+// of being mangled by string-level regex.
+//
+// 308 (vs 301): preserves the request method and body across the
+// redirect. Local scripts that POST to `http://localhost:4201/...`
+// (matrix registration/setup writes `/_server-session`, `/_user`,
+// webhook endpoints) need that — a 301 makes fetch downgrade the
+// follow-up to GET and drops the body, breaking those calls. 308 is
+// also semantically correct: this redirect is a permanent property of
+// the wire protocol, not a temporary handler decision.
+function redirectToHttps(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): void {
+  let hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
+  let path = req.url ?? '/';
+  let authority: string;
+  try {
+    let parsed = new URL(`http://${hostHeader || hostFromSocket(req)}`);
+    // `url.host` preserves brackets around IPv6 literals and the port if
+    // present, which is exactly the form we want in the redirect target.
+    authority = parsed.host;
+  } catch {
+    authority = hostFromSocket(req);
+  }
+  let location = `https://${authority}${path}`;
+  res.writeHead(308, {
+    Location: location,
+    'Content-Type': 'text/plain; charset=utf-8',
+  });
+  res.end(`Redirecting to ${location}\n`);
+}
+
+// Best-effort fallback when the inbound request has no Host header
+// (HTTP/1.0 client). Uses the dispatcher's bound `localAddress:localPort`
+// so the redirect goes to the actual listener instead of guessing port
+// 443. Brackets IPv6 literals to match URL `host` formatting.
+function hostFromSocket(req: http.IncomingMessage): string {
+  let addr = req.socket.localAddress ?? 'localhost';
+  let port = req.socket.localPort;
+  let bracketed = addr.includes(':') ? `[${addr}]` : addr;
+  return port ? `${bracketed}:${port}` : bracketed;
+}
 
 export class RealmServer {
   private log = logger('realm-server');
@@ -253,12 +473,17 @@ export class RealmServer {
     return app;
   }
 
-  listen(port: number) {
-    let instance = this.app.listen(port);
+  listen(port: number): RealmHttpServer {
+    let { server: instance, proto } = createListener(this.log, this.app);
+    instance.listen(port);
     instance.on('listening', () => {
       let actualPort =
         (instance.address() as import('net').AddressInfo | null)?.port ?? port;
-      this.log.info(`Realm server listening on port %s\n`, actualPort);
+      this.log.info(
+        `Realm server listening on port %s (%s)\n`,
+        actualPort,
+        proto,
+      );
     });
     return instance;
   }

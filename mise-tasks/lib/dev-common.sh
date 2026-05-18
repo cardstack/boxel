@@ -243,26 +243,39 @@ sweep_orphaned_services() {
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
+# Pick wait-on's protocol prefix based on the realm-server's scheme. Local
+# dev runs HTTPS+HTTP/2 by default; tests/CI fall back to plain HTTP when
+# `infra:ensure-dev-cert` hasn't run. `${REALM_BASE_URL#*://}` strips
+# whichever scheme is in use to feed wait-on's authority-only form.
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
+case "$REALM_TEST_URL" in
+  https://*) REALM_TEST_READY_SCHEME="https-get" ;;
+  *)         REALM_TEST_READY_SCHEME="http-get"  ;;
+esac
+
 # Phase 1 readiness URLs
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-SKILLS_READY="http-get://${REALM_BASE_URL#http://}/skills/${READY_PATH}"
+BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
+SKILLS_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/skills/${READY_PATH}"
 PHASE1_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
 
 if [ -z "${SKIP_CATALOG:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/catalog/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/catalog/${READY_PATH}"
 fi
 if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/boxel-homepage/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/boxel-homepage/${READY_PATH}"
 fi
 if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/experiments/${READY_PATH}"
 fi
-PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}"
+PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}"
 
 PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
 
 # Phase 2 readiness URL
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
 # In environment mode, bootstrap infra before starting services
 if [ -n "$BOXEL_ENVIRONMENT" ]; then

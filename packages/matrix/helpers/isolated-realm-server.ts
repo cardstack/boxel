@@ -9,6 +9,18 @@ import type { SynapseInstance } from '../docker/synapse';
 
 setGracefulCleanup();
 
+// The isolated realm-server / worker stack matches production:
+// HTTPS+HTTP/2 on `https://localhost:4205`. URL maps, realm registry
+// entries, and the Playwright `baseURL` all hardcode `https://`, and
+// the spawned child processes inherit `REALM_SERVER_TLS_CERT_FILE` /
+// `_KEY_FILE` from `mise-tasks/lib/env-vars.sh` so the same mkcert
+// leaf the parent dev stack uses on :4201/:4202 also terminates TLS
+// on :4205. Keeping the wire protocol identical to prod means the
+// matrix suite acts as a regression guard on the h2 framing changes
+// elsewhere in this PR (`setContextResponse` h1-only-header filter,
+// `fetchRequestFromContext` pseudo-header strip, the HEAD-stream
+// `writable` patch, and the hand-rolled `proxyAsset` forwarder).
+
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
@@ -18,7 +30,7 @@ const skillsRealmDir = resolve(
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
-export const appURL = 'http://localhost:4205/test';
+export const appURL = 'https://localhost:4205/test';
 
 const DEFAULT_PRERENDER_PORT = 4231;
 const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;
@@ -53,11 +65,7 @@ function parseTimeoutMs(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
 }
 
-function pushOutputTail(
-  output: string[],
-  prefix: string,
-  data: Buffer,
-): void {
+function pushOutputTail(output: string[], prefix: string, data: Buffer): void {
   for (let line of data.toString().split(/\r?\n/)) {
     if (!line.trim()) {
       continue;
@@ -109,7 +117,9 @@ function buildStartupFailure(
   diagnostics: Record<string, unknown>,
 ): Error {
   let message =
-    reason instanceof Error ? reason.message : `Startup failed: ${String(reason)}`;
+    reason instanceof Error
+      ? reason.message
+      : `Startup failed: ${String(reason)}`;
   let error = new Error(
     `${message}\nStartup diagnostics:\n${JSON.stringify(
       {
@@ -234,7 +244,24 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    // The mkcert leaf for the isolated stack covers `*.localhost`, but
+    // Node's `tls.checkServerIdentity` hardcodes-disallows wildcard
+    // matching against TLDs (it treats `localhost` as a TLD per RFC
+    // 6125 strict interpretation), so worker fetches to
+    // `https://publish-realm-XXX.localhost:4205/...` fail with
+    // ERR_TLS_CERT_ALTNAME_INVALID. Relax cert validation in the
+    // harness's spawned Node children — the wire is loopback only and
+    // the cert is still being validated end-to-end against the mkcert
+    // root via NODE_EXTRA_CA_CERTS, just without strict SAN matching
+    // on subdomains.
+    NODE_TLS_REJECT_UNAUTHORIZED: '0',
+    // vite preview always serves HTTPS on :4200 in this harness
+    // (vite.config.mjs reads the mkcert leaf, which mise activates via
+    // infra:ensure-dev-cert before boot). Hardcode the canonical here
+    // rather than reading process.env.HOST_URL — a shell that
+    // mise-activated before the cert existed leaks a stale http://...
+    // value and sends the prerender to a port that doesn't speak HTTP.
+    BOXEL_HOST_URL: 'https://localhost:4200',
     LOG_LEVELS:
       process.env.TEST_HARNESS_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
@@ -320,7 +347,10 @@ export async function startServer({
     process.env.TEST_HARNESS_REALM_SERVER_START_TIMEOUT_MS,
     DEFAULT_REALM_SERVER_START_TIMEOUT_MS,
   );
-  let workerManagerMetadataFile = join(dir.name, 'worker-manager-metadata.json');
+  let workerManagerMetadataFile = join(
+    dir.name,
+    'worker-manager-metadata.json',
+  );
   let realmServerMetadataFile = join(dir.name, 'realm-server-metadata.json');
   let workerManagerOutput: string[] = [];
   let realmServerOutput: string[] = [];
@@ -346,16 +376,16 @@ export async function startServer({
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='https://localhost:4205/test/'`,
+    `--toUrl='https://localhost:4205/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='@cardstack/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--toUrl='https://localhost:4205/skills/'`,
   ]);
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='https://localhost:4205/base/'`,
   ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
@@ -363,6 +393,11 @@ export async function startServer({
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
+      // See the prerender spawn above for why this is needed (Node's
+      // `tls.checkServerIdentity` doesn't honor `*.localhost` wildcard
+      // SANs, so publish-realm subdomain fetches from the spawned
+      // worker fail with ERR_TLS_CERT_ALTNAME_INVALID).
+      NODE_TLS_REJECT_UNAUTHORIZED: '0',
       TEST_HARNESS_WORKER_START_TIMEOUT_MS: String(workerStartTimeoutMs),
       TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
     },
@@ -447,20 +482,20 @@ export async function startServer({
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='https://localhost:4205/test/'`,
+    `--toUrl='https://localhost:4205/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
     `--fromUrl='@cardstack/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--toUrl='https://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='https://localhost:4205/base/'`,
   ]);
 
   console.log(`realm server database: ${testDBName}`);
@@ -470,6 +505,18 @@ export async function startServer({
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
+      // See the prerender spawn for why this is needed (Node's
+      // `tls.checkServerIdentity` doesn't honor `*.localhost` wildcard
+      // SANs, so publish-realm subdomain fetches from the spawned
+      // realm-server fail with ERR_TLS_CERT_ALTNAME_INVALID).
+      NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      // Override HOST_URL explicitly: main.ts reads it as `distURL` (the
+      // URL the realm-server fetches index.html from at boot). A stale
+      // HOST_URL=http leaking in from a shell that mise-activated before
+      // the cert existed would land the boot fetch on a port that doesn't
+      // speak HTTP, and the realm-server would exit -2 before any test
+      // can run. The harness boots vite preview as HTTPS on :4200.
+      HOST_URL: 'https://localhost:4200',
       // Matrix tests don't exercise GitHub PR creation, so disable that route
       // to avoid pulling Octokit into the realm server startup path.
       DISABLE_GITHUB_PR_ROUTE: 'true',
@@ -581,8 +628,8 @@ export async function startServer({
   // metadata backfill trims on first boot.
   await server.executeSQL(
     `INSERT INTO realm_metadata (url, show_as_catalog) VALUES
-       ('http://localhost:4205/test/', true),
-       ('http://localhost:4205/skills/', true)
+       ('https://localhost:4205/test/', true),
+       ('https://localhost:4205/skills/', true)
      ON CONFLICT (url) DO UPDATE SET show_as_catalog = true`,
   );
 

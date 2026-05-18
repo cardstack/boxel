@@ -589,10 +589,15 @@ export class PgAdapter implements DBAdapter {
       await client.connect();
       let realmServerUrl = `http://realm-server.${slug}.localhost`;
       let realmTestUrl = `http://realm-test.${slug}.localhost`;
+      // Match both http and https canonicals — realm-server speaks HTTPS in
+      // local dev now, so a DB seeded after the CS-11114 flip stores
+      // `https://localhost:42XX/...` permission rows; older rows can still
+      // be on `http://`. The regex collapses both into the env-mode
+      // Traefik hostname.
       let result = await client.query(
         `UPDATE realm_user_permissions
-         SET realm_url = regexp_replace(realm_url, '^http://localhost:4201/', $1)
-         WHERE realm_url LIKE 'http://localhost:4201/%'`,
+         SET realm_url = regexp_replace(realm_url, '^https?://localhost:4201/', $1)
+         WHERE realm_url ~ '^https?://localhost:4201/'`,
         [`${realmServerUrl}/`],
       );
       if (result.rowCount && result.rowCount > 0) {
@@ -602,8 +607,8 @@ export class PgAdapter implements DBAdapter {
       }
       let result2 = await client.query(
         `UPDATE realm_user_permissions
-         SET realm_url = regexp_replace(realm_url, '^http://localhost:4202/', $1)
-         WHERE realm_url LIKE 'http://localhost:4202/%'`,
+         SET realm_url = regexp_replace(realm_url, '^https?://localhost:4202/', $1)
+         WHERE realm_url ~ '^https?://localhost:4202/'`,
         [`${realmTestUrl}/`],
       );
       if (result2.rowCount && result2.rowCount > 0) {

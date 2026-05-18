@@ -477,7 +477,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // go to a file with different realm
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `http://localhost:4202/test/mango.png`,
+      `https://localhost:4202/test/mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
@@ -521,7 +521,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `http://localhost:4202/test/mango.png`,
+      `https://localhost:4202/test/mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
@@ -823,7 +823,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     await fillIn(
       '[data-test-card-url-bar-input]',
-      `http://localhost:4202/test/mango.png`,
+      `https://localhost:4202/test/mango.png`,
     );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',

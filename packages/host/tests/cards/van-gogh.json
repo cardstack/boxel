@@ -1,7 +1,7 @@
 {
   "data": {
     "type": "card",
-    "id": "http://localhost:4202/test/van-gogh",
+    "id": "https://localhost:4202/test/van-gogh",
     "attributes": {
       "firstName": "Van",
       "lastName": "Gogh"

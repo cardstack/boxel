@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Start test realm servers"
-#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE depends=["infra:ensure-dev-cert", "infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
 SCRIPTS_DIR="./scripts"

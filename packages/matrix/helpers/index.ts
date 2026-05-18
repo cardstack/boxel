@@ -16,7 +16,7 @@ import { appURL, BasicSQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
-export const testHost = 'http://localhost:4205/test';
+export const testHost = 'https://localhost:4205/test';
 export const mailHost = 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
@@ -111,12 +111,12 @@ export async function setRealmRedirects(page: Page) {
   await registerRealmRedirect(
     page,
     'http://localhost:4201/skills/',
-    'http://localhost:4205/skills/',
+    'https://localhost:4205/skills/',
   );
   await registerRealmRedirect(
     page,
     'http://localhost:4201/base/',
-    'http://localhost:4205/base/',
+    'https://localhost:4205/base/',
   );
 }
 

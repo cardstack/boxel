@@ -6,6 +6,8 @@ import puppeteer, { type Browser } from 'puppeteer';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
+import { isHttpsLoopback } from '../lib/is-https-loopback';
+
 const log = logger('prerenderer');
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
 const USER_DATA_MAX_AGE_MS = 60 * 60 * 1000;
@@ -27,6 +29,30 @@ export class BrowserManager {
       process.env.PUPPETEER_DISABLE_SANDBOX === 'true';
     if (disableSandbox) {
       launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+
+    // When the realm-server speaks HTTPS (local dev with a mkcert leaf
+    // cert), Chromium needs to be told to accept it. mkcert's root CA
+    // may or may not be in the system trust store depending on whether
+    // the dev ran `mkcert -install`. Puppeteer's bundled Chromium uses
+    // its own NSS DB that mkcert doesn't always touch, so we relax cert
+    // checks unconditionally for the prerender path. Safe: the origin
+    // is fixed by REALM_BASE_URL and the connection is loopback-only.
+    //
+    // Chrome 144+ silently demotes `--ignore-certificate-errors` to a
+    // dev-only flag unless paired with `--allow-insecure-localhost`.
+    // Without the pair, every TLS connection to localhost gets
+    // terminated with ERR_CONNECTION_CLOSED (visible upstream as a
+    // hung wait-for-host-standby probe).
+    //
+    // Gated on https + a loopback hostname so the relaxation only
+    // fires in local dev / CI. Production hits real hostnames with
+    // real CA-signed certs and must keep strict validation.
+    if (isHttpsLoopback(process.env.REALM_BASE_URL)) {
+      launchArgs.push(
+        '--ignore-certificate-errors',
+        '--allow-insecure-localhost',
+      );
     }
 
     let extraArgs =
