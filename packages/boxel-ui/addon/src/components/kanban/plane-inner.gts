@@ -115,11 +115,17 @@ export class KanbanPlaneInner extends Component<{
   }
 
   restoreColumn = (hc: {
+    cardCount: number;
     config: KanbanColumnConfig;
     reason: 'collapsed' | 'empty';
   }): void => {
     if (hc.reason === 'collapsed') {
       this.args.onToggleCollapsed?.(hc.config.key, false);
+      // A collapsed-and-empty column stays hidden after uncollapsing when
+      // hideEmpty is on — clear the empty filter too so the column appears.
+      if (this.args.hideEmpty && hc.cardCount === 0) {
+        this.args.onShowEmptyColumns?.();
+      }
     } else {
       this.args.onShowEmptyColumns?.();
     }
