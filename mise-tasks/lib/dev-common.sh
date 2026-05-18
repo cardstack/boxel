@@ -250,7 +250,6 @@ PHASE1_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
 
 if [ -z "${SKIP_CATALOG:-}" ]; then
   PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/catalog/${READY_PATH}"
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/legacy-catalog/${READY_PATH}"
 fi
 if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
   PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/boxel-homepage/${READY_PATH}"

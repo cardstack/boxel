@@ -1,36 +1,9 @@
 #!/bin/sh
-#MISE description="Start services for host test suite (trimmed catalog)"
+#MISE description="Start services for host test suite"
 #MISE dir="packages/realm-server"
 
 set -eu
 export PATH="./node_modules/.bin:$PATH"
-
-SCRIPTS_DIR="./scripts"
-CATALOG_SRC_PATH="$(cd "../../packages/catalog-realm" && pwd)"
-CATALOG_TEMP_PATH="$(mktemp -d "${TMPDIR:-/tmp}/catalog-realm.hosttests.XXXXXX")"
-
-cleanup() {
-  rm -rf "$CATALOG_TEMP_PATH"
-}
-trap cleanup EXIT INT TERM
-
-# Copy required folders
-KEEP_FOLDERS="fields catalog-app components commands"
-for item in $KEEP_FOLDERS; do
-  if [ -d "$CATALOG_SRC_PATH/$item" ]; then
-    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
-  else
-    echo "ERROR: required catalog folder not found: $item" >&2
-    exit 1
-  fi
-done
-
-# Copy all root-level files (e.g. *.gts, *.json, config files)
-find "$CATALOG_SRC_PATH" -maxdepth 1 -type f | while read -r f; do
-  cp -a "$f" "$CATALOG_TEMP_PATH/"
-done
-
-export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
@@ -44,7 +17,6 @@ WAIT_ON_TIMEOUT=900000 \
   SKIP_CATALOG="$SKIP_CATALOG" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
-  CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
   LOG_LEVELS="$HOST_TEST_LOG_LEVELS" \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \

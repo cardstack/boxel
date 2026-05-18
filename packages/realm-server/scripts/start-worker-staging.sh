@@ -2,8 +2,6 @@
 
 DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_LEGACY_CATALOG_REALM_URL='https://realms-staging.stack.cards/legacy-catalog/'
-LEGACY_CATALOG_REALM_URL="${RESOLVED_LEGACY_CATALOG_REALM_URL:-$DEFAULT_LEGACY_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-factory/'
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
@@ -27,9 +25,6 @@ NODE_NO_WARNINGS=1 \
   \
   --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
-  \
-   --fromUrl="${LEGACY_CATALOG_REALM_URL}" \
-   --toUrl="${LEGACY_CATALOG_REALM_URL}" \
   \
   --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \

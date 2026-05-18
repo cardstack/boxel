@@ -110,7 +110,6 @@
     "setup:skills-in-deployment": "mkdir -p /persistent/skills",
     "setup:software-factory-in-deployment": "mkdir -p /persistent/software-factory && rsync --dry-run --itemize-changes --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/ && rsync --checksum --recursive --delete ../software-factory/realm/. /persistent/software-factory/",
     "setup:boxel-homepage-in-deployment": "mkdir -p /persistent/boxel-homepage",
-    "setup:legacy-catalog-in-deployment": "mkdir -p /persistent/legacy-catalog && rsync --dry-run --itemize-changes --checksum --recursive --delete ../catalog-realm/. /persistent/legacy-catalog/ && rsync --checksum --recursive --delete ../catalog-realm/. /persistent/legacy-catalog/",
     "setup:openrouter-in-deployment": "mkdir -p /persistent/openrouter /persistent/openrouter/OpenRouterModel && rsync --dry-run --itemize-changes --checksum --recursive --delete --exclude 'OpenRouterModel/' ../openrouter-realm/. /persistent/openrouter/ && rsync --checksum --recursive --delete --exclude 'OpenRouterModel/' ../openrouter-realm/. /persistent/openrouter/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "mise run services:realm-server-base -- --workerManagerPort=4213",
