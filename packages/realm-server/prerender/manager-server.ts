@@ -1,6 +1,7 @@
 import '../instrument';
 import '../setup-logger';
 import '../lib/wtfnode-on-signal';
+import { writeSync } from 'node:fs';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { createServer } from 'http';
@@ -11,12 +12,15 @@ import {
   registerService,
 } from '../lib/dev-service-registry';
 
-// Synchronous stderr stamp so we have proof the Node process actually
-// started (and at what pid/ppid) independent of the logger pipeline.
-// Used to triage cases where SIGTERM doesn't reach Node — if we see
-// STARTUP but never SIGTERM received, signal delivery is broken
-// upstream of Node.
-process.stderr.write(
+// FD-level synchronous stderr write — `writeSync(2, ...)` calls the
+// write(2) syscall directly, bypassing Node's stream layer.
+// `process.stderr.write` is libuv-async when stderr is a pipe (the
+// Docker / ECS case), so it can be lost if the process exits before
+// libuv flushes. Stamps that fire just before death need to use the
+// FD-level form. Proof the Node process actually started, at what
+// pid/ppid, independent of the logger pipeline.
+writeSync(
+  2,
   `[prerender-manager] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
 );
 
@@ -95,14 +99,18 @@ function shutdown(signal: NodeJS.Signals) {
   // process manager to terminate after grace period.
 }
 
+// `writeSync(2, ...)` (FD-level, syscall-synchronous) for the same
+// reason as the STARTUP stamp at the top of this file.
 process.on('SIGINT', () => {
-  process.stderr.write(
+  writeSync(
+    2,
     `[prerender-manager] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
   );
   shutdown('SIGINT');
 });
 process.on('SIGTERM', () => {
-  process.stderr.write(
+  writeSync(
+    2,
     `[prerender-manager] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
   );
   shutdown('SIGTERM');
