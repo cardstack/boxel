@@ -1877,11 +1877,15 @@ export class PagePool {
       // a reservation, not a spawned tab. Without this synchronous
       // refill+retry, the call falls through to the busy-tab fallback
       // below and queues behind the file render that's awaiting this
-      // sub-render: the self-referential prerender deadlock. Mirrors
-      // the brand-new-affinity branch's await on `#ensureStandbyPool`
-      // (entryList.length === 0 path further down). `#ensureStandbyPool`
-      // respects `#maxPages` via `#prepareSlotForStandby`, so this
-      // can't oversubscribe the global pool.
+      // sub-render: the self-referential prerender deadlock.
+      // `#ensureStandbyPool` respects `#maxPages` via
+      // `#prepareSlotForStandby`, so this can't oversubscribe the
+      // global pool. Note this path only fires under
+      // `entryList.length < #affinityTabMax` — the at-cap case (every
+      // tab held by file renders, no dynamic-expansion budget) still
+      // falls through to busy-tab below. That residual deadlock
+      // requires either operator-side capacity tuning or the high-
+      // priority tier escape hatch beneath this branch.
       //
       // We await `#ensureStandbyPool` UNCONDITIONALLY here (not gated
       // on `current < desired`). Reason: `#currentStandbyCount` =
@@ -1894,10 +1898,15 @@ export class PagePool {
       // subsequent `commandeerDormantTab(standbyOnly:true)` would
       // then fail to find a real standby and the caller would fall
       // through to the busy-tab branch — exactly the deadlock this
-      // change is meant to prevent. Awaiting unconditionally lets
-      // the in-flight refill complete (the `#ensuringStandbys`
-      // dedup makes the call a no-op when there is no in-flight
-      // refill and a wait when there is).
+      // change is meant to prevent. Two scenarios produce no-op
+      // behavior: (a) the pool is genuinely healthy with
+      // `#standbys.size >= desired` and no refill in flight —
+      // `#ensureStandbyPoolInternal`'s loop returns at line 1266
+      // (`current >= desired`); (b) a refill is in flight —
+      // `#ensureStandbyPool` returns the existing `#ensuringStandbys`
+      // promise via dedup at line 1242 and we wait for it. Both
+      // produce the right shape: no spurious creation when not needed,
+      // wait when needed.
       if (queue !== 'file' && entryList.length < this.#affinityTabMax) {
         let startedAt = Date.now();
         await this.#ensureStandbyPool();
@@ -1964,11 +1973,19 @@ export class PagePool {
       // #ensureStandbyPool()` in `getPage` made this ordering implicit;
       // now we make it explicit here so brand-new affinities still get
       // a fresh standby in preference to busy-tab queueing.
-      if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
-        let startedAt = Date.now();
-        await this.#ensureStandbyPool();
-        tabStartupMs += Date.now() - startedAt;
-      }
+      //
+      // Await `#ensureStandbyPool` unconditionally rather than gating
+      // on `current < desired`. `#currentStandbyCount` includes
+      // `#creatingStandbys`, so a refill that's in flight on another
+      // affinity inflates `current` past `desired` here while
+      // `#standbys.size` is still 0 — gating would prematurely fall
+      // through to cross-affinity steal instead of waiting for the
+      // standby a peer just kicked off. Mirrors the same fix in the
+      // non-file spawn-branch above. `#ensuringStandbys` dedup makes
+      // this a no-op when the pool is genuinely healthy.
+      let startedAt = Date.now();
+      await this.#ensureStandbyPool();
+      tabStartupMs += Date.now() - startedAt;
       throwIfAborted(signal);
       let retryShared = this.#tryClaimOrphanContext(affinityKey);
       if (retryShared) {
