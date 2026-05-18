@@ -47,15 +47,21 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ENV_SLUG
   export ENV_MODE=true
 
-  # Service URLs (Traefik hostnames)
-  export REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
-  export REALM_TEST_URL="http://realm-test.${ENV_SLUG}.localhost"
-  export MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
-  export WORKER_MGR_URL="http://worker.${ENV_SLUG}.localhost"
-  export WORKER_TEST_MGR_URL="http://worker-test.${ENV_SLUG}.localhost"
-  export PRERENDER_MGR_URL="http://prerender-mgr.${ENV_SLUG}.localhost"
-  export ICONS_URL="http://icons.${ENV_SLUG}.localhost"
-  export HOST_URL="http://host.${ENV_SLUG}.localhost"
+  # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
+  # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
+  # traefik/dynamic/tls.yml references). Plain :80 routes 308-redirect
+  # to https — see packages/host/scripts/traefik-helpers.js and
+  # packages/realm-server/lib/dev-service-registry.ts. Everything is
+  # https so the host app's same-origin / mixed-content rules don't
+  # block fetches from the https host page to the realm services.
+  export REALM_BASE_URL="https://realm-server.${ENV_SLUG}.localhost"
+  export REALM_TEST_URL="https://realm-test.${ENV_SLUG}.localhost"
+  export MATRIX_URL_VAL="https://matrix.${ENV_SLUG}.localhost"
+  export WORKER_MGR_URL="https://worker.${ENV_SLUG}.localhost"
+  export WORKER_TEST_MGR_URL="https://worker-test.${ENV_SLUG}.localhost"
+  export PRERENDER_MGR_URL="https://prerender-mgr.${ENV_SLUG}.localhost"
+  export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
+  export HOST_URL="https://host.${ENV_SLUG}.localhost"
 
   # Database
   export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
