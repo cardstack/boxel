@@ -2,6 +2,9 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
+import { logger } from './logger';
+
+const log = logger('factory-skill-loader');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,6 +43,7 @@ const SKILL_PRIORITY: readonly string[] = [
   'boxel-file-structure',
   'boxel-api',
   'boxel-command',
+  'boxel-ui-component-discovery',
   'ember-best-practices',
   'software-factory-operations',
 ];
@@ -124,7 +128,26 @@ export interface SkillResolver {
   resolve(issue: IssueData, project: ProjectData): string[];
 }
 
+export interface DefaultSkillResolverOptions {
+  /**
+   * Feature flag — when true, `boxel-ui-component-discovery` is added to the
+   * always-loaded skill set so the agent searches the catalog for boxel-ui
+   * Specs before writing UI in `.gts` files. When false (default), the skill
+   * is omitted and the agent has no awareness of it. Pair with the
+   * `enableBoxelUiDiscovery` flag passed to the system-prompt template so
+   * the catalog-search exception in `prompts/system.md` is also enabled.
+   * See CS-10527.
+   */
+  enableBoxelUiDiscovery?: boolean;
+}
+
 export class DefaultSkillResolver implements SkillResolver {
+  private enableBoxelUiDiscovery: boolean;
+
+  constructor(options: DefaultSkillResolverOptions = {}) {
+    this.enableBoxelUiDiscovery = options.enableBoxelUiDiscovery === true;
+  }
+
   /**
    * Determine which skills to load based on issue and project context.
    *
@@ -134,7 +157,9 @@ export class DefaultSkillResolver implements SkillResolver {
    * 3. software-factory-operations — for factory delivery workflow issues
    * 4. boxel-api + boxel-command — always loaded so the agent has the realm
    *    search query syntax and host-command failure modes inline.
-   * 5. KnowledgeArticle tags can specify additional skills.
+   * 5. boxel-ui-component-discovery — always loaded when the
+   *    `enableBoxelUiDiscovery` flag was passed at construction time.
+   * 6. KnowledgeArticle tags can specify additional skills.
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);
@@ -152,6 +177,15 @@ export class DefaultSkillResolver implements SkillResolver {
       'boxel-command',
     ];
 
+    if (this.enableBoxelUiDiscovery) {
+      // Always loaded under the feature flag. The directive must apply even
+      // when the issue text doesn't contain `component` / `.gts` / `template`
+      // literally — briefs that just describe a form, view, or "isolated
+      // render" would otherwise miss the discovery skill and the agent would
+      // hand-roll UI. See CS-10527 for the test run where that happened.
+      skills.push('boxel-ui-component-discovery');
+    }
+
     if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
       skills.push('ember-best-practices');
     }
@@ -168,6 +202,10 @@ export class DefaultSkillResolver implements SkillResolver {
         skills.push(skillName);
       }
     }
+
+    log.info(
+      `Resolved skills for issue "${issue.id}" (issueType=${issueType ?? '(none)'}): ${skills.join(', ')}`,
+    );
 
     return skills;
   }

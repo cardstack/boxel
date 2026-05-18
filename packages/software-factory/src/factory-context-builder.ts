@@ -42,6 +42,14 @@ export interface ContextBuilderConfig {
   maxSkillTokens?: number;
   /** Loader for traversing issue relationships (required for buildForIssue). */
   issueLoader?: IssueRelationshipLoader;
+  /**
+   * Feature flag — when true, the AgentContext carries
+   * `enableBoxelUiDiscovery: true` so the system prompt template enables the
+   * catalog-search exception. The resolver should also have been constructed
+   * with the same value so the discovery skill is included in the load list.
+   * See CS-10527.
+   */
+  enableBoxelUiDiscovery?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,12 +61,14 @@ export class ContextBuilder {
   private skillLoader: SkillLoaderInterface;
   private maxSkillTokens: number | undefined;
   private issueLoader: IssueRelationshipLoader | undefined;
+  private enableBoxelUiDiscovery: boolean;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
     this.skillLoader = config.skillLoader;
     this.maxSkillTokens = config.maxSkillTokens;
     this.issueLoader = config.issueLoader;
+    this.enableBoxelUiDiscovery = config.enableBoxelUiDiscovery === true;
   }
 
   /**
@@ -101,6 +111,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
+      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
@@ -176,6 +187,7 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealm,
+      enableBoxelUiDiscovery: this.enableBoxelUiDiscovery,
       ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
