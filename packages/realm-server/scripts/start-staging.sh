@@ -27,7 +27,7 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='staging.boxel.dev' \
   PUBLISHED_REALM_BOXEL_SITE_DOMAIN='staging.boxel.build' \
-  ts-node \
+  exec ts-node \
   --transpileOnly main \
   --port=3000 \
   --matrixURL='https://matrix-staging.stack.cards' \

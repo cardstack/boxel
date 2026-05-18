@@ -22,4 +22,4 @@ RUN CI=1 pnpm install -r --offline
 
 EXPOSE 3000
 
-CMD pnpm --filter "./packages/realm-server" $worker_script
+CMD exec pnpm --filter "./packages/realm-server" $worker_script

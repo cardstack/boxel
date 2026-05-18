@@ -10,7 +10,7 @@ NODE_NO_WARNINGS=1 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
   OPENROUTER_REALM_URL='https://app.boxel.ai/openrouter/' \
-  ts-node \
+  exec ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
