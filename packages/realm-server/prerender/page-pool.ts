@@ -1974,18 +1974,22 @@ export class PagePool {
       // now we make it explicit here so brand-new affinities still get
       // a fresh standby in preference to busy-tab queueing.
       //
-      // Await `#ensureStandbyPool` unconditionally rather than gating
-      // on `current < desired`. `#currentStandbyCount` includes
-      // `#creatingStandbys`, so a refill that's in flight on another
-      // affinity inflates `current` past `desired` here while
-      // `#standbys.size` is still 0 — gating would prematurely fall
-      // through to cross-affinity steal instead of waiting for the
-      // standby a peer just kicked off. Mirrors the same fix in the
-      // non-file spawn-branch above. `#ensuringStandbys` dedup makes
-      // this a no-op when the pool is genuinely healthy.
-      let startedAt = Date.now();
-      await this.#ensureStandbyPool();
-      tabStartupMs += Date.now() - startedAt;
+      // The gate here is intentional and asymmetric with the non-file
+      // spawn-branch above. There the deadlock cost of skipping is
+      // unbounded (the caller queues on the very tab whose work it
+      // blocks), so we await unconditionally. Here the cost of
+      // skipping is only a cross-affinity-steal hop — itself a
+      // designed fallback — so paying an extra microtask for a no-op
+      // await is the wrong trade. It also shifts microtask ordering
+      // against a concurrent same-affinity file caller arriving on
+      // an idle tab, which the
+      // `queues same-realm request when tab is transitioning` test in
+      // `prerendering-test.ts` pins.
+      if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
+      }
       throwIfAborted(signal);
       let retryShared = this.#tryClaimOrphanContext(affinityKey);
       if (retryShared) {

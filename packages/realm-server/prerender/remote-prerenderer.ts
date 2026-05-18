@@ -11,6 +11,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   PRERENDER_JOB_ID_HEADER,
+  PRERENDER_JOB_PRIORITY_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -74,7 +75,11 @@ export function createRemotePrerenderer(
     let endpoint = new URL(path, prerenderURL);
     // jobId is request metadata, not part of the validated body — strip
     // it out before sending so the prerender-server's payload schema
-    // doesn't need to know about it.
+    // doesn't need to know about it. `priority` IS part of the validated
+    // body (existing PagePool plumbing), so we read it without stripping
+    // and additionally forward it as a header so the host's
+    // `_federated-search` fetch wrapper can re-stamp it on sub-prerender
+    // requests fired during render.
     let { jobId, ...attributesWithoutJobId } = attributes as Record<
       string,
       any
@@ -87,6 +92,12 @@ export function createRemotePrerenderer(
     };
     let sanitizedJobId =
       typeof jobId === 'string' ? sanitizePrerenderJobId(jobId) : null;
+    let priorityHeaderValue =
+      typeof attributes.priority === 'number' &&
+      Number.isSafeInteger(attributes.priority) &&
+      attributes.priority >= 0
+        ? String(attributes.priority)
+        : null;
     // CS-10872: one correlation ID per logical client call, reused on
     // retries so operators can follow the full manager/prerender-server
     // log story for the same intent rather than hunting through N
@@ -110,6 +121,9 @@ export function createRemotePrerenderer(
             [PRERENDER_REQUEST_ID_HEADER]: requestId,
             ...(sanitizedJobId
               ? { [PRERENDER_JOB_ID_HEADER]: sanitizedJobId }
+              : {}),
+            ...(priorityHeaderValue
+              ? { [PRERENDER_JOB_PRIORITY_HEADER]: priorityHeaderValue }
               : {}),
           },
           body: JSON.stringify(body),

@@ -775,22 +775,35 @@ export class RenderRunner {
       // The check lives inside the try so `finally { release() }` frees
       // the tab slot if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      // Single CDP round-trip that sets both the session auth and the
-      // indexing job id on the page. The job id surfaces to the host's
-      // `_federated-search` fetch wrapper via `globalThis.__boxelJobId`
-      // — the realm-server's handle-search gate pairs it with
+      // Single CDP round-trip that sets the session auth and the
+      // indexing job's id + priority on the page. Both surface to the
+      // host's `_federated-search` fetch wrapper via
+      // `globalThis.__boxelJobId` / `__boxelJobPriority` — the
+      // realm-server's handle-search gate pairs the id with
       // `x-boxel-consuming-realm` to decide whether to consult the
-      // JobScopedSearchCache. Always overwrite (including with
-      // undefined) so a tab reused across multiple visits never bleeds
-      // a prior visit's job id into the next render.
+      // JobScopedSearchCache, and threads the priority into
+      // `LookupContext.priority` so any sub-`prerenderModule` fired by
+      // `CachingDefinitionLookup` for a missed definition inherits the
+      // originating priority instead of silently dropping to 0. Always
+      // overwrite (including with undefined) so a tab reused across
+      // multiple visits never bleeds a prior visit's values into the
+      // next render.
       await page.evaluate(
-        (sessionAuth: string, id: string | undefined) => {
+        (
+          sessionAuth: string,
+          id: string | undefined,
+          jobPriority: number | undefined,
+        ) => {
           localStorage.setItem('boxel-session', sessionAuth);
           (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
             id;
+          (
+            globalThis as unknown as { __boxelJobPriority?: number }
+          ).__boxelJobPriority = jobPriority;
         },
         auth,
         jobId,
+        priority,
       );
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
