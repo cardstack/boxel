@@ -947,7 +947,11 @@ jobs:
   boxel-cli-test:
     name: Boxel CLI Tests
     needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    # Also run on realm-server changes: boxel-cli's integration tests cover
+    # the publish/unpublish/readiness-check HTTP contract the realm-server
+    # exposes, so a realm-server-only PR that drifts that contract (as in
+    # CS-11161) needs to fail here pre-merge rather than on main post-merge.
+    if: needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-cli-test-${{ github.head_ref || github.run_id }}

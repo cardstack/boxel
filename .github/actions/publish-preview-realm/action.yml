@@ -1,0 +1,118 @@
+name: Publish preview realm
+description: |
+  End-to-end preview-realm deploy for a PR: idempotently create a source
+  realm, push local content into it, and publish it at a public URL. The
+  publish step accepts the realm-server's 202 + status:pending contract
+  and polls /_readiness-check until the realm is mounted and indexed.
+  Replaces the matrix→openid→server-session curl block + manual 200/201
+  check that boxel-home maintained in preview-realm.yml.
+
+inputs:
+  realm-name:
+    description: |
+      Endpoint slug for the source realm. Lowercase letters, digits, and
+      hyphens only. The source realm URL will be
+      `${realm-server-url}/${matrix-username}/${realm-name}/`.
+    required: true
+  display-name:
+    description: Human-readable display name for the source realm.
+    required: true
+  published-realm-url:
+    description: |
+      Public URL the published realm will serve at, e.g.
+      `https://${user}.staging.boxel.dev/boxel-home-pr-57/`. Must satisfy
+      the realm-server's `domainsForPublishedRealms` allow-list.
+    required: true
+  source-path:
+    description: Local directory whose contents are pushed to the source realm.
+    required: false
+    default: "."
+  matrix-url:
+    description: Matrix server URL.
+    required: true
+  matrix-username:
+    description: Matrix username without the leading @ or :domain suffix.
+    required: true
+  matrix-password:
+    description: Matrix password.
+    required: true
+  realm-server-url:
+    description: |
+      Realm-server URL. When empty, the action infers it from matrix-url
+      for the boxel.ai (production) and matrix-staging.stack.cards
+      (staging) cases only. Supply this explicitly for any other
+      environment, including local dev (e.g. http://localhost:4201/).
+    required: false
+    default: ""
+  readiness-timeout-ms:
+    description: |
+      Maximum time to wait for the published realm to pass its readiness
+      check before failing the action. Default: 300000 (5 minutes).
+    required: false
+    default: "300000"
+
+outputs:
+  source-realm-url:
+    description: URL of the source realm that was created / synced.
+    value: ${{ steps.urls.outputs.source-realm-url }}
+  published-realm-url:
+    description: URL the realm is published at.
+    value: ${{ inputs.published-realm-url }}
+
+runs:
+  using: composite
+  steps:
+    - uses: cardstack/boxel/.github/actions/_setup-boxel-cli@${{ github.action_ref }}
+      with:
+        matrix-url: ${{ inputs.matrix-url }}
+        matrix-username: ${{ inputs.matrix-username }}
+        matrix-password: ${{ inputs.matrix-password }}
+        realm-server-url: ${{ inputs.realm-server-url }}
+
+    - id: urls
+      shell: bash
+      env:
+        REALM_SERVER_URL: ${{ inputs.realm-server-url }}
+        MATRIX_URL: ${{ inputs.matrix-url }}
+        MATRIX_USERNAME: ${{ inputs.matrix-username }}
+        REALM_NAME: ${{ inputs.realm-name }}
+      run: |
+        # Mirror boxel profile add's environment-default logic so the
+        # computed source URL matches the profile's realmServerUrl.
+        if [ -z "$REALM_SERVER_URL" ]; then
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            REALM_SERVER_URL="https://app.boxel.ai/"
+          elif echo "$MATRIX_URL" | grep -q "matrix-staging.stack.cards"; then
+            REALM_SERVER_URL="https://realms-staging.stack.cards/"
+          else
+            echo "::error::realm-server-url must be supplied for matrix-url=$MATRIX_URL"
+            exit 1
+          fi
+        fi
+        BASE="${REALM_SERVER_URL%/}"
+        SOURCE_URL="${BASE}/${MATRIX_USERNAME}/${REALM_NAME}/"
+        echo "source-realm-url=${SOURCE_URL}" >> "$GITHUB_OUTPUT"
+        echo "Source realm URL: ${SOURCE_URL}"
+
+    - name: Create source realm if absent
+      shell: bash
+      env:
+        REALM_NAME: ${{ inputs.realm-name }}
+        DISPLAY_NAME: ${{ inputs.display-name }}
+      run: boxel realm create "$REALM_NAME" "$DISPLAY_NAME"
+
+    - name: Push content to source realm
+      shell: bash
+      env:
+        SOURCE_PATH: ${{ inputs.source-path }}
+        SOURCE_URL: ${{ steps.urls.outputs.source-realm-url }}
+      run: boxel realm push "$SOURCE_PATH" "$SOURCE_URL" --delete
+
+    - name: Publish + wait for readiness
+      shell: bash
+      env:
+        SOURCE_URL: ${{ steps.urls.outputs.source-realm-url }}
+        PUBLISHED_URL: ${{ inputs.published-realm-url }}
+        TIMEOUT_MS: ${{ inputs.readiness-timeout-ms }}
+      run: |
+        boxel realm publish "$SOURCE_URL" "$PUBLISHED_URL" --timeout "$TIMEOUT_MS"
