@@ -3,15 +3,33 @@ import {
   type PgPrimitive,
   type ExecuteOptions,
   type Expression,
+  type Querier,
   expressionToSql,
   logger,
+  param,
 } from '@cardstack/runtime-common';
+import { createHash } from 'crypto';
 import migrate from 'node-pg-migrate';
 import { join } from 'path';
 import { Pool, Client, type Notification } from 'pg';
 
 import { postgresConfig } from './pg-config';
 import migrationNameFixes from './scripts/migration-name-fixes.js';
+
+// Hash a realm URL to a stable signed int64 (as a string, because JS numbers
+// can't represent the full int64 range). Used as a pg advisory lock key:
+// two writers for the same realm URL hash to the same key and serialize;
+// writers for different URLs use different keys and run in parallel.
+//
+// sha256 is overkill crypto-wise but the cost is negligible, and it gives
+// excellent collision resistance at the 10,000+ realm scale the project
+// plans for. Returning a string (rather than BigInt) keeps the value
+// parameter-compatible with our existing `query` / `param` helpers, which
+// don't accept BigInt directly.
+export function hashRealmUrlForAdvisoryLock(url: string): string {
+  const digest = createHash('sha256').update(url).digest();
+  return digest.readBigInt64BE(0).toString();
+}
 
 const log = logger('pg-adapter');
 
@@ -344,6 +362,92 @@ export class PgAdapter implements DBAdapter {
     } finally {
       await client.end();
     }
+  }
+
+  // Run `fn` while holding a per-realm transaction-scoped Postgres advisory
+  // lock. The lock is taken with `pg_advisory_xact_lock` inside an explicit
+  // BEGIN / COMMIT on a pinned pool connection (via withConnection), so the
+  // lock is automatically released by the transaction's commit or rollback
+  // — there is no "unlock failed → stale lock on pooled connection" failure
+  // mode that a session-scoped `pg_advisory_lock` + `pg_advisory_unlock`
+  // pattern would expose.
+  //
+  // Concurrent callers for the same realm URL serialize (the second call
+  // blocks on the xact-lock until the first's transaction commits/rolls
+  // back). Callers for different URLs run in parallel — the hash key space
+  // ensures that.
+  //
+  // Reads are NOT gated by this lock; reads hit the DB directly (or go
+  // through in-memory caches on the realm-server) without acquiring it.
+  // Read-heavy paths should never call this helper.
+  //
+  // Note on the enclosing transaction: `fn` runs inside BEGIN/COMMIT here so
+  // the advisory lock is correctly scoped, AND so any DELETEs `fn` runs via
+  // the pinned `txQuerier` argument share that transaction's atomicity.
+  // CS-10898 plumbed the pinned querier through the realm-destruction
+  // helpers (removeRealmDatabaseArtifacts, removeRealmPermissions,
+  // deleteRegistryRowByUrl, deletePublishedRowsBySourceUrl,
+  // cancelRunningJobsInConcurrencyGroup); when callers pass `txQuerier` to
+  // those helpers, all their writes commit or roll back together with the
+  // advisory lock's own transaction. Queries `fn` issues through the shared
+  // dbAdapter still go via separate pool connections and are NOT part of
+  // this transaction. The data-plane mutation paths in runtime-common
+  // (CS-11125) intentionally do not consume `txQuerier`: their inner work
+  // (writing files via the FS adapter, enqueuing indexing jobs, broadcasting
+  // NOTIFY events) is not transactional with the lock-holder's connection.
+  // The lock there serves only to serialize concurrent same-URL writers
+  // across replicas, not to group DB statements into a single tx.
+  //
+  // Pool-exhaustion caveat: when the callback opts into the pinned querier
+  // for all of its DB work, only one client is checked out for the entire
+  // critical section. If the callback also issues queries through the
+  // shared dbAdapter (e.g. existence-check SELECTs), each of those checks
+  // out an additional pool client briefly. Under N concurrent same-URL
+  // writers, N-1 block on the advisory lock before doing anything — so
+  // this method does not itself amplify pool pressure. Under N concurrent
+  // different-URL writers, each pins one client; if the pool ceiling is
+  // less than realistic write concurrency, callbacks that need additional
+  // pool clients could deadlock waiting on the pool. For current scope
+  // (low realistic write concurrency, pool size >= concurrent writers +
+  // headroom) this is acceptable.
+  //
+  // Re-entrancy: callers MUST NOT re-enter the lock for the same URL while
+  // already holding it — a second `pg_advisory_xact_lock` on the same key
+  // would pin a different pool connection and block forever on its own
+  // transaction. Code that wraps a wider critical section around a method
+  // that also takes the lock must invoke the unlocked inner variant (e.g.
+  // realm.ts uses `_batchWriteUnlocked` inside its own withWriteLock).
+  async withWriteLock<T>(
+    realmUrl: string,
+    fn: (txQuerier: Querier | undefined) => Promise<T>,
+  ): Promise<T> {
+    const lockKey = hashRealmUrlForAdvisoryLock(realmUrl);
+    return await this.withConnection(async (queryFn) => {
+      await queryFn(['BEGIN']);
+      try {
+        await queryFn([
+          `SELECT pg_advisory_xact_lock(`,
+          param(lockKey),
+          `::bigint)`,
+        ]);
+        const result = await fn(queryFn);
+        await queryFn(['COMMIT']);
+        return result;
+      } catch (err: unknown) {
+        try {
+          await queryFn(['ROLLBACK']);
+        } catch (rollbackErr: unknown) {
+          // Rollback failed — the xact-lock is still released when the
+          // connection's transaction is aborted (pg will auto-rollback on
+          // client release), so we don't have a stale-lock problem. Log
+          // for visibility and rethrow the original error.
+          log.warn(
+            `ROLLBACK after withWriteLock error for ${realmUrl} failed: ${String(rollbackErr)}`,
+          );
+        }
+        throw err;
+      }
+    });
   }
 
   async withConnection<T>(

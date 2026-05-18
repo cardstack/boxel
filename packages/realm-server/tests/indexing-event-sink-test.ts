@@ -30,6 +30,9 @@ function makeRecordingAdapter(): {
         return [];
       },
       async notify() {},
+      async withWriteLock(_url, fn) {
+        return await fn(undefined);
+      },
     },
   };
 }
@@ -376,6 +379,9 @@ module(basename(__filename), function () {
           return [];
         },
         async notify() {},
+        async withWriteLock(_url, fn) {
+          return await fn(undefined);
+        },
       };
       let sink = new IndexingEventSink({ flushIntervalMs: 10 });
       sink.setAdapter(slowAdapter);

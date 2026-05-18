@@ -2,6 +2,8 @@ import { module, test } from 'qunit';
 
 import {
   fetcher,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
   type FetcherMiddlewareHandler,
 } from '@cardstack/runtime-common';
 
@@ -84,6 +86,27 @@ module('Unit | fetcher', function () {
     assert.strictEqual(attempts, 2, 'second attempt reached fetch impl');
     assert.strictEqual(response.status, 200);
     assert.strictEqual(await response.text(), 'OK');
+  });
+
+  test('resolves a registered scoped prefix before constructing the Request', async function (assert) {
+    assert.expect(1);
+    registerCardReferencePrefix(
+      '@cardstack/catalog/',
+      'https://app.example.com/catalog/',
+    );
+    try {
+      let fetch = fetcher(async function (request) {
+        assert.strictEqual(
+          (request as Request).url,
+          'https://app.example.com/catalog/Foo/abc',
+          'scoped id is resolved to its real URL, not joined onto document.baseURI',
+        );
+        return new Response('OK', { status: 200 });
+      }, []);
+      await fetch('@cardstack/catalog/Foo/abc');
+    } finally {
+      unregisterCardReferencePrefix('@cardstack/catalog/');
+    }
   });
 
   test('handler can call next more than once if needed', async function (assert) {

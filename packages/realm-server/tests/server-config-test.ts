@@ -1,34 +1,24 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { dirSync } from 'tmp';
 
-import { RealmServer } from '../server';
+import { createServeIndex } from '../handlers/serve-index';
 
 module(basename(__filename), function () {
   test('prefers MATRIX_SERVER_NAME over matrix URL hostname in host config', async function (assert) {
     let originalMatrixServerName = process.env.MATRIX_SERVER_NAME;
-    let tempDir = dirSync({ unsafeCleanup: true });
 
     process.env.MATRIX_SERVER_NAME = 'stack.cards';
 
     try {
-      let server = new RealmServer({
+      let { retrieveIndexHTML } = createServeIndex({
         serverURL: new URL('http://127.0.0.1:4448'),
+        assetsURL: new URL('http://example.com/notional-assets-host/'),
         realms: [],
         reconciler: {} as any,
-        virtualNetwork: {} as any,
+        dbAdapter: {} as any,
         matrixClient: {
           matrixURL: new URL('http://localhost:8008/'),
         } as any,
-        realmServerSecretSeed: 'test-realm-server-secret',
-        realmSecretSeed: 'test-realm-secret',
-        grafanaSecret: 'test-grafana-secret',
-        realmsRootPath: tempDir.name,
-        dbAdapter: {} as any,
-        queue: {} as any,
-        definitionLookup: {} as any,
-        assetsURL: new URL('http://example.com/notional-assets-host/'),
-        matrixRegistrationSecret: 'test-matrix-registration-secret',
         getIndexHTML: async () =>
           `<html><head><meta name="@cardstack/host/config/environment" content="${encodeURIComponent(
             JSON.stringify({
@@ -39,9 +29,11 @@ module(basename(__filename), function () {
               publishedRealmBoxelSiteDomain: 'localhost:4201',
             }),
           )}"></head><body></body></html>`,
+        cardSizeLimitBytes: 0,
+        fileSizeLimitBytes: 0,
       });
 
-      let html = await (server as any).retrieveIndexHTML();
+      let html = await retrieveIndexHTML();
       let match = html.match(
         /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)">/,
       );
@@ -60,7 +52,6 @@ module(basename(__filename), function () {
       } else {
         process.env.MATRIX_SERVER_NAME = originalMatrixServerName;
       }
-      tempDir.removeCallback();
     }
   });
 });

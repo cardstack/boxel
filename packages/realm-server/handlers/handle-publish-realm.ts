@@ -42,7 +42,6 @@ import { registerUser } from '../synapse';
 import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
 import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
 import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
-import { withRealmWriteLock } from '../lib/realm-advisory-locks';
 
 const log = logger('handle-publish');
 
@@ -398,8 +397,7 @@ export default function handlePublishRealm({
       // mounts the (re-)published realm on its first request. The
       // response is 202 Accepted with status:'pending'; the client polls
       // /<publishedRealmURL>/_readiness-check to learn when it's ready.
-      let { lastPublishedAt, publishedRealmId } = await withRealmWriteLock(
-        dbAdapter,
+      let { lastPublishedAt, publishedRealmId } = await dbAdapter.withWriteLock(
         publishedRealmURL,
         async () => {
           let existingRows = (await query(dbAdapter, [
