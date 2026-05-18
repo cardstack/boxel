@@ -6,11 +6,11 @@ import { setupDB } from './helpers';
 import { RealmIndexUpdatedListener } from '../lib/realm-index-updated-listener';
 
 // Minimal fake `Realm` — the listener only calls `.url` (via lookup) and
-// `.clearInFlightSearches()`, so that's all we need to stub.
+// `.clearRealmIndexCaches()`, so that's all we need to stub.
 function makeFakeRealm(url: string, onClear: () => void): Realm {
   return {
     url,
-    clearInFlightSearches() {
+    clearRealmIndexCaches() {
       onClear();
     },
   } as unknown as Realm;
@@ -57,7 +57,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         cleared,
         1,
-        'clearInFlightSearches called exactly once for the mounted realm',
+        'clearRealmIndexCaches called exactly once for the mounted realm',
       );
     });
 
@@ -107,7 +107,7 @@ module(basename(__filename), function () {
       },
     });
 
-    test('NOTIFY realm_index_updated → listener → clearInFlightSearches', async function (assert) {
+    test('NOTIFY realm_index_updated → listener → clearRealmIndexCaches', async function (assert) {
       let cleared = 0;
       const realmUrl = 'http://x.test/listen-e2e/';
       const realmA = makeFakeRealm(realmUrl, () => {
@@ -125,7 +125,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           cleared,
           1,
-          'clearInFlightSearches fired exactly once for the mounted realm',
+          'clearRealmIndexCaches fired exactly once for the mounted realm',
         );
       } finally {
         await listener.shutDown();

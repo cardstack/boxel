@@ -8,9 +8,9 @@ const log = logger('realm-server:index-updated-listener');
 // RealmIndexQueryEngine.#inFlightSearch. When any realm-server commits a
 // boxel_index update (worker's batch.done() lands on the shared table),
 // it emits `NOTIFY realm_index_updated, '<realmURL>'` (see
-// Realm.clearInFlightSearchesAndBroadcast in runtime-common/realm.ts).
+// Realm.clearRealmIndexCachesAndBroadcast in runtime-common/realm.ts).
 // Every listener on this channel looks up the realm URL in its lookup
-// function; if mounted locally, calls `realm.clearInFlightSearches()` so a
+// function; if mounted locally, calls `realm.clearRealmIndexCaches()` so a
 // new caller arriving after the peer's update doesn't coalesce into a
 // pre-update pending promise. If the realm isn't mounted on this
 // instance, the notification is dropped — there's no #inFlightSearch
@@ -100,9 +100,9 @@ export class RealmIndexUpdatedListener {
       return;
     }
     try {
-      realm.clearInFlightSearches();
+      realm.clearRealmIndexCaches();
     } catch (err: unknown) {
-      log.warn(`clearInFlightSearches failed for ${realmURL}: ${String(err)}`);
+      log.warn(`clearRealmIndexCaches failed for ${realmURL}: ${String(err)}`);
     }
   }
 }

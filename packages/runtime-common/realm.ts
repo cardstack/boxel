@@ -1185,7 +1185,7 @@ export class Realm {
         // callers. CS-11119 also broadcasts the same wipe to peer
         // replicas via NOTIFY realm_index_updated so their #inFlightSearch
         // maps don't coalesce post-update callers into pre-update promises.
-        await this.clearInFlightSearchesAndBroadcast();
+        await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1230,7 +1230,7 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[]) => {
-        await this.clearInFlightSearchesAndBroadcast();
+        await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -1365,7 +1365,7 @@ export class Realm {
     // landed in boxel_index, so any pre-update promise must not be reused.
     // Broadcasts via NOTIFY realm_index_updated so peer replicas drop
     // their #inFlightSearch maps too (CS-11119).
-    await this.clearInFlightSearchesAndBroadcast();
+    await this.clearRealmIndexCachesAndBroadcast();
     this.invalidateCachedRealmInfo();
   }
 
@@ -1429,7 +1429,7 @@ export class Realm {
   // await their existing promise (the underlying SQL was already in
   // motion); only NEW callers after the drop will miss the map and fire
   // a fresh search against the now-current index.
-  clearInFlightSearches(): void {
+  clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
   }
 
@@ -1440,8 +1440,8 @@ export class Realm {
   // a missed NOTIFY is a bounded staleness window (one in-flight
   // searchCards walk), not data corruption. Mirrors CS-11156's
   // clearLocalSourceCachesAndBroadcast pattern for the byte-cache surface.
-  async clearInFlightSearchesAndBroadcast(): Promise<void> {
-    this.clearInFlightSearches();
+  async clearRealmIndexCachesAndBroadcast(): Promise<void> {
+    this.clearRealmIndexCaches();
     await notifyRealmIndexUpdated(this.#dbAdapter, this.url);
   }
 
