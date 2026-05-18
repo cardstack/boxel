@@ -66,6 +66,14 @@ function runVite({ subcommand, port, allHosts, extraEnv, nodeMemory }) {
     if (signal === 'SIGTERM' || signal === 'SIGINT') {
       process.exit(0);
     }
+    if (signal) {
+      // vite died from another signal (e.g. SIGKILL, SIGSEGV, SIGABRT) —
+      // propagate that as a non-zero exit so pnpm and the orchestrator see
+      // the crash instead of treating it as a clean shutdown. 128 + signum
+      // is the POSIX convention shells use for signal-induced exits.
+      const signum = require('os').constants.signals[signal] || 0;
+      process.exit(128 + signum);
+    }
     process.exit(code || 0);
   });
   return child;
