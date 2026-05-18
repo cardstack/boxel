@@ -924,11 +924,20 @@ export class IndexQueryEngine {
   }
 
   async fetchCardTypeSummary(realmURL: URL): Promise<RealmMetaValue> {
+    // ORDER BY realm_version DESC + LIMIT 1 because `pruneObsoleteEntries`
+    // doesn't always reach stale rows — a from-scratch reindex resets the
+    // realm_version to a low number, so older incremental rows at higher
+    // versions survive the `realm_version < <new>` prune predicate. Without
+    // an explicit ordering Postgres can return any of them; that bug caused
+    // CardsGrid's "All Files" group to vanish on every realm whose latest
+    // index happened after a from-scratch and whose physical row order
+    // happened to put a legacy `array`-shape row first.
     let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
+      `ORDER BY rm.realm_version DESC LIMIT 1`,
     ] as Expression)) as { value: unknown }[];
 
     return normalizeRealmMetaValue(results[0]?.value);

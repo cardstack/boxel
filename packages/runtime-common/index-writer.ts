@@ -743,11 +743,20 @@ export class Batch {
   }
 
   private async pruneObsoleteEntries() {
+    // Delete every realm_meta row for this realm except the one we just
+    // wrote. The previous predicate (`realm_version < this.realmVersion`)
+    // only swept rows from incremental indexing where versions march
+    // forward. A from-scratch reindex resets the version to a low number,
+    // leaving older high-version rows orphaned forever — those legacy rows
+    // then poisoned `_types` reads when the SELECT picked the wrong one.
+    // Cleaning by `!=` covers both directions safely; the unique key on
+    // (realm_url, realm_version) guarantees we never accidentally keep
+    // two current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['realm_version <', param(this.realmVersion)],
+        ['realm_version !=', param(this.realmVersion)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
