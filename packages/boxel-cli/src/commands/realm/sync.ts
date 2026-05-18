@@ -314,14 +314,16 @@ class RealmSyncer extends RealmSyncBase {
       }
 
       const result = await this.uploadFilesAtomic(filesToUpload, addPaths);
+      // Record every file the server actually wrote, even when other
+      // files in the same batch failed — see push.ts for the symmetric
+      // reasoning.
+      this.pushedFiles.push(...result.succeeded);
       if (result.error) {
         this.hasError = true;
         console.error(result.error.message);
         for (const entry of result.error.perFile) {
           console.error(`  ${entry.path}: ${entry.title}`);
         }
-      } else {
-        this.pushedFiles.push(...result.succeeded);
       }
     }
 
@@ -371,8 +373,12 @@ class RealmSyncer extends RealmSyncBase {
       );
     }
 
-    // Phase 6: Update manifest
-    if (!this.options.dryRun && !this.hasError) {
+    // Phase 6: Update manifest. Persist even on partial failure — we
+    // only record hashes for files the server actually wrote
+    // (pushedFiles + pulledFiles), so the manifest stays consistent
+    // with the realm and the next sync won't re-attempt successful
+    // files.
+    if (!this.options.dryRun) {
       // Build updated hashes from prior manifest + current local files + executed ops.
       // Start with the previous manifest so that files deleted locally but not
       // propagated (no --delete) retain their entries and aren't re-pulled next sync.

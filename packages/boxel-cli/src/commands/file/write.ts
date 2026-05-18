@@ -7,6 +7,7 @@ import {
 } from '../../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import { FG_GREEN, FG_RED, DIM, RESET } from '../../lib/colors';
 import { cliLog } from '../../lib/cli-log';
 
@@ -26,15 +27,19 @@ interface WriteCliOptions {
 }
 
 /**
- * Write a file to a realm. Content is sent as-is with card+source MIME type.
- * Path should include the file extension.
+ * Write a file to a realm. Path should include the file extension.
+ *
+ * String content is sent with the card+source MIME type (the text path
+ * .gts / .json / .md / etc. always took). Binary content (a `Uint8Array`,
+ * including the `Buffer` subclass) is sent with `application/octet-stream`,
+ * which the realm-server routes to `upsertBinaryFile` and writes verbatim.
  *
  * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
  */
 export async function write(
   realmUrl: string,
   path: string,
-  content: string,
+  content: string | Uint8Array,
   options?: WriteCommandOptions,
 ): Promise<WriteResult> {
   let pm = options?.profileManager ?? getProfileManager();
@@ -47,15 +52,21 @@ export async function write(
   }
 
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
+  let isBinary = typeof content !== 'string';
 
   try {
     let response = await pm.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-        'Content-Type': SupportedMimeType.CardSource,
-      },
-      body: content,
+      headers: isBinary
+        ? { 'Content-Type': SupportedMimeType.OctetStream }
+        : {
+            Accept: SupportedMimeType.CardSource,
+            'Content-Type': SupportedMimeType.CardSource,
+          },
+      // Both branches of `content: string | Uint8Array` are valid
+      // BodyInit values, but TS narrows them as a union that doesn't
+      // unify against the fetch signature without a hint.
+      body: content as BodyInit,
     });
 
     if (!response.ok) {
@@ -103,10 +114,30 @@ export function registerWriteCommand(parent: Command): void {
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
-      let content: string;
+      let content: string | Uint8Array;
       if (opts.file) {
+        // Refuse a source/destination binary-classification mismatch
+        // (e.g., `write notes.md --file image.png`) — otherwise raw
+        // bytes would land at a text extension and corrupt-on-read.
+        const srcIsBinary = isBinaryFilename(opts.file);
+        const dstIsBinary = isBinaryFilename(filePath);
+        if (srcIsBinary !== dstIsBinary) {
+          stderr(
+            `${FG_RED}Error:${RESET} source file ${opts.file} is ${
+              srcIsBinary ? 'binary' : 'text'
+            } but destination path ${filePath} is ${
+              dstIsBinary ? 'binary' : 'text'
+            }. Refusing to write to avoid silent corruption — rename the destination to match.`,
+          );
+          process.exit(1);
+        }
         try {
-          content = readFileSync(opts.file, 'utf-8');
+          // Binary source files are read as raw bytes so write() can
+          // hand them to the realm unchanged; forcing utf-8 would
+          // corrupt PNG / PDF / font / etc. payloads silently.
+          content = srcIsBinary
+            ? readFileSync(opts.file)
+            : readFileSync(opts.file, 'utf-8');
         } catch (err) {
           stderr(
             `${FG_RED}Error:${RESET} Could not read file: ${err instanceof Error ? err.message : String(err)}`,
