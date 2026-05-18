@@ -59,7 +59,6 @@ import {
 } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
-import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
@@ -95,7 +94,6 @@ export default class RenderRoute extends Route<Model> {
   @service('render-store') declare store: RenderStoreService;
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
-  @service declare matrixService: MatrixService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare private network: NetworkService;
@@ -188,13 +186,16 @@ export default class RenderRoute extends Route<Model> {
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
-    // Stamp render-context BEFORE touching realm / matrix services. Several
-    // prerender-aware short-circuits — most notably RealmResource's
-    // tokenRefresher — read this flag synchronously on their first run; if
-    // it's still unset, tokenRefresher proceeds to its delayed loginTask,
-    // which in turn lazily injects matrix-service. That early matrix-service
-    // construction lands its loader.import('file-api') outside model()'s
-    // tracking-session window and silently drops the dep from snapshots.
+    // Stamp render-context BEFORE touching the realm service. Prerender-
+    // aware short-circuits read this flag synchronously on their first
+    // run — most importantly `RealmResource.tokenRefresher`. With the
+    // flag unset, tokenRefresher falls through to its delayed
+    // `loginTask`, which lazily injects matrix-service. Inside the
+    // prerender Chrome the matrix client + event bindings + token-refresh
+    // logic are dead weight that the render route never touches, and
+    // constructing matrix-service drags all of it in. Setting the flag
+    // first keeps matrix-service uninstantiated for the prerender's
+    // lifetime.
     (globalThis as any).__boxelRenderContext = true;
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
@@ -330,18 +331,16 @@ export default class RenderRoute extends Route<Model> {
           : 'instance',
     });
 
-    // Force the matrix-service SDK load to settle INSIDE the active
-    // tracking session. matrix-service is the only path in the host that
-    // imports `https://cardstack.com/base/file-api` at runtime (via its
-    // `fileAPIModule` importResource); without this await its
-    // `loader.import('file-api')` races against the session window and
-    // silently drops the dep on cached/reused prerender pages. Awaiting
-    // `ready` here both constructs matrix-service (if not yet) and waits
-    // for `loadSDK` (cardAPI + fileAPI imports) to complete with the
-    // session active, so the imports are recorded as deps of THIS render.
-    if (!isTesting()) {
-      await this.matrixService.ready;
-    }
+    // Stamp `card-api` and `file-api` as runtime deps of this render.
+    // `file-api` is the public URL the indexer references when
+    // invalidating file extracts; doing the import here records the
+    // deps against the active tracking session without forcing
+    // matrix-service construction (which would also pull in the matrix
+    // SDK + client + event bindings the prerender never touches).
+    await Promise.all([
+      this.loaderService.loader.import(`${baseRealm.url}card-api`),
+      this.loaderService.loader.import(`${baseRealm.url}file-api`),
+    ]);
 
     // the window.boxelTransitionTo() function helper first normalizes the base
     // params by transitioning the router back to 'render' before it goes on to
