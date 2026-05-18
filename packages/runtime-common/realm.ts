@@ -4346,7 +4346,17 @@ export class Realm {
         });
         if (instanceEntry === undefined) {
           if (await this.nonJsonFileExists(localPath)) {
-            return unsupportedMediaType(request, requestContext);
+            // A path that points to a non-JSON file (e.g. an uploaded
+            // binary) was asked for as card+json. Return a file-meta JSON
+            // document so the caller receives valid JSON it can
+            // discriminate via `data.type === 'file-meta'` — instead of
+            // raw binary bytes that crash a downstream `response.json()`.
+            let fileMeta = await this.fileMetaDocument(
+              requestContext,
+              localPath,
+              SupportedMimeType.CardJson,
+            );
+            return fileMeta ?? notFound(request, requestContext);
           } else {
             return notFound(request, requestContext);
           }
@@ -4390,7 +4400,12 @@ export class Realm {
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          return unsupportedMediaType(request, requestContext);
+          let fileMeta = await this.fileMetaDocument(
+            requestContext,
+            localPath,
+            SupportedMimeType.CardJson,
+          );
+          return fileMeta ?? notFound(request, requestContext);
         } else {
           return notFound(request, requestContext);
         }
@@ -4492,6 +4507,9 @@ export class Realm {
     });
     if (!entry) {
       if (await this.nonJsonFileExists(localPath)) {
+        // Markdown can't represent a binary file; keep the 415 here.
+        // The card+json sibling handler returns a file-meta JSON doc for
+        // the same scenario.
         return unsupportedMediaType(request, requestContext);
       }
       return notFound(request, requestContext);
