@@ -9,7 +9,7 @@ Wraps the `boxel realm` subcommands that move data between a local directory and
 - **`push`** — local → remote. Deploy local edits to the realm.
 - **`pull`** — remote → local. Download a realm into a directory.
 - **`sync`** — bidirectional. Reconcile both sides; needs a `--prefer-*` flag when there are conflicts.
-- **`watch`** — remote → local, continuous. Long-running poller; pulls remote changes into the local directory as they happen.
+- **`watch`** — remote → local, continuous. Long-running poller; pulls remote changes into the local directory as they happen. Locally-edited files are *not* overwritten by default — the watcher skips downloads when the local copy diverges from the sync manifest, logs a warning, and keeps polling. Pass `--overwrite-local` to opt back into the unconditional mirror behavior.
 - **`create`** — provision a new realm on the realm server.
 - **`remove`** — delete a realm and unlink it from the active profile.
 - **`list`** — see realms the active profile can access.
@@ -42,6 +42,10 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 - `--dry-run` — preview without writing. Good for first-time runs.
 
 `push` and `pull` have their own `--delete` and `--dry-run` flags but no `--prefer-*` flags (they're one-directional). When in doubt, dry-run first.
+
+`watch` protects local edits without a flag: by default any file whose local hash differs from the sync manifest is skipped (with a yellow `⚠ skipped …` line) instead of overwritten. The warning re-fires on every poll until the user reconciles via `boxel realm sync …` (e.g. `--prefer-newest`) or rerun watch with `--overwrite-local` to accept the remote.
+
+If `watch` is starting in a directory that already mirrors the realm but has no `.boxel-sync.json` (e.g. populated by hand, by `git clone`, or by a different tool), run `boxel realm pull` first. Without a manifest every existing file looks "diverged" and the first poll warns about each one until reconciled.
 
 <!-- generated:commands:start -->
 
@@ -81,6 +85,7 @@ Start watching a Boxel realm for server-side changes and pull them into a local 
 - `-i, --interval <seconds>` — Polling interval in seconds
 - `-d, --debounce <seconds>` — Seconds to wait after a burst of changes before applying them
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
+- `--overwrite-local` — Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.
 
 ### `boxel realm watch stop`
 
