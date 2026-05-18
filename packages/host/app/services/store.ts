@@ -36,6 +36,7 @@ import {
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_JOB_ID_HEADER,
   X_BOXEL_JOB_PRIORITY_HEADER,
+  userInitiatedPriority,
   Deferred,
   delay,
   mergeRelationships,
@@ -161,17 +162,53 @@ function jobIdHeader(): Record<string, string> {
   return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
 }
 
-// Companion to `jobIdHeader()`. The prerender server's render-runner
-// also injects `__boxelJobPriority` onto the page before transitioning
-// into the render route. Outside a prerender tab the global is
-// undefined and we send no header — user / API callers leave the
-// realm-server's lookup paths to fall back to priority 0 as today.
+// Companion to `jobIdHeader()`. Policy is two-state, gated by
+// `__boxelDuringPrerender` (the same flag `duringPrerenderHeaders`
+// reads), not by the presence of `__boxelJobPriority`:
+//
+// 1. Inside a prerender tab: forward the worker job's priority as-is.
+//    The render-runner injects `__boxelJobPriority` alongside
+//    `__boxelJobId` on each visit — a priority of 0 is meaningful
+//    (the originating job is system-initiated background indexing)
+//    and must be preserved, not upgraded. Sub-`prerenderModule`
+//    calls fired by `_federated-search` for a `lookupDefinition`
+//    cache miss inherit this priority so they don't outrun the
+//    parent. If `__boxelJobPriority` is missing here (older
+//    render-runner build, test fixture, etc.) treat as 0 — the
+//    safe default for prerender-context work.
+//
+// 2. Outside a prerender tab (the host SPA in a real user's browser,
+//    or any external API caller that isn't a prerender visit):
+//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    search are by definition user-initiated work and should outrank
+//    background indexing on the realm-server's PagePool. Without
+//    this, a user search whose definition lookup misses the modules
+//    cache would fire its sub-prerender at priority 0 and queue
+//    behind concurrent indexing fan-out.
+//
+// External API callers that need a different priority (e.g. batch
+// tooling that wants explicit routing) can override
+// `globalThis.__boxelJobPriority` themselves — outside a prerender
+// tab the policy is still "stamp what's there, default to user
+// priority."
 function jobPriorityHeader(): Record<string, string> {
+  let duringPrerender = (
+    globalThis as unknown as { __boxelDuringPrerender?: boolean }
+  ).__boxelDuringPrerender;
   let p = (globalThis as unknown as { __boxelJobPriority?: number })
     .__boxelJobPriority;
-  return typeof p === 'number' && Number.isSafeInteger(p) && p >= 0
-    ? { [X_BOXEL_JOB_PRIORITY_HEADER]: String(p) }
-    : {};
+  let valid =
+    typeof p === 'number' && Number.isSafeInteger(p) && p >= 0 ? p : undefined;
+  if (duringPrerender) {
+    // Forward as-is, including 0. Fall back to 0 if the global is
+    // absent or malformed.
+    return { [X_BOXEL_JOB_PRIORITY_HEADER]: String(valid ?? 0) };
+  }
+  // Outside prerender: user-initiated unless the caller overrode the
+  // global with their own value.
+  return {
+    [X_BOXEL_JOB_PRIORITY_HEADER]: String(valid ?? userInitiatedPriority),
+  };
 }
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
