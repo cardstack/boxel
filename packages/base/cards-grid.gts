@@ -1,7 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
@@ -106,7 +106,6 @@ class Isolated extends Component<typeof CardsGrid> {
   private cardTypeFilters: FilterOption[] = new TrackedArray();
   private fileTypeFilters: FilterOption[] = new TrackedArray();
   private highlightsCards: BoxComponent[] = new TrackedArray();
-  private filterOptions: FilterOption[] = new TrackedArray();
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
 
@@ -119,7 +118,6 @@ class Isolated extends Component<typeof CardsGrid> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.setupFilterOptions();
     this.activeFilter = this.filterOptions[0];
     this.loadHighlightsCards.perform();
     registerDestructor(this, () => this.teardownRealmSubscription());
@@ -152,6 +150,12 @@ class Isolated extends Component<typeof CardsGrid> {
     return realmHref?.includes('/personal/') ?? false;
   }
 
+  // The per-group filter wrappers are `@cached` so their object identity
+  // stays stable across re-computations of `filterOptions`. `FilterList`'s
+  // `isSelected` is an identity comparison (`@filter === @activeFilter`), so
+  // returning a fresh object on every getter access would break the active
+  // highlight after the first render.
+  @cached
   private get highlightFilter(): FilterOption {
     return {
       displayName: 'Highlights',
@@ -160,6 +164,7 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
+  @cached
   private get allCardsFilter(): FilterOption {
     return {
       displayName: 'All Cards',
@@ -178,11 +183,7 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
-  // The All Files group is only added to the sidebar after `loadFilterList`
-  // detects file-kind summaries in the realm — see how `setupFilterOptions` is
-  // re-called from `loadFilterList`. This satisfies the "hide empty groups"
-  // decision in the Linear plan: realms without any FileDef instances don't
-  // get a stub File branch.
+  @cached
   private get allFilesFilter(): FilterOption {
     return {
       displayName: 'All Files',
@@ -197,15 +198,28 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
-  private setupFilterOptions() {
-    this.filterOptions.splice(0, this.filterOptions.length);
+  // Derived from tracked state — `isPersonalRealm` and `fileTypeFilters.length`
+  // are the only deps that change the visible group set. We avoid the
+  // previous `splice + push` approach because mutating a `TrackedArray`
+  // during the component constructor (which runs mid-render) fires Glimmer's
+  // "you attempted to update X but it was already used in this computation"
+  // assertion. A `@cached` getter only re-runs when its tracked deps change
+  // and stays stable otherwise, so identity-based comparisons keep working.
+  @cached
+  private get filterOptions(): FilterOption[] {
+    let options: FilterOption[] = [];
     if (this.isPersonalRealm) {
-      this.filterOptions.push(this.highlightFilter);
+      options.push(this.highlightFilter);
     }
-    this.filterOptions.push(this.allCardsFilter);
+    options.push(this.allCardsFilter);
+    // Hide the All Files group when the realm has no file rows — matches the
+    // "empty groups: hide" decision in the Linear plan. Reading `.length` on
+    // a TrackedArray sets up a dep so this getter re-runs once
+    // `loadFilterList` finishes its first push into `fileTypeFilters`.
     if (this.fileTypeFilters.length > 0) {
-      this.filterOptions.push(this.allFilesFilter);
+      options.push(this.allFilesFilter);
     }
+    return options;
   }
 
   private teardownRealmSubscription() {
@@ -374,10 +388,10 @@ class Isolated extends Component<typeof CardsGrid> {
       });
     });
 
-    // Re-run setup so the All Files group appears/disappears as the file leaf
-    // list grows or shrinks. setupFilterOptions inspects `fileTypeFilters` to
-    // decide whether to include the group at all.
-    this.setupFilterOptions();
+    // `filterOptions` is a @cached getter that derives the group list from
+    // tracked state — `fileTypeFilters.length` changing here causes it to
+    // re-compute on the next read, which adds/removes the All Files group
+    // without any imperative array mutation.
 
     let flattenedFilters: FilterOption[] = [];
     this.filterOptions.map((f) =>
