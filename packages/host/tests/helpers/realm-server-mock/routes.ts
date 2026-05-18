@@ -263,7 +263,12 @@ function registerTypesRoutes() {
       let allEntries: {
         id: string;
         type: 'card-type-summary';
-        attributes: { displayName: string; total: number; iconHTML: string };
+        attributes: {
+          displayName: string;
+          total: number;
+          iconHTML: string;
+          kind: 'instance' | 'file';
+        };
         meta: { realmURL: string };
       }[] = [];
 

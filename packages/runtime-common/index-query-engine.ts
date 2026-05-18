@@ -55,11 +55,11 @@ import {
 } from './query';
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
-import type { RealmMetaTable } from './index-structure';
 import {
   coerceTypes,
+  normalizeRealmMetaValue,
   type BoxelIndexTable,
-  type CardTypeSummary,
+  type RealmMetaValue,
 } from './index-structure';
 import {
   getFieldDef,
@@ -923,15 +923,15 @@ export class IndexQueryEngine {
     return usedRenderTypeColumnExpression;
   }
 
-  async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
+  async fetchCardTypeSummary(realmURL: URL): Promise<RealmMetaValue> {
     let results = (await this.#query([
       `SELECT value
        FROM realm_meta rm
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
-    ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
+    ] as Expression)) as { value: unknown }[];
 
-    return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
+    return normalizeRealmMetaValue(results[0]?.value);
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {

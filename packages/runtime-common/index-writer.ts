@@ -40,6 +40,7 @@ import type { TimingDiagnostics } from './index';
 import {
   coerceTypes,
   type BoxelIndexTable,
+  type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -640,31 +641,16 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index_working as i
-          WHERE`,
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type = ', param('instance')],
-        ['i.types IS NOT NULL'],
-        [
-          dbExpression({
-            pg: `(i.types->>0) IS NOT NULL`,
-            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
-          }),
-        ],
-        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
-      ]),
-      `GROUP BY i.display_names->>0, i.types->>0`,
-      `ORDER BY i.display_names->>0 ASC`,
-    ] as Expression);
+    let instances = await this.#fetchTypeSummary('instance');
+    let files = await this.#fetchTypeSummary('file');
+
+    let value = { instances, files };
 
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
         realm_version: this.realmVersion,
-        value: results,
+        value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
@@ -682,6 +668,35 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  // Aggregates per-type summaries (count, display name, code-ref key, icon)
+  // for one kind of row in boxel_index_working — either CardDef instances or
+  // FileDef files. The shape of the result rows matches `CardTypeSummary`
+  // exactly, so callers can drop them straight into `realm_meta.value`.
+  async #fetchTypeSummary(
+    indexType: BoxelIndexTable['type'],
+  ): Promise<CardTypeSummary[]> {
+    let results = await this.#query([
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+       FROM boxel_index_working as i
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param(indexType)],
+        ['i.types IS NOT NULL'],
+        [
+          dbExpression({
+            pg: `(i.types->>0) IS NOT NULL`,
+            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
+          }),
+        ],
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+      ]),
+      `GROUP BY i.display_names->>0, i.types->>0`,
+      `ORDER BY i.display_names->>0 ASC`,
+    ] as Expression);
+    return results as unknown as CardTypeSummary[];
   }
 
   private async applyBatchUpdates() {

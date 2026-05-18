@@ -12,12 +12,15 @@ import { HighlightIcon } from '@cardstack/boxel-ui/icons';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
+import AllFilesIcon from '@cardstack/boxel-icons/files';
+import FileIcon from '@cardstack/boxel-icons/file';
 
 import {
   cardIdToURL,
   chooseCard,
   specRef,
   baseRealm,
+  baseFileRef,
   isCardInstance,
   SupportedMimeType,
   subscribeToRealm,
@@ -101,8 +104,9 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
+  private fileTypeFilters: FilterOption[] = new TrackedArray();
   private highlightsCards: BoxComponent[] = new TrackedArray();
-  private filterOptions: FilterOption[] = [];
+  private filterOptions: FilterOption[] = new TrackedArray();
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
 
@@ -174,12 +178,34 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
+  // The All Files group is only added to the sidebar after `loadFilterList`
+  // detects file-kind summaries in the realm — see how `setupFilterOptions` is
+  // re-called from `loadFilterList`. This satisfies the "hide empty groups"
+  // decision in the Linear plan: realms without any FileDef instances don't
+  // get a stub File branch.
+  private get allFilesFilter(): FilterOption {
+    return {
+      displayName: 'All Files',
+      icon: AllFilesIcon,
+      query: {
+        filter: {
+          type: baseFileRef,
+        },
+      },
+      filters: this.fileTypeFilters,
+      isExpanded: false,
+    };
+  }
+
   private setupFilterOptions() {
     this.filterOptions.splice(0, this.filterOptions.length);
     if (this.isPersonalRealm) {
       this.filterOptions.push(this.highlightFilter);
     }
     this.filterOptions.push(this.allCardsFilter);
+    if (this.fileTypeFilters.length > 0) {
+      this.filterOptions.push(this.allFilesFilter);
+    }
   }
 
   private teardownRealmSubscription() {
@@ -293,21 +319,48 @@ class Isolated extends Component<typeof CardsGrid> {
         displayName: string;
         total: number;
         iconHTML: string | null;
+        // Older realm-server builds may not stamp `kind` yet — treat missing
+        // as 'instance' so this client stays compatible during a rolling
+        // deploy. New servers always set the discriminator.
+        kind?: 'instance' | 'file';
       };
     }[];
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
+    // The "All Files" group already represents the bare FileDef root — listing
+    // it again as a leaf would just be a duplicate row.
+    let excludedFileTypeIds = [`${baseRealm.url}card-api/FileDef`];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
+    this.fileTypeFilters.splice(0, this.fileTypeFilters.length);
 
     cardTypeSummaries.forEach((summary) => {
-      if (!summary.id || excludedCardTypeIds.includes(summary.id)) {
+      if (!summary.id) {
         return;
       }
       let codeRef = codeRefFromInternalKey(summary.id);
       if (!codeRef) {
+        return;
+      }
+      let kind = summary.attributes.kind ?? 'instance';
+      if (kind === 'file') {
+        if (excludedFileTypeIds.includes(summary.id)) {
+          return;
+        }
+        this.fileTypeFilters.push({
+          displayName: summary.attributes.displayName ?? codeRef.name,
+          icon: summary.attributes.iconHTML ?? FileIcon,
+          query: {
+            filter: {
+              type: codeRef,
+            },
+          },
+        });
+        return;
+      }
+      if (excludedCardTypeIds.includes(summary.id)) {
         return;
       }
       this.cardTypeFilters.push({
@@ -320,6 +373,11 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    // Re-run setup so the All Files group appears/disappears as the file leaf
+    // list grows or shrinks. setupFilterOptions inspects `fileTypeFilters` to
+    // decide whether to include the group at all.
+    this.setupFilterOptions();
 
     let flattenedFilters: FilterOption[] = [];
     this.filterOptions.map((f) =>

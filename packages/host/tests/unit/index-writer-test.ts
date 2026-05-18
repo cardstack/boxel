@@ -85,9 +85,13 @@ const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
 
 const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
   let rows = await fetchRealmMetaRows(adapter);
+  let raw = rows[0]?.value as
+    | { instances?: RealmMetaValue[]; files?: RealmMetaValue[] }
+    | undefined;
   return {
     rows,
-    value: (rows[0]?.value ?? []) as RealmMetaValue[],
+    value: (raw?.instances ?? []) as RealmMetaValue[],
+    files: (raw?.files ?? []) as RealmMetaValue[],
   };
 };
 
@@ -1665,6 +1669,127 @@ module('Unit | index-writer', function (hooks) {
         makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
       ],
       'correct card type summary after indexing is done',
+    );
+  });
+
+  test('update realm meta partitions file rows into the files array', async function (assert) {
+    // CS-prep for "Include FileDefs in CardsGrid": file rows in boxel_index
+    // (type='file') should be aggregated into `realm_meta.value.files`,
+    // independently of the cards group. This is what powers CardsGrid's
+    // "All Files" sidebar leaves.
+    let iconHTML = '<svg>file icon</svg>';
+    let baseFileTypes = internalKeysFor({
+      module: rri('./card-api'),
+      name: 'FileDef',
+    });
+    let markdownTypes = internalKeysFor(
+      {
+        module: rri('./markdown-file-def'),
+        name: 'MarkdownDef',
+      },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        // Plain instance row — should land in `instances`.
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource('1', 'Mango', {
+            module: rri('./person'),
+            name: 'Person',
+          }) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: internalKeysFor(
+            { module: rri('./person'), name: 'Person' },
+            baseCardRef,
+          ),
+          icon_html: iconHTML,
+        },
+        // Two markdown files — same code_ref so they collapse into one
+        // summary row with total: 2.
+        {
+          url: `${testRealmURL}notes/a.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/b.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'b.md', url: `${testRealmURL}notes/b.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        // A bare-FileDef file — base type used when the extension isn't mapped.
+        {
+          url: `${testRealmURL}misc/raw.bin`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'raw.bin', url: `${testRealmURL}misc/raw.bin` },
+          display_names: ['File'],
+          types: baseFileTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    // No new writes — just finalize so updateRealmMeta runs against the
+    // working table that setupIndex seeded.
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.strictEqual(
+      realmMeta.rows.length,
+      1,
+      'one realm_meta row was written',
+    );
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      'instance summaries only reflect CardDef rows',
+    );
+    // Files are ordered by display_name ASC; "File" sorts before "Markdown".
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}card-api/FileDef`,
+          'File',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          2,
+        ),
+      ],
+      'file summaries collapse duplicates and live in their own arm',
     );
   });
 

@@ -554,6 +554,7 @@ export default class RealmServerService extends Service {
           displayName: string;
           total: number;
           iconHTML: string;
+          kind?: 'instance' | 'file';
         };
         meta?: { realmURL: string };
       }[];

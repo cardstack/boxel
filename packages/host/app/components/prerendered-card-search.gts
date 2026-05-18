@@ -32,14 +32,14 @@ import { getSearch } from '../resources/search';
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
-// Internal registry of URLs known to be file-meta from prerendered search.
-// Used by the overlay system to correctly identify FileDef cards when they
-// haven't been loaded into the store yet (prerendered results are HTML-only).
-export const knownFileMetaUrls = new Set<string>();
-
-export function clearKnownFileMetaUrls() {
-  knownFileMetaUrls.clear();
-}
+// The Set itself lives in `lib/known-file-meta-urls` so non-component code
+// (e.g. `lib/stack-item.ts`) can read it without importing a component file.
+// Re-exported here for back-compat with existing call sites.
+import {
+  knownFileMetaUrls,
+  clearKnownFileMetaUrls,
+} from '../lib/known-file-meta-urls';
+export { knownFileMetaUrls, clearKnownFileMetaUrls };
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;

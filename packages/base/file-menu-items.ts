@@ -35,6 +35,21 @@ export function getDefaultFileMenuItems(
     });
   }
   if (params.menuContext === 'interact') {
+    if (fileDefInstanceId) {
+      // Files are read-only in interact-mode (no edit format). The "Open in
+      // Code Mode" entry is the canonical way for a user who opened a file
+      // via CardsGrid's All Files group to jump to the editing surface.
+      menuItems.push({
+        label: 'Open in Code Mode',
+        action: async () => {
+          await new SwitchSubmodeCommand(params.commandContext).execute({
+            submode: 'code',
+            codePath: fileDefInstanceId,
+          });
+        },
+        icon: CodeIcon,
+      });
+    }
     if (fileDefInstanceId && params.canEdit) {
       // TODO: add menu item to delete the file
     }

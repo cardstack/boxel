@@ -136,7 +136,7 @@ module(basename(__filename), function () {
           return aName.localeCompare(bName);
         });
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let expectedData = [
+      let instanceEntries = [
         {
           type: 'card-type-summary',
           id: `${testRealm.url}chess-gallery/ChessGallery`,
@@ -144,6 +144,7 @@ module(basename(__filename), function () {
             displayName: 'Chess Gallery',
             total: 3,
             iconHTML: chessIconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -153,6 +154,7 @@ module(basename(__filename), function () {
             displayName: 'Family Photo Card',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -162,6 +164,7 @@ module(basename(__filename), function () {
             displayName: 'Friend',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -171,6 +174,7 @@ module(basename(__filename), function () {
             displayName: 'FriendWithUsedLink',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -180,6 +184,7 @@ module(basename(__filename), function () {
             displayName: 'Home',
             total: 1,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -189,6 +194,7 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 3,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -198,6 +204,7 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 4,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -207,6 +214,7 @@ module(basename(__filename), function () {
             displayName: 'Realm Config',
             total: 1,
             iconHTML: fileSettingsIconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -216,12 +224,29 @@ module(basename(__filename), function () {
             displayName: 'TimersCard',
             total: 1,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
       ];
+      let actualInstances = response.body.data.filter(
+        (entry: any) => entry.attributes.kind === 'instance',
+      );
       assert.deepEqual(
-        sortCardTypeSummaries(response.body.data),
-        sortCardTypeSummaries(expectedData),
+        sortCardTypeSummaries(actualInstances),
+        sortCardTypeSummaries(instanceEntries),
+        'instance summaries match expected fixture',
+      );
+      // Files may or may not be present in this realistic fixture; the more
+      // specific file-presence assertions live in the dedicated FileDefs test
+      // below. Here we only insist that every entry on the response carries a
+      // `kind` discriminator.
+      assert.ok(
+        response.body.data.every(
+          (entry: any) =>
+            entry.attributes.kind === 'instance' ||
+            entry.attributes.kind === 'file',
+        ),
+        'every summary entry carries an instance/file kind',
       );
     });
   });
