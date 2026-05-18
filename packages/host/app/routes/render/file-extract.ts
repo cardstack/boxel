@@ -7,7 +7,9 @@ import { isTesting } from '@embroider/macros';
 
 import {
   baseFileRef,
+  baseRealm,
   formattedError,
+  logger,
   snapshotRuntimeDependencies,
   withRuntimeDependencyTrackingContext,
   type RenderError,
@@ -24,6 +26,9 @@ import type LoaderService from '../../services/loader-service';
 import type NetworkService from '../../services/network';
 import type RealmService from '../../services/realm';
 import type { Model as RenderModel } from '../render';
+
+const log = logger('render-route:file-extract');
+
 export type Model = { id: string; nonce: string } & FileDefExtractResult;
 
 export default class RenderFileExtractRoute extends Route<Model> {
@@ -117,7 +122,28 @@ export default class RenderFileExtractRoute extends Route<Model> {
       };
     }
     let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
-    let mergedDeps = [...new Set([...(result.deps ?? []), ...deps])];
+    // `baseFileRef.module` points at `card-api` (where FileDef is implemented),
+    // but the indexer references `file-api` — the canonical public re-export —
+    // when invalidating file extracts. Pin it as a static dep so the contract
+    // doesn't ride on whether the runtime tracker happened to observe an
+    // import of file-api during the active session window.
+    let baseFileApiModule = `${baseRealm.url}file-api`;
+    let resultDeps = result.deps ?? [];
+    if (
+      !deps.includes(baseFileApiModule) &&
+      !resultDeps.includes(baseFileApiModule)
+    ) {
+      // If this fires repeatedly the static merge below is masking a real
+      // regression in the tracking-session lifecycle — worth investigating
+      // rather than treating as a permanent fallback.
+      log.warn(
+        `runtime tracker missed canonical file-api module for ${id} ` +
+          `(nonce=${nonce}); falling back to static dep. ` +
+          `extractor deps=${JSON.stringify(resultDeps)} ` +
+          `tracker deps=${JSON.stringify(deps)}`,
+      );
+    }
+    let mergedDeps = [...new Set([baseFileApiModule, ...resultDeps, ...deps])];
     return {
       id,
       nonce,
