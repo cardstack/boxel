@@ -126,10 +126,10 @@ let {
   serviceName = 'realm-server',
   serverURL = isEnvironmentMode()
     ? serviceURL(serviceName)
-    : `http://localhost:${port}`,
+    : `https://localhost:${port}`,
   distURL = isEnvironmentMode()
     ? serviceURL('host')
-    : (process.env.HOST_URL ?? 'http://localhost:4200'),
+    : (process.env.HOST_URL ?? 'https://localhost:4200'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -523,7 +523,14 @@ const getIndexHTML = async () => {
     if (isEnvironmentMode()) {
       deregisterEnvironment();
     }
-    httpServer.closeAllConnections();
+    // Both the plain `http.Server` and the TLS-mode `net.Server`
+    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
+    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them
+    // — without it `close()` can hang for a tab-keep-alive lifetime.
+    if (typeof (httpServer as any).closeAllConnections === 'function') {
+      (httpServer as any).closeAllConnections();
+    }
     httpServer.close(() => {
       (async () => {
         await Promise.all([

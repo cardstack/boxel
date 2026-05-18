@@ -14,7 +14,8 @@ export default defineConfig({
   reporter: process.env.CI ? 'blob' : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    baseURL: 'http://localhost:4205/test',
+    baseURL: 'https://localhost:4205/test',
+    ignoreHTTPSErrors: true,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'retry-with-trace',
@@ -36,8 +37,19 @@ export default defineConfig({
           args: [
             // Simulate resolving a custom workspace domain to a realm server
             '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
+            // The mkcert leaf's SAN is `localhost` only — the published
+            // realm subdomain (`https://published.realm:4205/`) and the
+            // tenant-style subdomains under `*.localhost:4205` that
+            // publish-realm.spec.ts exercises fail strict cert
+            // validation. Pair --ignore-certificate-errors with
+            // --allow-insecure-localhost so chrome 144+ actually honors
+            // the relaxation (Chrome silently demoted
+            // --ignore-certificate-errors to a dev-only flag without
+            // --allow-insecure-localhost).
+            '--ignore-certificate-errors',
+            '--allow-insecure-localhost',
             // Allow iframe to request storage access depsite being considered insecure
-            '--unsafely-treat-insecure-origin-as-secure=http://published.realm',
+            '--unsafely-treat-insecure-origin-as-secure=https://published.realm',
           ],
           // devtools: true,
         },

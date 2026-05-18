@@ -13,6 +13,9 @@ test-results/.last-run.json
 .claude/*.lock
 .claude/worktrees/
 traefik/dynamic/*.yml
+# Static TLS cert config is committed; runtime-generated per-env routing
+# files (e.g. `<slug>-host.yml`, `<slug>-realm-server.yml`) stay ignored.
+!traefik/dynamic/tls.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/
 packages/host/dist

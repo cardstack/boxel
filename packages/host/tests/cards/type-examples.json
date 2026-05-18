@@ -1,7 +1,7 @@
 {
   "data": {
     "type": "card",
-    "id": "http://localhost:4202/test/type-examples",
+    "id": "https://localhost:4202/test/type-examples",
     "attributes": {
       "intField": 1,
       "stringField": "string",

@@ -229,7 +229,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const result = await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -271,7 +271,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // First pull to get initial files
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -293,7 +293,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const result = await runCommand(
       'node',
-      [pushCmd, context.localDir, `http://localhost:${REALM_PORT}/test/`],
+      [pushCmd, context.localDir, `https://localhost:${REALM_PORT}/test/`],
       process.cwd(),
     );
 
@@ -309,7 +309,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const pullResult = await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, verifyDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, verifyDir],
       process.cwd(),
     );
 
@@ -339,7 +339,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // First pull to get initial files
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -353,7 +353,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       'node',
       [
         pullCmd,
-        `http://localhost:${REALM_PORT}/test/`,
+        `https://localhost:${REALM_PORT}/test/`,
         context.localDir,
         '--delete',
       ],
@@ -383,7 +383,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // First pull to get initial files
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -398,7 +398,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
       [
         pushCmd,
         context.localDir,
-        `http://localhost:${REALM_PORT}/test/`,
+        `https://localhost:${REALM_PORT}/test/`,
         '--dry-run',
       ],
       process.cwd(),
@@ -416,7 +416,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, checkDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, checkDir],
       process.cwd(),
     );
 
@@ -434,7 +434,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // Test pulling .realm.json
     const pullResult = await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -474,7 +474,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const pushResult = await runCommand(
       'node',
-      [pushCmd, context.localDir, `http://localhost:${REALM_PORT}/test/`],
+      [pushCmd, context.localDir, `https://localhost:${REALM_PORT}/test/`],
       process.cwd(),
     );
 
@@ -490,7 +490,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const verifyPullResult = await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, verifyDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, verifyDir],
       process.cwd(),
     );
 
@@ -532,7 +532,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // Test using only REALM_SECRET_SEED instead of MATRIX_PASSWORD
     const pullResult = await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
       {
         // Remove MATRIX_PASSWORD and provide REALM_SECRET_SEED instead
@@ -567,7 +567,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
     // First pull to get initial files
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, context.localDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, context.localDir],
       process.cwd(),
     );
 
@@ -593,7 +593,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     const result = await runCommand(
       'node',
-      [pushCmd, context.localDir, `http://localhost:${REALM_PORT}/test/`],
+      [pushCmd, context.localDir, `https://localhost:${REALM_PORT}/test/`],
       process.cwd(),
     );
 
@@ -609,7 +609,7 @@ module('Workspace Sync CLI Integration Tests', function (hooks) {
 
     await runCommand(
       'node',
-      [pullCmd, `http://localhost:${REALM_PORT}/test/`, checkDir],
+      [pullCmd, `https://localhost:${REALM_PORT}/test/`, checkDir],
       process.cwd(),
     );
 

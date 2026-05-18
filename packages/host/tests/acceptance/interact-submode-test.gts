@@ -912,7 +912,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
+      setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
       await visitOperatorMode({
         stacks: [
           [
@@ -923,7 +923,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
           [
             {
-              id: 'http://localhost:4202/test/hassan',
+              id: 'https://localhost:4202/test/hassan',
               format: 'isolated',
             },
           ],

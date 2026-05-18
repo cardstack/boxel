@@ -38,13 +38,19 @@ const PER_ATTEMPT_TIMEOUT_MS = 30_000;
 const MAX_BACKOFF_MS = 5_000;
 const TOTAL_TIMEOUT_MS = 600_000;
 
+import { isHttpsLoopback } from '../lib/is-https-loopback';
+
 const log = (msg: string) => console.log(`[wait-for-host-standby] ${msg}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const elapsedSec = (start: number) => Math.round((Date.now() - start) / 1000);
 
 async function main() {
+  // Vite serves HTTPS on localhost:4200 in local dev (the realm-server
+  // requires the mkcert leaf and vite reads the same cert). Default
+  // accordingly so a stale shell that hasn't re-exported HOST_URL
+  // still probes the right scheme.
   let hostUrl =
-    process.argv[2] || process.env.HOST_URL || 'http://localhost:4200';
+    process.argv[2] || process.env.HOST_URL || 'https://localhost:4200';
   let standbyUrl = `${hostUrl}/_standby`;
 
   let launchArgs: string[] = [];
@@ -53,6 +59,23 @@ async function main() {
     process.env.PUPPETEER_DISABLE_SANDBOX === 'true'
   ) {
     launchArgs.push('--no-sandbox', '--disable-setuid-sandbox');
+  }
+  // Match the prerender server's BrowserManager: relax cert checks for
+  // the local mkcert leaf. Chrome 144+ silently demotes
+  // `--ignore-certificate-errors` to a dev-only flag — pair it with
+  // `--allow-insecure-localhost` so the dev cert is actually accepted
+  // (otherwise the TLS handshake closes with ERR_CONNECTION_CLOSED and
+  // every retry times out with no obvious explanation in the log).
+  //
+  // Gated on https + a loopback hostname so the relaxation only fires
+  // in local dev / CI (where the cert is the mkcert leaf). Production
+  // hits a real hostname with a real CA-signed cert, where we want
+  // strict validation.
+  if (isHttpsLoopback(hostUrl)) {
+    launchArgs.push(
+      '--ignore-certificate-errors',
+      '--allow-insecure-localhost',
+    );
   }
 
   log(`probing ${standbyUrl} (max ${TOTAL_TIMEOUT_MS / 1000}s)...`);
@@ -78,10 +101,44 @@ async function main() {
       1,
       Math.min(PER_ATTEMPT_TIMEOUT_MS, TOTAL_TIMEOUT_MS - (Date.now() - start)),
     );
+  // Verbose mode forwards every chrome console message + every failed
+  // network request from the standby probe page to our own stdout, so
+  // when the probe hangs we can see what URL the page is choking on
+  // (TLS-handshake failures, h2 stream resets, cross-origin denials,
+  // etc.). Off by default — healthy runs don't need the noise. Flip
+  // `WAIT_FOR_HOST_STANDBY_VERBOSE=1` when investigating a probe hang.
+  let verbose = process.env.WAIT_FOR_HOST_STANDBY_VERBOSE === '1';
   try {
     while (Date.now() - start < TOTAL_TIMEOUT_MS) {
       attempt++;
       let page = await browser.newPage();
+      if (verbose) {
+        page.on('console', (msg) =>
+          log(`[chrome console.${msg.type()}] ${msg.text()}`),
+        );
+        page.on('pageerror', (err: unknown) =>
+          log(
+            `[chrome pageerror] ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          ),
+        );
+        page.on('requestfailed', (req) =>
+          log(
+            `[chrome requestfailed] ${req.method()} ${req.url()} — ${
+              req.failure()?.errorText ?? 'unknown'
+            }`,
+          ),
+        );
+        page.on('response', (resp) => {
+          if (resp.status() >= 400) {
+            log(`[chrome response ${resp.status()}] ${resp.url()}`);
+          }
+        });
+        page.on('framedetached', (frame) =>
+          log(`[chrome framedetached] url=${frame.url()}`),
+        );
+      }
       try {
         // Mirror page-pool.ts's #loadStandbyPage: each phase gets its own
         // PER_ATTEMPT_TIMEOUT_MS budget. The goto budget only covers
@@ -89,14 +146,17 @@ async function main() {
         // `#standby-ready` is a separate clock because on a cold vite
         // cache the script tag's module fetch can spin while the
         // optimizer is still bundling its dep graph.
+        if (verbose) log(`attempt ${attempt}: page.goto(${standbyUrl})`);
         let response = await page.goto(standbyUrl, {
           waitUntil: 'domcontentloaded',
           timeout: phaseBudgetMs(),
         });
         let status = response?.status();
+        if (verbose) log(`attempt ${attempt}: goto resolved status=${status}`);
         if (status != null && status >= 400) {
           throw new Error(`HTTP ${status}`);
         }
+        if (verbose) log(`attempt ${attempt}: waiting for #standby-ready`);
         await page.waitForFunction(
           () => !!document.querySelector('#standby-ready'),
           { timeout: phaseBudgetMs() },

@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import { dirSync, type DirResult } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,

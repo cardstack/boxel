@@ -4,6 +4,31 @@
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
+# Run the dev-cert prerequisite UPFRONT — before we spawn the host app
+# or the parallel server stack. ensure-dev-cert fails fast with a clear
+# "run `mise run infra:trust-dev-cert` once" message when the root CA
+# is missing, but inside the multiplexed `start-server-and-test` /
+# `run-p -ln` output that message is one of hundreds of buffered lines
+# the user has to scroll past, and the cascade of downstream failures
+# (vite restart, prerender / worker-manager teardown) buries it. Run
+# it here so it's the first thing a dev sees when the cert isn't
+# installed; if it passes, the inner `mise run` invocations that
+# depend on it are fast no-ops (idempotent leaf-cert check).
+echo "[dev-all] Verifying dev TLS cert prerequisite…"
+if ! BOXEL_DEV_INVOKED_AS='mise run dev-all' mise run infra:ensure-dev-cert; then
+  exit 1
+fi
+
+# `mise run dev-all` sources env-vars.sh once on entry. If
+# infra:ensure-dev-cert just provisioned the cert (first-run case), this
+# shell's env still lacks REALM_SERVER_TLS_CERT_FILE / _KEY_FILE, and
+# the next `pnpm --filter @cardstack/host start` inherits that gap and
+# brings vite up plain-HTTP — but HOST_URL is already
+# `https://localhost:4200`, so the readiness curl probe times out.
+# Re-source env-vars.sh so the TLS vars get picked up now that the cert
+# exists. Idempotent in the steady-state case.
+. "$(cd "$(dirname "$0")" && pwd)/lib/env-vars.sh"
+
 # Enable job control so backgrounded subprocesses run in their own process
 # group. Without this, Ctrl-C is delivered to the whole foreground group;
 # npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
@@ -57,7 +82,7 @@ while true; do
     echo "ERROR: Host app process died." >&2
     exit 1
   fi
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
+  if [ "$(curl -ks -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
     break
   fi
   sleep 2

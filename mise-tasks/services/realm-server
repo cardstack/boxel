@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Start realm development server"
-#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db", "infra:wait-for-prerender"]
+#MISE depends=["infra:ensure-dev-cert", "infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
 # Propagate realm-server's exit status through the trailing `| dev-log-tee.sh`

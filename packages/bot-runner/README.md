@@ -65,7 +65,7 @@ List registrations:
 Register via script
 
 ```sh
-REALM_SERVER_URL="http://localhost:4201" \
+REALM_SERVER_URL="https://localhost:4201" \
 REALM_SERVER_JWT="..." \
 USERNAME="@submissionbot:localhost" \
 ./packages/realm-server/scripts/register-bot.sh
@@ -73,7 +73,7 @@ USERNAME="@submissionbot:localhost" \
 
 Defaults and requirements:
 
-- `REALM_SERVER_URL` (default: `http://localhost:4201`)
+- `REALM_SERVER_URL` (default: `https://localhost:4201`)
 - `REALM_SERVER_JWT` (required)
 - `USERNAME` (default: `@user:localhost`, Matrix user id)
 

@@ -1,5 +1,16 @@
 (globalThis as any).__environment = 'test';
 
+// Strip the dev TLS env vars before any fixture realm-server is spun up.
+// `env-vars.sh` exports these whenever the local mkcert cert exists, which
+// is now the CI default. Without this delete, in-process fixture servers
+// would bind the HTTPS+HTTP/2 dispatcher on their random `127.0.0.1:444X`
+// ports and the dispatcher's plain-HTTP branch would 308-redirect every
+// supertest request to `https://…`, breaking every assertion that expects
+// `200`/`4xx`. In-process tests don't need TLS — they speak HTTP/1.1 to
+// supertest directly.
+delete process.env.REALM_SERVER_TLS_CERT_FILE;
+delete process.env.REALM_SERVER_TLS_KEY_FILE;
+
 // Ensure test timers don't hold the Node event loop open. Wrap setTimeout and
 // setInterval to unref timers so the process can exit once work is done. This
 // does have the effect of masking any issues where code should be clearing
@@ -169,6 +180,7 @@ const ALL_TEST_FILES: string[] = [
   './full-reindex-test',
   './indexing-test',
   './lazy-mount-test',
+  './listener-dispatcher-test',
   './module-cache-race-test',
   './module-syntax-test',
   './permissions/permission-checker-test',
