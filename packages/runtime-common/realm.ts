@@ -2159,13 +2159,16 @@ export class Realm {
       settled.then(
         () => {
           this.#log.info(
-            `Deferred delete-indexing settled for ${this.url}${path} in ${Date.now() - enqueueStart}ms`,
+            `Deferred delete-indexing settled for ${url.href} in ${Date.now() - enqueueStart}ms`,
           );
         },
         (err: unknown) => {
-          let message = err instanceof Error ? err.message : String(err);
+          let detail =
+            err instanceof Error
+              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              : String(err);
           this.#log.error(
-            `Deferred delete-indexing chain failed for ${this.url}${path} after ${Date.now() - enqueueStart}ms: ${message}`,
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
           );
         },
       );
