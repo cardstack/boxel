@@ -1,5 +1,9 @@
 import type { Realm } from '@cardstack/runtime-common';
-import { logger, REALM_FILE_CHANGES_CHANNEL } from '@cardstack/runtime-common';
+import {
+  logger,
+  REALM_FILE_CHANGES_CHANNEL,
+  REALM_FILE_CHANGES_WILDCARD,
+} from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
 const log = logger('realm-server:file-changes-listener');
@@ -9,8 +13,14 @@ const log = logger('realm-server:file-changes-listener');
 // runtime-common/realm.ts), every listener subscribed on this channel looks
 // up the URL in its lookup function. If the realm is mounted locally,
 // `realm.invalidateCache(path)` clears the matching #sourceCache /
-// #moduleCache entries. If it's not mounted, the notification is dropped —
+// #transpiledModuleCache entries. If it's not mounted, the notification is dropped —
 // this instance has no stale state to clear.
+//
+// Bulk variant: when the path is the wildcard sentinel `*` (CS-11156),
+// `realm.clearLocalSourceCaches()` drops every cached path for that realm. Emitted
+// by the publish-realm / unpublish-realm / delete-realm handlers after the
+// FS swap or removal so peers (whose file-watcher events do NOT cross
+// replicas) bypass their pre-swap cached bytes on the next read.
 //
 // The LISTEN is backed by `PgAdapter.subscribe` (shared multiplexed
 // notification client). There is no periodic work to run between
@@ -86,21 +96,28 @@ export class RealmFileChangesListener {
       // Not mounted on this instance — nothing to invalidate.
       return;
     }
+    const isWildcard = parsed.path === REALM_FILE_CHANGES_WILDCARD;
     try {
-      realm.invalidateCache(parsed.path);
+      if (isWildcard) {
+        realm.clearLocalSourceCaches();
+      } else {
+        realm.invalidateCache(parsed.path);
+      }
     } catch (err: unknown) {
-      log.warn(
-        `invalidateCache failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
-      );
+      const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';
+      log.warn(`${op} failed for ${parsed.url} ${parsed.path}: ${String(err)}`);
     }
   }
 }
 
-// Payload shape: `<realmURL>:<localPath>`. Realm URLs always carry a
-// trailing slash (enforced by `ensureTrailingSlash` throughout the code),
-// so the separator between URL and path is the first `:` that immediately
+// Payload shape: `<realmURL>:<localPath>` or `<realmURL>:*` (bulk
+// invalidation — CS-11156). Realm URLs always carry a trailing slash
+// (enforced by `ensureTrailingSlash` throughout the code), so the
+// separator between URL and path is the first `:` that immediately
 // follows a `/`. That avoids false matches on the scheme colon
-// (`http://...`) and any host:port colon (`localhost:4201`).
+// (`http://...`) and any host:port colon (`localhost:4201`). The same
+// regex handles both shapes; the wildcard payload parses as
+// `path = '*'`.
 const PAYLOAD_SEPARATOR = /\/:/;
 
 export function parsePayload(
