@@ -228,4 +228,67 @@ module(basename(__filename), function (hooks) {
     resB.release();
     gate.unblockAll();
   });
+
+  // The file-admission cap reserves a slot per-affinity for module / command
+  // work, but only as a *cap* on file callers — it doesn't itself produce
+  // the reserved tab. `#selectEntryForAffinity` for a non-file caller used
+  // to fall through to `#selectLeastPendingTab` when both the orphan-claim
+  // and the standby-commandeer paths missed, queueing the caller behind
+  // the busy file render that was waiting on it: the self-referential
+  // prerender deadlock. The fix unconditionally awaits `#ensureStandbyPool`
+  // and retries commandeer for module / command callers under the
+  // per-affinity cap, regardless of priority.
+  test('module call on an existing affinity with all owned tabs busy materializes a fresh tab', async function (assert) {
+    let gate = makeManualGate();
+    let browserManager = makeBrowserStub({ gate: gate.gate });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    // File render acquires the only tab on affinity A and holds it.
+    let held = await pool.getPage('A', 'file');
+    assert.ok(held.pageId, 'first getPage on A returned a page');
+
+    // A module sub-render arrives for the same affinity while A1 is busy.
+    // Pre-fix: this would queue behind A1 on its per-tab queue (the
+    // deadlock state). Post-fix: a fresh tab is materialized.
+    let modCall = pool.getPage('A', 'module');
+
+    // Race the module call against the held tab — if the test ever hangs
+    // waiting on `modCall`, that's the deadlock regression returning.
+    // Bound with a 2s timeout so a regression fails the test cleanly.
+    let timeoutFired = false;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    let timer = new Promise<'timeout'>((resolve) => {
+      timeoutHandle = setTimeout(() => {
+        timeoutFired = true;
+        resolve('timeout');
+      }, 2000);
+    });
+    let winner = await Promise.race([
+      modCall.then((r) => ({ kind: 'mod' as const, result: r })),
+      timer,
+    ]);
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+
+    assert.false(
+      timeoutFired,
+      'module call did not block on the held file-render tab (no deadlock)',
+    );
+    if (winner !== 'timeout') {
+      assert.strictEqual(
+        winner.kind,
+        'mod',
+        'module call resolved without waiting on the file render',
+      );
+      // The module render must land on a different tab than the held one
+      // (which is still in use by the file render).
+      assert.notStrictEqual(
+        winner.result.pageId,
+        held.pageId,
+        'module call got its own tab, distinct from the held file-render tab',
+      );
+      winner.result.release();
+    }
+    held.release();
+    gate.unblockAll();
+  });
 });

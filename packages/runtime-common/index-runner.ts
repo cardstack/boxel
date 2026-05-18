@@ -630,7 +630,9 @@ export class IndexRunner {
     let failed = 0;
     for (let moduleUrl of toWarm) {
       try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl);
+        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+          priority: this.#jobPriority,
+        });
       } catch {
         failed += 1;
       }

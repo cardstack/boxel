@@ -35,6 +35,7 @@ import {
   resolveFileDefCodeRef,
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_JOB_ID_HEADER,
+  X_BOXEL_JOB_PRIORITY_HEADER,
   Deferred,
   delay,
   mergeRelationships,
@@ -158,6 +159,19 @@ function consumingRealmHeader(): Record<string, string> {
 function jobIdHeader(): Record<string, string> {
   let j = (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId;
   return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
+}
+
+// Companion to `jobIdHeader()`. The prerender server's render-runner
+// also injects `__boxelJobPriority` onto the page before transitioning
+// into the render route. Outside a prerender tab the global is
+// undefined and we send no header — user / API callers leave the
+// realm-server's lookup paths to fall back to priority 0 as today.
+function jobPriorityHeader(): Record<string, string> {
+  let p = (globalThis as unknown as { __boxelJobPriority?: number })
+    .__boxelJobPriority;
+  return typeof p === 'number' && Number.isSafeInteger(p) && p >= 0
+    ? { [X_BOXEL_JOB_PRIORITY_HEADER]: String(p) }
+    : {};
 }
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
@@ -871,6 +885,7 @@ export default class StoreService extends Service implements StoreInterface {
           ...duringPrerenderHeaders(),
           ...consumingRealmHeader(),
           ...jobIdHeader(),
+          ...jobPriorityHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -940,6 +955,7 @@ export default class StoreService extends Service implements StoreInterface {
           ...duringPrerenderHeaders(),
           ...consumingRealmHeader(),
           ...jobIdHeader(),
+          ...jobPriorityHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
