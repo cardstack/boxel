@@ -29,43 +29,27 @@ workspace mirror of the target realm is **not** your cwd at
 session start — you create it during bootstrap as a fresh temp
 directory and `cd` into it. See "Set up the workspace" below.
 
-## First: wire up the dev `boxel` CLI
+## First: verify the dev `boxel` CLI is installed
 
-**Do not assume `boxel` is on PATH.** During Phase 1, the `boxel`
-CLI is always run from the in-monorepo development source at
-`<monorepo>/packages/boxel-cli/bin/boxel.js`. Wire it up before
-doing anything else, then use `boxel <command>` throughout the
-rest of this skill and the operations / scheduling skills.
+The user is expected to have installed the dev `boxel` CLI as a
+one-time setup step (see the runbook prerequisites). Verify it's
+on PATH and exposes the commands this skill needs before going
+further:
 
 ```bash
-# Find the monorepo root from any sub-directory inside it.
-MONOREPO="$(git rev-parse --show-toplevel)"
-BOXEL_BIN="$MONOREPO/packages/boxel-cli/bin/boxel.js"
-
-# Symlink onto PATH so every subsequent `boxel <cmd>` works.
-mkdir -p "$HOME/.local/bin"
-ln -sf "$BOXEL_BIN" "$HOME/.local/bin/boxel"
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac
-
-# Verify the commands the rest of this skill needs are present.
 boxel --version
 boxel --help | grep -qE '^\s+(lint|parse|test)\s' || {
-  echo "boxel --help is missing lint/parse/test — your dist/ is stale."
-  echo "Stop and ask the user to run:"
-  echo "  pnpm --filter @cardstack/boxel-cli build"
-  echo "Re-run this verification after they rebuild."
+  echo "boxel --help is missing lint/parse/test — the dev CLI isn't installed (or its dist is stale)."
+  echo "Stop and ask the user to run, from the monorepo:"
+  echo "  cd packages/boxel-cli && pnpm build && pnpm link --global"
+  echo "  (one-time: if pnpm complains its global bin dir isn't on PATH, 'pnpm setup' first)"
   exit 1
 }
 ```
 
-If the verification fails, **stop and report**. Don't try to rebuild
-`dist/` yourself — that's a per-machine setup the user controls.
-The runbook's prerequisites cover the initial build; if you're
-hitting this, the user pulled new boxel-cli code without
-rebuilding.
-
-This setup is a Phase 1 workaround. When boxel-cli ships properly
-the wiring goes away and `boxel` is just on PATH globally.
+If verification fails, **stop and report**. Don't try to install
+or rebuild `boxel` yourself — that's a per-machine setup the user
+controls.
 
 ## Creating the target realm
 

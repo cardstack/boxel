@@ -23,37 +23,24 @@ factory backlog. You are about to:
   skill, depending on `issueType`), then mark it `done` or `blocked`.
 - Repeat until no eligible issues remain.
 
-## First: wire up the dev `boxel` CLI
+## First: verify the dev `boxel` CLI is installed
 
-**Do not assume `boxel` is on PATH.** During Phase 1, the `boxel`
-CLI is always run from the in-monorepo development source at
-`<monorepo>/packages/boxel-cli/bin/boxel.js`. Wire it up before
-any `boxel <cmd>` invocation in this skill (or the bootstrap /
-operations skills you'll hand off to). The block below is
-idempotent — safe to run at the start of every session, even if
-something else already symlinked it:
+The user is expected to have installed the dev `boxel` CLI as a
+one-time setup step (see the runbook prerequisites). Verify it
+before any `boxel <cmd>` invocation:
 
 ```bash
-MONOREPO="$(git rev-parse --show-toplevel)"
-BOXEL_BIN="$MONOREPO/packages/boxel-cli/bin/boxel.js"
-
-mkdir -p "$HOME/.local/bin"
-ln -sf "$BOXEL_BIN" "$HOME/.local/bin/boxel"
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac
-
 boxel --version
 boxel --help | grep -qE '^\s+(lint|parse|test)\s' || {
-  echo "boxel --help is missing lint/parse/test — dist is stale."
-  echo "Ask user to run: pnpm --filter @cardstack/boxel-cli build"
+  echo "boxel --help is missing lint/parse/test — the dev CLI isn't installed (or its dist is stale)."
+  echo "Ask user to run, from the monorepo:"
+  echo "  cd packages/boxel-cli && pnpm build && pnpm link --global"
   exit 1
 }
 ```
 
-If the verification fails, stop and report. Don't try to rebuild
-`dist/` yourself.
-
-Phase 1 only — once boxel-cli ships properly, the wiring step
-disappears and `boxel` is just installed globally.
+If verification fails, stop and report. Don't try to install or
+rebuild `boxel` yourself.
 
 ## Picking the next issue
 

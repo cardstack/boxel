@@ -15,21 +15,21 @@ The user has done the following outside Claude Code:
   shows the active profile.
 
   **Dev `boxel` CLI setup.** The `boxel` CLI ships with the
-  monorepo; until it's released as a standalone binary, symlink
-  the dev script onto your PATH:
+  monorepo; until it's released as a standalone binary, install
+  it as a globally-linked pnpm package:
 
   ```bash
   cd /path/to/boxel/packages/boxel-cli
-  pnpm build                                          # build fresh dist/
-  ln -sf "$(pwd)/bin/boxel.js" ~/.local/bin/boxel     # or any PATH dir
-  boxel --version                                     # confirm
+  pnpm build
+  pnpm link --global
+  boxel --version
   ```
 
+  If pnpm complains its global bin dir isn't on PATH, run
+  `pnpm setup` once (idempotent), restart your shell, and retry.
+
   If `boxel --help` doesn't list `lint` / `parse` / `test`,
-  your `dist/` is stale — `pnpm build` again. The shim runs
-  precompiled JS from `dist/` when present, which is what you
-  want from temp-dir workspaces (no `tsconfig.json` reachable
-  for the ts-node fallback).
+  your `dist/` is stale — `pnpm build` again.
 
 - Installed Claude Code and run `/login` so the session is
   subscription-billed. `ANTHROPIC_API_KEY` is **not** set in the shell
