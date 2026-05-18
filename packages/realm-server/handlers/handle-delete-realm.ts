@@ -5,6 +5,7 @@ import {
   ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
+  notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
   query,
@@ -238,6 +239,17 @@ export default function handleDeleteRealm({
       } catch (error) {
         Sentry.captureException(error);
       }
+
+      // CS-11156. Broadcast a bulk cache-invalidation for the source realm
+      // and each removed published realm so any peer replicas that still
+      // have these realms mounted drop their #sourceCache / #transpiledModuleCache
+      // before the reconciler unmount lands via NOTIFY realm_registry.
+      // Best-effort, fire-and-forget; missed NOTIFY is a bounded
+      // staleness window resolved by the unmount itself.
+      for (let publishedRealm of publishedRealms) {
+        await notifyAllFileChanges(dbAdapter, publishedRealm.url);
+      }
+      await notifyAllFileChanges(dbAdapter, realmURL);
 
       await setContextResponse(
         ctxt,

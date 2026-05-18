@@ -3,7 +3,7 @@ import type {
   SearchIndexErrorEntry,
   SingleCardDocument,
 } from '../index';
-import type { ModuleCacheEntries } from '../definition-lookup';
+import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
 import { canonicalURL } from './dependency-url';
 import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
@@ -16,7 +16,9 @@ type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 
 interface DependencyResolverOptions {
   realmURL: URL;
-  readModuleCacheEntries(moduleIds: string[]): Promise<ModuleCacheEntries>;
+  readDefinitionCacheEntries(
+    moduleIds: string[],
+  ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   // Slim projection (url, type, deps only) used by invalidation ordering.
   // Selection priority is applied server-side; see IndexWriter.
@@ -42,7 +44,7 @@ export class IndexRunnerDependencyManager {
 
   constructor({
     realmURL,
-    readModuleCacheEntries,
+    readDefinitionCacheEntries,
     getDependencyRows,
     getOrderingDependencyRows,
     getInvalidations,
@@ -50,7 +52,7 @@ export class IndexRunnerDependencyManager {
     this.#getOrderingDependencyRows = getOrderingDependencyRows;
     this.#indexBackedDependencyErrors = new IndexBackedDependencyErrors({
       realmURL,
-      readModuleCacheEntries,
+      readDefinitionCacheEntries,
       getDependencyRows,
       getInvalidations,
     });

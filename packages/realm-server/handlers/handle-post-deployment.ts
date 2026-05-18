@@ -27,7 +27,7 @@ export default function handlePostDeployment({
       return;
     }
 
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
 
     let boxelUiChangeCheckerResult =
       await compareCurrentBoxelUIChecksum(assetsURL);
