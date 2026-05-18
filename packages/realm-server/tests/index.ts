@@ -243,6 +243,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/screenshot-card-endpoint-test',
   './server-endpoints/search-test',
   './server-endpoints/search-prerendered-test',
+  './serve-index-test',
   './server-config-test',
   './server-endpoints/info-test',
   './server-endpoints/stripe-session-test',
