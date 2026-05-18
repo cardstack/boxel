@@ -43,6 +43,15 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
+// Synchronous stderr stamp so we have proof the Node process actually
+// started (and at what pid/ppid) independent of the logger pipeline.
+// Used to triage cases where SIGTERM doesn't reach Node — if we see
+// STARTUP but never SIGTERM received, signal delivery is broken
+// upstream of Node.
+process.stderr.write(
+  `[realm-server] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
+
 let log = logger('main');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
 
@@ -596,8 +605,18 @@ const getIndexHTML = async () => {
   // orchestrators trigger graceful cleanup (close httpServer, unsubscribe
   // realm watchers, drain queue + DB) instead of leaking the open
   // handles into a SIGKILL escalation.
-  process.on('SIGTERM', () => stopRealmServer(false));
-  process.on('SIGINT', () => stopRealmServer(false));
+  process.on('SIGTERM', () => {
+    process.stderr.write(
+      `[realm-server] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    stopRealmServer(false);
+  });
+  process.on('SIGINT', () => {
+    process.stderr.write(
+      `[realm-server] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    stopRealmServer(false);
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       stopRealmServer(true);

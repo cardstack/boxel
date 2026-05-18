@@ -11,6 +11,15 @@ import {
   registerService,
 } from '../lib/dev-service-registry';
 
+// Synchronous stderr stamp so we have proof the Node process actually
+// started (and at what pid/ppid) independent of the logger pipeline.
+// Used to triage cases where SIGTERM doesn't reach Node — if we see
+// STARTUP but never SIGTERM received, signal delivery is broken
+// upstream of Node.
+process.stderr.write(
+  `[prerender-manager] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
+
 let log = logger('prerender-manager');
 
 let { port, exitOnSignal, forceExitTimeoutMs } = yargs(process.argv.slice(2))
@@ -86,5 +95,15 @@ function shutdown(signal: NodeJS.Signals) {
   // process manager to terminate after grace period.
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => {
+  process.stderr.write(
+    `[prerender-manager] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
+  shutdown('SIGINT');
+});
+process.on('SIGTERM', () => {
+  process.stderr.write(
+    `[prerender-manager] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
+  shutdown('SIGTERM');
+});

@@ -22,6 +22,15 @@ const swallowEpipe = (err: NodeJS.ErrnoException) => {
 process.stdout.on('error', swallowEpipe);
 process.stderr.on('error', swallowEpipe);
 
+// Synchronous stderr stamp so we have proof the Node process actually
+// started (and at what pid/ppid) independent of the logger pipeline.
+// Used to triage cases where SIGTERM doesn't reach Node — if we see
+// STARTUP but never SIGTERM received, signal delivery is broken
+// upstream of Node.
+process.stderr.write(
+  `[worker-manager] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
+
 import {
   logger,
   userInitiatedPriority,
@@ -538,16 +547,28 @@ function runShutdownCallbacks() {
 }
 
 process.on('SIGINT', () => {
+  process.stderr.write(
+    `[worker-manager] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   shutdown();
 });
 process.on('SIGTERM', () => {
+  process.stderr.write(
+    `[worker-manager] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   shutdown();
 });
 process.on('disconnect', () => {
+  process.stderr.write(
+    `[worker-manager] disconnect received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   log.info(`Parent IPC disconnected, shutting down worker manager...`);
   shutdown();
 });
 process.on('uncaughtException', (err) => {
+  process.stderr.write(
+    `[worker-manager] uncaughtException pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
 });

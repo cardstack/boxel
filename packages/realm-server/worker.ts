@@ -14,6 +14,15 @@ const swallowEpipe = (err: NodeJS.ErrnoException) => {
 process.stdout.on('error', swallowEpipe);
 process.stderr.on('error', swallowEpipe);
 
+// Synchronous stderr stamp so we have proof the Node process actually
+// started (and at what pid/ppid) independent of the logger pipeline.
+// Used to triage cases where SIGTERM doesn't reach Node — if we see
+// STARTUP but never SIGTERM received, signal delivery is broken
+// upstream of Node.
+process.stderr.write(
+  `[worker] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
+
 import {
   Worker,
   VirtualNetwork,
@@ -193,9 +202,24 @@ let autoMigrate = migrateDB || undefined;
       process.exit(1);
     }
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  process.on('disconnect', shutdown);
+  process.on('SIGINT', () => {
+    process.stderr.write(
+      `[worker] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('SIGTERM', () => {
+    process.stderr.write(
+      `[worker] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('disconnect', () => {
+    process.stderr.write(
+      `[worker] disconnect received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async
