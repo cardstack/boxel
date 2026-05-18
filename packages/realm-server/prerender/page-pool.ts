@@ -1882,12 +1882,26 @@ export class PagePool {
       // (entryList.length === 0 path further down). `#ensureStandbyPool`
       // respects `#maxPages` via `#prepareSlotForStandby`, so this
       // can't oversubscribe the global pool.
+      //
+      // We await `#ensureStandbyPool` UNCONDITIONALLY here (not gated
+      // on `current < desired`). Reason: `#currentStandbyCount` =
+      // `#standbys.size + #creatingStandbys`. If the file render that
+      // arrived just before this caller consumed the only standby and
+      // its post-acquire `#kickStandbyRefill` is already creating a
+      // replacement, `creatingStandbys > 0` inflates `current` to
+      // meet `desired` while `#standbys.size` is still 0. A
+      // `current < desired` guard would skip the await; the
+      // subsequent `commandeerDormantTab(standbyOnly:true)` would
+      // then fail to find a real standby and the caller would fall
+      // through to the busy-tab branch — exactly the deadlock this
+      // change is meant to prevent. Awaiting unconditionally lets
+      // the in-flight refill complete (the `#ensuringStandbys`
+      // dedup makes the call a no-op when there is no in-flight
+      // refill and a wait when there is).
       if (queue !== 'file' && entryList.length < this.#affinityTabMax) {
-        if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
-          let startedAt = Date.now();
-          await this.#ensureStandbyPool();
-          tabStartupMs += Date.now() - startedAt;
-        }
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
         let refilled = this.#commandeerDormantTab(affinityKey, {
           standbyOnly: true,
         });

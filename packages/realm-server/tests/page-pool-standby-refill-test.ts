@@ -235,7 +235,7 @@ module(basename(__filename), function (hooks) {
   // to fall through to `#selectLeastPendingTab` when both the orphan-claim
   // and the standby-commandeer paths missed, queueing the caller behind
   // the busy file render that was waiting on it: the self-referential
-  // prerender deadlock. The fix synchronously refills the standby pool
+  // prerender deadlock. The fix unconditionally awaits `#ensureStandbyPool`
   // and retries commandeer for module / command callers under the
   // per-affinity cap, regardless of priority.
   test('module call on an existing affinity with all owned tabs busy materializes a fresh tab', async function (assert) {
