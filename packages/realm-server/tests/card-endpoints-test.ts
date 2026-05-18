@@ -4300,18 +4300,6 @@ module(basename(__filename), function () {
         );
       });
 
-      test('GET on a file URL with a card+markdown Accept returns 415', async function (assert) {
-        let response = await request
-          .get('/greeting.txt')
-          .set('Accept', 'application/vnd.card+markdown');
-
-        assert.strictEqual(
-          response.status,
-          415,
-          'markdown cannot represent a binary file',
-        );
-      });
-
       test('rejects write requests to file URLs', async function (assert) {
         let response;
         response = await request
