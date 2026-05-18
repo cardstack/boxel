@@ -1357,6 +1357,9 @@ export class Realm {
   // handler's vantage point. Different from `__testOnlyClearCaches`
   // in that it does NOT reset the transpile counter (which is
   // test-only diagnostic state, unrelated to byte-correctness).
+  // CS-11156 will replace the publish handler's local call here with
+  // a cross-replica NOTIFY broadcast; this method stays as the
+  // bulk-invalidate primitive the receiver invokes.
   clearLocalCaches(): void {
     this.#sourceCache.clear();
     this.#dropAllModuleCacheEntries();
@@ -1518,12 +1521,26 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
+  // Public mutation entry points (`write`, `writeMany`, `delete`, `deleteAll`)
+  // serialize concurrent same-URL writers across replicas via the per-realm
+  // advisory lock. The lock spans the FS write + index update so two
+  // replicas can't both commit on top of the same pre-state.
+  //
+  // HTTP route handlers in this file that need their READ to be inside the
+  // same critical section as the write (the `/_atomic` precheck and
+  // `patchCardInstance`'s indexEntry read) take the lock themselves at the
+  // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
+  // through the public methods would deadlock (a second
+  // `pg_advisory_xact_lock` on the same key would block on its own pinned
+  // pool connection).
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this._batchWrite(new Map([[path, contents]]), options);
+    let results = await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._batchWriteUnlocked(new Map([[path, contents]]), options),
+    );
     return results[0];
   }
 
@@ -1531,10 +1548,12 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this._batchWrite(files, options);
+    return this.#dbAdapter.withWriteLock(this.url, () =>
+      this._batchWriteUnlocked(files, options),
+    );
   }
 
-  private async _batchWrite(
+  private async _batchWriteUnlocked(
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
@@ -1912,158 +1931,172 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
-    let atomicCheckErrors = await this.checkBeforeAtomicWrite(atomicOperations);
-    if (atomicCheckErrors.length > 0) {
+
+    // Take the per-realm advisory lock from the precheck through the
+    // write. Without this, two replicas could both pass
+    // `checkBeforeAtomicWrite` for the same `add` operation (file does
+    // not exist), then both proceed to write — last writer wins on disk
+    // but indexer state is incoherent. Inside the lock we invoke
+    // `_batchWriteUnlocked` directly to avoid re-acquiring the same
+    // advisory lock through `writeMany` (which would deadlock on a
+    // different pinned pool connection).
+    return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      let atomicCheckErrors =
+        await this.checkBeforeAtomicWrite(atomicOperations);
+      if (atomicCheckErrors.length > 0) {
+        return createResponse({
+          body: JSON.stringify({ errors: atomicCheckErrors }),
+          init: {
+            status: this.lowestStatusCode(atomicCheckErrors),
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+
+      let operations = filterAtomicOperations(atomicOperations);
+      let files = new Map<LocalPath, string>();
+      let writeResults: FileWriteResult[] = [];
+
+      for (let operation of operations) {
+        let resource = operation.data;
+        let href = operation.href;
+        let localPath = this.paths.local(new URL(href, this.paths.url));
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource already exists',
+                  detail: `Resource ${href} already exists`,
+                  status: 409,
+                },
+              ],
+            }),
+            init: {
+              status: 409,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+        if (operation.op === 'update' && !exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource does not exist',
+                  detail: `Resource ${href} does not exist`,
+                  status: 404,
+                },
+              ],
+            }),
+            init: {
+              status: 404,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+        if (isModuleResource(resource)) {
+          let content = resource.attributes?.content ?? '';
+          this.assertWriteSize(content, 'file');
+          files.set(localPath, content);
+        } else if (isCardResource(resource)) {
+          let doc = {
+            data: resource,
+          };
+          let jsonString = JSON.stringify(doc, null, 2);
+          this.assertWriteSize(jsonString, 'card');
+          files.set(localPath, jsonString);
+        } else {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: 400,
+                  title: 'Invalid resource',
+                  detail: `Operation data is not a valid card resource or module resource`,
+                },
+              ],
+            }),
+            init: {
+              status: 400,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
+
+      if (files.size > 0) {
+        try {
+          // /_atomic returns once writes are durable, not once they are
+          // indexed. Callers that need indexed state must drain via
+          // realm.incrementalIndexing() (server-side), wait on the
+          // matrix 'index' incremental event (client-side), or opt-in
+          // to a synchronous response by passing `?waitForIndex=true`
+          // on the POST URL. The query-param path is intended for
+          // one-shot CLI / agent flows where Matrix subscription is
+          // impractical and a search poll-loop would race indexing
+          // latency. Mixed module+instance batches are still
+          // serialized correctly: the in-loop intermediate flush in
+          // _batchWriteUnlocked at the `lastWriteType === 'module' &&
+          // currentWriteType === 'instance'` gate is always awaited,
+          // so an instance's fileSerialization sees its module already
+          // indexed.
+          let waitForIndex =
+            new URL(request.url).searchParams.get('waitForIndex') === 'true';
+          writeResults = await this._batchWriteUnlocked(files, {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            serializeFile: true,
+            waitForIndex,
+          });
+        } catch (e: any) {
+          if (e instanceof CardError) {
+            return responseWithError(e, requestContext);
+          }
+          // Log the underlying exception before returning 500 —
+          // otherwise callers only see "Write Error" and the original
+          // stack trace is lost, making atomic-batch failures
+          // effectively undebuggable.
+          this.#log.error(
+            `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+          );
+          return createResponse({
+            body: JSON.stringify({
+              errors: [{ title: 'Write Error', detail: e.message }],
+            }),
+            init: {
+              status: 500,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
+
+      let results: AtomicOperationResult[] = writeResults.map(
+        ({ path, created }) => ({
+          data: {
+            id: this.paths.fileURL(path).href,
+          },
+          meta: {
+            created,
+          },
+        }),
+      );
       return createResponse({
-        body: JSON.stringify({ errors: atomicCheckErrors }),
+        body: JSON.stringify({ 'atomic:results': results }, null, 2),
         init: {
-          status: this.lowestStatusCode(atomicCheckErrors),
-          headers: { 'content-type': SupportedMimeType.JSONAPI },
+          status: 201,
+          headers: {
+            'content-type': SupportedMimeType.JSONAPI,
+          },
         },
         requestContext,
       });
-    }
-
-    let operations = filterAtomicOperations(atomicOperations);
-    let files = new Map<LocalPath, string>();
-    let writeResults: FileWriteResult[] = [];
-
-    for (let operation of operations) {
-      let resource = operation.data;
-      let href = operation.href;
-      let localPath = this.paths.local(new URL(href, this.paths.url));
-      let exists = await this.#adapter.exists(localPath);
-      if (operation.op === 'add' && exists) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                title: 'Resource already exists',
-                detail: `Resource ${href} already exists`,
-                status: 409,
-              },
-            ],
-          }),
-          init: {
-            status: 409,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-      if (operation.op === 'update' && !exists) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                title: 'Resource does not exist',
-                detail: `Resource ${href} does not exist`,
-                status: 404,
-              },
-            ],
-          }),
-          init: {
-            status: 404,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-      if (isModuleResource(resource)) {
-        let content = resource.attributes?.content ?? '';
-        this.assertWriteSize(content, 'file');
-        files.set(localPath, content);
-      } else if (isCardResource(resource)) {
-        let doc = {
-          data: resource,
-        };
-        let jsonString = JSON.stringify(doc, null, 2);
-        this.assertWriteSize(jsonString, 'card');
-        files.set(localPath, jsonString);
-      } else {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: 400,
-                title: 'Invalid resource',
-                detail: `Operation data is not a valid card resource or module resource`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    if (files.size > 0) {
-      try {
-        // /_atomic returns once writes are durable, not once they are
-        // indexed. Callers that need indexed state must drain via
-        // realm.incrementalIndexing() (server-side), wait on the matrix
-        // 'index' incremental event (client-side), or opt-in to a
-        // synchronous response by passing `?waitForIndex=true` on the
-        // POST URL. The query-param path is intended for one-shot CLI /
-        // agent flows where Matrix subscription is impractical and a
-        // search poll-loop would race indexing latency. Mixed
-        // module+instance batches are still serialized correctly: the
-        // in-loop intermediate flush in _batchWrite at the
-        // lastWriteType === 'module' && currentWriteType === 'instance'
-        // gate is always awaited, so an instance's fileSerialization
-        // sees its module already indexed.
-        let waitForIndex =
-          new URL(request.url).searchParams.get('waitForIndex') === 'true';
-        writeResults = await this.writeMany(files, {
-          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          serializeFile: true,
-          waitForIndex,
-        });
-      } catch (e: any) {
-        if (e instanceof CardError) {
-          return responseWithError(e, requestContext);
-        }
-        // Log the underlying exception before returning 500 — otherwise
-        // callers only see "Write Error" and the original stack trace is
-        // lost, making atomic-batch failures effectively undebuggable.
-        this.#log.error(
-          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
-        );
-        return createResponse({
-          body: JSON.stringify({
-            errors: [{ title: 'Write Error', detail: e.message }],
-          }),
-          init: {
-            status: 500,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    let results: AtomicOperationResult[] = writeResults.map(
-      ({ path, created }) => ({
-        data: {
-          id: this.paths.fileURL(path).href,
-        },
-        meta: {
-          created,
-        },
-      }),
-    );
-    return createResponse({
-      body: JSON.stringify({ 'atomic:results': results }, null, 2),
-      init: {
-        status: 201,
-        headers: {
-          'content-type': SupportedMimeType.JSONAPI,
-        },
-      },
-      requestContext,
     });
   }
 
@@ -2118,6 +2151,15 @@ export class Realm {
   }
 
   async delete(
+    path: LocalPath,
+    options?: { waitForIndex?: boolean },
+  ): Promise<void> {
+    await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._deleteUnlocked(path, options),
+    );
+  }
+
+  private async _deleteUnlocked(
     path: LocalPath,
     options?: { waitForIndex?: boolean },
   ): Promise<void> {
@@ -2176,6 +2218,12 @@ export class Realm {
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
+    await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._deleteAllUnlocked(paths),
+    );
+  }
+
+  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -3975,7 +4023,6 @@ export class Realm {
     if (await this.nonJsonFileExists(localPath)) {
       return unsupportedMediaType(request, requestContext);
     }
-    let primarySerialization: LooseSingleCardDocument | undefined;
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
@@ -3985,12 +4032,6 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
-    let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
-      includeErrors: true,
-    });
-    if (!indexEntry) {
-      return notFound(request, requestContext);
-    }
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -4015,242 +4056,267 @@ export class Realm {
         }
       }
     }
-    let original = cloneDeep(
-      indexEntry.instance ?? {
-        type: 'card',
-        meta: { adoptsFrom: patch.meta.adoptsFrom },
-      },
-    ) as CardResource;
-    original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-    original.meta.adoptsFrom =
-      original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
-    delete original.meta.lastModified;
-    let originalClone = cloneDeep(original);
 
-    if (
-      originalClone.meta?.adoptsFrom &&
-      internalKeyFor(patch.meta.adoptsFrom, url) !==
-        internalKeyFor(originalClone.meta.adoptsFrom, url)
-    ) {
-      return badRequest({
-        message: `Cannot change card instance type to ${JSON.stringify(
-          patch.meta.adoptsFrom,
-        )}`,
-        requestContext,
-        id: instanceURL,
+    // CS-11125: serialize concurrent PATCHes against the same realm so the
+    // indexEntry read, merge, and write are all inside one critical
+    // section. Without the lock, two replicas could both read the same
+    // `original` from boxel_index, compute independent merges, and the
+    // second writer's merge would silently lose the first's changes.
+    // writeMany below uses the default `waitForIndex: true`, so once the
+    // lock releases the index reflects the just-committed state and the
+    // next waiter's `indexEntry` read sees it.
+    //
+    // Inside the lock we invoke `_batchWriteUnlocked` rather than the
+    // public `writeMany` — re-entering the lock through the public method
+    // would block on a different pinned pool connection.
+    return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      let primarySerialization: LooseSingleCardDocument | undefined;
+      let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
+        includeErrors: true,
       });
-    }
-    let included = (maybeIncluded ?? []) as CardResource[];
-
-    delete (patch as any).type;
-    delete (patch as any).meta.realmInfo;
-    delete (patch as any).meta.realmURL;
-
-    promoteLocalIdsToRemoteIds({
-      resource: patch,
-      included,
-      realmURL: new URL(this.url),
-    });
-
-    let primaryResource = mergeWith(
-      originalClone,
-      patch,
-      (_objectValue: any, sourceValue: any) => {
-        // a patched array should overwrite the original array instead of merging
-        // into an original array, otherwise we won't be able to remove items in
-        // the original array
-        return Array.isArray(sourceValue) ? sourceValue : undefined;
-      },
-    );
-
-    if (primaryResource.relationships || patch.relationships) {
-      let merged = mergeRelationships(
-        primaryResource.relationships,
-        patch.relationships,
-      );
-
-      if (merged && Object.keys(merged).length !== 0) {
-        primaryResource.relationships = merged;
+      if (!indexEntry) {
+        return notFound(request, requestContext);
       }
-    }
+      let original = cloneDeep(
+        indexEntry.instance ?? {
+          type: 'card',
+          meta: { adoptsFrom: patch.meta.adoptsFrom },
+        },
+      ) as CardResource;
+      original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+      original.meta.adoptsFrom =
+        original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+      delete original.meta.lastModified;
+      let originalClone = cloneDeep(original);
 
-    // If the patch makes no semantic changes and doesn't include side-loaded
-    // resources, short-circuit to avoid touching the file (and changing mtime).
-    if (included.length === 0 && isEqual(primaryResource, original)) {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(instanceURL),
-        { loadLinks: true },
-      );
-      if (entry && entry.type !== 'error') {
-        let existingDoc = merge({}, entry.doc, {
-          data: {
-            links: { self: instanceURL },
-            meta: { lastModified: entry.doc.data.meta.lastModified },
-          },
-        });
-        let createdAt = await this.getCreatedTime(
-          this.paths.local(url) + '.json',
-        );
-        // entry.doc came from cardDocument(), which already called
-        // attachRealmInfo() and (re)populated the realm-info cache —
-        // so the cached hash is current as of this response.
-        await this.getRealmInfo();
-        let foreignDeps = this.hasForeignRealmDeps(entry.deps);
-        let etag = foreignDeps
-          ? undefined
-          : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
-        return createResponse({
-          body: JSON.stringify(existingDoc, null, 2),
-          init: {
-            headers: {
-              'content-type': SupportedMimeType.CardJson,
-              'cache-control': this.cardJsonCacheControl(requestContext),
-              ...(etag ? { etag } : {}),
-              ...etagSuppressedHeader(foreignDeps),
-              ...lastModifiedHeader(existingDoc),
-              ...(createdAt != null
-                ? { 'x-created': formatRFC7231(createdAt * 1000) }
-                : {}),
-            },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    delete (primaryResource as any).id; // don't write the ID to the file
-    let files = new Map<LocalPath, string>();
-    let resources = [primaryResource, ...included];
-    for (let [i, resource] of resources.entries()) {
       if (
-        (i > 0 && typeof resource.lid !== 'string') ||
-        (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+        originalClone.meta?.adoptsFrom &&
+        internalKeyFor(patch.meta.adoptsFrom, url) !==
+          internalKeyFor(originalClone.meta.adoptsFrom, url)
       ) {
-        continue;
-      }
-      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-      let fileURL =
-        i === 0
-          ? new URL(`${url}.json`)
-          : this.paths.fileURL(
-              `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-            );
-      // we already did this one
-      if (i !== 0) {
-        promoteLocalIdsToRemoteIds({
-          resource,
-          included,
-          realmURL: new URL(this.url),
-        });
-        visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-          setModuleURL(
-            resolveCardReference(
-              moduleURL,
-              instanceURL,
-            ) as RealmResourceIdentifier,
-          );
+        return badRequest({
+          message: `Cannot change card instance type to ${JSON.stringify(
+            patch.meta.adoptsFrom,
+          )}`,
+          requestContext,
+          id: instanceURL,
         });
       }
-      let fileSerialization: LooseSingleCardDocument | undefined;
-      try {
-        fileSerialization = await this.fileSerialization(
-          {
-            data: merge(resource, { meta: { realmURL: this.url } }),
-          },
-          fileURL,
+      let included = (maybeIncluded ?? []) as CardResource[];
+
+      delete (patch as any).type;
+      delete (patch as any).meta.realmInfo;
+      delete (patch as any).meta.realmURL;
+
+      promoteLocalIdsToRemoteIds({
+        resource: patch,
+        included,
+        realmURL: new URL(this.url),
+      });
+
+      let primaryResource = mergeWith(
+        originalClone,
+        patch,
+        (_objectValue: any, sourceValue: any) => {
+          // a patched array should overwrite the original array instead of merging
+          // into an original array, otherwise we won't be able to remove items in
+          // the original array
+          return Array.isArray(sourceValue) ? sourceValue : undefined;
+        },
+      );
+
+      if (primaryResource.relationships || patch.relationships) {
+        let merged = mergeRelationships(
+          primaryResource.relationships,
+          patch.relationships,
         );
-      } catch (err: any) {
-        if (err.message.startsWith('field validation error')) {
-          return badRequest({
-            message: err.message,
-            requestContext,
-            id: instanceURL,
+
+        if (merged && Object.keys(merged).length !== 0) {
+          primaryResource.relationships = merged;
+        }
+      }
+
+      // If the patch makes no semantic changes and doesn't include side-loaded
+      // resources, short-circuit to avoid touching the file (and changing mtime).
+      if (included.length === 0 && isEqual(primaryResource, original)) {
+        let entry = await this.#realmIndexQueryEngine.cardDocument(
+          new URL(instanceURL),
+          { loadLinks: true },
+        );
+        if (entry && entry.type !== 'error') {
+          let existingDoc = merge({}, entry.doc, {
+            data: {
+              links: { self: instanceURL },
+              meta: { lastModified: entry.doc.data.meta.lastModified },
+            },
           });
-        } else {
-          return systemError({
+          let createdAt = await this.getCreatedTime(
+            this.paths.local(url) + '.json',
+          );
+          // entry.doc came from cardDocument(), which already called
+          // attachRealmInfo() and (re)populated the realm-info cache —
+          // so the cached hash is current as of this response.
+          await this.getRealmInfo();
+          let foreignDeps = this.hasForeignRealmDeps(entry.deps);
+          let etag = foreignDeps
+            ? undefined
+            : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+          return createResponse({
+            body: JSON.stringify(existingDoc, null, 2),
+            init: {
+              headers: {
+                'content-type': SupportedMimeType.CardJson,
+                'cache-control': this.cardJsonCacheControl(requestContext),
+                ...(etag ? { etag } : {}),
+                ...etagSuppressedHeader(foreignDeps),
+                ...lastModifiedHeader(existingDoc),
+                ...(createdAt != null
+                  ? { 'x-created': formatRFC7231(createdAt * 1000) }
+                  : {}),
+              },
+            },
             requestContext,
-            message: err.message,
-            additionalError: err,
-            id: instanceURL,
           });
         }
       }
-      let path = this.paths.local(fileURL);
-      files.set(path, JSON.stringify(fileSerialization, null, 2));
-      if (i === 0) {
-        primarySerialization = fileSerialization;
-      }
-    }
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-    });
-    let entry = await this.#realmIndexQueryEngine.cardDocument(
-      new URL(instanceURL),
-      {
-        loadLinks: true,
-      },
-    );
-    let doc: SingleCardDocument;
-    if (!entry || entry?.type === 'error') {
-      if (
-        primarySerialization &&
-        isBrowserTestEnv() &&
-        !(globalThis as any).__emulateServerPatchFailure
-      ) {
-        doc = merge({}, primarySerialization, {
-          data: {
-            id: instanceURL,
-            links: { self: instanceURL },
-            meta: {
-              ...(primarySerialization.data.meta ?? {}),
-              lastModified,
+
+      delete (primaryResource as any).id; // don't write the ID to the file
+      let files = new Map<LocalPath, string>();
+      let resources = [primaryResource, ...included];
+      for (let [i, resource] of resources.entries()) {
+        if (
+          (i > 0 && typeof resource.lid !== 'string') ||
+          (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+        ) {
+          continue;
+        }
+        let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
+        let fileURL =
+          i === 0
+            ? new URL(`${url}.json`)
+            : this.paths.fileURL(
+                `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
+              );
+        // we already did this one
+        if (i !== 0) {
+          promoteLocalIdsToRemoteIds({
+            resource,
+            included,
+            realmURL: new URL(this.url),
+          });
+          visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+            setModuleURL(
+              resolveCardReference(
+                moduleURL,
+                instanceURL,
+              ) as RealmResourceIdentifier,
+            );
+          });
+        }
+        let fileSerialization: LooseSingleCardDocument | undefined;
+        try {
+          fileSerialization = await this.fileSerialization(
+            {
+              data: merge(resource, { meta: { realmURL: this.url } }),
             },
-          },
-        }) as SingleCardDocument;
+            fileURL,
+          );
+        } catch (err: any) {
+          if (err.message.startsWith('field validation error')) {
+            return badRequest({
+              message: err.message,
+              requestContext,
+              id: instanceURL,
+            });
+          } else {
+            return systemError({
+              requestContext,
+              message: err.message,
+              additionalError: err,
+              id: instanceURL,
+            });
+          }
+        }
+        let path = this.paths.local(fileURL);
+        files.set(path, JSON.stringify(fileSerialization, null, 2));
+        if (i === 0) {
+          primarySerialization = fileSerialization;
+        }
+      }
+      // Use the unlocked inner write so we don't re-enter
+      // withWriteLock (which would block on a different pinned pool
+      // connection).
+      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      });
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(instanceURL),
+        {
+          loadLinks: true,
+        },
+      );
+      let doc: SingleCardDocument;
+      if (!entry || entry?.type === 'error') {
+        if (
+          primarySerialization &&
+          isBrowserTestEnv() &&
+          !(globalThis as any).__emulateServerPatchFailure
+        ) {
+          doc = merge({}, primarySerialization, {
+            data: {
+              id: instanceURL,
+              links: { self: instanceURL },
+              meta: {
+                ...(primarySerialization.data.meta ?? {}),
+                lastModified,
+              },
+            },
+          }) as SingleCardDocument;
+        } else {
+          return systemError({
+            requestContext,
+            message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+            id: instanceURL,
+            additionalError: entry
+              ? CardError.fromSerializableError(entry.error)
+              : undefined,
+          });
+        }
       } else {
-        return systemError({
-          requestContext,
-          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-          id: instanceURL,
-          additionalError: entry
-            ? CardError.fromSerializableError(entry.error)
-            : undefined,
+        doc = merge({}, entry.doc, {
+          data: {
+            links: { self: instanceURL },
+            meta: { lastModified },
+          },
         });
       }
-    } else {
-      doc = merge({}, entry.doc, {
-        data: {
-          links: { self: instanceURL },
-          meta: { lastModified },
+      // Same rationale as the no-op short-circuit branch above:
+      // cardDocument() above primed the realm-info cache via
+      // attachRealmInfo(), but only when entry was a non-error doc.
+      // On the error fallback we may still need to populate it.
+      await this.getRealmInfo();
+      let foreignDeps =
+        entry && entry.type !== 'error'
+          ? this.hasForeignRealmDeps(entry.deps)
+          : false;
+      let etag =
+        entry && entry.type !== 'error' && !foreignDeps
+          ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
+          : undefined;
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            'cache-control': this.cardJsonCacheControl(requestContext),
+            ...(etag ? { etag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
+            ...lastModifiedHeader(doc),
+            ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+          },
         },
+        requestContext,
       });
-    }
-    // Same rationale as the no-op short-circuit branch above:
-    // cardDocument() above primed the realm-info cache via
-    // attachRealmInfo(), but only when entry was a non-error doc.
-    // On the error fallback we may still need to populate it.
-    await this.getRealmInfo();
-    let foreignDeps =
-      entry && entry.type !== 'error'
-        ? this.hasForeignRealmDeps(entry.deps)
-        : false;
-    let etag =
-      entry && entry.type !== 'error' && !foreignDeps
-        ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
-        : undefined;
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          'cache-control': this.cardJsonCacheControl(requestContext),
-          ...(etag ? { etag } : {}),
-          ...etagSuppressedHeader(foreignDeps),
-          ...lastModifiedHeader(doc),
-          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
-        },
-      },
-      requestContext,
     });
   }
 
