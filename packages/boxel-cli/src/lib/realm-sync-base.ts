@@ -43,6 +43,28 @@ function decodeAtomicResultId(id: string): string {
   }
 }
 
+// Builds a structured upload error: the message embeds the response
+// status + statusText + a snippet of the response body (the realm
+// returns useful detail there — size limits, missing scopes, etc.),
+// and a `status` property is attached so the batch helper can route
+// the failure without re-parsing the message.
+async function throwUploadError(
+  response: Response,
+  relativePath: string,
+): Promise<never> {
+  const bodyText = await response.text().catch(() => '');
+  const message = `Failed to upload ${relativePath}: ${response.status} ${response.statusText}${
+    bodyText ? ` — ${bodyText.slice(0, 200)}` : ''
+  }`;
+  const err = new Error(message) as Error & {
+    status?: number;
+    body?: string;
+  };
+  err.status = response.status;
+  err.body = bodyText;
+  throw err;
+}
+
 export const SupportedMimeType = {
   CardSource: 'application/vnd.card+source',
   DirectoryListing: 'application/vnd.api+json',
@@ -417,9 +439,7 @@ export abstract class RealmSyncBase {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to upload: ${response.status} ${response.statusText}`,
-      );
+      await throwUploadError(response, relativePath);
     }
 
     console.log(`  Uploaded: ${relativePath}`);
@@ -444,13 +464,11 @@ export abstract class RealmSyncBase {
       headers: {
         'Content-Type': SupportedMimeType.OctetStream,
       },
-      body: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      body: bytes,
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to upload: ${response.status} ${response.statusText}`,
-      );
+      await throwUploadError(response, relativePath);
     }
   }
 
@@ -509,13 +527,17 @@ export abstract class RealmSyncBase {
             console.log(`  Uploaded: ${relativePath}`);
             return { relativePath, ok: true as const };
           } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            const statusMatch = message.match(/(\d{3})/);
+            const errWithStatus = err as { status?: number };
+            const status =
+              typeof errWithStatus?.status === 'number'
+                ? errWithStatus.status
+                : 500;
+            const title = err instanceof Error ? err.message : String(err);
             return {
               relativePath,
               ok: false as const,
-              status: statusMatch ? Number(statusMatch[1]) : 500,
-              title: message,
+              status,
+              title,
             };
           }
         }),

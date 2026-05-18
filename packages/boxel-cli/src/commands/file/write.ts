@@ -116,16 +116,28 @@ export function registerWriteCommand(parent: Command): void {
     .action(async (filePath: string, opts: WriteCliOptions) => {
       let content: string | Uint8Array;
       if (opts.file) {
+        // Refuse a source/destination binary-classification mismatch
+        // (e.g., `write notes.md --file image.png`) — otherwise raw
+        // bytes would land at a text extension and corrupt-on-read.
+        const srcIsBinary = isBinaryFilename(opts.file);
+        const dstIsBinary = isBinaryFilename(filePath);
+        if (srcIsBinary !== dstIsBinary) {
+          stderr(
+            `${FG_RED}Error:${RESET} source file ${opts.file} is ${
+              srcIsBinary ? 'binary' : 'text'
+            } but destination path ${filePath} is ${
+              dstIsBinary ? 'binary' : 'text'
+            }. Refusing to write to avoid silent corruption — rename the destination to match.`,
+          );
+          process.exit(1);
+        }
         try {
-          // When the local source file (and the destination path) is a
-          // binary asset, read raw bytes so we can hand them to write()
-          // unchanged. Forcing utf-8 would corrupt PNG / PDF / font /
-          // etc. payloads silently.
-          if (isBinaryFilename(opts.file) || isBinaryFilename(filePath)) {
-            content = readFileSync(opts.file);
-          } else {
-            content = readFileSync(opts.file, 'utf-8');
-          }
+          // Binary source files are read as raw bytes so write() can
+          // hand them to the realm unchanged; forcing utf-8 would
+          // corrupt PNG / PDF / font / etc. payloads silently.
+          content = srcIsBinary
+            ? readFileSync(opts.file)
+            : readFileSync(opts.file, 'utf-8');
         } catch (err) {
           stderr(
             `${FG_RED}Error:${RESET} Could not read file: ${err instanceof Error ? err.message : String(err)}`,

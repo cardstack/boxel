@@ -788,6 +788,67 @@ describe('realm push (integration)', () => {
     ]);
   });
 
+  it('records text successes in manifest when binary partially fails', async () => {
+    // Mixed batch where the per-file binary POST fails (stubbed 413)
+    // while the atomic text batch lands. The manifest must still
+    // record the text file that the server actually wrote — otherwise
+    // the next push sees it as missing-from-manifest and tries to
+    // re-add it, hitting a 409 against the existing remote.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalFile(localDir, 'card.gts', 'export const c = 1;\n');
+    writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
+
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        let contentType =
+          (init?.headers as Record<string, string> | undefined)?.[
+            'Content-Type'
+          ] ?? '';
+        if (
+          init?.method === 'POST' &&
+          contentType === 'application/octet-stream' &&
+          url.endsWith('/image.png')
+        ) {
+          return new Response('Payload Too Large', {
+            status: 413,
+            statusText: 'Payload Too Large',
+          });
+        }
+        return realFetch(input, init);
+      });
+
+    // pushCommand exits 2 on any upload error; intercept so the test
+    // can observe state instead of being terminated.
+    let exitCode: number | undefined;
+    let exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
+      code?: number,
+    ) => {
+      if (exitCode === undefined) exitCode = code;
+      return undefined as never;
+    }) as never);
+
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+    } finally {
+      fetchSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+    expect(exitCode).toBe(2);
+
+    // The text file landed
+    expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('c = 1');
+
+    // The manifest records the text success even though the binary failed
+    let manifest = readManifest(localDir);
+    expect(manifest.files['card.gts']).toMatch(/^[0-9a-f]{32}$/);
+    expect(manifest.files['image.png']).toBeUndefined();
+  });
+
   it('treats SVG as text — round-trips through /_atomic without corruption', async () => {
     // SVG is XML, so isBinaryFilename returns false. Confirm it still
     // rides the atomic batch path and comes back exactly.
