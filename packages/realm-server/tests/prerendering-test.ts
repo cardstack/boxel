@@ -3494,6 +3494,16 @@ module(basename(__filename), function () {
             affinityValue: realmURL3,
           }),
         ]);
+        // `disposeAffinity` only KICKS standby refill — it doesn't await
+        // it. If the next test claims a tab before that kick produces a
+        // standby AND `#ensureStandbyPool`'s awaited retry also can't
+        // produce one, `#selectEntryForAffinity` falls through to the
+        // cross-affinity-steal escape hatch and reassigns an idle tab
+        // from another realm — keeping the donor's `pageId`. The
+        // "distinct pages per realm" test then sees `r1.pool.pageId ===
+        // r2.pool.pageId` and fails. Waiting here makes the next
+        // affinity-pooling test deterministic on the standby path.
+        await prerenderer.warmStandbys();
       };
 
       hooks.before(async function () {
@@ -4913,10 +4923,24 @@ module(basename(__filename), function () {
             url: testCardURL2,
             auth: auth(),
           });
+          // When this fails it's almost always the cross-affinity-steal
+          // fallback in `#selectEntryForAffinity` — `pageId` is equal
+          // because realm2's `getPage` repurposed realm1's idle tab
+          // when `#ensureStandbyPool` couldn't conjure a standby. Dump
+          // both call's `tabStartupMs` / `tabQueueMs` (a steal returns
+          // `tabStartupMs=0`, the standby path is non-zero) and the
+          // live queue snapshot so the CI log shows where the standby
+          // pool was when the race fired.
+          let queueSnapshot = prerenderer.getQueueDepthSnapshot();
           assert.notStrictEqual(
             r1.pool.pageId,
             r2.pool.pageId,
-            'distinct pages per realm',
+            `distinct pages per realm — ` +
+              `r1.pageId=${r1.pool.pageId} ` +
+              `r2.pageId=${r2.pool.pageId} ` +
+              `r1.waits=${JSON.stringify(r1.timings.waits)} ` +
+              `r2.waits=${JSON.stringify(r2.timings.waits)} ` +
+              `queueSnapshot=${JSON.stringify(queueSnapshot)}`,
           );
           assert.false(r1.pool.reused, 'first realm first call not reused');
           assert.false(r2.pool.reused, 'second realm first call not reused');

@@ -190,6 +190,15 @@ export class Prerenderer {
     await this.#pagePool.disposeAffinity(affinityKey);
   }
 
+  // Block until the standby pool has reached its desired count. The
+  // constructor and `disposeAffinity` both kick refill fire-and-forget;
+  // tests that need a fresh tab in their *next* `prerenderVisit` call
+  // (rather than racing the kicked refill) await this instead. Wraps
+  // `PagePool.warmStandbys`, which dedupes against any in-flight kick.
+  async warmStandbys(): Promise<void> {
+    await this.#pagePool.warmStandbys();
+  }
+
   // Emit the `render cancelled` log line (format from CS-10872)
   // and, on a `rendering`-state cancel, tear down the affinity so
   // the next request gets a fresh tab rather than one whose
