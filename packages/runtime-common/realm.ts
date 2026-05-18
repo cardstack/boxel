@@ -2146,6 +2146,7 @@ export class Realm {
       // the worker settle. The post-worker broadcast runs inside the
       // deferred lifecycle via onSettled so realm.incrementalIndexing()
       // doesn't resolve before the broadcast.
+      let enqueueStart = Date.now();
       let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
         [url],
         {
@@ -2155,12 +2156,19 @@ export class Realm {
           },
         },
       );
-      settled.catch((err: unknown) => {
-        let message = err instanceof Error ? err.message : String(err);
-        this.#log.error(
-          `Deferred delete-indexing chain failed for ${this.url}${path}: ${message}`,
-        );
-      });
+      settled.then(
+        () => {
+          this.#log.info(
+            `Deferred delete-indexing settled for ${this.url}${path} in ${Date.now() - enqueueStart}ms`,
+          );
+        },
+        (err: unknown) => {
+          let message = err instanceof Error ? err.message : String(err);
+          this.#log.error(
+            `Deferred delete-indexing chain failed for ${this.url}${path} after ${Date.now() - enqueueStart}ms: ${message}`,
+          );
+        },
+      );
     }
   }
 
