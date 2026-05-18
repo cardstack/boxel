@@ -2,7 +2,10 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { fetchRealmPermissions } from '@cardstack/runtime-common';
+import {
+  fetchRealmPermissions,
+  insertPermissions,
+} from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   testRealmHref,
@@ -341,6 +344,38 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             bob: ['read', 'write'],
           },
           'permissions are correct',
+        );
+      });
+
+      // CS-11126: realm visibility / world-readable used to be memoized
+      // per Realm instance, so a `*: read` grant or revoke on replica A
+      // would be silently ignored by every other replica until restart.
+      // With the caches dropped, every visibility() call re-reads
+      // realm_permissions, so an out-of-band DB write (which is what a
+      // peer's commit looks like from this replica's vantage) is
+      // observed on the next call. Simulating "peer write" via direct
+      // insertPermissions/DELETE keeps the test single-process.
+      test('visibility() reflects out-of-band realm_permissions changes without restart', async function (assert) {
+        assert.strictEqual(
+          await testRealm.visibility(),
+          'shared',
+          'baseline: realm with mary+bob (no `*`) is shared',
+        );
+
+        // peer-side grant: *: read directly in the DB
+        await insertPermissions(dbAdapter, testRealmURL, { '*': ['read'] });
+        assert.strictEqual(
+          await testRealm.visibility(),
+          'public',
+          'after out-of-band *: read grant, visibility is public on next call',
+        );
+
+        // peer-side revoke: drop *: read
+        await insertPermissions(dbAdapter, testRealmURL, { '*': [] });
+        assert.strictEqual(
+          await testRealm.visibility(),
+          'shared',
+          'after out-of-band *: read revoke, visibility flips back without restart',
         );
       });
 
