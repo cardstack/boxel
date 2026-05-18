@@ -126,7 +126,7 @@ session.
 
 | Capability              | How the agent invokes it                                                                                                                                                                                    |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Realm creation          | `boxel run-command create-realm` (or `boxel realm create`)                                                                                                                                                  |
+| Realm creation          | `boxel realm create <slug> "<display-name>"` (native subcommand; `<slug>` must match `^[a-z0-9-]+$`)                                                                                                        |
 | Workspace pull / push   | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)                                                                                                                          |
 | Federated search        | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                                                                                                                                             |
 | Card-type schema        | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'`                                                           |

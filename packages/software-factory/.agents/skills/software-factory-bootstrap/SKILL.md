@@ -38,13 +38,16 @@ further:
 
 ```bash
 boxel --version
-boxel --help | grep -qE '^\s+(lint|parse|test)\s' || {
-  echo "boxel --help is missing lint/parse/test — the dev CLI isn't installed (or its dist is stale)."
-  echo "Stop and ask the user to run, from the monorepo:"
-  echo "  cd packages/boxel-cli && pnpm build && pnpm link --global"
-  echo "  (one-time: if pnpm complains its global bin dir isn't on PATH, 'pnpm setup' first)"
-  exit 1
-}
+help_output="$(boxel --help)"
+for cmd in lint parse test; do
+  echo "$help_output" | grep -qE "^[[:space:]]+$cmd[[:space:]]" || {
+    echo "boxel --help is missing the \`$cmd\` subcommand — the dev CLI isn't installed (or its dist is stale)."
+    echo "Stop and ask the user to run, from the monorepo:"
+    echo "  cd packages/boxel-cli && pnpm build && pnpm link --global"
+    echo "  (one-time: if pnpm complains its global bin dir isn't on PATH, 'pnpm setup' first)"
+    exit 1
+  }
+done
 ```
 
 If verification fails, **stop and report**. Don't try to install
