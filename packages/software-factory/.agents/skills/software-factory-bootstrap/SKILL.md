@@ -42,26 +42,27 @@ rest of this skill and the operations / scheduling skills.
 MONOREPO="$(git rev-parse --show-toplevel)"
 BOXEL_BIN="$MONOREPO/packages/boxel-cli/bin/boxel.js"
 
-# If `dist/` is present it may be stale (missing `boxel lint` /
-# `boxel parse` / `boxel test`). Rename it so the `bin/boxel.js`
-# shim falls back to the live TS source via ts-node.
-if [ -d "$MONOREPO/packages/boxel-cli/dist" ]; then
-  mv "$MONOREPO/packages/boxel-cli/dist" \
-     "$MONOREPO/packages/boxel-cli/dist.stale.$(date +%s)"
-fi
-
 # Symlink onto PATH so every subsequent `boxel <cmd>` works.
 mkdir -p "$HOME/.local/bin"
 ln -sf "$BOXEL_BIN" "$HOME/.local/bin/boxel"
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH";; esac
 
-boxel --version    # confirm; non-empty version string means we're set
-boxel --help       # confirm `lint`, `parse`, `test` are listed
+# Verify the commands the rest of this skill needs are present.
+boxel --version
+boxel --help | grep -qE '^\s+(lint|parse|test)\s' || {
+  echo "boxel --help is missing lint/parse/test — your dist/ is stale."
+  echo "Stop and ask the user to run:"
+  echo "  pnpm --filter @cardstack/boxel-cli build"
+  echo "Re-run this verification after they rebuild."
+  exit 1
+}
 ```
 
-If `boxel --help` does **not** list `lint`, `parse`, or `test`,
-something is still running an older version — most likely an
-older `dist/` re-appeared. Repeat the rename step and re-check.
+If the verification fails, **stop and report**. Don't try to rebuild
+`dist/` yourself — that's a per-machine setup the user controls.
+The runbook's prerequisites cover the initial build; if you're
+hitting this, the user pulled new boxel-cli code without
+rebuilding.
 
 This setup is a Phase 1 workaround. When boxel-cli ships properly
 the wiring goes away and `boxel` is just on PATH globally.

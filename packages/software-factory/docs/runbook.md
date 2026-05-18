@@ -25,10 +25,11 @@ The user has done the following outside Claude Code:
   boxel --version                                     # confirm
   ```
 
-  If `packages/boxel-cli/dist/` exists but is stale (missing
-  `boxel lint` / `parse` / `test` in `--help` output), either
-  rebuild (`pnpm build`) or rename `dist/` to `dist.stale/` so
-  the bin shim falls back to the live TS source via ts-node.
+  If `boxel --help` doesn't list `lint` / `parse` / `test`,
+  your `dist/` is stale — `pnpm build` again. The shim runs
+  precompiled JS from `dist/` when present, which is what you
+  want from temp-dir workspaces (no `tsconfig.json` reachable
+  for the ts-node fallback).
 
 
 - Installed Claude Code and run `/login` so the session is
