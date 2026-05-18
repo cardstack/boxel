@@ -1,23 +1,31 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
-import type { Realm } from '@cardstack/runtime-common';
+import { notifyAllFileChanges, type Realm } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
 import {
   RealmFileChangesListener,
   parsePayload,
 } from '../lib/realm-file-changes-listener';
 
-// Minimal fake `Realm` — the listener only calls `.url` (via lookup) and
-// `.invalidateCache(path)`, so that's all we need to stub.
+// Minimal fake `Realm` — the listener calls `.url` (via lookup),
+// `.invalidateCache(path)` for per-path payloads, and `.clearLocalSourceCaches()`
+// for wildcard payloads (CS-11156). Stub both; tests pick whichever they
+// care about.
 function makeFakeRealm(
   url: string,
-  onInvalidate: (path: string) => void,
+  hooks: {
+    onInvalidate?: (path: string) => void;
+    onClearAll?: () => void;
+  },
 ): Realm {
   return {
     url,
     invalidateCache(path: string) {
-      onInvalidate(path);
+      hooks.onInvalidate?.(path);
+    },
+    clearLocalSourceCaches() {
+      hooks.onClearAll?.();
     },
   } as unknown as Realm;
 }
@@ -78,14 +86,29 @@ module(basename(__filename), function () {
     test('returns undefined when the path is empty', function (assert) {
       assert.strictEqual(parsePayload('http://x/:'), undefined);
     });
+
+    test('parses a wildcard payload (bulk invalidation, CS-11156)', function (assert) {
+      assert.deepEqual(parsePayload('http://x.test/r/:*'), {
+        url: 'http://x.test/r/',
+        path: '*',
+      });
+    });
+
+    test('parses a wildcard payload against a url with a port (CS-11156)', function (assert) {
+      assert.deepEqual(parsePayload('http://localhost:4201/luke/src/:*'), {
+        url: 'http://localhost:4201/luke/src/',
+        path: '*',
+      });
+    });
   });
 
   module('RealmFileChangesListener (dispatch)', function () {
     test('handleNotification forwards to the mounted realm', function (assert) {
       const invalidations: Array<{ url: string; path: string }> = [];
-      const realmA = makeFakeRealm('http://x.test/a/', (path) =>
-        invalidations.push({ url: 'http://x.test/a/', path }),
-      );
+      const realmA = makeFakeRealm('http://x.test/a/', {
+        onInvalidate: (path) =>
+          invalidations.push({ url: 'http://x.test/a/', path }),
+      });
       const listener = new RealmFileChangesListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
@@ -97,6 +120,33 @@ module(basename(__filename), function () {
       assert.deepEqual(invalidations, [
         { url: 'http://x.test/a/', path: 'cards/foo.gts' },
       ]);
+    });
+
+    test('handleNotification with wildcard payload calls clearLocalSourceCaches and not invalidateCache (CS-11156)', function (assert) {
+      const invalidations: string[] = [];
+      const clearAllCount = { value: 0 };
+      const realmA = makeFakeRealm('http://x.test/a/', {
+        onInvalidate: (path) => invalidations.push(path),
+        onClearAll: () => clearAllCount.value++,
+      });
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (url) =>
+          url === 'http://x.test/a/' ? realmA : undefined,
+      });
+
+      listener.handleNotification('http://x.test/a/:*');
+
+      assert.strictEqual(
+        clearAllCount.value,
+        1,
+        'clearLocalSourceCaches called exactly once',
+      );
+      assert.deepEqual(
+        invalidations,
+        [],
+        'invalidateCache not called for wildcard payload',
+      );
     });
 
     test('handleNotification drops silently when the url is not mounted', function (assert) {
@@ -154,9 +204,9 @@ module(basename(__filename), function () {
     test('NOTIFY realm_file_changes → listener → invalidateCache', async function (assert) {
       const invalidations: Array<{ url: string; path: string }> = [];
       const realmUrl = 'http://x.test/listen-e2e/';
-      const realmA = makeFakeRealm(realmUrl, (path) =>
-        invalidations.push({ url: realmUrl, path }),
-      );
+      const realmA = makeFakeRealm(realmUrl, {
+        onInvalidate: (path) => invalidations.push({ url: realmUrl, path }),
+      });
       const listener = new RealmFileChangesListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
@@ -174,6 +224,71 @@ module(basename(__filename), function () {
         assert.deepEqual(received, [
           { url: realmUrl, path: 'src/greeting.gts' },
         ]);
+      } finally {
+        await listener.shutDown();
+      }
+    });
+
+    test('notifyAllFileChanges round-trip: emitter → NOTIFY → listener → clearLocalSourceCaches (CS-11156)', async function (assert) {
+      // Models the cross-replica case: the emitter is what the publish /
+      // unpublish / delete realm handlers call after the FS swap; the
+      // listener is a peer replica's subscription. End-to-end through the
+      // shared Postgres NOTIFY channel.
+      const clearAllCount = { value: 0 };
+      const realmUrl = 'http://x.test/listen-e2e-bulk-emit/';
+      const realmA = makeFakeRealm(realmUrl, {
+        onClearAll: () => clearAllCount.value++,
+      });
+      const listener = new RealmFileChangesListener({
+        dbAdapter,
+        lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+      });
+      await listener.start();
+      try {
+        await notifyAllFileChanges(dbAdapter, realmUrl);
+
+        await waitFor(() =>
+          clearAllCount.value > 0 ? clearAllCount.value : undefined,
+        );
+        assert.strictEqual(
+          clearAllCount.value,
+          1,
+          'peer-side clearLocalSourceCaches called once after the bulk emit',
+        );
+      } finally {
+        await listener.shutDown();
+      }
+    });
+
+    test('NOTIFY realm_file_changes wildcard → listener → clearLocalSourceCaches (CS-11156)', async function (assert) {
+      const invalidations: string[] = [];
+      const clearAllCount = { value: 0 };
+      const realmUrl = 'http://x.test/listen-e2e-bulk/';
+      const realmA = makeFakeRealm(realmUrl, {
+        onInvalidate: (path) => invalidations.push(path),
+        onClearAll: () => clearAllCount.value++,
+      });
+      const listener = new RealmFileChangesListener({
+        dbAdapter,
+        lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
+      });
+      await listener.start();
+      try {
+        await dbAdapter.notify('realm_file_changes', `${realmUrl}:*`);
+
+        await waitFor(() =>
+          clearAllCount.value > 0 ? clearAllCount.value : undefined,
+        );
+        assert.strictEqual(
+          clearAllCount.value,
+          1,
+          'clearLocalSourceCaches called exactly once',
+        );
+        assert.deepEqual(
+          invalidations,
+          [],
+          'invalidateCache not called for wildcard',
+        );
       } finally {
         await listener.shutDown();
       }

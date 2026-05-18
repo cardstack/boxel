@@ -9,7 +9,7 @@ const log = logger('realm-server:module-cache-invalidation-listener');
 
 // Cross-instance module-cache invalidation broadcast (CS-10952). Peer
 // realm-server processes emit `NOTIFY module_cache_invalidated, '<payload>'`
-// from CachingDefinitionLookup.invalidate / clearRealmCache / clearAllModules
+// from CachingDefinitionLookup.invalidate / clearRealmDefinitions / clearAllDefinitions
 // after their DELETE commits; this listener parses the payload and replays
 // the appropriate generation bump on the locally-attached
 // CachingDefinitionLookup so its in-flight prerenders observe the

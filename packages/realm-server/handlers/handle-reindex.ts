@@ -80,7 +80,7 @@ export async function reindex({
   definitionLookup: DefinitionLookup;
   priority?: number;
 }) {
-  await definitionLookup.clearRealmCache(realm.url);
+  await definitionLookup.clearRealmDefinitions(realm.url);
   return await enqueueReindexRealmJob(
     realm.url,
     await realm.getRealmOwnerUsername(),

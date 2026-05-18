@@ -371,9 +371,9 @@ module(basename(__filename), function () {
           // A starts first. A's prerender will gate. While A holds the
           // lock + is awaiting the gate, B issues its lookup; B contends
           // the lock, observes acquired:false, parks on NOTIFY.
-          const pA = lookupA.getModuleCacheEntry(moduleURL);
+          const pA = lookupA.getCachedDefinitions(moduleURL);
           await new Promise((r) => setTimeout(r, 100));
-          const pB = lookupB.getModuleCacheEntry(moduleURL);
+          const pB = lookupB.getCachedDefinitions(moduleURL);
           await new Promise((r) => setTimeout(r, 100));
 
           // At this point: A is awaiting the gate (one prerender call
@@ -439,7 +439,7 @@ module(basename(__filename), function () {
           undefined,
           realmURL,
         );
-        const p = lookup.getModuleCacheEntry(moduleURL);
+        const p = lookup.getCachedDefinitions(moduleURL);
         await new Promise((r) => setTimeout(r, 50));
         aPrerender.release();
         const entry = await p;
@@ -467,7 +467,7 @@ module(basename(__filename), function () {
             coordinatorA,
             realmURL,
           );
-          const pA = lookupA.getModuleCacheEntry(moduleURL);
+          const pA = lookupA.getCachedDefinitions(moduleURL);
           await new Promise((r) => setTimeout(r, 50));
           aPrerender.release();
           await pA;
@@ -485,7 +485,7 @@ module(basename(__filename), function () {
               coordinatorB,
               realmURL,
             );
-            const entryB = await lookupB.getModuleCacheEntry(moduleURL);
+            const entryB = await lookupB.getCachedDefinitions(moduleURL);
             assert.ok(entryB, 'B returned the cached entry');
             assert.strictEqual(
               bPrerender.callsFor(moduleURL),
