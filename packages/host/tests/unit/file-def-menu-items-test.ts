@@ -58,15 +58,13 @@ module('Unit | FileDef menu items', function (hooks) {
     });
 
     let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(texts.includes('Copy as Markdown'), 'contains Copy as Markdown');
     assert.ok(
-      texts.includes('Copy as Markdown'),
-      'contains Copy as Markdown',
+      texts.includes('Open in Code Mode'),
+      'contains Open in Code Mode',
     );
-    assert.ok(texts.includes('Open in Code Mode'), 'contains Open in Code Mode');
     assert.ok(texts.includes('Delete'), 'contains Delete when canEdit');
-    let deleteItem = items.find(
-      (i: MenuItemOptions) => i.label === 'Delete',
-    );
+    let deleteItem = items.find((i: MenuItemOptions) => i.label === 'Delete');
     assert.true(
       Boolean(deleteItem?.dangerous),
       'Delete is marked as a dangerous action',

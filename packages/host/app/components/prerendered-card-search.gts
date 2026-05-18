@@ -25,21 +25,22 @@ import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
-import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';
-import { getPrerenderedSearch } from '../resources/prerendered-search';
-import { getSearch } from '../resources/search';
-
-const OWNER_DESTROYED_ERROR =
-  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
-
-// The Set itself lives in `lib/known-file-meta-urls` so non-component code
-// (e.g. `lib/stack-item.ts`) can read it without importing a component file.
-// Re-exported here for back-compat with existing call sites.
+// `knownFileMetaUrls` lives in `lib/` so non-component code (e.g.
+// `lib/stack-item.ts`) can read it without importing a component file. We
+// re-export here for back-compat with existing call sites that imported it
+// from this module.
 import {
   knownFileMetaUrls,
   clearKnownFileMetaUrls,
 } from '../lib/known-file-meta-urls';
+import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';
+import { getPrerenderedSearch } from '../resources/prerendered-search';
+import { getSearch } from '../resources/search';
+
 export { knownFileMetaUrls, clearKnownFileMetaUrls };
+
+const OWNER_DESTROYED_ERROR =
+  "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;

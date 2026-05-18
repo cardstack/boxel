@@ -44,9 +44,13 @@ export default function handleFederatedTypes({
         continue;
       }
       try {
+        // `fetchCardTypeSummary` now returns the partitioned shape
+        // `{ instances, files }`. Federate both arms into the flat response,
+        // tagging each entry with its `kind` so clients (CardsGrid, etc.)
+        // can partition the list back into "All Cards" vs "All Files" groups.
         let summaries =
           await realm.realmIndexQueryEngine.fetchCardTypeSummary();
-        for (let summary of summaries) {
+        for (let summary of summaries.instances) {
           allEntries.push({
             type: 'card-type-summary',
             id: summary.code_ref,
@@ -54,6 +58,22 @@ export default function handleFederatedTypes({
               displayName: summary.display_name,
               total: summary.total,
               iconHTML: summary.icon_html,
+              kind: 'instance',
+            },
+            meta: {
+              realmURL,
+            },
+          });
+        }
+        for (let summary of summaries.files) {
+          allEntries.push({
+            type: 'card-type-summary',
+            id: summary.code_ref,
+            attributes: {
+              displayName: summary.display_name,
+              total: summary.total,
+              iconHTML: summary.icon_html,
+              kind: 'file',
             },
             meta: {
               realmURL,
