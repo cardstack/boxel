@@ -2117,7 +2117,10 @@ export class Realm {
     return { isTracked: false, url };
   }
 
-  async delete(path: LocalPath): Promise<void> {
+  async delete(
+    path: LocalPath,
+    options?: { waitForIndex?: boolean },
+  ): Promise<void> {
     let url = this.paths.fileURL(path);
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
@@ -2131,10 +2134,45 @@ export class Realm {
     await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
-    let invalidations = await this.updateIndexAndCollectInvalidations([url], {
-      delete: true,
-    });
-    this.broadcastIncrementalInvalidationEvent(invalidations);
+    let waitForIndex = options?.waitForIndex !== false;
+    if (waitForIndex) {
+      let invalidations = await this.updateIndexAndCollectInvalidations([url], {
+        delete: true,
+      });
+      this.broadcastIncrementalInvalidationEvent(invalidations);
+    } else {
+      // Mirrors the write() waitForIndex:false path: await the durable
+      // enqueue so DB-side failures still bubble out, but fire-and-forget
+      // the worker settle. The post-worker broadcast runs inside the
+      // deferred lifecycle via onSettled so realm.incrementalIndexing()
+      // doesn't resolve before the broadcast.
+      let enqueueStart = Date.now();
+      let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+        [url],
+        {
+          delete: true,
+          onSettled: (deferredInvalidations) => {
+            this.broadcastIncrementalInvalidationEvent(deferredInvalidations);
+          },
+        },
+      );
+      settled.then(
+        () => {
+          this.#log.info(
+            `Deferred delete-indexing settled for ${url.href} in ${Date.now() - enqueueStart}ms`,
+          );
+        },
+        (err: unknown) => {
+          let detail =
+            err instanceof Error
+              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              : String(err);
+          this.#log.error(
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
+          );
+        },
+      );
+    }
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
@@ -3465,6 +3503,11 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Source-content-type callers, by definition, don't depend on indexed
+    // state — symmetric with upsertCardSource. Return as soon as the file
+    // is gone from disk; indexing happens async and surfaces errors via
+    // error_doc as before. Subscribers to indexing events still see the
+    // broadcast once the worker settles.
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -3473,7 +3516,7 @@ export class Realm {
     if (!handle) {
       return notFound(request, requestContext, `${localName} not found`);
     }
-    await this.delete(handle.path);
+    await this.delete(handle.path, { waitForIndex: false });
     return createResponse({
       body: null,
       init: { status: 204 },
