@@ -8,7 +8,6 @@ import { Memoize } from 'typescript-memoize';
 
 import {
   logger,
-  hasCardExtension,
   hasExecutableExtension,
   SupportedMimeType,
   jobIdentity,
@@ -205,16 +204,26 @@ export class IndexRunner {
         invalidations,
       );
     // Pre-warm the modules cache. Combines per-row deps (which catch
-    // most modules used during a from-scratch pass) with the realm-
-    // wide `.gts` / `.gjs` sweep (which catches sibling card modules
-    // referenced by string in templates — the typical
+    // most modules used during a from-scratch pass) with a realm-wide
+    // sweep of every executable file in the realm — `.gts` / `.gjs`
+    // (cards with Glimmer templates) and `.ts` / `.js` (cards without
+    // templates, e.g. command-input cards in catalog-realm; and pure
+    // helpers). The realm-wide sweep catches sibling modules referenced
+    // by string in card templates, the typical
     // `<Search @query={{filter: {type: {module: '.../cohort.gts', name: 'Cohort'}}}}>`
-    // pattern). The filesystem-mtimes walk was already paid by
+    // pattern that no instance's runtime `deps` will capture. Non-card
+    // modules pre-warmed by this sweep persist to the modules table as
+    // empty-definitions rows (no-card markers — see
+    // `definition-lookup.ts:561-563`), so subsequent
+    // `lookupDefinition` / `getCachedDefinitions` calls short-circuit
+    // at the cache without re-firing the prerenderer.
+    //
+    // The filesystem-mtimes walk was already paid by
     // discoverInvalidations above; we just filter and reuse it.
-    let allRealmCardModules = Object.keys(
+    let allRealmExecutables = Object.keys(
       discoverResult.filesystemMtimes,
-    ).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    ).filter(hasExecutableExtension);
+    await current.preWarmModulesTable(invalidations, allRealmExecutables);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -365,14 +374,17 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    // Pre-warm: combine per-row deps with a realm-wide `.gts`/`.gjs`
-    // sweep. Incremental skips `discoverInvalidations` so the
-    // filesystem-mtimes walk hasn't happened yet — call it here.
-    // Typical realm sizes make this < 200 ms; one call per job.
+    // Pre-warm: combine per-row deps with a realm-wide sweep of every
+    // executable file in the realm. Incremental skips
+    // `discoverInvalidations` so the filesystem-mtimes walk hasn't
+    // happened yet — call it here. Typical realm sizes make this
+    // < 200 ms; one call per job. Non-card modules pre-warmed by this
+    // sweep persist to the modules table as empty-definitions rows
+    // (no-card markers) and short-circuit subsequent lookups.
     let incrementalMtimes = await current.#reader.mtimes();
-    let allRealmCardModules =
-      Object.keys(incrementalMtimes).filter(hasCardExtension);
-    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    let allRealmExecutables =
+      Object.keys(incrementalMtimes).filter(hasExecutableExtension);
+    await current.preWarmModulesTable(invalidations, allRealmExecutables);
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
@@ -588,23 +600,31 @@ export class IndexRunner {
   // module.
   private async preWarmModulesTable(
     invalidations: URL[],
-    allRealmCardModules: string[] = [],
+    allRealmExecutables: string[] = [],
   ): Promise<void> {
-    if (invalidations.length === 0 && allRealmCardModules.length === 0) {
+    if (invalidations.length === 0 && allRealmExecutables.length === 0) {
       return;
     }
     let preWarmStart = Date.now();
 
-    // Base layer: every `.gts` / `.gjs` file in the realm, regardless of
-    // whether it appears in this batch's invalidation set. Catches sibling
-    // card modules that are referenced by *string* in templates (e.g.
+    // Base layer: every executable file in the realm, regardless of
+    // whether it appears in this batch's invalidation set. Catches
+    // sibling card modules referenced by *string* in templates (e.g.
     // `<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`)
-    // and so do not appear in any instance's runtime `deps`. Those
-    // modules are exactly what `_federated-search` needs the modules-
-    // table cache to be warm for; without this layer the search fires a
-    // same-affinity `prerenderModule` mid-card-render and risks the
-    // self-referential prerender deadlock.
-    let toWarm = new Set<string>(allRealmCardModules);
+    // — those don't appear in any instance's runtime `deps`. They're
+    // exactly what `_federated-search` needs the modules-table cache
+    // to be warm for; without this layer the search fires a same-
+    // affinity `prerenderModule` mid-card-render and risks the self-
+    // referential prerender deadlock.
+    //
+    // Includes `.ts` / `.js` files because card definitions can live
+    // there too (e.g. `catalog-realm/commands/collect-submission-files.ts`
+    // — `class CollectSubmissionFilesInput extends CardDef`). Non-card
+    // helpers in `.ts` / `.js` pre-warmed here persist as empty-
+    // definitions rows in the modules table (no-card markers — see
+    // `definition-lookup.ts:561-563`); subsequent lookups short-circuit
+    // at the cache without re-firing the prerenderer.
+    let toWarm = new Set<string>(allRealmExecutables);
 
     let hrefs = invalidations.map((u) => u.href);
     let existingRows = await this.batch.getDependencyRows(hrefs);
