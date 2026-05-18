@@ -18,6 +18,8 @@ export class KanbanPlane extends Component<{
     onChange?: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
+    onShowEmptyColumns?: () => void;
+    onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
     placements: KanbanPlacement[];
   };
   Blocks: {
@@ -90,6 +92,8 @@ export class KanbanPlane extends Component<{
       @hideEmpty={{@hideEmpty}}
       @manager={{this.ownedManager}}
       @onAddCard={{@onAddCard}}
+      @onToggleCollapsed={{@onToggleCollapsed}}
+      @onShowEmptyColumns={{@onShowEmptyColumns}}
       @placements={{@placements}}
     >
       <:card as |placement|>

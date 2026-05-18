@@ -156,6 +156,46 @@ export function runTests() {
           .dom(`[data-kanban-column="${COL.review}"]`)
           .doesNotExist('review column hidden');
       });
+
+      test('collapsing a column updates the persisted collapsed state', async function (assert) {
+        let savedBoardDocPromise = new Promise<any>((resolve) => {
+          this.onSave((url, doc) => {
+            if (url.href === boardId) {
+              resolve(doc);
+            }
+          });
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        assert.dom(`[data-kanban-column="${COL.backlog}"]`).exists();
+
+        await click(
+          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
+        );
+        await waitFor('[aria-label="Show Backlog"]');
+
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .doesNotExist('backlog column is hidden after collapsing');
+        assert
+          .dom('[aria-label="Show Backlog"]')
+          .exists('hidden tray contains the collapsed backlog column');
+
+        let savedBoardDoc = await savedBoardDocPromise;
+        let savedColumns = savedBoardDoc.data.attributes.columns;
+        let backlogColumn = savedColumns.find(
+          (column: { key: string }) => column.key === 'backlog',
+        );
+
+        assert.true(
+          backlogColumn?.collapsed,
+          'backlog collapsed state is persisted on the board model',
+        );
+      });
     });
 
     // ── unknown status ────────────────────────────────────────────────────────

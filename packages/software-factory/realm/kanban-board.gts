@@ -94,6 +94,24 @@ export class KanbanBoard extends CardDef {
       this.args.model.hideEmptyColumns = !this.args.model?.hideEmptyColumns;
     };
 
+    handleToggleCollapsed = (
+      columnKey: string | null,
+      collapsed: boolean,
+    ): void => {
+      let columns = this.args.model.columns ?? [];
+      let idx = columns.findIndex((c) => c.key === columnKey);
+      if (idx === -1) return;
+      this.args.model.columns = columns.map((c, i) =>
+        i === idx
+          ? Object.assign(new KanbanColumnField(), { ...c, collapsed })
+          : c,
+      );
+    };
+
+    handleShowEmptyColumns = (): void => {
+      this.args.model.hideEmptyColumns = false;
+    };
+
     <template>
       <div class='kanban-board-isolated'>
         <header class='kanban-board-header'>
@@ -133,6 +151,8 @@ export class KanbanBoard extends CardDef {
               @placements={{this.placements}}
               @hideEmpty={{@model.hideEmptyColumns}}
               @onChange={{this.handleChange}}
+              @onToggleCollapsed={{this.handleToggleCollapsed}}
+              @onShowEmptyColumns={{this.handleShowEmptyColumns}}
             >
               <:card as |placement|>
                 {{#let (get @fields.cards placement.index) as |CardField|}}

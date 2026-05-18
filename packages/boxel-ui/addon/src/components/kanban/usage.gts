@@ -144,6 +144,19 @@ export default class KanbanUsage extends Component {
     this.hideEmpty = !this.hideEmpty;
   }
 
+  @action handleToggleCollapsed(
+    columnKey: string | null,
+    collapsed: boolean,
+  ): void {
+    this.columns = this.columns.map((col) =>
+      col.key === columnKey ? { ...col, collapsed } : col,
+    );
+  }
+
+  @action handleShowEmptyColumns(): void {
+    this.hideEmpty = false;
+  }
+
   @action addCard(columnKey: string | null): void {
     let nextIndex = this.cards.length;
     let columnIndex = this.columns.findIndex(
@@ -183,6 +196,15 @@ export default class KanbanUsage extends Component {
           It owns its drag manager internally while yielding card and ghost
           blocks so callers can customize rendering without taking over the
           interaction layer.
+        </p>
+        <p>
+          Columns can be collapsed via the hide button in their header. Hidden
+          columns (collapsed or empty when
+          <code>hideEmpty</code>
+          is on) are collected into a
+          <strong>Hidden Columns</strong>
+          tray on the right side of the board. Clicking a row in the tray
+          restores that column.
         </p>
       </:description>
       <:example>
@@ -226,6 +248,8 @@ export default class KanbanUsage extends Component {
               @cardSize={{this.cardSize}}
               @hideEmpty={{this.hideEmpty}}
               @onAddCard={{this.addCard}}
+              @onToggleCollapsed={{this.handleToggleCollapsed}}
+              @onShowEmptyColumns={{this.handleShowEmptyColumns}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
@@ -270,13 +294,21 @@ export default class KanbanUsage extends Component {
         />
         <Args.Bool
           @name='hideEmpty'
-          @description='When true, collapsed columns and empty visible columns are omitted from the plane.'
+          @description='When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns.'
           @value={{this.hideEmpty}}
           @onInput={{fn (mut this.hideEmpty)}}
         />
         <Args.Action
           @name='onChange'
           @description='Invoked with updated placements when the internally owned drag manager commits a move.'
+        />
+        <Args.Action
+          @name='onToggleCollapsed'
+          @description='Invoked with the column key when a column is collapsed via its header button or restored from the Hidden Columns tray.'
+        />
+        <Args.Action
+          @name='onShowEmptyColumns'
+          @description='Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again.'
         />
         <Args.Action
           @name='onOpen'

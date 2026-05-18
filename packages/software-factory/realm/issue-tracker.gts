@@ -1051,16 +1051,20 @@ export class Project extends CardDef {
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   get columns(): KanbanColumnConfig[] {
+    let persistedColumns = this.args.model?.columns ?? [];
     return buildColumnsFromStatusOptions(
       getProjectIssueStatusOptions(this.args.model?.project),
-    ).map((col) => ({
-      key: col.key ?? null,
-      label: col.label ?? null,
-      color: col.color ?? null,
-      collapsed: col.collapsed ?? null,
-      sortOrder: col.sortOrder ?? null,
-      wipLimit: col.wipLimit ?? null,
-    }));
+    ).map((col) => {
+      let persisted = persistedColumns.find((stored) => stored.key === col.key);
+      return {
+        key: col.key ?? null,
+        label: col.label ?? null,
+        color: col.color ?? null,
+        collapsed: persisted?.collapsed ?? col.collapsed ?? null,
+        sortOrder: col.sortOrder ?? null,
+        wipLimit: col.wipLimit ?? null,
+      };
+    });
   }
 
   get statusColor(): string | undefined {
@@ -1076,6 +1080,46 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
   toggleHideEmptyColumns = (): void => {
     this.args.model.hideEmptyColumns = !this.args.model?.hideEmptyColumns;
+  };
+
+  handleToggleCollapsed = (
+    columnKey: string | null,
+    collapsed: boolean,
+  ): void => {
+    if (!columnKey) {
+      return;
+    }
+
+    let existingColumns = this.args.model.columns ?? [];
+    let existingIdx = existingColumns.findIndex(
+      (column) => column.key === columnKey,
+    );
+
+    if (existingIdx !== -1) {
+      this.args.model.columns = existingColumns.map((c, i) =>
+        i === existingIdx
+          ? Object.assign(new KanbanColumnField(), { ...c, collapsed })
+          : c,
+      );
+      return;
+    }
+
+    let source = this.columns.find((column) => column.key === columnKey);
+    this.args.model.columns = [
+      ...existingColumns,
+      Object.assign(new KanbanColumnField(), {
+        key: source?.key ?? columnKey,
+        label: source?.label ?? null,
+        color: source?.color ?? null,
+        collapsed,
+        sortOrder: source?.sortOrder ?? null,
+        wipLimit: source?.wipLimit ?? null,
+      }),
+    ];
+  };
+
+  handleShowEmptyColumns = (): void => {
+    this.args.model.hideEmptyColumns = false;
   };
 
   openCard = (index: number): void => {
@@ -1235,6 +1279,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           @onChange={{this.handleChange}}
           @onOpen={{this.openCard}}
           @onAddCard={{this.addCardTask.perform}}
+          @onToggleCollapsed={{this.handleToggleCollapsed}}
+          @onShowEmptyColumns={{this.handleShowEmptyColumns}}
         >
           <:card as |placement|>
             {{#let (get @fields.cards placement.index) as |CardField|}}
@@ -1367,13 +1413,7 @@ export class IssueTracker extends KanbanBoard {
     },
   });
 
-  @field columns = containsMany(KanbanColumnField, {
-    computeVia: function (this: IssueTracker) {
-      return buildColumnsFromStatusOptions(
-        getProjectIssueStatusOptions(this.project),
-      );
-    },
-  });
+  @field columns = containsMany(KanbanColumnField);
 
   @field placements = containsMany(KanbanBoardPlacement);
 
@@ -1392,8 +1432,9 @@ export class IssueTracker extends KanbanBoard {
           <@fields.project />
         </FieldContainer>
         <p class='board-edit-note'>
-          Board columns are computed from the linked project&apos;s issue status
-          options.
+          Board columns are derived from the linked project&apos;s issue status
+          options, while board-specific UI state like collapsed columns is
+          stored on this tracker.
         </p>
         <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
           <@fields.hideEmptyColumns />

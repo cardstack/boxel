@@ -1,3 +1,4 @@
+import EyeOff from '@cardstack/boxel-icons/eye-off';
 import { cn, cssVar } from '@cardstack/boxel-ui/helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
@@ -13,6 +14,7 @@ interface Signature {
     isOverWip: boolean;
     isTarget: boolean;
     onAddCard?: () => void;
+    onCollapse?: () => void;
   };
   Element: HTMLDivElement;
 }
@@ -43,6 +45,20 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
           Max
           {{@column.wipLimit}}
         </span>
+      {{/if}}
+      {{#if @onCollapse}}
+        <ContextButton
+          class='col-collapse-btn'
+          @icon={{EyeOff}}
+          @variant='ghost'
+          @label={{if
+            @column.label
+            (concat 'Hide ' @column.label)
+            'Hide column'
+          }}
+          {{on 'click' @onCollapse}}
+          data-test-column-collapse-button
+        />
       {{/if}}
       {{#if @onAddCard}}
         <ContextButton
@@ -100,11 +116,12 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
     .col-header-right {
       display: flex;
       align-items: center;
-      gap: 0.25rem;
+      gap: var(--boxel-sp-6xs);
     }
     .col-wip {
       font-size: 0.625rem;
       font-family: var(--font-mono, var(--boxel-monospace-font-family));
+      margin-right: var(--boxel-sp-3xs);
       opacity: var(--_kanban-muted-opacity);
     }
     .col-wip.over {
@@ -116,6 +133,16 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
       opacity: var(--_kanban-muted-opacity);
     }
     .col-add-btn:hover {
+      opacity: 1;
+    }
+    .col-collapse-btn {
+      opacity: 0;
+      transition: opacity 150ms ease;
+    }
+    .col-header:hover .col-collapse-btn {
+      opacity: var(--_kanban-muted-opacity);
+    }
+    .col-collapse-btn:hover {
       opacity: 1;
     }
   </style>
