@@ -671,6 +671,21 @@ jobs:
           path: /tmp/host-dist.log
           retention-days: 30
 
+  realm-server-vitest-test:
+    name: Realm Server Vitest Tests
+    needs: [change-check]
+    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: realm-server-vitest-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Vitest suite (CS-10346 migration)
+        run: pnpm test:vitest
+        working-directory: packages/realm-server
+
   realm-server-merge-reports:
     name: Merge Realm Server reports and publish
     if: ${{ !cancelled() && (needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
