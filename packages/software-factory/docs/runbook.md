@@ -42,8 +42,10 @@ The user has done the following outside Claude Code:
   `pnpm --filter @cardstack/host build`.
 - Playwright's headless Chromium is installed (also for `boxel test`):
   `npx playwright install chromium`. One-time per machine.
-- An empty local directory chosen as the workspace. Claude Code is
-  launched with that directory as cwd.
+- Claude Code is launched from `packages/software-factory/` so the
+  `.claude/skills` symlink (→ `.agents/skills/`) is discovered.
+  The agent creates its own scratch workspace inside `mktemp -d`
+  during the run — you don't need to pre-create one.
 
 The user also knows:
 
@@ -65,9 +67,10 @@ Run the software factory on this brief:
 
   Brief URL:    <BRIEF_URL>
   Target realm: <TARGET_REALM_URL>
-  Workspace:    <LOCAL_WORKSPACE_DIR>
 
-Follow docs/interactive-runbook.md end-to-end:
+Use a fresh temp directory (`mktemp -d`) as the workspace.
+
+Follow docs/runbook.md end-to-end:
 
 1. Wire up the dev `boxel` CLI (per the software-factory-bootstrap
    or software-factory-scheduling skill — first action).

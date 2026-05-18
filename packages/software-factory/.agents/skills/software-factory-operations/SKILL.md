@@ -36,12 +36,23 @@ The block is idempotent; running it again here is safe and cheap.
 
 ## Workspace files (local mirror of the target realm)
 
-Your `cwd` is the local mirror of the target realm. Use the **native**
-`Read`, `Write`, `Edit`, `Glob`, `Grep`, and `Bash` tools on these
-files; realm-relative paths resolve directly. After you write, push
-the workspace to the realm with `boxel realm push <local-dir>
-<target-realm-url>` — the validators that touch the realm need the
-realm to reflect your latest writes.
+Your `cwd` should be the local mirror of the target realm — a temp
+directory the bootstrap step created via `mktemp -d` and `cd`'d
+into. If you're picking up an Issue in a fresh session where
+bootstrap already ran (so the workspace doesn't exist yet), set
+it up now:
+
+```bash
+WORKSPACE="$(mktemp -d)"
+boxel realm pull <target-realm-url> "$WORKSPACE"
+cd "$WORKSPACE"
+```
+
+Use the **native** `Read`, `Write`, `Edit`, `Glob`, `Grep`, and
+`Bash` tools on these files; realm-relative paths resolve directly.
+After you write, push the workspace to the realm with
+`boxel realm push <local-dir> <target-realm-url>` — the validators
+that touch the realm need the realm to reflect your latest writes.
 
 Files that live in the workspace:
 

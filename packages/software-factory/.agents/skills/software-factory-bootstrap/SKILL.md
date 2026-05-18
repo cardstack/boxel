@@ -23,7 +23,11 @@ The user has handed you (or the seed Issue carries) two URLs:
   `http://localhost:4201/<username>/<realm-name>/`. The target may
   or may not exist yet.
 
-Your `cwd` is the local workspace mirror of the target realm.
+You start in `packages/software-factory/` (where Claude Code was
+launched so the `.claude/skills` symlink is picked up). The local
+workspace mirror of the target realm is **not** your cwd at
+session start — you create it during bootstrap as a fresh temp
+directory and `cd` into it. See "Set up the workspace" below.
 
 ## First: wire up the dev `boxel` CLI
 
@@ -97,11 +101,19 @@ it unless the command itself exits non-zero.
 See the `realm-sync` skill for the full surface (auth, icon URL,
 etc.).
 
-Once the realm exists, set up the workspace mirror for it:
+## Set up the workspace
+
+Once the realm exists, create a fresh temp directory as the local
+workspace mirror, pull the (empty) realm into it, and `cd` so
+realm-relative paths resolve. After this step, every subsequent
+file operation in this skill (and in `software-factory-operations`)
+runs from inside the workspace:
 
 ```bash
-boxel realm pull <target-realm-url> <local-dir>
-# e.g. boxel realm pull http://localhost:4201/user/my-realm/ .
+WORKSPACE="$(mktemp -d)"
+boxel realm pull <target-realm-url> "$WORKSPACE"
+cd "$WORKSPACE"
+pwd                              # confirm cwd is the temp workspace
 ```
 
 A freshly-created realm is empty, so the pull is a no-op except to
