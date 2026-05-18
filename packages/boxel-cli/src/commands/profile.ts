@@ -80,7 +80,7 @@ function validateUrl(input: string, label: string): string {
 
 // Matches scripts/env-slug.sh: lowercase, "/" -> "-", strip chars outside
 // [a-z0-9-], collapse runs of "-", trim leading/trailing "-".
-function computeEnvSlug(name: string): string {
+export function computeEnvSlug(name: string): string {
   return name
     .toLowerCase()
     .replace(/\//g, '-')
@@ -91,7 +91,7 @@ function computeEnvSlug(name: string): string {
 
 // Derive URLs from BOXEL_ENVIRONMENT using the same ".${slug}.localhost"
 // pattern that mise-tasks/lib/env-vars.sh produces for env-mode local dev.
-function resolveBoxelEnvironment(): EnvironmentDefaults | null {
+export function resolveBoxelEnvironment(): EnvironmentDefaults | null {
   const raw = process.env.BOXEL_ENVIRONMENT;
   if (!raw || !raw.trim()) return null;
   const slug = computeEnvSlug(raw);
@@ -458,14 +458,28 @@ async function addProfileNonInteractive(
     process.exit(1);
   }
 
-  if (manager.getProfile(matrixId)) {
-    console.log(
-      `${FG_YELLOW}Profile ${matrixId} already exists. Updating password.${RESET}`,
+  const isUpdate = Boolean(manager.getProfile(matrixId));
+
+  // addProfile performs a real matrixLogin and persists the resulting
+  // access token (the password never lands on disk). It also handles the
+  // create-vs-reauth split uniformly: re-running it on an existing profile
+  // refreshes the stored token while preserving cached realm tokens.
+  try {
+    await manager.addProfile(
+      matrixId,
+      password,
+      displayName,
+      matrixUrl,
+      realmServerUrl,
     );
-    await manager.updatePassword(matrixId, password);
-    if (displayName) {
-      manager.updateDisplayName(matrixId, displayName);
-    }
+  } catch (err) {
+    console.error(
+      `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+
+  if (isUpdate) {
     if (matrixUrl || realmServerUrl) {
       const urlsChanged = manager.updateUrls(matrixId, {
         matrixUrl,
@@ -483,20 +497,6 @@ async function addProfileNonInteractive(
     return;
   }
 
-  try {
-    await manager.addProfile(
-      matrixId,
-      password,
-      displayName,
-      matrixUrl,
-      realmServerUrl,
-    );
-  } catch (err) {
-    console.error(
-      `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
-    );
-    process.exit(1);
-  }
   console.log(
     `${FG_GREEN}\u2713${RESET} Profile created: ${formatProfileBadge(matrixId)}`,
   );
@@ -538,7 +538,7 @@ async function migrateFromEnv(manager: ProfileManager): Promise<void> {
       );
     } else {
       console.log(
-        `${FG_YELLOW}Profile ${formatProfileBadge(result.profileId)} already exists.${RESET} Password has been updated if it changed.`,
+        `${FG_GREEN}\u2713${RESET} Refreshed profile: ${formatProfileBadge(result.profileId)}`,
       );
       console.log(
         `\n${DIM}Use 'boxel profile add -u ${result.profileId} -p <password>' to update other fields.${RESET}`,

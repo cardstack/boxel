@@ -33,11 +33,17 @@ describe('resolveRealmAuthenticator', () => {
   });
 
   it('returns the profile manager when no seed is supplied and a profile is active', async () => {
-    await pm.addProfile(
+    // Bypass the Matrix login round-trip — this test only cares that a
+    // profile is present, not that it was minted by a real login.
+    await pm.addProfileWithAuth(
       '@ctse:stack.cards',
-      'password',
+      {
+        accessToken: 'test-access-token',
+        userId: '@ctse:stack.cards',
+        deviceId: 'TEST_DEVICE',
+        matrixUrl: 'https://matrix-staging.stack.cards',
+      },
       'Test',
-      'https://matrix-staging.stack.cards',
       'https://realms-staging.stack.cards/',
     );
     const result = resolveRealmAuthenticator({
