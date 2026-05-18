@@ -486,7 +486,13 @@ module(basename(__filename), function () {
       },
     });
 
-    test('realm is full indexed at boot', async function (assert) {
+    // Guards the contract that a brand-new realm (empty boxel_index state)
+    // always full-indexes on first boot — independent of
+    // REALM_SERVER_FULL_INDEX_ON_STARTUP. `createRealm` (the test helper)
+    // never passes `fullIndexOnStartup`, so the realm here has it set to
+    // false; the from-scratch job below is produced by the `isNewIndex`
+    // branch in Realm.start(), not by the env-var-driven branch.
+    test('newly-created realm full-indexes on first boot', async function (assert) {
       let jobs = await testDbAdapter.execute('select * from jobs');
       assert.strictEqual(
         jobs.length,

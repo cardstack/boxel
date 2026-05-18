@@ -39,6 +39,7 @@ import {
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
+import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
@@ -102,8 +103,25 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-const FULL_INDEX_ON_STARTUP =
-  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
+// REALM_SERVER_FULL_INDEX_ON_STARTUP is a three-state override (resolved in
+// lib/full-index-on-startup.ts) that controls whether each realm runs a
+// from-scratch index when its process boots. The `isNewIndex` branch in
+// Realm.start() is independent of this flag, so a brand-new (empty) index
+// still builds on first boot regardless of which value is set here.
+//   - default (unset, or any value other than 'true' / 'false'): only
+//     kind='bootstrap' realms (the ones passed via the CLI --path args,
+//     e.g. base / catalog / skills) full-index on startup. kind='source'
+//     (user realms) and kind='published' realms skip the boot reindex.
+//   - 'true': every realm full-indexes on startup, regardless of kind.
+//     Matches the pre-flip behavior.
+//   - 'false': suppresses the env-driven full-index for every kind. Used by
+//     the cached-index dev flow (scripts/import-cached-index.sh) where the
+//     index tables were just restored from a recent CI snapshot.
+// The deploy-time platform-code reindex flows through a different path
+// (handle-post-deployment.ts + boxel-ui checksum), so flipping the default
+// here does not affect post-deploy reindex storms.
+const FULL_INDEX_ON_STARTUP_OVERRIDE =
+  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP;
 // When set to 'true', skip the unconditional modules-cache clear on startup.
 // Used by the software-factory test harness, which restores a known-good
 // modules cache from a template database (URLs already rewritten to match
@@ -268,7 +286,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartup=${FULL_INDEX_ON_STARTUP}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -423,6 +441,10 @@ const getIndexHTML = async () => {
         diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      let fullIndexOnStartup = resolveFullIndexOnStartup(
+        row.kind,
+        FULL_INDEX_ON_STARTUP_OVERRIDE,
+      );
       const reconciledRealm = new Realm(
         {
           url: row.url,
@@ -450,9 +472,7 @@ const getIndexHTML = async () => {
           ),
         },
         {
-          ...(FULL_INDEX_ON_STARTUP
-            ? { fullIndexOnStartup: true as const }
-            : {}),
+          ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),

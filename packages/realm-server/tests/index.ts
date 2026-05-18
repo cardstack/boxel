@@ -177,6 +177,7 @@ const ALL_TEST_FILES: string[] = [
   './card-source-endpoints-test',
   './definition-lookup-test',
   './file-watcher-events-test',
+  './full-index-on-startup-test',
   './full-reindex-test',
   './indexing-test',
   './lazy-mount-test',
