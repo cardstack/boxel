@@ -153,9 +153,13 @@ export class RealmIndexUpdater {
           clearLastModified: opts?.clearLastModified,
         },
       );
-      // [ci-readiness-diag] — see also realm.ts readinessCheck + #startup
+      // [ci-readiness-diag] — startedAt covers the full enqueue path
+      // (getRealmOwnerUsername + the optional clearLastModified write
+      // inside enqueueReindexRealmJob + the queue insert), not just the
+      // SQL publish. Labeled accordingly. See also realm.ts
+      // readinessCheck + #startup.
       this.#log.info(
-        `[ci-readiness-diag] Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (queue.publish took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
+        `[ci-readiness-diag] Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (enqueue path took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
       );
       return job;
     })();

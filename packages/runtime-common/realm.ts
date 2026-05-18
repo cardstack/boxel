@@ -1065,42 +1065,19 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
-    // [ci-readiness-diag] — block runs from this line to the matching
-    // marker below. Remove the entry/heartbeat/exit logs together once
-    // CI flake is rooted out; the bare `await this.#startedUp.promise`
-    // is the only behavioral statement.
+    // [ci-readiness-diag] — entry / fulfillment markers. The per-realm
+    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
+    // probe cadence doesn't multiply heartbeat intervals (~300 of them
+    // accumulating across a 10-minute hang) on a single Deferred.
     let waitStart = Date.now();
     this.#log.info(
       `[ci-readiness-diag] readiness check requested for realm ${this.url}`,
     );
-    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
-      () => {
-        let elapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
-        this.#log.info(
-          `[ci-readiness-diag] readiness check still waiting on #startedUp for realm ${this.url} (elapsed=${elapsed}s)`,
-        );
-      },
-      15_000,
-    );
-    if (
-      heartbeat &&
-      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
-        'function'
-    ) {
-      (heartbeat as unknown as { unref: () => void }).unref();
-    }
-    try {
-      await this.#startedUp.promise;
-    } finally {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
-      }
-    }
+    await this.#startedUp.promise;
     let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
     this.#log.info(
       `[ci-readiness-diag] readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
     );
-    // [ci-readiness-diag] — end of removable block.
 
     return createResponse({
       body: null,
@@ -2445,59 +2422,86 @@ export class Realm {
     // readiness-check timeout flake. Remove all of them together once the
     // root cause is identified; the existing control flow is unchanged.
     this.#log.info(`[ci-readiness-diag] startup begin for realm ${this.url}`);
-    if (this.#copiedFromRealm) {
-      this.#log.info(
-        `[ci-readiness-diag] startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
-      );
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.#log.info(
-        `[ci-readiness-diag] startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-      );
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-        realmURL: this.url,
-      });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      this.#log.info(
-        `[ci-readiness-diag] startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
-      );
-      if (isNewIndex || this.#fullIndexOnStartup) {
-        let priority =
-          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-        let promise = this.#realmIndexUpdater.fullIndex(priority);
-        if (isNewIndex) {
-          // we only await the full indexing at boot if this is a brand new index
-          this.#log.info(
-            `[ci-readiness-diag] startup awaiting fullIndex (new index) for realm ${this.url}`,
-          );
-          await promise;
-          this.#log.info(
-            `[ci-readiness-diag] startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-          );
-        } else {
-          this.#log.info(
-            `[ci-readiness-diag] startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
-          );
-        }
-        // not sure how useful this event is--nothing is currently listening for
-        // it, and it may happen during or after the full index...
+    // [ci-readiness-diag] — one heartbeat per realm-lifetime, not per
+    // readiness-probe (wait-on polls every 0.5–2s; a per-request
+    // heartbeat would multiply to hundreds of concurrent intervals).
+    // Cleared in the finally below so a startup that fails or throws
+    // doesn't leak the timer past the lifetime of this method.
+    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
+      () => {
+        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        this.#log.info(
+          `[ci-readiness-diag] startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
+        );
+      },
+      15_000,
+    );
+    if (
+      heartbeat &&
+      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
+        'function'
+    ) {
+      (heartbeat as unknown as { unref: () => void }).unref();
+    }
+    try {
+      if (this.#copiedFromRealm) {
+        this.#log.info(
+          `[ci-readiness-diag] startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
+        );
+        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+        this.#log.info(
+          `[ci-readiness-diag] startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+        );
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'full',
+          indexType: 'copy',
+          sourceRealmURL: this.#copiedFromRealm.href,
           realmURL: this.url,
         });
+      } else {
+        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+        this.#log.info(
+          `[ci-readiness-diag] startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
+        );
+        if (isNewIndex || this.#fullIndexOnStartup) {
+          let priority =
+            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+          let promise = this.#realmIndexUpdater.fullIndex(priority);
+          if (isNewIndex) {
+            // we only await the full indexing at boot if this is a brand new index
+            this.#log.info(
+              `[ci-readiness-diag] startup awaiting fullIndex (new index) for realm ${this.url}`,
+            );
+            await promise;
+            this.#log.info(
+              `[ci-readiness-diag] startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+            );
+          } else {
+            this.#log.info(
+              `[ci-readiness-diag] startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
+            );
+          }
+          // not sure how useful this event is--nothing is currently listening for
+          // it, and it may happen during or after the full index...
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'full',
+            realmURL: this.url,
+          });
+        }
+      }
+      this.#log.info(
+        `[ci-readiness-diag] startup awaiting isWorldReadable for realm ${this.url}`,
+      );
+      await this.isWorldReadable();
+      this.#log.info(
+        `[ci-readiness-diag] startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
+      );
+    } finally {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
       }
     }
-    this.#log.info(
-      `[ci-readiness-diag] startup awaiting isWorldReadable for realm ${this.url}`,
-    );
-    await this.isWorldReadable();
-    this.#log.info(
-      `[ci-readiness-diag] startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
-    );
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
