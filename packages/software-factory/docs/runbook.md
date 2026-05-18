@@ -31,7 +31,6 @@ The user has done the following outside Claude Code:
   want from temp-dir workspaces (no `tsconfig.json` reachable
   for the ts-node fallback).
 
-
 - Installed Claude Code and run `/login` so the session is
   subscription-billed. `ANTHROPIC_API_KEY` is **not** set in the shell
   Claude Code launched from (it would override subscription auth — see
@@ -125,20 +124,20 @@ session.
 
 ## What the agent calls (and from where)
 
-| Capability                | How the agent invokes it                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------- |
-| Realm creation            | `boxel run-command create-realm` (or `boxel realm create`)                          |
-| Workspace pull / push     | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)  |
-| Federated search          | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                     |
-| Card-type schema          | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'` |
-| Lint                      | `boxel lint [path] --realm <url>` (whole-realm or single-file)                      |
-| Parse / type-check        | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)        |
-| Evaluate module           | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`  |
-| Instantiate card          | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'` |
-| Run QUnit tests           | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)               |
-| Read transpiled output    | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors) |
-| Write files               | native `Write` / `Edit`                                                             |
-| Read / search workspace   | native `Read` / `Glob` / `Grep`                                                     |
+| Capability              | How the agent invokes it                                                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Realm creation          | `boxel run-command create-realm` (or `boxel realm create`)                                                                                                                                                  |
+| Workspace pull / push   | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)                                                                                                                          |
+| Federated search        | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                                                                                                                                             |
+| Card-type schema        | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'`                                                           |
+| Lint                    | `boxel lint [path] --realm <url>` (whole-realm or single-file)                                                                                                                                              |
+| Parse / type-check      | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)                                                                                                                                |
+| Evaluate module         | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`                                           |
+| Instantiate card        | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'` |
+| Run QUnit tests         | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)                                                                                                                                       |
+| Read transpiled output  | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors)                                                                                                                        |
+| Write files             | native `Write` / `Edit`                                                                                                                                                                                     |
+| Read / search workspace | native `Read` / `Glob` / `Grep`                                                                                                                                                                             |
 
 There are no factory MCP tools. `signal_done` and
 `request_clarification` are replaced by writing the issue's `status`

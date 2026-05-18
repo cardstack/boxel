@@ -77,13 +77,13 @@ plain `.json` files. Use `Write` to create them; to update, `Read`
 first, then `Edit` (or `Write` the merged document back) — see
 "Read before write" below.
 
-| File path                        | adoptsFrom                                                     |
-| -------------------------------- | -------------------------------------------------------------- |
-| `Projects/<slug>.json`           | `{module: "<tracker-module-url>", name: "Project"}`            |
-| `Boards/<slug>.json`             | `{module: "<tracker-module-url>", name: "IssueTracker"}`       |
-| `Issues/<slug>.json`             | `{module: "<tracker-module-url>", name: "Issue"}`              |
-| `Knowledge Articles/<slug>.json` | `{module: "<tracker-module-url>", name: "KnowledgeArticle"}`   |
-| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`    |
+| File path                        | adoptsFrom                                                   |
+| -------------------------------- | ------------------------------------------------------------ |
+| `Projects/<slug>.json`           | `{module: "<tracker-module-url>", name: "Project"}`          |
+| `Boards/<slug>.json`             | `{module: "<tracker-module-url>", name: "IssueTracker"}`     |
+| `Issues/<slug>.json`             | `{module: "<tracker-module-url>", name: "Issue"}`            |
+| `Knowledge Articles/<slug>.json` | `{module: "<tracker-module-url>", name: "KnowledgeArticle"}` |
+| `Spec/<slug>.json`               | `{module: "https://cardstack.com/base/spec", name: "Spec"}`  |
 
 `<tracker-module-url>` is derived from the target realm's origin
 (`<origin>/software-factory/darkfactory`) — see the
@@ -294,7 +294,7 @@ Evaluates an ESM module in the realm's prerenderer sandbox. Use
 right after writing a `.gts` to catch import errors, decorator
 mishaps, or anything else that fails at module load time.
 
-**Input shape** — `moduleIdentifier` is the *absolute* module URL
+**Input shape** — `moduleIdentifier` is the _absolute_ module URL
 (no `.gts` extension); `realmIdentifier` is the absolute target
 realm URL (used for SSRF validation):
 
@@ -424,7 +424,6 @@ QUnit card tests" below.
    terminate. If you hit any of these, stop iterating and
    proceed to "Bailing out" below instead of marking the Issue
    done:
-
    - **8 total iterations per Issue.** If after 8 passes through
      the validator loop you still don't have all five validators
      green, stop. (This matches the orchestrator's old
@@ -442,7 +441,6 @@ QUnit card tests" below.
 8. **Push the workspace** so the final validation cards land on
    the realm.
 9. **Either mark done or bail out.**
-
    - If all five validators passed: edit
      `Issues/<slug>.json:data.attributes.status` to `"done"` and
      push. (See `software-factory-scheduling` for the full
@@ -522,13 +520,13 @@ Five card types, one per validator, all published from the source
 realm. Build each module URL from the target realm's origin (same
 pattern as the tracker module URL):
 
-| CLI                                                     | Card class           | Source module                                |
-| ------------------------------------------------------- | -------------------- | -------------------------------------------- |
-| `boxel lint`                                            | `LintResult`         | `<origin>/software-factory/lint-result`      |
-| `boxel parse`                                           | `ParseResult`        | `<origin>/software-factory/parse-result`     |
-| `boxel run-command .../evaluate-module/default`         | `EvalResult`         | `<origin>/software-factory/eval-result`      |
-| `boxel run-command .../instantiate-card/default`        | `InstantiateResult`  | `<origin>/software-factory/instantiate-result` |
-| `boxel test`                                            | `TestRun`            | `<origin>/software-factory/test-results`     |
+| CLI                                              | Card class          | Source module                                  |
+| ------------------------------------------------ | ------------------- | ---------------------------------------------- |
+| `boxel lint`                                     | `LintResult`        | `<origin>/software-factory/lint-result`        |
+| `boxel parse`                                    | `ParseResult`       | `<origin>/software-factory/parse-result`       |
+| `boxel run-command .../evaluate-module/default`  | `EvalResult`        | `<origin>/software-factory/eval-result`        |
+| `boxel run-command .../instantiate-card/default` | `InstantiateResult` | `<origin>/software-factory/instantiate-result` |
+| `boxel test`                                     | `TestRun`           | `<origin>/software-factory/test-results`       |
 
 ### File naming
 
@@ -572,7 +570,7 @@ For each artifact card:
        "attributes": {
          /* mapped from the validator's --json output, per the schema */
          "status": "passed",
-         "runAt": "2026-05-15T10:42:00.000Z",
+         "runAt": "2026-05-15T10:42:00.000Z"
          /* ...other schema attributes... */
        },
        "relationships": {
@@ -687,9 +685,8 @@ export function runTests() {
 
     test('renders title in fitted view', async function (assert) {
       let loader = getService('loader-service').loader;
-      let { StickyNote } = await loader.import<typeof import('./sticky-note')>(
-        cardModuleUrl,
-      );
+      let { StickyNote } =
+        await loader.import<typeof import('./sticky-note')>(cardModuleUrl);
       let note = new StickyNote({ title: 'Test Note', body: 'Hello' });
       await renderCard(loader, note, 'fitted');
       assert.dom('[data-test-title]').hasText('Test Note');
@@ -723,7 +720,7 @@ table stakes; without it your tests don't get past validation.
 - Use QUnit assertions: `assert.dom()`, `assert.strictEqual()`,
   `assert.ok()`.
 - **Wrap every `test(...)` in a QUnit `module('<name>', function
-  (hooks) { ... })` block.** The TestRun UI (and any future
+(hooks) { ... })` block.** The TestRun UI (and any future
   TestRun cards you write) group results by module name; top-level
   tests collapse into a "default" bucket and become hard to read.
 - **Never use `QUnit.skip()` or `QUnit.todo()`.** All tests must

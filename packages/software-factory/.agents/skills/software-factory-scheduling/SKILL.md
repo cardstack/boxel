@@ -72,7 +72,6 @@ disappears and `boxel` is just installed globally.
 
 2. **Filter to eligible issues.** An Issue is eligible if **all** of
    the following are true:
-
    - `attributes.status` is `"backlog"` **or** `"in_progress"`.
    - **Every** Issue listed in `relationships.blockedBy.*.links.self`
      has `attributes.status === "done"`. Resolve each `blockedBy`
@@ -83,7 +82,6 @@ disappears and `boxel` is just installed globally.
      budget on it in the current run.
 
 3. **Order the eligible set** and take the first:
-
    - `in_progress` before `backlog` (resume semantics — finish what
      you started before starting something new).
    - Then by `attributes.priority`: `critical` > `high` > `medium`
@@ -102,12 +100,12 @@ disappears and `boxel` is just installed globally.
 The agent owns the full status lifecycle in this flow. There is no
 orchestrator to flip statuses for you.
 
-| Transition                       | When                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| `backlog` → `in_progress`        | The moment you pick the issue up, **before** doing any work on it.              |
-| `in_progress` → `done`           | All required validators have passed AND the workspace has synced cleanly.       |
-| `in_progress` → `blocked`        | You cannot make progress: ambiguous brief, missing dependency, or you've hit one of the validator-loop bail-out limits documented in `software-factory-operations` ("Bailing out" section — 8 iterations per Issue, 3 identical consecutive validator failures, or 5 distinct fix attempts on the same validator without a pass). Always append a comment explaining which limit you hit and what you tried. |
-| `blocked` → `backlog`            | The user (or a future you) decides to retry — out of this skill's scope.        |
+| Transition                | When                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `backlog` → `in_progress` | The moment you pick the issue up, **before** doing any work on it.                                                                                                                                                                                                                                                                                                                                           |
+| `in_progress` → `done`    | All required validators have passed AND the workspace has synced cleanly.                                                                                                                                                                                                                                                                                                                                    |
+| `in_progress` → `blocked` | You cannot make progress: ambiguous brief, missing dependency, or you've hit one of the validator-loop bail-out limits documented in `software-factory-operations` ("Bailing out" section — 8 iterations per Issue, 3 identical consecutive validator failures, or 5 distinct fix attempts on the same validator without a pass). Always append a comment explaining which limit you hit and what you tried. |
+| `blocked` → `backlog`     | The user (or a future you) decides to retry — out of this skill's scope.                                                                                                                                                                                                                                                                                                                                     |
 
 **Always push the workspace after a status change.** The
 status flip is local until `boxel realm push <local-dir>

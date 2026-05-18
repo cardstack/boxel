@@ -161,8 +161,12 @@ For each card, the document envelope is:
 {
   "data": {
     "type": "card",
-    "attributes": { /* per the live schema (see below) */ },
-    "relationships": { /* per the live schema (see below) */ },
+    "attributes": {
+      /* per the live schema (see below) */
+    },
+    "relationships": {
+      /* per the live schema (see below) */
+    },
     "meta": {
       "adoptsFrom": {
         "module": "<tracker-module-url>",
