@@ -9,7 +9,18 @@ import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
 
 const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
-const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
+/**
+ * The SDK orchestrator and the new interactive Claude Code path each get
+ * their own copies of `software-factory-bootstrap` / `software-factory-operations`.
+ * The orchestrator loads from `.agents/skills-sdk/`; its skills still describe
+ * the factory-MCP-tool surface (`signal_done`, `get_card_schema`, `run_lint`, …)
+ * that the orchestrator's `ToolUseFactoryAgent` actually provides. Interactive
+ * Claude Code reads from `.agents/skills/` via the `.claude/skills` symlink;
+ * those skills describe the `boxel` CLI surface and the agent-owned status
+ * lifecycle. The two diverged during CS-11149 and need to stay separated
+ * until the orchestrator is retired.
+ */
+const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-sdk');
 
 /**
  * Additional skill search directories, checked in order when a skill is not
