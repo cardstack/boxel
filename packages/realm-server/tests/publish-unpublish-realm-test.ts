@@ -905,7 +905,7 @@ module(basename(__filename), function () {
       // file-watcher catches up (potentially many hours later in
       // production), the published URL keeps serving stale HTML.
       //
-      // The fix (handle-publish-realm calling Realm.clearLocalCaches()
+      // The fix (handle-publish-realm calling Realm.clearLocalSourceCaches()
       // before enqueueing the reindex) is verified end-to-end by the
       // matrix Playwright test, but the data-layer invariant is faster
       // to assert here: after republish, the boxel_index row for the

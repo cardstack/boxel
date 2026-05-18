@@ -46,7 +46,7 @@ export function hashCoalesceKeyForAdvisoryLock(key: string): string {
 //
 // The pinned connection ONLY holds the advisory lock and emits the
 // NOTIFY. The `fn` callback issues its DB work (readFromDatabaseCache,
-// persistModuleCacheEntry) through the shared dbAdapter — a separate
+// persistDefinitionCacheEntry) through the shared dbAdapter — a separate
 // pool connection autocommits each query as today. Pool pressure is
 // bounded by N processes (each pins one extra client per concurrent
 // coordinated load) rather than N × M concurrent callers, since the

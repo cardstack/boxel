@@ -4,6 +4,7 @@ import {
   query,
   SupportedMimeType,
   logger,
+  notifyAllFileChanges,
   param,
   removeRealmPermissions,
   fetchRealmPermissions,
@@ -152,6 +153,15 @@ export default function handleUnpublishRealm({
       // CS-10898). Doing it inside the tx would risk the worse failure
       // mode where we delete files but the registry row sticks around.
       removeRealmFiles(publishedRealmPath);
+
+      // CS-11156. Broadcast a bulk cache-invalidation to peer replicas so
+      // any that still have this realm mounted drop their #sourceCache /
+      // #transpiledModuleCache before the reconciler unmount lands. The per-file
+      // deleteAll above already emitted per-path NOTIFYs covering bytes
+      // that existed on disk; this bulk emit closes the brief window
+      // between the registry-row delete commit and the peers' reaction.
+      // Best-effort, fire-and-forget.
+      await notifyAllFileChanges(dbAdapter, publishedRealmURL);
 
       // Removing this derivative just changed the source realm's
       // `RealmInfo.lastPublishedAt` map (rows where `source_url =
