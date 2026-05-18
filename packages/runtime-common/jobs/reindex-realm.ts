@@ -17,11 +17,16 @@ export async function enqueueReindexRealmJob(
   priority: number,
   opts?: EnqueueReindexRealmJobOptions,
 ) {
+  // Flagging the args so the from-scratch coalesce can refuse to attach
+  // a forced-refresh publish to an already-running same-realm
+  // from-scratch whose mtimes snapshot pre-dates the clear below.
+  let clearLastModified = opts?.clearLastModified === true;
   let args = {
     realmURL: realmUrl,
     realmUsername,
+    clearLastModified,
   };
-  if (opts?.clearLastModified) {
+  if (clearLastModified) {
     await query(dbAdapter, [
       `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
       param(realmUrl),
