@@ -1,7 +1,6 @@
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
-  type LinkableCollectionDocument,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -28,7 +27,14 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_ENTRIES = 5000;
 
 type CachedEntry = {
-  result: LinkableCollectionDocument;
+  // Result is stored opaquely so both `_federated-search`'s
+  // `LinkableCollectionDocument` and `_federated-search-prerendered`'s
+  // `PrerenderedCardCollectionDocument` can share the same cache
+  // instance. Inner-key canonicalisation already includes the
+  // endpoint-distinguishing params (htmlFormat / cardUrls / renderType
+  // are passed through `opts`), so two endpoints' entries cannot
+  // collide on a key they don't both fully share.
+  result: unknown;
   timer: ReturnType<typeof setTimeout>;
   // Position in the FIFO eviction ring. Stored on the entry so a
   // cache hit doesn't need a separate map lookup to know its slot.
@@ -37,10 +43,16 @@ type CachedEntry = {
 
 // Per-batch read cache used during indexing. Each entry is keyed by
 // `(jobId, normalizedRealms, normalizedQuery, normalizedOpts)` and
-// represents one `_federated-search` populate computed during the
-// lifetime of one indexing job. The job-id boundary scopes the cache
-// to a single batch; a subsequent job hashes to different keys and
-// never reuses a stale value.
+// represents one search populate computed during the lifetime of one
+// indexing job. The cache is shared across both `_federated-search`
+// (`LinkableCollectionDocument` results) and
+// `_federated-search-prerendered` (`PrerenderedCardCollectionDocument`
+// results) — the endpoint-specific request shape (`htmlFormat`,
+// `cardUrls`, `renderType` for the prerendered handler) is folded into
+// `opts` before the call here, so the canonicalised inner key already
+// segregates the two endpoints' entries. The job-id boundary scopes
+// the cache to a single batch; a subsequent job hashes to different
+// keys and never reuses a stale value.
 //
 // Same-realm reads are safe by construction: within an indexing batch
 // the writer touches `boxel_index_working`, not `boxel_index`, so
@@ -94,18 +106,18 @@ export class JobScopedSearchCache {
     this.#maxEntries = opts?.maxEntries ?? DEFAULT_MAX_ENTRIES;
   }
 
-  async getOrPopulate(args: {
+  async getOrPopulate<T>(args: {
     jobId: string;
     realms: string[];
     query: Query;
     opts: unknown | undefined;
-    populate: () => Promise<LinkableCollectionDocument>;
-  }): Promise<LinkableCollectionDocument> {
+    populate: () => Promise<T>;
+  }): Promise<T> {
     let innerKey = buildInnerKey(args.realms, args.query, args.opts);
     let jobMap = this.#byJob.get(args.jobId);
     let existing = jobMap?.get(innerKey);
     if (existing) {
-      return existing.result;
+      return existing.result as T;
     }
 
     let result = await args.populate();
