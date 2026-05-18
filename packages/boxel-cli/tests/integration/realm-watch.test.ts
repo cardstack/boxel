@@ -25,6 +25,7 @@ import {
   setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: (() => void) | undefined;
@@ -203,6 +204,27 @@ async function writeRemoteFile(
   if (!response.ok) {
     throw new Error(
       `writeRemoteFile ${relPath} failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
+}
+
+async function writeRemoteBytes(
+  realm: string,
+  relPath: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  let previousMtime = (await fetchRemoteMtimes(realm))[
+    buildFileUrl(realm, relPath)
+  ];
+  let response = await remoteMutation(realm, relPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: bytes,
+  });
+  if (!response.ok) {
+    throw new Error(
+      `writeRemoteBytes ${relPath} failed: ${response.status} ${response.statusText}`,
     );
   }
   await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
@@ -467,6 +489,25 @@ describe('realm watch (integration)', () => {
     let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
     expect(checkpoints.length).toBeGreaterThanOrEqual(1);
     expect(checkpoints[0].source).toBe('remote');
+  });
+
+  it('pulls a remote PNG byte-identically (CS-11075)', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteBytes(realmUrl, 'image.png', TINY_PNG_BYTES);
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    let result = await watcher.flushPending();
+    expect(result.pulled).toContain('image.png');
+
+    let pulled = fs.readFileSync(path.join(localDir, 'image.png'));
+    expect(pulled.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+
+    watcher.shutdown();
   });
 
   it('returns an error when the realm URL is unreachable', async () => {

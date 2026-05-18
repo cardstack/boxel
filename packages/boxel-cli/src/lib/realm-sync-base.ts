@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 import pLimit from 'p-limit';
+import { isBinaryFilename } from '@cardstack/runtime-common';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
@@ -46,6 +47,7 @@ export const SupportedMimeType = {
   CardSource: 'application/vnd.card+source',
   DirectoryListing: 'application/vnd.api+json',
   Mtimes: 'application/vnd.api+json',
+  OctetStream: 'application/octet-stream',
 } as const;
 
 export interface SyncOptions {
@@ -396,6 +398,12 @@ export abstract class RealmSyncBase {
       return;
     }
 
+    if (isBinaryFilename(relativePath)) {
+      await this.uploadBinaryFile(relativePath, localPath);
+      console.log(`  Uploaded: ${relativePath}`);
+      return;
+    }
+
     const content = await fs.readFile(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
@@ -415,6 +423,35 @@ export abstract class RealmSyncBase {
     }
 
     console.log(`  Uploaded: ${relativePath}`);
+  }
+
+  // Uploads a single binary file (PNG, PDF, font, etc.) per the host
+  // pattern: a per-file POST with Content-Type: application/octet-stream
+  // and the raw bytes as the body. The realm-server routes octet-stream
+  // POSTs to upsertBinaryFile, which writes the bytes verbatim without
+  // any string conversion. Used by both uploadFile (single-shot) and
+  // uploadFilesAtomic (mixed-batch fallback for the binary entries it
+  // splits out of the atomic JSON payload).
+  protected async uploadBinaryFile(
+    relativePath: string,
+    localPath: string,
+  ): Promise<void> {
+    const bytes = await fs.readFile(localPath);
+    const url = this.buildFileUrl(relativePath);
+
+    const response = await this.authenticator.authedRealmFetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': SupportedMimeType.OctetStream,
+      },
+      body: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to upload: ${response.status} ${response.statusText}`,
+      );
+    }
   }
 
   // Batched upload via the realm's /_atomic endpoint. Returns the set of
@@ -449,8 +486,76 @@ export abstract class RealmSyncBase {
       return { succeeded: [] };
     }
 
+    // The /_atomic endpoint embeds each file's content inside a JSON
+    // `attributes.content` string, which can't carry raw binary bytes.
+    // Match the host pattern: keep /_atomic for text files only, and
+    // for each binary file fall back to a per-file octet-stream POST
+    // (the same wire format `uploadFile` uses for a single binary).
+    const textEntries: Array<[string, string]> = [];
+    const binaryEntries: Array<[string, string]> = [];
+    for (const entry of entries) {
+      if (isBinaryFilename(entry[0])) {
+        binaryEntries.push(entry);
+      } else {
+        textEntries.push(entry);
+      }
+    }
+
+    const binaryResults = await Promise.all(
+      binaryEntries.map(([relativePath, localPath]) =>
+        this.remoteLimit(async () => {
+          try {
+            await this.uploadBinaryFile(relativePath, localPath);
+            console.log(`  Uploaded: ${relativePath}`);
+            return { relativePath, ok: true as const };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const statusMatch = message.match(/(\d{3})/);
+            return {
+              relativePath,
+              ok: false as const,
+              status: statusMatch ? Number(statusMatch[1]) : 500,
+              title: message,
+            };
+          }
+        }),
+      ),
+    );
+
+    const binarySucceeded: string[] = [];
+    const binaryFailed: Array<{
+      path: string;
+      status: number;
+      title: string;
+    }> = [];
+    for (const result of binaryResults) {
+      if (result.ok) {
+        binarySucceeded.push(result.relativePath);
+      } else {
+        binaryFailed.push({
+          path: result.relativePath,
+          status: result.status,
+          title: result.title,
+        });
+      }
+    }
+
+    if (textEntries.length === 0) {
+      if (binaryFailed.length > 0) {
+        return {
+          succeeded: binarySucceeded,
+          error: {
+            status: binaryFailed[0].status,
+            perFile: binaryFailed,
+            message: `Binary upload failed for ${binaryFailed.length} file(s)`,
+          },
+        };
+      }
+      return { succeeded: binarySucceeded };
+    }
+
     const operations = await Promise.all(
-      entries.map(async ([relativePath, localPath]) => {
+      textEntries.map(async ([relativePath, localPath]) => {
         const content = await fs.readFile(localPath, 'utf8');
         return {
           op: addPaths.has(relativePath)
@@ -483,20 +588,31 @@ export abstract class RealmSyncBase {
         'atomic:results'?: Array<{ data?: { id?: string } }>;
       };
       const hrefToRelative = new Map(
-        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+        textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
       );
       // The realm normalizes hrefs: a path with a space goes out as
       // `Knowledge Articles/...` but comes back URL-encoded as
       // `Knowledge%20Articles/...`. Decode the response id before the
       // map lookup so we resolve back to the original relative path
       // instead of falling through to the raw encoded URL.
-      const succeeded = (body['atomic:results'] ?? [])
+      const atomicSucceeded = (body['atomic:results'] ?? [])
         .map((r) => r.data?.id)
         .filter((id): id is string => typeof id === 'string')
         .map((id) => decodeAtomicResultId(id))
         .map((id) => hrefToRelative.get(id) ?? id);
-      for (const rel of succeeded) {
+      for (const rel of atomicSucceeded) {
         console.log(`  Uploaded: ${rel}`);
+      }
+      const succeeded = [...atomicSucceeded, ...binarySucceeded];
+      if (binaryFailed.length > 0) {
+        return {
+          succeeded,
+          error: {
+            status: binaryFailed[0].status,
+            perFile: binaryFailed,
+            message: `Binary upload failed for ${binaryFailed.length} file(s)`,
+          },
+        };
       }
       return { succeeded };
     }
@@ -515,7 +631,7 @@ export abstract class RealmSyncBase {
       const match = detail.match(/Resource (\S+) /);
       const href = match ? decodeAtomicResultId(match[1]) : '';
       const relMap = new Map(
-        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+        textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
       );
       return {
         path: relMap.get(href) ?? href,
@@ -525,10 +641,10 @@ export abstract class RealmSyncBase {
     });
 
     return {
-      succeeded: [],
+      succeeded: binarySucceeded,
       error: {
         status: response.status,
-        perFile,
+        perFile: [...perFile, ...binaryFailed],
         message: `Atomic upload failed: ${response.status} ${response.statusText}`,
       },
     };
@@ -559,12 +675,16 @@ export abstract class RealmSyncBase {
       );
     }
 
-    const content = await response.text();
-
     const localDir = path.dirname(localPath);
     await fs.mkdir(localDir, { recursive: true });
 
-    await fs.writeFile(localPath, content, 'utf8');
+    if (isBinaryFilename(relativePath)) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.writeFile(localPath, buffer);
+    } else {
+      const content = await response.text();
+      await fs.writeFile(localPath, content, 'utf8');
+    }
     console.log(`  Downloaded: ${relativePath}`);
   }
 

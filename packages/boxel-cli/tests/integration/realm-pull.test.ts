@@ -13,6 +13,7 @@ import {
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
@@ -262,5 +263,29 @@ describe('realm pull (integration)', () => {
 
     expect(result.error).toBeDefined();
     expect(result.files).toEqual([]);
+  });
+
+  // --- Binary file downloads (CS-11075) ---
+
+  it('pulls a binary PNG byte-identically', async () => {
+    let localDir = makeLocalDir();
+
+    // Seed the realm with raw bytes via the octet-stream endpoint (the
+    // canonical wire format the realm-server's upsertBinaryFile route
+    // expects). The startTestRealmServer fileSystem option only accepts
+    // strings, so we POST after server start.
+    let pngUrl = new URL('image.png', realmUrl).href;
+    let seedResponse = await profileManager.authedRealmFetch(pngUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: TINY_PNG_BYTES,
+    });
+    expect(seedResponse.ok).toBe(true);
+
+    await pull(realmUrl, localDir, { profileManager });
+
+    let localPath = path.join(localDir, 'image.png');
+    let pulled = fs.readFileSync(localPath);
+    expect(pulled.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
   });
 });

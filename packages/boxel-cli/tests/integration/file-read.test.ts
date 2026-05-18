@@ -12,6 +12,7 @@ import {
   setupTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
@@ -99,6 +100,27 @@ describe('file read (integration)', () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe(404);
     expect(result.error).toContain('404');
+  });
+
+  it('reads a binary PNG byte-identically (returns bytes, not content)', async () => {
+    // Seed via direct octet-stream POST — startTestRealmServer's
+    // fileSystem option only accepts strings.
+    let pngUrl = `${realmUrl}image.png`;
+    let seed = await profileManager.authedRealmFetch(pngUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: TINY_PNG_BYTES,
+    });
+    expect(seed.ok, `seed POST failed: ${seed.status}`).toBe(true);
+
+    let result = await read(realmUrl, 'image.png', { profileManager });
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe(200);
+    expect(result.content).toBeUndefined();
+    expect(result.bytes).toBeDefined();
+    expect(Buffer.from(result.bytes!).equals(Buffer.from(TINY_PNG_BYTES))).toBe(
+      true,
+    );
   });
 
   it('returns error result when no active profile', async () => {
