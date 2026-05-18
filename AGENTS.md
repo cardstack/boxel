@@ -76,6 +76,12 @@
 - To run a subset of the tests:
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
+- **Always capture test output to a file.** A host test run can produce hundreds of KB of output (browser logs, indexer warnings, per-test diagnostics). If you only pipe through `tail`/`grep`, you lose everything else and have to re-run — which is slow and the bug may not reproduce. Redirect the full run to a file, then grep that file for failures, browser logs around a specific test, etc.
+  ```
+  pnpm exec ember test --path dist --filter "Foo" 2>&1 | tee /tmp/host-test-foo.log
+  grep -E "^(not )?ok |^# " /tmp/host-test-foo.log   # summary + per-test status
+  grep -B2 -A40 "not ok 27" /tmp/host-test-foo.log   # detail for a specific failure
+  ```
 - run `pnpm lint` in this directory to lint changes made to this package
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 - the host tests report this error:
