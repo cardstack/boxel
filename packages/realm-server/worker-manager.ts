@@ -1,5 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
 
 // During `mise dev-all` Ctrl-C, the bash trap walks the process tree
 // deepest-first. The `dev-log-tee` reader on this process's stdout/stderr

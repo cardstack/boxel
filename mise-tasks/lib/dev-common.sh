@@ -204,12 +204,23 @@ _kill_tree_walk() {
 #     (4201/4202, 4210/4211, 4221/4222). Wrappers that just invoke ts-node
 #     don't `exec` it, so killing the wrapper alone leaves the ts-node
 #     grandchild reparented to init with its port still bound.
-#   - packages/host/scripts/vite-serve.js — the host start wrapper that
-#     spawns the actual vite child. (We don't separately sweep `pnpm
-#     --filter @cardstack/host start`: its only child IS vite-serve.js, so
+#   - scripts/vite-serve.js — the host start wrapper that spawns the
+#     actual vite child. Can't anchor to $REPO_ROOT because pnpm invokes
+#     it as `node scripts/vite-serve.js` (relative argv, cwd-relative),
+#     so the absolute path never appears in argv for pkill -f to match.
+#     The filename is unique to Boxel's host package, so the relative
+#     pattern is safe from cross-tool collisions (only a sibling Boxel
+#     checkout running dev concurrently could collide, which already
+#     requires BOXEL_DEV_ALL_PIDFILE isolation). Killing this wrapper
+#     also frees the same-port redirect dispatcher it owns on 4200 in
+#     local-HTTPS dev mode. (We don't separately sweep `pnpm --filter
+#     @cardstack/host start`: its only child IS vite-serve.js, so
 #     killing the anchored child causes pnpm to exit on its own.)
-#   - packages/host/.*vite/bin/vite.js --port 4200 — the host dev server
-#     (port 4200) spawned by vite-serve.js
+#   - packages/host/.*vite/bin/vite.js — the host vite process. In
+#     plain-HTTP mode it binds the public port (4200) directly; in
+#     local-HTTPS mode the wrapper puts it on a dynamic internal port
+#     and the dispatcher fronts 4200. Don't pin the pattern to a specific
+#     `--port` value or the dynamic-port case escapes the sweep.
 #   - node_modules/.*/start-server-and-test/src/bin/start.js — the
 #     phase-coordinator that owns the run-p subtree
 #   - node_modules/.*/npm-run-all/bin/run-p — run-p, which spawns the
@@ -221,8 +232,8 @@ _kill_tree_walk() {
 sweep_orphaned_services() {
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
   TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
-  VITE_SERVE_RE="${REPO_ROOT_RE}/packages/host/scripts/vite-serve\.js"
-  VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js --port 4200"
+  VITE_SERVE_RE="scripts/vite-serve\.js"
+  VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js"
   SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
   RUNP_RE="${REPO_ROOT_RE}/.*node_modules/.*npm-run-all/bin/run-p"
   HTTP_SERVER_RE="http-server.*X-Boxel-Assume-User.*--port 4206"

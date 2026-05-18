@@ -17,6 +17,7 @@
  * instead of failing with `ERR_CONNECTION_REFUSED`.
  */
 
+require('./wtfnode-on-signal');
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -37,13 +38,80 @@ function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
   if (nodeMemory) {
     env.NODE_OPTIONS = process.env.NODE_OPTIONS || '--max-old-space-size=8192';
   }
+  // Detach vite's stdin from the parent TTY. Vite's `bindCLIShortcuts`
+  // opens a readline.createInterface({ input: process.stdin }) without an
+  // 'error' handler whenever stdin is a TTY. When the user hits Ctrl-C in
+  // a `mise dev` / `mise dev-all` session, the TTY tears down underneath
+  // that readline and Node emits an unhandled 'error' event (read EIO),
+  // which crashes vite with a noisy stack trace just before shutdown.
+  // Setting stdin to 'ignore' makes process.stdin.isTTY false, so the
+  // shortcuts feature is skipped — we don't use it from `pnpm start`
+  // anyway since stdin is piped through pnpm/run-p wrappers that swallow
+  // keypresses before they reach vite.
+  // No `shell: true`: with a shell wrapper, `child` would be the intermediate
+  // `sh -c` process, and `child.kill(signal)` would only signal the shell —
+  // leaving the vite grandchild orphaned and still bound to port 4200 if a
+  // parent process manager signals just this wrapper instead of sweeping the
+  // whole process group. Spawning npx directly makes `child` the npx process,
+  // which forwards signals to its vite child.
   const child = spawn('npx', args, {
-    stdio: 'inherit',
+    stdio: ['ignore', 'inherit', 'inherit'],
     cwd: path.join(__dirname, '..'),
-    shell: true,
     env,
   });
-  child.on('exit', (code) => process.exit(code || 0));
+
+  // Forward SIGTERM/SIGINT/SIGHUP to the vite child, then exit immediately
+  // with code 0. Two reasons we don't wait for the child:
+  //
+  //   1. The dev orchestrator gives the process group ~2s of SIGTERM grace
+  //      before SIGKILL'ing stragglers (see PGROUP_GRACE_SECS in
+  //      mise-tasks/lib/dev-common.sh). If we wait longer than that for our
+  //      child to exit, the orchestrator SIGKILLs us mid-wait — pnpm then
+  //      reports our death as `Command failed with signal "SIGTERM"` (the
+  //      original signal it saw us receive) and the wrapper layers above
+  //      print `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL]`. Exiting in the same
+  //      tick guarantees pnpm reads waitpid as a clean exit-code-0.
+  //   2. `npx` doesn't reliably propagate forwarded signals to the real
+  //      vite process, so waiting on `child.on('exit')` can hang forever.
+  //      The orchestrator's `sweep_orphaned_services` is the safety net
+  //      that catches the abandoned vite grandchild after we've left.
+  let exited = false;
+  const exitOnce = (code) => {
+    if (!exited) {
+      exited = true;
+      process.exit(code);
+    }
+  };
+  const shutdown = (signal) => {
+    if (!child.killed) {
+      try {
+        child.kill(signal);
+      } catch (_) {
+        /* child already gone */
+      }
+    }
+    exitOnce(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGHUP', () => shutdown('SIGHUP'));
+
+  child.on('exit', (code, signal) => {
+    if (signal === 'SIGTERM' || signal === 'SIGINT' || signal === 'SIGHUP') {
+      exitOnce(0);
+      return;
+    }
+    if (signal) {
+      // vite died from another signal (e.g. SIGKILL, SIGSEGV, SIGABRT) —
+      // propagate that as a non-zero exit so pnpm and the orchestrator see
+      // the crash instead of treating it as a clean shutdown. 128 + signum
+      // is the POSIX convention shells use for signal-induced exits.
+      const signum = require('os').constants.signals[signal] || 0;
+      exitOnce(128 + signum);
+      return;
+    }
+    exitOnce(code || 0);
+  });
   return child;
 }
 

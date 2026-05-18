@@ -9,6 +9,14 @@
 # as "Illegal option", so this script must run under bash.
 set -o pipefail
 
+# Treat SIGTERM/SIGINT as a clean shutdown. The dev/dev-all orchestrators
+# SIGTERM this script during Ctrl-C; without this trap the pipefail-aware
+# pipe below exits 143, mise reports it as "task failed", and run-p prints
+# `ERROR: "start:worker-development" exited with 143` — pure shutdown
+# noise. Real crashes (ts-node faulting on its own) still propagate, since
+# the trap only fires when *we* receive the signal.
+trap 'exit 0' INT TERM
+
 # Tee stdout+stderr to a per-service log file so the local Alloy scraper
 # (packages/observability/alloy/config.alloy) can pick this up via
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.
