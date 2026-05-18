@@ -258,6 +258,16 @@ export interface PopulateCoordinator {
   waitForKey(coalesceKey: string, timeoutMs: number): Promise<void>;
 }
 
+// Public option shape for definition lookup calls. `priority` is forwarded to
+// the prerender server when a cache miss requires a sub-prerender — same
+// numeric scale as worker-job priority (0 = system-initiated background,
+// 10 = userInitiatedPriority). Callers in the indexer thread their job
+// priority through here so user-initiated reindex work doesn't silently
+// downgrade to background priority for its module sub-renders.
+export interface DefinitionLookupOptions {
+  priority?: number;
+}
+
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
   // Like lookupDefinition but does not trigger a prerenderer call or
@@ -272,7 +282,10 @@ export interface DefinitionLookup {
   clearAllModules(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
-  getModuleCacheEntry(moduleUrl: string): Promise<ModuleCacheEntry | undefined>;
+  getModuleCacheEntry(
+    moduleUrl: string,
+    opts?: DefinitionLookupOptions,
+  ): Promise<ModuleCacheEntry | undefined>;
   getModuleCacheEntries(
     query: ModuleCacheEntryQuery,
   ): Promise<ModuleCacheEntries>;
@@ -383,6 +396,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async getModuleCacheEntry(
     moduleUrl: string,
+    opts?: DefinitionLookupOptions,
   ): Promise<ModuleCacheEntry | undefined> {
     let canonicalModuleURL = canonicalURL(moduleUrl);
     let context = await this.buildLookupContext(canonicalModuleURL);
@@ -403,6 +417,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       cacheUserId,
       prerenderUserId,
+      priority: opts?.priority,
     });
   }
 
@@ -417,6 +432,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
+    priority?: number;
   }): Promise<ModuleCacheEntry | undefined> {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
@@ -486,6 +502,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope: CacheScope;
       cacheUserId: string;
       prerenderUserId: string;
+      priority?: number;
     },
     coordinator: PopulateCoordinator,
   ): Promise<ModuleCacheEntry | undefined> {
@@ -534,6 +551,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope,
     cacheUserId,
     prerenderUserId,
+    priority,
   }: {
     moduleURL: string;
     realmURL: string;
@@ -541,6 +559,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
+    priority?: number;
   }): Promise<ModuleCacheEntry | undefined> {
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmCache (and any future synchronous bump) runs entirely before
@@ -578,6 +597,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         candidateURL,
         realmURL,
         prerenderUserId,
+        priority,
       );
       if (
         response.status === 'error' &&
@@ -1082,6 +1102,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     moduleUrl: string,
     realmURL: string,
     userId: string,
+    priority?: number,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
@@ -1091,6 +1112,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       realm: realmURL,
       url: moduleUrl,
       auth,
+      priority,
     });
   }
 
@@ -1735,8 +1757,9 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async getModuleCacheEntry(
     moduleUrl: string,
+    opts?: DefinitionLookupOptions,
   ): Promise<ModuleCacheEntry | undefined> {
-    return await this.#inner.getModuleCacheEntry(moduleUrl);
+    return await this.#inner.getModuleCacheEntry(moduleUrl, opts);
   }
 
   async getModuleCacheEntries(

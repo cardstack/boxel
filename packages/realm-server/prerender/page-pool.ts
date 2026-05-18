@@ -1870,6 +1870,32 @@ export class PagePool {
         let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab, tabStartupMs };
       }
+      // module / command callers must produce the reserved tab the
+      // file-admission cap is supposed to keep room for. The cap
+      // bounds file workload at `affinityTabMax − 1`, leaving global-
+      // pool headroom for a non-file call — but the headroom is only
+      // a reservation, not a spawned tab. Without this synchronous
+      // refill+retry, the call falls through to the busy-tab fallback
+      // below and queues behind the file render that's awaiting this
+      // sub-render: the self-referential prerender deadlock. Mirrors
+      // the brand-new-affinity branch's await on `#ensureStandbyPool`
+      // (entryList.length === 0 path further down). `#ensureStandbyPool`
+      // respects `#maxPages` via `#prepareSlotForStandby`, so this
+      // can't oversubscribe the global pool.
+      if (queue !== 'file' && entryList.length < this.#affinityTabMax) {
+        if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
+          let startedAt = Date.now();
+          await this.#ensureStandbyPool();
+          tabStartupMs += Date.now() - startedAt;
+        }
+        let refilled = this.#commandeerDormantTab(affinityKey, {
+          standbyOnly: true,
+        });
+        if (refilled) {
+          let releaseTab = await refilled.queue.acquire(signal, priority);
+          return { entry: refilled, reused: false, releaseTab, tabStartupMs };
+        }
+      }
       // No orphan, no commandeer-able tab/standby. If we got here
       // through the dynamic-expansion escape hatch, drive an
       // expansion + fresh spawn so the saturated module/command
