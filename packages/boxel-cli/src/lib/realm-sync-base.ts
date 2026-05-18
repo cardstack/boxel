@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 import pLimit from 'p-limit';
-import { isBinaryFilename } from '@cardstack/runtime-common';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;

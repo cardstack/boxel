@@ -6,7 +6,7 @@ import {
 } from '../../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import { isBinaryFilename } from '@cardstack/runtime-common';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 import { cliLog } from '../../lib/cli-log';
 
