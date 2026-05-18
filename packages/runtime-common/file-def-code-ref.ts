@@ -55,3 +55,17 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
     ) as RealmResourceIdentifier,
   };
 }
+
+// True when the given file/URL has an extension the realm recognizes as a
+// FileDef subtype (image, markdown, gts/ts, etc.). Used to pick between
+// card and file-meta load paths for an arbitrary URL.
+export function isFileDefExtension(filenameOrPath: string): boolean {
+  let path = filenameOrPath.split(/[?#]/)[0];
+  let segment = path.split('/').pop() ?? '';
+  let dot = segment.lastIndexOf('.');
+  if (dot === -1) {
+    return false;
+  }
+  let extension = segment.slice(dot).toLowerCase();
+  return extension in FILEDEF_CODE_REF_BY_EXTENSION;
+}

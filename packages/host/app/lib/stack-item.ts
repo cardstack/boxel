@@ -1,6 +1,9 @@
 import { tracked } from '@glimmer/tracking';
 
-import { isFileDefInstance } from '@cardstack/runtime-common';
+import {
+  isFileDefInstance,
+  isFileDefExtension,
+} from '@cardstack/runtime-common';
 import type { Deferred } from '@cardstack/runtime-common';
 import type { Store, StoreReadType } from '@cardstack/runtime-common';
 
@@ -22,8 +25,15 @@ interface Args {
 
 export type StackItemType = 'card' | 'file';
 
-function inferStackItemType(type?: StackItemType): StackItemType {
-  return type === 'file' ? 'file' : 'card';
+function inferStackItemType(
+  type: StackItemType | undefined,
+  id?: string,
+): StackItemType {
+  if (type === 'file' || type === 'card') {
+    return type;
+  }
+  // URL extension known to the FileDef registry → file-meta load path.
+  return id && isFileDefExtension(id) ? 'file' : 'card';
 }
 
 export function stackItemTypeToStoreReadType(
@@ -100,7 +110,7 @@ export class StackItem {
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
-    this.type = inferStackItemType(type);
+    this.type = inferStackItemType(type, this.#id);
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
     this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;
