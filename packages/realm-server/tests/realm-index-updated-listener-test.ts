@@ -3,7 +3,7 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
-import { RealmIndexSwappedListener } from '../lib/realm-index-swapped-listener';
+import { RealmIndexUpdatedListener } from '../lib/realm-index-updated-listener';
 
 // Minimal fake `Realm` — the listener only calls `.url` (via lookup) and
 // `.clearInFlightSearches()`, so that's all we need to stub.
@@ -40,13 +40,13 @@ function waitFor<T>(
 }
 
 module(basename(__filename), function () {
-  module('RealmIndexSwappedListener (dispatch)', function () {
+  module('RealmIndexUpdatedListener (dispatch)', function () {
     test('handleNotification forwards to the mounted realm', function (assert) {
       let cleared = 0;
       const realmA = makeFakeRealm('http://x.test/a/', () => {
         cleared++;
       });
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: (url) =>
           url === 'http://x.test/a/' ? realmA : undefined,
@@ -62,7 +62,7 @@ module(basename(__filename), function () {
     });
 
     test('handleNotification drops silently when the realm is not mounted', function (assert) {
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => undefined,
       });
@@ -73,7 +73,7 @@ module(basename(__filename), function () {
     });
 
     test('handleNotification ignores an undefined payload', function (assert) {
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => {
           throw new Error('should not be called for empty payloads');
@@ -85,7 +85,7 @@ module(basename(__filename), function () {
     });
 
     test('handleNotification ignores an empty payload', function (assert) {
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter: {} as unknown as PgAdapter,
         lookupMountedRealm: () => {
           throw new Error('should not be called for empty payloads');
@@ -98,7 +98,7 @@ module(basename(__filename), function () {
     });
   });
 
-  module('RealmIndexSwappedListener (LISTEN end-to-end)', function (hooks) {
+  module('RealmIndexUpdatedListener (LISTEN end-to-end)', function (hooks) {
     let dbAdapter: PgAdapter;
 
     setupDB(hooks, {
@@ -107,19 +107,19 @@ module(basename(__filename), function () {
       },
     });
 
-    test('NOTIFY realm_index_swapped → listener → clearInFlightSearches', async function (assert) {
+    test('NOTIFY realm_index_updated → listener → clearInFlightSearches', async function (assert) {
       let cleared = 0;
       const realmUrl = 'http://x.test/listen-e2e/';
       const realmA = makeFakeRealm(realmUrl, () => {
         cleared++;
       });
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter,
         lookupMountedRealm: (url) => (url === realmUrl ? realmA : undefined),
       });
       await listener.start();
       try {
-        await dbAdapter.notify('realm_index_swapped', realmUrl);
+        await dbAdapter.notify('realm_index_updated', realmUrl);
 
         await waitFor(() => (cleared > 0 ? cleared : undefined));
         assert.strictEqual(
@@ -134,7 +134,7 @@ module(basename(__filename), function () {
 
     test('NOTIFY for an unmounted realm is dropped silently', async function (assert) {
       const lookups: string[] = [];
-      const listener = new RealmIndexSwappedListener({
+      const listener = new RealmIndexUpdatedListener({
         dbAdapter,
         lookupMountedRealm: (url) => {
           lookups.push(url);
@@ -144,7 +144,7 @@ module(basename(__filename), function () {
       await listener.start();
       try {
         await dbAdapter.notify(
-          'realm_index_swapped',
+          'realm_index_updated',
           'http://x.test/not-mounted/',
         );
 

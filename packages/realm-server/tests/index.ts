@@ -214,7 +214,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
   './realm-file-changes-listener-test',
-  './realm-index-swapped-listener-test',
+  './realm-index-updated-listener-test',
   './module-cache-invalidation-listener-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
