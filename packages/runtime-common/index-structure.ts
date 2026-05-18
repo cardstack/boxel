@@ -68,8 +68,8 @@ export interface CardTypeSummary {
 //
 // Legacy realms written before this column was partitioned stored `value` as a
 // bare `CardTypeSummary[]` (instances only). Readers should call
-// `normalizeRealmMetaValue` (see index-query-engine.ts) to tolerate that shape
-// during the transition until every realm has been reindexed.
+// `normalizeRealmMetaValue` (defined below) to tolerate that shape during the
+// transition until every realm has been reindexed.
 export interface RealmMetaValue {
   instances: CardTypeSummary[];
   files: CardTypeSummary[];

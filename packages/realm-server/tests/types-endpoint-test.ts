@@ -236,10 +236,6 @@ module(basename(__filename), function () {
         sortCardTypeSummaries(instanceEntries),
         'instance summaries match expected fixture',
       );
-      // Files may or may not be present in this realistic fixture; the more
-      // specific file-presence assertions live in the dedicated FileDefs test
-      // below. Here we only insist that every entry on the response carries a
-      // `kind` discriminator.
       assert.ok(
         response.body.data.every(
           (entry: any) =>
@@ -247,6 +243,17 @@ module(basename(__filename), function () {
             entry.attributes.kind === 'file',
         ),
         'every summary entry carries an instance/file kind',
+      );
+      // The realistic fixture seeds `.md` files (sample.md, card-refs.md),
+      // so the response must include at least one `kind: 'file'` entry.
+      // Anchoring the test here protects against a regression that drops
+      // the `files` arm before `makeCardTypeSummaryDoc` emits the doc.
+      let fileEntries = response.body.data.filter(
+        (entry: any) => entry.attributes.kind === 'file',
+      );
+      assert.ok(
+        fileEntries.length > 0,
+        'response includes at least one kind: file entry from the indexed .md fixtures',
       );
     });
   });

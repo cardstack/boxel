@@ -503,7 +503,18 @@ export default class RealmServerService extends Service {
     data: {
       id: string;
       type: 'card-type-summary';
-      attributes: { displayName: string; total: number; iconHTML: string };
+      attributes: {
+        displayName: string;
+        total: number;
+        iconHTML: string;
+        // The federated `_types` response now stamps `kind` on every
+        // entry. Keeping it in the declared return type — not just the
+        // local `json` cast — means callers see the discriminator and
+        // can partition card vs file summaries instead of conflating
+        // them. `?` for back-compat with the still-supported legacy
+        // response shape (no kind, treated as 'instance').
+        kind?: 'instance' | 'file';
+      };
       meta?: { realmURL: string };
     }[];
     meta: { page: { total: number } };

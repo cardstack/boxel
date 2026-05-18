@@ -65,6 +65,18 @@ export default class CardList extends Component<Signature> {
     }
   }
 
+  // Render the filename fallback only when the prerender pipeline produced
+  // no HTML AND the row is not an error. Error rows have their own
+  // dedicated error component built by PrerenderedCard's constructor, which
+  // also has empty `html`; treating them like file fallbacks would swap a
+  // helpful "rendering error" affordance for a bare filename.
+  shouldRenderFallback(card: {
+    hasHtml?: boolean;
+    isError?: boolean;
+  }): boolean {
+    return card.hasHtml === false && !card.isError;
+  }
+
   <template>
     <ul
       class={{cn
@@ -94,7 +106,7 @@ export default class CardList extends Component<Signature> {
                   'boxel-card-list-item'
                   instance-error=card.isError
                   clickable=(if this.cardCrudFunctions.viewCard true false)
-                  fallback=(eq card.hasHtml false)
+                  fallback=(this.shouldRenderFallback card)
                 }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
@@ -104,12 +116,14 @@ export default class CardList extends Component<Signature> {
                 tabindex={{if this.cardCrudFunctions.viewCard '0'}}
                 {{on 'click' (fn this.handleCardClick card.url)}}
               >
-                {{#if (eq card.hasHtml false)}}
+                {{#if (this.shouldRenderFallback card)}}
                   {{! CS-11171: file rows whose prerender produced no HTML
                       (currently `.gts`/`.ts` FileDef rows) — render a name
                       so the row is at least visible and the click handler on
                       this `<li>` can still route the user into interact-mode
-                      (and from there into Code Mode via the kebab menu). }}
+                      (and from there into Code Mode via the kebab menu).
+                      Error rows are excluded so PrerenderedCard's dedicated
+                      error component still gets rendered for them. }}
                   <div class='card-fallback' data-test-card-fallback>
                     <FileIcon class='card-fallback__icon' role='presentation' />
                     <div class='card-fallback__name'>

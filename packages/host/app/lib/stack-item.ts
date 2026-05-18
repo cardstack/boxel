@@ -109,11 +109,16 @@ export class StackItem {
       lastInteractedAt,
     } = args;
 
-    this.#id = id.replace(/\.json$/, '');
+    this.type = inferStackItemType(type);
+    // CardDef instance ids are stored without a `.json` extension, so the
+    // strip sanitizes inputs that erroneously include one. FileDef rows are
+    // a different story — their canonical URL keeps the extension
+    // (`*.json` for JsonFileDef, `*.md` for MarkdownDef, etc.) and stripping
+    // would lose the identity of `.json` FileDef rows in the store.
+    this.#id = this.type === 'file' ? id : id.replace(/\.json$/, '');
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
-    this.type = inferStackItemType(type);
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
     this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;

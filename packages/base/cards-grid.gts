@@ -112,6 +112,12 @@ class Isolated extends Component<typeof CardsGrid> {
   @tracked private activeViewId: ViewOption['id'] = this.viewOptions[1].id;
   @tracked private activeFilter!: FilterOption;
   @tracked private activeSort: SortOption = this.sortOptions[0];
+  // Tracked separately from `fileTypeFilters.length` so the All Files
+  // group still appears when the only file summaries the realm has are
+  // bare `FileDef` rows (we exclude those from the leaf list to avoid
+  // duplicating the group's own root). Without this, a realm that only
+  // contains binary/unmapped files would silently hide the entire group.
+  @tracked private hasAnyFileSummary = false;
 
   #unsubscribeFromRealm: (() => void) | undefined;
   #subscribedRealm: string | undefined;
@@ -198,7 +204,7 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
-  // Derived from tracked state — `isPersonalRealm` and `fileTypeFilters.length`
+  // Derived from tracked state — `isPersonalRealm` and `hasAnyFileSummary`
   // are the only deps that change the visible group set. We avoid the
   // previous `splice + push` approach because mutating a `TrackedArray`
   // during the component constructor (which runs mid-render) fires Glimmer's
@@ -212,11 +218,13 @@ class Isolated extends Component<typeof CardsGrid> {
       options.push(this.highlightFilter);
     }
     options.push(this.allCardsFilter);
-    // Hide the All Files group when the realm has no file rows — matches the
-    // "empty groups: hide" decision in the Linear plan. Reading `.length` on
-    // a TrackedArray sets up a dep so this getter re-runs once
-    // `loadFilterList` finishes its first push into `fileTypeFilters`.
-    if (this.fileTypeFilters.length > 0) {
+    // Hide the All Files group only when the realm has no file rows at all
+    // — matches the "empty groups: hide" decision in the Linear plan. We
+    // can't use `fileTypeFilters.length > 0` here because bare `FileDef`
+    // rows are intentionally excluded from the leaf list (they would be a
+    // duplicate of the group itself), so a realm with only bare FileDef
+    // files would otherwise lose the entire group.
+    if (this.hasAnyFileSummary) {
       options.push(this.allFilesFilter);
     }
     return options;
@@ -349,6 +357,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
     this.fileTypeFilters.splice(0, this.fileTypeFilters.length);
+    let sawFileSummary = false;
 
     cardTypeSummaries.forEach((summary) => {
       if (!summary.id) {
@@ -360,6 +369,11 @@ class Isolated extends Component<typeof CardsGrid> {
       }
       let kind = summary.attributes.kind ?? 'instance';
       if (kind === 'file') {
+        // Even when the only file summary is the bare-FileDef root (which
+        // we exclude from the leaf list), we still want the All Files
+        // group to appear in the sidebar — otherwise the user has no way
+        // to reach those files. Flip this flag before the leaf-list gate.
+        sawFileSummary = true;
         if (excludedFileTypeIds.includes(summary.id)) {
           return;
         }
@@ -387,6 +401,8 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    this.hasAnyFileSummary = sawFileSummary;
 
     // `filterOptions` is a @cached getter that derives the group list from
     // tracked state — `fileTypeFilters.length` changing here causes it to
