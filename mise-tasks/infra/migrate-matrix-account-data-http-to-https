@@ -16,4 +16,9 @@
 
 set -euo pipefail
 
+# The migration speaks to synapse over HTTP. Start it if it isn't already
+# running so a dev who hasn't run `pnpm start:all` yet doesn't see the
+# fetch fail with ECONNREFUSED on the very first request.
+pnpm assert-synapse-running
+
 pnpm migrate-account-data-http-to-https

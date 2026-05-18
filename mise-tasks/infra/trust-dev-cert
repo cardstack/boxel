@@ -67,6 +67,29 @@ if command -v certutil >/dev/null 2>&1; then
   fi
 fi
 
+# Firefox holds an exclusive lock on its NSS DB while it's running.
+# `mkcert -install` then fails with
+#   certutil: SEC_ERROR_READ_ONLY: security library: read-only database.
+# and exits 255 — aborting the whole script under `set -e` even though
+# the system-store install would have succeeded. Catch this up front so
+# the dev gets a clear "close Firefox and retry" message instead of a
+# cryptic certutil failure.
+if pgrep -i -x firefox >/dev/null 2>&1 \
+  || pgrep -i -x firefox-bin >/dev/null 2>&1 \
+  || pgrep -i -f 'Firefox\.app/Contents/MacOS/firefox' >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[trust-dev-cert] Firefox is currently running. `mkcert -install` cannot
+write the root CA into Firefox's NSS database while Firefox holds the
+profile lock — it fails with SEC_ERROR_READ_ONLY and aborts.
+
+Quit Firefox (all windows, including dev-edition), then re-run:
+
+  mise run infra:trust-dev-cert
+
+EOF
+  exit 1
+fi
+
 echo "[trust-dev-cert] Running mkcert -install (will prompt for sudo)"
 mkcert -install
 echo "[trust-dev-cert] Done. Re-run \`mise run dev-all\` to start the dev stack."
