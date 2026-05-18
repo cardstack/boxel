@@ -55,7 +55,18 @@ export interface IncrementalDoneResult extends IncrementalResult {
   clientRequestId: string | null;
 }
 
-export type FromScratchArgs = WorkerArgs;
+export interface FromScratchArgs extends WorkerArgs {
+  // True when the caller cleared `boxel_index.last_modified` for the
+  // realm before publishing. The worker doesn't need to act on this
+  // (the clear already happened in the DB) — it's surfaced in args
+  // so the coalesce decision can refuse to attach a clearing publish
+  // to an already-running same-realm from-scratch whose
+  // `Batch.getModifiedTimes` snapshot pre-dates the clear, which would
+  // otherwise let the running job report success without re-rendering
+  // the swapped files. Always present (non-optional) so the args
+  // object satisfies WorkerArgs's JSON-shape index signature.
+  clearLastModified: boolean;
+}
 
 export interface FromScratchResult extends JSONTypes.Object {
   invalidations: string[];
@@ -239,29 +250,59 @@ function chooseIncrementalCoalesceDecision(
 function chooseFromScratchCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
+  let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
-  if (!sameTypeCandidate) {
-    return { type: 'insert' };
+  if (sameTypeCandidate) {
+    return {
+      type: 'join',
+      jobId: sameTypeCandidate.id,
+      update: {
+        ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        args: {
+          ...(isObjectLike(sameTypeCandidate.args)
+            ? sameTypeCandidate.args
+            : {}),
+          ...(isObjectLike(incoming.args) ? incoming.args : {}),
+          coalescedCallers: mergeCoalescedCallers(
+            getCoalescedCallers(sameTypeCandidate.args),
+            getCoalescedCallers(incoming.args),
+          ),
+        },
+      },
+    };
   }
 
-  return {
-    type: 'join',
-    jobId: sameTypeCandidate.id,
-    update: {
-      ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
-      args: {
-        ...(isObjectLike(sameTypeCandidate.args) ? sameTypeCandidate.args : {}),
-        ...(isObjectLike(incoming.args) ? incoming.args : {}),
-        coalescedCallers: mergeCoalescedCallers(
-          getCoalescedCallers(sameTypeCandidate.args),
-          getCoalescedCallers(incoming.args),
-        ),
-      },
-    },
-  };
+  // No still-pending candidate. Attach to an in-flight same-realm
+  // from-scratch instead — same concurrency group + same jobType is
+  // sufficient because a from-scratch reindex subsumes any other
+  // from-scratch for that realm by definition. Without this fallback,
+  // a worker claiming the first enqueue between two pre-claim publishes
+  // forces the second to insert a fresh row at its own priority, even
+  // though the in-flight job will produce exactly the result the second
+  // caller wanted.
+  //
+  // Exception: a publish carrying `clearLastModified: true` has already
+  // nulled `boxel_index.last_modified` for the realm so the next
+  // from-scratch pass re-renders every row even where mtimes didn't
+  // change. An already-running from-scratch read its mtimes snapshot
+  // before that clear, so attaching this publish to it would let the
+  // caller observe a successful job that did NOT actually re-render
+  // the swapped files. Force a fresh row instead.
+  if (!incomingClearsLastModified(incoming.args)) {
+    for (let candidate of inFlightCandidates) {
+      if (candidate.jobType === incoming.jobType) {
+        return { type: 'join', jobId: candidate.id };
+      }
+    }
+  }
+
+  return { type: 'insert' };
+}
+
+function incomingClearsLastModified(args: unknown): boolean {
+  return isObjectLike(args) && args.clearLastModified === true;
 }
 
 registerQueueJobDefinition({
