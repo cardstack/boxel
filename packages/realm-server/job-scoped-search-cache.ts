@@ -127,18 +127,27 @@ export class JobScopedSearchCache {
     let innerKey = buildInnerKey(args.realms, args.query, args.opts);
     let jobMap = this.#byJob.get(args.jobId);
     let existing = jobMap?.get(innerKey);
+    if (existing) {
+      // A hit implies a prior store, which must have allocated the
+      // jobId's stats entry — but be defensive in case a hand-rolled
+      // test ever pre-seeds entries without going through populate.
+      let stat = this.#stats.get(args.jobId);
+      if (stat) stat.hits += 1;
+      return existing.result as T;
+    }
+
+    let result = await args.populate();
+    // Count the miss only after populate resolves. If populate throws
+    // we count nothing — the call is observationally equivalent to
+    // "never happened" from the cache's perspective, and we avoid
+    // leaking a `#stats` entry for a jobId that never produced a
+    // cache entry whose eviction would clear it.
     let stat = this.#stats.get(args.jobId);
     if (!stat) {
       stat = { hits: 0, misses: 0 };
       this.#stats.set(args.jobId, stat);
     }
-    if (existing) {
-      stat.hits += 1;
-      return existing.result as T;
-    }
     stat.misses += 1;
-
-    let result = await args.populate();
 
     // Late-arriving check: the populate may have just settled while a
     // peer's populate (same key) also settled and stored its result
@@ -181,6 +190,7 @@ export class JobScopedSearchCache {
         jm!.delete(slot.innerKey);
         if (jm!.size === 0) {
           this.#byJob.delete(slot.jobId);
+          this.#flushStats(slot.jobId, 'cap-evicted');
         }
       }
     }
@@ -201,21 +211,7 @@ export class JobScopedSearchCache {
       jm.delete(innerKey);
       if (jm.size === 0) {
         this.#byJob.delete(jobId);
-        // The last entry for this job has TTL-evicted — surface
-        // accumulated hit/miss stats so operators can tell whether
-        // the cache was doing work for the batch. Stats are cleared
-        // alongside the entry map so a subsequent job reuse of the
-        // same jobId (rare; jobIds are monotonic) starts fresh.
-        let stat = this.#stats.get(jobId);
-        if (stat) {
-          let total = stat.hits + stat.misses;
-          let hitRate =
-            total === 0 ? '0%' : `${Math.round((100 * stat.hits) / total)}%`;
-          log.debug(
-            `job-scoped search cache stats job=${jobId} hits=${stat.hits} misses=${stat.misses} hitRate=${hitRate} (TTL-evicted)`,
-          );
-          this.#stats.delete(jobId);
-        }
+        this.#flushStats(jobId, 'TTL-evicted');
       }
     }
   }
@@ -224,24 +220,32 @@ export class JobScopedSearchCache {
   // eviction path so the cache releases memory as soon as the worker
   // signals job completion, rather than waiting on TTL.
   clearJob(jobId: string): void {
-    let stat = this.#stats.get(jobId);
     let jobMap = this.#byJob.get(jobId);
     let entries = jobMap?.size ?? 0;
-    if (stat) {
-      let total = stat.hits + stat.misses;
-      let hitRate =
-        total === 0 ? '0%' : `${Math.round((100 * stat.hits) / total)}%`;
-      log.debug(
-        `job-scoped search cache stats job=${jobId} hits=${stat.hits} misses=${stat.misses} hitRate=${hitRate} entries=${entries}`,
-      );
-      this.#stats.delete(jobId);
-    }
+    this.#flushStats(jobId, `clearJob entries=${entries}`);
     if (!jobMap) return;
     for (let entry of jobMap.values()) {
       clearTimeout(entry.timer);
       this.#fifo.delete(entry.fifoSeq);
     }
     this.#byJob.delete(jobId);
+  }
+
+  // Single sink for the once-per-job stats log. Called from every
+  // path that can leave a jobId with no remaining cache entries —
+  // TTL eviction, cap eviction, and clearJob. The stats map's entry
+  // is dropped in lockstep so a subsequent jobId reuse (rare, since
+  // jobIds are monotonic) starts fresh.
+  #flushStats(jobId: string, reason: string): void {
+    let stat = this.#stats.get(jobId);
+    if (!stat) return;
+    let total = stat.hits + stat.misses;
+    let hitRate =
+      total === 0 ? '0%' : `${Math.round((100 * stat.hits) / total)}%`;
+    log.debug(
+      `job-scoped search cache stats job=${jobId} hits=${stat.hits} misses=${stat.misses} hitRate=${hitRate} (${reason})`,
+    );
+    this.#stats.delete(jobId);
   }
 
   // Total entry count across all jobs. Useful for tests + observability.
