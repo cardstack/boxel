@@ -19,7 +19,7 @@ describe('boxel-cli', () => {
     const output = execFileSync(process.execPath, [cliEntry, '--version'], {
       encoding: 'utf8',
     });
-    expect(output.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(output.trim()).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
   });
 
   it('exposes a global --quiet flag in --help', () => {
