@@ -86,6 +86,14 @@ export class PrerenderedCard implements PrerenderedCardLike {
   get usedRenderType(): ResolvedCodeRef | undefined {
     return this.data.usedRenderType;
   }
+  // True iff the prerender pipeline produced HTML for this row. Currently
+  // false for executable-module FileDef rows (`.gts`/`.ts`) because the
+  // fused visit skips the FileRender pass when `isModule` is true — see
+  // CS-11171. CardList consults this to render a filename fallback so the
+  // user can still see and click the row through to interact-mode.
+  get hasHtml(): boolean {
+    return typeof this.data.html === 'string' && this.data.html.length > 0;
+  }
 }
 function getErrorComponent(realmURL: string, url: string) {
   let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
