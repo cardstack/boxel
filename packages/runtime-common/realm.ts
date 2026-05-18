@@ -683,7 +683,7 @@ export class Realm {
   // caller's promise instead of running babel again. Invalidation paths
   // (writeMany, invalidateCache, the full-index clear, etc.) drop the
   // entry through the shared #dropTranspiledModuleEntry /
-  // #dropAllTranspiledDefinitionCacheEntries helpers so post-invalidate callers don't
+  // #dropAllTranspiledModuleCacheEntries helpers so post-invalidate callers don't
   // join a stale transpile whose #transpiledModuleCache.set will be discarded by
   // CS-11028's generation guard anyway. Identity-checked cleanup on
   // settle is the same shape as CachingDefinitionLookup's #inFlight — a
@@ -1071,7 +1071,7 @@ export class Realm {
 
     let completed = indexingCompleted.then(async ({ invalidations }) => {
       await this.#definitionLookup.clearRealmDefinitions(this.url);
-      this.#dropAllTranspiledDefinitionCacheEntries();
+      this.#dropAllTranspiledModuleCacheEntries();
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1383,7 +1383,7 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#dropAllTranspiledDefinitionCacheEntries();
+    this.#dropAllTranspiledModuleCacheEntries();
     // Reset the transpile counter so each test reasons about its own
     // delta. Production never reads this counter — only the CS-11029
     // dedup tests do (CS-11029).
@@ -1402,12 +1402,14 @@ export class Realm {
   // handler's vantage point. Different from `__testOnlyClearCaches`
   // in that it does NOT reset the transpile counter (which is
   // test-only diagnostic state, unrelated to byte-correctness).
-  // CS-11156 will replace the publish handler's local call here with
-  // a cross-replica NOTIFY broadcast; this method stays as the
-  // bulk-invalidate primitive the receiver invokes.
+  // CS-11156: this is the local bulk-invalidate primitive that both the
+  // publish-realm handler and the cross-replica `realm_file_changes:*`
+  // listener invoke. The publish handler reaches it via
+  // `clearLocalSourceCachesAndBroadcast` (local clear + peer broadcast);
+  // the listener invokes it directly (no broadcast — would NOTIFY-loop).
   clearLocalSourceCaches(): void {
     this.#sourceCache.clear();
-    this.#dropAllTranspiledDefinitionCacheEntries();
+    this.#dropAllTranspiledModuleCacheEntries();
   }
 
   // CS-11029 test seams: tests need to assert "N concurrent same-path
@@ -1482,7 +1484,7 @@ export class Realm {
   // just-cleared map (CS-11028). The per-path map is cleared because the
   // generations it held are no longer reachable — the global counter is
   // what catches in-flight snapshots after a wipe.
-  #dropAllTranspiledDefinitionCacheEntries(): void {
+  #dropAllTranspiledModuleCacheEntries(): void {
     this.#transpiledModuleCache.clear();
     this.#transpiledModuleCacheGenerations.clear();
     this.#transpiledModuleCacheGlobalGeneration += 1;

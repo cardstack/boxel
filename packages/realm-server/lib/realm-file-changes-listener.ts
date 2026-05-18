@@ -96,16 +96,16 @@ export class RealmFileChangesListener {
       // Not mounted on this instance — nothing to invalidate.
       return;
     }
+    const isWildcard = parsed.path === REALM_FILE_CHANGES_WILDCARD;
     try {
-      if (parsed.path === REALM_FILE_CHANGES_WILDCARD) {
+      if (isWildcard) {
         realm.clearLocalSourceCaches();
       } else {
         realm.invalidateCache(parsed.path);
       }
     } catch (err: unknown) {
-      log.warn(
-        `invalidateCache failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
-      );
+      const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';
+      log.warn(`${op} failed for ${parsed.url} ${parsed.path}: ${String(err)}`);
     }
   }
 }
