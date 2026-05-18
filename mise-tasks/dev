@@ -23,12 +23,21 @@ cleanup() {
   sweep_orphaned_services
   echo "[dev] All dev-stack processes stopped."
 }
+# Signal-driven shutdown path (Ctrl-C, parent dying): run cleanup, then exit
+# 0. Without the explicit `exit 0`, control returns to `wait "$SAT_PID"`
+# below, which then reports the 143/130 from the signalled child as the
+# script's exit status — surfacing in mise as a spurious task failure.
+on_shutdown_signal() {
+  cleanup
+  exit 0
+}
 # HUP is required: when the user hits Ctrl-C in a terminal running `mise run
 # dev`, mise often exits without forwarding SIGINT to this bash script, and
 # bash then receives SIGHUP from the dying parent. Bash's default action on
 # an untrapped SIGHUP is to terminate *without* running the EXIT trap, so
 # without `HUP` here the cleanup never fires and the entire subtree leaks.
-trap cleanup EXIT INT TERM HUP
+trap cleanup EXIT
+trap on_shutdown_signal INT TERM HUP
 
 WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \

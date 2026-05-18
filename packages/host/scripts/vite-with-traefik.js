@@ -25,13 +25,44 @@ function runVite({ subcommand, port, allHosts, extraEnv, nodeMemory }) {
   if (nodeMemory) {
     env.NODE_OPTIONS = process.env.NODE_OPTIONS || '--max-old-space-size=8192';
   }
+  // Detach vite's stdin from the parent TTY. Vite's `bindCLIShortcuts`
+  // opens a readline.createInterface({ input: process.stdin }) without an
+  // 'error' handler whenever stdin is a TTY. When the user hits Ctrl-C in
+  // a `mise dev` / `mise dev-all` session, the TTY tears down underneath
+  // that readline and Node emits an unhandled 'error' event (read EIO),
+  // which crashes vite with a noisy stack trace just before shutdown.
+  // Setting stdin to 'ignore' makes process.stdin.isTTY false, so the
+  // shortcuts feature is skipped — we don't use it from `pnpm start`
+  // anyway since stdin is piped through pnpm/run-p wrappers that swallow
+  // keypresses before they reach vite.
   const child = spawn('npx', args, {
-    stdio: 'inherit',
+    stdio: ['ignore', 'inherit', 'inherit'],
     cwd: path.join(__dirname, '..'),
     shell: true,
     env,
   });
-  child.on('exit', (code) => process.exit(code || 0));
+
+  // Forward SIGTERM/SIGINT from the orchestrator to vite and translate the
+  // signal-induced exit into a clean 0. Without this, `pnpm start` exits
+  // non-zero on Ctrl-C and pnpm prints `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL]`.
+  const forward = (signal) => {
+    if (!child.killed) {
+      try {
+        child.kill(signal);
+      } catch (_) {
+        /* child already gone */
+      }
+    }
+  };
+  process.on('SIGTERM', () => forward('SIGTERM'));
+  process.on('SIGINT', () => forward('SIGINT'));
+
+  child.on('exit', (code, signal) => {
+    if (signal === 'SIGTERM' || signal === 'SIGINT') {
+      process.exit(0);
+    }
+    process.exit(code || 0);
+  });
   return child;
 }
 

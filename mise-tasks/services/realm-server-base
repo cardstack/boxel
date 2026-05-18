@@ -3,6 +3,11 @@
 #MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly ./scripts/matrix-registration-secret.ts)
   export MATRIX_REGISTRATION_SHARED_SECRET
