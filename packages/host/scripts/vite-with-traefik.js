@@ -17,6 +17,7 @@
  * instead of failing with `ERR_CONNECTION_REFUSED`.
  */
 
+require('./wtfnode-on-signal');
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -59,10 +60,29 @@ function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
     env,
   });
 
-  // Forward SIGTERM/SIGINT from the orchestrator to vite and translate the
-  // signal-induced exit into a clean 0. Without this, `pnpm start` exits
-  // non-zero on Ctrl-C and pnpm prints `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL]`.
-  const forward = (signal) => {
+  // Forward SIGTERM/SIGINT/SIGHUP to the vite child, then exit immediately
+  // with code 0. Two reasons we don't wait for the child:
+  //
+  //   1. The dev orchestrator gives the process group ~2s of SIGTERM grace
+  //      before SIGKILL'ing stragglers (see PGROUP_GRACE_SECS in
+  //      mise-tasks/lib/dev-common.sh). If we wait longer than that for our
+  //      child to exit, the orchestrator SIGKILLs us mid-wait — pnpm then
+  //      reports our death as `Command failed with signal "SIGTERM"` (the
+  //      original signal it saw us receive) and the wrapper layers above
+  //      print `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL]`. Exiting in the same
+  //      tick guarantees pnpm reads waitpid as a clean exit-code-0.
+  //   2. `npx` doesn't reliably propagate forwarded signals to the real
+  //      vite process, so waiting on `child.on('exit')` can hang forever.
+  //      The orchestrator's `sweep_orphaned_services` is the safety net
+  //      that catches the abandoned vite grandchild after we've left.
+  let exited = false;
+  const exitOnce = (code) => {
+    if (!exited) {
+      exited = true;
+      process.exit(code);
+    }
+  };
+  const shutdown = (signal) => {
     if (!child.killed) {
       try {
         child.kill(signal);
@@ -70,13 +90,16 @@ function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
         /* child already gone */
       }
     }
+    exitOnce(0);
   };
-  process.on('SIGTERM', () => forward('SIGTERM'));
-  process.on('SIGINT', () => forward('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGHUP', () => shutdown('SIGHUP'));
 
   child.on('exit', (code, signal) => {
-    if (signal === 'SIGTERM' || signal === 'SIGINT') {
-      process.exit(0);
+    if (signal === 'SIGTERM' || signal === 'SIGINT' || signal === 'SIGHUP') {
+      exitOnce(0);
+      return;
     }
     if (signal) {
       // vite died from another signal (e.g. SIGKILL, SIGSEGV, SIGABRT) —
@@ -84,9 +107,10 @@ function runVite({ subcommand, port, allHosts, host, extraEnv, nodeMemory }) {
       // the crash instead of treating it as a clean shutdown. 128 + signum
       // is the POSIX convention shells use for signal-induced exits.
       const signum = require('os').constants.signals[signal] || 0;
-      process.exit(128 + signum);
+      exitOnce(128 + signum);
+      return;
     }
-    process.exit(code || 0);
+    exitOnce(code || 0);
   });
   return child;
 }

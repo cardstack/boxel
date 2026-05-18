@@ -191,7 +191,8 @@
     "typescript": "catalog:",
     "uuid": "catalog:",
     "vite": "^8.0.8",
-    "wait-for-localhost-cli": "catalog:"
+    "wait-for-localhost-cli": "catalog:",
+    "wtfnode": "^0.10.1"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",

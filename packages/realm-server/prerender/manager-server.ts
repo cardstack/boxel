@@ -1,5 +1,6 @@
 import '../instrument';
 import '../setup-logger';
+import '../lib/wtfnode-on-signal';
 import { logger } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import { createServer } from 'http';

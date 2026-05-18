@@ -1,5 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
 import {
   Realm,
   VirtualNetwork,
@@ -516,12 +517,27 @@ const getIndexHTML = async () => {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }
   });
+  let stopping = false;
   let stopRealmServer = (notifyParent = false) => {
+    if (stopping) return;
+    stopping = true;
     let stopPort =
       (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
     console.log(`stopping realm server on port ${stopPort}...`);
     if (isEnvironmentMode()) {
       deregisterEnvironment();
+    }
+    // Close per-realm file watchers (sane → fs.watch) on shutdown.
+    // Each mounted Realm owns a NodeAdapter watcher that holds FSWatcher
+    // handles open; leaving them pins the event loop and prevents the
+    // process from exiting naturally. Safe to run before httpServer.close
+    // — watchers only feed cache invalidation, not request serving.
+    for (let r of realms) {
+      try {
+        r.unsubscribe();
+      } catch (err) {
+        console.error(`error unsubscribing realm ${r.url}:`, err);
+      }
     }
     // Both the plain `http.Server` and the TLS-mode `net.Server`
     // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
@@ -552,6 +568,13 @@ const getIndexHTML = async () => {
       });
     });
   };
+  // SIGTERM/SIGINT take the same shutdown path as the IPC `stop`
+  // message, so process-group sweeps from `mise dev` and equivalent
+  // orchestrators trigger graceful cleanup (close httpServer, unsubscribe
+  // realm watchers, drain queue + DB) instead of leaking the open
+  // handles into a SIGKILL escalation.
+  process.on('SIGTERM', () => stopRealmServer(false));
+  process.on('SIGINT', () => stopRealmServer(false));
   process.on('message', (message) => {
     if (message === 'stop') {
       stopRealmServer(true);
