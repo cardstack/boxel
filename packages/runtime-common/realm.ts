@@ -1517,7 +1517,10 @@ export class Realm {
     global: number;
   } {
     let pathGens = new Map<LocalPath, number>();
-    pathGens.set(localPath, this.#transpiledModuleCacheGenerations.get(localPath) ?? 0);
+    pathGens.set(
+      localPath,
+      this.#transpiledModuleCacheGenerations.get(localPath) ?? 0,
+    );
     if (!hasExecutableExtension(localPath)) {
       for (let ext of executableExtensions) {
         let candidate = localPath + ext;

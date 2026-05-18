@@ -16,7 +16,9 @@ type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 
 interface DependencyResolverOptions {
   realmURL: URL;
-  readDefinitionCacheEntries(moduleIds: string[]): Promise<DefinitionCacheEntries>;
+  readDefinitionCacheEntries(
+    moduleIds: string[],
+  ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   // Slim projection (url, type, deps only) used by invalidation ordering.
   // Selection priority is applied server-side; see IndexWriter.

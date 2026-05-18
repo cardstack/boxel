@@ -11,14 +11,18 @@ import {
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
-  readDefinitionCacheEntries(moduleIds: string[]): Promise<DefinitionCacheEntries>;
+  readDefinitionCacheEntries(
+    moduleIds: string[],
+  ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   getInvalidations(): string[];
 }
 
 export class IndexBackedDependencyErrors {
   #realmURL: URL;
-  #readDefinitionCacheEntries: (moduleIds: string[]) => Promise<DefinitionCacheEntries>;
+  #readDefinitionCacheEntries: (
+    moduleIds: string[],
+  ) => Promise<DefinitionCacheEntries>;
   #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
   #getInvalidations: () => string[];
   #relationshipDependencyRows = new Map<string, DependencyIndexRow[]>();

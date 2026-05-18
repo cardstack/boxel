@@ -272,7 +272,9 @@ export interface DefinitionLookup {
   clearAllDefinitions(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
-  getCachedDefinitions(moduleUrl: string): Promise<DefinitionCacheEntry | undefined>;
+  getCachedDefinitions(
+    moduleUrl: string,
+  ): Promise<DefinitionCacheEntry | undefined>;
   getCachedDefinitionsBatch(
     query: DefinitionCacheEntryQuery,
   ): Promise<DefinitionCacheEntries>;
@@ -434,8 +436,12 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //     runs the prerender and persist directly. This is the path
     //     used by every test that doesn't construct a coordinator and
     //     by sqlite/in-memory deployments.
-    let core: Promise<DefinitionCacheEntry | undefined> = this.#populateCoordinator
-      ? this.loadDefinitionCacheEntryCoordinated(args, this.#populateCoordinator)
+    let core: Promise<DefinitionCacheEntry | undefined> = this
+      .#populateCoordinator
+      ? this.loadDefinitionCacheEntryCoordinated(
+          args,
+          this.#populateCoordinator,
+        )
       : this.loadDefinitionCacheEntryUncached(args);
     pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
