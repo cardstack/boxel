@@ -479,15 +479,18 @@ function buildCardJsonEtag(
 // list of validators, and individual entries may be weak (`W/`-
 // prefixed). For GET we don't distinguish weak vs. strong (spec
 // says weak comparison is fine for non-range requests), so strip
-// the `W/` prefix and compare the bare quoted value to our ETag.
-function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
+// the `W/` prefix on *both* sides and compare the bare quoted
+// values — a server-emitted weak ETag must still match an echoed
+// `If-None-Match: W/"..."` from the client.
+export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   let value = headerValue.trim();
   if (value === '*') {
     return true;
   }
+  let normalizedEtag = etag.replace(/^W\//, '');
   return value
     .split(',')
-    .some((token) => token.trim().replace(/^W\//, '') === etag);
+    .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
 function computeContentHash(content: string | Uint8Array): string {

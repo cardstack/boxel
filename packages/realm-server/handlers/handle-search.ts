@@ -2,6 +2,7 @@ import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
   DURING_PRERENDER_HEADER,
+  ifNoneMatchMatches,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
   parseSearchQueryFromPayload,
@@ -111,16 +112,58 @@ export default function handleSearch(opts?: {
       : null;
     let cacheable = searchCache && jobId && consumingRealm;
 
-    let body = cacheable
-      ? await searchCache!.getOrPopulate({
+    if (cacheable) {
+      // ETag is opaque-but-deterministic over (jobId, innerKey).
+      // Same `(jobId, realms, query, opts)` always yields the same
+      // value for an entry's lifetime; a different jobId yields a
+      // different value so a stale If-None-Match from a previous
+      // batch never matches a fresh entry. Only emitted to / honored
+      // from cacheable callers — non-indexer traffic bypasses the
+      // cache and ETag protocol entirely, same gate as today.
+      let expectedEtag = searchCache!.computeETag({
+        jobId: jobId!,
+        realms: realmList,
+        query: cardsQuery,
+        opts: searchOpts,
+      });
+      let ifNoneMatch = ctxt.get('If-None-Match');
+      if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
+        // Only honor 304 when the cache still has the body — a
+        // TTL-evicted slot whose ETag the caller happens to remember
+        // must fall through and re-populate, otherwise a follow-up
+        // request would find nothing to revalidate against.
+        let cached = searchCache!.peek({
           jobId: jobId!,
           realms: realmList,
           query: cardsQuery,
           opts: searchOpts,
-          populate: runSearch,
-        })
-      : await runSearch();
+        });
+        if (cached !== undefined) {
+          ctxt.status = 304;
+          ctxt.set('ETag', expectedEtag);
+          return;
+        }
+      }
+      let body = await searchCache!.getOrPopulate({
+        jobId: jobId!,
+        realms: realmList,
+        query: cardsQuery,
+        opts: searchOpts,
+        populate: runSearch,
+      });
+      await setContextResponse(
+        ctxt,
+        new Response(body, {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            ETag: expectedEtag,
+          },
+        }),
+      );
+      return;
+    }
 
+    let body = await runSearch();
     await setContextResponse(
       ctxt,
       new Response(body, {

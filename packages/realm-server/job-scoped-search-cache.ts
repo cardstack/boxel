@@ -4,17 +4,19 @@ import {
   sortKeysDeep,
   type Query,
 } from '@cardstack/runtime-common';
+import { md5 } from 'super-fast-md5';
 
 const log = logger('job-scoped-search-cache');
 
 // Default entry TTL. Picked to comfortably outlive a single indexing
-// batch (workers cap from-scratch jobs at 6 min, incremental jobs are
-// shorter) while bounding the worst case where a job ends without a
-// NOTIFY-driven eviction reaching this process — a leaked entry persists
-// at most this long. Cross-job collision is impossible because the cache
-// key includes `jobId`, so a stale leak only hurts memory, never
-// correctness.
-const DEFAULT_TTL_MS = 10 * 60 * 1000;
+// batch — from-scratch reindexes of large realms can run for an hour
+// or more, so the TTL has to comfortably exceed that worst case while
+// bounding the leak window when a job ends without an explicit
+// eviction reaching this process. Cross-job collision is impossible
+// because the cache key includes `jobId` (the `<jobId>.<reservationId>`
+// composite, so a re-run of a failed job hashes to a different entry),
+// so a stale leak only hurts memory, never correctness.
+const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Hard cap on total entries across all jobs. When the cap is reached
 // the FIFO-oldest entry is evicted to make room. Cap exists to bound
@@ -265,6 +267,38 @@ export class JobScopedSearchCache {
 
   jobIds(): string[] {
     return [...this.#byJob.keys()];
+  }
+
+  // Look up the cached body without populating or touching stats.
+  // Used by the handler's 304 path to confirm the slot still exists
+  // before returning Not-Modified — otherwise an If-None-Match whose
+  // expected ETag matches a TTL-evicted slot would short-circuit to
+  // 304 with no body to back it up on a follow-up.
+  peek(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string | undefined {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return this.#byJob.get(args.jobId)?.get(innerKey)?.result;
+  }
+
+  // Job-id-based ETag. Same `(jobId, realms, query, opts)` always
+  // produces the same value for an entry's lifetime; a different
+  // jobId yields a different ETag so a stale If-None-Match from a
+  // previous batch never matches a fresh entry. Weak-form (`W/`)
+  // because the underlying body is pretty-printed JSON and we
+  // validate by recomputing-and-comparing, not by byte-exact match
+  // of the body itself.
+  computeETag(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return `W/"${args.jobId}-${md5(innerKey)}"`;
   }
 }
 
