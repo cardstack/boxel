@@ -69,6 +69,7 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
+  type LinkableCollectionDocument,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -88,6 +89,7 @@ import {
   duringPrerenderHeaders,
   jobIdHeader,
 } from '../lib/prerender-fetch-headers';
+import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
 import {
@@ -161,6 +163,14 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
+  // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
+  // calls during a prerender. Mirrors
+  // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
+  // `__boxelRenderContext` so live user searches stay uncoalesced —
+  // write-then-read freshness story unchanged outside prerender.
+  // Entries self-clear on `.finally()` via identity check.
+  private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
+    new Map();
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -208,6 +218,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.inflightSearch = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -216,6 +227,16 @@ export default class StoreService extends Service implements StoreInterface {
 
   async ensureSetupComplete(): Promise<void> {
     await this.ready;
+  }
+
+  // Drop every pending in-flight search entry. Callers awaiting an
+  // existing promise still get their answer (the underlying HTTP is
+  // already in motion); only *new* same-key callers after the drop
+  // miss the map and re-fetch. Wire this to anything the host
+  // recognizes as an invalidation boundary — render-route deactivate
+  // is the obvious one inside a prerender tab.
+  clearInFlightSearch(): void {
+    this.inflightSearch.clear();
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
@@ -230,6 +251,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.inflightSearch = new Map();
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -819,44 +841,7 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
-    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
-    // TODO remove this assertion after multi-realm server/federated identity is supported
-    this.realmServer.assertOwnRealmServer(realmServerURLs);
-    let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetchForRealms(
-      searchURL.href,
-      realms,
-      {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-          ...duringPrerenderHeaders(),
-          ...consumingRealmHeader(),
-          ...jobIdHeader(),
-        },
-        body: JSON.stringify({ ...query, realms }),
-      },
-    );
-    if (!response.ok) {
-      let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} - ${response.statusText}. ${responseText}`,
-      ) as any;
-      err.status = response.status;
-      err.responseText = responseText;
-      err.responseHeaders = response.headers;
-      throw err;
-    }
-    let json = await response.json();
-    if (!isLinkableCollectionDocument(json)) {
-      throw new Error(
-        `The realm search response was not a valid collection document:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-    let collectionDoc = json;
+    let collectionDoc = await this.fetchSearchDoc(query, realms);
 
     // Hydrate each result into the store
     let instances = (
@@ -888,6 +873,55 @@ export default class StoreService extends Service implements StoreInterface {
     resources: (CardResource<Saved> | FileMetaResource)[];
     meta: QueryResultsMeta;
   }> {
+    let doc = await this.fetchSearchDoc(query, realms);
+    return { resources: doc.data, meta: doc.meta };
+  }
+
+  // Shared HTTP+JSON path for both `fetchSearchData` (raw resources for
+  // data-only callers) and `fetchAndHydrateSearchResults` (instances
+  // hydrated into the store). Sits between `store.search` and
+  // `_federated-search`.
+  //
+  // Inside a prerender tab (`__boxelRenderContext === true`)
+  // concurrent same-(realms, query) callers share one in-flight
+  // promise. Outside a prerender, every caller runs uncoalesced so
+  // live-SPA write-then-read flows keep their current freshness
+  // semantics.
+  private async fetchSearchDoc(
+    query: Query,
+    realms: string[],
+  ): Promise<LinkableCollectionDocument> {
+    let key = (globalThis as any).__boxelRenderContext
+      ? searchInFlightKey(realms, query)
+      : undefined;
+    if (key !== undefined) {
+      let existing = this.inflightSearch.get(key);
+      if (existing) {
+        return await existing;
+      }
+      let pending = this.fetchSearchDocUncoalesced(query, realms).finally(
+        () => {
+          // Identity-check before deletion: a concurrent
+          // `clearInFlightSearch()` could in principle have removed
+          // (and a later caller re-set) this slot while we were
+          // in-flight. Only clean up if the map still points at *this*
+          // pending promise. Mirrors
+          // `RealmIndexQueryEngine.searchCards` server-side.
+          if (this.inflightSearch.get(key) === pending) {
+            this.inflightSearch.delete(key);
+          }
+        },
+      );
+      this.inflightSearch.set(key, pending);
+      return await pending;
+    }
+    return await this.fetchSearchDocUncoalesced(query, realms);
+  }
+
+  private async fetchSearchDocUncoalesced(
+    query: Query,
+    realms: string[],
+  ): Promise<LinkableCollectionDocument> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -925,7 +959,7 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    return { resources: json.data, meta: json.meta };
+    return json;
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(

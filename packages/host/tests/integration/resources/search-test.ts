@@ -9,6 +9,7 @@ import type { Loader, Query } from '@cardstack/runtime-common';
 import {
   baseRealm,
   baseRRI,
+  Deferred,
   isFileDefInstance,
   type Realm,
   type LooseSingleCardDocument,
@@ -682,5 +683,177 @@ module(`Integration | search resource`, function (hooks) {
       ),
       'new file is a FileDef instance',
     );
+  });
+
+  module(`in-flight search dedup`, function (innerHooks) {
+    // Holds outbound `maybeAuthedFetchForRealms` calls until the test
+    // releases them, so we can deterministically assert that both
+    // concurrent callers entered the dedup before either fetch
+    // settled.
+    let releaseFetch: Deferred<void>;
+    let fetchCalls: number;
+    let restoreFetch: (() => void) | undefined;
+
+    innerHooks.beforeEach(function () {
+      releaseFetch = new Deferred<void>();
+      fetchCalls = 0;
+      let realmServer = getService('realm-server') as RealmServerService;
+      let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+      realmServer.maybeAuthedFetchForRealms = (async (...args) => {
+        fetchCalls++;
+        await releaseFetch.promise;
+        return await original(...args);
+      }) as RealmServerService['maybeAuthedFetchForRealms'];
+      restoreFetch = () => {
+        realmServer.maybeAuthedFetchForRealms = original;
+      };
+    });
+
+    innerHooks.afterEach(function () {
+      // Always release any held fetches so a failing test doesn't
+      // leak pending promises into the next test.
+      try {
+        releaseFetch.fulfill();
+      } catch {
+        // already settled
+      }
+      restoreFetch?.();
+      restoreFetch = undefined;
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = undefined;
+      storeService.clearInFlightSearch();
+    });
+
+    let bookQuery: Query = {
+      filter: {
+        on: {
+          module: testRRI('book'),
+          name: 'Book',
+        },
+        eq: { 'author.lastName': 'Jones' },
+      },
+    };
+
+    test(`concurrent same-key store.search calls share a single fetch when inside a prerender`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      let p2 = storeService.search(bookQuery, [testRealmURL]);
+
+      // Yield long enough for both calls to enter `fetchSearchDoc`
+      // and consult the in-flight map; both fetches (if any) are
+      // still parked on `releaseFetch.promise`.
+      await new Promise((r) => setTimeout(r, 10));
+
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        'second caller coalesces onto first in-flight fetch',
+      );
+
+      releaseFetch.fulfill();
+      let [r1, r2] = await Promise.all([p1, p2]);
+      assert.deepEqual(
+        (r1 as { id?: string }[]).map((i) => i.id ?? null),
+        (r2 as { id?: string }[]).map((i) => i.id ?? null),
+        'both callers receive the same resolved instances',
+      );
+    });
+
+    test(`concurrent same-key store.search calls do NOT coalesce outside a prerender`, async function (assert) {
+      // __boxelRenderContext stays unset — this is the live-SPA path
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      let p2 = storeService.search(bookQuery, [testRealmURL]);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'both callers fire their own fetch outside the prerender gate',
+      );
+
+      releaseFetch.fulfill();
+      await Promise.all([p1, p2]);
+    });
+
+    test(`different queries produce different keys and run independently inside a prerender`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+
+      let otherQuery: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: { 'author.lastName': 'Abdel-Rahman' },
+        },
+      };
+
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      let p2 = storeService.search(otherQuery, [testRealmURL]);
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'different filters do not coalesce even inside a prerender',
+      );
+
+      releaseFetch.fulfill();
+      await Promise.all([p1, p2]);
+    });
+
+    test(`sequential same-key calls fall through after the first resolves (in-flight only, no resolved-doc cache)`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+
+      // First call: release immediately so the map self-clears.
+      releaseFetch.fulfill();
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first call fetches once');
+
+      // Second call after the in-flight slot is empty: must re-fetch
+      // because this layer only dedups concurrent calls. The
+      // resolved-doc cache (sibling ticket) is what closes the
+      // sequential-repeat window.
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'sequential same-key call re-fetches after the first resolves',
+      );
+    });
+
+    test(`clearInFlightSearch drops pending entries so new same-key callers re-fetch`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      await new Promise((r) => setTimeout(r, 10));
+      assert.strictEqual(fetchCalls, 1, 'first fetch in-flight');
+
+      // Simulate an invalidation event (e.g. render-route deactivate).
+      storeService.clearInFlightSearch();
+
+      let p2 = storeService.search(bookQuery, [testRealmURL]);
+      await new Promise((r) => setTimeout(r, 10));
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'post-clear same-key caller fires a fresh fetch',
+      );
+
+      releaseFetch.fulfill();
+      await Promise.all([p1, p2]);
+    });
   });
 });

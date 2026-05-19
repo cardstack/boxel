@@ -154,6 +154,14 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
+    // Drop any pending `_federated-search` in-flight entries the
+    // render-context coalescer accumulated during this visit. Entries
+    // self-clear on settle, but a deactivate while one is still
+    // in-flight could otherwise let a same-key caller arriving in the
+    // next render coalesce onto a promise belonging to the previous
+    // visit. The window is small (typically <1s per search) but the
+    // cost of an explicit clear is also small.
+    this.store.clearInFlightSearch();
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
