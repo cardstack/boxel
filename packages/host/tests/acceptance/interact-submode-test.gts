@@ -681,8 +681,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom(fieldInput).isFocused();
 
       // Ctrl+E from inside the input flips edit→isolated without
-      // requiring the user to click out first.
-      await triggerKeyEvent(fieldInput, 'keydown', 'e', { ctrlKey: true });
+      // requiring the user to click out first. (Numeric keyCode 69
+      // because triggerKeyEvent rejects lowercase strings and the
+      // `ctrl+e` listener matches against `event.key`, which the
+      // helper derives as 'e' from keyCode 69.)
+      await triggerKeyEvent(fieldInput, 'keydown', 69, { ctrlKey: true });
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
@@ -702,8 +705,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('card starts in isolated/view mode');
 
       // Ctrl+E enters edit mode (bound on every platform — Mac too,
-      // because Cmd+E is reserved by browsers).
-      await triggerKeyEvent(document.body, 'keydown', 'e', {
+      // because Cmd+E is reserved by browsers). Numeric keyCode 69
+      // so the helper produces `event.key === 'e'` — the listener
+      // matches against `event.key`, not `event.code`.
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         ctrlKey: true,
       });
       assert
@@ -713,7 +718,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('Ctrl+E flipped the card into edit mode');
 
       // The toggle is symmetric — pressing again returns to isolated.
-      await triggerKeyEvent(document.body, 'keydown', 'e', {
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         ctrlKey: true,
       });
       assert
@@ -724,7 +729,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Cmd+E (metaKey) is intentionally NOT bound — it stays free for
       // the browser's "Use Selection for Find" shortcut on Mac.
-      await triggerKeyEvent(document.body, 'keydown', 'e', {
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         metaKey: true,
       });
       assert
