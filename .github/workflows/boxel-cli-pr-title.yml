@@ -1,7 +1,7 @@
 name: PR Title Check [boxel-cli]
 
 # Validates that PRs touching packages/boxel-cli/** use a conventional-commit
-# title (feat:, fix:, chore:, etc.). The boxel-cli-on-main.yml workflow reads
+# title (feat:, fix:, chore:, etc.). The boxel-cli-publish.yml workflow reads
 # the merged PR's title to decide the unstable version bump level, so this
 # check is the contract that keeps that flow working.
 #
@@ -30,7 +30,7 @@ jobs:
     steps:
       # Sparse-checkout just the one JSON file that is the single source of
       # truth for allowed conventional-commit prefixes. The post-merge
-      # workflow (boxel-cli-on-main.yml) reads the same file via
+      # workflow (boxel-cli-publish.yml) reads the same file via
       # compute-release.ts — keeps the pre-merge gate and post-merge
       # classifier in lockstep.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
