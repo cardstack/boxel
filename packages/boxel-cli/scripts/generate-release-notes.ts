@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Build the GitHub Release body (and a matching CHANGELOG.md fragment) for a
- * boxel-cli publish. Sources its bullet list from
- * `POST /repos/{owner}/{repo}/releases/generate-notes` so the content is the
- * same auto-generated grouping GitHub uses elsewhere — but we compose the
- * outer body ourselves to:
+ * boxel-cli publish. Sources its bullet list from path-filtered local git
+ * history (only commits that touched `packages/boxel-cli/`), then resolves
+ * each commit to its PR via `gh api` so the bullets carry the same
+ * `<title> by @<user> in <PR URL>` shape GitHub's auto-notes use. We compose
+ * the outer body ourselves to:
  *
  *   • call out npm and plugin versions in separate sub-sections (omitted when
  *     that surface didn't bump),
@@ -12,8 +13,8 @@
  *     125 KB; we target ~60 KB),
  *   • emit a dated CHANGELOG entry that mirrors the release body.
  *
- * Both the on-main (unstable) and manual-promotion (stable) workflows call
- * this script with the same shape; only PREV_TAG / NPM_DIST_TAG differ.
+ * Both the unstable per-merge and stable promotion jobs call this script with
+ * the same shape; only PREV_TAG / NPM_DIST_TAG differ.
  *
  * Inputs (all via env):
  *   PREV_TAG              e.g. boxel-cli-v0.1.5-unstable.6 (required)
@@ -70,32 +71,112 @@ function readInputs(): Inputs {
   };
 }
 
-function fetchAutoNotes(inputs: Inputs): string {
-  // gh CLI passes through to the REST endpoint that backs --generate-notes.
-  // Using `gh api` (rather than `gh release create --generate-notes`) lets us
-  // get the body without creating the release, so we can compose + truncate
-  // before handing the final body to `gh release create --notes-file`.
-  const args = [
-    'api',
-    `repos/${inputs.repo}/releases/generate-notes`,
-    '-f',
-    `tag_name=${inputs.newTag}`,
-    '-f',
-    `previous_tag_name=${inputs.prevTag}`,
-    '-f',
-    'target_commitish=main',
-    '--jq',
-    '.body',
-  ];
-  const out = execSync(`gh ${args.map(quoteShell).join(' ')}`, {
-    stdio: ['ignore', 'pipe', 'inherit'],
-  }).toString();
-  return out.trim();
+/**
+ * Dependencies that `buildFilteredNotes` needs to talk to the outside world.
+ * Tests substitute these with deterministic stubs so the unit tests don't
+ * shell out to git or gh.
+ */
+export interface Deps {
+  /** Run `git log <prev>..HEAD --pretty=…%H%x09%an%x09%s -- packages/boxel-cli/`. */
+  gitLogBoxelCli(prevTag: string): string;
+  /** Run `gh api repos/<repo>/commits/<sha>/pulls --jq '.[0]'`. Returns "" if no PR. */
+  ghPrForCommit(repo: string, sha: string): string;
+}
+
+const BOT_AUTHOR = 'github-actions[bot]';
+const BOXEL_CLI_PATH = 'packages/boxel-cli/';
+
+function repoRoot(): string {
+  return execSync('git rev-parse --show-toplevel').toString().trim();
+}
+
+const realDeps: Deps = {
+  gitLogBoxelCli(prevTag) {
+    // %x09 = TAB. Subject can contain anything, so it goes last.
+    // cwd is pinned to the repo root because the path filter is interpreted
+    // relative to the process cwd, and the workflow invokes this script from
+    // `packages/boxel-cli/` — without the cwd override the filter would
+    // resolve to `packages/boxel-cli/packages/boxel-cli/` (nothing).
+    return execSync(
+      `git log ${quoteShell(prevTag)}..HEAD --pretty=%H%x09%an%x09%s -- ${BOXEL_CLI_PATH}`,
+      { stdio: ['ignore', 'pipe', 'inherit'], cwd: repoRoot() },
+    ).toString();
+  },
+  ghPrForCommit(repo, sha) {
+    const args = [
+      'api',
+      `repos/${repo}/commits/${sha}/pulls`,
+      '--jq',
+      '.[0] // empty',
+    ];
+    return execSync(`gh ${args.map(quoteShell).join(' ')}`, {
+      stdio: ['ignore', 'pipe', 'inherit'],
+    }).toString();
+  },
+};
+
+interface PrInfo {
+  number: number;
+  title: string;
+  htmlUrl: string;
+  login: string;
+}
+
+function parsePrJson(raw: string): PrInfo | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    const j = JSON.parse(trimmed);
+    if (!j || typeof j.number !== 'number') return null;
+    return {
+      number: j.number,
+      title: String(j.title ?? ''),
+      htmlUrl: String(j.html_url ?? ''),
+      login: String(j.user?.login ?? ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function buildFilteredNotes(
+  inputs: Inputs,
+  deps: Deps = realDeps,
+): string {
+  const log = deps.gitLogBoxelCli(inputs.prevTag).trim();
+  const seenPrs = new Set<number>();
+  const bullets: string[] = [];
+
+  if (log) {
+    for (const line of log.split('\n')) {
+      const [sha, author, subject] = line.split('\t');
+      if (!sha) continue;
+      if (author === BOT_AUTHOR) continue;
+      const prRaw = deps.ghPrForCommit(inputs.repo, sha);
+      const pr = parsePrJson(prRaw);
+      if (pr) {
+        if (seenPrs.has(pr.number)) continue;
+        seenPrs.add(pr.number);
+        const byLine = pr.login ? ` by @${pr.login}` : '';
+        bullets.push(`* ${pr.title}${byLine} in ${pr.htmlUrl}`);
+      } else {
+        // Direct push to main, no associated PR.
+        bullets.push(`* ${subject ?? ''} (${sha.slice(0, 7)})`);
+      }
+    }
+  }
+
+  if (bullets.length === 0) {
+    return '';
+  }
+
+  const compareUrl = `https://github.com/${inputs.repo}/compare/${inputs.prevTag}...${inputs.newTag}`;
+  return bullets.join('\n') + `\n\n**Full Changelog**: ${compareUrl}`;
 }
 
 function quoteShell(arg: string): string {
-  // Conservative single-quote escaping for the gh argv. The values we pass are
-  // tag names + a fixed `target_commitish` literal, none of which legitimately
+  // Conservative single-quote escaping for argv values. The values we pass
+  // are tag names, commit SHAs, and repo slugs, none of which legitimately
   // contain single quotes, so this never produces surprising output.
   if (/^[A-Za-z0-9_=./:-]+$/.test(arg)) return arg;
   return `'${arg.replace(/'/g, "'\\''")}'`;
@@ -167,7 +248,7 @@ export function composeChangelogFragment(
 
 function main(): void {
   const inputs = readInputs();
-  const autoNotes = fetchAutoNotes(inputs);
+  const autoNotes = buildFilteredNotes(inputs);
   const body = composeReleaseBody(inputs, autoNotes);
   const fragment = composeChangelogFragment(inputs, body);
   writeFileSync(inputs.releaseBodyFile, body + '\n', 'utf8');
