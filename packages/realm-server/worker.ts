@@ -1,6 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
 import './lib/wtfnode-on-signal';
+import { writeSync } from 'node:fs';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
 // SIGKILL'd or its dev-log-tee dead during dev-all Ctrl-C) doesn't make
@@ -13,6 +14,18 @@ const swallowEpipe = (err: NodeJS.ErrnoException) => {
 };
 process.stdout.on('error', swallowEpipe);
 process.stderr.on('error', swallowEpipe);
+
+// FD-level synchronous stderr write — `writeSync(2, ...)` calls the
+// write(2) syscall directly, bypassing Node's stream layer.
+// `process.stderr.write` is libuv-async when stderr is a pipe (the
+// Docker / ECS case), so it can be lost if the process exits before
+// libuv flushes. Stamps that fire just before death need to use the
+// FD-level form. Proof the Node process actually started, at what
+// pid/ppid, independent of the logger pipeline.
+writeSync(
+  2,
+  `[worker] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
 
 import {
   Worker,
@@ -193,9 +206,29 @@ let autoMigrate = migrateDB || undefined;
       process.exit(1);
     }
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  process.on('disconnect', shutdown);
+  // `writeSync(2, ...)` (FD-level, syscall-synchronous) for the same
+  // reason as the STARTUP stamp at the top of this file.
+  process.on('SIGINT', () => {
+    writeSync(
+      2,
+      `[worker] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('SIGTERM', () => {
+    writeSync(
+      2,
+      `[worker] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('disconnect', () => {
+    writeSync(
+      2,
+      `[worker] disconnect received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async
