@@ -20,7 +20,7 @@ import {
   IconButton,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
@@ -102,10 +102,32 @@ type PanelWidths = {
   minWidth: number | null;
 };
 
+const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
+const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
+
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
   @tracked private topBarCenterElement: Element | null = null;
+  @tracked private currentWindowWidth = 0;
+
+  private get topBarButtonsCollapsed(): boolean {
+    let rootFontSize = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
+    let threshold = this.operatorModeStateService.hasAnyStackItemExpanded
+      ? COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM
+      : COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM;
+    return this.currentWindowWidth <= threshold * rootFontSize;
+  }
+
+  private get submodeSwitcherCollapsed(): boolean {
+    return (
+      this.operatorModeStateService.hasAnyStackItemExpanded &&
+      this.topBarButtonsCollapsed
+    );
+  }
+
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -119,6 +141,12 @@ export default class SubmodeLayout extends Component<Signature> {
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   declare private doSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
+
+  @action
+  private storeExpandedCardHeaderElement(element: Element) {
+    this.operatorModeStateService.expandedCardHeaderElement =
+      element as HTMLElement;
+  }
 
   @action
   private storeTopBarCenterElement(element: Element) {
@@ -137,6 +165,8 @@ export default class SubmodeLayout extends Component<Signature> {
 
   // Handles window resize and initializes AI panel width from localStorage
   onWindowResize = (windowWidth: number) => {
+    this.currentWindowWidth = windowWidth;
+
     let aiPanelDefaultWidthInPixels = 371;
     if (windowWidth < aiPanelDefaultWidthInPixels) {
       aiPanelDefaultWidthInPixels = windowWidth;
@@ -401,7 +431,7 @@ export default class SubmodeLayout extends Component<Signature> {
   <template>
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
-      class='submode-layout {{this.aiAssistantVisibilityClass}}'
+      class={{cn 'submode-layout' this.aiAssistantVisibilityClass}}
       data-test-submode-layout
       ...attributes
     >
@@ -435,6 +465,7 @@ export default class SubmodeLayout extends Component<Signature> {
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
+                @isCollapsed={{this.submodeSwitcherCollapsed}}
                 @submode={{this.operatorModeStateService.state.submode}}
                 @onSubmodeSelect={{this.updateSubmode}}
               />
@@ -445,7 +476,20 @@ export default class SubmodeLayout extends Component<Signature> {
                   @initiallyOpened={{bool
                     this.operatorModeStateService.state.newFileDropdownOpen
                   }}
+                  @isCollapsed={{this.topBarButtonsCollapsed}}
                 />
+              {{/if}}
+              {{#if
+                (eq this.operatorModeStateService.state.submode 'interact')
+              }}
+                <div
+                  class={{cn
+                    'expanded-card-header-slot'
+                    has-expanded=this.operatorModeStateService.hasAnyStackItemExpanded
+                  }}
+                  data-test-expanded-card-header-slot
+                  {{captureElement this.storeExpandedCardHeaderElement}}
+                ></div>
               {{/if}}
               {{yield to='topBar'}}
             {{/if}}
@@ -565,6 +609,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
 
       .ai-assistant-resizable-panel {
+        max-width: 100%;
         overflow: initial;
       }
 
@@ -595,6 +640,18 @@ export default class SubmodeLayout extends Component<Signature> {
         position: relative;
         width: 100%;
         max-width: 100%;
+        container-type: inline-size;
+        /* Lock outer box to exactly var(--stack-padding-top) — the
+           same value .operator-mode-stack uses for its padding-top
+           offset. Any content the bar contains (workspace button,
+           submode switcher, portaled expanded-card-header pill,
+           etc.) renders WITHIN this fixed height; nothing the slot
+           contents do can push the bar taller. This is what lets
+           interact-expanded card positioning match host-mode pixel
+           for pixel — both card-tops sit at y = stack-padding-top
+           and the bar is guaranteed to occupy that exact space. */
+        height: var(--stack-padding-top);
+        box-sizing: border-box;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-bar-z-index);
 
@@ -608,6 +665,23 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         justify-content: center;
         min-width: 0;
+      }
+
+      /* Slot for the expanded stack-item's CardHeader pill. When a
+         card is expanded, stack-item portals its CardHeader here via
+         the in-element block helper. The slot grows to take available
+         space (so the pill can stretch to ~800px) and centers the
+         pill horizontally — same horizontal position the stack card
+         would occupy below. When no card is expanded, the slot is
+         empty (zero rendered children). */
+      .expanded-card-header-slot {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        max-width: 50rem; /* same as `stackItemMaxWidth` in stack-item.gts */
+        margin: 0 auto;
       }
 
       .submode-switcher {
@@ -627,7 +701,7 @@ export default class SubmodeLayout extends Component<Signature> {
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
-        width: var(--submode-new-file-button-width);
+        flex-shrink: 0;
       }
 
       .profile-icon-button {
@@ -689,6 +763,12 @@ export default class SubmodeLayout extends Component<Signature> {
       :deep(.open-search-field) {
         box-shadow: var(--submode-bar-item-box-shadow);
         outline: var(--submode-bar-item-outline);
+      }
+
+      @media (max-width: 26rem) {
+        .expanded-card-header-slot:not(.has-expanded) {
+          display: none;
+        }
       }
 
       @media print {
