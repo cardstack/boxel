@@ -27,6 +27,8 @@ import ignore, { type Ignore } from 'ignore';
 export class RealmIndexUpdater {
   #realm: Realm;
   #log = logger('realm-index-updater');
+  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
+  #readinessDiag = logger('readiness-diag');
   #ignoreData: Record<string, string> = {};
   // Bumped every time a from-scratch result writes #ignoreData. Concurrent
   // incrementals capture this version when they snapshot #ignoreData; if a
@@ -142,8 +144,8 @@ export class RealmIndexUpdater {
     let startedAt = performance.now();
 
     this.#log.info(`Realm ${this.realmURL.href} is starting indexing`);
-    let published = (async () =>
-      await enqueueReindexRealmJob(
+    let published = (async () => {
+      let job = await enqueueReindexRealmJob(
         this.#realm.url,
         await this.#realm.getRealmOwnerUsername(),
         this.#queue,
@@ -152,7 +154,17 @@ export class RealmIndexUpdater {
         {
           clearLastModified: opts?.clearLastModified,
         },
-      ))();
+      );
+      // [readiness-diag] — startedAt covers the full enqueue path
+      // (getRealmOwnerUsername + the optional clearLastModified write
+      // inside enqueueReindexRealmJob + the queue insert), not just the
+      // SQL publish. Labeled accordingly. See also realm.ts
+      // readinessCheck + #startup.
+      this.#readinessDiag.debug(
+        `Realm ${this.realmURL.href} from-scratch job durably enqueued as job_id=${job.id} (enqueue path took ${((performance.now() - startedAt) / 1000).toFixed(2)}s)`,
+      );
+      return job;
+    })();
 
     let completed = published
       .then(async (job) => {

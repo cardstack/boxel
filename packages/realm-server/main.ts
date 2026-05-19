@@ -1,6 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
 import './lib/wtfnode-on-signal';
+import { writeSync } from 'node:fs';
 import {
   Realm,
   VirtualNetwork,
@@ -37,10 +38,23 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
+import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
+
+// FD-level synchronous stderr write — `writeSync(2, ...)` calls the
+// write(2) syscall directly, bypassing Node's stream layer.
+// `process.stderr.write` is libuv-async when stderr is a pipe (the
+// Docker / ECS case), so it can be lost if the process exits before
+// libuv flushes. Stamps that fire just before death need to use the
+// FD-level form. Proof the Node process actually started, at what
+// pid/ppid, independent of the logger pipeline.
+writeSync(
+  2,
+  `[realm-server] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
 
 let log = logger('main');
 const runtimeMetadataFile = process.env.TEST_HARNESS_REALM_SERVER_METADATA_FILE;
@@ -313,6 +327,7 @@ const getIndexHTML = async () => {
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
+  let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
@@ -572,6 +587,7 @@ const getIndexHTML = async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
+          indexUpdatedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
         ]);
@@ -593,8 +609,22 @@ const getIndexHTML = async () => {
   // orchestrators trigger graceful cleanup (close httpServer, unsubscribe
   // realm watchers, drain queue + DB) instead of leaking the open
   // handles into a SIGKILL escalation.
-  process.on('SIGTERM', () => stopRealmServer(false));
-  process.on('SIGINT', () => stopRealmServer(false));
+  // `writeSync(2, ...)` (FD-level, syscall-synchronous) for the same
+  // reason as the STARTUP stamp at the top of this file.
+  process.on('SIGTERM', () => {
+    writeSync(
+      2,
+      `[realm-server] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    stopRealmServer(false);
+  });
+  process.on('SIGINT', () => {
+    writeSync(
+      2,
+      `[realm-server] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    stopRealmServer(false);
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       stopRealmServer(true);
@@ -656,6 +686,17 @@ const getIndexHTML = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await fileChangesListener.start();
+
+  // CS-11119: cross-instance #inFlightSearch invalidation. Sibling of
+  // fileChangesListener — same lookup function, different channel. Fires
+  // at INDEX-UPDATE time (peer's worker batch.done committed boxel_index)
+  // rather than write time, so post-update callers on this replica don't
+  // coalesce into pre-update pending promises.
+  indexUpdatedListener = new RealmIndexUpdatedListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+  });
+  await indexUpdatedListener.start();
 
   // Cross-instance module-cache invalidation (CS-10952). When a peer
   // realm-server emits NOTIFY module_cache_invalidated, replay the bump on

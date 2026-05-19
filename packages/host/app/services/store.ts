@@ -23,7 +23,6 @@ import {
   baseFileRef,
   CardError,
   cardIdToURL,
-  DURING_PRERENDER_HEADER,
   isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
@@ -33,8 +32,6 @@ import {
   isSingleCardDocument,
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
-  X_BOXEL_CONSUMING_REALM_HEADER,
-  X_BOXEL_JOB_ID_HEADER,
   X_BOXEL_JOB_PRIORITY_HEADER,
   Deferred,
   delay,
@@ -87,6 +84,11 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
+import {
+  consumingRealmHeader,
+  duringPrerenderHeaders,
+  jobIdHeader,
+} from '../lib/prerender-fetch-headers';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
 import {
@@ -122,50 +124,13 @@ let waiter = buildWaiter('store-service');
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
-// Set by the prerender server's `evaluateOnNewDocument` before the
-// SPA boots — `__boxelDuringPrerender = true`. Read here so the
-// federated-search fetch wrapper can attach the marker header on
-// realm-server-bound calls only, narrowly scoping the signal to the
-// endpoint that needs it. See realm.ts:DURING_PRERENDER_HEADER for
-// the full chain.
-function duringPrerenderHeaders(): Record<string, string> {
-  let flag = (globalThis as unknown as { __boxelDuringPrerender?: boolean })
-    .__boxelDuringPrerender;
-  return flag ? { [DURING_PRERENDER_HEADER]: '1' } : {};
-}
-
-// While rendering inside a prerender tab the render route writes
-// `__boxelConsumingRealm` with the URL of the realm whose card is being
-// rendered. Attach it to outbound `_federated-search` requests so the
-// realm-server's job-scoped cache layer can gate same-realm-only
-// caching. Read each fetch (not cached at module scope) so a tab that
-// renders cards from multiple realms in sequence sends the correct
-// header per request. Returns an empty object when the global is not
-// set so non-prerender (live SPA) fetches behave exactly as before.
-function consumingRealmHeader(): Record<string, string> {
-  let r = (globalThis as unknown as { __boxelConsumingRealm?: string })
-    .__boxelConsumingRealm;
-  return r ? { [X_BOXEL_CONSUMING_REALM_HEADER]: r } : {};
-}
-
-// Companion to `consumingRealmHeader()`. The prerender server's
-// `prerenderVisitAttempt` injects `__boxelJobId` onto the page before
-// transitioning into the render route — see
-// `packages/realm-server/prerender/render-runner.ts`. Read it on each
-// fetch (not module-scope-cached) so a page reused across multiple
-// visits picks up the current visit's job id. Outside a prerender
-// tab the global is undefined and we send no header, so user / API
-// callers continue to bypass the realm-server's job-scoped cache.
-function jobIdHeader(): Record<string, string> {
-  let j = (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId;
-  return j ? { [X_BOXEL_JOB_ID_HEADER]: j } : {};
-}
-
-// Companion to `jobIdHeader()`. The prerender server's render-runner
-// also injects `__boxelJobPriority` onto the page before transitioning
-// into the render route. Outside a prerender tab the global is
-// undefined and we send no header — user / API callers leave the
-// realm-server's lookup paths to fall back to priority 0 as today.
+// Companion to `jobIdHeader()` (re-exported from
+// `../lib/prerender-fetch-headers`). The prerender server's
+// render-runner injects `__boxelJobPriority` onto the page before
+// transitioning into the render route. Outside a prerender tab the
+// global is undefined and we send no header — user / API callers
+// leave the realm-server's lookup paths to fall back to priority 0
+// as today.
 function jobPriorityHeader(): Record<string, string> {
   let p = (globalThis as unknown as { __boxelJobPriority?: number })
     .__boxelJobPriority;
