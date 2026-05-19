@@ -14,6 +14,7 @@ import { execSync } from 'child_process';
 import { resolve } from 'path';
 
 import bumpByPrefixJson from './release-prefixes.json';
+import { lastStableTag } from './lib/tags';
 
 export type BumpLevel = 'major' | 'minor' | 'patch' | 'none';
 
@@ -210,31 +211,6 @@ export function computeRelease(
 
 function repoRoot(): string {
   return execSync('git rev-parse --show-toplevel').toString().trim();
-}
-
-function lastStableTag(): string {
-  const tags = execSync("git tag --list 'boxel-cli-v*'")
-    .toString()
-    .trim()
-    .split('\n')
-    .filter((t) => t && !t.includes('-unstable.'))
-    .map((t) => t.replace(/^boxel-cli-v/, ''))
-    .sort(compareSemver);
-  if (tags.length === 0) {
-    throw new Error(
-      'No stable boxel-cli-v* tag found. Cannot compute prerelease counter.',
-    );
-  }
-  return tags[tags.length - 1];
-}
-
-function compareSemver(a: string, b: string): number {
-  const A = parseSemver(a);
-  const B = parseSemver(b);
-  if (A.major !== B.major) return A.major - B.major;
-  if (A.minor !== B.minor) return A.minor - B.minor;
-  if (A.patch !== B.patch) return A.patch - B.patch;
-  return 0;
 }
 
 function changedFilesAgainstHead1(root: string): string[] {

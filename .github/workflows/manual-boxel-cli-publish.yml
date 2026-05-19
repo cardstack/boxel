@@ -76,6 +76,64 @@ jobs:
         run: pnpm build
         working-directory: packages/boxel-cli
 
+      - name: Generate release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.strip.outputs.version }}
+          REPO: ${{ github.repository }}
+          RUNNER_TEMP_DIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          NEW_TAG="boxel-cli-v${VERSION}"
+          # Find the previous stable boxel-cli-v* tag (skipping any -unstable.*
+          # tags). We diff against the prior stable so the release notes for a
+          # stable cut aggregate every PR since the previous stable, not just
+          # the most recent unstable's single PR.
+          PREV_TAG=$(git tag --list 'boxel-cli-v*' \
+            | grep -v -- '-unstable\.' \
+            | sort -V \
+            | grep -v -x "$NEW_TAG" \
+            | tail -n 1 || true)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No prior stable boxel-cli-v* tag found (bootstrap). Falling back to one-line release body."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Previous stable tag: $PREV_TAG"
+          BODY_FILE="$RUNNER_TEMP_DIR/release-body.md"
+          FRAGMENT_FILE="$RUNNER_TEMP_DIR/changelog-fragment.md"
+          PREV_TAG="$PREV_TAG" \
+          NEW_TAG="$NEW_TAG" \
+          NEXT_NPM="$VERSION" \
+          NEXT_PLUGIN="" \
+          NPM_DIST_TAG="latest" \
+          REPO="$REPO" \
+          RELEASE_BODY_FILE="$BODY_FILE" \
+          CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
+          NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
+            ts-node --transpileOnly scripts/generate-release-notes.ts
+          FRAG_FILE="$FRAGMENT_FILE" node -e '
+            const fs = require("fs");
+            const path = "packages/boxel-cli/CHANGELOG.md";
+            const ANCHOR = "<!-- New entries are inserted directly below this line";
+            const fragment = fs.readFileSync(process.env.FRAG_FILE, "utf8");
+            const existing = fs.readFileSync(path, "utf8");
+            const idx = existing.indexOf(ANCHOR);
+            let head, tail;
+            if (idx === -1) {
+              head = "";
+              tail = existing;
+            } else {
+              const lineEnd = existing.indexOf("\n", idx);
+              head = existing.slice(0, lineEnd + 1);
+              tail = existing.slice(lineEnd + 1);
+            }
+            fs.writeFileSync(path, head + "\n" + fragment + "\n" + tail);
+          '
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
       - name: Commit and tag stable
         env:
           VERSION: ${{ steps.strip.outputs.version }}
@@ -90,7 +148,7 @@ jobs:
             echo "::error::Tag $TAG already exists. A prior promotion likely failed mid-flight. Delete the orphan tag and verify npm state before re-running."
             exit 1
           fi
-          git add packages/boxel-cli/package.json
+          git add packages/boxel-cli/package.json packages/boxel-cli/CHANGELOG.md
           git commit -m "Release @cardstack/boxel-cli v${VERSION} [skip ci]"
           git tag "$TAG"
           git push origin main --follow-tags
@@ -105,9 +163,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.strip.outputs.version }}
+          NOTES_HAS: ${{ steps.notes.outputs.has }}
+          NOTES_BODY_FILE: ${{ steps.notes.outputs.body_file }}
         run: |
+          set -euo pipefail
           TAG="boxel-cli-v${VERSION}"
-          NPM_URL="https://www.npmjs.com/package/@cardstack/boxel-cli/v/${VERSION}"
-          gh release create "$TAG" \
-            --title "@cardstack/boxel-cli v${VERSION}" \
-            --notes "Promoted from unstable. Published to npm under dist-tag \`latest\`: ${NPM_URL}"
+          if [ "$NOTES_HAS" = "true" ] && [ -f "$NOTES_BODY_FILE" ]; then
+            gh release create "$TAG" \
+              --title "@cardstack/boxel-cli v${VERSION}" \
+              --notes-file "$NOTES_BODY_FILE"
+          else
+            NPM_URL="https://www.npmjs.com/package/@cardstack/boxel-cli/v/${VERSION}"
+            gh release create "$TAG" \
+              --title "@cardstack/boxel-cli v${VERSION}" \
+              --notes "Promoted from unstable. Published to npm under dist-tag \`latest\`: ${NPM_URL}"
+          fi
