@@ -51,7 +51,11 @@ jobs:
       - name: Start dev stack (base realm + prerenderer)
         run: |
           mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
+          # Realm-server and vite host both speak HTTPS+HTTP/2 only; `-k`
+          # tolerates the mkcert leaf cert from infra:ensure-dev-cert. The
+          # %{http_code} check guards against the dispatcher's 3xx ahead
+          # of the base realm finishing its initial index.
+          timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
 
       - name: Build a small fixture to push
         shell: bash
@@ -70,12 +74,12 @@ jobs:
         with:
           realm-name: cs-11161-demo-${{ github.run_id }}
           display-name: "CS-11161 demo realm"
-          published-realm-url: http://cs-11161-demo-${{ github.run_id }}.localhost:4201/
+          published-realm-url: https://cs-11161-demo-${{ github.run_id }}.localhost:4201/
           source-path: /tmp/cs-11161-fixture
           matrix-url: http://localhost:8008
           matrix-username: user
           matrix-password: password
-          realm-server-url: http://localhost:4201/
+          realm-server-url: https://localhost:4201/
           readiness-timeout-ms: "120000"
 
       - name: Demo workspace-sync (re-push to the just-created source realm)
@@ -86,17 +90,17 @@ jobs:
           matrix-url: http://localhost:8008
           matrix-username: user
           matrix-password: password
-          realm-server-url: http://localhost:4201/
+          realm-server-url: https://localhost:4201/
 
       - name: Demo unpublish-preview-realm
         if: always() && steps.publish_demo.outcome == 'success'
         uses: cardstack/boxel/.github/actions/unpublish-preview-realm@cs-11161-extract-workspace-sync-action
         with:
-          published-realm-url: http://cs-11161-demo-${{ github.run_id }}.localhost:4201/
+          published-realm-url: https://cs-11161-demo-${{ github.run_id }}.localhost:4201/
           matrix-url: http://localhost:8008
           matrix-username: user
           matrix-password: password
-          realm-server-url: http://localhost:4201/
+          realm-server-url: https://localhost:4201/
 
       - name: Print server logs
         if: ${{ !cancelled() }}
