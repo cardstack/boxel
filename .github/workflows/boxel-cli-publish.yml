@@ -175,6 +175,10 @@ jobs:
             exit 0
           fi
           BODY_FILE="$RUNNER_TEMP_DIR/release-body.md"
+          # The script writes both a body file and a changelog fragment file.
+          # We only consume the body here — CHANGELOG.md is intentionally NOT
+          # updated on unstable publishes (it's reserved for stable cuts; the
+          # per-bump unstable detail is on the GitHub Releases page).
           FRAGMENT_FILE="$RUNNER_TEMP_DIR/changelog-fragment.md"
           PREV_TAG="$PREV_TAG" \
           NEW_TAG="$NEW_TAG" \
@@ -186,26 +190,6 @@ jobs:
           CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
           NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
             ts-node --transpileOnly scripts/generate-release-notes.ts
-          # Prepend the fragment to CHANGELOG.md, just below the seed anchor
-          # comment. Same inline-script pattern as the version-bump step.
-          FRAG_FILE="$FRAGMENT_FILE" node -e '
-            const fs = require("fs");
-            const path = "packages/boxel-cli/CHANGELOG.md";
-            const ANCHOR = "<!-- New entries are inserted directly below this line";
-            const fragment = fs.readFileSync(process.env.FRAG_FILE, "utf8");
-            const existing = fs.readFileSync(path, "utf8");
-            const idx = existing.indexOf(ANCHOR);
-            let head, tail;
-            if (idx === -1) {
-              head = "";
-              tail = existing;
-            } else {
-              const lineEnd = existing.indexOf("\n", idx);
-              head = existing.slice(0, lineEnd + 1);
-              tail = existing.slice(lineEnd + 1);
-            }
-            fs.writeFileSync(path, head + "\n" + fragment + "\n" + tail);
-          '
           echo "has=true" >> "$GITHUB_OUTPUT"
           echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
 
@@ -219,8 +203,7 @@ jobs:
           set -euo pipefail
           git add packages/boxel-cli/package.json \
                   packages/boxel-cli/plugin/.claude-plugin/plugin.json \
-                  packages/boxel-cli/plugin/skills \
-                  packages/boxel-cli/CHANGELOG.md
+                  packages/boxel-cli/plugin/skills
           if git diff --cached --quiet; then
             echo "No changes to commit (regen produced no diff, bumps both none)."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
