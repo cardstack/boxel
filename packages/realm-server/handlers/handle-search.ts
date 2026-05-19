@@ -22,6 +22,8 @@ import {
 import type { JobScopedSearchCache } from '../job-scoped-search-cache';
 import {
   PRERENDER_JOB_ID_HEADER,
+  PRERENDER_JOB_PRIORITY_HEADER,
+  sanitizeJobPriorityHeader,
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants';
 
@@ -53,14 +55,27 @@ export default function handleSearch(opts?: {
     }
 
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
-    let searchOpts = cacheOnlyDefinitions
-      ? { cacheOnlyDefinitions: true }
-      : undefined;
+    // The host's `_federated-search` fetch wrapper stamps
+    // `x-boxel-job-priority` while rendering inside a prerender tab.
+    // Threading it into search opts here lets `CachingDefinitionLookup`
+    // sub-prerenders (fired when a `type:` filter misses the modules
+    // cache) inherit the originating job's priority instead of silently
+    // dropping to 0. User / API callers don't stamp the header, so the
+    // value is `null` for live traffic — falls back to priority 0
+    // (system-initiated default), same observable behavior as today.
+    let jobPriority = sanitizeJobPriorityHeader(
+      ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
+    );
+    let searchOpts: { cacheOnlyDefinitions?: true; priority?: number } = {};
+    if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
+    if (jobPriority !== null) searchOpts.priority = jobPriority;
+    let normalizedSearchOpts =
+      Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
     let runSearch = () =>
       searchRealms(
         realmList.map((realmURL) => realmByURL.get(realmURL)),
         cardsQuery,
-        searchOpts,
+        normalizedSearchOpts,
       );
 
     // Job-scoped cache. Gated on:
