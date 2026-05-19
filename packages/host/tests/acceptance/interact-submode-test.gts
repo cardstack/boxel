@@ -7,6 +7,7 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -1035,6 +1036,78 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
         )
         .hasValue('Updated Pet');
+    });
+  });
+
+  module('expand to full width', function () {
+    test('expanding a card in a two-stack layout hides the other stack', async function (assert) {
+      let fadhlanId = `${testRealmURL}Person/fadhlan`;
+      let mangoId = `${testRealmURL}Pet/mango`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: fadhlanId, format: 'isolated' }],
+          [{ id: mangoId, format: 'isolated' }],
+        ],
+      });
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"]')
+        .exists('stack 0 exists');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .exists('stack 1 exists');
+
+      await waitFor(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="0"] [data-test-stack-card="${fadhlanId}"]`,
+        )
+        .hasClass('expanded', 'fadhlan card is expanded');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .isNotVisible('stack 1 is hidden when stack 0 has an expanded card');
+    });
+
+    test('expanding the same card open in two stacks only expands one', async function (assert) {
+      let fadhlanId = `${testRealmURL}Person/fadhlan`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: fadhlanId, format: 'isolated' }],
+          [{ id: fadhlanId, format: 'isolated' }],
+        ],
+      });
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"]')
+        .exists('stack 0 exists');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .exists('stack 1 exists');
+
+      await waitFor(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
+        .hasClass('expanded', 'stack 0 card is expanded');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .isNotVisible('stack 1 is hidden');
+      assert
+        .dom('[data-test-stack-card].expanded')
+        .exists({ count: 1 }, 'only one card has the expanded class');
     });
   });
 

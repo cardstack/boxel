@@ -161,6 +161,21 @@
 
 - Always run `pnpm lint` in modified packages before committing
 
+### boxel-cli commit prefixes
+
+PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
+
+| Prefix | Bump level (per touched surface) |
+|---|---|
+| `feat!:` / `fix!:` / body `BREAKING CHANGE:` | major |
+| `feat:` | minor |
+| `fix:` / `perf:` / `refactor:` | patch |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+
+Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected — this only applies when the PR's diff touches `packages/boxel-cli/**`.
+
+**Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
+
 ## Production-safe selectors
 
 - `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.

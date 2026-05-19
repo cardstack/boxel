@@ -3,7 +3,6 @@ import { JSDOM } from 'jsdom';
 import merge from 'lodash/merge';
 import type { DBAdapter, Realm } from '@cardstack/runtime-common';
 import {
-  Deferred,
   hasExtension,
   logger,
   param,
@@ -83,12 +82,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       return promiseForIndexHTML;
     }
 
-    let deferred = new Deferred<string>();
-
-    if (!isDev) {
-      promiseForIndexHTML = deferred.promise;
-    }
-
     let rewriteRealmURL = (url?: string) => {
       if (!url) {
         return url;
@@ -101,74 +94,86 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ).href;
     };
 
-    let indexHTML = (await getIndexHTML()).replace(
-      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
-      (_match, g1, g2, g3) => {
-        let config = JSON.parse(decodeURIComponent(g2));
+    let work = (async () => {
+      let indexHTML = (await getIndexHTML()).replace(
+        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+        (_match, g1, g2, g3) => {
+          let config = JSON.parse(decodeURIComponent(g2));
 
-        if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSpaceDomain = serverURL.host;
-        }
+          if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
+            // if this is the default, this needs to be the realm server’s host
+            // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
+            // the default domain for publishing a realm
+            config.publishedRealmBoxelSpaceDomain = serverURL.host;
+          }
 
-        if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSiteDomain = serverURL.host;
-        }
+          if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
+            // if this is the default, this needs to be the realm server’s host
+            // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
+            // the default domain for publishing a realm
+            config.publishedRealmBoxelSiteDomain = serverURL.host;
+          }
 
-        config = merge({}, config, {
-          hostsOwnAssets: false,
-          assetsURL: assetsURL.href,
-          matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
-          matrixServerName:
-            process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
-          realmServerURL: serverURL.href,
-          resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
-          resolvedCatalogRealmURL: rewriteRealmURL(
-            config.resolvedCatalogRealmURL,
-          ),
-          resolvedSkillsRealmURL: rewriteRealmURL(
-            config.resolvedSkillsRealmURL,
-          ),
-          resolvedOpenRouterRealmURL: rewriteRealmURL(
-            config.resolvedOpenRouterRealmURL,
-          ),
-          defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
-          defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
-          cardSizeLimitBytes,
-          fileSizeLimitBytes,
-          publishedRealmDomainOverrides:
-            process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
-            config.publishedRealmDomainOverrides,
-        });
-        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
-      },
-    );
+          config = merge({}, config, {
+            hostsOwnAssets: false,
+            assetsURL: assetsURL.href,
+            matrixURL: matrixClient.matrixURL.href.replace(/\/$/, ''),
+            matrixServerName:
+              process.env.MATRIX_SERVER_NAME || matrixClient.matrixURL.hostname,
+            realmServerURL: serverURL.href,
+            resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
+            resolvedCatalogRealmURL: rewriteRealmURL(
+              config.resolvedCatalogRealmURL,
+            ),
+            resolvedSkillsRealmURL: rewriteRealmURL(
+              config.resolvedSkillsRealmURL,
+            ),
+            resolvedOpenRouterRealmURL: rewriteRealmURL(
+              config.resolvedOpenRouterRealmURL,
+            ),
+            defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
+            defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
+            cardSizeLimitBytes,
+            fileSizeLimitBytes,
+            publishedRealmDomainOverrides:
+              process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
+              config.publishedRealmDomainOverrides,
+          });
+          return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
+        },
+      );
 
-    indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="${assetsURL.href}`);
+      indexHTML = indexHTML.replace(/(src|href)="\//g, `$1="${assetsURL.href}`);
 
-    // Strip any static favicon/apple-touch-icon links from the base HTML
-    // since these are now dynamically injected between the head markers
-    indexHTML = indexHTML
-      .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
-      .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
+      // Strip any static favicon/apple-touch-icon links from the base HTML
+      // since these are now dynamically injected between the head markers
+      indexHTML = indexHTML
+        .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
+        .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
 
-    // Recompute the hash in dev mode (where index.html is not cached) so
-    // that changes to the shell are reflected in the ETag.
-    if (!indexHTMLHash || isDev) {
-      let { createHash } = await import('crypto');
-      indexHTMLHash = createHash('md5')
-        .update(indexHTML)
-        .digest('hex')
-        .slice(0, 8);
+      // Recompute the hash in dev mode (where index.html is not cached) so
+      // that changes to the shell are reflected in the ETag.
+      if (!indexHTMLHash || isDev) {
+        let { createHash } = await import('crypto');
+        indexHTMLHash = createHash('md5')
+          .update(indexHTML)
+          .digest('hex')
+          .slice(0, 8);
+      }
+
+      return indexHTML;
+    })();
+
+    if (!isDev) {
+      promiseForIndexHTML = work;
+      // If the work rejects, clear the cache so the next request retries
+      // instead of awaiting a permanently-rejected (or pending) promise.
+      work.catch(() => {
+        promiseForIndexHTML = undefined;
+      });
     }
 
-    deferred.fulfill(indexHTML);
-    return indexHTML;
+    return work;
   }
 
   function defaultIconLinks(): string[] {

@@ -162,7 +162,7 @@ Key modules:
 
 ## Notes
 
-- **Realm card tests (`realm/*.test.gts`)** — QUnit tests co-located with source realm card definitions. These run inside the Boxel host app (via the host test suite), not via Playwright. To run them, use `pnpm test` in `packages/host` with the relevant test file pattern. They are separate from the Playwright specs in `tests/` which test the factory loop end-to-end. To run them interactively in the browser, go to: `https://localhost:4200/tests/index.html?liveTest=true&realmURL=http%3A%2F%2Flocalhost%3A4201%2Fsoftware-factory%2F`
+- **Realm card tests (`realm/*.test.gts`)** — QUnit tests co-located with source realm card definitions. These run inside the Boxel host app (via the host test suite), not via Playwright. To run them, use `pnpm test` in `packages/host` with the relevant test file pattern. They are separate from the Playwright specs in `tests/` which test the factory loop end-to-end. To run them interactively in the browser, go to: `https://localhost:4200/tests/index.html?liveTest=true&realmURL=https%3A%2F%2Flocalhost%3A4201%2Fsoftware-factory%2F`
 - Template DBs are reused across runs while the seeded Postgres container stays up.
 - `serve:support` publishes a shared support context in `/tmp/software-factory-runtime/support.json`.
 - When that shared support context exists, `serve:realm` and `smoke:realm` reuse the running Synapse and prerender services instead of restarting them.

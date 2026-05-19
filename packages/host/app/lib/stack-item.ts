@@ -54,6 +54,7 @@ export function detectStackItemTypeForTarget(
 }
 
 let nextInteractionSequence = 0;
+let nextStackItemInstanceId = 0;
 
 export class StackItem {
   // `format`, `request`, `useBaseTemplate` are tracked so that callers
@@ -76,6 +77,7 @@ export class StackItem {
   // open B, edit A, Escape" target A: clicking edit on A is the most
   // recent interaction even though B was opened more recently.
   lastInteractedAt: number;
+  readonly instanceId: string;
   #id: string;
   relationshipContext?:
     | {
@@ -104,6 +106,7 @@ export class StackItem {
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
     this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;
+    this.instanceId = `stack-item-${++nextStackItemInstanceId}`;
   }
 
   get id() {
