@@ -42,3 +42,36 @@ export function sanitizeConsumingRealmHeader(
   if (!trimmed) return null;
   return REALM_URL_PATTERN.test(trimmed) ? trimmed : null;
 }
+
+// HTTP header carrying the worker-job priority of the request that
+// triggered the prerender. Threaded from `pg-queue` job priority →
+// `remote-prerenderer` → prerender-server → render-runner → page
+// (`globalThis.__boxelJobPriority`) → host's `_federated-search` fetch
+// wrapper → realm-server's `handle-search`. The realm-server forwards
+// it into `LookupContext.priority` so any sub-`prerenderModule` fired
+// by `CachingDefinitionLookup` for a missed definition inherits the
+// originating job's priority instead of silently dropping to 0.
+//
+// Same scale as worker-job priority — 0 = system-initiated, 10 =
+// userInitiatedPriority — small non-negative integers.
+export const X_BOXEL_JOB_PRIORITY_HEADER = 'x-boxel-job-priority';
+
+// Sanitize the inbound job-priority header value. The producer side
+// stringifies a small non-negative integer; the consumer side must
+// reject anything that isn't a base-10 integer in a reasonable range
+// before passing it on as a number. Rejecting an out-of-range value
+// returns `null` rather than clamping so an upstream regression
+// (e.g. someone sending a bogus value) surfaces as "no priority" —
+// safer than silently substituting a plausible-looking integer.
+const JOB_PRIORITY_MAX = 1_000_000;
+export function sanitizeJobPriorityHeader(
+  raw: string | null | undefined,
+): number | null {
+  if (typeof raw !== 'string') return null;
+  let trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (!/^\d+$/.test(trimmed)) return null;
+  let n = Number(trimmed);
+  if (!Number.isSafeInteger(n) || n < 0 || n > JOB_PRIORITY_MAX) return null;
+  return n;
+}
