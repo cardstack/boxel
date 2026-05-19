@@ -815,6 +815,46 @@ describe('realm watch (integration)', () => {
     watcher.shutdown();
   });
 
+  it('writes no checkpoint when every change in a flush is skipped', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('skip-checkpoint');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    let firstFlush = await watcher.flushPending();
+    expect(firstFlush.checkpoint).not.toBeNull();
+
+    let checkpointsAfterFirstFlush = await new CheckpointManager(
+      localDir,
+    ).getCheckpoints();
+    expect(checkpointsAfterFirstFlush.length).toBe(1);
+
+    // Diverge locally, then change remote → flush will skip the only entry.
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let skippedFlush = await watcher.flushPending();
+
+    expect(skippedFlush.skipped).toContain(rel);
+    expect(skippedFlush.pulled).toHaveLength(0);
+    expect(skippedFlush.deleted).toHaveLength(0);
+    expect(skippedFlush.checkpoint).toBeNull();
+
+    let checkpointsAfterSkip = await new CheckpointManager(
+      localDir,
+    ).getCheckpoints();
+    expect(checkpointsAfterSkip.length).toBe(1);
+
+    watcher.shutdown();
+  });
+
   it('overwrites diverged local files when overwriteLocal is enabled', async () => {
     let localDir = makeLocalDir();
     let rel = watchFixture('force');

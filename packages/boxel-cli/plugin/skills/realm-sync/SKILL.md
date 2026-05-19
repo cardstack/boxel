@@ -43,7 +43,7 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 
 `push` and `pull` have their own `--delete` and `--dry-run` flags but no `--prefer-*` flags (they're one-directional). When in doubt, dry-run first.
 
-`watch` protects local edits without a flag: by default any file whose local hash differs from the sync manifest is skipped (with a yellow `⚠ skipped …` line) instead of overwritten. The warning re-fires on every poll until the user reconciles via `boxel realm sync …` (e.g. `--prefer-newest`) or rerun watch with `--overwrite-local` to accept the remote.
+`watch` protects local edits without a flag: by default any file whose local hash differs from the sync manifest is skipped (with a yellow `⚠ skipped …` line) instead of overwritten. The warning re-fires on every poll until the user reconciles via `boxel realm sync …` (e.g. `--prefer-newest`) or reruns watch with `--overwrite-local` to accept the remote.
 
 If `watch` is starting in a directory that already mirrors the realm but has no `.boxel-sync.json` (e.g. populated by hand, by `git clone`, or by a different tool), run `boxel realm pull` first. Without a manifest every existing file looks "diverged" and the first poll warns about each one until reconciled.
 

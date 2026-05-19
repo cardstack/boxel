@@ -209,17 +209,29 @@ export class RealmWatcher extends RealmSyncBase {
     const changes: CheckpointChange[] = [];
 
     // Load the manifest once per flush so we hash-compare against a single
-    // baseline. Skipped when `overwriteLocal` is on — we never look.
-    const manifest = this.overwriteLocal
-      ? null
-      : await loadManifest(this.options.localDir);
+    // baseline. Skipped when `overwriteLocal` is on — we never look. A
+    // manifest from a different realm is treated as "no manifest" (same
+    // policy as `initialize()` and `sync()`), so every local file looks
+    // unrecorded and is protected by the divergence gate.
+    let manifest: SyncManifest | null = null;
+    if (!this.overwriteLocal) {
+      const loaded = await loadManifest(this.options.localDir);
+      if (loaded && loaded.realmUrl === this.normalizedRealmUrl) {
+        manifest = loaded;
+      }
+    }
 
     for (const [file, info] of drained) {
       const localPath = path.join(this.options.localDir, file);
 
       if (
         !this.overwriteLocal &&
-        (await this.localDivergesFromManifest(localPath, file, manifest))
+        (await this.localDivergesFromManifest(
+          localPath,
+          file,
+          manifest,
+          info.status,
+        ))
       ) {
         skipped.push(file);
         continue;
@@ -266,22 +278,28 @@ export class RealmWatcher extends RealmSyncBase {
   }
 
   /**
-   * True when a local file exists at `localPath` but its content no longer
-   * matches the hash recorded for `relPath` in the sync manifest (or the
-   * manifest has no record of it at all). False when no local file exists
-   * — there's nothing to protect.
+   * True when the local copy of `relPath` no longer matches the sync
+   * manifest: hash mismatch, missing manifest record for a present file,
+   * or — for non-delete operations — the user deleted the file locally
+   * while the manifest still recorded it (the delete-vs-change conflict
+   * that `sync-logic.ts` classifies via `'deleted' + 'changed' = conflict`).
    */
   private async localDivergesFromManifest(
     localPath: string,
     relPath: string,
     manifest: SyncManifest | null,
+    operation: 'added' | 'modified' | 'deleted',
   ): Promise<boolean> {
     let localHash: string;
     try {
       localHash = await computeFileHash(localPath);
     } catch (err: any) {
-      if (err.code === 'ENOENT') return false;
-      throw err;
+      if (err.code !== 'ENOENT') throw err;
+      // Remote also deleting → no local work to lose. Manifest had no
+      // record → first-time pull, nothing to protect. Manifest had a
+      // record and remote wants to write → that's the conflict.
+      if (operation === 'deleted') return false;
+      return manifest?.files[relPath] !== undefined;
     }
     const manifestHash = manifest?.files[relPath];
     if (manifestHash === undefined) return true;
@@ -339,10 +357,13 @@ export class RealmWatcher extends RealmSyncBase {
     pulled: string[],
     deleted: string[],
   ): Promise<void> {
+    // Drop file hashes from a manifest belonging to a different realm —
+    // otherwise we'd persist cross-realm entries under our `realmUrl`.
+    // Matches the policy used by `flushPending()` and `initialize()`.
     const prior = await loadManifest(this.options.localDir);
-    const files: Record<string, string> = prior?.files
-      ? { ...prior.files }
-      : {};
+    const priorFiles =
+      prior && prior.realmUrl === this.normalizedRealmUrl ? prior.files : null;
+    const files: Record<string, string> = priorFiles ? { ...priorFiles } : {};
 
     for (const file of deleted) {
       delete files[file];
