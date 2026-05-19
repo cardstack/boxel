@@ -307,20 +307,27 @@ const CARD_JSON_ETAG_VARIANT = 'card';
 export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const REALM_FILE_CHANGES_WILDCARD = '*';
 
-// CS-11119: Postgres NOTIFY channel announcing that a realm's index has
-// just been updated (the worker's batch.done() has committed
-// boxel_index). Payload is the realm URL.
+// CS-11119: Postgres NOTIFY channel announcing that a realm's read-side
+// derived caches (`#inFlightSearch`, `#cachedRealmInfo`) must drop.
+// Payload is the realm URL.
 //
 // Distinct from REALM_FILE_CHANGES_CHANNEL (which fires at file-WRITE
-// time, before indexing has run) — this channel fires at INDEX-UPDATE
-// time, after the swap of boxel_index has landed. Peer replicas
-// subscribe and drop their RealmIndexQueryEngine.#inFlightSearch so a new
-// caller arriving after a peer's update does not coalesce into a
-// pre-update pending promise and receive pre-update data.
+// time, before indexing has run). Originally introduced for INDEX-UPDATE
+// fan-out — emitted after the worker's batch.done() committed
+// boxel_index — but the receiver also drops `#cachedRealmInfo`, which is
+// derived from `realm_permissions`. CS-11178 extends the publisher list
+// so a `realm_permissions` write (`patchRealmPermissions`) fires the
+// same NOTIFY: peers drop their cached RealmInfo (whose `visibility`
+// field is permissions-derived) and an unrelated in-flight searchCards
+// pays at most one extra DB round-trip — admin-rare PATCHes make the
+// over-invalidation negligible. If a future caller needs to invalidate
+// permissions-derived state without touching index-derived state,
+// introduce a dedicated `realm_permissions_changed` channel.
 //
 // Same best-effort semantics as the other realm-server NOTIFY channels: a
 // missed NOTIFY leaves a bounded staleness window (one in-flight
-// searchCards walk), not data corruption.
+// searchCards walk plus a stale RealmInfo on `_info` until the next swap
+// or write), not data corruption.
 export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
@@ -1477,19 +1484,19 @@ export class Realm {
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
 
-  // CS-11119: Drop every read-side cache whose content derives from the
-  // realm's index — currently `#inFlightSearch` (the searchCards
-  // coalesce map) and `#cachedRealmInfo` (cached `RealmInfo` +
-  // ETag-hash; the ETag's hash component derives from indexed metadata
-  // and `realm_registry` rows, so a from-scratch reindex pass that
-  // re-reads /realm.json invalidates both). Called by the
+  // CS-11119: Drop every read-side cache whose content derives from
+  // server-side state — currently `#inFlightSearch` (the searchCards
+  // coalesce map, index-derived) and `#cachedRealmInfo` (cached
+  // `RealmInfo` + ETag-hash; mostly index-derived but its `visibility`
+  // field is permissions-derived per CS-11178). Called by the
   // realm_index_updated LISTEN handler on peer instances after a swap
-  // commits somewhere else in the fleet. Public so the realm-server
-  // process can wire the listener without reaching into private state.
-  // Callers awaiting a pre-clear in-flight searchCards promise still
-  // receive its pre-update result (the SQL was already in motion);
-  // only NEW callers after the clear miss the map and fire a fresh
-  // search against the now-current index.
+  // commits — or after a `realm_permissions` PATCH lands — somewhere
+  // else in the fleet. Public so the realm-server process can wire the
+  // listener without reaching into private state. Callers awaiting a
+  // pre-clear in-flight searchCards promise still receive its
+  // pre-update result (the SQL was already in motion); only NEW callers
+  // after the clear miss the map and fire a fresh search against the
+  // now-current index.
   clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
@@ -5921,6 +5928,19 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
+    // CS-11178: `RealmInfo.visibility` is derived from `realm_permissions`
+    // and memoized into `#cachedRealmInfo` by `parseRealmInfo`. Without
+    // this invalidation a PATCH on this replica leaves the *local*
+    // `_info` response stale until the next index swap, and a PATCH on
+    // any peer replica leaves *every* replica's `_info` response stale
+    // until process restart — the same multi-replica staleness pattern
+    // CS-11126 closed at the auth layer, surviving one layer up.
+    // Reuses the existing realm_index_updated channel: the peer listener
+    // calls `clearRealmIndexCaches()` which drops `#cachedRealmInfo`
+    // (exactly what we need) and `#inFlightSearch` (a no-op when empty;
+    // permission PATCHes are admin-rare so the over-invalidation is
+    // negligible).
+    await this.clearRealmIndexCachesAndBroadcast();
     return await this.getRealmPermissions(request, requestContext);
   }
 
