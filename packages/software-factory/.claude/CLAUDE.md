@@ -26,7 +26,7 @@ Two parallel skill paths exist, one per factory run mode:
 
 - **SDK orchestrator** (`pnpm factory:go`): the loader at
   `src/factory-skill-loader.ts` reads from
-  **`.agents/skills-sdk/`** first. Those skills describe the
+  **`.agents/skills-orchestrator/`** first. Those skills describe the
   factory-MCP-tool surface (`signal_done`, `get_card_schema`,
   `run_lint`, …) that `ToolUseFactoryAgent` actually provides at
   runtime.
@@ -49,7 +49,7 @@ specific):
 
 The two software-factory skill sets diverged during CS-11149. They
 stay separated until the SDK orchestrator is retired; at that
-point the orchestrator code and `.agents/skills-sdk/` get deleted
+point the orchestrator code and `.agents/skills-orchestrator/` get deleted
 together.
 
 ## Architectural principle

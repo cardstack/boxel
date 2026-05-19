@@ -12,7 +12,7 @@ const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 /**
  * The SDK orchestrator and the new interactive Claude Code path each get
  * their own copies of `software-factory-bootstrap` / `software-factory-operations`.
- * The orchestrator loads from `.agents/skills-sdk/`; its skills still describe
+ * The orchestrator loads from `.agents/skills-orchestrator/`; its skills still describe
  * the factory-MCP-tool surface (`signal_done`, `get_card_schema`, `run_lint`, …)
  * that the orchestrator's `ToolUseFactoryAgent` actually provides. Interactive
  * Claude Code reads from `.agents/skills/` via the `.claude/skills` symlink;
@@ -20,7 +20,7 @@ const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
  * lifecycle. The two diverged during CS-11149 and need to stay separated
  * until the orchestrator is retired.
  */
-const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-sdk');
+const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
 
 /**
  * Additional skill search directories, checked in order when a skill is not
