@@ -1,22 +1,42 @@
 #!/bin/sh
 #MISE description="Start services for realm-server test suite (icons + host-dist + dev-minimal services)"
+#MISE depends=["infra:ensure-dev-cert"]
 #MISE dir="packages/realm-server"
 
 export PATH="./node_modules/.bin:$PATH"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+# Pick wait-on's protocol prefix based on the realm-server's scheme.
+# Realm-server speaks HTTPS+HTTP/2 in local dev (see infra:ensure-dev-cert);
+# stripping `*://` instead of a hardcoded `http://` lets the same script
+# work whether REALM_BASE_URL is https or http.
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
+case "$REALM_TEST_URL" in
+  https://*) REALM_TEST_READY_SCHEME="https-get" ;;
+  *)         REALM_TEST_READY_SCHEME="http-get"  ;;
+esac
+BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
+NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
+# START_SERVER_AND_TEST_INSECURE=1 scopes to the wait-on readiness probe.
+# The realm-server now serves the self-signed mkcert leaf on
+# https://localhost:4201|4202; start-server-and-test forces strictSSL:true
+# on wait-on (overriding NODE_TLS_REJECT_UNAUTHORIZED), so the documented
+# INSECURE flag is the right escape hatch. Does not affect services
+# under test.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   NODE_NO_WARNINGS=1 \
+  START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
+    "${BASE_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'

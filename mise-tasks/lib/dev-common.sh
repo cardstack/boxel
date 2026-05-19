@@ -204,12 +204,23 @@ _kill_tree_walk() {
 #     (4201/4202, 4210/4211, 4221/4222). Wrappers that just invoke ts-node
 #     don't `exec` it, so killing the wrapper alone leaves the ts-node
 #     grandchild reparented to init with its port still bound.
-#   - packages/host/scripts/vite-serve.js — the host start wrapper that
-#     spawns the actual vite child. (We don't separately sweep `pnpm
-#     --filter @cardstack/host start`: its only child IS vite-serve.js, so
+#   - scripts/vite-serve.js — the host start wrapper that spawns the
+#     actual vite child. Can't anchor to $REPO_ROOT because pnpm invokes
+#     it as `node scripts/vite-serve.js` (relative argv, cwd-relative),
+#     so the absolute path never appears in argv for pkill -f to match.
+#     The filename is unique to Boxel's host package, so the relative
+#     pattern is safe from cross-tool collisions (only a sibling Boxel
+#     checkout running dev concurrently could collide, which already
+#     requires BOXEL_DEV_ALL_PIDFILE isolation). Killing this wrapper
+#     also frees the same-port redirect dispatcher it owns on 4200 in
+#     local-HTTPS dev mode. (We don't separately sweep `pnpm --filter
+#     @cardstack/host start`: its only child IS vite-serve.js, so
 #     killing the anchored child causes pnpm to exit on its own.)
-#   - packages/host/.*vite/bin/vite.js --port 4200 — the host dev server
-#     (port 4200) spawned by vite-serve.js
+#   - packages/host/.*vite/bin/vite.js — the host vite process. In
+#     plain-HTTP mode it binds the public port (4200) directly; in
+#     local-HTTPS mode the wrapper puts it on a dynamic internal port
+#     and the dispatcher fronts 4200. Don't pin the pattern to a specific
+#     `--port` value or the dynamic-port case escapes the sweep.
 #   - node_modules/.*/start-server-and-test/src/bin/start.js — the
 #     phase-coordinator that owns the run-p subtree
 #   - node_modules/.*/npm-run-all/bin/run-p — run-p, which spawns the
@@ -221,8 +232,8 @@ _kill_tree_walk() {
 sweep_orphaned_services() {
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
   TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
-  VITE_SERVE_RE="${REPO_ROOT_RE}/packages/host/scripts/vite-serve\.js"
-  VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js --port 4200"
+  VITE_SERVE_RE="scripts/vite-serve\.js"
+  VITE_BIN_RE="${REPO_ROOT_RE}/packages/host/.*vite/bin/vite\.js"
   SAT_RE="${REPO_ROOT_RE}/.*node_modules/.*start-server-and-test/src/bin/start\.js"
   RUNP_RE="${REPO_ROOT_RE}/.*node_modules/.*npm-run-all/bin/run-p"
   HTTP_SERVER_RE="http-server.*X-Boxel-Assume-User.*--port 4206"
@@ -243,27 +254,39 @@ sweep_orphaned_services() {
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
+# Pick wait-on's protocol prefix based on the realm-server's scheme. Local
+# dev runs HTTPS+HTTP/2 by default; tests/CI fall back to plain HTTP when
+# `infra:ensure-dev-cert` hasn't run. `${REALM_BASE_URL#*://}` strips
+# whichever scheme is in use to feed wait-on's authority-only form.
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
+case "$REALM_TEST_URL" in
+  https://*) REALM_TEST_READY_SCHEME="https-get" ;;
+  *)         REALM_TEST_READY_SCHEME="http-get"  ;;
+esac
+
 # Phase 1 readiness URLs
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-SKILLS_READY="http-get://${REALM_BASE_URL#http://}/skills/${READY_PATH}"
+BASE_REALM_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/base/${READY_PATH}"
+SKILLS_READY="${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/skills/${READY_PATH}"
 PHASE1_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
 
 if [ -z "${SKIP_CATALOG:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/catalog/${READY_PATH}"
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/legacy-catalog/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/catalog/${READY_PATH}"
 fi
 if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/boxel-homepage/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/boxel-homepage/${READY_PATH}"
 fi
 if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
-  PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
+  PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/experiments/${READY_PATH}"
 fi
-PHASE1_URLS="${PHASE1_URLS}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}"
+PHASE1_URLS="${PHASE1_URLS}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}"
 
 PHASE1_URLS="${PHASE1_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
 
 # Phase 2 readiness URL
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-test/${READY_PATH}"
 
 # In environment mode, bootstrap infra before starting services
 if [ -n "$BOXEL_ENVIRONMENT" ]; then

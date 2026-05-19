@@ -9,6 +9,11 @@
 # rejects it as "Illegal option", so this script must run under bash.
 set -o pipefail
 
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
 # Tee stdout+stderr to a per-service log file so the local Alloy scraper
 # (packages/observability/alloy/config.alloy) can pick this up via
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.

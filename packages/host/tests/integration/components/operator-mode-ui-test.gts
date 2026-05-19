@@ -186,14 +186,14 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
 
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');

@@ -6,6 +6,6 @@
 NODE_ENV=production \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
-  ts-node \
+  exec ts-node \
   --transpileOnly prerender/prerender-server \
   --port=${PRERENDER_PORT:-4221}

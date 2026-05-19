@@ -19,7 +19,7 @@ import {
   runTestRealmServerWithRealms,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 
 module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
   module('Realm Server Endpoints | /_federated-info', function (hooks) {

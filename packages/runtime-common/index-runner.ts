@@ -147,13 +147,13 @@ export class IndexRunner {
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
-      readModuleCacheEntries: async (moduleIds) => {
+      readDefinitionCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
           return {};
         }
         let { resolvedRealmURL, cacheScope, authUserId } =
           await this.getModuleCacheContext();
-        return await this.#definitionLookup.getModuleCacheEntries({
+        return await this.#definitionLookup.getCachedDefinitionsBatch({
           moduleUrls: moduleIds,
           cacheScope,
           authUserId,
@@ -555,8 +555,8 @@ export class IndexRunner {
   //
   // Cache hits are O(1) DB reads inside DefinitionLookup. Cache
   // misses go through the read-through path
-  // (loadModuleCacheEntryUncached → getModuleDefinitionsViaPrerenderer
-  // → persistModuleCacheEntry), the same flow `lookupDefinition`
+  // (loadDefinitionCacheEntryUncached → getModuleDefinitionsViaPrerenderer
+  // → persistDefinitionCacheEntry), the same flow `lookupDefinition`
   // uses; DefinitionLookup owns the in-flight dedup and the cross-
   // process coalescer, so two callers asking for the same URL share
   // one prerender.
@@ -630,7 +630,7 @@ export class IndexRunner {
     let failed = 0;
     for (let moduleUrl of toWarm) {
       try {
-        await this.#definitionLookup.getModuleCacheEntry(moduleUrl);
+        await this.#definitionLookup.getCachedDefinitions(moduleUrl);
       } catch {
         failed += 1;
       }

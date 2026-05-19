@@ -1,5 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
 import {
   Realm,
   VirtualNetwork,
@@ -36,8 +37,10 @@ import {
   type RealmRegistryRow,
 } from './lib/realm-registry-reconciler';
 import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
+import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
+import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 let log = logger('main');
@@ -101,8 +104,25 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-const FULL_INDEX_ON_STARTUP =
-  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
+// REALM_SERVER_FULL_INDEX_ON_STARTUP is a three-state override (resolved in
+// lib/full-index-on-startup.ts) that controls whether each realm runs a
+// from-scratch index when its process boots. The `isNewIndex` branch in
+// Realm.start() is independent of this flag, so a brand-new (empty) index
+// still builds on first boot regardless of which value is set here.
+//   - default (unset, or any value other than 'true' / 'false'): only
+//     kind='bootstrap' realms (the ones passed via the CLI --path args,
+//     e.g. base / catalog / skills) full-index on startup. kind='source'
+//     (user realms) and kind='published' realms skip the boot reindex.
+//   - 'true': every realm full-indexes on startup, regardless of kind.
+//     Matches the pre-flip behavior.
+//   - 'false': suppresses the env-driven full-index for every kind. Used by
+//     the cached-index dev flow (scripts/import-cached-index.sh) where the
+//     index tables were just restored from a recent CI snapshot.
+// The deploy-time platform-code reindex flows through a different path
+// (handle-post-deployment.ts + boxel-ui checksum), so flipping the default
+// here does not affect post-deploy reindex storms.
+const FULL_INDEX_ON_STARTUP_OVERRIDE =
+  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP;
 // When set to 'true', skip the unconditional modules-cache clear on startup.
 // Used by the software-factory test harness, which restores a known-good
 // modules cache from a template database (URLs already rewritten to match
@@ -126,10 +146,10 @@ let {
   serviceName = 'realm-server',
   serverURL = isEnvironmentMode()
     ? serviceURL(serviceName)
-    : `http://localhost:${port}`,
+    : `https://localhost:${port}`,
   distURL = isEnvironmentMode()
     ? serviceURL('host')
-    : (process.env.HOST_URL ?? 'http://localhost:4200'),
+    : (process.env.HOST_URL ?? 'https://localhost:4200'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -267,7 +287,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartup=${FULL_INDEX_ON_STARTUP}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -294,6 +314,7 @@ const getIndexHTML = async () => {
   let queue = new PgQueuePublisher(dbAdapter);
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
+  let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
@@ -339,7 +360,7 @@ const getIndexHTML = async () => {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
     log.info('Clearing modules cache...');
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
   }
 
   // Backfill realm_registry from CLI args (bootstrap), on-disk source realms,
@@ -422,6 +443,10 @@ const getIndexHTML = async () => {
         diskPath = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
       }
       const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      let fullIndexOnStartup = resolveFullIndexOnStartup(
+        row.kind,
+        FULL_INDEX_ON_STARTUP_OVERRIDE,
+      );
       const reconciledRealm = new Realm(
         {
           url: row.url,
@@ -449,9 +474,7 @@ const getIndexHTML = async () => {
           ),
         },
         {
-          ...(FULL_INDEX_ON_STARTUP
-            ? { fullIndexOnStartup: true as const }
-            : {}),
+          ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }
             : {}),
@@ -516,19 +539,42 @@ const getIndexHTML = async () => {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }
   });
+  let stopping = false;
   let stopRealmServer = (notifyParent = false) => {
+    if (stopping) return;
+    stopping = true;
     let stopPort =
       (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
     console.log(`stopping realm server on port ${stopPort}...`);
     if (isEnvironmentMode()) {
       deregisterEnvironment();
     }
-    httpServer.closeAllConnections();
+    // Close per-realm file watchers (sane → fs.watch) on shutdown.
+    // Each mounted Realm owns a NodeAdapter watcher that holds FSWatcher
+    // handles open; leaving them pins the event loop and prevents the
+    // process from exiting naturally. Safe to run before httpServer.close
+    // — watchers only feed cache invalidation, not request serving.
+    for (let r of realms) {
+      try {
+        r.unsubscribe();
+      } catch (err) {
+        console.error(`error unsubscribing realm ${r.url}:`, err);
+      }
+    }
+    // Both the plain `http.Server` and the TLS-mode `net.Server`
+    // dispatcher (see `server.ts`) expose `closeAllConnections()`. The
+    // dispatcher's mirror force-closes in-flight TLS / HTTP/2 /
+    // keep-alive sessions instead of waiting for peers to release them
+    // — without it `close()` can hang for a tab-keep-alive lifetime.
+    if (typeof (httpServer as any).closeAllConnections === 'function') {
+      (httpServer as any).closeAllConnections();
+    }
     httpServer.close(() => {
       (async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
+          indexUpdatedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
         ]);
@@ -545,6 +591,13 @@ const getIndexHTML = async () => {
       });
     });
   };
+  // SIGTERM/SIGINT take the same shutdown path as the IPC `stop`
+  // message, so process-group sweeps from `mise dev` and equivalent
+  // orchestrators trigger graceful cleanup (close httpServer, unsubscribe
+  // realm watchers, drain queue + DB) instead of leaking the open
+  // handles into a SIGKILL escalation.
+  process.on('SIGTERM', () => stopRealmServer(false));
+  process.on('SIGINT', () => stopRealmServer(false));
   process.on('message', (message) => {
     if (message === 'stop') {
       stopRealmServer(true);
@@ -606,6 +659,17 @@ const getIndexHTML = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await fileChangesListener.start();
+
+  // CS-11119: cross-instance #inFlightSearch invalidation. Sibling of
+  // fileChangesListener — same lookup function, different channel. Fires
+  // at INDEX-UPDATE time (peer's worker batch.done committed boxel_index)
+  // rather than write time, so post-update callers on this replica don't
+  // coalesce into pre-update pending promises.
+  indexUpdatedListener = new RealmIndexUpdatedListener({
+    dbAdapter,
+    lookupMountedRealm: (url) => realms.find((r) => r.url === url),
+  });
+  await indexUpdatedListener.start();
 
   // Cross-instance module-cache invalidation (CS-10952). When a peer
   // realm-server emits NOTIFY module_cache_invalidated, replay the bump on

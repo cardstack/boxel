@@ -1,0 +1,20 @@
+# Default TLS cert for the websecure entryPoint. Reads the mkcert leaf
+# provisioned by `mise run infra:ensure-dev-cert` — that cert has
+# `*.localhost` in its SAN, so it covers every per-environment hostname
+# (`host.<slug>.localhost`, `realm-server.<slug>.localhost`, ...) without
+# needing a separate cert per worktree.
+#
+# The cert files are mounted into the container at /etc/traefik/certs/
+# via docker-compose.traefik.yml. Mount source is the dev's
+# `~/.local/share/boxel/dev-certs/` directory, so a single
+# `infra:ensure-dev-cert` run is enough for both the realm-server
+# dispatcher and Traefik.
+tls:
+  certificates:
+    - certFile: /etc/traefik/certs/localhost.pem
+      keyFile: /etc/traefik/certs/localhost-key.pem
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/localhost.pem
+        keyFile: /etc/traefik/certs/localhost-key.pem

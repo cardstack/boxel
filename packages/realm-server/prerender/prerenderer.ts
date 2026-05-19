@@ -34,7 +34,7 @@ import {
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
-  : 'http://localhost:4200';
+  : 'https://localhost:4200';
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
@@ -85,12 +85,22 @@ export class Prerenderer {
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
+    // Local HTTPS dev (vite on https://localhost:4200 with HTTP/2) needs
+    // a more generous standby navigation timeout than the 30s default.
+    // The host bundle's first cold-start over h2 multiplexes ~1000+
+    // module requests through vite's optimizer; on a cold runner the
+    // initial `_standby` load can comfortably exceed 30s even though
+    // the server is healthy. Configurable via env so production /
+    // hosted runners can keep the tighter default.
+    let standbyTimeoutMs =
+      parseInt(process.env.PRERENDER_STANDBY_TIMEOUT_MS ?? '', 10) || undefined;
     this.#pagePool = new PagePool({
       maxPages,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
+      ...(standbyTimeoutMs ? { standbyTimeoutMs } : {}),
       onAffinityDisposed: (affinityKey) => {
         // Affinity tear-down implies the warm loader is gone, so any
         // owner entry for that affinity is now meaningless. Clear it
@@ -188,6 +198,15 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     this.#renderRunner.clearAuthCache(affinityKey);
     await this.#pagePool.disposeAffinity(affinityKey);
+  }
+
+  // Block until the standby pool has reached its desired count. The
+  // constructor and `disposeAffinity` both kick refill fire-and-forget;
+  // tests that need a fresh tab in their *next* `prerenderVisit` call
+  // (rather than racing the kicked refill) await this instead. Wraps
+  // `PagePool.warmStandbys`, which dedupes against any in-flight kick.
+  async warmStandbys(): Promise<void> {
+    await this.#pagePool.warmStandbys();
   }
 
   // Emit the `render cancelled` log line (format from CS-10872)

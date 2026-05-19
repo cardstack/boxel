@@ -349,7 +349,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -372,7 +372,7 @@ module(`Integration | realm indexing`, function (hooks) {
           [
             `${testRealmURL}Person/owner`,
             `${testRealmURL}Person/owner.json`,
-            'http://localhost:4202/test/pet',
+            'https://localhost:4202/test/pet',
           ].sort(),
           'error deps are correct',
         );
@@ -390,7 +390,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/person'),
+              module: rri('https://localhost:4202/test/person'),
               name: 'Person',
             },
           },
@@ -425,7 +425,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -469,7 +469,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -489,7 +489,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -525,7 +525,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           realmURL: ri('http://test-realm/test/'),
@@ -583,7 +583,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
             realmURL: ri('http://test-realm/test/'),
@@ -623,7 +623,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -643,7 +643,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -683,6 +683,106 @@ module(`Integration | realm indexing`, function (hooks) {
     }
   });
 
+  test('HTTP DELETE +source returns before incremental indexing settles', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+    let queryEngine = realm.realmIndexQueryEngine;
+
+    // Sanity: drain the from-scratch indexing that setup queues so the
+    // pending-indexing assertion below isolates the DELETE's work.
+    await realm.incrementalIndexing();
+    assert.strictEqual(
+      realm.incrementalIndexing(),
+      undefined,
+      'baseline: no pending indexing before DELETE',
+    );
+
+    let response = await realm.handle(
+      new Request(`${testRealmURL}Pet/mango`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/vnd.card+source' },
+      }),
+    );
+    if (!response) {
+      throw new Error('realm did not handle the DELETE');
+    }
+    assert.strictEqual(response.status, 204, 'DELETE returns 204');
+
+    // The HTTP response landed; the worker settle is fire-and-forget.
+    // The underlying file is already gone from disk (sync part of delete).
+    assert.strictEqual(
+      await adapter.openFile('Pet/mango.json'),
+      undefined,
+      'file is gone from disk before indexing settles',
+    );
+    let pendingIndex = realm.incrementalIndexing();
+    assert.notStrictEqual(
+      pendingIndex,
+      undefined,
+      'DELETE returned before deferred indexing settled',
+    );
+
+    await pendingIndex;
+    assert.strictEqual(
+      realm.incrementalIndexing(),
+      undefined,
+      'incrementalIndexing() drains the deferred delete work',
+    );
+
+    let entry = await queryEngine.cardDocument(
+      new URL(`${testRealmURL}Pet/mango`),
+    );
+    assert.strictEqual(
+      entry,
+      undefined,
+      'index reflects the deletion after the drain',
+    );
+  });
+
+  test('realm.delete() with default options (waitForIndex:true) awaits indexing inline', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'Pet/mango.json': {
+          data: {
+            id: `${testRealmURL}Pet/mango`,
+            attributes: { firstName: 'Mango' },
+            meta: {
+              adoptsFrom: {
+                module: 'http://localhost:4202/test/pet',
+                name: 'Pet',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await realm.incrementalIndexing();
+    await realm.delete('Pet/mango.json');
+
+    assert.strictEqual(
+      realm.incrementalIndexing(),
+      undefined,
+      'no pending indexing remains after a default delete — the await happened inline',
+    );
+  });
+
   test('write with default options (waitForIndex:true) awaits indexing inline', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -695,7 +795,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -714,7 +814,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/pet'),
+              module: rri('https://localhost:4202/test/pet'),
               name: 'Pet',
             },
           },
@@ -741,7 +841,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -762,7 +862,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -798,7 +898,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -841,7 +941,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -862,7 +962,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/pet',
+                module: 'https://localhost:4202/test/pet',
                 name: 'Pet',
               },
             },
@@ -896,7 +996,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/pet'),
+            module: rri('https://localhost:4202/test/pet'),
             name: 'Pet',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -2298,7 +2398,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/vendor`,
+                module: `https://localhost:4202/test/vendor`,
                 name: 'Vendor',
               },
             },
@@ -2312,7 +2412,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain`,
+                module: `https://localhost:4202/test/chain`,
                 name: 'Chain',
               },
             },
@@ -2326,7 +2426,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `http://localhost:4202/test/chain`,
+                module: `https://localhost:4202/test/chain`,
                 name: 'Chain',
               },
             },
@@ -2393,7 +2493,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`http://localhost:4202/test/vendor`),
+              module: rri(`https://localhost:4202/test/vendor`),
               name: 'Vendor',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -2439,7 +2539,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`http://localhost:4202/test/chain`),
+                module: rri(`https://localhost:4202/test/chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2481,7 +2581,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri(`http://localhost:4202/test/chain`),
+                module: rri(`https://localhost:4202/test/chain`),
                 name: 'Chain',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -2523,7 +2623,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Boom/boom`,
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/card-with-error',
+                module: 'https://localhost:4202/test/card-with-error',
                 name: 'Boom',
               },
             },
@@ -2537,7 +2637,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -2606,7 +2706,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/person',
+                module: 'https://localhost:4202/test/person',
                 name: 'Person',
               },
             },
@@ -2670,7 +2770,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/post',
+                module: 'https://localhost:4202/test/post',
                 name: 'Post',
               },
             },
@@ -2690,7 +2790,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/post',
+                module: 'https://localhost:4202/test/post',
                 name: 'Post',
               },
             },
@@ -2821,7 +2921,7 @@ module(`Integration | realm indexing`, function (hooks) {
               cardDescription: 'Spec for Booking',
               specType: 'card',
               ref: {
-                module: 'http://localhost:4202/test/booking',
+                module: 'https://localhost:4202/test/booking',
                 name: 'Booking',
               },
             },
@@ -2844,10 +2944,10 @@ module(`Integration | realm indexing`, function (hooks) {
       id: `${testRealmURL}Spec/booking`,
       cardDescription: 'Spec for Booking',
       specType: 'card',
-      moduleHref: 'http://localhost:4202/test/booking',
+      moduleHref: 'https://localhost:4202/test/booking',
       containedExamples: null,
       linkedExamples: null,
-      ref: 'http://localhost:4202/test/booking/Booking',
+      ref: 'https://localhost:4202/test/booking/Booking',
       cardTitle: 'Booking',
       isCard: true,
       isComponent: false,
@@ -3377,7 +3477,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3399,7 +3499,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3422,7 +3522,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3458,7 +3558,7 @@ module(`Integration | realm indexing`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: rri('http://localhost:4202/test/friend'),
+            module: rri('https://localhost:4202/test/friend'),
             name: 'Friend',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -3542,7 +3642,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3568,7 +3668,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3610,7 +3710,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3662,7 +3762,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('http://localhost:4202/test/friend'),
+                module: rri('https://localhost:4202/test/friend'),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3760,7 +3860,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -3812,7 +3912,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('http://localhost:4202/test/friend'),
+                module: rri('https://localhost:4202/test/friend'),
                 name: 'Friend',
               },
               lastModified: adapter.lastModifiedMap.get(
@@ -3898,7 +3998,7 @@ module(`Integration | realm indexing`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/friend',
+                module: 'https://localhost:4202/test/friend',
                 name: 'Friend',
               },
             },
@@ -3940,7 +4040,7 @@ module(`Integration | realm indexing`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri('http://localhost:4202/test/friend'),
+              module: rri('https://localhost:4202/test/friend'),
               name: 'Friend',
             },
             lastModified: adapter.lastModifiedMap.get(
@@ -4652,7 +4752,6 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'http://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/arrow-left',
@@ -4718,6 +4817,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',
@@ -4803,7 +4903,6 @@ module(`Integration | realm indexing`, function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((ref) => !ref.includes('glimmer-scoped.css')),
       [
-        'http://localhost:4202/test/person',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-box-left-middle',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/align-left',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/apps',
@@ -4881,6 +4980,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/string',
         'https://cardstack.com/base/text-input-validator',
         'https://cardstack.com/base/watched-array',
+        'https://localhost:4202/test/person',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
         'https://packages/@cardstack/boxel-host/commands/copy-card-as-markdown',

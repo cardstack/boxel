@@ -17,7 +17,7 @@ import type { RealmServerTokenClaim } from '../utils/jwt';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 

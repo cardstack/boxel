@@ -252,6 +252,20 @@ async function ensureHostReady(): Promise<{
       );
 
       await portReservation.release();
+      // Strip REALM_SERVER_TLS_CERT_FILE / _KEY_FILE before spawning vite
+      // preview. packages/host/vite.config.mjs reads those env vars and,
+      // when present, terminates TLS in vite preview too. The harness
+      // probes readiness via `fetch('http://localhost:<port>/')` and
+      // hands the same http URL to spawned realm-servers via HOST_URL,
+      // so an HTTPS preview server would make the readiness probe and
+      // every downstream HOST_URL fetch fail. The dev stack's HTTPS
+      // origin lives on a fixed port (4200); harness ports are dynamic
+      // and never browser-facing, so plain HTTP is the right scheme
+      // here.
+      let { REALM_SERVER_TLS_CERT_FILE, REALM_SERVER_TLS_KEY_FILE, ...env } =
+        process.env;
+      void REALM_SERVER_TLS_CERT_FILE;
+      void REALM_SERVER_TLS_KEY_FILE;
       let child = spawn(
         'npx',
         ['vite', 'preview', '--port', String(port), '--strictPort'],
@@ -259,7 +273,7 @@ async function ensureHostReady(): Promise<{
           cwd: hostPackageDir,
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env: process.env,
+          env,
         },
       );
 

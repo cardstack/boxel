@@ -785,6 +785,44 @@ module('Integration | operator-mode | basics', function (hooks) {
     );
   });
 
+  module('expand to full width', function () {
+    test('can expand card to full width via more options menu and collapse via header button', async function (assert) {
+      let personCard = `${testRealmURL}Person/fadhlan`;
+      ctx.setCardInOperatorModeState(personCard);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${personCard}"]`);
+      assert.dom('[data-test-expand-button]').doesNotExist();
+
+      await click('[data-test-more-options-button]');
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+      assert
+        .dom(`[data-test-stack-card="${personCard}"]`)
+        .hasClass('expanded', 'stack card has expanded class');
+
+      await click('[data-test-more-options-button]');
+      assert
+        .dom('[data-test-boxel-menu-item-text="Expand to Full Width"]')
+        .doesNotExist(
+          '"Expand to full width" is no longer in the menu after expansion',
+        );
+
+      await click('[data-test-expand-button="active"]');
+      assert
+        .dom(`[data-test-stack-card="${personCard}"]`)
+        .doesNotHaveClass(
+          'expanded',
+          'expanded class is removed after collapse',
+        );
+      assert
+        .dom('[data-test-expand-button]')
+        .doesNotExist('restore button is gone after collapse');
+    });
+  });
+
   test('can toggle isolated template in place when the stack stores a saved card by local id', async function (assert) {
     const cardId = `${testRealmURL}PublishingPacket/story`;
     const customIsolated = '[data-test-pubpacket-isolated]';

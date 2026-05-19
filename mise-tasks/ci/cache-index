@@ -7,14 +7,20 @@ set -euo pipefail
 export PATH="./node_modules/.bin:$PATH"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-REALM_HOST="${REALM_BASE_URL#http://}"
+# Strip whichever scheme is in front; realm-server speaks HTTPS+HTTP/2 in
+# local dev (see infra:ensure-dev-cert) so REALM_BASE_URL can be https://.
+REALM_HOST="${REALM_BASE_URL#*://}"
+case "$REALM_BASE_URL" in
+  https://*) REALM_READY_SCHEME="https-get" ;;
+  *)         REALM_READY_SCHEME="http-get"  ;;
+esac
 
 # Build readiness URLs for all enabled realms.
 # boxel-homepage is excluded: its source repo (cardstack/boxel-home) is private
 # and inaccessible to CI without extra credentials.
 READINESS_URLS=""
-for realm in base catalog legacy-catalog skills submissions experiments openrouter software-factory; do
-  READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}http-get://${REALM_HOST}/${realm}/${READY_PATH}"
+for realm in base catalog skills submissions experiments openrouter software-factory; do
+  READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}${REALM_READY_SCHEME}://${REALM_HOST}/${realm}/${READY_PATH}"
 done
 READINESS_URLS="${READINESS_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}"
 
@@ -48,7 +54,12 @@ pnpm --dir=../matrix register-realm-users
 ensure_services_running
 
 echo "Waiting for realm readiness..."
-wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ') &
+# Probe-only TLS relaxation: the realm-server / host now serve the
+# self-signed mkcert leaf on https://localhost:42XX and wait-on's
+# in-process axios doesn't pick up NODE_EXTRA_CA_CERTS reliably on CI
+# runners. The actual services under test still validate normally.
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ') &
 WAIT_ON_PID=$!
 
 while kill -0 "$WAIT_ON_PID" 2>/dev/null; do

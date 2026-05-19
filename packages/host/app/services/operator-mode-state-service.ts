@@ -112,6 +112,11 @@ interface CardItem {
   useBaseTemplate?: boolean;
 }
 
+interface SerializedExpandedStackItem {
+  id: string;
+  stackIndex: number;
+}
+
 export type FileView = 'inspector' | 'browser';
 
 type SerializedItem = CardItem;
@@ -130,6 +135,7 @@ export type SerializedState = {
   moduleInspector?: ModuleInspectorView;
   cardPreviewFormat?: Format;
   workspaceChooserOpened?: boolean;
+  expandedStackItem?: SerializedExpandedStackItem;
 };
 
 interface OpenFileSubscriber {
@@ -169,6 +175,52 @@ export default class OperatorModeStateService extends Service {
 
   @tracked profileSettingsOpen = false;
   @tracked createListingModalPayload?: CreateListingModalPayload;
+
+  // Per-card expanded-mode intent. Keyed by stack-item instance id so the
+  // user's expand intent survives bury/pop cycles within a stack:
+  // when a card is pushed deeper, stack-item reads isTopCard=false
+  // and renders normally; when it pops back to the top, the stored
+  // intent re-applies and the card re-expands.
+  private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
+  isStackItemExpanded(itemKey: string): boolean {
+    return this.expandedStackItems.get(itemKey) ?? false;
+  }
+  setStackItemExpanded(itemKey: string, value: boolean) {
+    if (value) {
+      // Only one card can be expanded at a time — clear all others so
+      // the same card open in two stacks can't leave both expanded.
+      this.expandedStackItems.clear();
+      this.expandedStackItems.set(itemKey, true);
+    } else {
+      this.expandedStackItems.delete(itemKey);
+    }
+    this.schedulePersist();
+  }
+  // True when at least one stack's TOP card has expand intent — used
+  // to drive the bar's glass-morphism + .has-expanded-card class. Only
+  // top cards count: when a card with expand intent gets buried under
+  // a new stack item, the intent is retained (so it auto-re-expands
+  // on return) but the bar should drop its frost so the new top card
+  // stacks normally without a frosted scrim. Same per-level: A
+  // expanded → push B → A buried + intent kept, frost off → B top
+  // (no intent yet) → expand B → frost on → push C → B buried +
+  // intent kept, frost off; close C → B top again, intent fires,
+  // frost back on; close B → A top again, intent fires, frost on.
+  get hasAnyStackItemExpanded(): boolean {
+    if (this.expandedStackItems.size === 0) return false;
+    return this._state.stacks.some((stack) => {
+      const top = stack[stack.length - 1];
+      return top && this.expandedStackItems.has(top.instanceId);
+    });
+  }
+
+  // Slot in submode-layout's top bar where an EXPANDED stack item's
+  // CardHeader portals itself. Captured by submode-layout via
+  // captureElement modifier on insert. Stack-item reads this and uses
+  // {{#in-element}} to project its header pill into the bar when
+  // isExpanded — replacing the inline card header for the expanded
+  // mode only. When collapsed, the inline header reappears.
+  @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -278,6 +330,7 @@ export default class OperatorModeStateService extends Service {
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
     this.createListingModalPayload = undefined;
+    this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
@@ -299,6 +352,11 @@ export default class OperatorModeStateService extends Service {
       // this card to the top instead?)
       return;
     }
+    // Note: expand intent is retained on the buried card so that
+    // when the topping card closes and the previously-expanded card
+    // returns to top, it auto-re-expands. The visual collapse is
+    // already handled by isExpanded = isTopCard && isExpandedIntent
+    // — a buried card never renders as expanded.
     this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);
@@ -999,6 +1057,11 @@ export default class OperatorModeStateService extends Service {
       state.stacks.push(serializedStack);
     }
 
+    let expandedStackItem = this.serializedExpandedStackItem;
+    if (expandedStackItem) {
+      state.expandedStackItem = expandedStackItem;
+    }
+
     return state;
   }
 
@@ -1030,6 +1093,8 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   deserialize(rawState: SerializedState): OperatorModeState {
+    this.expandedStackItems.clear();
+
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -1085,7 +1150,35 @@ export default class OperatorModeStateService extends Service {
       stackIndex++;
     }
 
+    let expandedStackItem = rawState.expandedStackItem;
+    if (expandedStackItem) {
+      let stack = newState.stacks[expandedStackItem.stackIndex];
+      let item = stack?.find(
+        (candidate) => candidate.id === expandedStackItem.id,
+      );
+      if (item) {
+        this.expandedStackItems.set(item.instanceId, true);
+      }
+    }
+
     return newState;
+  }
+
+  private get serializedExpandedStackItem():
+    | SerializedExpandedStackItem
+    | undefined {
+    for (let [stackIndex, stack] of this._state.stacks.entries()) {
+      for (let item of stack) {
+        if (item.id && this.expandedStackItems.has(item.instanceId)) {
+          return {
+            id: item.id,
+            stackIndex,
+          };
+        }
+      }
+    }
+
+    return undefined;
   }
 
   get openDirs() {

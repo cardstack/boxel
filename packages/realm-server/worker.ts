@@ -1,5 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
 
 // Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
 // SIGKILL'd or its dev-log-tee dead during dev-all Ctrl-C) doesn't make
