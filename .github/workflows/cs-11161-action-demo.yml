@@ -55,6 +55,14 @@ jobs:
         working-directory: packages/realm-server
       - name: Wait for PostgreSQL to accept connections
         run: timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/5435) >/dev/null 2>&1; do sleep 1; done'
+      - name: Run database migrations
+        # register-all calls ensureUserRecord which writes to the boxel
+        # users table. The boxel database (and that table) are created
+        # by the realm-server's migrations on first boot. Run them up
+        # front so the registration step has a target schema to write
+        # against.
+        run: pnpm migrate
+        working-directory: packages/realm-server
       - name: Register matrix users (all)
         # `register-realm-users` runs in realms-only mode and skips the
         # `user`/`password` account this demo authenticates as. Use the
