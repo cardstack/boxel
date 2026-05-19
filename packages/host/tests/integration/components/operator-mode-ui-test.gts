@@ -22,6 +22,10 @@ import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
 
+// Total realm types exposed by the test fixture's grid. Bump when adding or
+// removing CardDef/FieldDef types from the operator-mode test realm.
+const ALL_REALM_TYPE_COUNT = 16;
+
 module('Integration | operator-mode | ui', function (hooks) {
   let ctx = setupOperatorModeTests(hooks);
 
@@ -592,8 +596,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     ).length;
     assert.strictEqual(
       allTypeOptions,
-      15,
-      `type picker shows 15 types (got ${allTypeOptions})`,
+      ALL_REALM_TYPE_COUNT - 1,
+      `type picker shows ${ALL_REALM_TYPE_COUNT - 1} types (got ${allTypeOptions})`,
     );
   });
 
@@ -1026,7 +1030,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        `Any Type (${ALL_REALM_TYPE_COUNT})`,
         'select-all shows count of all realm types',
       );
 
@@ -1087,7 +1091,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (16)',
+        `Any Type (${ALL_REALM_TYPE_COUNT})`,
         'select-all shows count of all realm types',
       );
 
@@ -1096,7 +1100,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      15,
+      ALL_REALM_TYPE_COUNT - 1,
       'all realm types are shown even without recent cards',
     );
   });
@@ -1516,12 +1520,13 @@ module('Integration | operator-mode | ui', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
-      // "Any Type" count should reflect the total from the API (15 types),
-      // not just the currently loaded page (3 types with PAGE_SIZE=3)
+      // "Any Type" count should reflect the total from the API
+      // (ALL_REALM_TYPE_COUNT), not just the currently loaded page (3 types
+      // with PAGE_SIZE=3)
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
         .containsText(
-          'Any Type (16)',
+          `Any Type (${ALL_REALM_TYPE_COUNT})`,
           'select-all shows total count from API, not loaded options count',
         );
     } finally {
