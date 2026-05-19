@@ -33,6 +33,7 @@ import {
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
   X_BOXEL_JOB_PRIORITY_HEADER,
+  userInitiatedPriority,
   Deferred,
   delay,
   mergeRelationships,
@@ -125,18 +126,75 @@ const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
 // Companion to `jobIdHeader()` (re-exported from
-// `../lib/prerender-fetch-headers`). The prerender server's
-// render-runner injects `__boxelJobPriority` onto the page before
-// transitioning into the render route. Outside a prerender tab the
-// global is undefined and we send no header — user / API callers
-// leave the realm-server's lookup paths to fall back to priority 0
-// as today.
+// `../lib/prerender-fetch-headers`). Policy is two-state, gated by
+// `__boxelDuringPrerender`, not by the presence of
+// `__boxelJobPriority`:
+//
+// 1. Inside a prerender tab: forward the worker job's priority as-is.
+//    The render-runner injects `__boxelJobPriority` alongside
+//    `__boxelJobId` on each visit — a priority of 0 is meaningful
+//    (the originating job is system-initiated background indexing)
+//    and must be preserved, not upgraded. Sub-`prerenderModule`
+//    calls fired by `_federated-search` for a `lookupDefinition`
+//    cache miss inherit this priority so they don't outrun the
+//    parent. If `__boxelJobPriority` is missing here (older
+//    render-runner build, test fixture, etc.) treat as 0 — the
+//    safe default for prerender-context work.
+//
+// 2. Outside a prerender tab (the host SPA in a real user's browser):
+//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    search are by definition user-initiated work and should outrank
+//    background indexing on the realm-server's PagePool. Without
+//    this, a user search whose definition lookup misses the modules
+//    cache would fire its sub-prerender at priority 0 and queue
+//    behind concurrent indexing fan-out.
+//
+// External (non-host) HTTP callers — anything that doesn't run in
+// the host SPA's JS runtime — bypass this helper entirely and set
+// `X-Boxel-Job-Priority` directly on their request if they care.
+// This helper covers the host SPA only.
+//
+// Both globals are checked with `=== true` / strict-number rather
+// than truthy coercion: `__boxelDuringPrerender` is typed as a
+// boolean and a stray truthy string from a future code path
+// shouldn't silently flip the policy from "user-priority" to
+// "preserve 0."
+// Pure resolver — exported for the unit test in
+// `tests/integration/job-priority-header-test.ts`. See the comment
+// above for the policy rationale; the function is the literal
+// translation of that policy to numbers.
+export function resolveOutboundJobPriority({
+  duringPrerender,
+  jobPriority,
+}: {
+  duringPrerender: unknown;
+  jobPriority: unknown;
+}): number {
+  let valid =
+    typeof jobPriority === 'number' &&
+    Number.isSafeInteger(jobPriority) &&
+    jobPriority >= 0
+      ? jobPriority
+      : undefined;
+  if (duringPrerender === true) {
+    return valid ?? 0;
+  }
+  return valid ?? userInitiatedPriority;
+}
+
 function jobPriorityHeader(): Record<string, string> {
-  let p = (globalThis as unknown as { __boxelJobPriority?: number })
-    .__boxelJobPriority;
-  return typeof p === 'number' && Number.isSafeInteger(p) && p >= 0
-    ? { [X_BOXEL_JOB_PRIORITY_HEADER]: String(p) }
-    : {};
+  let g = globalThis as unknown as {
+    __boxelDuringPrerender?: boolean;
+    __boxelJobPriority?: number;
+  };
+  return {
+    [X_BOXEL_JOB_PRIORITY_HEADER]: String(
+      resolveOutboundJobPriority({
+        duringPrerender: g.__boxelDuringPrerender,
+        jobPriority: g.__boxelJobPriority,
+      }),
+    ),
+  };
 }
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
