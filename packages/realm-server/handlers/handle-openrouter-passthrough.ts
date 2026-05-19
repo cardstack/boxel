@@ -4,11 +4,7 @@ import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import * as Sentry from '@sentry/node';
 
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
-import {
-  awaitPendingCost,
-  handleStreamingRequest,
-  trackCostDeduction,
-} from '../lib/proxy-forward';
+import { handleStreamingRequest } from '../lib/proxy-forward';
 import {
   fetchRequestFromContext,
   sendResponseForBadRequest,
@@ -95,77 +91,74 @@ export default function handleOpenRouterPassthrough({
         return;
       }
 
-      try {
-        await awaitPendingCost(matrixUserId);
-      } catch (e) {
-        log.error('Error waiting for pending cost:', e);
-        await sendResponseForSystemError(
+      if (isStreaming && !destinationConfig.supportsStreaming) {
+        await sendResponseForBadRequest(
           ctxt,
-          'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+          'Streaming is not supported for the OpenRouter passthrough',
         );
         return;
       }
 
-      const creditValidation =
-        await destinationConfig.creditStrategy.validateCredits(
-          dbAdapter,
-          matrixUserId,
-        );
-      if (!creditValidation.hasEnoughCredits) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          creditValidation.errorMessage || 'Insufficient credits',
-        );
-        return;
-      }
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${destinationConfig.apiKey}`,
-      };
-      const finalBody = JSON.stringify(openAIBody);
-
-      if (isStreaming) {
-        if (!destinationConfig.supportsStreaming) {
-          await sendResponseForBadRequest(
+      // Serialize concurrent requests from the same matrix user across
+      // replicas: the next request can't kick off another billable upstream
+      // call before the previous request's cost row has landed in the
+      // credits ledger. The lock is held through validate-credits → upstream
+      // call → save-cost; on streaming, save-cost happens inside
+      // handleStreamingRequest after the `[DONE]` marker.
+      await dbAdapter.withUserCostLock(matrixUserId, async () => {
+        const creditValidation =
+          await destinationConfig.creditStrategy.validateCredits(
+            dbAdapter,
+            matrixUserId,
+          );
+        if (!creditValidation.hasEnoughCredits) {
+          await sendResponseForForbiddenRequest(
             ctxt,
-            'Streaming is not supported for the OpenRouter passthrough',
+            creditValidation.errorMessage || 'Insufficient credits',
           );
           return;
         }
-        await handleStreamingRequest(
-          ctxt,
-          OPENROUTER_CHAT_URL,
-          'POST',
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${destinationConfig.apiKey}`,
+        };
+        const finalBody = JSON.stringify(openAIBody);
+
+        if (isStreaming) {
+          await handleStreamingRequest(
+            ctxt,
+            OPENROUTER_CHAT_URL,
+            'POST',
+            headers,
+            finalBody,
+            destinationConfig,
+            dbAdapter,
+            matrixUserId,
+          );
+          return;
+        }
+
+        const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
+          method: 'POST',
           headers,
-          finalBody,
-          destinationConfig,
+          body: finalBody,
+        });
+        const responseData = await externalResponse.json();
+
+        await destinationConfig.creditStrategy.saveUsageCost(
           dbAdapter,
           matrixUserId,
+          responseData,
         );
-        return;
-      }
 
-      const externalResponse = await globalThis.fetch(OPENROUTER_CHAT_URL, {
-        method: 'POST',
-        headers,
-        body: finalBody,
+        const response = new Response(JSON.stringify(responseData), {
+          status: externalResponse.status,
+          statusText: externalResponse.statusText,
+          headers: { 'content-type': SupportedMimeType.JSON },
+        });
+        await setContextResponse(ctxt, response);
       });
-      const responseData = await externalResponse.json();
-
-      trackCostDeduction(
-        destinationConfig,
-        dbAdapter,
-        matrixUserId,
-        responseData,
-      );
-
-      const response = new Response(JSON.stringify(responseData), {
-        status: externalResponse.status,
-        statusText: externalResponse.statusText,
-        headers: { 'content-type': SupportedMimeType.JSON },
-      });
-      await setContextResponse(ctxt, response);
     } catch (error) {
       log.error('Error in openrouter-passthrough handler:', error);
       Sentry.captureException(error);

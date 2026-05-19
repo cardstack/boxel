@@ -72,6 +72,16 @@ export default class SQLiteAdapter implements DBAdapter {
     return await fn(undefined);
   }
 
+  // SQLite has no cross-connection concurrency to coordinate, so the
+  // per-user cost-barrier lock is a passthrough. The PG implementation
+  // provides the real serialization across replicas.
+  async withUserCostLock<T>(
+    _matrixUserId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return await fn();
+  }
+
   private async internalExecute(sql: string, opts?: ExecuteOptions) {
     sql = this.adjustSQL(sql);
     return await this.query(sql, opts);
