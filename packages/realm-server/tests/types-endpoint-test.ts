@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
@@ -136,7 +136,7 @@ module(basename(__filename), function () {
           return aName.localeCompare(bName);
         });
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      let expectedData = [
+      let instanceEntries = [
         {
           type: 'card-type-summary',
           id: `${testRealm.url}chess-gallery/ChessGallery`,
@@ -144,6 +144,7 @@ module(basename(__filename), function () {
             displayName: 'Chess Gallery',
             total: 3,
             iconHTML: chessIconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -153,6 +154,7 @@ module(basename(__filename), function () {
             displayName: 'Family Photo Card',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -162,15 +164,17 @@ module(basename(__filename), function () {
             displayName: 'Friend',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
           type: 'card-type-summary',
-          id: 'http://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
+          id: 'https://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
           attributes: {
             displayName: 'FriendWithUsedLink',
             total: 2,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -180,6 +184,7 @@ module(basename(__filename), function () {
             displayName: 'Home',
             total: 1,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -189,6 +194,7 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 3,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -198,6 +204,7 @@ module(basename(__filename), function () {
             displayName: 'Person',
             total: 4,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -207,6 +214,7 @@ module(basename(__filename), function () {
             displayName: 'Realm Config',
             total: 1,
             iconHTML: fileSettingsIconHTML,
+            kind: 'instance' as const,
           },
         },
         {
@@ -216,12 +224,36 @@ module(basename(__filename), function () {
             displayName: 'TimersCard',
             total: 1,
             iconHTML,
+            kind: 'instance' as const,
           },
         },
       ];
+      let actualInstances = response.body.data.filter(
+        (entry: any) => entry.attributes.kind === 'instance',
+      );
       assert.deepEqual(
-        sortCardTypeSummaries(response.body.data),
-        sortCardTypeSummaries(expectedData),
+        sortCardTypeSummaries(actualInstances),
+        sortCardTypeSummaries(instanceEntries),
+        'instance summaries match expected fixture',
+      );
+      assert.ok(
+        response.body.data.every(
+          (entry: any) =>
+            entry.attributes.kind === 'instance' ||
+            entry.attributes.kind === 'file',
+        ),
+        'every summary entry carries an instance/file kind',
+      );
+      // The realistic fixture seeds `.md` files (sample.md, card-refs.md),
+      // so the response must include at least one `kind: 'file'` entry.
+      // Anchoring the test here protects against a regression that drops
+      // the `files` arm before `makeCardTypeSummaryDoc` emits the doc.
+      let fileEntries = response.body.data.filter(
+        (entry: any) => entry.attributes.kind === 'file',
+      );
+      assert.ok(
+        fileEntries.length > 0,
+        'response includes at least one kind: file entry from the indexed .md fixtures',
       );
     });
   });

@@ -85,9 +85,13 @@ const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
 
 const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
   let rows = await fetchRealmMetaRows(adapter);
+  let raw = rows[0]?.value as
+    | { instances?: RealmMetaValue[]; files?: RealmMetaValue[] }
+    | undefined;
   return {
     rows,
-    value: (rows[0]?.value ?? []) as RealmMetaValue[],
+    value: (raw?.instances ?? []) as RealmMetaValue[],
+    files: (raw?.files ?? []) as RealmMetaValue[],
   };
 };
 
@@ -1665,6 +1669,336 @@ module('Unit | index-writer', function (hooks) {
         makeCardTypeSummary(`${testRealmURL}pet/Pet`, 'Pet', iconHTML, 1),
       ],
       'correct card type summary after indexing is done',
+    );
+  });
+
+  test('update realm meta partitions file rows into the files array', async function (assert) {
+    // CS-prep for "Include FileDefs in CardsGrid": file rows in boxel_index
+    // (type='file') should be aggregated into `realm_meta.value.files`,
+    // independently of the cards group. This is what powers CardsGrid's
+    // "All Files" sidebar leaves.
+    let iconHTML = '<svg>file icon</svg>';
+    let baseFileTypes = internalKeysFor({
+      module: rri('./card-api'),
+      name: 'FileDef',
+    });
+    let markdownTypes = internalKeysFor(
+      {
+        module: rri('./markdown-file-def'),
+        name: 'MarkdownDef',
+      },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        // Plain instance row — should land in `instances`.
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource('1', 'Mango', {
+            module: rri('./person'),
+            name: 'Person',
+          }) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: internalKeysFor(
+            { module: rri('./person'), name: 'Person' },
+            baseCardRef,
+          ),
+          icon_html: iconHTML,
+        },
+        // Two markdown files — same code_ref so they collapse into one
+        // summary row with total: 2.
+        {
+          url: `${testRealmURL}notes/a.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/b.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'b.md', url: `${testRealmURL}notes/b.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        // A bare-FileDef file — base type used when the extension isn't mapped.
+        {
+          url: `${testRealmURL}misc/raw.bin`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'raw.bin', url: `${testRealmURL}misc/raw.bin` },
+          display_names: ['File'],
+          types: baseFileTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    // No new writes — just finalize so updateRealmMeta runs against the
+    // working table that setupIndex seeded.
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.strictEqual(
+      realmMeta.rows.length,
+      1,
+      'one realm_meta row was written',
+    );
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      'instance summaries only reflect CardDef rows',
+    );
+    // Files are ordered by display_name ASC; "File" sorts before "Markdown".
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}card-api/FileDef`,
+          'File',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          2,
+        ),
+      ],
+      'file summaries collapse duplicates and live in their own arm',
+    );
+  });
+
+  test('update realm meta collapses rows with the same code_ref but mixed display_names', async function (assert) {
+    // Regression: when a realm has been partially re-indexed across a code
+    // change (some file rows have populated `display_names`, some still
+    // have `[]` from the previous indexer), the aggregation must collapse
+    // them into one summary per code_ref — using `MAX(display_name)` so
+    // the populated label wins over the empty/null one. Without the
+    // collapse, CardsGrid's sidebar shows two entries for the same type
+    // (e.g., "Markdown" and "MarkdownDef") that resolve to identical
+    // searches and confuse the user.
+    let iconHTML = '<svg>icon</svg>';
+    let markdownTypes = internalKeysFor(
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        // Two markdown files with the same code_ref but different
+        // display_names — simulates the rolling-deploy state where the
+        // new extractor populated names for one file but not the other.
+        {
+          url: `${testRealmURL}notes/new.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'new.md', url: `${testRealmURL}notes/new.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/old.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'old.md', url: `${testRealmURL}notes/old.md` },
+          display_names: [],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          2,
+        ),
+      ],
+      'one summary per code_ref, with the populated display_name picked over the empty one',
+    );
+  });
+
+  test('fetchCardTypeSummary returns the realm_meta row at realm_versions.current_version', async function (assert) {
+    // Regression: the read path JOINs realm_meta against
+    // realm_versions.current_version so it always picks the row that
+    // matches the realm's authoritative current version. Without the JOIN,
+    // a naive SELECT returns an arbitrary realm_meta row when stale rows
+    // linger (e.g., after a from-scratch reindex resets the version) and
+    // CardsGrid's "All Files" group silently vanishes for any realm whose
+    // physical row order happens to surface a legacy array-shape row.
+    let iconHTML = '<svg>icon</svg>';
+    let personTypes = internalKeysFor(
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+
+    // Seed a CARD row at version 1 — that's the version we'll mark as
+    // current. updateRealmMeta() will aggregate this into realm_meta.value
+    // (new partitioned shape) for v1.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource('1', 'Mango', {
+            module: rri('./person'),
+            name: 'Person',
+          }) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    // Have the index writer aggregate v1 into realm_meta.value with the
+    // new partitioned shape.
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    // Now plant a *stale* legacy-shape row at a HIGHER version number. This
+    // is exactly the layout you get after a from-scratch reindex: the prune
+    // predicate `realm_version < current` doesn't reach v999, so it lingers.
+    // The naive `SELECT … WHERE realm_url=…` (no ORDER BY) would happily
+    // return this row first.
+    await adapter.execute(
+      `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+       VALUES ($1, $2, $3, $4)`,
+      {
+        bind: [
+          testRealmURL,
+          999,
+          JSON.stringify([
+            {
+              code_ref: `${testRealmURL}stale/Stale`,
+              display_name: 'Stale',
+              total: 42,
+              icon_html: iconHTML,
+            },
+          ]),
+          String(Date.now() - 1000),
+        ],
+      },
+    );
+
+    let summary = await indexQueryEngine.fetchCardTypeSummary(
+      new URL(testRealmURL),
+    );
+    assert.deepEqual(
+      summary.instances.map((s) => s.code_ref),
+      [`${testRealmURL}person/Person`],
+      'fetchCardTypeSummary returns the row at realm_versions.current_version even when a higher-numbered stale row is present',
+    );
+    assert.notOk(
+      summary.instances.find((s) => s.display_name === 'Stale'),
+      'stale row contents do not leak through',
+    );
+  });
+
+  test('done() prunes realm_meta rows at any version, including ones higher than the current', async function (assert) {
+    // Regression: pruneObsoleteEntries uses != instead of < so a
+    // from-scratch reindex (which resets the realm_version to a low
+    // number) doesn't leave older high-version rows orphaned in
+    // realm_meta forever.
+    let iconHTML = '<svg>icon</svg>';
+
+    // realm_versions starts at 0, so the next batch will write at v1.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 0 }],
+      [],
+    );
+
+    // Plant stale realm_meta rows at high version numbers — the kind of
+    // residue a long-running realm accumulates before its first
+    // from-scratch reindex.
+    for (let version of [50, 100, 200, 999]) {
+      await adapter.execute(
+        `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+         VALUES ($1, $2, $3, $4)`,
+        {
+          bind: [
+            testRealmURL,
+            version,
+            JSON.stringify([
+              {
+                code_ref: `${testRealmURL}stale-${version}/Stale`,
+                display_name: `Stale-${version}`,
+                total: version,
+                icon_html: iconHTML,
+              },
+            ]),
+            String(Date.now() - version * 1000),
+          ],
+        },
+      );
+    }
+
+    let rowsBefore = await adapter.execute(
+      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      rowsBefore.map((r) => r.realm_version),
+      [50, 100, 200, 999],
+      'stale rows are seeded before the batch runs',
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    let rowsAfter = await adapter.execute(
+      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      rowsAfter.map((r) => r.realm_version),
+      [1],
+      'pruneObsoleteEntries deletes every row that is not the current version, including higher-numbered stale ones',
     );
   });
 

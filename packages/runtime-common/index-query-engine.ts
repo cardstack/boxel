@@ -55,11 +55,11 @@ import {
 } from './query';
 import type { SerializedError } from './error';
 import type { DBAdapter } from './db';
-import type { RealmMetaTable } from './index-structure';
 import {
   coerceTypes,
+  normalizeRealmMetaValue,
   type BoxelIndexTable,
-  type CardTypeSummary,
+  type RealmMetaValue,
 } from './index-structure';
 import {
   getFieldDef,
@@ -923,15 +923,29 @@ export class IndexQueryEngine {
     return usedRenderTypeColumnExpression;
   }
 
-  async fetchCardTypeSummary(realmURL: URL): Promise<CardTypeSummary[]> {
+  async fetchCardTypeSummary(realmURL: URL): Promise<RealmMetaValue> {
+    // JOIN against realm_versions.current_version so we always pick the
+    // realm_meta row that matches the realm's authoritative current
+    // version. Naive `SELECT … WHERE realm_url=…` returns an arbitrary
+    // row when stale rows linger (e.g., a from-scratch reindex resets
+    // the version to a low number, leaving older high-version rows that
+    // the legacy prune predicate `realm_version < <new>` never reaches).
+    // Ordering by `realm_version DESC` would actually pick the *wrong*
+    // row after a from-scratch — the highest version is the oldest.
+    // realm_versions is the system source of truth for "which version
+    // is current," so anchoring the read there is the robust fix.
     let results = (await this.#query([
-      `SELECT value
+      `SELECT rm.value
        FROM realm_meta rm
+       JOIN realm_versions rv
+         ON rv.realm_url = rm.realm_url
+        AND rv.current_version = rm.realm_version
        WHERE`,
       ...every([['rm.realm_url =', param(realmURL.href)]]),
-    ] as Expression)) as Pick<RealmMetaTable, 'value'>[];
+      `LIMIT 1`,
+    ] as Expression)) as { value: unknown }[];
 
-    return (results[0]?.value ?? []) as unknown as CardTypeSummary[];
+    return normalizeRealmMetaValue(results[0]?.value);
   }
 
   private filterCondition(filter: Filter, onRef: CodeRef): CardExpression {

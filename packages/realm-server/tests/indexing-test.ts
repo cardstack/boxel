@@ -486,7 +486,13 @@ module(basename(__filename), function () {
       },
     });
 
-    test('realm is full indexed at boot', async function (assert) {
+    // Guards the contract that a brand-new realm (empty boxel_index state)
+    // always full-indexes on first boot — independent of
+    // REALM_SERVER_FULL_INDEX_ON_STARTUP. `createRealm` (the test helper)
+    // never passes `fullIndexOnStartup`, so the realm here has it set to
+    // false; the from-scratch job below is produced by the `isNewIndex`
+    // branch in Realm.start(), not by the env-var-driven branch.
+    test('newly-created realm full-indexes on first boot', async function (assert) {
       let jobs = await testDbAdapter.execute('select * from jobs');
       assert.strictEqual(
         jobs.length,
@@ -2007,7 +2013,7 @@ module(basename(__filename), function () {
         );
 
         if (definitionLookup) {
-          let moduleEntries = await definitionLookup.getModuleCacheEntries({
+          let moduleEntries = await definitionLookup.getCachedDefinitionsBatch({
             moduleUrls: [fileDefAlias],
             cacheScope: 'public',
             authUserId: '',
@@ -2138,7 +2144,7 @@ module(basename(__filename), function () {
         if (!definitionLookup) {
           assert.ok(false, 'definition lookup is available');
         } else {
-          let deepModuleEntry = await definitionLookup.getModuleCacheEntry(
+          let deepModuleEntry = await definitionLookup.getCachedDefinitions(
             `${testRealm}deep-card`,
           );
           assert.strictEqual(
@@ -2221,7 +2227,7 @@ module(basename(__filename), function () {
             // definition lookup errors are expected while dependencies are missing
           }
 
-          deepModuleEntry = await definitionLookup.getModuleCacheEntry(
+          deepModuleEntry = await definitionLookup.getCachedDefinitions(
             `${testRealm}deep-card`,
           );
           if (deepModuleEntry?.error?.error) {
@@ -2240,7 +2246,7 @@ module(basename(__filename), function () {
             assert.ok(false, 'expected deep-card module error details');
           }
 
-          let middleModuleEntry = await definitionLookup.getModuleCacheEntry(
+          let middleModuleEntry = await definitionLookup.getCachedDefinitions(
             `${testRealm}middle-field`,
           );
           assert.strictEqual(
@@ -2484,7 +2490,7 @@ module(basename(__filename), function () {
         let definitionLookup = (testRealmServer?.testRealmServer as any)
           ?.definitionLookup as DefinitionLookup | undefined;
         if (definitionLookup) {
-          let moduleBEntry = await definitionLookup.getModuleCacheEntry(
+          let moduleBEntry = await definitionLookup.getCachedDefinitions(
             `${testRealm}module-b`,
           );
           assert.strictEqual(
@@ -2503,7 +2509,7 @@ module(basename(__filename), function () {
             assert.ok(false, 'expected module-b error details');
           }
 
-          let moduleAEntry = await definitionLookup.getModuleCacheEntry(
+          let moduleAEntry = await definitionLookup.getCachedDefinitions(
             `${testRealm}module-a`,
           );
           assert.strictEqual(

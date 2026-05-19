@@ -421,7 +421,7 @@ module(basename(__filename), function () {
         }
       });
 
-      test('A.clearRealmCache(url) → B listener bumps B.bumpRealmGeneration', async function (assert) {
+      test('A.clearRealmDefinitions(url) → B listener bumps B.bumpRealmGeneration', async function (assert) {
         const realmURL = 'http://x.test/peer-clear-realm/';
         const instanceB = new CachingDefinitionLookup(
           dbAdapter,
@@ -444,7 +444,7 @@ module(basename(__filename), function () {
             stubVirtualNetwork,
             stubCreatePrerenderAuth,
           );
-          await instanceA.clearRealmCache(realmURL);
+          await instanceA.clearRealmDefinitions(realmURL);
 
           const seen = await waitFor(() =>
             recorderB.realm.length > 0 ? recorderB.realm : undefined,
@@ -455,7 +455,7 @@ module(basename(__filename), function () {
         }
       });
 
-      test('A.clearAllModules() → B listener bumps B.bumpGlobalGeneration', async function (assert) {
+      test('A.clearAllDefinitions() → B listener bumps B.bumpGlobalGeneration', async function (assert) {
         const instanceB = new CachingDefinitionLookup(
           dbAdapter,
           stubPrerenderer,
@@ -477,7 +477,7 @@ module(basename(__filename), function () {
             stubVirtualNetwork,
             stubCreatePrerenderAuth,
           );
-          await instanceA.clearAllModules();
+          await instanceA.clearAllDefinitions();
 
           await waitFor(() => (recorderB.global > 0 ? true : undefined));
           assert.strictEqual(

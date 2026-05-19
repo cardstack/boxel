@@ -12,14 +12,30 @@ export PATH="./node_modules/.bin:$PATH"
 # If both services are already running (e.g. local dev), skip startup entirely.
 # start-server-and-test fails if run-p exits immediately, which happens when
 # start:icons and start:host-dist both detect existing servers and exit 0.
-if curl --fail --silent "$ICONS_URL" >/dev/null 2>&1 && \
-   curl --fail --silent "$HOST_URL" >/dev/null 2>&1; then
+# -k tolerates the self-signed mkcert leaf the dev stack now serves on HOST_URL.
+if curl -k --fail --silent "$ICONS_URL" >/dev/null 2>&1 && \
+   curl -k --fail --silent "$HOST_URL" >/dev/null 2>&1; then
   echo "Icons and host already running, nothing to start"
   exec sleep 100000000
 fi
 
-WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 \
+# Build wait-on URLs: prefix `https-get://` (forces GET, scheme variant
+# of plain `https://` which would default to HEAD) when HOST_URL is
+# HTTPS. Vite preview behind the same-port dispatcher doesn't reliably
+# answer HEAD over h2 in CI, so a HEAD-based probe times out even
+# though GET succeeds (verified locally with curl).
+#
+# START_SERVER_AND_TEST_INSECURE=1 also disables wait-on cert validation:
+# start-server-and-test passes `strictSSL: true` to wait-on by default
+# (overriding the global NODE_TLS_REJECT_UNAUTHORIZED), and this is the
+# documented escape hatch. Scopes to the probe only — the actual servers
+# under test still present a real cert.
+case "$HOST_URL" in
+  https://*) HOST_READY="https-get://${HOST_URL#https://}" ;;
+  *)         HOST_READY="$HOST_URL" ;;
+esac
+WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist' \
-    "${ICONS_URL}|${HOST_URL}" \
+    "${ICONS_URL}|${HOST_READY}" \
     'wait'

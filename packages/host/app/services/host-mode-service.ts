@@ -98,9 +98,14 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotMatrixTests() {
+    // Realm-server speaks https locally now (see infra:ensure-dev-cert);
+    // test-realms and the matrix-test realm share the same cert and
+    // bind their respective ports.
     return (
       this.hostModeOrigin !== 'http://localhost:4202' &&
-      this.hostModeOrigin !== 'http://localhost:4205'
+      this.hostModeOrigin !== 'https://localhost:4202' &&
+      this.hostModeOrigin !== 'http://localhost:4205' &&
+      this.hostModeOrigin !== 'https://localhost:4205'
     );
   }
 

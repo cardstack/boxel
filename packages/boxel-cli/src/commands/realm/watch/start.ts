@@ -48,6 +48,12 @@ interface PendingChange {
 export interface FlushResult {
   pulled: string[];
   deleted: string[];
+  /**
+   * Files whose remote-side change was detected but not applied because the
+   * local copy diverges from the sync manifest. Cleared by passing
+   * `overwriteLocal: true`, or by reconciling via `boxel realm sync`.
+   */
+  skipped: string[];
   checkpoint: Checkpoint | null;
 }
 
@@ -59,6 +65,7 @@ export interface FlushResult {
 export class RealmWatcher extends RealmSyncBase {
   readonly name: string;
   private readonly debounceMs: number;
+  private readonly overwriteLocal: boolean;
   private readonly checkpointManager: CheckpointManager;
   private lastKnownMtimes = new Map<string, number>();
   private pendingChanges = new Map<string, PendingChange>();
@@ -68,10 +75,11 @@ export class RealmWatcher extends RealmSyncBase {
   constructor(
     spec: WatchRealmSpec,
     authenticator: RealmAuthenticator,
-    options: { debounceMs: number },
+    options: { debounceMs: number; overwriteLocal?: boolean },
   ) {
     super({ realmUrl: spec.realmUrl, localDir: spec.localDir }, authenticator);
     this.debounceMs = options.debounceMs;
+    this.overwriteLocal = options.overwriteLocal ?? false;
     this.checkpointManager = new CheckpointManager(spec.localDir);
     this.name = deriveRealmName(this.normalizedRealmUrl);
   }
@@ -186,7 +194,7 @@ export class RealmWatcher extends RealmSyncBase {
     }
 
     if (this.pendingChanges.size === 0) {
-      return { pulled: [], deleted: [], checkpoint: null };
+      return { pulled: [], deleted: [], skipped: [], checkpoint: null };
     }
 
     // Snapshot then clear before any await — anything an interleaved poll()
@@ -197,11 +205,39 @@ export class RealmWatcher extends RealmSyncBase {
 
     const pulled: string[] = [];
     const deleted: string[] = [];
+    const skipped: string[] = [];
     const changes: CheckpointChange[] = [];
 
+    // Load the manifest once per flush so we hash-compare against a single
+    // baseline. Skipped when `overwriteLocal` is on — we never look. A
+    // manifest from a different realm is treated as "no manifest" (same
+    // policy as `initialize()` and `sync()`), so every local file looks
+    // unrecorded and is protected by the divergence gate.
+    let manifest: SyncManifest | null = null;
+    if (!this.overwriteLocal) {
+      const loaded = await loadManifest(this.options.localDir);
+      if (loaded && loaded.realmUrl === this.normalizedRealmUrl) {
+        manifest = loaded;
+      }
+    }
+
     for (const [file, info] of drained) {
+      const localPath = path.join(this.options.localDir, file);
+
+      if (
+        !this.overwriteLocal &&
+        (await this.localDivergesFromManifest(
+          localPath,
+          file,
+          manifest,
+          info.status,
+        ))
+      ) {
+        skipped.push(file);
+        continue;
+      }
+
       if (info.status === 'deleted') {
-        const localPath = path.join(this.options.localDir, file);
         try {
           await fs.unlink(localPath);
         } catch (err: any) {
@@ -210,14 +246,18 @@ export class RealmWatcher extends RealmSyncBase {
         deleted.push(file);
         changes.push({ file, status: 'deleted' });
       } else {
-        const localPath = path.join(this.options.localDir, file);
         await this.downloadFile(file, localPath);
         pulled.push(file);
         changes.push({ file, status: info.status });
       }
     }
 
+    // Only advance mtimes for files we actually applied. Skipped entries
+    // keep their old `lastKnownMtimes` value (or absence) so the next poll
+    // re-detects them — the warning persists until reconciled.
+    const skippedSet = new Set(skipped);
     for (const [file, info] of drained) {
+      if (skippedSet.has(file)) continue;
       if (info.status === 'deleted') {
         this.lastKnownMtimes.delete(file);
       } else {
@@ -225,14 +265,45 @@ export class RealmWatcher extends RealmSyncBase {
       }
     }
 
-    await this.persistManifest(pulled, deleted);
+    let checkpoint: Checkpoint | null = null;
+    if (changes.length > 0) {
+      await this.persistManifest(pulled, deleted);
+      checkpoint = await this.checkpointManager.createCheckpoint(
+        'remote',
+        changes,
+      );
+    }
 
-    const checkpoint = await this.checkpointManager.createCheckpoint(
-      'remote',
-      changes,
-    );
+    return { pulled, deleted, skipped, checkpoint };
+  }
 
-    return { pulled, deleted, checkpoint };
+  /**
+   * True when the local copy of `relPath` no longer matches the sync
+   * manifest: hash mismatch, missing manifest record for a present file,
+   * or — for non-delete operations — the user deleted the file locally
+   * while the manifest still recorded it (the delete-vs-change conflict
+   * that `sync-logic.ts` classifies via `'deleted' + 'changed' = conflict`).
+   */
+  private async localDivergesFromManifest(
+    localPath: string,
+    relPath: string,
+    manifest: SyncManifest | null,
+    operation: 'added' | 'modified' | 'deleted',
+  ): Promise<boolean> {
+    let localHash: string;
+    try {
+      localHash = await computeFileHash(localPath);
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
+      // Remote also deleting → no local work to lose. Manifest had no
+      // record → first-time pull, nothing to protect. Manifest had a
+      // record and remote wants to write → that's the conflict.
+      if (operation === 'deleted') return false;
+      return manifest?.files[relPath] !== undefined;
+    }
+    const manifestHash = manifest?.files[relPath];
+    if (manifestHash === undefined) return true;
+    return localHash !== manifestHash;
   }
 
   /**
@@ -286,10 +357,13 @@ export class RealmWatcher extends RealmSyncBase {
     pulled: string[],
     deleted: string[],
   ): Promise<void> {
+    // Drop file hashes from a manifest belonging to a different realm —
+    // otherwise we'd persist cross-realm entries under our `realmUrl`.
+    // Matches the policy used by `flushPending()` and `initialize()`.
     const prior = await loadManifest(this.options.localDir);
-    const files: Record<string, string> = prior?.files
-      ? { ...prior.files }
-      : {};
+    const priorFiles =
+      prior && prior.realmUrl === this.normalizedRealmUrl ? prior.files : null;
+    const files: Record<string, string> = priorFiles ? { ...priorFiles } : {};
 
     for (const file of deleted) {
       delete files[file];
@@ -332,6 +406,12 @@ export interface WatchRealmsOptions {
   authenticator?: RealmAuthenticator;
   /** Stops the watch loop when aborted. SIGINT/SIGTERM are wired up when omitted. */
   signal?: AbortSignal;
+  /**
+   * When true, downloads always overwrite the local file. When false
+   * (default), files whose local copy diverges from the sync manifest are
+   * skipped with a warning instead of overwritten.
+   */
+  overwriteLocal?: boolean;
 }
 
 export interface WatchRealmsResult {
@@ -358,6 +438,7 @@ export async function watchRealms(
   const intervalMs = options.intervalMs ?? 30_000;
   const debounceMs = options.debounceMs ?? 5_000;
   const quiet = options.quiet ?? false;
+  const overwriteLocal = options.overwriteLocal ?? false;
 
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
     return { watchers: [], error: '`intervalMs` must be a positive number.' };
@@ -408,6 +489,7 @@ export async function watchRealms(
   for (const spec of specs) {
     const watcher = new RealmWatcher(spec, authenticator, {
       debounceMs,
+      overwriteLocal,
     });
     try {
       await watcher.initialize();
@@ -546,14 +628,20 @@ function formatLockedError(localDir: string, info: WatchLockInfo): string {
 
 function logFlush(name: string, result: FlushResult): void {
   const total = result.pulled.length + result.deleted.length;
-  if (total === 0) return;
-  console.log(
-    `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_GREEN}applied ${total} change(s)${RESET} (${result.pulled.length} pulled, ${result.deleted.length} deleted)`,
-  );
-  if (result.checkpoint) {
-    const tag = result.checkpoint.isMajor ? '[MAJOR]' : '[minor]';
+  if (total > 0) {
     console.log(
-      `  ${DIM}Checkpoint:${RESET} ${result.checkpoint.shortHash} ${tag} ${result.checkpoint.message}`,
+      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_GREEN}applied ${total} change(s)${RESET} (${result.pulled.length} pulled, ${result.deleted.length} deleted)`,
+    );
+    if (result.checkpoint) {
+      const tag = result.checkpoint.isMajor ? '[MAJOR]' : '[minor]';
+      console.log(
+        `  ${DIM}Checkpoint:${RESET} ${result.checkpoint.shortHash} ${tag} ${result.checkpoint.message}`,
+      );
+    }
+  }
+  for (const file of result.skipped) {
+    console.log(
+      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_YELLOW}⚠ skipped ${file}: local diverges from sync manifest (rerun with --overwrite-local to discard, or \`boxel realm sync\` to reconcile)${RESET}`,
     );
   }
 }
@@ -614,6 +702,10 @@ export function registerStartCommand(watch: Command): void {
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
+    .option(
+      '--overwrite-local',
+      'Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.',
+    )
     .action(
       async (
         realmUrl: string,
@@ -622,6 +714,7 @@ export function registerStartCommand(watch: Command): void {
           interval: number;
           debounce: number;
           realmSecretSeed?: boolean;
+          overwriteLocal?: boolean;
         },
       ) => {
         const realmSecretSeed = await resolveRealmSecretSeed(
@@ -631,6 +724,7 @@ export function registerStartCommand(watch: Command): void {
           intervalMs: options.interval * 1000,
           debounceMs: options.debounce * 1000,
           realmSecretSeed,
+          overwriteLocal: options.overwriteLocal === true,
         });
         if (result.error) {
           console.error(`${FG_RED}Error:${RESET} ${result.error}`);

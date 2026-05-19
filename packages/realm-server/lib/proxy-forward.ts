@@ -7,52 +7,18 @@ import type { AllowedProxyDestination } from './allowed-proxy-destinations';
 
 const log = logger('proxy-forward');
 
-/**
- * Per-user barrier ensuring the previous request's billable cost has been
- * recorded before a new request starts. Shared across every handler that
- * forwards through a credit-bearing destination so the same user can't race
- * concurrent requests through different endpoints (e.g. `_request-forward`
- * and `/_openrouter/chat/completions`).
- */
-const pendingCostPromises = new Map<string, Promise<void>>();
-
 const KEEP_ALIVE_INTERVAL_MS = 15000;
-
-export async function awaitPendingCost(matrixUserId: string): Promise<void> {
-  let pending = pendingCostPromises.get(matrixUserId);
-  if (pending) {
-    await pending;
-  }
-}
-
-/** Schedule cost deduction in the background, chained after any prior pending. */
-export function trackCostDeduction(
-  destinationConfig: AllowedProxyDestination,
-  dbAdapter: DBAdapter,
-  matrixUserId: string,
-  responseData: unknown,
-): void {
-  const previous = pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-  const cost = previous
-    .then(() =>
-      destinationConfig.creditStrategy.saveUsageCost(
-        dbAdapter,
-        matrixUserId,
-        responseData,
-      ),
-    )
-    .finally(() => {
-      if (pendingCostPromises.get(matrixUserId) === cost) {
-        pendingCostPromises.delete(matrixUserId);
-      }
-    });
-  pendingCostPromises.set(matrixUserId, cost);
-}
 
 /**
  * Stream the upstream `text/event-stream` response back to the client, parsing
  * each `data:` line so we can capture the OpenRouter generation id / inline
- * cost and schedule a credit deduction at `[DONE]`.
+ * cost and save the credit deduction at `[DONE]`.
+ *
+ * Cost-save is awaited inline (not fire-and-forget). Callers run this inside
+ * `dbAdapter.withUserCostLock(matrixUserId, ...)`, which serializes concurrent
+ * same-user requests across replicas; the lock must be held until the cost
+ * row commits so the next request can't kick off another billable upstream
+ * call before the previous request's debit lands in the ledger.
  */
 export async function handleStreamingRequest(
   ctxt: Koa.Context,
@@ -101,23 +67,23 @@ export async function handleStreamingRequest(
       reader,
       async (data) => {
         if (data === '[DONE]') {
+          ctxt.res.write(`data: [DONE]\n\n`);
           if (
             generationId != null ||
             (typeof costInUsd === 'number' &&
               Number.isFinite(costInUsd) &&
               costInUsd > 0)
           ) {
-            trackCostDeduction(endpointConfig, dbAdapter, matrixUserId, {
-              id: generationId,
-              usage: { cost: costInUsd },
-            });
+            await endpointConfig.creditStrategy.saveUsageCost(
+              dbAdapter,
+              matrixUserId,
+              { id: generationId, usage: { cost: costInUsd } },
+            );
           } else {
             log.warn(
               `Streaming response for user ${matrixUserId} contained no generation ID or usage cost, skipping credit deduction`,
             );
           }
-
-          ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
         }
 

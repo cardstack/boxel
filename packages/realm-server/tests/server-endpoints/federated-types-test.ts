@@ -22,7 +22,7 @@ import {
   runTestRealmServerWithRealms,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 
 interface FederatedTypesResponse {
   data: FederatedCardTypeSummaryEntry[];
@@ -58,6 +58,11 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           },
         },
       },
+      // FileDef row — exercises the `files` arm of realm_meta.value so the
+      // federated response carries both `kind: 'instance'` and `kind: 'file'`
+      // discriminators. Without it the `instance`/`file` partitioning would
+      // be untested at this layer.
+      'note.md': '# Note\n\nFile body.',
     };
 
     async function startTypesRealmServer({
@@ -147,6 +152,44 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Authorization', `Bearer ${realmServerToken}`)
         .send({ realms, ...extra });
     }
+
+    test('QUERY /_federated-types stamps a kind discriminator on instance AND file entries', async function (assert) {
+      // Regression for CS-11170: the federated handler used to iterate
+      // fetchCardTypeSummary() as a flat array. After realm_meta moved to
+      // the partitioned `{ instances, files }` shape, the handler must
+      // iterate both arms and stamp each entry with its `kind`. Both
+      // realms here carry a CardDef instance + a `.md` FileDef row, so the
+      // response must include at least one of each kind.
+      let response = await makeAuthenticatedRequest([
+        testRealm.url,
+        secondaryRealm.url,
+      ]);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = response.body as FederatedTypesResponse;
+
+      assert.ok(
+        body.data.every((entry) =>
+          ['instance', 'file'].includes(entry.attributes.kind),
+        ),
+        'every entry carries a kind: instance | file discriminator',
+      );
+
+      let instanceEntries = body.data.filter(
+        (entry) => entry.attributes.kind === 'instance',
+      );
+      let fileEntries = body.data.filter(
+        (entry) => entry.attributes.kind === 'file',
+      );
+      assert.ok(
+        instanceEntries.length > 0,
+        'response includes at least one kind: instance entry',
+      );
+      assert.ok(
+        fileEntries.length > 0,
+        'response includes at least one kind: file entry — proves the federated handler iterates the files arm of realm_meta.value, not just instances',
+      );
+    });
 
     test('QUERY /_federated-types returns flat type summaries from multiple realms', async function (assert) {
       let response = await makeAuthenticatedRequest([

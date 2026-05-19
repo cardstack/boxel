@@ -1,6 +1,6 @@
 import type { RealmInfo } from './realm';
 import type { QueryResultsMeta, PrerenderedCard } from './index-query-engine';
-import type { CardTypeSummary } from './index-structure';
+import type { CardTypeSummary, RealmMetaValue } from './index-structure';
 import {
   type CardResource,
   type FileMetaResource,
@@ -162,17 +162,56 @@ export function transformResultsToPrerenderedCardsDoc(results: {
   };
 }
 
-export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
-  let data = summaries.map((summary) => ({
+export type CardTypeSummaryKind = 'instance' | 'file';
+
+// JSON:API representation of one entry from `realm_meta.value`. Clients
+// partition the flat array by `kind` on read — see CardsGrid's
+// `loadFilterList`. Keeping a single resource shape with a discriminator
+// (rather than two parallel `data` arrays) preserves the existing contract for
+// callers that only care about one kind.
+export interface CardTypeSummaryEntry {
+  type: 'card-type-summary';
+  id: string;
+  attributes: {
+    displayName: string;
+    total: number;
+    iconHTML: string;
+    kind: CardTypeSummaryKind;
+  };
+}
+
+function summaryToEntry(
+  summary: CardTypeSummary,
+  kind: CardTypeSummaryKind,
+): CardTypeSummaryEntry {
+  return {
     type: 'card-type-summary',
     id: summary.code_ref,
     attributes: {
       displayName: summary.display_name,
       total: summary.total,
       iconHTML: summary.icon_html,
+      kind,
     },
-  }));
+  };
+}
 
+// Accepts either the partitioned RealmMetaValue (current shape) or a bare
+// CardTypeSummary[] (legacy callers that pre-filtered to instances). In both
+// cases the output is a flat list of entries discriminated by `kind`.
+export function makeCardTypeSummaryDoc(
+  summaries: RealmMetaValue | CardTypeSummary[],
+) {
+  let value: RealmMetaValue;
+  if (Array.isArray(summaries)) {
+    value = { instances: summaries, files: [] };
+  } else {
+    value = summaries;
+  }
+  let data: CardTypeSummaryEntry[] = [
+    ...value.instances.map((s) => summaryToEntry(s, 'instance')),
+    ...value.files.map((s) => summaryToEntry(s, 'file')),
+  ];
   return { data };
 }
 
@@ -183,6 +222,7 @@ export interface FederatedCardTypeSummaryEntry {
     displayName: string;
     total: number;
     iconHTML: string;
+    kind: CardTypeSummaryKind;
   };
   meta: {
     realmURL: string;

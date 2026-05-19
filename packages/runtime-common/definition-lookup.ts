@@ -43,8 +43,8 @@ const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 // peer realm-server processes can bump their in-memory generation counters
 // in lockstep with the DB. Payload is JSON; one of:
 //   {"k":"module","r":<resolvedRealmURL>,"m":[<moduleURL>,...]} — invalidate fan-out
-//   {"k":"realm","r":<resolvedRealmURL>}                        — clearRealmCache
-//   {"k":"global"}                                              — clearAllModules
+//   {"k":"realm","r":<resolvedRealmURL>}                        — clearRealmDefinitions
+//   {"k":"global"}                                              — clearAllDefinitions
 // Self-notify is idempotent: the emitting process already bumped its
 // counter synchronously before the DB delete, and a second bump on
 // listener receive is observationally equivalent (counters are monotonic
@@ -56,7 +56,7 @@ const NOTIFY_PAYLOAD_BUDGET = 7000;
 // Postgres NOTIFY channel for cross-instance prerender-coalesce wakeups
 // (CS-10953). The winner of a `pg_try_advisory_xact_lock` for a given
 // inFlightKey emits this notify (with the inFlightKey as payload) inside
-// the same transaction as its persistModuleCacheEntry, so peer waiters
+// the same transaction as its persistDefinitionCacheEntry, so peer waiters
 // see the signal only on commit (the cache row is visible to their
 // re-read by the time their wait resolves). Loser path on
 // missed-NOTIFY falls back to a bounded-timeout re-read.
@@ -156,7 +156,7 @@ function parseJsonValue<T>(value: T | string | null): T | null {
 export type CacheScope = 'public' | 'realm-auth';
 type LocalRealm = Pick<Realm, 'url' | 'getRealmOwnerUserId' | 'visibility'>;
 
-export interface ModuleCacheEntry {
+export interface DefinitionCacheEntry {
   definitions: Record<string, ModuleDefinitionResult | ErrorEntry>;
   deps: string[];
   error?: ErrorEntry;
@@ -166,14 +166,14 @@ export interface ModuleCacheEntry {
   createdAt?: number;
 }
 
-export interface ModuleCacheEntryQuery {
+export interface DefinitionCacheEntryQuery {
   moduleUrls: string[];
   cacheScope: CacheScope;
   authUserId: string;
   resolvedRealmURL: string;
 }
 
-export type ModuleCacheEntries = Record<string, ModuleCacheEntry>;
+export type DefinitionCacheEntries = Record<string, DefinitionCacheEntry>;
 
 interface WriteToDatabaseCacheParams {
   moduleUrl: string;
@@ -258,8 +258,21 @@ export interface PopulateCoordinator {
   waitForKey(coalesceKey: string, timeoutMs: number): Promise<void>;
 }
 
+// Public option shape for definition lookup calls. `priority` is forwarded to
+// the prerender server when a cache miss requires a sub-prerender — same
+// numeric scale as worker-job priority (0 = system-initiated background,
+// 10 = userInitiatedPriority). Callers in the indexer thread their job
+// priority through here so user-initiated reindex work doesn't silently
+// downgrade to background priority for its module sub-renders.
+export interface DefinitionLookupOptions {
+  priority?: number;
+}
+
 export interface DefinitionLookup {
-  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition>;
   // Like lookupDefinition but does not trigger a prerenderer call or
   // populate missing definitions. It may still perform lookup-context
   // resolution (including remote visibility probing) before reading from the
@@ -268,18 +281,28 @@ export interface DefinitionLookup {
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
   invalidate(moduleURL: string): Promise<string[]>;
-  clearRealmCache(resolvedRealmURL: string): Promise<void>;
-  clearAllModules(): Promise<void>;
+  clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
+  clearAllDefinitions(): Promise<void>;
   registerRealm(realm: LocalRealm): void;
   forRealm(realm: LocalRealm): DefinitionLookup;
-  getModuleCacheEntry(moduleUrl: string): Promise<ModuleCacheEntry | undefined>;
-  getModuleCacheEntries(
-    query: ModuleCacheEntryQuery,
-  ): Promise<ModuleCacheEntries>;
+  getCachedDefinitions(
+    moduleUrl: string,
+    opts?: DefinitionLookupOptions,
+  ): Promise<DefinitionCacheEntry | undefined>;
+  getCachedDefinitionsBatch(
+    query: DefinitionCacheEntryQuery,
+  ): Promise<DefinitionCacheEntries>;
 }
 
 interface LookupContext {
   requestingRealm?: LocalRealm;
+  // Worker-job priority forwarded into sub-`prerenderModule` calls for
+  // definition cache misses. Origin is the `x-boxel-job-priority`
+  // header on `_federated-search` calls during a prerendered card
+  // render — `handle-search` sanitizes the header and passes it into
+  // `RealmIndexQueryEngine`'s search opts; the search engine threads
+  // it here when it calls `lookupDefinition`.
+  priority?: number;
 }
 
 export class CachingDefinitionLookup implements DefinitionLookup {
@@ -291,13 +314,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     userId: string,
     permissions: RealmPermissions,
   ) => string;
-  // Dedupes concurrent loadModuleCacheEntry calls that would hit the same
+  // Dedupes concurrent loadDefinitionCacheEntry calls that would hit the same
   // cache row so a single prerenderer round-trip is shared by all waiters
   // instead of each caller racing to the prerenderer independently.
-  #inFlight = new Map<string, Promise<ModuleCacheEntry | undefined>>();
+  #inFlight = new Map<string, Promise<DefinitionCacheEntry | undefined>>();
   // Invalidation generations. Bumped synchronously by invalidate /
-  // clearRealmCache / clearAllModules before the DB delete.
-  // loadModuleCacheEntryUncached snapshots all three values at entry and
+  // clearRealmDefinitions / clearAllDefinitions before the DB delete.
+  // loadDefinitionCacheEntryUncached snapshots all three values at entry and
   // re-checks them just before persist; if any changed, the in-flight
   // prerender's result is discarded rather than re-inserted, so the cache
   // wipe isn't undone by a prerender that started against pre-invalidation
@@ -307,15 +330,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   //     specific URLs avoids spuriously discarding an in-flight prerender
   //     for an unrelated module in the same realm.
   //   - #realmGenerations: keyed by `resolvedRealmURL`; bumped by
-  //     clearRealmCache() so every in-flight prerender for that realm is
+  //     clearRealmDefinitions() so every in-flight prerender for that realm is
   //     invalidated, including modules not yet in #moduleGenerations.
-  //   - #globalGeneration: bumped by clearAllModules() so every in-flight
+  //   - #globalGeneration: bumped by clearAllDefinitions() so every in-flight
   //     prerender is invalidated regardless of realm or module URL.
   #moduleGenerations = new Map<string, number>();
   #realmGenerations = new Map<string, number>();
   #globalGeneration = 0;
   // CS-10953 cross-process prerender coalescer. Optional — when undefined,
-  // loadModuleCacheEntryUncached runs the original uncoordinated path.
+  // loadDefinitionCacheEntryUncached runs the original uncoordinated path.
   // Constructed only by the realm-server main when
   // PRERENDER_COALESCE_ACROSS_PROCESSES is enabled and the dbAdapter is pg.
   #populateCoordinator?: PopulateCoordinator;
@@ -337,8 +360,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     this.#populateCoordinator = populateCoordinator;
   }
 
-  async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef);
+  async lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition> {
+    return await this.lookupDefinitionWithContext(codeRef, {
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+    });
   }
 
   async lookupCachedDefinition(
@@ -381,9 +409,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return undefined;
   }
 
-  async getModuleCacheEntry(
+  async getCachedDefinitions(
     moduleUrl: string,
-  ): Promise<ModuleCacheEntry | undefined> {
+    opts?: DefinitionLookupOptions,
+  ): Promise<DefinitionCacheEntry | undefined> {
     let canonicalModuleURL = canonicalURL(moduleUrl);
     let context = await this.buildLookupContext(canonicalModuleURL);
     if (!context) {
@@ -396,13 +425,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       resolvedRealmURL,
     } = context;
-    return await this.loadModuleCacheEntry({
+    return await this.loadDefinitionCacheEntry({
       moduleURL: canonicalModuleURL,
       realmURL,
       resolvedRealmURL,
       cacheScope,
       cacheUserId,
       prerenderUserId,
+      priority: opts?.priority,
     });
   }
 
@@ -410,20 +440,21 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  private async loadModuleCacheEntry(args: {
+  private async loadDefinitionCacheEntry(args: {
     moduleURL: string;
     realmURL: string;
     resolvedRealmURL: string;
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
-  }): Promise<ModuleCacheEntry | undefined> {
+    priority?: number;
+  }): Promise<DefinitionCacheEntry | undefined> {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
     if (existing) {
       return await existing;
     }
-    let pending: Promise<ModuleCacheEntry | undefined>;
+    let pending: Promise<DefinitionCacheEntry | undefined>;
     // Two paths inside #inFlight:
     //   - With a populate coordinator (CS-10953): coordinated path adds
     //     a pg_try_advisory_xact_lock around the prerender so at most
@@ -434,9 +465,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     //     runs the prerender and persist directly. This is the path
     //     used by every test that doesn't construct a coordinator and
     //     by sqlite/in-memory deployments.
-    let core: Promise<ModuleCacheEntry | undefined> = this.#populateCoordinator
-      ? this.loadModuleCacheEntryCoordinated(args, this.#populateCoordinator)
-      : this.loadModuleCacheEntryUncached(args);
+    let core: Promise<DefinitionCacheEntry | undefined> = this
+      .#populateCoordinator
+      ? this.loadDefinitionCacheEntryCoordinated(
+          args,
+          this.#populateCoordinator,
+        )
+      : this.loadDefinitionCacheEntryUncached(args);
     pending = core.finally(() => {
       // Identity-check before deletion: an invalidation path may have
       // dropped our entry mid-flight, after which a newer caller can
@@ -478,7 +513,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   //     returns the post-invalidate cache state (undefined or fresher
   //     row); coordinator notifies regardless so peer waiters wake
   //     promptly. Same observable behavior as N=1 generation-mismatch.
-  private async loadModuleCacheEntryCoordinated(
+  private async loadDefinitionCacheEntryCoordinated(
     args: {
       moduleURL: string;
       realmURL: string;
@@ -486,9 +521,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope: CacheScope;
       cacheUserId: string;
       prerenderUserId: string;
+      priority?: number;
     },
     coordinator: PopulateCoordinator,
-  ): Promise<ModuleCacheEntry | undefined> {
+  ): Promise<DefinitionCacheEntry | undefined> {
     let coalesceKey = inFlightKey(args);
     for (let iteration = 0; iteration < COALESCE_MAX_ITERATIONS; iteration++) {
       // Optimistic pre-lock cache read. On a hit we skip the lock
@@ -507,7 +543,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       }
 
       let outcome = await coordinator.tryAcquireAndRun(coalesceKey, async () =>
-        this.loadModuleCacheEntryUncached(args),
+        this.loadDefinitionCacheEntryUncached(args),
       );
       if (outcome.acquired) {
         // Winner. Result might be undefined if all populationCandidates
@@ -523,17 +559,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
     }
     throw new Error(
-      `loadModuleCacheEntryCoordinated exceeded ${COALESCE_MAX_ITERATIONS} iterations for ${coalesceKey}; peer prerender appears stuck or NOTIFY broadcast is broken`,
+      `loadDefinitionCacheEntryCoordinated exceeded ${COALESCE_MAX_ITERATIONS} iterations for ${coalesceKey}; peer prerender appears stuck or NOTIFY broadcast is broken`,
     );
   }
 
-  private async loadModuleCacheEntryUncached({
+  private async loadDefinitionCacheEntryUncached({
     moduleURL,
     realmURL,
     resolvedRealmURL,
     cacheScope,
     cacheUserId,
     prerenderUserId,
+    priority,
   }: {
     moduleURL: string;
     realmURL: string;
@@ -541,9 +578,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
-  }): Promise<ModuleCacheEntry | undefined> {
+    priority?: number;
+  }): Promise<DefinitionCacheEntry | undefined> {
     // Snapshot invalidation generations BEFORE the first await.
-    // clearRealmCache (and any future synchronous bump) runs entirely before
+    // clearRealmDefinitions (and any future synchronous bump) runs entirely before
     // its first await, so a snapshot taken after an await above would already
     // include the bump and silently match at persist time. Invalidate happens
     // to await before bumping, so this point of failure is asymmetric — but
@@ -578,6 +616,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         candidateURL,
         realmURL,
         prerenderUserId,
+        priority,
       );
       if (
         response.status === 'error' &&
@@ -598,7 +637,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           resolvedRealmURL,
         );
       }
-      return await this.persistModuleCacheEntry(
+      return await this.persistDefinitionCacheEntry(
         candidateURL,
         response,
         resolvedRealmURL,
@@ -639,7 +678,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   // Public so the cross-instance ModuleCacheInvalidationListener (CS-10952)
   // can replay an invalidation broadcast from a peer realm-server into this
-  // process's counters. Internal callers in invalidate() / clearRealmCache()
+  // process's counters. Internal callers in invalidate() / clearRealmDefinitions()
   // use the same methods. Bumping is idempotent w.r.t. correctness — a
   // double-bump from the self-notify echo is observationally indistinguishable
   // from a single bump because in-flight prerenders only test for snapshot
@@ -667,7 +706,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // the error TTL. This causes the entry to be treated as a cache miss so
   // the prerenderer is called again to get a fresh result. This prevents
   // transient prerender failures from being permanently cached.
-  private isExpiredErrorEntry(entry: ModuleCacheEntry): boolean {
+  private isExpiredErrorEntry(entry: DefinitionCacheEntry): boolean {
     if (!entry.error) {
       return false;
     }
@@ -743,13 +782,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
     } = context;
 
-    let moduleEntry = await this.loadModuleCacheEntry({
+    let moduleEntry = await this.loadDefinitionCacheEntry({
       moduleURL: canonicalModuleURL,
       realmURL,
       resolvedRealmURL,
       cacheScope,
       cacheUserId,
       prerenderUserId,
+      priority: contextOpts?.priority,
     });
 
     if (!moduleEntry) {
@@ -813,14 +853,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     this.dropInFlightForRealm(resolvedRealmURL, uniqueInvalidations);
     await this.deleteModuleAliases(resolvedRealmURL, uniqueInvalidations);
-    await this.notifyModuleCacheInvalidations(
+    await this.notifyDefinitionCacheInvalidations(
       resolvedRealmURL,
       uniqueInvalidations,
     );
     return uniqueInvalidations;
   }
 
-  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
+  async clearRealmDefinitions(resolvedRealmURL: string): Promise<void> {
     // Realm-scope bump: every in-flight prerender for this realm (any
     // module URL, any scope/user) sees the mismatch at persist time.
     this.bumpRealmGeneration(resolvedRealmURL);
@@ -833,14 +873,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         ['resolved_realm_url =', param(resolvedRealmURL)],
       ]) as Expression),
     ]);
-    await this.notifyRealmCacheInvalidation(resolvedRealmURL);
+    await this.notifyRealmDefinitionCacheInvalidation(resolvedRealmURL);
   }
 
-  async clearAllModules(): Promise<void> {
+  async clearAllDefinitions(): Promise<void> {
     this.bumpGlobalGeneration();
     this.#inFlight.clear();
     await this.query(['DELETE FROM', MODULES_TABLE]);
-    await this.notifyGlobalCacheInvalidation();
+    await this.notifyGlobalDefinitionCacheInvalidation();
   }
 
   // pg_notify emission helpers. Mirror Realm.#notifyFileChange's best-effort
@@ -862,7 +902,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // either way. Postgres caps NOTIFY payloads at 8000 bytes, so the module
   // emitter chunks the URL list to stay under a 7000-byte budget — common
   // case is one notify; pathological fan-out becomes a handful.
-  private async notifyModuleCacheInvalidations(
+  private async notifyDefinitionCacheInvalidations(
     resolvedRealmURL: string,
     moduleURLs: string[],
   ): Promise<void> {
@@ -897,7 +937,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     await flush();
   }
 
-  private async notifyRealmCacheInvalidation(
+  private async notifyRealmDefinitionCacheInvalidation(
     resolvedRealmURL: string,
   ): Promise<void> {
     if (this.#dbAdapter.kind !== 'pg') {
@@ -908,7 +948,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
   }
 
-  private async notifyGlobalCacheInvalidation(): Promise<void> {
+  private async notifyGlobalDefinitionCacheInvalidation(): Promise<void> {
     if (this.#dbAdapter.kind !== 'pg') {
       return;
     }
@@ -941,8 +981,8 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   // round-trip cannot be cancelled and still completes, but because the
   // invalidation path also bumps the module / realm / global generation
   // synchronously before awaiting the DB delete, the in-flight's generation
-  // check in loadModuleCacheEntryUncached observes the bump before
-  // persistModuleCacheEntry runs and discards the result via
+  // check in loadDefinitionCacheEntryUncached observes the bump before
+  // persistDefinitionCacheEntry runs and discards the result via
   // readFromDatabaseCache instead of repopulating the cleared row. This
   // drop step is the in-flight-map half of the same fix: it ensures new
   // callers arriving after the invalidation don't attach to the now-
@@ -985,9 +1025,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   async lookupDefinitionForRealm(
     codeRef: ResolvedCodeRef,
     realm: LocalRealm,
+    opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
     return await this.lookupDefinitionWithContext(codeRef, {
       requestingRealm: realm,
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
   }
 
@@ -1082,6 +1124,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     moduleUrl: string,
     realmURL: string,
     userId: string,
+    priority?: number,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
@@ -1091,6 +1134,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       realm: realmURL,
       url: moduleUrl,
       auth,
+      priority,
     });
   }
 
@@ -1099,7 +1143,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope,
     authUserId: string,
     resolvedRealmURL: string,
-  ): Promise<ModuleCacheEntry | undefined> {
+  ): Promise<DefinitionCacheEntry | undefined> {
     let moduleAlias = normalizeExecutableURL(moduleUrl);
     let rows = (await this.query(
       [
@@ -1154,9 +1198,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     };
   }
 
-  async getModuleCacheEntries(
-    query: ModuleCacheEntryQuery,
-  ): Promise<ModuleCacheEntries> {
+  async getCachedDefinitionsBatch(
+    query: DefinitionCacheEntryQuery,
+  ): Promise<DefinitionCacheEntries> {
     if (query.moduleUrls.length === 0) {
       return {};
     }
@@ -1196,7 +1240,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolved_realm_url: string | null;
     }[];
 
-    let entries: ModuleCacheEntries = {};
+    let entries: DefinitionCacheEntries = {};
     let assignEntry = (key: string, row: (typeof rows)[number]) => {
       let definitions =
         parseJsonValue<Record<string, ModuleDefinitionResult | ErrorEntry>>(
@@ -1295,13 +1339,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     ]);
   }
 
-  private async persistModuleCacheEntry(
+  private async persistDefinitionCacheEntry(
     moduleUrl: string,
     response: ModuleRenderResponse,
     resolvedRealmURL: string,
     cacheScope: CacheScope,
     userId: string,
-  ): Promise<ModuleCacheEntry> {
+  ): Promise<DefinitionCacheEntry> {
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
       response.deps ?? [],
@@ -1329,7 +1373,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     if (errorEntry?.error.deps?.length) {
       deps = [...new Set([...deps, ...errorEntry.error.deps])];
     }
-    let cacheEntry: ModuleCacheEntry = {
+    let cacheEntry: DefinitionCacheEntry = {
       definitions: response.definitions ?? {},
       deps,
       error: errorEntry,
@@ -1701,8 +1745,15 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     this.#realm = realm;
   }
 
-  async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-    return await this.#inner.lookupDefinitionForRealm(codeRef, this.#realm);
+  async lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition> {
+    return await this.#inner.lookupDefinitionForRealm(
+      codeRef,
+      this.#realm,
+      opts,
+    );
   }
 
   async lookupCachedDefinition(
@@ -1717,12 +1768,12 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     return await this.#inner.invalidate(moduleURL);
   }
 
-  async clearRealmCache(resolvedRealmURL: string): Promise<void> {
-    await this.#inner.clearRealmCache(resolvedRealmURL);
+  async clearRealmDefinitions(resolvedRealmURL: string): Promise<void> {
+    await this.#inner.clearRealmDefinitions(resolvedRealmURL);
   }
 
-  async clearAllModules(): Promise<void> {
-    await this.#inner.clearAllModules();
+  async clearAllDefinitions(): Promise<void> {
+    await this.#inner.clearAllDefinitions();
   }
 
   registerRealm(realm: LocalRealm): void {
@@ -1733,15 +1784,16 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     return this.#inner.forRealm(realm);
   }
 
-  async getModuleCacheEntry(
+  async getCachedDefinitions(
     moduleUrl: string,
-  ): Promise<ModuleCacheEntry | undefined> {
-    return await this.#inner.getModuleCacheEntry(moduleUrl);
+    opts?: DefinitionLookupOptions,
+  ): Promise<DefinitionCacheEntry | undefined> {
+    return await this.#inner.getCachedDefinitions(moduleUrl, opts);
   }
 
-  async getModuleCacheEntries(
-    query: ModuleCacheEntryQuery,
-  ): Promise<ModuleCacheEntries> {
-    return await this.#inner.getModuleCacheEntries(query);
+  async getCachedDefinitionsBatch(
+    query: DefinitionCacheEntryQuery,
+  ): Promise<DefinitionCacheEntries> {
+    return await this.#inner.getCachedDefinitionsBatch(query);
   }
 }

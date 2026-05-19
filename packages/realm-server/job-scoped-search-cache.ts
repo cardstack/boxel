@@ -1,9 +1,11 @@
 import {
+  logger,
   normalizeQueryForSignature,
   sortKeysDeep,
-  type LinkableCollectionDocument,
   type Query,
 } from '@cardstack/runtime-common';
+
+const log = logger('job-scoped-search-cache');
 
 // Default entry TTL. Picked to comfortably outlive a single indexing
 // batch (workers cap from-scratch jobs at 6 min, incremental jobs are
@@ -28,7 +30,14 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_ENTRIES = 5000;
 
 type CachedEntry = {
-  result: LinkableCollectionDocument;
+  // Result is stored opaquely so both `_federated-search`'s
+  // `LinkableCollectionDocument` and `_federated-search-prerendered`'s
+  // `PrerenderedCardCollectionDocument` can share the same cache
+  // instance. Inner-key canonicalisation already includes the
+  // endpoint-distinguishing params (htmlFormat / cardUrls / renderType
+  // are passed through `opts`), so two endpoints' entries cannot
+  // collide on a key they don't both fully share.
+  result: unknown;
   timer: ReturnType<typeof setTimeout>;
   // Position in the FIFO eviction ring. Stored on the entry so a
   // cache hit doesn't need a separate map lookup to know its slot.
@@ -37,10 +46,16 @@ type CachedEntry = {
 
 // Per-batch read cache used during indexing. Each entry is keyed by
 // `(jobId, normalizedRealms, normalizedQuery, normalizedOpts)` and
-// represents one `_federated-search` populate computed during the
-// lifetime of one indexing job. The job-id boundary scopes the cache
-// to a single batch; a subsequent job hashes to different keys and
-// never reuses a stale value.
+// represents one search populate computed during the lifetime of one
+// indexing job. The cache is shared across both `_federated-search`
+// (`LinkableCollectionDocument` results) and
+// `_federated-search-prerendered` (`PrerenderedCardCollectionDocument`
+// results) — the endpoint-specific request shape (`htmlFormat`,
+// `cardUrls`, `renderType` for the prerendered handler) is folded into
+// `opts` before the call here, so the canonicalised inner key already
+// segregates the two endpoints' entries. The job-id boundary scopes
+// the cache to a single batch; a subsequent job hashes to different
+// keys and never reuses a stale value.
 //
 // Same-realm reads are safe by construction: within an indexing batch
 // the writer touches `boxel_index_working`, not `boxel_index`, so
@@ -88,27 +103,51 @@ export class JobScopedSearchCache {
   #nextFifoSeq = 0;
   readonly #ttlMs: number;
   readonly #maxEntries: number;
+  // Per-job hit/miss counters for observability. Recorded on every
+  // `getOrPopulate` call and emitted as a single debug-level log line
+  // when the job's last entry leaves the cache — either via
+  // `clearJob` (worker signals job completion) or via TTL eviction of
+  // the last surviving entry, whichever fires first. Off by default;
+  // enable via `LOG_LEVELS=job-scoped-search-cache=debug` when an
+  // operator wants to confirm cache utilisation on a specific batch.
+  #stats = new Map<string, { hits: number; misses: number }>();
 
   constructor(opts?: { ttlMs?: number; maxEntries?: number }) {
     this.#ttlMs = opts?.ttlMs ?? DEFAULT_TTL_MS;
     this.#maxEntries = opts?.maxEntries ?? DEFAULT_MAX_ENTRIES;
   }
 
-  async getOrPopulate(args: {
+  async getOrPopulate<T>(args: {
     jobId: string;
     realms: string[];
     query: Query;
     opts: unknown | undefined;
-    populate: () => Promise<LinkableCollectionDocument>;
-  }): Promise<LinkableCollectionDocument> {
+    populate: () => Promise<T>;
+  }): Promise<T> {
     let innerKey = buildInnerKey(args.realms, args.query, args.opts);
     let jobMap = this.#byJob.get(args.jobId);
     let existing = jobMap?.get(innerKey);
     if (existing) {
-      return existing.result;
+      // A hit implies a prior store, which must have allocated the
+      // jobId's stats entry — but be defensive in case a hand-rolled
+      // test ever pre-seeds entries without going through populate.
+      let stat = this.#stats.get(args.jobId);
+      if (stat) stat.hits += 1;
+      return existing.result as T;
     }
 
     let result = await args.populate();
+    // Count the miss only after populate resolves. If populate throws
+    // we count nothing — the call is observationally equivalent to
+    // "never happened" from the cache's perspective, and we avoid
+    // leaking a `#stats` entry for a jobId that never produced a
+    // cache entry whose eviction would clear it.
+    let stat = this.#stats.get(args.jobId);
+    if (!stat) {
+      stat = { hits: 0, misses: 0 };
+      this.#stats.set(args.jobId, stat);
+    }
+    stat.misses += 1;
 
     // Late-arriving check: the populate may have just settled while a
     // peer's populate (same key) also settled and stored its result
@@ -151,6 +190,7 @@ export class JobScopedSearchCache {
         jm!.delete(slot.innerKey);
         if (jm!.size === 0) {
           this.#byJob.delete(slot.jobId);
+          this.#flushStats(slot.jobId, 'cap-evicted');
         }
       }
     }
@@ -171,6 +211,7 @@ export class JobScopedSearchCache {
       jm.delete(innerKey);
       if (jm.size === 0) {
         this.#byJob.delete(jobId);
+        this.#flushStats(jobId, 'TTL-evicted');
       }
     }
   }
@@ -180,12 +221,31 @@ export class JobScopedSearchCache {
   // signals job completion, rather than waiting on TTL.
   clearJob(jobId: string): void {
     let jobMap = this.#byJob.get(jobId);
+    let entries = jobMap?.size ?? 0;
+    this.#flushStats(jobId, `clearJob entries=${entries}`);
     if (!jobMap) return;
     for (let entry of jobMap.values()) {
       clearTimeout(entry.timer);
       this.#fifo.delete(entry.fifoSeq);
     }
     this.#byJob.delete(jobId);
+  }
+
+  // Single sink for the once-per-job stats log. Called from every
+  // path that can leave a jobId with no remaining cache entries —
+  // TTL eviction, cap eviction, and clearJob. The stats map's entry
+  // is dropped in lockstep so a subsequent jobId reuse (rare, since
+  // jobIds are monotonic) starts fresh.
+  #flushStats(jobId: string, reason: string): void {
+    let stat = this.#stats.get(jobId);
+    if (!stat) return;
+    let total = stat.hits + stat.misses;
+    let hitRate =
+      total === 0 ? '0%' : `${Math.round((100 * stat.hits) / total)}%`;
+    log.debug(
+      `job-scoped search cache stats job=${jobId} hits=${stat.hits} misses=${stat.misses} hitRate=${hitRate} (${reason})`,
+    );
+    this.#stats.delete(jobId);
   }
 
   // Total entry count across all jobs. Useful for tests + observability.

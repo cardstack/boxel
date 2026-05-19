@@ -37,4 +37,15 @@ export interface DBAdapter {
     realmUrl: string,
     fn: (txQuerier: Querier | undefined) => Promise<T>,
   ) => Promise<T>;
+  // Per-matrix-user cost-barrier primitive: serializes concurrent billable
+  // upstream proxy calls for the same user across replicas so the next
+  // request can't kick off another upstream call before the previous
+  // request's cost row has landed in the credits ledger. PgAdapter
+  // implements with `pg_advisory_xact_lock` on a namespaced hash of the
+  // matrix user id; SQLite is a passthrough. See PgAdapter.withUserCostLock
+  // for design notes (pool pressure, re-entrancy).
+  withUserCostLock: <T>(
+    matrixUserId: string,
+    fn: () => Promise<T>,
+  ) => Promise<T>;
 }

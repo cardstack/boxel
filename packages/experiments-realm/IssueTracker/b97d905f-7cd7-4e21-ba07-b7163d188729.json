@@ -18,32 +18,32 @@
       "boardTitle": null,
       "placements": [
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbr-1",
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-1",
           "columnKey": "backlog",
           "sortOrder": 0
         },
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbr-2",
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-2",
           "columnKey": "in_progress",
           "sortOrder": 1
         },
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbr-3",
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-3",
           "columnKey": "blocked",
           "sortOrder": 1
         },
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbr-4",
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-4",
           "columnKey": "blocked",
           "sortOrder": 2
         },
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbr-5",
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-5",
           "columnKey": "review",
           "sortOrder": 4
         },
         {
-          "itemId": "http://localhost:4201/experiments/Issue/hbs-6",
+          "itemId": "https://localhost:4201/experiments/Issue/hbs-6",
           "columnKey": "done",
           "sortOrder": 5
         }

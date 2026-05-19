@@ -47,7 +47,7 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 ## Running the Factory
 
-Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
+Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `https://localhost:4201/software-factory/Wiki/sticky-note`).
 
 Set up your profile:
 
@@ -61,8 +61,8 @@ Then run the factory (default backend is Claude via the Agent SDK):
 cd packages/software-factory
 
 pnpm factory:go \
-  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm http://localhost:4201/your-username/my-test-realm/ \
+  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm https://localhost:4201/your-username/my-test-realm/ \
   --debug
 ```
 
@@ -90,15 +90,15 @@ To skip retrying blocked issues, use `--no-retry-blocked`:
 
 ```bash
 pnpm factory:go \
-  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm http://localhost:4201/your-username/my-test-realm/ \
+  --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm https://localhost:4201/your-username/my-test-realm/ \
   --no-retry-blocked
 ```
 
 ### What to expect on the command line
 
 ```
-[factory:go] brief=http://localhost:4201/software-factory/Wiki/sticky-note
+[factory:go] brief=https://localhost:4201/software-factory/Wiki/sticky-note
 [factory:go] Starting seed issue + issue-driven loop...
 [factory-seed] Creating seed issue at Issues/bootstrap-seed.json
 [issue-loop] Starting issue loop: targetRealm=..., maxIterationsPerIssue=5
@@ -162,7 +162,7 @@ Key modules:
 
 ## Notes
 
-- **Realm card tests (`realm/*.test.gts`)** — QUnit tests co-located with source realm card definitions. These run inside the Boxel host app (via the host test suite), not via Playwright. To run them, use `pnpm test` in `packages/host` with the relevant test file pattern. They are separate from the Playwright specs in `tests/` which test the factory loop end-to-end. To run them interactively in the browser, go to: `http://localhost:4200/tests/index.html?liveTest=true&realmURL=http%3A%2F%2Flocalhost%3A4201%2Fsoftware-factory%2F`
+- **Realm card tests (`realm/*.test.gts`)** — QUnit tests co-located with source realm card definitions. These run inside the Boxel host app (via the host test suite), not via Playwright. To run them, use `pnpm test` in `packages/host` with the relevant test file pattern. They are separate from the Playwright specs in `tests/` which test the factory loop end-to-end. To run them interactively in the browser, go to: `https://localhost:4200/tests/index.html?liveTest=true&realmURL=https%3A%2F%2Flocalhost%3A4201%2Fsoftware-factory%2F`
 - Template DBs are reused across runs while the seeded Postgres container stays up.
 - `serve:support` publishes a shared support context in `/tmp/software-factory-runtime/support.json`.
 - When that shared support context exists, `serve:realm` and `smoke:realm` reuse the running Synapse and prerender services instead of restarting them.

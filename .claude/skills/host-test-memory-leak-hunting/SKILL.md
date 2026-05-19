@@ -66,7 +66,7 @@ Snapshots at `t=10` (warm) and `t=50` give a clean delta over 40 tests. Add `t=9
 ### 3. Open a fresh test tab
 
 ```sh
-ENCODED=$(node -e 'console.log(encodeURIComponent("http://localhost:4200/tests/index.html?hidepassed&filter=card-basics"))')
+ENCODED=$(node -e 'console.log(encodeURIComponent("https://localhost:4200/tests/index.html?hidepassed&filter=card-basics"))')
 curl -sX PUT "http://localhost:9333/json/new?${ENCODED}"
 ```
 

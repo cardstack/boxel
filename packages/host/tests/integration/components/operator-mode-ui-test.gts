@@ -186,14 +186,14 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
 
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
@@ -592,8 +592,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     ).length;
     assert.strictEqual(
       allTypeOptions,
-      13,
-      `type picker shows 13 types (got ${allTypeOptions})`,
+      15,
+      `type picker shows 15 types (got ${allTypeOptions})`,
     );
   });
 
@@ -1026,7 +1026,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (16)',
         'select-all shows count of all realm types',
       );
 
@@ -1087,7 +1087,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (16)',
         'select-all shows count of all realm types',
       );
 
@@ -1096,7 +1096,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      13,
+      15,
       'all realm types are shown even without recent cards',
     );
   });
@@ -1516,12 +1516,12 @@ module('Integration | operator-mode | ui', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
-      // "Any Type" count should reflect the total from the API (13 types),
+      // "Any Type" count should reflect the total from the API (15 types),
       // not just the currently loaded page (3 types with PAGE_SIZE=3)
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
         .containsText(
-          'Any Type (14)',
+          'Any Type (16)',
           'select-all shows total count from API, not loaded options count',
         );
     } finally {

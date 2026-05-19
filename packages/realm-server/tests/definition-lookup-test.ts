@@ -99,16 +99,34 @@ module(basename(__filename), function () {
     let mockRemotePrerenderer: Prerenderer;
     let dbAdapter: PgAdapter;
     let prerenderModuleCalls: number = 0;
+    let prerenderModulePriorities: (number | undefined)[] = [];
+    let forceEmptyDefinitions: boolean = false;
     let virtualNetwork: VirtualNetwork;
 
     hooks.beforeEach(async () => {
       prerenderModuleCalls = 0;
+      prerenderModulePriorities = [];
+      forceEmptyDefinitions = false;
     });
     hooks.before(async () => {
       virtualNetwork = createVirtualNetwork();
       mockRemotePrerenderer = {
         async prerenderModule(args: ModulePrerenderArgs) {
           prerenderModuleCalls++;
+          prerenderModulePriorities.push(args.priority);
+          if (forceEmptyDefinitions) {
+            return Promise.resolve({
+              id: 'example-id',
+              status: 'ready' as const,
+              nonce: '12345',
+              isShimmed: false,
+              lastModified: +new Date(),
+              createdAt: +new Date(),
+              deps: [],
+              definitions: {},
+              error: undefined,
+            }) as Promise<ModuleRenderResponse>;
+          }
           let moduleURL = new URL(args.url);
           let modulePathWithoutExtension = moduleURL.href.replace(/\.gts$/, '');
           return Promise.resolve({
@@ -314,6 +332,100 @@ module(basename(__filename), function () {
         prerenderModuleCalls,
         2,
         'prerenderModule was called a second time after extensionless invalidation',
+      );
+    });
+
+    test('getCachedDefinitions forwards priority to prerenderModule', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      await definitionLookup.getCachedDefinitions(`${realmURL}person.gts`, {
+        priority: 10,
+      });
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was called once',
+      );
+      assert.deepEqual(
+        prerenderModulePriorities,
+        [10],
+        'priority 10 was forwarded to prerenderModule',
+      );
+
+      // A subsequent call with a different priority on a cached entry must
+      // not fire the prerenderer again — cache short-circuits.
+      await definitionLookup.getCachedDefinitions(`${realmURL}person.gts`, {
+        priority: 0,
+      });
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'cached entry returned without re-invoking the prerenderer',
+      );
+
+      // Default-priority call (no opts) must end up at priority `undefined`
+      // at the prerenderer, which the prerender server reads as 0.
+      await definitionLookup.invalidate(`${realmURL}person.gts`);
+      await definitionLookup.getCachedDefinitions(`${realmURL}person.gts`);
+      assert.strictEqual(prerenderModuleCalls, 2);
+      assert.deepEqual(
+        prerenderModulePriorities,
+        [10, undefined],
+        'omitted priority forwards as undefined (default = 0 on the server)',
+      );
+    });
+
+    test('getCachedDefinitions caches non-card modules as no-card markers', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+      forceEmptyDefinitions = true;
+
+      let first = await definitionLookup.getCachedDefinitions(
+        `${realmURL}person.gts`,
+      );
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'prerenderModule was called once',
+      );
+      assert.ok(first, 'returned a cache entry');
+      assert.deepEqual(
+        first?.definitions,
+        {},
+        'no-card module returns empty definitions',
+      );
+
+      // The empty-definitions row must persist to the modules table and be
+      // treated as a valid cache hit on the next lookup — the prerenderer
+      // must not fire a second time.
+      let second = await definitionLookup.getCachedDefinitions(
+        `${realmURL}person.gts`,
+      );
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'second call short-circuited at the cache; prerenderModule still called once',
+      );
+      assert.deepEqual(
+        second?.definitions,
+        {},
+        'second call returned the same empty-definitions row',
+      );
+
+      // Confirm the row really is in the database (not a transient in-memory
+      // entry that survived only the in-flight dedupe window).
+      let rows = await dbAdapter.execute(
+        `SELECT url, definitions FROM modules WHERE resolved_realm_url = $1`,
+        { bind: [realmURL] },
+      );
+      assert.strictEqual(
+        rows.length,
+        1,
+        'modules table has exactly one row for the realm',
+      );
+      assert.deepEqual(
+        (rows[0] as { definitions: Record<string, unknown> }).definitions,
+        {},
+        'persisted row has empty definitions',
       );
     });
 
@@ -1706,7 +1818,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('in-flight prerender result is dropped when clearRealmCache runs concurrently', async function (assert) {
+    test('in-flight prerender result is dropped when clearRealmDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
       let moduleURL = `${realmURL}stale-persist-clear-realm.gts`;
@@ -1752,14 +1864,14 @@ module(basename(__filename), function () {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await lookup.clearRealmCache(realmURL);
+      await lookup.clearRealmDefinitions(realmURL);
 
       releaseGate();
       let result = await Promise.allSettled([pA]);
       assert.strictEqual(
         result[0].status,
         'rejected',
-        'A rejects after clearRealmCache leaves an empty cache',
+        'A rejects after clearRealmDefinitions leaves an empty cache',
       );
       assert.strictEqual(calls, 1);
 
@@ -1770,14 +1882,14 @@ module(basename(__filename), function () {
       assert.strictEqual(
         rows.length,
         0,
-        'clearRealmCache is honored — A did not re-insert the row',
+        'clearRealmDefinitions is honored — A did not re-insert the row',
       );
     });
 
-    test('in-flight prerender result is dropped when clearAllModules runs concurrently', async function (assert) {
+    test('in-flight prerender result is dropped when clearAllDefinitions runs concurrently', async function (assert) {
       await dbAdapter.execute('DELETE FROM modules');
 
-      // clearAllModules drains state for every realm — including realms
+      // clearAllDefinitions drains state for every realm — including realms
       // that have never been individually invalidated. Use a fresh module
       // URL so the realm has no #generations entry going in; this guards
       // against the per-realm map missing the realm at clear time.
@@ -1824,14 +1936,14 @@ module(basename(__filename), function () {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      await lookup.clearAllModules();
+      await lookup.clearAllDefinitions();
 
       releaseGate();
       let result = await Promise.allSettled([pA]);
       assert.strictEqual(
         result[0].status,
         'rejected',
-        'A rejects after clearAllModules leaves an empty cache',
+        'A rejects after clearAllDefinitions leaves an empty cache',
       );
       assert.strictEqual(calls, 1);
 
@@ -1842,7 +1954,7 @@ module(basename(__filename), function () {
       assert.strictEqual(
         rows.length,
         0,
-        'clearAllModules is honored — A did not re-insert the row',
+        'clearAllDefinitions is honored — A did not re-insert the row',
       );
     });
 
@@ -1925,7 +2037,7 @@ module(basename(__filename), function () {
 
     test('a settled in-flight promise does not delete a newer in-flight under the same key', async function (assert) {
       // Identity-check regression guard. Without the identity check in
-      // loadModuleCacheEntry's .finally, A's settle would delete B's
+      // loadDefinitionCacheEntry's .finally, A's settle would delete B's
       // freshly-installed entry and cause D to race a third prerender.
       await dbAdapter.execute('DELETE FROM modules');
 

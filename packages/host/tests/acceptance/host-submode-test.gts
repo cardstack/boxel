@@ -550,17 +550,17 @@ module('Acceptance | host submode', function (hooks) {
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Interact"]');
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Host"]');
       assert.dom('[data-test-open-ai-assistant]').doesNotExist();
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
 
-      await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+      await click('[data-test-submode-switcher-button]');
       await click('[data-test-boxel-menu-item-text="Code"]');
       assert.dom('[data-test-open-ai-assistant]').exists();
       assert.dom('[data-test-ai-assistant-panel]').exists();
@@ -634,7 +634,7 @@ module('Acceptance | host submode', function (hooks) {
         assert.dom('.publishing-realm-popover').exists();
         assert
           .dom('.publishing-realm-popover')
-          .containsText(`Publishing to: http://testuser.localhost:4201/test/`);
+          .containsText(`Publishing to: https://testuser.localhost:4201/test/`);
         assert.dom('.publishing-realm-popover').exists();
         assert.dom('.loading-icon').exists();
 
@@ -667,7 +667,7 @@ module('Acceptance | host submode', function (hooks) {
           .dom(
             '[data-test-publish-realm-modal] [data-test-open-boxel-space-button]',
           )
-          .hasAttribute('href', 'http://testuser.localhost:4201/test/')
+          .hasAttribute('href', 'https://testuser.localhost:4201/test/')
           .hasAttribute('target', '_blank');
       });
 
@@ -685,8 +685,8 @@ module('Acceptance | host submode', function (hooks) {
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'http://testuser.localhost:4201/test/': String(now),
-            'http://custom-site-name.localhost:4201/': String(now),
+            'https://testuser.localhost:4201/test/': String(now),
+            'https://custom-site-name.localhost:4201/': String(now),
           },
         });
 
@@ -731,7 +731,7 @@ module('Acceptance | host submode', function (hooks) {
       test('can unpublish realm', async function (assert) {
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['http://testuser.localhost:4201/test/']: (
+            ['https://testuser.localhost:4201/test/']: (
               new Date().getTime() -
               3 * 24 * 60 * 60 * 1000
             ).toString(),
@@ -851,7 +851,7 @@ module('Acceptance | host submode', function (hooks) {
         assert
           .dom('[data-test-custom-subdomain-details]')
           .includesText(
-            'http://my-boxel-site.localhost:4201/ Not published yet',
+            'https://my-boxel-site.localhost:4201/ Not published yet',
           );
         assert.dom('[data-test-unclaim-custom-subdomain-button]').exists();
         assert.dom('[data-test-custom-subdomain-checkbox]').isChecked();
@@ -926,7 +926,7 @@ module('Acceptance | host submode', function (hooks) {
         let now = Date.now();
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            'http://testuser.localhost:4201/test/': String(now),
+            'https://testuser.localhost:4201/test/': String(now),
             'https://another-domain.com/realm/': String(now - 1000),
           },
         });
@@ -942,7 +942,7 @@ module('Acceptance | host submode', function (hooks) {
             .dom('[data-test-open-site-button]')
             .hasAttribute(
               'href',
-              'http://testuser.localhost:4201/test/Person/1',
+              'https://testuser.localhost:4201/test/Person/1',
             )
             .hasAttribute('target', '_blank');
 
@@ -970,7 +970,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom(
-              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"]',
+              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"]',
             )
             .exists();
           assert
@@ -982,11 +982,11 @@ module('Acceptance | host submode', function (hooks) {
           // Check that popover buttons have correct href attributes
           assert
             .dom(
-              '[data-test-published-realm-item="http://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
+              '[data-test-published-realm-item="https://testuser.localhost:4201/test/Person/1"] [data-test-open-site-button]',
             )
             .hasAttribute(
               'href',
-              'http://testuser.localhost:4201/test/Person/1',
+              'https://testuser.localhost:4201/test/Person/1',
             )
             .hasAttribute('target', '_blank');
 
@@ -1039,7 +1039,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'http://custom-site-name.localhost:4201/',
+              'https://custom-site-name.localhost:4201/',
               'shows claimed custom site URL',
             );
           assert
@@ -1070,7 +1070,7 @@ module('Acceptance | host submode', function (hooks) {
           assert
             .dom(`${customDomainOption} .domain-url`)
             .hasText(
-              'http://custom-site-name.localhost:4201/',
+              'https://custom-site-name.localhost:4201/',
               'displays placeholder custom site URL after unclaim',
             );
           assert
@@ -1162,7 +1162,7 @@ module('Acceptance | host submode', function (hooks) {
         await click('[data-test-publish-realm-button]');
         assert.dom('[data-test-publish-realm-modal]').exists();
 
-        let defaultUrl = 'http://testuser.localhost:4201/test/';
+        let defaultUrl = 'https://testuser.localhost:4201/test/';
         assert
           .dom(`[data-test-domain-publish-error="${defaultUrl}"]`)
           .doesNotExist();
@@ -1198,8 +1198,8 @@ module('Acceptance | host submode', function (hooks) {
           sourceRealmURL: testRealmURL,
         });
 
-        let defaultUrl = 'http://testuser.localhost:4201/test/';
-        let customUrl = 'http://my-custom-site.localhost:4201/';
+        let defaultUrl = 'https://testuser.localhost:4201/test/';
+        let customUrl = 'https://my-custom-site.localhost:4201/';
 
         // Mock publish to succeed for default, fail for custom
         realmServer.publishRealm = async (
@@ -1335,7 +1335,7 @@ module('Acceptance | host submode', function (hooks) {
 
           assert
             .dom('[data-test-open-custom-subdomain-button]')
-            .hasAttribute('href', 'http://my-custom-site.localhost:4201/')
+            .hasAttribute('href', 'https://my-custom-site.localhost:4201/')
             .hasAttribute('target', '_blank');
         } finally {
           realmServer.fetchBoxelClaimedDomain = originalFetchClaimed;
@@ -1390,7 +1390,7 @@ module('Acceptance | host submode', function (hooks) {
 
         let restoreRealmInfo = withUpdatedTestRealmInfo({
           lastPublishedAt: {
-            ['http://my-custom-site.localhost:4201/']: (
+            ['https://my-custom-site.localhost:4201/']: (
               new Date().getTime() -
               2 * 24 * 60 * 60 * 1000
             ).toString(),

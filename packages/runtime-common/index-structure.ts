@@ -60,11 +60,43 @@ export interface CardTypeSummary {
   icon_html: string;
 }
 
+// Top-level shape of `realm_meta.value`. `instances` summarizes CardDef rows
+// (boxel_index.type='instance') and `files` summarizes FileDef rows
+// (boxel_index.type='file'). Both arrays use the same per-type-summary shape.
+// CardsGrid's sidebar partitions these into the "All Cards" and "All Files"
+// top-level groups.
+//
+// Legacy realms written before this column was partitioned stored `value` as a
+// bare `CardTypeSummary[]` (instances only). Readers should call
+// `normalizeRealmMetaValue` (defined below) to tolerate that shape during the
+// transition until every realm has been reindexed.
+export interface RealmMetaValue {
+  instances: CardTypeSummary[];
+  files: CardTypeSummary[];
+}
+
 export interface RealmMetaTable {
   realm_version: number;
   realm_url: string;
-  value: Record<string, string>[];
+  value: RealmMetaValue;
   indexed_at: string | null;
+}
+
+// Tolerate the legacy `value` shape (a bare CardTypeSummary[]) stored before
+// realm_meta was partitioned into instances/files. Once every realm has been
+// reindexed, the array branch becomes dead code and can be removed.
+export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
+  if (!raw) {
+    return { instances: [], files: [] };
+  }
+  if (Array.isArray(raw)) {
+    return { instances: raw as CardTypeSummary[], files: [] };
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return {
+    instances: value.instances ?? [],
+    files: value.files ?? [],
+  };
 }
 
 export const coerceTypes = Object.freeze({

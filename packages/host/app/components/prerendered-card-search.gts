@@ -25,21 +25,22 @@ import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
+// `knownFileMetaUrls` lives in `lib/` so non-component code (e.g.
+// `lib/stack-item.ts`) can read it without importing a component file. We
+// re-export here for back-compat with existing call sites that imported it
+// from this module.
+import {
+  knownFileMetaUrls,
+  clearKnownFileMetaUrls,
+} from '../lib/known-file-meta-urls';
 import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';
 import { getPrerenderedSearch } from '../resources/prerendered-search';
 import { getSearch } from '../resources/search';
 
+export { knownFileMetaUrls, clearKnownFileMetaUrls };
+
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
-
-// Internal registry of URLs known to be file-meta from prerendered search.
-// Used by the overlay system to correctly identify FileDef cards when they
-// haven't been loaded into the store yet (prerendered results are HTML-only).
-export const knownFileMetaUrls = new Set<string>();
-
-export function clearKnownFileMetaUrls() {
-  knownFileMetaUrls.clear();
-}
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
@@ -85,6 +86,14 @@ export class PrerenderedCard implements PrerenderedCardLike {
   }
   get usedRenderType(): ResolvedCodeRef | undefined {
     return this.data.usedRenderType;
+  }
+  // True iff the prerender pipeline produced HTML for this row. Currently
+  // false for executable-module FileDef rows (`.gts`/`.ts`) because the
+  // fused visit skips the FileRender pass when `isModule` is true — see
+  // CS-11171. CardList consults this to render a filename fallback so the
+  // user can still see and click the row through to interact-mode.
+  get hasHtml(): boolean {
+    return typeof this.data.html === 'string' && this.data.html.length > 0;
   }
 }
 function getErrorComponent(realmURL: string, url: string) {
