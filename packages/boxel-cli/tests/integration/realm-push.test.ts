@@ -368,11 +368,7 @@ describe('realm push (integration)', () => {
     writeLocalFile(localDir, '.boxelignore', '*.ignore\nignore-dir/\n');
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
     writeLocalFile(localDir, 'test.ignore', 'should not be uploaded');
-    writeLocalFile(
-      localDir,
-      'ignore-dir/ignored.json',
-      '{"ignored":true}\n',
-    );
+    writeLocalFile(localDir, 'ignore-dir/ignored.json', '{"ignored":true}\n');
 
     await pushCommand(localDir, realmUrl, { profileManager });
 
