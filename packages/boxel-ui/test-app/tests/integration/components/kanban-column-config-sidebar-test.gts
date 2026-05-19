@@ -1,5 +1,12 @@
 import { module, test } from 'qunit';
-import { click, fillIn, render, triggerEvent } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  focus,
+  render,
+  triggerEvent,
+  typeIn,
+} from '@ember/test-helpers';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -82,7 +89,9 @@ module(
           />
         </template>,
       );
-      assert.dom('[aria-label="Close column settings"]').exists('shown when onClose provided');
+      assert
+        .dom('[aria-label="Close column settings"]')
+        .exists('shown when onClose provided');
       await click('[aria-label="Close column settings"]');
       assert.true(closed, 'onClose invoked on click');
     });
@@ -102,19 +111,43 @@ module(
         </template>,
       );
 
-      assert.dom('[data-test-col-config-row="0"] [aria-label="Move column up"]').isDisabled('first row: up disabled');
-      assert.dom('[data-test-col-config-row="0"] [aria-label="Move column down"]').isNotDisabled('first row: down enabled');
-      assert.dom('[data-test-col-config-row="2"] [aria-label="Move column up"]').isNotDisabled('last row: up enabled');
-      assert.dom('[data-test-col-config-row="2"] [aria-label="Move column down"]').isDisabled('last row: down disabled');
+      assert
+        .dom('[data-test-col-config-row="0"] [aria-label="Move column up"]')
+        .isDisabled('first row: up disabled');
+      assert
+        .dom('[data-test-col-config-row="0"] [aria-label="Move column down"]')
+        .isNotDisabled('first row: down enabled');
+      assert
+        .dom('[data-test-col-config-row="2"] [aria-label="Move column up"]')
+        .isNotDisabled('last row: up enabled');
+      assert
+        .dom('[data-test-col-config-row="2"] [aria-label="Move column down"]')
+        .isDisabled('last row: down disabled');
 
-      await click('[data-test-col-config-row="0"] [aria-label="Move column down"]');
-      assert.strictEqual(result![0]!.key, 'in-progress', 'move-down: in-progress is now first');
-      assert.strictEqual(result![1]!.key, 'backlog', 'move-down: backlog moved to second');
+      await click(
+        '[data-test-col-config-row="0"] [aria-label="Move column down"]',
+      );
+      assert.strictEqual(
+        result![0]!.key,
+        'in-progress',
+        'move-down: in-progress is now first',
+      );
+      assert.strictEqual(
+        result![1]!.key,
+        'backlog',
+        'move-down: backlog moved to second',
+      );
       assert.strictEqual(result![0]!.sortOrder, 1, 'sortOrders renumbered');
       assert.strictEqual(result![1]!.sortOrder, 2);
 
-      await click('[data-test-col-config-row="1"] [aria-label="Move column up"]');
-      assert.strictEqual(result![0]!.key, 'in-progress', 'move-up: same result from opposite direction');
+      await click(
+        '[data-test-col-config-row="1"] [aria-label="Move column up"]',
+      );
+      assert.strictEqual(
+        result![0]!.key,
+        'in-progress',
+        'move-up: same result from opposite direction',
+      );
       assert.strictEqual(result![1]!.key, 'backlog');
     });
 
@@ -136,7 +169,11 @@ module(
       await fillIn('[data-test-col-config-label="0"]', 'Queue');
 
       assert.strictEqual(result![0]!.label, 'Queue');
-      assert.strictEqual(result![1]!.label, 'In Progress', 'other cols unchanged');
+      assert.strictEqual(
+        result![1]!.label,
+        'In Progress',
+        'other cols unchanged',
+      );
     });
 
     test('WIP input: updates limit; clamps negative values to 0', async function (assert) {
@@ -238,10 +275,55 @@ module(
 
       assert.dom('[data-test-col-config-label="0"]').hasValue('Backlog');
 
-      state.cols = [{ ...BASE_COLUMNS[0]!, label: 'Queue' }, ...BASE_COLUMNS.slice(1)];
+      state.cols = [
+        { ...BASE_COLUMNS[0]!, label: 'Queue' },
+        ...BASE_COLUMNS.slice(1),
+      ];
       await new Promise((r) => requestAnimationFrame(r));
 
       assert.dom('[data-test-col-config-label="0"]').hasValue('Queue');
+    });
+
+    test('label input accumulates all typed characters without losing focus between keystrokes', async function (assert) {
+      let result: KanbanColumnConfig[] | undefined;
+      const onChange = (cols: KanbanColumnConfig[]) => {
+        result = cols;
+      };
+
+      await render(
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{BASE_COLUMNS}}
+            @onColumnsChange={{onChange}}
+          />
+        </template>,
+      );
+
+      let input = document.querySelector(
+        '[data-test-col-config-label="0"]',
+      ) as HTMLInputElement;
+
+      await focus(input);
+      assert.strictEqual(
+        document.activeElement,
+        input,
+        'input is focused before typing',
+      );
+
+      // Clear the pre-filled value so typeIn appends to an empty field
+      input.value = '';
+      await typeIn(input, 'New Label');
+
+      assert.strictEqual(
+        document.activeElement,
+        input,
+        'input retains focus after typing all characters',
+      );
+      assert.strictEqual(
+        result?.[0]?.label,
+        'New Label',
+        'full typed string is accumulated in the onChange result',
+      );
     });
   },
 );

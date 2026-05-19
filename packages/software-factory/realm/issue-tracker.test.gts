@@ -3,6 +3,7 @@ import {
   click,
   fillIn,
   settled,
+  triggerEvent,
   triggerKeyEvent,
   waitFor,
 } from '@ember/test-helpers';
@@ -15,6 +16,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  type TestContextWithSave,
 } from '@cardstack/host/tests/helpers';
 import { setupMockMatrix } from '@cardstack/host/tests/helpers/mock-matrix';
 
@@ -157,7 +159,7 @@ export function runTests() {
           .doesNotExist('review column hidden');
       });
 
-      test('collapsing a column updates the persisted collapsed state', async function (assert) {
+      test<TestContextWithSave>('collapsing a column updates the persisted collapsed state', async function (assert) {
         let savedBoardDocPromise = new Promise<any>((resolve) => {
           this.onSave((url, doc) => {
             if (url.href === boardId) {
@@ -194,6 +196,333 @@ export function runTests() {
         assert.true(
           backlogColumn?.collapsed,
           'backlog collapsed state is persisted on the board model',
+        );
+      });
+
+      test<TestContextWithSave>('sidebar visibility toggle persists collapsed state and can reveal the column again', async function (assert) {
+        let savedBoardDocs: any[] = [];
+        this.onSave((url, doc) => {
+          if (url.href === boardId) {
+            savedBoardDocs.push(doc);
+          }
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        await click('[data-test-configure-columns-btn]');
+        await click('[data-test-col-config-visible="0"]');
+        await waitFor('[aria-label="Show Backlog"]');
+
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .doesNotExist(
+            'backlog column is hidden after collapsing from the sidebar',
+          );
+
+        let collapsedSave = savedBoardDocs[savedBoardDocs.length - 1];
+        let collapsedBacklog = collapsedSave.data.attributes.columns.find(
+          (column: { key: string }) => column.key === 'backlog',
+        );
+        assert.true(
+          collapsedBacklog?.collapsed,
+          'sidebar collapse persists backlog as collapsed',
+        );
+
+        await click('[data-test-col-config-visible="0"]');
+        await waitFor(`[data-kanban-column="${COL.backlog}"]`);
+
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .exists(
+            'backlog column is shown again after revealing from the sidebar',
+          );
+
+        let revealedSave = savedBoardDocs[savedBoardDocs.length - 1];
+        let revealedBacklog = revealedSave.data.attributes.columns.find(
+          (column: { key: string }) => column.key === 'backlog',
+        );
+        assert.false(
+          revealedBacklog?.collapsed,
+          'sidebar reveal persists backlog as expanded',
+        );
+      });
+
+      test('turning hide empty off reveals empty columns even if they were hidden from the sidebar', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        assert
+          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .exists('blocked starts visible while hide-empty is off');
+
+        await click('[data-test-configure-columns-btn]');
+        await click('[data-test-col-config-visible="2"]');
+        await waitFor('[aria-label="Show Blocked"]');
+
+        assert
+          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .doesNotExist('blocked is hidden after sidebar toggle');
+
+        await click('.column-visibility-toggle input[role="switch"]');
+        await click('.column-visibility-toggle input[role="switch"]');
+
+        assert
+          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .exists(
+            'blocked is visible again after hide-empty is turned back off',
+          );
+      });
+
+      test<TestContextWithSave>('turning hide-empty off saves hideEmptyColumns as false', async function (assert) {
+        let boardSaves: any[] = [];
+        this.onSave((url, doc) => {
+          if (url.href === boardId) {
+            boardSaves.push(doc);
+          }
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        // Turn on hide-empty — blocked and review (empty) disappear
+        await click('.column-visibility-toggle input[role="switch"]');
+        await waitFor('[data-test-hidden-columns]');
+
+        assert
+          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .hasAttribute('data-test-switch-checked', 'on');
+
+        // Turn hide-empty back off
+        await click('.column-visibility-toggle input[role="switch"]');
+        await settled();
+
+        assert
+          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .hasAttribute('data-test-switch-checked', 'off', 'switch is off');
+        assert
+          .dom('[data-kanban-column]')
+          .exists({ count: 5 }, 'all columns visible again');
+        assert
+          .dom('[data-test-hidden-columns]')
+          .doesNotExist('hidden tray gone');
+
+        let lastSave = boardSaves[boardSaves.length - 1];
+        assert.false(
+          lastSave?.data.attributes.hideEmptyColumns,
+          'hideEmptyColumns persisted as false after turning off the filter',
+        );
+      });
+
+      test('collapsing one column from the header leaves all other columns visible', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        assert.dom('[data-kanban-column]').exists({ count: 5 });
+
+        await click(
+          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
+        );
+        await waitFor('[aria-label="Show Backlog"]');
+
+        assert
+          .dom('[data-kanban-column]')
+          .exists({ count: 4 }, 'only the collapsed column is removed');
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .doesNotExist('backlog is hidden');
+        assert
+          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .exists('in_progress still visible');
+        assert
+          .dom(`[data-kanban-column="${COL.done}"]`)
+          .exists('done still visible');
+      });
+
+      test('can hide a column from the header and reveal it from the sidebar, and vice versa', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        // Hide backlog from the column header
+        await click(
+          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
+        );
+        await waitFor('[aria-label="Show Backlog"]');
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .doesNotExist('backlog hidden via column header');
+
+        // Reveal backlog from the sidebar toggle
+        await click('[data-test-configure-columns-btn]');
+        await click('[data-test-col-config-visible="0"]');
+        await waitFor(`[data-kanban-column="${COL.backlog}"]`);
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .exists('backlog revealed via sidebar toggle');
+
+        // Hide in-progress from the sidebar toggle
+        await click('[data-test-col-config-visible="1"]');
+        await waitFor('[aria-label="Show In Progress"]');
+        assert
+          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .doesNotExist('in-progress hidden via sidebar toggle');
+
+        // Reveal in-progress from the hidden-columns tray in the header
+        await click('[aria-label="Show In Progress"]');
+        await waitFor(`[data-kanban-column="${COL.in_progress}"]`);
+        assert
+          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .exists('in-progress revealed via hidden-columns tray');
+        assert.dom('[data-test-hidden-columns]').doesNotExist('tray gone');
+      });
+
+      test('after hiding columns from both header and sidebar, hide-empty toggle is on; turning it off reveals only the empty-hidden columns', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        // Turn on hide-empty — blocked (col 2) and review (col 3) are empty
+        await click('.column-visibility-toggle input[role="switch"]');
+        await waitFor('[data-test-hidden-columns]');
+
+        assert
+          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .hasAttribute('data-test-switch-checked', 'on', 'switch is on');
+        assert
+          .dom('[data-kanban-column]')
+          .exists({ count: 3 }, 'two empty columns hidden');
+
+        // Also collapse backlog from the column header
+        await click(
+          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
+        );
+        await waitFor('[data-test-hidden-column-count]');
+        assert
+          .dom('[data-test-hidden-column-count]')
+          .hasText('3', '3 columns hidden total');
+
+        // Also collapse in-progress from the sidebar
+        await click('[data-test-configure-columns-btn]');
+        await click('[data-test-col-config-visible="1"]');
+        await waitFor('[aria-label="Show In Progress"]');
+        assert
+          .dom('[data-test-hidden-column-count]')
+          .hasText('4', '4 columns hidden total');
+
+        // Switch must still appear ON
+        assert
+          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .hasAttribute('data-test-switch-checked', 'on', 'switch still on');
+
+        // Turn off hide-empty — reveals only the empty-hidden columns
+        await click('.column-visibility-toggle input[role="switch"]');
+        await settled();
+
+        assert
+          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .hasAttribute('data-test-switch-checked', 'off', 'switch now off');
+        assert
+          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .exists('blocked is visible again (was empty-hidden)');
+        assert
+          .dom(`[data-kanban-column="${COL.review}"]`)
+          .exists('review is visible again (was empty-hidden)');
+        assert
+          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .doesNotExist(
+            'backlog stays hidden (was manually collapsed, has cards)',
+          );
+        assert
+          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .doesNotExist(
+            'in-progress stays hidden (was manually collapsed, has cards)',
+          );
+      });
+    });
+
+    // ── column config sync ────────────────────────────────────────────────────
+    module('column config sync', function (hooks) {
+      hooks.beforeEach(async function () {
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            ...makeProject([
+              { value: 'todo', label: 'To Do' },
+              { value: 'doing', label: 'Doing' },
+              { value: 'done', label: 'Done' },
+            ]),
+            ...makeBoard(),
+          },
+        });
+      });
+
+      test<TestContextWithSave>('renaming a column in the sidebar updates the matching project issueStatusOption label, and recoloring updates its color', async function (assert) {
+        let resolveLabelSave: (doc: any) => void;
+        let labelSavePromise = new Promise<any>((r) => {
+          resolveLabelSave = r;
+        });
+        let resolveColorSave: (doc: any) => void;
+        let colorSavePromise = new Promise<any>((r) => {
+          resolveColorSave = r;
+        });
+        let labelSaveSeen = false;
+        this.onSave((url, doc) => {
+          if (url.href !== projectId) return;
+          if (!labelSaveSeen) {
+            labelSaveSeen = true;
+            resolveLabelSave!(doc);
+          } else {
+            resolveColorSave!(doc);
+          }
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-kanban-column]');
+
+        // Open sidebar and rename "To Do" → "Planning"
+        await click('[data-test-configure-columns-btn]');
+        await fillIn('[data-test-col-config-label="0"]', 'Planning');
+
+        let labelSaveDoc = await labelSavePromise;
+        let updatedOptions = labelSaveDoc.data.attributes.issueStatusOptions;
+        assert.strictEqual(
+          updatedOptions[0].label,
+          'Planning',
+          'project issueStatusOption label updated to match sidebar rename',
+        );
+        assert.strictEqual(
+          updatedOptions[1].label,
+          'Doing',
+          'other project options unchanged',
+        );
+
+        // Recolor the first column and verify the project option color syncs
+        let colorInput = document.querySelector(
+          '[data-test-col-config-color="0"]',
+        ) as HTMLInputElement;
+        colorInput.value = '#ff0000';
+        await triggerEvent(colorInput, 'change');
+
+        let colorSaveDoc = await colorSavePromise;
+        assert.strictEqual(
+          colorSaveDoc.data.attributes.issueStatusOptions[0].color,
+          '#ff0000',
+          'project issueStatusOption color updated to match sidebar recolor',
         );
       });
     });
