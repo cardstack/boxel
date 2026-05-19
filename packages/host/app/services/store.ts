@@ -262,6 +262,16 @@ export default class StoreService extends Service implements StoreInterface {
   // render-route deactivate clear, in case a prerender tab is reused
   // across jobs without driving either of those paths.
   private searchCacheJobId: string | undefined = undefined;
+  // Monotonic counter bumped on every clear of `searchCache` (every
+  // path that empties the map: `clearSearchCache`, `resetState`,
+  // `resetCache`, the jobId-change clear at fetch-entry). A
+  // `fetchSearchDoc` call captures this at entry and checks it before
+  // populating on resolve — if the cache was intentionally cleared
+  // while the request was in flight, the resolved doc must not
+  // repopulate against the new generation. Mirrors the identity
+  // check on the in-flight Map but for the resolved-doc layer where
+  // we can't compare against a stored Promise.
+  private searchCacheGeneration = 0;
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -312,6 +322,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch = new Map();
     this.searchCache = new Map();
     this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -340,6 +351,7 @@ export default class StoreService extends Service implements StoreInterface {
   clearSearchCache(): void {
     this.searchCache.clear();
     this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
@@ -357,6 +369,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch = new Map();
     this.searchCache = new Map();
     this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -1019,6 +1032,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
       this.searchCache.clear();
       this.searchCacheJobId = jobId;
+      this.searchCacheGeneration++;
     }
 
     // Resolved-doc cache eligibility: prerender + jobId + same-realm.
@@ -1039,6 +1053,11 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
+    // Snapshot the generation *after* the entry-time clear so a
+    // concurrent clear arriving during the await below is observable
+    // as a generation drift and we skip the populate. Mirrors the
+    // identity check used by the in-flight Map below.
+    let captureGeneration = this.searchCacheGeneration;
 
     let inflightKey = inPrerender
       ? searchInFlightKey(realms, query)
@@ -1069,7 +1088,16 @@ export default class StoreService extends Service implements StoreInterface {
       doc = await this.fetchSearchDocUncoalesced(query, realms);
     }
 
-    if (cacheKey !== undefined) {
+    // Populate only if the cache generation hasn't moved under us. A
+    // route deactivate (clearSearchCache) or `resetState` between
+    // fetch-entry and resolve would bump the generation; in that case
+    // the resolved doc belongs to a now-stale window and must not
+    // repopulate the cleared cache. The caller still receives `doc`
+    // — only the *cache write* is suppressed.
+    if (
+      cacheKey !== undefined &&
+      this.searchCacheGeneration === captureGeneration
+    ) {
       this.searchCache.set(cacheKey, doc);
     }
     return doc;

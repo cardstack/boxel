@@ -1059,6 +1059,34 @@ module(`Integration | search resource`, function (hooks) {
       await Promise.all([p1, p2]);
     });
 
+    test(`clearSearchCache during an in-flight fetch suppresses the post-resolve populate`, async function (assert) {
+      // A request that's already past the cache-miss gate must not
+      // repopulate the cache after an intentional clear lands. The
+      // resolved doc is still returned to its caller; only the cache
+      // write is suppressed. This protects per-visit isolation when a
+      // route deactivates (or resetState fires) while a request is
+      // in-flight.
+      enterPrerender('job-1', testRealmURL);
+
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first call entered the fetch');
+
+      // The clear lands while p1 is parked on releaseFetch.
+      storeService.clearSearchCache();
+
+      releaseFetch.fulfill();
+      await p1;
+
+      // A subsequent same-key call must re-fetch — the in-flight
+      // resolve was forbidden from repopulating the cleared cache.
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'post-clear repopulate was suppressed; next call re-fetches',
+      );
+    });
+
     test(`consumingRealm mismatch on a single-realm search bypasses the cache`, async function (assert) {
       // Tab is rendering a card in `consumingRealm`, but the search
       // explicitly targets a different single realm. Same-realm gate
