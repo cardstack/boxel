@@ -22,6 +22,8 @@ export default class ContextButtonUsage extends Component {
   @tracked private height?: string;
   @tracked private isLoading = false;
   @tracked private isDisabled = false;
+  @tracked private isActive = false;
+  @tracked private isToggle = false;
   @tracked private label = 'context-button usage';
 
   <template>
@@ -34,6 +36,8 @@ export default class ContextButtonUsage extends Component {
           @size={{this.size}}
           @loading={{this.isLoading}}
           @disabled={{this.isDisabled}}
+          @isActive={{this.isActive}}
+          @isToggle={{this.isToggle}}
           @width={{this.width}}
           @height={{this.height}}
         />
@@ -83,6 +87,20 @@ export default class ContextButtonUsage extends Component {
           @optional={{true}}
           @value={{this.isDisabled}}
           @onInput={{fn (mut this.isDisabled)}}
+          @defaultValue='false'
+        />
+        <Args.Bool
+          @name='isActive'
+          @optional={{true}}
+          @value={{this.isActive}}
+          @onInput={{fn (mut this.isActive)}}
+          @defaultValue='false'
+        />
+        <Args.Bool
+          @name='isToggle'
+          @optional={{true}}
+          @value={{this.isToggle}}
+          @onInput={{fn (mut this.isToggle)}}
           @defaultValue='false'
         />
         <Args.String

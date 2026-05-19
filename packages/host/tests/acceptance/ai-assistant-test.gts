@@ -912,7 +912,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
     // Switching submodes should not change the active LLM
-    await click('[data-test-submode-switcher] button');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-llm-select-selected]').hasText(expectedName);
 
@@ -1088,12 +1088,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
     // Move to code mode and a file will be attached
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
     // Move back to interact mode and check the file is not attached
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
@@ -1126,7 +1126,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
@@ -1533,7 +1533,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // In code mode, auto-attached card must be the playground panel card and the card of the opened file with json extension
     // unless the card is manually chosen
-    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-submode-switcher-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert
       .dom(
