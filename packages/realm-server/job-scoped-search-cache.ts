@@ -4,6 +4,7 @@ import {
   sortKeysDeep,
   type Query,
 } from '@cardstack/runtime-common';
+import { md5 } from 'super-fast-md5';
 
 const log = logger('job-scoped-search-cache');
 
@@ -265,6 +266,38 @@ export class JobScopedSearchCache {
 
   jobIds(): string[] {
     return [...this.#byJob.keys()];
+  }
+
+  // Look up the cached body without populating or touching stats.
+  // Used by the handler's 304 path to confirm the slot still exists
+  // before returning Not-Modified — otherwise an If-None-Match whose
+  // expected ETag matches a TTL-evicted slot would short-circuit to
+  // 304 with no body to back it up on a follow-up.
+  peek(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string | undefined {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return this.#byJob.get(args.jobId)?.get(innerKey)?.result;
+  }
+
+  // Job-id-based ETag. Same `(jobId, realms, query, opts)` always
+  // produces the same value for an entry's lifetime; a different
+  // jobId yields a different ETag so a stale If-None-Match from a
+  // previous batch never matches a fresh entry. Weak-form (`W/`)
+  // because the underlying body is pretty-printed JSON and we
+  // validate by recomputing-and-comparing, not by byte-exact match
+  // of the body itself.
+  computeETag(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return `W/"${args.jobId}-${md5(innerKey)}"`;
   }
 }
 

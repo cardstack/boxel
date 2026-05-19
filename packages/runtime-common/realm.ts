@@ -473,7 +473,7 @@ function buildCardJsonEtag(
 // prefixed). For GET we don't distinguish weak vs. strong (spec
 // says weak comparison is fine for non-range requests), so strip
 // the `W/` prefix and compare the bare quoted value to our ETag.
-function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
+export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   let value = headerValue.trim();
   if (value === '*') {
     return true;

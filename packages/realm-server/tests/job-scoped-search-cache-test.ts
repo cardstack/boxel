@@ -474,6 +474,180 @@ module(basename(__filename), function () {
       assert.strictEqual(cache.size(), 2, 'two entries under the same job');
     });
 
+    test('computeETag: stable across calls with identical inputs', function (assert) {
+      let cache = new JobScopedSearchCache();
+      let a = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      let b = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      assert.strictEqual(a, b, 'same inputs produce the same ETag');
+      assert.ok(
+        /^W\/"42\.1-[0-9a-f]+"$/.test(a),
+        `ETag is weak-form quoted "<jobId>-<digest>": ${a}`,
+      );
+    });
+
+    test('computeETag: changes when jobId changes', function (assert) {
+      let cache = new JobScopedSearchCache();
+      let a = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      let b = cache.computeETag({
+        jobId: '43.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      assert.notStrictEqual(
+        a,
+        b,
+        'a stale ETag from a prior batch cannot match a fresh entry',
+      );
+    });
+
+    test('computeETag: changes when query, realms, or opts change', function (assert) {
+      let cache = new JobScopedSearchCache();
+      let base = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery('Mango'),
+        opts: undefined,
+      });
+      let diffQuery = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery('Vango'),
+        opts: undefined,
+      });
+      let diffRealms = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA, realmB],
+        query: makeQuery('Mango'),
+        opts: undefined,
+      });
+      let diffRealmOrder = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmB, realmA],
+        query: makeQuery('Mango'),
+        opts: undefined,
+      });
+      let diffOpts = cache.computeETag({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery('Mango'),
+        opts: { htmlFormat: 'embedded' },
+      });
+      assert.notStrictEqual(base, diffQuery, 'query change → new ETag');
+      assert.notStrictEqual(base, diffRealms, 'realm set change → new ETag');
+      assert.notStrictEqual(
+        base,
+        diffRealmOrder,
+        'realm order is part of the key',
+      );
+      assert.notStrictEqual(base, diffOpts, 'opts change → new ETag');
+    });
+
+    test('peek: returns the cached body for a known key, undefined otherwise', async function (assert) {
+      let cache = new JobScopedSearchCache();
+      let populate = async () => makeDoc('peeked');
+
+      assert.strictEqual(
+        cache.peek({
+          jobId: '42.1',
+          realms: [realmA],
+          query: makeQuery(),
+          opts: undefined,
+        }),
+        undefined,
+        'cold cache returns undefined',
+      );
+
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+
+      assert.strictEqual(
+        cache.peek({
+          jobId: '42.1',
+          realms: [realmA],
+          query: makeQuery(),
+          opts: undefined,
+        }),
+        makeDoc('peeked'),
+        'warm cache returns the cached body',
+      );
+
+      assert.strictEqual(
+        cache.peek({
+          jobId: '99.9',
+          realms: [realmA],
+          query: makeQuery(),
+          opts: undefined,
+        }),
+        undefined,
+        'a different jobId is not visible to peek',
+      );
+    });
+
+    test('peek: does not affect hit/miss stats', async function (assert) {
+      let cache = new JobScopedSearchCache();
+      let populates = 0;
+      let populate = async () => {
+        populates++;
+        return makeDoc(`call-${populates}`);
+      };
+
+      // Prime the cache.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      // peek-only access; should not trigger populate or count as hit.
+      cache.peek({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      cache.peek({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+      });
+      // A real getOrPopulate still observes the cached entry.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      assert.strictEqual(
+        populates,
+        1,
+        'populate ran once; peeks did not re-trigger populate',
+      );
+    });
+
     test('cross-realm: realm order is part of the key (not normalized)', async function (assert) {
       // `_federated-search` is order-preserving — `searchRealms`
       // queries each realm in the input order and `combineSearchResults`
