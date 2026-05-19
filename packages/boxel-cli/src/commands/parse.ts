@@ -98,6 +98,27 @@ interface SpecExampleInfo {
   exampleUrls: string[];
 }
 
+/**
+ * Bounded-poll an async attempt until `needsRetry` is false or the
+ * deadline elapses. Used to absorb realm-side indexing latency when
+ * we search for Specs immediately after a push.
+ */
+async function retryWithPoll<T>(
+  attempt: () => Promise<T>,
+  needsRetry: (result: T) => boolean,
+  options: { totalWaitMs?: number; pollMs?: number } = {},
+): Promise<T> {
+  let totalWaitMs = options.totalWaitMs ?? 30_000;
+  let pollMs = options.pollMs ?? 250;
+  let deadline = Date.now() + totalWaitMs;
+  let result = await attempt();
+  while (needsRetry(result) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    result = await attempt();
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
@@ -268,10 +289,16 @@ async function discoverJsonExampleFiles(
   realmUrl: string,
   pm: ProfileManager,
 ): Promise<string[]> {
-  let searchResult = await search(
-    realmUrl,
-    { filter: { type: SPEC_TYPE } },
-    { profileManager: pm },
+  // The realm's source POST returns once writes are durable, but the
+  // search index settles asynchronously. Right after a `boxel realm
+  // push`, a search for Spec cards may still see the pre-push state
+  // and return zero results, which would make us silently skip the
+  // freshly-pushed linkedExamples. Bounded-poll for up to ~30s while
+  // the result is OK but empty so the index has a chance to catch up.
+  let searchResult = await retryWithPoll(
+    () =>
+      search(realmUrl, { filter: { type: SPEC_TYPE } }, { profileManager: pm }),
+    (r) => r.ok && (r.data?.length ?? 0) === 0,
   );
   if (!searchResult.ok) {
     return [];

@@ -4,7 +4,6 @@ import { readFileSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { dirname, join, normalize, resolve } from 'node:path';
 
-import { chromium } from '@playwright/test';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import {
@@ -16,6 +15,30 @@ import { FG_RED, FG_GREEN, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
 import { findBoxelCliRoot } from '../lib/find-package-root';
 import { listFiles } from './file/list';
+
+// `@playwright/test` is a devDependency and external in our esbuild
+// config, so it's not present in a published-from-npm install. Anything
+// loaded at the top of this module would crash `boxel --help` for end
+// users who never run `boxel test`. Resolved lazily inside the runner
+// instead.
+type ChromiumApi = (typeof import('@playwright/test'))['chromium'];
+
+async function loadChromium(): Promise<ChromiumApi> {
+  try {
+    let mod = (await import('@playwright/test')) as {
+      chromium: ChromiumApi;
+    };
+    return mod.chromium;
+  } catch (err) {
+    let message = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Could not load @playwright/test (${message}). \`boxel test\` ` +
+        'is monorepo-only — install Playwright in the boxel-cli package ' +
+        'via `pnpm --filter @cardstack/boxel-cli install` and run ' +
+        '`npx playwright install chromium` once.',
+    );
+  }
+}
 
 /**
  * `boxel test` runs the realm's QUnit test suite by driving a
@@ -134,14 +157,21 @@ export async function runTestsForRealm(
   }
 
   if (testFiles.length === 0) {
+    // A realm with no `*.test.gts` files is treated as a validator
+    // failure: factory Issues are supposed to ship with tests, and a
+    // silent "passed" would let an agent mark an Issue done without
+    // ever writing one.
     return {
-      status: 'passed',
+      status: 'failed',
       passedCount: 0,
       failedCount: 0,
       skippedCount: 0,
       durationMs: 0,
       testFiles: [],
       failures: [],
+      errorMessage:
+        'No `*.test.gts` files found in the realm. ' +
+        'Every implementation Issue must ship with at least one test file.',
     };
   }
 
@@ -224,6 +254,7 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     });
     setHtml(html);
 
+    let chromium = await loadChromium();
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
