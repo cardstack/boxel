@@ -42,9 +42,19 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
+      - name: Start PostgreSQL
+        # register-all (below) writes EXTRA_USERS to the boxel users
+        # table, so postgres must be up before the matrix-side
+        # registration runs. boxel-cli-test gets away without this step
+        # because it uses register-realm-users (realms-only), which
+        # never touches the DB.
+        run: pnpm start:pg
+        working-directory: packages/realm-server
       - name: Start Matrix
         run: pnpm start:matrix
         working-directory: packages/realm-server
+      - name: Wait for PostgreSQL to accept connections
+        run: timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/5435) >/dev/null 2>&1; do sleep 1; done'
       - name: Register matrix users (all)
         # `register-realm-users` runs in realms-only mode and skips the
         # `user`/`password` account this demo authenticates as. Use the
