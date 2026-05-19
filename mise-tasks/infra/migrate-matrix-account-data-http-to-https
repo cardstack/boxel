@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Rewrite app.boxel.realms account_data in every local matrix user from http://localhost:42XX to https://"
+#MISE dir="packages/matrix"
+#
+# One-off companion to the `1779100257124_canonical-url-http-to-https`
+# postgres migration. The postgres migration rewrites realm-server's
+# own state; this script handles the per-user state stored in synapse
+# (the workspace list every Boxel user reads via
+# `getAccountDataFromServer('app.boxel.realms')` on boot). Without it,
+# already-logged-in dev accounts keep hitting `http://localhost:4201/...`,
+# the dispatcher 301-redirects to https://, and the browser blocks
+# every CORS preflight ("Redirect is not allowed for a preflight
+# request").
+#
+# Safe to re-run. Each user that has only https URLs is skipped.
+
+set -euo pipefail
+
+# The migration speaks to synapse over HTTP. Start it if it isn't already
+# running so a dev who hasn't run `pnpm start:all` yet doesn't see the
+# fetch fail with ECONNREFUSED on the very first request.
+pnpm assert-synapse-running
+
+pnpm migrate-account-data-http-to-https

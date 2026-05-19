@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
 import type {
@@ -1349,7 +1349,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -1377,7 +1377,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1390,7 +1390,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1403,7 +1403,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1452,7 +1452,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1493,7 +1493,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1522,7 +1522,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1551,7 +1551,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1609,7 +1609,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1676,7 +1676,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1710,7 +1710,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1744,7 +1744,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1816,7 +1816,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1865,7 +1865,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1899,7 +1899,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1954,7 +1954,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -2011,7 +2011,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -2043,7 +2043,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -2057,7 +2057,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),
@@ -2105,7 +2105,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -2141,7 +2141,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                   realmURL: ri(testRealmHref.replace(/\/$/, '')),
@@ -2177,7 +2177,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -2230,7 +2230,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -3529,7 +3529,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     module: rri(
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                      'https://localhost:4202/node-test/friend-with-used-link',
                     ),
                     name: 'FriendWithUsedLink',
                   },
@@ -3545,7 +3545,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3621,7 +3621,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3652,7 +3652,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3712,7 +3712,7 @@ module(basename(__filename), function () {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
                   module: rri(
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                    'https://localhost:4202/node-test/friend-with-used-link',
                   ),
                 },
                 realmInfo: testRealmInfo,
@@ -3763,7 +3763,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3819,7 +3819,7 @@ module(basename(__filename), function () {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
                   module: rri(
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                    'https://localhost:4202/node-test/friend-with-used-link',
                   ),
                 },
                 realmInfo: testRealmInfo,
@@ -3865,7 +3865,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),

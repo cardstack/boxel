@@ -82,7 +82,7 @@ test.describe('Head tags', () => {
   }) => {
     await publishDefaultRealm(page);
 
-    let publishedRealmURLString = `http://${user.username}.localhost:4205/new-workspace/index`;
+    let publishedRealmURLString = `https://${user.username}.localhost:4205/new-workspace/index`;
 
     await page.goto(publishedRealmURLString);
 
@@ -270,7 +270,7 @@ test.describe('Head tags', () => {
     await page.locator('[data-test-publish-button]').click();
     await page.waitForSelector('[data-test-unpublish-button]');
 
-    let publishedRealmURL = `http://${user.username}.localhost:4205/${realmName}/`;
+    let publishedRealmURL = `https://${user.username}.localhost:4205/${realmName}/`;
     let defaultCardURL = `${publishedRealmURL}default-head-card.json`;
 
     await page.goto(defaultCardURL);

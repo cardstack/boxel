@@ -291,7 +291,10 @@ export class RealmRegistryReconciler {
   // would receive a not-yet-started Realm; routing it through the
   // in-flight promise instead lets the caller await start() like the
   // original requester.
-  async lookupOrMount(url: string): Promise<Realm | undefined> {
+  async lookupOrMount(
+    url: string,
+    opts?: { fromScratchIndexPriority?: number },
+  ): Promise<Realm | undefined> {
     const inflight = this.pendingMounts.get(url);
     if (inflight) {
       return inflight;
@@ -308,7 +311,7 @@ export class RealmRegistryReconciler {
       }
       this.knownByUrl.set(url, row);
     }
-    return this.ensureMounted(row);
+    return this.ensureMounted(row, opts);
   }
 
   async #lookupRow(url: string): Promise<RealmRegistryRow | undefined> {
@@ -347,7 +350,10 @@ export class RealmRegistryReconciler {
   // rollout safety relies on this signal — Loki/Grafana extract cold-
   // mount latency, mount failure rate, and pinned-vs-lazy ratios from
   // these lines.
-  async ensureMounted(row: RealmRegistryRow): Promise<Realm> {
+  async ensureMounted(
+    row: RealmRegistryRow,
+    opts?: { fromScratchIndexPriority?: number },
+  ): Promise<Realm> {
     // pendingMounts checked before mounted: see lookupOrMount() above.
     // The Realm is published into mounted synchronously before its
     // start() promise resolves, so a caller hitting the mounted
@@ -386,7 +392,7 @@ export class RealmRegistryReconciler {
     this.#reconcilerOwned.add(row.url);
     const promise = (async () => {
       try {
-        await realm.start();
+        await realm.start(opts);
         log.info(
           `mount ok url=%s kind=%s pinned=%s duration_ms=%d`,
           row.url,

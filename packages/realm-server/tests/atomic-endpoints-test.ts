@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#MISE description="Reverse-migrate app.boxel.realms account_data from https://localhost:42XX back to http:// (companion to the canonical-url postgres migrate-down)"
+#MISE dir="packages/matrix"
+#
+# Symmetric reverse of `migrate-matrix-account-data-http-to-https`. Used
+# when you `pnpm migrate down` the canonical-url-http-to-https postgres
+# migration — you also need to flip the per-user synapse account_data
+# back to http:// so the browser keeps matching the (now-http) realm
+# canonicals in the DB.
+#
+# Safe to re-run. Each user that already has http URLs is skipped.
+
+set -euo pipefail
+
+# The migration speaks to synapse over HTTP. Start it if it isn't already
+# running so a dev who hasn't run `pnpm start:all` yet doesn't see the
+# fetch fail with ECONNREFUSED on the very first request.
+pnpm assert-synapse-running
+
+pnpm migrate-account-data-https-to-http

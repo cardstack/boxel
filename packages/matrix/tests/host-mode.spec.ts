@@ -185,7 +185,7 @@ test.describe('Host mode', () => {
     await page.reload();
     await page.locator('[data-test-host-mode-isolated]').waitFor();
 
-    publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
+    publishedRealmURL = `https://published.localhost:4205/${username}/${realmName}/`;
 
     await page.evaluate(
       async ({ realmURL, publishedRealmURL }) => {
@@ -197,7 +197,7 @@ test.describe('Host mode', () => {
           throw new Error(`No session token found for ${realmURL}`);
         }
 
-        let response = await fetch('http://localhost:4205/_publish-realm', {
+        let response = await fetch('https://localhost:4205/_publish-realm', {
           method: 'POST',
           headers: {
             Accept: 'application/json',
@@ -222,7 +222,7 @@ test.describe('Host mode', () => {
     publishedCardURL = `${publishedRealmURL}index.json`;
     publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     publishedMyCardURL = `${publishedRealmURL}my-card.json`;
-    connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
+    connectRouteURL = `https://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
 
@@ -318,7 +318,7 @@ test.describe('Host mode', () => {
     page,
   }) => {
     let response = await page.goto(
-      'http://localhost:4205/connect/http%3A%2F%2Fexample.com',
+      'https://localhost:4205/connect/http%3A%2F%2Fexample.com',
     );
 
     expect(response?.status()).toBe(404);

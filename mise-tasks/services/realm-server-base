@@ -1,7 +1,12 @@
 #!/bin/sh
 #MISE description="Start base realm server only"
-#MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE depends=["infra:ensure-dev-cert", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
+
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly ./scripts/matrix-registration-secret.ts)
@@ -29,4 +34,4 @@ NODE_ENV=development \
   --path='../base' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl='https://localhost:4201/base/'

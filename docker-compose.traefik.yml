@@ -4,10 +4,16 @@ services:
     container_name: boxel-traefik
     ports:
       - "80:80"
+      - "443:443"
       - "4230:4230"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      # mkcert leaf provisioned by `mise run infra:ensure-dev-cert` —
+      # mounted read-only and referenced by traefik/dynamic/tls.yml.
+      # Compose interpolates ${HOME} at startup; BOXEL_DEV_CERT_DIR
+      # overrides for CI / non-standard layouts.
+      - ${BOXEL_DEV_CERT_DIR:-${HOME}/.local/share/boxel/dev-certs}:/etc/traefik/certs:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

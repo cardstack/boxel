@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Start test realm servers"
-#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE depends=["infra:ensure-dev-cert", "infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
 SCRIPTS_DIR="./scripts"
@@ -14,7 +14,15 @@ if [ -z "$BOXEL_ENVIRONMENT" ]; then
       kill "$ICONS_PID" >/dev/null 2>&1 || true
     fi
   }
-  trap cleanup_icons_server EXIT INT TERM
+  trap cleanup_icons_server EXIT
+  # INT/TERM additionally exit 0 — see mise-tasks/services/worker for why.
+  # Clearing EXIT inside the signal handler avoids running cleanup twice.
+  trap 'trap - EXIT; cleanup_icons_server; exit 0' INT TERM
+else
+  # Even without an icons server to clean up, swallow signal-induced 143s so
+  # the orchestrator's Ctrl-C doesn't surface as `ERROR: "start:test-realms"
+  # exited with 143`.
+  trap 'exit 0' INT TERM
 fi
 
 if [ -n "$ENV_MODE" ]; then

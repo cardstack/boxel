@@ -18,7 +18,7 @@ const AiAssistantPanelPopover: TemplateOnlyComponent<Signature> = <template>
       top: 1.5rem;
       right: 1.875rem;
       margin-top: var(--boxel-sp-sm);
-      width: 320px;
+      max-width: 20rem;
       min-height: 12.5rem;
       max-height: 75vh;
       background: var(--ai-assistant-menu-background);

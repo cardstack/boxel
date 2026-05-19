@@ -4,6 +4,31 @@
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
+# Run the dev-cert prerequisite UPFRONT — before we spawn the host app
+# or the parallel server stack. ensure-dev-cert fails fast with a clear
+# "run `mise run infra:trust-dev-cert` once" message when the root CA
+# is missing, but inside the multiplexed `start-server-and-test` /
+# `run-p -ln` output that message is one of hundreds of buffered lines
+# the user has to scroll past, and the cascade of downstream failures
+# (vite restart, prerender / worker-manager teardown) buries it. Run
+# it here so it's the first thing a dev sees when the cert isn't
+# installed; if it passes, the inner `mise run` invocations that
+# depend on it are fast no-ops (idempotent leaf-cert check).
+echo "[dev-all] Verifying dev TLS cert prerequisite…"
+if ! BOXEL_DEV_INVOKED_AS='mise run dev-all' mise run infra:ensure-dev-cert; then
+  exit 1
+fi
+
+# `mise run dev-all` sources env-vars.sh once on entry. If
+# infra:ensure-dev-cert just provisioned the cert (first-run case), this
+# shell's env still lacks REALM_SERVER_TLS_CERT_FILE / _KEY_FILE, and
+# the next `pnpm --filter @cardstack/host start` inherits that gap and
+# brings vite up plain-HTTP — but HOST_URL is already
+# `https://localhost:4200`, so the readiness curl probe times out.
+# Re-source env-vars.sh so the TLS vars get picked up now that the cert
+# exists. Idempotent in the steady-state case.
+. "$(cd "$(dirname "$0")" && pwd)/lib/env-vars.sh"
+
 # Enable job control so backgrounded subprocesses run in their own process
 # group. Without this, Ctrl-C is delivered to the whole foreground group;
 # npm-run-all2 (`run-p`) tends to exit before propagating SIGINT to its
@@ -27,18 +52,32 @@ spawn_cleanup_guardian $$
 pnpm --filter @cardstack/host start &
 HOST_PID=$!
 record_dev_pid host "$HOST_PID"
-cleanup() {
-  trap - EXIT INT TERM HUP
-  kill_from_pidfile
-  sweep_orphaned_services
-  echo "[dev-all] All dev-stack processes stopped."
+# Fast shutdown helper: SIGTERM every recorded pgroup and return. The slow
+# TERM→sleep→KILL escalation and the sweep_orphaned_services pass run in the
+# background under the cleanup guardian (spawned at script start), which
+# polls this script's PID and finishes the job after we exit. Doing the
+# slow work in the foreground here would exceed mise's per-task SIGTERM→
+# SIGKILL grace and cause mise to WIFSIGNAL us — surfacing as
+# `ERROR … exited with non-zero status: no exit status` even though the
+# eventual cleanup is correct.
+fast_shutdown_kick() {
+  if [ -f "$PIDFILE" ]; then
+    while IFS='=' read -r _fc_label _fc_pid; do
+      [ -z "$_fc_pid" ] && continue
+      kill -TERM -- "-$_fc_pid" 2>/dev/null || true
+    done < "$PIDFILE"
+  fi
 }
-# HUP is required: when the user hits Ctrl-C in a terminal running `mise run
-# dev-all`, mise often exits without forwarding SIGINT to this bash script,
-# and bash then receives SIGHUP from the dying parent. Bash's default action
-# on an untrapped SIGHUP is to terminate *without* running the EXIT trap, so
-# without `HUP` here the cleanup never fires and the entire subtree leaks.
-trap cleanup EXIT INT TERM HUP
+# EXIT trap fires on every exit path (normal, signal, error). Kick TERMs so
+# the guardian can finish cleanup even when the INT/TERM/HUP trap below
+# never fires — e.g. with `set -m`, Ctrl-C in the controlling terminal is
+# delivered to SAT_PID's pgroup rather than this bash, so this shell only
+# notices via the `wait` returning a signal-induced code (handled at the
+# bottom of the script).
+trap fast_shutdown_kick EXIT
+# Direct signal path (Ctrl-C reaches this bash, or parent SIGTERM/SIGHUP):
+# kick the same fast cleanup and exit 0 so mise records WIFEXITED(0).
+trap 'fast_shutdown_kick; trap - EXIT INT TERM HUP; echo "[dev-all] Shutdown initiated; background cleanup will complete shortly."; exit 0' INT TERM HUP
 
 HOST_TIMEOUT=120
 ELAPSED=0
@@ -48,7 +87,7 @@ while true; do
     echo "ERROR: Host app process died." >&2
     exit 1
   fi
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
+  if [ "$(curl -ks -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
     break
   fi
   sleep 2
@@ -69,4 +108,15 @@ WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
 SAT_PID=$!
 record_dev_pid sat "$SAT_PID"
 wait "$SAT_PID"
-exit $?
+RC=$?
+# `set -m` puts SAT_PID in its own pgroup, so Ctrl-C in the controlling
+# terminal is delivered to SAT's pgroup — not to this bash — and `wait`
+# returns a 128+signal exit code without the INT/TERM/HUP trap firing.
+# Normalize that to 0 so mise records WIFEXITED(0) instead of treating
+# the expected shutdown as a task failure. The EXIT trap still runs
+# fast_shutdown_kick, and the cleanup guardian completes the KILL
+# escalation + sweep after we exit.
+if [ "$RC" -ge 128 ]; then
+  RC=0
+fi
+exit $RC

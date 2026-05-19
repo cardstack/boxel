@@ -108,18 +108,23 @@ jobs:
 
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Start test services (icons + host dist + realm servers)
-        run: mise run test-services:host | tee -a /tmp/server.log &
-      - name: Create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-
+      # Install + restart dbus/upower BEFORE the test services come up.
+      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
+      # in any already-running chromium (the prerender's standby probe and
+      # the realm-server's prerender workers), which aborts every in-flight
+      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
+      # stuck waiting for #standby-ready that never lands.
       - name: Install D-Bus helpers
         run: |
           sudo apt-get update
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
 
       - name: Live test suite
         run: dbus-run-session -- pnpm test:live
@@ -170,6 +175,18 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
+      # Install + restart dbus/upower BEFORE the test services come up.
+      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
+      # in any already-running chromium (the prerender's standby probe and
+      # the realm-server's prerender workers), which aborts every in-flight
+      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
+      # stuck waiting for #standby-ready that never lands.
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
@@ -177,13 +194,6 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-
-      - name: Install D-Bus helpers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 upower
-          sudo service dbus restart
-          sudo service upower restart
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |

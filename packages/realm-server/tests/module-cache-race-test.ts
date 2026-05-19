@@ -3,7 +3,7 @@ import { basename, join } from 'path';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
@@ -26,12 +26,12 @@ import {
 } from './helpers';
 
 // CS-11028: regression coverage for the persist-after-invalidate race in
-// Realm.#moduleCache. The scenario: reader A enters fallbackHandle for
+// Realm.#transpiledModuleCache. The scenario: reader A enters fallbackHandle for
 // foo.gts, snapshots the module-cache generation, then awaits transpileJS
 // (50–500 ms). While A is in-flight, invalidateCache(foo.gts) runs —
 // synchronously bumping the per-path generation and clearing whatever was
 // in the cache (a no-op if A hadn't filled it yet). Without the fix A's
-// post-transpile #moduleCache.set re-fills the slot with pre-invalidation
+// post-transpile #transpiledModuleCache.set re-fills the slot with pre-invalidation
 // bytes, so the next reader sees stale code until something else triggers
 // another invalidate. The fix snapshots the generation BEFORE the first
 // await and discards the cache write when the generation moved.
@@ -46,7 +46,7 @@ import {
 // `x-boxel-cache` header — a miss proves A's cache write was discarded.
 module(basename(__filename), function () {
   module(
-    'Realm.#moduleCache invalidate-during-transpile race',
+    'Realm.#transpiledModuleCache invalidate-during-transpile race',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
@@ -123,7 +123,7 @@ module(basename(__filename), function () {
         await new Promise((resolve) => setTimeout(resolve, 50));
 
         // Invalidate mid-transpile. The generation counter bumps; A's
-        // post-transpile #moduleCache.set will compare its snapshot against
+        // post-transpile #transpiledModuleCache.set will compare its snapshot against
         // the now-bumped counter and skip the write.
         testRealm.invalidateCache(modulePath);
 
@@ -211,7 +211,7 @@ module(basename(__filename), function () {
         );
 
         // The canonical request side already worked before this fix
-        // (#moduleCache.invalidate cleared the canonical entry), but
+        // (#transpiledModuleCache.invalidate cleared the canonical entry), but
         // verify it still misses so the fix doesn't regress it.
         let canonicalResponse = await request
           .get(`/${canonicalPath}`)
@@ -227,7 +227,7 @@ module(basename(__filename), function () {
       test('in-flight transpile result is dropped when testRealm.write fires concurrently (user-visible bug)', async function (assert) {
         // The original bug report: "file edited and saved, host page reload
         // serves the pre-edit module bytes." A user write goes through
-        // writeMany, which used to mutate #moduleCache directly without
+        // writeMany, which used to mutate #transpiledModuleCache directly without
         // bumping the generation counter — letting an in-flight transpile's
         // post-await cache.set silently fill the slot writeMany just
         // cleared. This test exercises the same code path the user does.
@@ -298,32 +298,34 @@ module(basename(__filename), function () {
   // tracks a monotonic transpile counter exposed via
   // __testOnlyGetTranspileCallCount so the tests can assert "exactly one
   // transpile call" directly rather than inferring it from timing.
-  module('Realm.#moduleCache in-flight transpile dedup', function (hooks) {
-    let realmURL = new URL('http://127.0.0.1:4444/test/');
-    let testRealm: Realm;
-    let request: RealmRequest;
+  module(
+    'Realm.#transpiledModuleCache in-flight transpile dedup',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
 
-    function onRealmSetup(args: {
-      testRealm: Realm;
-      testRealmHttpServer: Server;
-      request: SuperTest<Test>;
-    }) {
-      testRealm = args.testRealm;
-      request = withRealmPath(args.request, realmURL);
-    }
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+      }
 
-    setupPermissionedRealmCached(hooks, {
-      fixture: 'blank',
-      realmURL,
-      permissions: {
-        '*': ['read', 'write'],
-        user: ['read', 'write', 'realm-owner'],
-        '@node-test_realm:localhost': ['read', 'realm-owner'],
-      },
-      onRealmSetup,
-    });
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
 
-    const transpilerHeavySource = `
+      const transpilerHeavySource = `
       import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";
 
@@ -337,335 +339,336 @@ module(basename(__filename), function () {
       }
     `;
 
-    function authHeader() {
-      return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
-    }
-
-    function fireRequest(path: string): Promise<{ status: number }> {
-      return request
-        .get(`/${path}`)
-        .set('Accept', SupportedMimeType.All)
-        .set('Authorization', authHeader())
-        .then((r) => r as { status: number });
-    }
-
-    // Poll the realm's in-flight counter until it matches `expected`,
-    // up to `timeoutMs`. Fixed-time setTimeout()s are unreliable in CI
-    // — request startup latency can exceed the wait window — so the
-    // tests below use this helper together with __testOnlyDelayTranspile
-    // to deterministically observe inflight state without racing real
-    // .gts transpile timing.
-    async function waitForInflight(
-      expected: number,
-      timeoutMs = 5000,
-    ): Promise<void> {
-      let deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        if (testRealm.__testOnlyGetInFlightTranspileCount() === expected) {
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 5));
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
       }
-      throw new Error(
-        `timed out waiting for in-flight count to reach ${expected}; saw ${testRealm.__testOnlyGetInFlightTranspileCount()}`,
-      );
-    }
 
-    test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
-      let modulePath = 'dedup-same-path.gts';
-      await testRealm.write(modulePath, transpilerHeavySource);
-      testRealm.__testOnlyClearCaches();
+      function fireRequest(path: string): Promise<{ status: number }> {
+        return request
+          .get(`/${path}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader())
+          .then((r) => r as { status: number });
+      }
 
-      let before = testRealm.__testOnlyGetTranspileCallCount();
-      let responses = await Promise.all([
-        fireRequest(modulePath),
-        fireRequest(modulePath),
-        fireRequest(modulePath),
-      ]);
-      let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+      // Poll the realm's in-flight counter until it matches `expected`,
+      // up to `timeoutMs`. Fixed-time setTimeout()s are unreliable in CI
+      // — request startup latency can exceed the wait window — so the
+      // tests below use this helper together with __testOnlyDelayTranspile
+      // to deterministically observe inflight state without racing real
+      // .gts transpile timing.
+      async function waitForInflight(
+        expected: number,
+        timeoutMs = 5000,
+      ): Promise<void> {
+        let deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (testRealm.__testOnlyGetInFlightTranspileCount() === expected) {
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        throw new Error(
+          `timed out waiting for in-flight count to reach ${expected}; saw ${testRealm.__testOnlyGetInFlightTranspileCount()}`,
+        );
+      }
 
-      assert.deepEqual(
-        responses.map((r) => r.status),
-        [200, 200, 200],
-        'all three concurrent same-path requests succeed',
-      );
-      assert.strictEqual(
-        delta,
-        1,
-        'exactly one transpileJS call serviced three concurrent same-path readers',
-      );
-      assert.strictEqual(
-        testRealm.__testOnlyGetInFlightTranspileCount(),
-        0,
-        'in-flight slot released after the shared transpile settled',
-      );
-    });
+      test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
+        let modulePath = 'dedup-same-path.gts';
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
 
-    test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
-      let pathA = 'dedup-a.gts';
-      let pathB = 'dedup-b.gts';
-      await testRealm.write(pathA, transpilerHeavySource);
-      await testRealm.write(pathB, transpilerHeavySource);
-      testRealm.__testOnlyClearCaches();
-
-      let before = testRealm.__testOnlyGetTranspileCallCount();
-      let responses = await Promise.all([
-        fireRequest(pathA),
-        fireRequest(pathB),
-      ]);
-      let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
-
-      assert.deepEqual(
-        responses.map((r) => r.status),
-        [200, 200],
-        'both different-path requests succeed',
-      );
-      assert.strictEqual(
-        delta,
-        2,
-        'each distinct path triggers its own transpile — no cross-path false coalesce',
-      );
-    });
-
-    test('in-flight entry survives an unrelated path’s invalidate', async function (assert) {
-      let primaryPath = 'dedup-primary.gts';
-      let unrelatedPath = 'dedup-unrelated.gts';
-      await testRealm.write(primaryPath, transpilerHeavySource);
-      await testRealm.write(unrelatedPath, transpilerHeavySource);
-      testRealm.__testOnlyClearCaches();
-
-      // Park transpile at a gate so the inflight state is deterministic.
-      let releaseGate: () => void = () => {};
-      let gate = new Promise<void>((r) => {
-        releaseGate = r;
-      });
-      testRealm.__testOnlyDelayTranspile(() => gate);
-
-      try {
         let before = testRealm.__testOnlyGetTranspileCallCount();
-        let primaryInflight = fireRequest(primaryPath);
-        await waitForInflight(1);
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          1,
-          'primary path has an in-flight entry',
-        );
-
-        // Invalidate an unrelated path — should not affect primary's entry.
-        testRealm.invalidateCache(unrelatedPath);
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          1,
-          'unrelated invalidate did not drop the primary in-flight entry',
-        );
-
-        // Release primary so we can verify the end-state. A second
-        // concurrent caller while the gate was held would have joined
-        // primary's pending — covered by the "N concurrent same-path"
-        // test above; here we just confirm primary's transpile
-        // completes normally after the unrelated invalidate.
-        releaseGate();
-        await primaryInflight;
+        let responses = await Promise.all([
+          fireRequest(modulePath),
+          fireRequest(modulePath),
+          fireRequest(modulePath),
+        ]);
         let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          [200, 200, 200],
+          'all three concurrent same-path requests succeed',
+        );
         assert.strictEqual(
           delta,
           1,
-          'primary transpiled once — unrelated invalidate did not force a redo',
+          'exactly one transpileJS call serviced three concurrent same-path readers',
         );
-      } finally {
-        testRealm.__testOnlyDelayTranspile(undefined);
-      }
-    });
-
-    test('in-flight entry is dropped when its own path is invalidated; later caller starts a fresh transpile', async function (assert) {
-      let modulePath = 'dedup-self-invalidate.gts';
-      await testRealm.write(modulePath, transpilerHeavySource);
-      testRealm.__testOnlyClearCaches();
-
-      // Both transpiles will await the same gate — releasing it lets
-      // both proceed and complete. The first transpile was orphaned
-      // from the map by invalidateCache; the second installed a fresh
-      // entry. Their .finally identity checks operate on their own
-      // captured `pending` references, so both clean up correctly.
-      let releaseGate: () => void = () => {};
-      let gate = new Promise<void>((r) => {
-        releaseGate = r;
-      });
-      testRealm.__testOnlyDelayTranspile(() => gate);
-
-      try {
-        let before = testRealm.__testOnlyGetTranspileCallCount();
-        let firstInflight = fireRequest(modulePath);
-        await waitForInflight(1);
-
-        // Invalidate the path — drops the in-flight entry from the
-        // map. firstInflight's promise is still alive at the gate.
-        testRealm.invalidateCache(modulePath);
         assert.strictEqual(
           testRealm.__testOnlyGetInFlightTranspileCount(),
           0,
-          'in-flight entry dropped by invalidateCache',
+          'in-flight slot released after the shared transpile settled',
         );
+      });
 
-        // A caller arriving after the invalidate must not join the
-        // dropped pending; it should install a fresh entry.
-        let secondInflight = fireRequest(modulePath);
-        await waitForInflight(1);
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          1,
-          'second caller installed its own fresh in-flight entry',
-        );
+      test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
+        let pathA = 'dedup-a.gts';
+        let pathB = 'dedup-b.gts';
+        await testRealm.write(pathA, transpilerHeavySource);
+        await testRealm.write(pathB, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
 
-        releaseGate();
-        await firstInflight;
-        await secondInflight;
+        let before = testRealm.__testOnlyGetTranspileCallCount();
+        let responses = await Promise.all([
+          fireRequest(pathA),
+          fireRequest(pathB),
+        ]);
         let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+
+        assert.deepEqual(
+          responses.map((r) => r.status),
+          [200, 200],
+          'both different-path requests succeed',
+        );
         assert.strictEqual(
           delta,
           2,
-          'invalidate forced a second transpile — the dropped slot is not joined by post-invalidate callers',
+          'each distinct path triggers its own transpile — no cross-path false coalesce',
         );
-      } finally {
-        testRealm.__testOnlyDelayTranspile(undefined);
-      }
-    });
+      });
 
-    test('identity-checked cleanup: A in-flight + invalidate + B in-flight + A settles → B survives', async function (assert) {
-      let modulePath = 'dedup-identity.gts';
-      await testRealm.write(modulePath, transpilerHeavySource);
-      testRealm.__testOnlyClearCaches();
+      test('in-flight entry survives an unrelated path’s invalidate', async function (assert) {
+        let primaryPath = 'dedup-primary.gts';
+        let unrelatedPath = 'dedup-unrelated.gts';
+        await testRealm.write(primaryPath, transpilerHeavySource);
+        await testRealm.write(unrelatedPath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
 
-      // Independent gates per call so A and B can be released
-      // separately. The hook routes by call index rather than a
-      // mutable `currentGate` reference — `waitForInflight` only
-      // confirms the in-flight slot is set, which happens BEFORE the
-      // transpile hook fires, so A may still be racing toward the
-      // hook when the test swaps the gate. Call-index routing plus
-      // explicit hook-entry signals make the test order deterministic
-      // under CI load.
-      let releaseA: () => void = () => {};
-      let gateA = new Promise<void>((r) => {
-        releaseA = r;
-      });
-      let releaseB: () => void = () => {};
-      let gateB = new Promise<void>((r) => {
-        releaseB = r;
-      });
-      let signalAEntered: () => void = () => {};
-      let aEntered = new Promise<void>((r) => {
-        signalAEntered = r;
-      });
-      let signalBEntered: () => void = () => {};
-      let bEntered = new Promise<void>((r) => {
-        signalBEntered = r;
-      });
-      let hookCalls = 0;
-      testRealm.__testOnlyDelayTranspile(() => {
-        hookCalls += 1;
-        if (hookCalls === 1) {
-          signalAEntered();
-          return gateA;
+        // Park transpile at a gate so the inflight state is deterministic.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        testRealm.__testOnlyDelayTranspile(() => gate);
+
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          let primaryInflight = fireRequest(primaryPath);
+          await waitForInflight(1);
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'primary path has an in-flight entry',
+          );
+
+          // Invalidate an unrelated path — should not affect primary's entry.
+          testRealm.invalidateCache(unrelatedPath);
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'unrelated invalidate did not drop the primary in-flight entry',
+          );
+
+          // Release primary so we can verify the end-state. A second
+          // concurrent caller while the gate was held would have joined
+          // primary's pending — covered by the "N concurrent same-path"
+          // test above; here we just confirm primary's transpile
+          // completes normally after the unrelated invalidate.
+          releaseGate();
+          await primaryInflight;
+          let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+          assert.strictEqual(
+            delta,
+            1,
+            'primary transpiled once — unrelated invalidate did not force a redo',
+          );
+        } finally {
+          testRealm.__testOnlyDelayTranspile(undefined);
         }
-        signalBEntered();
-        return gateB;
       });
 
-      try {
-        let pendingA = fireRequest(modulePath);
-        // Wait until A is actually parked at gateA — not just until
-        // the in-flight slot is set. Otherwise the invalidate below
-        // can race A's hook invocation.
-        await aEntered;
+      test('in-flight entry is dropped when its own path is invalidated; later caller starts a fresh transpile', async function (assert) {
+        let modulePath = 'dedup-self-invalidate.gts';
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+
+        // Both transpiles will await the same gate — releasing it lets
+        // both proceed and complete. The first transpile was orphaned
+        // from the map by invalidateCache; the second installed a fresh
+        // entry. Their .finally identity checks operate on their own
+        // captured `pending` references, so both clean up correctly.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        testRealm.__testOnlyDelayTranspile(() => gate);
+
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          let firstInflight = fireRequest(modulePath);
+          await waitForInflight(1);
+
+          // Invalidate the path — drops the in-flight entry from the
+          // map. firstInflight's promise is still alive at the gate.
+          testRealm.invalidateCache(modulePath);
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            0,
+            'in-flight entry dropped by invalidateCache',
+          );
+
+          // A caller arriving after the invalidate must not join the
+          // dropped pending; it should install a fresh entry.
+          let secondInflight = fireRequest(modulePath);
+          await waitForInflight(1);
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'second caller installed its own fresh in-flight entry',
+          );
+
+          releaseGate();
+          await firstInflight;
+          await secondInflight;
+          let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+          assert.strictEqual(
+            delta,
+            2,
+            'invalidate forced a second transpile — the dropped slot is not joined by post-invalidate callers',
+          );
+        } finally {
+          testRealm.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('identity-checked cleanup: A in-flight + invalidate + B in-flight + A settles → B survives', async function (assert) {
+        let modulePath = 'dedup-identity.gts';
+        await testRealm.write(modulePath, transpilerHeavySource);
+        testRealm.__testOnlyClearCaches();
+
+        // Independent gates per call so A and B can be released
+        // separately. The hook routes by call index rather than a
+        // mutable `currentGate` reference — `waitForInflight` only
+        // confirms the in-flight slot is set, which happens BEFORE the
+        // transpile hook fires, so A may still be racing toward the
+        // hook when the test swaps the gate. Call-index routing plus
+        // explicit hook-entry signals make the test order deterministic
+        // under CI load.
+        let releaseA: () => void = () => {};
+        let gateA = new Promise<void>((r) => {
+          releaseA = r;
+        });
+        let releaseB: () => void = () => {};
+        let gateB = new Promise<void>((r) => {
+          releaseB = r;
+        });
+        let signalAEntered: () => void = () => {};
+        let aEntered = new Promise<void>((r) => {
+          signalAEntered = r;
+        });
+        let signalBEntered: () => void = () => {};
+        let bEntered = new Promise<void>((r) => {
+          signalBEntered = r;
+        });
+        let hookCalls = 0;
+        testRealm.__testOnlyDelayTranspile(() => {
+          hookCalls += 1;
+          if (hookCalls === 1) {
+            signalAEntered();
+            return gateA;
+          }
+          signalBEntered();
+          return gateB;
+        });
+
+        try {
+          let pendingA = fireRequest(modulePath);
+          // Wait until A is actually parked at gateA — not just until
+          // the in-flight slot is set. Otherwise the invalidate below
+          // can race A's hook invocation.
+          await aEntered;
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'A installed its in-flight entry',
+          );
+
+          // Invalidate drops A from the map. A is still parked at gateA.
+          testRealm.invalidateCache(modulePath);
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            0,
+            'invalidate dropped A from the map',
+          );
+
+          let pendingB = fireRequest(modulePath);
+          await bEntered;
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'B installed a fresh in-flight entry after invalidate dropped A',
+          );
+
+          // Release A. Its .finally identity check: map has B's pending,
+          // not A's — so it must NOT delete the slot.
+          releaseA();
+          await pendingA;
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            1,
+            'B’s in-flight entry survives A’s settle (identity check held)',
+          );
+
+          // Release B. Its .finally identity check passes; slot cleaned up.
+          releaseB();
+          await pendingB;
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            0,
+            'B’s in-flight entry cleaned up after B settled',
+          );
+        } finally {
+          testRealm.__testOnlyDelayTranspile(undefined);
+        }
+      });
+
+      test('errored transpile is shared with concurrent waiters and the in-flight slot releases on rejection', async function (assert) {
+        let modulePath = 'dedup-error.gts';
+        // Syntactically invalid .gts source — transpileJS will throw.
+        await testRealm.write(
+          modulePath,
+          'this is not a valid gts file <template>oops</template>',
+        );
+        testRealm.__testOnlyClearCaches();
+
+        let before = testRealm.__testOnlyGetTranspileCallCount();
+        let [resA, resB] = await Promise.all([
+          fireRequest(modulePath),
+          fireRequest(modulePath),
+        ]);
+        let deltaShared = testRealm.__testOnlyGetTranspileCallCount() - before;
+
         assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
+          resA.status,
+          406,
+          'first errored request returns a transpile-failed response',
+        );
+        assert.strictEqual(
+          resB.status,
+          406,
+          'concurrent waiter shares the same error response',
+        );
+        assert.strictEqual(
+          deltaShared,
           1,
-          'A installed its in-flight entry',
+          'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
         );
 
-        // Invalidate drops A from the map. A is still parked at gateA.
-        testRealm.invalidateCache(modulePath);
+        // After both fail, the in-flight slot must release so a fresh
+        // caller re-attempts transpile against current source.
+        let resC = await fireRequest(modulePath);
+        assert.strictEqual(resC.status, 406);
+        let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
         assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          0,
-          'invalidate dropped A from the map',
+          deltaAfter,
+          2,
+          'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
         );
-
-        let pendingB = fireRequest(modulePath);
-        await bEntered;
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          1,
-          'B installed a fresh in-flight entry after invalidate dropped A',
-        );
-
-        // Release A. Its .finally identity check: map has B's pending,
-        // not A's — so it must NOT delete the slot.
-        releaseA();
-        await pendingA;
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          1,
-          'B’s in-flight entry survives A’s settle (identity check held)',
-        );
-
-        // Release B. Its .finally identity check passes; slot cleaned up.
-        releaseB();
-        await pendingB;
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          0,
-          'B’s in-flight entry cleaned up after B settled',
-        );
-      } finally {
-        testRealm.__testOnlyDelayTranspile(undefined);
-      }
-    });
-
-    test('errored transpile is shared with concurrent waiters and the in-flight slot releases on rejection', async function (assert) {
-      let modulePath = 'dedup-error.gts';
-      // Syntactically invalid .gts source — transpileJS will throw.
-      await testRealm.write(
-        modulePath,
-        'this is not a valid gts file <template>oops</template>',
-      );
-      testRealm.__testOnlyClearCaches();
-
-      let before = testRealm.__testOnlyGetTranspileCallCount();
-      let [resA, resB] = await Promise.all([
-        fireRequest(modulePath),
-        fireRequest(modulePath),
-      ]);
-      let deltaShared = testRealm.__testOnlyGetTranspileCallCount() - before;
-
-      assert.strictEqual(
-        resA.status,
-        406,
-        'first errored request returns a transpile-failed response',
-      );
-      assert.strictEqual(
-        resB.status,
-        406,
-        'concurrent waiter shares the same error response',
-      );
-      assert.strictEqual(
-        deltaShared,
-        1,
-        'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
-      );
-
-      // After both fail, the in-flight slot must release so a fresh
-      // caller re-attempts transpile against current source.
-      let resC = await fireRequest(modulePath);
-      assert.strictEqual(resC.status, 406);
-      let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
-      assert.strictEqual(
-        deltaAfter,
-        2,
-        'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
-      );
-    });
-  });
+      });
+    },
+  );
 
   // CS-11030: the L2 cross-process cache lives in module_transpile_cache.
   // A request that misses L1 (in-memory) writes the transpiled bytes to
@@ -676,7 +679,7 @@ module(basename(__filename), function () {
   // coalesce behavior is exercised by module-cache-coordination-test.ts
   // and reused via the shared MODULE_CACHE_POPULATED_CHANNEL.
   module(
-    'Realm.#moduleCache L2 module_transpile_cache (DB-backed)',
+    'Realm.#transpiledModuleCache L2 module_transpile_cache (DB-backed)',
     function (hooks) {
       let realmURL = new URL('http://127.0.0.1:4444/test/');
       let testRealm: Realm;
@@ -973,20 +976,22 @@ module(basename(__filename), function () {
   // the advisory-lock + NOTIFY channel. Mirrors the
   // CachingDefinitionLookup two-instance test in
   // module-cache-coordination-test.ts but exercises the transpile flow.
-  module('Realm.#moduleCache L2 cross-instance coalesce', function (hooks) {
-    let dbAdapter: PgAdapter;
-    let publisher: import('@cardstack/runtime-common').QueuePublisher;
-    let runner: import('@cardstack/runtime-common').QueueRunner;
-    setupDB(hooks, {
-      beforeEach: async (adapter, pub, run) => {
-        dbAdapter = adapter;
-        publisher = pub;
-        runner = run;
-      },
-    });
+  module(
+    'Realm.#transpiledModuleCache L2 cross-instance coalesce',
+    function (hooks) {
+      let dbAdapter: PgAdapter;
+      let publisher: import('@cardstack/runtime-common').QueuePublisher;
+      let runner: import('@cardstack/runtime-common').QueueRunner;
+      setupDB(hooks, {
+        beforeEach: async (adapter, pub, run) => {
+          dbAdapter = adapter;
+          publisher = pub;
+          runner = run;
+        },
+      });
 
-    const peerRealmURL = 'http://127.0.0.1:5555/peer/';
-    const peerCardSource = `
+      const peerRealmURL = 'http://127.0.0.1:5555/peer/';
+      const peerCardSource = `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
 
@@ -1000,163 +1005,166 @@ module(basename(__filename), function () {
         }
       `;
 
-    async function buildPeerRealm(args: {
-      dir: string;
-      coordinator: ModuleCacheCoordinator;
-    }): Promise<Realm> {
-      let virtualNetwork = createVirtualNetwork();
-      let prerenderer = await getTestPrerenderer();
-      let definitionLookup = new CachingDefinitionLookup(
-        dbAdapter,
-        prerenderer,
-        virtualNetwork,
-        testCreatePrerenderAuth,
-      );
-      let { realm } = await createRealm({
-        dir: args.dir,
-        definitionLookup,
-        realmURL: peerRealmURL,
-        permissions: { '*': ['read', 'write'] },
-        virtualNetwork,
-        publisher,
-        runner,
-        dbAdapter,
-        transpileCoordinator: args.coordinator,
-      });
-      return realm;
-    }
-
-    async function setupTwoPeers(): Promise<{
-      realmA: Realm;
-      realmB: Realm;
-      coordA: ModuleCacheCoordinator;
-      coordB: ModuleCacheCoordinator;
-      cardPath: string;
-      canonicalUrl: string;
-    }> {
-      let tmp = dirSync();
-      let testRealmDir = join(tmp.name, 'peer-realm');
-      ensureDirSync(testRealmDir);
-      // Minimal .realm.json so the Realm bootstraps a name + readable
-      // visibility; the test only ever asks for module GETs.
-      writeJSONSync(join(testRealmDir, '.realm.json'), {
-        name: 'Peer Realm',
-      });
-      let cardPath = 'peer-card.gts';
-      writeFileSync(join(testRealmDir, cardPath), peerCardSource);
-
-      let coordA = new ModuleCacheCoordinator({ dbAdapter });
-      await coordA.start();
-      let coordB = new ModuleCacheCoordinator({ dbAdapter });
-      await coordB.start();
-      // Give both coordinators a moment to issue their LISTEN before
-      // the test fires NOTIFY traffic — matches the 100ms pause in
-      // module-cache-coordination-test.ts.
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      let realmA = await buildPeerRealm({
-        dir: testRealmDir,
-        coordinator: coordA,
-      });
-      let realmB = await buildPeerRealm({
-        dir: testRealmDir,
-        coordinator: coordB,
-      });
-
-      // Drop anything either realm filled during construction so the
-      // test's request is the only thing that can drive the counter.
-      realmA.__testOnlyClearCaches();
-      realmB.__testOnlyClearCaches();
-      // __testOnlyClearCaches fire-and-forgets the L2 bulk wipe; wait
-      // for it to land before reads.
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      let canonicalUrl = new URL(cardPath, peerRealmURL).href;
-      return { realmA, realmB, coordA, coordB, cardPath, canonicalUrl };
-    }
-
-    function moduleRequest(realm: Realm, cardPath: string): Request {
-      return new Request(new URL(cardPath, peerRealmURL).href, {
-        method: 'GET',
-        headers: {
-          Accept: SupportedMimeType.All,
-          Authorization: `Bearer ${createJWT(realm, 'user', ['read'])}`,
-        },
-      });
-    }
-
-    test('L2 row written by peer A is served from L2 by peer B without re-running babel', async function (assert) {
-      let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers();
-      try {
-        let respA = await realmA.handle(moduleRequest(realmA, cardPath));
-        assert.strictEqual(respA?.status, 200, 'peer A served the module');
-        assert.strictEqual(
-          realmA.__testOnlyGetTranspileCallCount(),
-          1,
-          'peer A ran babel exactly once',
+      async function buildPeerRealm(args: {
+        dir: string;
+        coordinator: ModuleCacheCoordinator;
+      }): Promise<Realm> {
+        let virtualNetwork = createVirtualNetwork();
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+          virtualNetwork,
+          testCreatePrerenderAuth,
         );
-
-        let bCountBefore = realmB.__testOnlyGetTranspileCallCount();
-        let respB = await realmB.handle(moduleRequest(realmB, cardPath));
-        assert.strictEqual(respB?.status, 200, 'peer B served the module');
-        assert.strictEqual(
-          realmB.__testOnlyGetTranspileCallCount() - bCountBefore,
-          0,
-          'peer B served from the L2 row peer A wrote — no babel ran on peer B',
-        );
-      } finally {
-        await coordA.shutDown();
-        await coordB.shutDown();
-      }
-    });
-
-    test('two peers concurrently transpiling the same path coalesce through the coordinator: exactly one babel call across both', async function (assert) {
-      let { realmA, realmB, coordA, coordB, cardPath } = await setupTwoPeers();
-      try {
-        // Gate babel on both realms so whichever one wins the
-        // advisory lock parks inside transpileJS, holding the lock
-        // open. The loser's tryAcquireAndRun returns acquired:false
-        // BEFORE the runner fn is invoked, so the loser never reaches
-        // the delay — only the winner waits on the gate.
-        let releaseGate!: () => void;
-        let gate = new Promise<void>((resolve) => {
-          releaseGate = resolve;
+        let { realm } = await createRealm({
+          dir: args.dir,
+          definitionLookup,
+          realmURL: peerRealmURL,
+          permissions: { '*': ['read', 'write'] },
+          virtualNetwork,
+          publisher,
+          runner,
+          dbAdapter,
+          transpileCoordinator: args.coordinator,
         });
-        realmA.__testOnlyDelayTranspile(() => gate);
-        realmB.__testOnlyDelayTranspile(() => gate);
-
-        // Stagger A → B by 100ms so A reliably takes the pg advisory
-        // lock first; B then contends and observes acquired:false.
-        // Mirrors the staggered start in the CachingDefinitionLookup
-        // two-instance test.
-        let pA = realmA.handle(moduleRequest(realmA, cardPath));
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        let pB = realmB.handle(moduleRequest(realmB, cardPath));
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // At this point: A is parked inside materializeAndTranspile
-        // awaiting the gate (transpile counter hasn't bumped yet —
-        // the delay hook runs before the count). B has observed
-        // acquired:false and is parked on waitForKey waiting for the
-        // NOTIFY A will emit when its tx commits.
-        releaseGate();
-        let [respA, respB] = await Promise.all([pA, pB]);
-        assert.strictEqual(respA?.status, 200, 'peer A served 200');
-        assert.strictEqual(respB?.status, 200, 'peer B served 200');
-
-        let aTotal = realmA.__testOnlyGetTranspileCallCount();
-        let bTotal = realmB.__testOnlyGetTranspileCallCount();
-        assert.strictEqual(
-          aTotal + bTotal,
-          1,
-          'exactly one babel call across both peers — the L2 winner wrote and the loser read',
-        );
-      } finally {
-        realmA.__testOnlyDelayTranspile(undefined);
-        realmB.__testOnlyDelayTranspile(undefined);
-        await coordA.shutDown();
-        await coordB.shutDown();
+        return realm;
       }
-    });
-  });
+
+      async function setupTwoPeers(): Promise<{
+        realmA: Realm;
+        realmB: Realm;
+        coordA: ModuleCacheCoordinator;
+        coordB: ModuleCacheCoordinator;
+        cardPath: string;
+        canonicalUrl: string;
+      }> {
+        let tmp = dirSync();
+        let testRealmDir = join(tmp.name, 'peer-realm');
+        ensureDirSync(testRealmDir);
+        // Minimal .realm.json so the Realm bootstraps a name + readable
+        // visibility; the test only ever asks for module GETs.
+        writeJSONSync(join(testRealmDir, '.realm.json'), {
+          name: 'Peer Realm',
+        });
+        let cardPath = 'peer-card.gts';
+        writeFileSync(join(testRealmDir, cardPath), peerCardSource);
+
+        let coordA = new ModuleCacheCoordinator({ dbAdapter });
+        await coordA.start();
+        let coordB = new ModuleCacheCoordinator({ dbAdapter });
+        await coordB.start();
+        // Give both coordinators a moment to issue their LISTEN before
+        // the test fires NOTIFY traffic — matches the 100ms pause in
+        // module-cache-coordination-test.ts.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        let realmA = await buildPeerRealm({
+          dir: testRealmDir,
+          coordinator: coordA,
+        });
+        let realmB = await buildPeerRealm({
+          dir: testRealmDir,
+          coordinator: coordB,
+        });
+
+        // Drop anything either realm filled during construction so the
+        // test's request is the only thing that can drive the counter.
+        realmA.__testOnlyClearCaches();
+        realmB.__testOnlyClearCaches();
+        // __testOnlyClearCaches fire-and-forgets the L2 bulk wipe; wait
+        // for it to land before reads.
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        let canonicalUrl = new URL(cardPath, peerRealmURL).href;
+        return { realmA, realmB, coordA, coordB, cardPath, canonicalUrl };
+      }
+
+      function moduleRequest(realm: Realm, cardPath: string): Request {
+        return new Request(new URL(cardPath, peerRealmURL).href, {
+          method: 'GET',
+          headers: {
+            Accept: SupportedMimeType.All,
+            Authorization: `Bearer ${createJWT(realm, 'user', ['read'])}`,
+          },
+        });
+      }
+
+      test('L2 row written by peer A is served from L2 by peer B without re-running babel', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } =
+          await setupTwoPeers();
+        try {
+          let respA = await realmA.handle(moduleRequest(realmA, cardPath));
+          assert.strictEqual(respA?.status, 200, 'peer A served the module');
+          assert.strictEqual(
+            realmA.__testOnlyGetTranspileCallCount(),
+            1,
+            'peer A ran babel exactly once',
+          );
+
+          let bCountBefore = realmB.__testOnlyGetTranspileCallCount();
+          let respB = await realmB.handle(moduleRequest(realmB, cardPath));
+          assert.strictEqual(respB?.status, 200, 'peer B served the module');
+          assert.strictEqual(
+            realmB.__testOnlyGetTranspileCallCount() - bCountBefore,
+            0,
+            'peer B served from the L2 row peer A wrote — no babel ran on peer B',
+          );
+        } finally {
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+
+      test('two peers concurrently transpiling the same path coalesce through the coordinator: exactly one babel call across both', async function (assert) {
+        let { realmA, realmB, coordA, coordB, cardPath } =
+          await setupTwoPeers();
+        try {
+          // Gate babel on both realms so whichever one wins the
+          // advisory lock parks inside transpileJS, holding the lock
+          // open. The loser's tryAcquireAndRun returns acquired:false
+          // BEFORE the runner fn is invoked, so the loser never reaches
+          // the delay — only the winner waits on the gate.
+          let releaseGate!: () => void;
+          let gate = new Promise<void>((resolve) => {
+            releaseGate = resolve;
+          });
+          realmA.__testOnlyDelayTranspile(() => gate);
+          realmB.__testOnlyDelayTranspile(() => gate);
+
+          // Stagger A → B by 100ms so A reliably takes the pg advisory
+          // lock first; B then contends and observes acquired:false.
+          // Mirrors the staggered start in the CachingDefinitionLookup
+          // two-instance test.
+          let pA = realmA.handle(moduleRequest(realmA, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          let pB = realmB.handle(moduleRequest(realmB, cardPath));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // At this point: A is parked inside materializeAndTranspile
+          // awaiting the gate (transpile counter hasn't bumped yet —
+          // the delay hook runs before the count). B has observed
+          // acquired:false and is parked on waitForKey waiting for the
+          // NOTIFY A will emit when its tx commits.
+          releaseGate();
+          let [respA, respB] = await Promise.all([pA, pB]);
+          assert.strictEqual(respA?.status, 200, 'peer A served 200');
+          assert.strictEqual(respB?.status, 200, 'peer B served 200');
+
+          let aTotal = realmA.__testOnlyGetTranspileCallCount();
+          let bTotal = realmB.__testOnlyGetTranspileCallCount();
+          assert.strictEqual(
+            aTotal + bTotal,
+            1,
+            'exactly one babel call across both peers — the L2 winner wrote and the loser read',
+          );
+        } finally {
+          realmA.__testOnlyDelayTranspile(undefined);
+          realmB.__testOnlyDelayTranspile(undefined);
+          await coordA.shutDown();
+          await coordB.shutDown();
+        }
+      });
+    },
+  );
 });

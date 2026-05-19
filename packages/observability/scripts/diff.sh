@@ -153,7 +153,7 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # `__REALM_SERVER_URL__` placeholder substitution below produces the
 # same value diff.sh expects to find in the live (pulled) state. CI
 # sources REALM_SERVER_URL from SSM in observability-diff.yml; locally
-# we default to apply.sh's hardcoded http://localhost:4201/. For
+# we default to apply.sh's hardcoded https://localhost:4201/. For
 # staging/production ad-hoc runs, the operator must export the same
 # value apply.sh uses (CI fetches it from /<env>/boxel-grafana/realm_server_url
 # — see observability-apply-${env_name}.yml).
@@ -170,7 +170,7 @@ source ./scripts/grafanactl-env.sh "$env_name"
 # fixed placeholder before diffing — see the `grafana_secret` arm of
 # JQ_NORMALIZE below.
 case "$env_name" in
-  local) realm_server_url="${REALM_SERVER_URL:-http://localhost:4201/}" ;;
+  local) realm_server_url="${REALM_SERVER_URL:-https://localhost:4201/}" ;;
   *)
     [[ -n "${REALM_SERVER_URL:-}" ]] \
       || { echo "error: REALM_SERVER_URL not set; CI fetches it from /${env_name}/boxel-grafana/realm_server_url in observability-diff.yml — for a local hosted run, export it manually first (same SSM path apply-${env_name}.yml uses)" >&2; exit 1; }

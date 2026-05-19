@@ -6,7 +6,7 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
 import {

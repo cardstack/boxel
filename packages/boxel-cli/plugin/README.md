@@ -56,33 +56,71 @@ Skills appear under the `/boxel-cli:` namespace.
 
 The plugin's `version` is independent of `@cardstack/boxel-cli`'s npm version. The plugin only describes the CLI; it does not bundle it.
 
-| Change | `package.json` `version` (npm CLI) | `plugin.json` `version` |
-|---|---|---|
-| New / changed CLI command | bump | bump (synopsis regenerates) |
-| Plugin prose only | — | bump |
-| CLI refactor / bug fix (no Commander change) | bump | — |
-| New `cardstack/boxel-skills` release | — | bump (after re-running `pnpm build:skills`) |
+Both `package.json` (the npm package) and `plugin.json` (this plugin) bump automatically on merge to `main`, driven by the PR title's conventional-commit prefix and which files the PR touched.
 
-See [Releasing](#releasing) below for how a `plugin.json` bump actually reaches users.
+### Conventional-commit prefixes
+
+PRs touching `packages/boxel-cli/**` must have a title that matches the conventional-commit grammar. The on-`main` workflow reads the merged PR's title and decides the bump level:
+
+| Prefix | Bump level |
+|---|---|
+| `feat!:` / `fix!:` / body contains `BREAKING CHANGE:` | major |
+| `feat:` | minor |
+| `fix:` / `perf:` / `refactor:` | patch |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+
+Scopes are allowed and ignored for bump-level purposes (`feat(profile): …` → minor).
+
+### Surface scoping
+
+Each version file only bumps if the PR touched its surface:
+
+- **`package.json` (npm)** bumps if the PR touched `src/`, `api.ts`, `scripts/build.ts`, or `package.json`.
+- **`plugin.json`** bumps if the PR touched `plugin/`, `scripts/build-plugin.ts`, or `scripts/build-skills.ts`, **or if the on-`main` regen step produced a diff in `plugin/skills/`** (e.g. a new CLI command added in `src/` triggers a synopsis regen, which counts as a plugin-surface change).
+
+| Change | `package.json` | `plugin.json` |
+|---|---|---|
+| New / changed CLI command (e.g. `feat:` in `src/commands/`) | bump (minor) | bump (synopsis regenerates → minor) |
+| Plugin README or prose (`fix:` in `plugin/README.md`) | — | bump (patch) |
+| CLI bug fix without Commander surface change (`fix:` in `src/lib/`) | bump (patch) | — |
+| Upstream `cardstack/boxel-skills` update via `BOXEL_SKILLS_VERSION` | — | bump (regen produces `plugin/skills/` diff) |
+| `chore:` / `docs:` housekeeping | — | — |
+
+> ⚠️ **`BOXEL_SKILLS_VERSION` bumps must NOT use `chore:`.** Bumping the pinned upstream skills version regenerates `plugin/skills/boxel-development/` and `plugin/skills/boxel-design/`, but a `chore:` prefix says "no bump" — the new content would land on `main` without a `plugin.json` bump, so the marketplace cache (keyed on `plugin.json` `version`) wouldn't refresh for users. Use `fix(skills):` for routine refreshes or `feat(skills):` for content that adds capabilities.
 
 ## Releasing
 
-The plugin is **git-distributed** through `.claude-plugin/marketplace.json` at the monorepo root — there is no separate npm publish step for the plugin. A release is simply: merge to `main` with a bumped `plugin.json` `version`.
+### Unstable channel (automated, every merge)
 
-### Steps
+Every merge to `main` that touches `packages/boxel-cli/**` triggers the `unstable` job in `.github/workflows/boxel-cli-publish.yml`:
 
-1. If you changed CLI commands, run `pnpm build:plugin` from `packages/boxel-cli/` to regenerate the `<!-- generated:commands -->` blocks in each `SKILL.md`.
-2. If `cardstack/boxel-skills` cut a new tag (or you want to pull in upstream edits), bump `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` and run `pnpm build:skills` from `packages/boxel-cli/`. That regenerates `plugin/skills/boxel-development/` and `plugin/skills/boxel-design/` from the pinned tag.
-3. Bump `packages/boxel-cli/plugin/.claude-plugin/plugin.json` `version` (semver — patch for prose, minor for new skills, major for breaking changes to skill names/contracts).
-4. Open a PR. CI in `.github/workflows/ci-lint.yaml` will fail if the synopsis is stale (*synopsis freshness* check), if the boxel-skills sync is stale (*boxel-skills sync* check), or if the bump is missing when generated content changed (*synopsis-bump* / *boxel-skills-bump coupling* checks).
-5. Merge to `main`. That's the publish — `cardstack/boxel`'s `.claude-plugin/marketplace.json` is the source of truth and Claude Code pulls from it directly.
+1. Regenerates `plugin/skills/` from the current Commander tree and pinned boxel-skills tag.
+2. Reads the merged PR's title via `gh api repos/.../commits/<sha>/pulls`.
+3. Classifies the bump level and decides per-surface bumps.
+4. Writes new versions into `package.json` and/or `plugin.json`.
+5. Commits `chore(release): boxel-cli npm=<v> plugin=<v> [skip ci]` back to `main` and tags `boxel-cli-v<npmVer>` if npm bumped.
+6. If npm bumped, publishes `@cardstack/boxel-cli@<base>-unstable.<n>` under npm dist-tag `unstable` (Ember canary pattern). `<n>` is `git rev-list --count <last-stable-tag>..HEAD`, so it's monotonic across reruns.
 
-### How users pick up the new version
+The plugin update reaches users on the next `/plugin marketplace update && /plugin update` (or automatic refresh on Claude Code startup). The marketplace cache is keyed on `plugin.json` `version` — **the auto-bump is what unlocks the update**.
 
-- **Automatic:** Claude Code refreshes marketplaces on startup for public repos.
-- **Manual:** `/plugin marketplace update && /plugin update` inside Claude Code.
+Concurrent merges are serialized by a `concurrency` group on the workflow so two near-simultaneous merges don't compute the same `unstable.<n>`.
 
-The marketplace cache is keyed on `plugin.json` `version` — **forgetting the bump means no user sees the change**, even after merge. The CI coupling check exists to prevent exactly this.
+### Installing the unstable npm build
+
+```bash
+npm install -g @cardstack/boxel-cli@unstable
+```
+
+### Stable releases (manual promotion)
+
+Stable releases are deliberate. From the GitHub Actions UI, run the **"boxel-cli publish"** workflow (`.github/workflows/boxel-cli-publish.yml`) with `confirm: promote` — that fires the `stable` job. It:
+
+1. Strips `-unstable.<n>` from the current `package.json` version.
+2. Commits, tags `boxel-cli-v<ver>`, pushes.
+3. Publishes under npm dist-tag `latest`.
+4. Creates a non-prerelease GitHub Release.
+
+There is no separate stable bump for `plugin.json` — its version stream already advances every merge, so by the time you cut a stable npm, the plugin has been on its own steady cadence.
 
 ### Adding a new plugin to the marketplace
 
@@ -97,9 +135,3 @@ If a future ticket adds a second plugin under `packages/<other>/plugin`, append 
 ```
 
 Each plugin's own `plugin.json` `version` drives its update lifecycle — the marketplace catalog itself does not need a version bump.
-
-### What a plugin release does *not* do
-
-- It does **not** publish or update `@cardstack/boxel-cli` on npm. That ships separately via the `manual-boxel-cli-publish.yml` workflow.
-- It does **not** require users to reinstall — `/plugin update` is in-place.
-- It does **not** bundle the CLI. Users still need `npm install -g @cardstack/boxel-cli` (see [Prerequisites](#prerequisites)).
