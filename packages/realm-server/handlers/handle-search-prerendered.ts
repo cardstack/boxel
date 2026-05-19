@@ -56,11 +56,15 @@ export default function handleSearchPrerendered(opts?: {
       cardUrls: parsed.cardUrls,
       renderType: parsed.renderType,
     };
-    let runSearch = () =>
-      searchPrerenderedRealms(
-        realmList.map((realmURL) => realmByURL.get(realmURL)),
-        parsed.cardsQuery,
-        searchOpts,
+    let runSearch = async () =>
+      JSON.stringify(
+        await searchPrerenderedRealms(
+          realmList.map((realmURL) => realmByURL.get(realmURL)),
+          parsed.cardsQuery,
+          searchOpts,
+        ),
+        null,
+        2,
       );
 
     // Symmetric to `_federated-search`'s gating. Cache is consulted
@@ -92,7 +96,7 @@ export default function handleSearchPrerendered(opts?: {
       : null;
     let cacheable = searchCache && jobId && consumingRealm;
 
-    let combined = cacheable
+    let body = cacheable
       ? await searchCache!.getOrPopulate({
           jobId: jobId!,
           realms: realmList,
@@ -104,7 +108,7 @@ export default function handleSearchPrerendered(opts?: {
 
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify(combined, null, 2), {
+      new Response(body, {
         headers: { 'content-type': SupportedMimeType.CardJson },
       }),
     );
