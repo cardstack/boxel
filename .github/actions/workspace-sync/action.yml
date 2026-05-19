@@ -88,9 +88,14 @@ runs:
       working-directory: ${{ env.BOXEL_SRC }}/packages/boxel-cli
       run: pnpm build
 
-    - name: Put boxel on PATH
+    - name: Make `boxel` available on PATH
       shell: bash
-      run: echo "${BOXEL_SRC}/packages/boxel-cli/bin" >> "$GITHUB_PATH"
+      # The bin directory contains `boxel.js` (the file package.json's
+      # `bin` field maps to `boxel`). Just prepending the directory to
+      # PATH would expose `boxel.js`, not `boxel`. Symlink the entry
+      # point under /usr/local/bin so consumers can call `boxel …` the
+      # way npm/pnpm-installed callers do.
+      run: sudo ln -sf "${BOXEL_SRC}/packages/boxel-cli/bin/boxel.js" /usr/local/bin/boxel
 
     - name: Configure boxel profile
       shell: bash
