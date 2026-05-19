@@ -847,14 +847,12 @@ module(`Integration | search resource`, function (hooks) {
       ).__boxelRenderContext = true;
 
       let p1 = storeService.search(bookQuery, [testRealmURL]);
-      await new Promise((r) => setTimeout(r, 10));
       assert.strictEqual(fetchCalls, 1, 'first fetch in-flight');
 
       // Simulate an invalidation event (e.g. render-route deactivate).
       storeService.clearInFlightSearch();
 
       let p2 = storeService.search(bookQuery, [testRealmURL]);
-      await new Promise((r) => setTimeout(r, 10));
       assert.strictEqual(
         fetchCalls,
         2,
@@ -863,6 +861,219 @@ module(`Integration | search resource`, function (hooks) {
 
       releaseFetch.fulfill();
       await Promise.all([p1, p2]);
+    });
+  });
+
+  module(`job-scoped resolved-doc search cache`, function (innerHooks) {
+    let releaseFetch: Deferred<void>;
+    let fetchCalls: number;
+    let restoreFetch: (() => void) | undefined;
+
+    innerHooks.beforeEach(function () {
+      releaseFetch = new Deferred<void>();
+      fetchCalls = 0;
+      let realmServer = getService('realm-server') as RealmServerService;
+      let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+      realmServer.maybeAuthedFetchForRealms = (async (url, ...args) => {
+        let isSearch =
+          typeof url === 'string' && url.includes('_federated-search');
+        if (isSearch) {
+          fetchCalls++;
+          await releaseFetch.promise;
+        }
+        return await original(url, ...args);
+      }) as RealmServerService['maybeAuthedFetchForRealms'];
+      restoreFetch = () => {
+        realmServer.maybeAuthedFetchForRealms = original;
+      };
+    });
+
+    innerHooks.afterEach(function () {
+      try {
+        releaseFetch.fulfill();
+      } catch {
+        // already settled
+      }
+      restoreFetch?.();
+      restoreFetch = undefined;
+      let g = globalThis as unknown as {
+        __boxelRenderContext?: boolean;
+        __boxelJobId?: string;
+        __boxelConsumingRealm?: string;
+      };
+      g.__boxelRenderContext = undefined;
+      g.__boxelJobId = undefined;
+      g.__boxelConsumingRealm = undefined;
+      storeService.clearInFlightSearch();
+      storeService.clearSearchCache();
+    });
+
+    let bookQuery: Query = {
+      filter: {
+        on: {
+          module: testRRI('book'),
+          name: 'Book',
+        },
+        eq: { 'author.lastName': 'Jones' },
+      },
+    };
+
+    function enterPrerender(jobId: string, consumingRealm: string) {
+      let g = globalThis as unknown as {
+        __boxelRenderContext?: boolean;
+        __boxelJobId?: string;
+        __boxelConsumingRealm?: string;
+      };
+      g.__boxelRenderContext = true;
+      g.__boxelJobId = jobId;
+      g.__boxelConsumingRealm = consumingRealm;
+    }
+
+    test(`sequential same-key store.search calls hit the resolved-doc cache (one fetch total)`, async function (assert) {
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      let r1 = await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first call populates cache');
+
+      let r2 = await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        'second sequential same-key call serves from cache, no network',
+      );
+      assert.deepEqual(
+        (r1 as { id?: string }[]).map((i) => i.id ?? null),
+        (r2 as { id?: string }[]).map((i) => i.id ?? null),
+        'cached doc returns the same instance set',
+      );
+    });
+
+    test(`cache bypasses outside a prerender (live SPA path)`, async function (assert) {
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      await storeService.search(bookQuery, [testRealmURL]);
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'two sequential calls each fetch — no cache outside prerender',
+      );
+    });
+
+    test(`cache bypasses when __boxelJobId is unset (prerender with no job)`, async function (assert) {
+      let g = globalThis as unknown as {
+        __boxelRenderContext?: boolean;
+        __boxelConsumingRealm?: string;
+      };
+      g.__boxelRenderContext = true;
+      g.__boxelConsumingRealm = testRealmURL;
+      // __boxelJobId intentionally unset
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      await storeService.search(bookQuery, [testRealmURL]);
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'sequential calls re-fetch when no jobId is on the page',
+      );
+    });
+
+    test(`cache bypasses cross-realm reads even inside a prerender`, async function (assert) {
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      // Realms array is a superset of [consumingRealm]. Cross-realm
+      // reads can't be cached because peer realm-servers swap on
+      // their own job cadence.
+      await storeService.search(bookQuery, [
+        testRealmURL,
+        'http://other-realm/data/',
+      ]);
+      await storeService.search(bookQuery, [
+        testRealmURL,
+        'http://other-realm/data/',
+      ]);
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'cross-realm reads bypass the same-realm cache',
+      );
+    });
+
+    test(`jobId change drops the cache (defensive clear at fetch-entry)`, async function (assert) {
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'populates cache under job-1');
+
+      // Same query, but the prerender server stamped a new jobId
+      // before the next visit started. fetchSearchDoc should observe
+      // the change and clear the cache before serving.
+      (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
+        'job-2';
+      await storeService.search(bookQuery, [testRealmURL]);
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'cache entry from prior job is not served under new jobId',
+      );
+    });
+
+    test(`clearSearchCache drops cached entries so subsequent same-key calls re-fetch`, async function (assert) {
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first call populates cache');
+
+      storeService.clearSearchCache();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'post-clear same-key caller re-fetches',
+      );
+    });
+
+    test(`cache hit short-circuits before the in-flight Map is consulted`, async function (assert) {
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first call populates cache');
+
+      // Fire two more concurrent same-key calls. With the cache hit,
+      // they should both short-circuit synchronously — neither needs
+      // the in-flight Map and no further fetch should happen.
+      let p1 = storeService.search(bookQuery, [testRealmURL]);
+      let p2 = storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'cache short-circuits both callers');
+      await Promise.all([p1, p2]);
+    });
+
+    test(`consumingRealm mismatch on a single-realm search bypasses the cache`, async function (assert) {
+      // Tab is rendering a card in `consumingRealm`, but the search
+      // explicitly targets a different single realm. Same-realm gate
+      // requires the search's realms to equal [consumingRealm].
+      enterPrerender('job-1', 'http://other-realm/data/');
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      await storeService.search(bookQuery, [testRealmURL]);
+
+      assert.strictEqual(
+        fetchCalls,
+        2,
+        'single-realm search against a non-consumingRealm is not cached',
+      );
     });
   });
 });

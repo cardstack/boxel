@@ -91,6 +91,7 @@ import {
   duringPrerenderHeaders,
   jobIdHeader,
 } from '../lib/prerender-fetch-headers';
+import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
@@ -244,6 +245,23 @@ export default class StoreService extends Service implements StoreInterface {
   // Entries self-clear on `.finally()` via identity check.
   private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
     new Map();
+  // Resolved-doc cache for same-realm `_federated-search` calls during
+  // a prerender. Layered *above* `inflightSearch`: a cache hit skips
+  // the network round-trip entirely; a miss falls through to the
+  // in-flight Map and the cache is populated on resolve. Keyed by
+  // (jobId, consumingRealm, query) — gated to same-realm-only so a
+  // cross-realm read can't freeze a value while a peer realm-server
+  // replica swaps mid-job. See `search-cache-key.ts` for the digest
+  // and the realm-server's `job-scoped-search-cache.ts` for the
+  // server-side prior art on storing resolved docs rather than
+  // promises (avoids tail-latency stalls on slow first populate).
+  private searchCache: Map<string, LinkableCollectionDocument> = new Map();
+  // The jobId the `searchCache` entries belong to. When a request
+  // arrives carrying a different `__boxelJobId` we drop the cache
+  // before serving — belt-and-braces beside `resetState()` and the
+  // render-route deactivate clear, in case a prerender tab is reused
+  // across jobs without driving either of those paths.
+  private searchCacheJobId: string | undefined = undefined;
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -292,6 +310,8 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
     this.inflightSearch = new Map();
+    this.searchCache = new Map();
+    this.searchCacheJobId = undefined;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -312,6 +332,16 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch.clear();
   }
 
+  // Drop every resolved-doc search-cache entry. The cache is scoped to
+  // a single indexing job; render-route deactivate calls this so the
+  // next visit (carrying a fresh `__boxelJobId`) starts from empty.
+  // `fetchSearchDoc` also drops the cache defensively when it observes
+  // `__boxelJobId` changing under it.
+  clearSearchCache(): void {
+    this.searchCache.clear();
+    this.searchCacheJobId = undefined;
+  }
+
   resetCache(opts?: { preserveReferences?: boolean }) {
     storeLogger.debug('resetting store cache');
     if (!opts?.preserveReferences) {
@@ -325,6 +355,8 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
     this.inflightSearch = new Map();
+    this.searchCache = new Map();
+    this.searchCacheJobId = undefined;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -955,40 +987,92 @@ export default class StoreService extends Service implements StoreInterface {
   // hydrated into the store). Sits between `store.search` and
   // `_federated-search`.
   //
-  // Inside a prerender tab (`__boxelRenderContext === true`)
-  // concurrent same-(realms, query) callers share one in-flight
-  // promise. Outside a prerender, every caller runs uncoalesced so
-  // live-SPA write-then-read flows keep their current freshness
-  // semantics.
+  // Two layers of dedup, both prerender-gated:
+  //
+  //   1. Resolved-doc cache (`searchCache`). Keyed by
+  //      (jobId, consumingRealm, query). Same-realm-only so a
+  //      cross-realm read can't freeze a value while a peer
+  //      realm-server replica swaps mid-job. Hit → return cached doc
+  //      synchronously, no network. Miss → fall through.
+  //   2. In-flight Map (`inflightSearch`). Concurrent same-(realms,
+  //      query) callers share one pending fetch. Sequential repeats
+  //      that don't hit layer 1 still pay the round-trip; layer 1 is
+  //      what closes the sequential-repeat window.
+  //
+  // Outside a prerender both layers are bypassed so live-SPA
+  // write-then-read flows keep their current freshness semantics.
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
   ): Promise<LinkableCollectionDocument> {
-    let key = (globalThis as any).__boxelRenderContext
+    let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
+    let jobId = inPrerender
+      ? ((globalThis as any).__boxelJobId as string | undefined)
+      : undefined;
+    let consumingRealm = inPrerender
+      ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
+      : undefined;
+
+    // Belt-and-braces jobId-change clear at fetch-entry. `resetState`
+    // and the render-route deactivate hook are the primary paths; this
+    // catches a prerender tab reused across jobs without either firing.
+    if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
+      this.searchCache.clear();
+      this.searchCacheJobId = jobId;
+    }
+
+    // Resolved-doc cache eligibility: prerender + jobId + same-realm.
+    // Cross-realm reads bypass — see field comment.
+    let cacheKey: string | undefined;
+    if (
+      inPrerender &&
+      typeof jobId === 'string' &&
+      typeof consumingRealm === 'string' &&
+      realms.length === 1 &&
+      realms[0] === consumingRealm
+    ) {
+      cacheKey = searchCacheKey(jobId, consumingRealm, query);
+      if (cacheKey !== undefined) {
+        let cached = this.searchCache.get(cacheKey);
+        if (cached !== undefined) {
+          return cached;
+        }
+      }
+    }
+
+    let inflightKey = inPrerender
       ? searchInFlightKey(realms, query)
       : undefined;
-    if (key !== undefined) {
-      let existing = this.inflightSearch.get(key);
+    let doc: LinkableCollectionDocument;
+    if (inflightKey !== undefined) {
+      let existing = this.inflightSearch.get(inflightKey);
       if (existing) {
-        return await existing;
+        doc = await existing;
+      } else {
+        let pending = this.fetchSearchDocUncoalesced(query, realms).finally(
+          () => {
+            // Identity-check before deletion: a concurrent
+            // `clearInFlightSearch()` could in principle have removed
+            // (and a later caller re-set) this slot while we were
+            // in-flight. Only clean up if the map still points at *this*
+            // pending promise. Mirrors
+            // `RealmIndexQueryEngine.searchCards` server-side.
+            if (this.inflightSearch.get(inflightKey) === pending) {
+              this.inflightSearch.delete(inflightKey);
+            }
+          },
+        );
+        this.inflightSearch.set(inflightKey, pending);
+        doc = await pending;
       }
-      let pending = this.fetchSearchDocUncoalesced(query, realms).finally(
-        () => {
-          // Identity-check before deletion: a concurrent
-          // `clearInFlightSearch()` could in principle have removed
-          // (and a later caller re-set) this slot while we were
-          // in-flight. Only clean up if the map still points at *this*
-          // pending promise. Mirrors
-          // `RealmIndexQueryEngine.searchCards` server-side.
-          if (this.inflightSearch.get(key) === pending) {
-            this.inflightSearch.delete(key);
-          }
-        },
-      );
-      this.inflightSearch.set(key, pending);
-      return await pending;
+    } else {
+      doc = await this.fetchSearchDocUncoalesced(query, realms);
     }
-    return await this.fetchSearchDocUncoalesced(query, realms);
+
+    if (cacheKey !== undefined) {
+      this.searchCache.set(cacheKey, doc);
+    }
+    return doc;
   }
 
   private async fetchSearchDocUncoalesced(
