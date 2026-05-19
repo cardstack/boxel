@@ -22,20 +22,35 @@ pnpm factory:go --brief-url <url> --target-realm <url>
 
 ## Skill loading
 
-The agent's instructions live in `.agents/skills/`. The factory loader
-(`src/factory-skill-loader.ts`) walks three directories:
+Two parallel skill paths exist, one per factory run mode:
 
-1. `packages/software-factory/.agents/skills/` — factory-specific skills
-   (`software-factory-bootstrap`, `software-factory-operations`).
-2. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code plugin
-   skills (`boxel-api`, `boxel-command`); same directory the plugin
-   distributes to end users.
-3. monorepo root `.agents/skills/` — general domain skills
-   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
+- **SDK orchestrator** (`pnpm factory:go`): the loader at
+  `src/factory-skill-loader.ts` reads from
+  **`.agents/skills-sdk/`** first. Those skills describe the
+  factory-MCP-tool surface (`signal_done`, `get_card_schema`,
+  `run_lint`, …) that `ToolUseFactoryAgent` actually provides at
+  runtime.
+- **Interactive Claude Code** (paste the prompt from
+  `docs/runbook.md`): Claude Code reads
+  **`.agents/skills/`** via the `.claude/skills` symlink. Those
+  skills describe the `boxel` CLI surface and the agent-owned
+  status lifecycle. The interactive flow has no orchestrator
+  process; the agent drives the loop directly.
 
-`packages/software-factory/.claude/skills` is a symlink to
-`.agents/skills/` so Claude Code and the factory loader read the same
-files.
+Fallback dirs for both modes (skills that aren't software-factory
+specific):
+
+1. `packages/boxel-cli/plugin/skills/` — boxel-cli Claude Code
+   plugin skills (`boxel-api`, `boxel-command`); same directory
+   the plugin distributes to end users.
+2. monorepo root `.agents/skills/` — general domain skills
+   (`boxel-development`, `boxel-file-structure`,
+   `ember-best-practices`).
+
+The two software-factory skill sets diverged during CS-11149. They
+stay separated until the SDK orchestrator is retired; at that
+point the orchestrator code and `.agents/skills-sdk/` get deleted
+together.
 
 ## Architectural principle
 
