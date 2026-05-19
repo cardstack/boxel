@@ -45,8 +45,11 @@ jobs:
       - name: Start Matrix
         run: pnpm start:matrix
         working-directory: packages/realm-server
-      - name: Register realm users
-        run: pnpm register-realm-users
+      - name: Register matrix users (all)
+        # `register-realm-users` runs in realms-only mode and skips the
+        # `user`/`password` account this demo authenticates as. Use the
+        # `register-all` variant so EXTRA_USERS get created too.
+        run: pnpm register-all
         working-directory: packages/matrix
       - name: Start dev stack (base realm + prerenderer)
         run: |
