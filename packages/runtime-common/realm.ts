@@ -6056,6 +6056,20 @@ export class Realm {
         } catch {
           return [];
         }
+        // Defensive same-realm guard. The project spec restricts routing
+        // rules to cards within the same realm, and CS-10052 enforces
+        // that in the UI — but the file is hand-editable, so the read
+        // path must filter too. Without this guard, a realm owner could
+        // point `instance` at a private realm's card and the serve-index
+        // cardURL rewrite would surface its prerendered HTML through
+        // their public realm's routed path, bypassing the private
+        // realm's permissions.
+        if (!id.startsWith(this.url)) {
+          this.#log.warn(
+            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+          );
+          return [];
+        }
         return [{ path, id }];
       });
     } catch (e) {
