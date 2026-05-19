@@ -186,23 +186,15 @@ export default class RenderRoute extends Route<Model> {
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
-    // Stamp render-context BEFORE touching the realm service. Prerender-
-    // aware short-circuits read this flag synchronously on their first
-    // run — most importantly `RealmResource.tokenRefresher`. With the
-    // flag unset, tokenRefresher falls through to its delayed
-    // `loginTask`, which lazily injects matrix-service. Inside the
-    // prerender Chrome the matrix client + event bindings + token-refresh
-    // logic are dead weight that the render route never touches, and
-    // constructing matrix-service drags all of it in. Setting the flag
-    // first keeps matrix-service uninstantiated for the prerender's
-    // lifetime.
-    (globalThis as any).__boxelRenderContext = true;
     if (!isTesting()) {
       // tests have their own way of dealing with window level errors in card-prerender.gts
       this.#attachWindowErrorListeners();
       this.realm.restoreSessionsFromStorage();
     }
 
+    // activate() doesn't run early enough for this to be set before the model()
+    // hook is run
+    (globalThis as any).__boxelRenderContext = true;
     this.#registerGlobalsDestructor();
     this.#authGuard.register();
     if (!isTesting()) {
