@@ -2486,10 +2486,6 @@ export class Realm {
         }
       }
       this.#readinessDiag.debug(
-        `startup awaiting isWorldReadable for realm ${this.url}`,
-      );
-      await this.isWorldReadable();
-      this.#readinessDiag.debug(
         `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
       );
     } finally {
