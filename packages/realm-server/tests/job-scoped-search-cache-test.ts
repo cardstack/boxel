@@ -1,9 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import type {
-  LinkableCollectionDocument,
-  Query,
-} from '@cardstack/runtime-common';
+import type { Query } from '@cardstack/runtime-common';
 import { JobScopedSearchCache } from '../job-scoped-search-cache';
 
 const realmA = 'http://localhost:4201/test/';
@@ -17,11 +14,19 @@ function makeQuery(firstName = 'Mango'): Query {
   };
 }
 
-function makeDoc(label: string): LinkableCollectionDocument {
-  return {
-    data: [{ type: 'card', id: `${realmA}${label}` }],
-    meta: { page: { total: 1, realmVersion: 1 } },
-  } as unknown as LinkableCollectionDocument;
+// Cache stores serialized response bytes, not parsed docs. Tests
+// model that by returning JSON strings directly. The shape matches
+// what a real `searchRealms` populate thunk would produce after
+// `JSON.stringify(..., null, 2)`.
+function makeDoc(label: string): string {
+  return JSON.stringify(
+    {
+      data: [{ type: 'card', id: `${realmA}${label}` }],
+      meta: { page: { total: 1, realmVersion: 1 } },
+    },
+    null,
+    2,
+  );
 }
 
 module(basename(__filename), function () {
@@ -52,6 +57,45 @@ module(basename(__filename), function () {
       assert.strictEqual(calls, 1, 'populate ran exactly once');
       assert.strictEqual(a, b, 'second caller got the cached doc');
       assert.strictEqual(cache.size(), 1, 'one entry stored');
+    });
+
+    test('cache returns the originally-serialized bytes on hit (no re-stringify)', async function (assert) {
+      // The whole point of storing strings is to ship the cached bytes
+      // directly. A populate that mutates its output on every call
+      // makes this observable: if the cache ever re-ran populate or
+      // re-serialized, the second hit would surface the newer bytes.
+      let cache = new JobScopedSearchCache();
+      let calls = 0;
+      let populate = async () => {
+        calls++;
+        return makeDoc(`call-${calls}`);
+      };
+
+      let firstHit = await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+      let secondHit = await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate,
+      });
+
+      assert.strictEqual(calls, 1, 'populate only ran on the first miss');
+      assert.strictEqual(
+        secondHit,
+        firstHit,
+        'hit byte-equals the originally-cached body',
+      );
+      assert.ok(
+        firstHit.includes('call-1'),
+        'cached bytes are from the first populate, not a re-stringify',
+      );
     });
 
     test('cache miss when jobId differs', async function (assert) {

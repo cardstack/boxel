@@ -71,11 +71,15 @@ export default function handleSearch(opts?: {
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
-    let runSearch = () =>
-      searchRealms(
-        realmList.map((realmURL) => realmByURL.get(realmURL)),
-        cardsQuery,
-        normalizedSearchOpts,
+    let runSearch = async () =>
+      JSON.stringify(
+        await searchRealms(
+          realmList.map((realmURL) => realmByURL.get(realmURL)),
+          cardsQuery,
+          normalizedSearchOpts,
+        ),
+        null,
+        2,
       );
 
     // Job-scoped cache. Gated on:
@@ -107,7 +111,7 @@ export default function handleSearch(opts?: {
       : null;
     let cacheable = searchCache && jobId && consumingRealm;
 
-    let combined = cacheable
+    let body = cacheable
       ? await searchCache!.getOrPopulate({
           jobId: jobId!,
           realms: realmList,
@@ -119,7 +123,7 @@ export default function handleSearch(opts?: {
 
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify(combined, null, 2), {
+      new Response(body, {
         headers: { 'content-type': SupportedMimeType.CardJson },
       }),
     );
