@@ -16,9 +16,14 @@ import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
   Args: {
+    cardCounts?: number[];
     columns: KanbanColumnConfig[];
+    hideEmpty?: boolean;
     onClose?: () => void;
     onColumnsChange: (columns: KanbanColumnConfig[]) => void;
+    onShowEmptyColumns?: (columnKey?: string | null) => void;
+    onToggleCollapsed?: (key: string | null, collapsed: boolean) => void;
+    visibilityStates?: Array<'collapsed' | 'empty' | 'visible'>;
   };
   Element: HTMLElement;
 }
@@ -68,11 +73,57 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
   @action toggleVisible(index: number): void {
     let col = this.args.columns[index];
     if (!col) return;
-    this.update(index, { collapsed: !col.collapsed });
+
+    let hiddenReason = this.visibilityState(index);
+    if (hiddenReason === 'empty') {
+      this.args.onShowEmptyColumns?.(col.key);
+      return;
+    }
+
+    if (this.args.onToggleCollapsed) {
+      this.args.onToggleCollapsed(
+        col.key,
+        hiddenReason === 'collapsed' ? false : true,
+      );
+    } else {
+      this.update(index, {
+        collapsed: hiddenReason === 'collapsed' ? false : true,
+      });
+    }
+
+    if (
+      hiddenReason === 'collapsed' &&
+      this.args.hideEmpty &&
+      this.cardCount(index) === 0
+    ) {
+      this.args.onShowEmptyColumns?.(col.key);
+    }
   }
 
   isFirst = (index: number): boolean => index === 0;
   isLast = (index: number): boolean => index >= this.args.columns.length - 1;
+  cardCount = (index: number): number => this.args.cardCounts?.[index] ?? 0;
+  isVisible = (index: number): boolean =>
+    this.visibilityState(index) === 'visible';
+
+  visibilityState = (index: number): 'collapsed' | 'empty' | 'visible' => {
+    let explicitState = this.args.visibilityStates?.[index];
+    if (explicitState) {
+      return explicitState;
+    }
+
+    let col = this.args.columns[index];
+    if (!col) {
+      return 'visible';
+    }
+    if (col.collapsed) {
+      return 'collapsed';
+    }
+    if (this.args.hideEmpty && this.cardCount(index) === 0) {
+      return 'empty';
+    }
+    return 'visible';
+  };
 
   <template>
     <aside class='col-config-sidebar' ...attributes>
@@ -90,7 +141,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       </header>
 
       <ul class='col-list'>
-        {{#each @columns as |column colIdx|}}
+        {{#each @columns key='key' as |column colIdx|}}
           <li class='col-row' data-test-col-config-row={{colIdx}}>
             <div class='col-row-order'>
               <IconButton
@@ -146,9 +197,13 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
 
             <IconButton
               class='col-visible-btn'
-              @icon={{if column.collapsed EyeOff Eye}}
+              @icon={{if (this.isVisible colIdx) Eye EyeOff}}
               @size='extra-small'
-              aria-label={{if column.collapsed 'Show column' 'Hide column'}}
+              aria-label={{if
+                (this.isVisible colIdx)
+                'Hide column'
+                'Show column'
+              }}
               data-test-col-config-visible={{colIdx}}
               {{on 'click' (fn this.toggleVisible colIdx)}}
             />

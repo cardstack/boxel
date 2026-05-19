@@ -24,6 +24,7 @@ import {
 } from './engine.ts';
 import { KanbanGhost } from './ghost.gts';
 import { BindPointerDown, CaptureElement } from './modifiers.gts';
+import type { KanbanColumnState } from './plane';
 
 const KANBAN_COLUMN_HORIZONTAL_PADDING_PX = 16;
 const KANBAN_INSERTION_GAP_PX = 8;
@@ -36,9 +37,10 @@ export class KanbanPlaneInner extends Component<{
     hideEmpty?: boolean;
     manager: KanbanDragManager;
     onAddCard?: (columnKey: string | null) => void;
-    onShowEmptyColumns?: () => void;
+    onShowEmptyColumns?: (columnKey?: string | null) => void;
     onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
     placements: KanbanPlacement[];
+    visibilityStates?: Array<KanbanColumnState>;
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -79,14 +81,25 @@ export class KanbanPlaneInner extends Component<{
   columnCardCount = (colIndex: number): number =>
     colCount(colIndex, this.args.placements);
 
-  isColumnVisible = (column: KanbanColumnConfig, colIndex: number): boolean => {
+  visibilityState = (
+    column: KanbanColumnConfig,
+    colIndex: number,
+  ): KanbanColumnState => {
+    let explicitState = this.args.visibilityStates?.[colIndex];
+    if (explicitState) {
+      return explicitState;
+    }
     if (column.collapsed) {
-      return false;
+      return 'collapsed';
     }
-    if (!this.args.hideEmpty) {
-      return true;
+    if (this.args.hideEmpty && this.columnCardCount(colIndex) === 0) {
+      return 'empty';
     }
-    return this.columnCardCount(colIndex) > 0;
+    return 'visible';
+  };
+
+  isColumnVisible = (column: KanbanColumnConfig, colIndex: number): boolean => {
+    return this.visibilityState(column, colIndex) === 'visible';
   };
 
   isOverWip = (column: KanbanColumnConfig, colIndex: number): boolean => {
@@ -98,16 +111,17 @@ export class KanbanPlaneInner extends Component<{
     cardCount: number;
     colIndex: number;
     config: KanbanColumnConfig;
-    reason: 'collapsed' | 'empty';
+    reason: KanbanColumnState;
   }> {
     return this.columns
       .map((config, colIndex) => ({
         config,
         colIndex,
         cardCount: this.columnCardCount(colIndex),
-        reason: (config.collapsed ? 'collapsed' : 'empty') as
-          | 'collapsed'
-          | 'empty',
+        reason:
+          this.visibilityState(config, colIndex) === 'collapsed'
+            ? ('collapsed' as KanbanColumnState)
+            : 'empty',
       }))
       .filter(
         ({ config, colIndex }) => !this.isColumnVisible(config, colIndex),
@@ -117,17 +131,15 @@ export class KanbanPlaneInner extends Component<{
   restoreColumn = (hc: {
     cardCount: number;
     config: KanbanColumnConfig;
-    reason: 'collapsed' | 'empty';
+    reason: KanbanColumnState;
   }): void => {
     if (hc.reason === 'collapsed') {
       this.args.onToggleCollapsed?.(hc.config.key, false);
-      // A collapsed-and-empty column stays hidden after uncollapsing when
-      // hideEmpty is on — clear the empty filter too so the column appears.
       if (this.args.hideEmpty && hc.cardCount === 0) {
-        this.args.onShowEmptyColumns?.();
+        this.args.onShowEmptyColumns?.(hc.config.key);
       }
     } else {
-      this.args.onShowEmptyColumns?.();
+      this.args.onShowEmptyColumns?.(hc.config.key);
     }
   };
 

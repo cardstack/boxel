@@ -8,6 +8,8 @@ import { type KanbanDragManagerArgs, KanbanDragManager } from './drag.gts';
 import { type KanbanColumnConfig, type KanbanPlacement } from './engine.ts';
 import { KanbanPlaneInner } from './plane-inner.gts';
 
+export type KanbanColumnState = 'collapsed' | 'empty' | 'visible';
+
 export class KanbanPlane extends Component<{
   Args: {
     boardLabel?: string;
@@ -18,9 +20,10 @@ export class KanbanPlane extends Component<{
     onChange?: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
-    onShowEmptyColumns?: () => void;
+    onShowEmptyColumns?: (columnKey?: string | null) => void;
     onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
     placements: KanbanPlacement[];
+    visibilityStates?: Array<KanbanColumnState>;
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -71,6 +74,10 @@ export class KanbanPlane extends Component<{
   };
 
   isColumnVisible = (colIndex: number): boolean => {
+    let explicitState = this.args.visibilityStates?.[colIndex];
+    if (explicitState) {
+      return explicitState === 'visible';
+    }
     let column = this.args.columns[colIndex];
     if (!column || column.collapsed) {
       return false;
@@ -95,6 +102,7 @@ export class KanbanPlane extends Component<{
       @onToggleCollapsed={{@onToggleCollapsed}}
       @onShowEmptyColumns={{@onShowEmptyColumns}}
       @placements={{@placements}}
+      @visibilityStates={{@visibilityStates}}
     >
       <:card as |placement|>
         {{yield placement to='card'}}
