@@ -31,7 +31,6 @@ jobs:
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
@@ -117,9 +116,6 @@ jobs:
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
-            workspace-sync-cli:
-              - *shared
-              - 'packages/workspace-sync-cli/**'
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
@@ -862,21 +858,6 @@ jobs:
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
-
-  workspace-sync-cli-build:
-    name: Workspace Sync CLI Build
-    needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/init
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
 
   boxel-cli-build:
     name: Boxel CLI Build
