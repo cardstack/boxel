@@ -59,15 +59,80 @@ outputs:
     description: URL the realm is published at.
     value: ${{ inputs.published-realm-url }}
 
+# The first seven steps duplicate the same setup-boxel-cli scaffolding in
+# workspace-sync and unpublish-preview-realm: a composite action's
+# `uses:` ref must be a literal string at parse time (no expressions), so
+# we cannot delegate to a sibling action and have it run at the same ref
+# the consumer pinned. Keep them in sync when changing any one.
 runs:
   using: composite
   steps:
-    - uses: cardstack/boxel/.github/actions/_setup-boxel-cli@${{ github.action_ref }}
+    - name: Checkout boxel monorepo for boxel-cli source
+      shell: bash
+      env:
+        BOXEL_REPO: ${{ github.action_repository }}
+        BOXEL_REF: ${{ github.action_ref }}
+      run: |
+        SRC="${RUNNER_TEMP}/boxel-src"
+        rm -rf "$SRC"
+        git clone --depth 1 "https://github.com/${BOXEL_REPO}.git" "$SRC"
+        git -C "$SRC" fetch --depth 1 origin "$BOXEL_REF"
+        git -C "$SRC" checkout FETCH_HEAD
+        echo "BOXEL_SRC=$SRC" >> "$GITHUB_ENV"
+
+    - name: Install mise (node + pnpm)
+      uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
       with:
-        matrix-url: ${{ inputs.matrix-url }}
-        matrix-username: ${{ inputs.matrix-username }}
-        matrix-password: ${{ inputs.matrix-password }}
-        realm-server-url: ${{ inputs.realm-server-url }}
+        install: true
+        working_directory: ${{ env.BOXEL_SRC }}
+
+    - name: Cache pnpm store
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ~/.local/share/pnpm/store
+        key: ${{ runner.os }}-boxel-pnpm-${{ hashFiles(format('{0}/pnpm-lock.yaml', env.BOXEL_SRC)) }}
+        restore-keys: |
+          ${{ runner.os }}-boxel-pnpm-
+
+    - name: Install workspace dependencies
+      shell: bash
+      working-directory: ${{ env.BOXEL_SRC }}
+      run: pnpm install --frozen-lockfile --filter @cardstack/boxel-cli...
+
+    - name: Build boxel-cli
+      shell: bash
+      working-directory: ${{ env.BOXEL_SRC }}/packages/boxel-cli
+      run: pnpm build
+
+    - name: Put boxel on PATH
+      shell: bash
+      run: echo "${BOXEL_SRC}/packages/boxel-cli/bin" >> "$GITHUB_PATH"
+
+    - name: Configure boxel profile
+      shell: bash
+      env:
+        BOXEL_PASSWORD: ${{ inputs.matrix-password }}
+        MATRIX_URL: ${{ inputs.matrix-url }}
+        MATRIX_USERNAME: ${{ inputs.matrix-username }}
+        REALM_SERVER_URL: ${{ inputs.realm-server-url }}
+      run: |
+        if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+          DOMAIN="boxel.ai"
+        elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+          DOMAIN="stack.cards"
+        else
+          DOMAIN="localhost"
+        fi
+        ARGS=(
+          profile add
+          --user "@${MATRIX_USERNAME}:${DOMAIN}"
+          --password "$BOXEL_PASSWORD"
+          --matrix-url "$MATRIX_URL"
+        )
+        if [ -n "$REALM_SERVER_URL" ]; then
+          ARGS+=(--realm-server-url "$REALM_SERVER_URL")
+        fi
+        boxel "${ARGS[@]}"
 
     - id: urls
       shell: bash
