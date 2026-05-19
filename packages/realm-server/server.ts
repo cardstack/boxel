@@ -396,6 +396,15 @@ export class RealmServer {
           origin: '*',
           allowHeaders:
             'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Grafana-Device-Id, X-Grafana-Action',
+          // Without an explicit expose list, @koa/cors only emits the
+          // CORS-safelisted response headers (cache-control, content-*,
+          // expires, last-modified, pragma). ETag is not on that list,
+          // so cross-origin browser callers (the host SPA inside a
+          // prerender tab, or any in-DevTools fetch) get a response
+          // whose `headers.get('ETag')` is `null` even though the
+          // server emitted one — making the entire revalidation
+          // protocol invisible to JS.
+          exposeHeaders: 'ETag',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
           // Cache the preflight response for 24 h. Without this @koa/cors
           // omits Access-Control-Max-Age and Chrome falls back to its
