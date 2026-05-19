@@ -394,6 +394,28 @@ export class Batch {
       // drop this band-aid
       return;
     }
+    // An instance-error / file-error entry whose `.error.message` is
+    // empty would persist as a row with `has_error = true` and an
+    // error_doc that is null or missing the human-readable text. Such
+    // a row is invisible to UI and DB-only triage, and historically
+    // produced indexing jobs that re-reserved indefinitely without
+    // ever rejecting. Throw at the boundary so the caller's stderr log
+    // carries the underlying render error and the worker can finalize
+    // the reservation against the per-job cap instead of silently
+    // writing a black-hole row.
+    if (
+      isErrorEntry(entry) &&
+      (!entry.error ||
+        typeof entry.error.message !== 'string' ||
+        entry.error.message.length === 0)
+    ) {
+      throw new Error(
+        `indexer refused ${entry.type} entry for ${url.href}: ` +
+          `error.message is empty. An upstream entry-construction site dropped ` +
+          `the underlying render error. Check worker stderr for the actual ` +
+          `failure text.`,
+      );
+    }
     let href = url.href;
     this.#invalidations.add(url.href);
     // Build the per-row timing_diagnostics blob. Render-side fields
@@ -817,6 +839,15 @@ export class Batch {
       return;
     }
     let existingTypes = await this.existingIndexTypes(toTombstone);
+    // `has_error` and `error_doc` are listed (with explicit false / null
+    // values per row) so the upsert's ON CONFLICT SET clause clears them.
+    // The primary key is `(url, realm_url, type)` — no `realm_version` —
+    // so a tombstone always collides with the prior row, and any column
+    // NOT in this list keeps its previous value. Without these two,
+    // a row that ever held `has_error = true` would carry that flag
+    // (and whatever `error_doc` it had at the time, including
+    // `jsonb null`) through every subsequent reindex, producing a row
+    // that reads as "errored but with no message" indefinitely.
     let columns = [
       'url',
       'file_alias',
@@ -824,6 +855,8 @@ export class Batch {
       'realm_version',
       'realm_url',
       'is_deleted',
+      'has_error',
+      'error_doc',
       'timing_diagnostics',
       'job_id',
     ].map((c) => [c]);
@@ -850,7 +883,10 @@ export class Batch {
           type,
           this.realmVersion,
           this.realmURL.href,
-          true,
+          true, // is_deleted
+          false, // has_error — explicit clear so stale error state from
+          // a prior pass does not survive the deletion
+          null, // error_doc — same rationale
           tombstoneDiagnosticsJson,
           jobIdValue,
         ].map((v) => [param(v)]),
