@@ -699,10 +699,19 @@ module(`Integration | search resource`, function (hooks) {
       fetchCalls = 0;
       let realmServer = getService('realm-server') as RealmServerService;
       let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
-      realmServer.maybeAuthedFetchForRealms = (async (...args) => {
-        fetchCalls++;
-        await releaseFetch.promise;
-        return await original(...args);
+      // Filter to `_federated-search` URLs only. The wrapper is the
+      // chokepoint for store-side searches, but any future caller
+      // routed through it (auth probes, registry pings, etc.) would
+      // otherwise inflate the counter and make the dedup assertion
+      // depend on what else the test environment happened to do.
+      realmServer.maybeAuthedFetchForRealms = (async (url, ...args) => {
+        let isSearch =
+          typeof url === 'string' && url.includes('_federated-search');
+        if (isSearch) {
+          fetchCalls++;
+          await releaseFetch.promise;
+        }
+        return await original(url, ...args);
       }) as RealmServerService['maybeAuthedFetchForRealms'];
       restoreFetch = () => {
         realmServer.maybeAuthedFetchForRealms = original;
@@ -740,13 +749,17 @@ module(`Integration | search resource`, function (hooks) {
         globalThis as unknown as { __boxelRenderContext?: boolean }
       ).__boxelRenderContext = true;
 
+      // The synchronous portion of the whole call chain — `search` →
+      // `fetchSearchData` → `fetchSearchDoc` → the wrapped
+      // `maybeAuthedFetchForRealms` — runs before each
+      // `storeService.search(...)` expression returns. `fetchCalls++`
+      // is the first line of the mock before any `await`, so by the
+      // time both invocations have completed their synchronous
+      // portions the counter reflects every fetch that has been
+      // committed (parked on `releaseFetch.promise`). Asserting
+      // immediately is deterministic — no timeout race.
       let p1 = storeService.search(bookQuery, [testRealmURL]);
       let p2 = storeService.search(bookQuery, [testRealmURL]);
-
-      // Yield long enough for both calls to enter `fetchSearchDoc`
-      // and consult the in-flight map; both fetches (if any) are
-      // still parked on `releaseFetch.promise`.
-      await new Promise((r) => setTimeout(r, 10));
 
       assert.strictEqual(
         fetchCalls,
@@ -767,8 +780,6 @@ module(`Integration | search resource`, function (hooks) {
       // __boxelRenderContext stays unset — this is the live-SPA path
       let p1 = storeService.search(bookQuery, [testRealmURL]);
       let p2 = storeService.search(bookQuery, [testRealmURL]);
-
-      await new Promise((r) => setTimeout(r, 10));
 
       assert.strictEqual(
         fetchCalls,
@@ -797,8 +808,6 @@ module(`Integration | search resource`, function (hooks) {
 
       let p1 = storeService.search(bookQuery, [testRealmURL]);
       let p2 = storeService.search(otherQuery, [testRealmURL]);
-
-      await new Promise((r) => setTimeout(r, 10));
 
       assert.strictEqual(
         fetchCalls,
