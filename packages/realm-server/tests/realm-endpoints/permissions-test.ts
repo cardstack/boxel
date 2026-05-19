@@ -12,6 +12,7 @@ import {
   testRealmHref,
   testRealmURL,
   createJWT,
+  waitUntil,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -399,12 +400,18 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       // Dispatch on the receiver side is covered separately in
       // `realm-index-updated-listener-test.ts`.
       test('PATCH /_permissions invalidates cached RealmInfo and broadcasts to peers', async function (assert) {
-        let notifyPayloads: string[] = [];
+        // Only count NOTIFYs whose payload matches this realm — the
+        // `realm_index_updated` channel is shared across every realm
+        // mounted in this process, and the test fixture's own boot
+        // sequence (or any racing index swap) can fan out unrelated
+        // payloads on the same listener. Filtering by `testRealm.url`
+        // keeps the assertion specific to the PATCH under test.
+        let sawNotifyForThisRealm = false;
         let subscription = await dbAdapter.subscribe(
           REALM_INDEX_UPDATED_CHANNEL,
           (notification) => {
-            if (notification.payload) {
-              notifyPayloads.push(notification.payload);
+            if (notification.payload === testRealm.url) {
+              sawNotifyForThisRealm = true;
             }
           },
         );
@@ -448,15 +455,13 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           );
 
           // The NOTIFY is delivered over a separate libpq connection,
-          // so it may arrive slightly after the HTTP response. Poll
-          // briefly rather than racing the event loop.
-          let pollStart = Date.now();
-          while (notifyPayloads.length === 0 && Date.now() - pollStart < 3000) {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-          }
-          assert.deepEqual(
-            notifyPayloads,
-            [testRealm.url],
+          // so it may arrive slightly after the HTTP response.
+          await waitUntil(async () => sawNotifyForThisRealm, {
+            timeout: 3000,
+            timeoutMessage: `expected NOTIFY ${REALM_INDEX_UPDATED_CHANNEL} for ${testRealm.url} after PATCH /_permissions`,
+          });
+          assert.ok(
+            sawNotifyForThisRealm,
             'realm_index_updated NOTIFY emitted with this realm URL (peer replicas drop their #cachedRealmInfo on receipt)',
           );
         } finally {
