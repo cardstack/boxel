@@ -302,12 +302,20 @@ realm URL (used for SSRF validation):
 MODULE="http://localhost:4201/user/my-realm/sticky-note"
 REALM="http://localhost:4201/user/my-realm/"
 boxel run-command @cardstack/boxel-host/commands/evaluate-module/default \
-  --realm "$REALM" \
+  --realm "$REALM" --json \
   --input "$(jq -nc --arg m "$MODULE" --arg r "$REALM" \
               '{moduleIdentifier:$m, realmIdentifier:$r}')"
 ```
 
-Result fields: `passed` (bool), and on failure `error` + `stackTrace`.
+`--json` returns the standard `run-command` wrapper:
+`{"status":"ready"|"error","result":"<json-string>","error":...}`.
+Parse `result` as JSON; the command's own fields live at
+`data.attributes`: `passed` (bool), and on failure `error` +
+`stackTrace`. A handy one-liner:
+
+```bash
+boxel run-command ... --json | jq -r '.result | fromjson | .data.attributes.passed'
+```
 
 When a failure reports a line/column, those numbers refer to the
 **transpiled** module — pair with `boxel read-transpiled` (see
@@ -334,7 +342,9 @@ must be absolute URLs.** If `instanceData` is passed, its
 MODULE="http://localhost:4201/user/my-realm/sticky-note"
 REALM="http://localhost:4201/user/my-realm/"
 CARD_NAME="StickyNote"
-INSTANCE_PATH="StickyNotes/note-1.json"
+# Instance folders are named exactly after the card type (singular),
+# matching the convention used across the catalog/experiments realms.
+INSTANCE_PATH="StickyNote/note-1.json"
 
 # Read the workspace JSON, rewrite adoptsFrom.module to the absolute URL,
 # then feed it to instantiate-card as the instanceData string.
@@ -342,12 +352,14 @@ INSTANCE_DATA=$(jq -c --arg m "$MODULE" --arg name "$CARD_NAME" \
   '.data.meta.adoptsFrom = {module:$m, name:$name}' "$INSTANCE_PATH")
 
 boxel run-command @cardstack/boxel-host/commands/instantiate-card/default \
-  --realm "$REALM" \
+  --realm "$REALM" --json \
   --input "$(jq -nc --arg m "$MODULE" --arg n "$CARD_NAME" --arg r "$REALM" --arg d "$INSTANCE_DATA" \
               '{moduleIdentifier:$m, cardName:$n, realmIdentifier:$r, instanceData:$d}')"
 ```
 
-Result fields: `passed` (bool), and on failure `error` + `stackTrace`.
+Same `--json` shape as `evaluate-module`: parse the wrapper's
+`result` field as JSON, then read `data.attributes.passed` /
+`error` / `stackTrace`.
 
 **Do not** pass a `Spec/...json` path or any card whose
 `adoptsFrom.module` is a base-realm URL
