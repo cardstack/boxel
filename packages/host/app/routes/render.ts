@@ -331,17 +331,6 @@ export default class RenderRoute extends Route<Model> {
           : 'instance',
     });
 
-    // Stamp `card-api` and `file-api` as runtime deps of this render.
-    // `file-api` is the public URL the indexer references when
-    // invalidating file extracts; doing the import here records the
-    // deps against the active tracking session without forcing
-    // matrix-service construction (which would also pull in the matrix
-    // SDK + client + event bindings the prerender never touches).
-    await Promise.all([
-      this.loaderService.loader.import(`${baseRealm.url}card-api`),
-      this.loaderService.loader.import(`${baseRealm.url}file-api`),
-    ]);
-
     // the window.boxelTransitionTo() function helper first normalizes the base
     // params by transitioning the router back to 'render' before it goes on to
     // 'render.html', 'render.meta', etc. That’s why you see the /render model
@@ -368,6 +357,16 @@ export default class RenderRoute extends Route<Model> {
         this.lastStoreResetKey = resetKey;
       }
     }
+    // Stamp `card-api` and `file-api` as runtime deps of this render.
+    // `file-api` is the public URL the indexer references when
+    // invalidating file extracts; doing the import here records the
+    // deps against the active tracking session without forcing
+    // matrix-service construction (which would also pull in the matrix
+    // SDK + client + event bindings the prerender never touches).
+    await Promise.all([
+      this.loaderService.loader.import(`${baseRealm.url}card-api`),
+      this.loaderService.loader.import(`${baseRealm.url}file-api`),
+    ]);
     if (parsedOptions.fileExtract) {
       let state = new TrackedMap<string, unknown>();
       state.set('status', 'ready');
