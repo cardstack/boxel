@@ -92,7 +92,7 @@ Each version file only bumps if the PR touched its surface:
 
 ### Unstable channel (automated, every merge)
 
-Every merge to `main` that touches `packages/boxel-cli/**` triggers `.github/workflows/boxel-cli-on-main.yml`:
+Every merge to `main` that touches `packages/boxel-cli/**` triggers the `unstable` job in `.github/workflows/boxel-cli-publish.yml`:
 
 1. Regenerates `plugin/skills/` from the current Commander tree and pinned boxel-skills tag.
 2. Reads the merged PR's title via `gh api repos/.../commits/<sha>/pulls`.
@@ -113,7 +113,7 @@ npm install -g @cardstack/boxel-cli@unstable
 
 ### Stable releases (manual promotion)
 
-Stable releases are deliberate. From the GitHub Actions UI, run **"Promote boxel-cli unstable → stable"** (`.github/workflows/manual-boxel-cli-publish.yml`) with `confirm: promote`. It:
+Stable releases are deliberate. From the GitHub Actions UI, run the **"boxel-cli publish"** workflow (`.github/workflows/boxel-cli-publish.yml`) with `confirm: promote` — that fires the `stable` job. It:
 
 1. Strips `-unstable.<n>` from the current `package.json` version.
 2. Commits, tags `boxel-cli-v<ver>`, pushes.
