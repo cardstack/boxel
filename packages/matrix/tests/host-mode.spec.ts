@@ -391,7 +391,7 @@ test.describe('Host mode', () => {
         if (!token) {
           throw new Error(`No session token found for ${realmURL}`);
         }
-        let response = await fetch('http://localhost:4205/_publish-realm', {
+        let response = await fetch('https://localhost:4205/_publish-realm', {
           method: 'POST',
           headers: {
             Accept: 'application/json',
