@@ -1059,6 +1059,38 @@ module(`Integration | search resource`, function (hooks) {
       await Promise.all([p1, p2]);
     });
 
+    test(`cache survives across renders within the same indexing job`, async function (assert) {
+      // A single indexing job spans many card renders in the same
+      // prerender tab. Each navigation activates+deactivates the
+      // render route, but all those visits share one `__boxelJobId`.
+      // The cache MUST survive those route bounces so later renders
+      // can reuse earlier ones' work — dropping the cache per-render
+      // would defeat the entire point.
+      //
+      // The render route's deactivate hook drops the in-flight Map
+      // (which is usually already empty by then) but deliberately
+      // leaves `searchCache` alone. We exercise the equivalent by
+      // clearing the in-flight Map between two same-key calls and
+      // verifying the second still hits the resolved-doc cache.
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(fetchCalls, 1, 'first render populates cache');
+
+      // Simulate what render-route deactivate does between renders:
+      // it clears the in-flight Map but does NOT clear searchCache.
+      storeService.clearInFlightSearch();
+
+      // Second render of the same job, same query — must hit cache.
+      await storeService.search(bookQuery, [testRealmURL]);
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        'second render in the same job reuses the cached doc',
+      );
+    });
+
     test(`clearSearchCache during an in-flight fetch suppresses the post-resolve populate`, async function (assert) {
       // A request that's already past the cache-miss gate must not
       // repopulate the cache after an intentional clear lands. The

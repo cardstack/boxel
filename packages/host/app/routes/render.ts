@@ -162,13 +162,15 @@ export default class RenderRoute extends Route<Model> {
     // visit. The window is small (typically <1s per search) but the
     // cost of an explicit clear is also small.
     this.store.clearInFlightSearch();
-    // Drop the resolved-doc search cache. Entries are scoped to a
-    // single indexing job; the next visit's `__boxelJobId` will be a
-    // different value, so cached entries become unreachable on key
-    // mismatch — but clearing here also reclaims memory promptly
-    // rather than waiting for the job-id-change defensive clear
-    // inside `fetchSearchDoc` to fire on the next request.
-    this.store.clearSearchCache();
+    // The resolved-doc search cache is INTENTIONALLY NOT cleared
+    // here. A single indexing job renders many cards in the same
+    // prerender tab — each card navigation activates and deactivates
+    // this route, but all those visits share one `__boxelJobId` and
+    // a stable view of the consuming realm's `boxel_index`. Cached
+    // entries from earlier renders in the job are the entire point;
+    // dropping them per-render would defeat the cache. Cross-job
+    // invalidation is handled by `fetchSearchDoc`'s entry-time
+    // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;

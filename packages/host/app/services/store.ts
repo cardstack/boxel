@@ -251,10 +251,21 @@ export default class StoreService extends Service implements StoreInterface {
   // in-flight Map and the cache is populated on resolve. Keyed by
   // (jobId, consumingRealm, query) — gated to same-realm-only so a
   // cross-realm read can't freeze a value while a peer realm-server
-  // replica swaps mid-job. See `search-cache-key.ts` for the digest
-  // and the realm-server's `job-scoped-search-cache.ts` for the
-  // server-side prior art on storing resolved docs rather than
-  // promises (avoids tail-latency stalls on slow first populate).
+  // replica swaps mid-job.
+  //
+  // Lifetime: the entire indexing job. One job typically spans many
+  // card renders in the same prerender tab (each navigation activates
+  // and deactivates the render route but all those visits share one
+  // `__boxelJobId`); the cache must survive those route bounces so
+  // earlier renders' work is reusable by later ones. Only clear when
+  // the job actually changes — `fetchSearchDoc` does this at
+  // fetch-entry via the jobId-change check, and `resetState` /
+  // `resetCache` do it on harder service resets. The render route's
+  // `deactivate` deliberately does NOT clear this cache. See
+  // `search-cache-key.ts` for the digest and the realm-server's
+  // `job-scoped-search-cache.ts` for the server-side prior art on
+  // storing resolved docs rather than promises (avoids tail-latency
+  // stalls on slow first populate).
   private searchCache: Map<string, LinkableCollectionDocument> = new Map();
   // The jobId the `searchCache` entries belong to. When a request
   // arrives carrying a different `__boxelJobId` we drop the cache
@@ -343,11 +354,13 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch.clear();
   }
 
-  // Drop every resolved-doc search-cache entry. The cache is scoped to
-  // a single indexing job; render-route deactivate calls this so the
-  // next visit (carrying a fresh `__boxelJobId`) starts from empty.
-  // `fetchSearchDoc` also drops the cache defensively when it observes
-  // `__boxelJobId` changing under it.
+  // Drop every resolved-doc search-cache entry. Used for hard resets
+  // (`resetState`, `resetCache`) and by tests; NOT called from the
+  // render route's per-visit deactivate, because the cache is meant
+  // to survive across renders within a single indexing job. Cross-job
+  // invalidation is handled by `fetchSearchDoc`'s entry-time
+  // jobId-change clear, which fires the first time a new
+  // `__boxelJobId` is observed.
   clearSearchCache(): void {
     this.searchCache.clear();
     this.searchCacheJobId = undefined;
