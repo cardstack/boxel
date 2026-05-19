@@ -9,13 +9,14 @@ import { md5 } from 'super-fast-md5';
 const log = logger('job-scoped-search-cache');
 
 // Default entry TTL. Picked to comfortably outlive a single indexing
-// batch (workers cap from-scratch jobs at 6 min, incremental jobs are
-// shorter) while bounding the worst case where a job ends without a
-// NOTIFY-driven eviction reaching this process — a leaked entry persists
-// at most this long. Cross-job collision is impossible because the cache
-// key includes `jobId`, so a stale leak only hurts memory, never
-// correctness.
-const DEFAULT_TTL_MS = 10 * 60 * 1000;
+// batch — from-scratch reindexes of large realms can run for an hour
+// or more, so the TTL has to comfortably exceed that worst case while
+// bounding the leak window when a job ends without an explicit
+// eviction reaching this process. Cross-job collision is impossible
+// because the cache key includes `jobId` (the `<jobId>.<reservationId>`
+// composite, so a re-run of a failed job hashes to a different entry),
+// so a stale leak only hurts memory, never correctness.
+const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Hard cap on total entries across all jobs. When the cap is reached
 // the FIFO-oldest entry is evicted to make room. Cap exists to bound
