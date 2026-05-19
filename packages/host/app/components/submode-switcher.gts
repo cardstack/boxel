@@ -69,7 +69,7 @@ const SubmodeTriggerButton: TemplateOnlyComponent<TriggerButtonSignature> =
     >
       <@icon width='18px' height='18px' role='presentation' />
       {{#unless @isCollapsed}}
-        <span class='submode-switcher-label'>{{capitalize @submode}}!</span>
+        <span class='submode-switcher-label'>{{capitalize @submode}}</span>
         <DropdownArrowDown
           class='dropdown-arrow'
           width='12px'
