@@ -920,6 +920,142 @@ module(basename(__filename), function () {
       }
     });
 
+    test('serializes concurrent same-user OpenRouter calls via the cost-barrier lock', async function (assert) {
+      // Two concurrent requests from the same matrix user must not both
+      // forward to OpenRouter against the same credit balance — the second
+      // must wait until the first's cost row has landed. Before the
+      // db-coordinated barrier the second forwarded immediately because
+      // its credit check raced the first's pending deduction.
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      // Each forward should see the prior cost already debited. We don't
+      // assert exact debit ordering against the upstream calls (the lock
+      // serializes both ends of the work), only that across both
+      // completions the ledger reflects both costs.
+      const inflightChatCalls: Array<{
+        release: () => void;
+        started: Promise<void>;
+      }> = [];
+
+      mockFetch.callsFake(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (!url.includes('/chat/completions')) {
+          return new Response(JSON.stringify({ error: 'Not found' }), {
+            status: 404,
+          });
+        }
+        // Suspend the upstream call until the test releases it, so two
+        // concurrent same-user requests would actually overlap upstream
+        // without the lock. With the lock the second call won't even
+        // reach this point until the first completes.
+        let releaseFn!: () => void;
+        let startedFn!: () => void;
+        const startedSignal = new Promise<void>((res) => (startedFn = res));
+        const gate = new Promise<void>((res) => (releaseFn = res));
+        inflightChatCalls.push({ release: releaseFn, started: startedSignal });
+        startedFn();
+        await gate;
+        return new Response(
+          JSON.stringify({
+            id: `gen-${inflightChatCalls.length}`,
+            choices: [{ text: 'ok' }],
+            usage: { total_tokens: 10, cost: 0.002 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        // supertest's Test is a thenable, not an eagerly-evaluating
+        // Promise — it fires the HTTP request when `.then` is called.
+        // Wrapping in `.then((r) => r)` forces the request to start now
+        // so the test can wait on inflight stub activity below; otherwise
+        // `const p1 = send()` would never actually hit the server until
+        // we awaited it.
+        const send = () =>
+          request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt}`)
+            .send({
+              url: 'https://openrouter.ai/api/v1/chat/completions',
+              method: 'POST',
+              requestBody: JSON.stringify({
+                model: 'openai/gpt-3.5-turbo',
+                messages: [{ role: 'user', content: 'Hi' }],
+              }),
+            })
+            .then((r) => r);
+
+        const p1 = send();
+        // Wait until the first forward has hit the upstream stub so we
+        // know it owns the lock. waitUntil defaults to a 1s budget, which
+        // isn't enough on a cold realm server (JWT → body parse → DB
+        // destination-config lookup → advisory-lock acquire → validate-
+        // Credits before fetch fires); give it real headroom.
+        await waitUntil(async () => inflightChatCalls.length >= 1, {
+          timeout: 15000,
+          timeoutMessage: 'first upstream call should reach the fetch stub',
+        });
+        const p2 = send();
+
+        // With the lock held, the second request must NOT reach upstream
+        // until the first releases. Give it generous wall time then assert.
+        await new Promise((r) => setTimeout(r, 500));
+        assert.strictEqual(
+          inflightChatCalls.length,
+          1,
+          'second concurrent same-user request blocks on the cost-barrier lock',
+        );
+
+        // Release the first; the second should then proceed and reach
+        // upstream by itself.
+        inflightChatCalls[0].release();
+        await p1;
+
+        await waitUntil(async () => inflightChatCalls.length >= 2, {
+          timeout: 15000,
+          timeoutMessage:
+            'second upstream call should proceed once lock releases',
+        });
+        inflightChatCalls[1].release();
+        await p2;
+
+        // Both costs (0.002 USD × 1000 = 2 credits each) should have
+        // landed, leaving 50 - 4 = 46.
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 46;
+          },
+          {
+            timeoutMessage:
+              'both serialized costs should be debited (50 - 4 = 46)',
+          },
+        );
+      } finally {
+        // If a test assertion failed mid-flight, leftover gated upstream
+        // calls would hang the test process — release any survivors.
+        for (const c of inflightChatCalls) c.release();
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
     test('should return a 400 when multipart payload is not an object', async function (assert) {
       const jwt = createRealmServerJWT(
         { user: '@testuser:localhost', sessionRoom: 'test-session-room' },

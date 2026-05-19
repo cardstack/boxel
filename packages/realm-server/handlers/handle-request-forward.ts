@@ -9,11 +9,7 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
-import {
-  awaitPendingCost,
-  handleStreamingRequest,
-  trackCostDeduction,
-} from '../lib/proxy-forward';
+import { handleStreamingRequest } from '../lib/proxy-forward';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
@@ -183,34 +179,7 @@ export default function handleRequestForward({
         return;
       }
 
-      // 4. Wait for any pending cost from a previous request to be recorded
-      try {
-        await awaitPendingCost(matrixUserId);
-      } catch (e) {
-        log.error('Error waiting for pending cost:', e);
-        await sendResponseForSystemError(
-          ctxt,
-          'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-        );
-        return;
-      }
-
-      // 5. Check user has sufficient credits using credit strategy
-      const creditValidation =
-        await destinationConfig.creditStrategy.validateCredits(
-          dbAdapter,
-          matrixUserId,
-        );
-
-      if (!creditValidation.hasEnoughCredits) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          creditValidation.errorMessage || 'Insufficient credits',
-        );
-        return;
-      }
-
-      // 5. Forward request to external endpoint
+      // 4. Forward request to external endpoint
       let parsedRequestBody: unknown;
       if (json.requestBody) {
         try {
@@ -292,68 +261,88 @@ export default function handleRequestForward({
         setContentTypeHeader(headers, 'application/json');
       }
 
-      // Handle streaming requests
-      if (json.stream) {
-        if (!(await destinationsConfig.supportsStreaming(json.url))) {
-          await sendResponseForBadRequest(
-            ctxt,
-            `Streaming is not supported for endpoint ${json.url}`,
-          );
-          return;
-        }
-
-        await handleStreamingRequest(
+      if (
+        json.stream &&
+        !(await destinationsConfig.supportsStreaming(json.url))
+      ) {
+        await sendResponseForBadRequest(
           ctxt,
-          finalUrl,
-          json.method,
-          headers,
-          finalBody,
-          destinationConfig,
-          dbAdapter,
-          matrixUserId,
+          `Streaming is not supported for endpoint ${json.url}`,
         );
         return;
       }
 
-      // Handle non-streaming requests
-      const fetchOptions: RequestInit = {
-        method: json.method,
-        headers,
-      };
+      // 5. Serialize concurrent requests from the same matrix user across
+      // replicas: the next request can't kick off another billable upstream
+      // call before the previous request's cost row has landed in the
+      // credits ledger. The lock is held through validate-credits →
+      // upstream call → save-cost; on streaming, save-cost happens inside
+      // handleStreamingRequest after the `[DONE]` marker.
+      await dbAdapter.withUserCostLock(matrixUserId, async () => {
+        const creditValidation =
+          await destinationConfig.creditStrategy.validateCredits(
+            dbAdapter,
+            matrixUserId,
+          );
 
-      // Only add body for non-GET requests or when requestBody is provided
-      if (json.method !== 'GET' && finalBody !== undefined) {
-        fetchOptions.body = finalBody;
-      }
+        if (!creditValidation.hasEnoughCredits) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            creditValidation.errorMessage || 'Insufficient credits',
+          );
+          return;
+        }
 
-      // FIXME undici or something is swallowing the errors, making them useless:
-      /*
-        Error in request forward handler: TypeError: fetch failed
-          at node:internal/deps/undici/undici:13510:13
-          at processTicksAndRejections (node:internal/process/task_queues:105:5)
-      */
-      const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
+        if (json.stream) {
+          await handleStreamingRequest(
+            ctxt,
+            finalUrl,
+            json.method,
+            headers,
+            finalBody,
+            destinationConfig,
+            dbAdapter,
+            matrixUserId,
+          );
+          return;
+        }
 
-      const responseData = await externalResponse.json();
+        const fetchOptions: RequestInit = {
+          method: json.method,
+          headers,
+        };
 
-      // 6. Deduct credits in the background using the cost from the response.
-      trackCostDeduction(
-        destinationConfig,
-        dbAdapter,
-        matrixUserId,
-        responseData,
-      );
+        // Only add body for non-GET requests or when requestBody is provided
+        if (json.method !== 'GET' && finalBody !== undefined) {
+          fetchOptions.body = finalBody;
+        }
 
-      // 7. Return response
-      const response = new Response(JSON.stringify(responseData), {
-        status: externalResponse.status,
-        statusText: externalResponse.statusText,
-        headers: {
-          'content-type': SupportedMimeType.JSON,
-        },
+        // FIXME undici or something is swallowing the errors, making them useless:
+        /*
+          Error in request forward handler: TypeError: fetch failed
+            at node:internal/deps/undici/undici:13510:13
+            at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        */
+        const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
+
+        const responseData = await externalResponse.json();
+
+        await destinationConfig.creditStrategy.saveUsageCost(
+          dbAdapter,
+          matrixUserId,
+          responseData,
+        );
+
+        const response = new Response(JSON.stringify(responseData), {
+          status: externalResponse.status,
+          statusText: externalResponse.statusText,
+          headers: {
+            'content-type': SupportedMimeType.JSON,
+          },
+        });
+
+        await setContextResponse(ctxt, response);
       });
-
-      await setContextResponse(ctxt, response);
     } catch (error) {
       log.error('Error in request forward handler:', error);
       Sentry.captureException(error);
