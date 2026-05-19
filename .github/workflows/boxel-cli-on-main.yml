@@ -1,0 +1,261 @@
+name: Auto-publish boxel-cli unstable
+
+# On every merge to main that touches packages/boxel-cli/**, regenerate plugin
+# skill content, decide per-surface version bumps from the merged PR's title
+# (conventional-commit prefix), commit the bumps back to main, tag, and publish
+# `@cardstack/boxel-cli@<v>-unstable.<n>` to npm under dist-tag `unstable`.
+#
+# Stable promotion is the manual-boxel-cli-publish.yml workflow.
+#
+# Loop safety:
+#   - Bot commits end with [skip ci] so GitHub does not re-trigger workflows.
+#   - The job guards with `if: github.actor != 'github-actions[bot]'` (belt + suspenders).
+# Concurrency:
+#   - `group: boxel-cli-release, cancel-in-progress: false` serializes back-to-back
+#     merges so prerelease counters don't collide.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/boxel-cli/**"
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: read
+
+concurrency:
+  group: boxel-cli-release
+  cancel-in-progress: false
+
+jobs:
+  release-unstable:
+    name: Regen, bump, publish unstable
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          # Need fetch-tags so the script can read boxel-cli-v* tags.
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/init
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch PR title from merge SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PR_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0] // empty')
+          if [ -z "$PR_JSON" ]; then
+            echo "No PR associated with ${{ github.sha }} — likely a direct push. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.title')
+          PR_BODY=$(echo "$PR_JSON" | jq -r '.body // ""')
+          # Multiline-safe output via heredoc delimiter (GitHub Actions docs).
+          {
+            echo "title<<__PR_EOF__"
+            echo "$PR_TITLE"
+            echo "__PR_EOF__"
+            echo "body<<__PR_EOF__"
+            echo "$PR_BODY"
+            echo "__PR_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "PR title: $PR_TITLE"
+
+      - name: Regenerate plugin synopsis and skills
+        if: steps.pr.outputs.skip != 'true'
+        working-directory: packages/boxel-cli
+        run: |
+          pnpm run build:plugin
+          pnpm run build:skills
+
+      - name: Compute release
+        id: release
+        if: steps.pr.outputs.skip != 'true'
+        working-directory: packages/boxel-cli
+        env:
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_BODY: ${{ steps.pr.outputs.body }}
+        run: |
+          set -euo pipefail
+          RESULT=$(NODE_NO_WARNINGS=1 pnpm exec ts-node --transpileOnly scripts/compute-release.ts)
+          echo "Compute result: $RESULT"
+          {
+            echo "json<<__REL_EOF__"
+            echo "$RESULT"
+            echo "__REL_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "npmBump=$(echo "$RESULT" | jq -r '.npmBump')" >> "$GITHUB_OUTPUT"
+          echo "pluginBump=$(echo "$RESULT" | jq -r '.pluginBump')" >> "$GITHUB_OUTPUT"
+          echo "nextNpm=$(echo "$RESULT" | jq -r '.nextNpm // ""')" >> "$GITHUB_OUTPUT"
+          echo "nextPlugin=$(echo "$RESULT" | jq -r '.nextPlugin // ""')" >> "$GITHUB_OUTPUT"
+
+      - name: Apply version bumps
+        if: steps.pr.outputs.skip != 'true' && (steps.release.outputs.npmBump != 'none' || steps.release.outputs.pluginBump != 'none')
+        env:
+          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
+          NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
+        run: |
+          set -euo pipefail
+          if [ -n "$NEXT_NPM" ]; then
+            node -e '
+              const fs = require("fs");
+              const p = "packages/boxel-cli/package.json";
+              const j = JSON.parse(fs.readFileSync(p, "utf8"));
+              j.version = process.env.NEXT_NPM;
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+            '
+            echo "package.json → $NEXT_NPM"
+          fi
+          if [ -n "$NEXT_PLUGIN" ]; then
+            node -e '
+              const fs = require("fs");
+              const p = "packages/boxel-cli/plugin/.claude-plugin/plugin.json";
+              const j = JSON.parse(fs.readFileSync(p, "utf8"));
+              j.version = process.env.NEXT_PLUGIN;
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+            '
+            echo "plugin.json → $NEXT_PLUGIN"
+          fi
+
+      - name: Generate release notes
+        id: notes
+        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV_TAG_RAW: ""
+          NEW_TAG: boxel-cli-v${{ steps.release.outputs.nextNpm }}
+          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
+          NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
+          NPM_DIST_TAG: unstable
+          REPO: ${{ github.repository }}
+          RUNNER_TEMP_DIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          # PREV_TAG is the prior boxel-cli-v* tag reachable from HEAD. Tags
+          # from earlier publishes point at the previous bot commit, which is
+          # HEAD's parent at this point in the run (we haven't committed yet).
+          # Use HEAD as the starting ref; git describe walks back to the
+          # nearest matching tag automatically.
+          if PREV_TAG=$(git describe --tags --abbrev=0 --match 'boxel-cli-v*' HEAD 2>/dev/null); then
+            echo "Previous tag: $PREV_TAG"
+          else
+            echo "No prior boxel-cli-v* tag found (bootstrap). Falling back to one-line release body."
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          BODY_FILE="$RUNNER_TEMP_DIR/release-body.md"
+          FRAGMENT_FILE="$RUNNER_TEMP_DIR/changelog-fragment.md"
+          PREV_TAG="$PREV_TAG" \
+          NEW_TAG="$NEW_TAG" \
+          NEXT_NPM="$NEXT_NPM" \
+          NEXT_PLUGIN="$NEXT_PLUGIN" \
+          NPM_DIST_TAG="$NPM_DIST_TAG" \
+          REPO="$REPO" \
+          RELEASE_BODY_FILE="$BODY_FILE" \
+          CHANGELOG_FRAGMENT_FILE="$FRAGMENT_FILE" \
+          NODE_NO_WARNINGS=1 pnpm --filter @cardstack/boxel-cli exec \
+            ts-node --transpileOnly scripts/generate-release-notes.ts
+          # Prepend the fragment to CHANGELOG.md, just below the seed anchor
+          # comment. Same inline-script pattern as the version-bump step.
+          FRAG_FILE="$FRAGMENT_FILE" node -e '
+            const fs = require("fs");
+            const path = "packages/boxel-cli/CHANGELOG.md";
+            const ANCHOR = "<!-- New entries are inserted directly below this line";
+            const fragment = fs.readFileSync(process.env.FRAG_FILE, "utf8");
+            const existing = fs.readFileSync(path, "utf8");
+            const idx = existing.indexOf(ANCHOR);
+            let head, tail;
+            if (idx === -1) {
+              head = "";
+              tail = existing;
+            } else {
+              const lineEnd = existing.indexOf("\n", idx);
+              head = existing.slice(0, lineEnd + 1);
+              tail = existing.slice(lineEnd + 1);
+            }
+            fs.writeFileSync(path, head + "\n" + fragment + "\n" + tail);
+          '
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          echo "body_file=$BODY_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag, and push
+        id: commit
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
+          NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
+        run: |
+          set -euo pipefail
+          git add packages/boxel-cli/package.json \
+                  packages/boxel-cli/plugin/.claude-plugin/plugin.json \
+                  packages/boxel-cli/plugin/skills \
+                  packages/boxel-cli/CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No changes to commit (regen produced no diff, bumps both none)."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          MSG="chore(release): boxel-cli"
+          [ -n "$NEXT_NPM" ] && MSG="$MSG npm=$NEXT_NPM"
+          [ -n "$NEXT_PLUGIN" ] && MSG="$MSG plugin=$NEXT_PLUGIN"
+          MSG="$MSG [skip ci]"
+          git commit -m "$MSG"
+          if [ -n "$NEXT_NPM" ]; then
+            TAG="boxel-cli-v${NEXT_NPM}"
+            git tag "$TAG"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+          git push origin main --follow-tags
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm
+        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        working-directory: packages/boxel-cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Build the dist/ bundle that gets published.
+          pnpm run build
+          # Use --no-git-checks because the workflow's commit + tag is already
+          # pushed; pnpm's pre-publish git-state check would otherwise complain.
+          pnpm publish --tag unstable --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release (prerelease)
+        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.commit.outputs.tag }}
+          NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
+          NOTES_HAS: ${{ steps.notes.outputs.has }}
+          NOTES_BODY_FILE: ${{ steps.notes.outputs.body_file }}
+        run: |
+          set -euo pipefail
+          if [ "$NOTES_HAS" = "true" ] && [ -f "$NOTES_BODY_FILE" ]; then
+            gh release create "$TAG" \
+              --title "@cardstack/boxel-cli v${NEXT_NPM}" \
+              --notes-file "$NOTES_BODY_FILE" \
+              --prerelease
+          else
+            # Bootstrap fallback: no prior boxel-cli-v* tag, no auto-notes.
+            NPM_URL="https://www.npmjs.com/package/@cardstack/boxel-cli/v/${NEXT_NPM}"
+            gh release create "$TAG" \
+              --title "@cardstack/boxel-cli v${NEXT_NPM}" \
+              --notes "Auto-published to npm under dist-tag \`unstable\`: ${NPM_URL}" \
+              --prerelease
+          fi
