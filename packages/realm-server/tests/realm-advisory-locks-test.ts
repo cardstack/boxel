@@ -91,6 +91,12 @@ module(basename(__filename), function () {
       // sleep, letting caller-2 win the race. Instead caller-1 resolves
       // `p1Entered` from inside its callback (after the lock is held), and
       // caller-2 is not constructed until that signal fires.
+      //
+      // We race the entry signal against `p1` itself so that a rejection
+      // during lock acquisition (transient pool/DB failure before the
+      // callback runs) surfaces immediately instead of leaving us awaiting
+      // a signal that will never fire — which would otherwise hang until
+      // the qunit test timeout and obscure the real error.
       let signalP1Entered!: () => void;
       const p1Entered = new Promise<void>((r) => {
         signalP1Entered = r;
@@ -101,7 +107,7 @@ module(basename(__filename), function () {
         await new Promise((r) => setTimeout(r, 150));
         push('1-end');
       });
-      await p1Entered;
+      await Promise.race([p1Entered, p1]);
       const p2 = dbAdapter.withWriteLock(url, async () => {
         push('2-start');
         push('2-end');
@@ -236,6 +242,11 @@ module(basename(__filename), function () {
       // we still wait for caller-1 to enter its critical section before
       // constructing caller-2, to match the rest of the file and to remain
       // robust if the in-process queue is ever refactored away.
+      //
+      // Race the entry signal against `p1` itself so a pre-entry rejection
+      // (transient pool/DB failure during advisory-lock acquisition)
+      // surfaces immediately instead of hanging on a signal that won't
+      // fire.
       let signalP1Entered!: () => void;
       const p1Entered = new Promise<void>((r) => {
         signalP1Entered = r;
@@ -246,7 +257,7 @@ module(basename(__filename), function () {
         await new Promise((r) => setTimeout(r, 150));
         push('1-end');
       });
-      await p1Entered;
+      await Promise.race([p1Entered, p1]);
       const p2 = dbAdapter.withUserCostLock(userId, async () => {
         push('2-start');
         push('2-end');
@@ -366,6 +377,9 @@ module(basename(__filename), function () {
       // Synchronize on write entering its critical section before kicking
       // off the cost-lock acquisition. A fixed-millisecond head start raced
       // the postgres roundtrip on slow CI runners.
+      //
+      // Race the entry signal against the write promise so a pre-entry
+      // rejection surfaces immediately instead of hanging the test.
       let signalWriteEntered!: () => void;
       const writeEntered = new Promise<void>((r) => {
         signalWriteEntered = r;
@@ -376,7 +390,7 @@ module(basename(__filename), function () {
         await new Promise((r) => setTimeout(r, 100));
         push('write-end');
       });
-      await writeEntered;
+      await Promise.race([writeEntered, writePromise]);
       const costPromise = dbAdapter.withUserCostLock(shared, async () => {
         push('cost-start');
         push('cost-end');
