@@ -771,17 +771,6 @@ export class Realm {
   readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
 
-  private visibilityPromise?: Promise<RealmVisibility>;
-
-  // We are caching world readable permissions for realms such that we can avoid
-  // having to look up the realm permissions for world-read realms on every HTTP
-  // HEAD and GET request. the tradeoff is that if there is an out-of-band
-  // update to the permissions that effects world readability (e.g. directly
-  // updating the DB), that will mean we need to restart the realm server to
-  // pick up the permissions change.
-  #worldReadable?: boolean;
-  #worldReadablePromise?: Promise<boolean>;
-
   get url(): string {
     return this.paths.url;
   }
@@ -5936,12 +5925,6 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
-    if (Object.prototype.hasOwnProperty.call(patch, '*')) {
-      let worldReadable =
-        Array.isArray(patch['*']) && patch['*'].includes('read');
-      this.#worldReadable = worldReadable;
-      this.#worldReadablePromise = Promise.resolve(worldReadable);
-    }
     return await this.getRealmPermissions(request, requestContext);
   }
 
@@ -6624,45 +6607,31 @@ export class Realm {
     );
   }
 
-  private async isWorldReadable(): Promise<boolean> {
-    if (this.#worldReadable !== undefined) {
-      return this.#worldReadable;
-    }
-    if (!this.#worldReadablePromise) {
-      this.#worldReadablePromise = (async () => {
-        let permissions = await fetchRealmPermissions(
-          this.#dbAdapter,
-          new URL(this.url),
-        );
-        let worldReadable = permissions['*']?.includes('read') ?? false;
-        if (this.#worldReadable === undefined) {
-          this.#worldReadable = worldReadable;
-          return worldReadable;
-        }
-        return this.#worldReadable;
-      })();
-    }
-    return await this.#worldReadablePromise;
-  }
-
+  // CS-11126: no memoization. `realm_permissions` is indexed by
+  // realm_url and a permissions PATCH from a peer replica must take
+  // effect here without a restart, so every read-path callsite fetches
+  // fresh. For requests, this is one extra indexed SELECT; for
+  // world-readable reads `createRequestContext` derives the flag from
+  // the same single fetch rather than calling this helper plus a
+  // second fetch.
   private async createRequestContext(
     requiredPermission: RealmAction,
   ): Promise<RequestContext> {
-    let permissions: RealmPermissions;
-    let shouldUseWorldReadable =
-      requiredPermission === 'read' && (await this.isWorldReadable());
-
-    if (shouldUseWorldReadable) {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        '*': ['read'],
-      };
-    } else {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
-      };
-    }
+    let fetched = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    let isWorldReadable = fetched['*']?.includes('read') ?? false;
+    let permissions: RealmPermissions =
+      requiredPermission === 'read' && isWorldReadable
+        ? {
+            [this.#matrixClientUserId]: ['assume-user'],
+            '*': ['read'],
+          }
+        : {
+            [this.#matrixClientUserId]: ['assume-user'],
+            ...fetched,
+          };
 
     return {
       realm: this,
@@ -6671,31 +6640,21 @@ export class Realm {
   }
 
   public async visibility(): Promise<RealmVisibility> {
-    if (this.visibilityPromise) {
-      return this.visibilityPromise;
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
+    let usernames = Object.keys(permissions).filter(
+      (username) => !username.startsWith('@realm/'),
+    );
+    if (usernames.includes('*')) {
+      return 'public';
+    } else if (usernames.includes('users') || usernames.length > 1) {
+      return 'shared';
+    } else {
+      return 'private';
     }
-
-    this.visibilityPromise = (async () => {
-      let permissions = await fetchRealmPermissions(
-        this.#dbAdapter,
-        new URL(this.url),
-      );
-
-      let usernames = Object.keys(permissions).filter(
-        (username) => !username.startsWith('@realm/'),
-      );
-      if (usernames.includes('*')) {
-        return 'public';
-      } else if (usernames.includes('users')) {
-        return 'shared';
-      } else if (usernames.length > 1) {
-        return 'shared';
-      } else {
-        return 'private';
-      }
-    })();
-
-    return this.visibilityPromise;
   }
 
   #logRequestPerformance(
