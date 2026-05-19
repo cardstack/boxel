@@ -225,6 +225,10 @@ export interface FileExtractResponse {
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource | null;
   types?: string[] | null;
+  // Display names walked from the resolved FileDef subclass up its prototype
+  // chain (e.g. `['Markdown', 'File']`). Persisted as `boxel_index.display_names`
+  // so CardsGrid's "All Files" sidebar can label each subtype.
+  displayNames?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;

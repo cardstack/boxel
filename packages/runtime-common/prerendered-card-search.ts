@@ -23,6 +23,12 @@ export interface PrerenderedCardLike {
   cardType?: string;
   iconHtml?: string;
   usedRenderType?: ResolvedCodeRef;
+  // True iff the prerender pipeline produced HTML for this row. Currently
+  // false for executable-module FileDef rows (`.gts`/`.ts`) because the
+  // fused visit skips the FileRender pass when `isModule` is true — see
+  // CS-11171. Consumers (e.g., CardList) can use this to render a fallback
+  // when html is missing so the row stays visible and clickable.
+  hasHtml?: boolean;
 }
 
 export interface PrerenderedCardComponentSignature {
