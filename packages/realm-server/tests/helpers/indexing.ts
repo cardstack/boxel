@@ -23,18 +23,42 @@ export async function waitForIncrementalIndexEvent(
   since: number,
   timeout = 5000,
 ) {
+  // The initiation and completion events are broadcast without await
+  // ordering (see Realm#sendIndexInitiationEvent + broadcastIncrementalInvalidationEvent),
+  // so matrix sync can surface them in either order. Wait until BOTH are
+  // visible so callers that re-fetch and assert on each event don't race.
+  let lastSeenInitiation = false;
+  let lastSeenIncremental = false;
   await waitUntil(
     async () => {
       let matrixMessages = await getMessagesSince(since);
-
-      return matrixMessages.some(
-        (m) =>
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
-      );
+      let sawInitiation = false;
+      let sawIncremental = false;
+      for (let m of matrixMessages) {
+        if (
+          m.type !== APP_BOXEL_REALM_EVENT_TYPE ||
+          m.content.eventName !== 'index'
+        ) {
+          continue;
+        }
+        if (m.content.indexType === 'incremental-index-initiation') {
+          sawInitiation = true;
+        } else if (m.content.indexType === 'incremental') {
+          sawIncremental = true;
+        }
+        if (sawInitiation && sawIncremental) {
+          return true;
+        }
+      }
+      lastSeenInitiation = sawInitiation;
+      lastSeenIncremental = sawIncremental;
+      return false;
     },
-    { timeout },
+    {
+      timeout,
+      timeoutMessage: () =>
+        `incremental index events not both received (initiation=${lastSeenInitiation}, incremental=${lastSeenIncremental}, since=${since})`,
+    },
   );
 }
 
@@ -85,10 +109,29 @@ export async function expectIncrementalIndexEvent(
     ? trimJsonExtension(targetUrl)
     : targetUrl;
 
-  if (!incrementalIndexInitiationEventContent) {
-    throw new Error('Incremental index initiation event not found');
-  }
-  if (!incrementalEventContent) {
+  if (!incrementalIndexInitiationEventContent || !incrementalEventContent) {
+    let realmEventSummary = messages
+      .filter((m) => m.type === APP_BOXEL_REALM_EVENT_TYPE)
+      .map((m) => ({
+        eventName: (m.content as { eventName?: string })?.eventName,
+        indexType: (m.content as { indexType?: string })?.indexType,
+        updatedFile: (m.content as { updatedFile?: string })?.updatedFile,
+        invalidations: (m.content as { invalidations?: string[] })
+          ?.invalidations,
+        originServerTs: m.origin_server_ts,
+      }));
+    console.error(
+      `[expectIncrementalIndexEvent] missing event(s) for url=${url} since=${since} realm=${realm}. ` +
+        `initiationPresent=${Boolean(
+          incrementalIndexInitiationEventContent,
+        )} incrementalPresent=${Boolean(
+          incrementalEventContent,
+        )}. realm events seen (${realmEventSummary.length}): ` +
+        JSON.stringify(realmEventSummary),
+    );
+    if (!incrementalIndexInitiationEventContent) {
+      throw new Error('Incremental index initiation event not found');
+    }
     throw new Error('Incremental event content not found');
   }
   assert.deepEqual(incrementalIndexInitiationEventContent, {

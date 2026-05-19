@@ -2214,18 +2214,32 @@ async function waitForIncrementalIndexEvent(
   try {
     await waitUntil(async () => {
       let matrixMessages = await getMessagesSince(since);
-
-      return matrixMessages.some(
-        (m) =>
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
-      );
+      let sawInitiation = false;
+      let sawIncremental = false;
+      for (let m of matrixMessages) {
+        if (
+          m.type !== APP_BOXEL_REALM_EVENT_TYPE ||
+          m.content.eventName !== 'index'
+        ) {
+          continue;
+        }
+        if (m.content.indexType === 'incremental-index-initiation') {
+          sawInitiation = true;
+        } else if (m.content.indexType === 'incremental') {
+          sawIncremental = true;
+        }
+        if (sawInitiation && sawIncremental) {
+          return true;
+        }
+      }
+      return false;
     });
   } catch (e) {
     let matrixMessages = await getMessagesSince(since);
 
-    console.log('waitForIncrementalIndexEvent failed, no event found. Events:');
+    console.log(
+      'waitForIncrementalIndexEvent failed: at least one of the initiation or incremental event was missing. Events:',
+    );
     console.log(JSON.stringify(matrixMessages, null, 2));
     throw e;
   }
