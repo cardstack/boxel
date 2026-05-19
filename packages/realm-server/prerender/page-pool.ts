@@ -992,6 +992,25 @@ export class PagePool {
       throwIfAborted(signal);
     }
     if (entry.affinityKey !== affinityKey) {
+      // The only path that returns an entry tagged for a different
+      // affinity is the brand-new-affinity cross-affinity-steal
+      // fallback in `#selectEntryForAffinity`. It runs only when
+      // `#ensureStandbyPool` couldn't produce a standby — usually a
+      // transient browser-context creation failure. The reassignment
+      // below keeps the donor entry's `pageId`, so callers that ask
+      // "did I get a distinct page from the previous render?" will
+      // observe equality across two different affinities. Surfacing
+      // the path here gives CI logs the breadcrumb when that
+      // assertion trips. Kept at `warn` because hitting this path
+      // also means we're rendering one affinity's content on a tab
+      // whose CDP runtime state was warmed for a different affinity.
+      log.warn(
+        `cross-affinity steal: reassigning pageId=${entry.pageId} ` +
+          `from ${entry.affinityKey} to ${affinityKey} ` +
+          `(standby refill failed to produce a fresh tab; ` +
+          `standbys=${this.#standbys.size} creating=${this.#creatingStandbys} ` +
+          `active=${this.#poolEntryCount()} maxPages=${this.#maxPages})`,
+      );
       entry = this.#reassignAffinityTab(entry, affinityKey);
       reused = false;
     }

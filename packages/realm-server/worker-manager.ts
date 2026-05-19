@@ -1,5 +1,7 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
+import { writeSync } from 'node:fs';
 
 // During `mise dev-all` Ctrl-C, the bash trap walks the process tree
 // deepest-first. The `dev-log-tee` reader on this process's stdout/stderr
@@ -20,6 +22,22 @@ const swallowEpipe = (err: NodeJS.ErrnoException) => {
 };
 process.stdout.on('error', swallowEpipe);
 process.stderr.on('error', swallowEpipe);
+
+// FD-level synchronous stderr write — `writeSync(2, ...)` calls the
+// write(2) syscall directly, bypassing Node's stream layer. We do that
+// (instead of `process.stderr.write`) because the stream-layer write is
+// libuv-async when stderr is a pipe (the normal Docker / ECS case), so
+// it can be lost if the process exits before libuv flushes. The whole
+// point of these stamps is to land *just before* the process dies, so
+// async loss would defeat them.
+//
+// Proof the Node process actually started, at what pid/ppid, independent
+// of the logger pipeline. If we see STARTUP but never SIGTERM received,
+// signal delivery is broken upstream of Node.
+writeSync(
+  2,
+  `[worker-manager] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
 
 import {
   logger,
@@ -536,17 +554,37 @@ function runShutdownCallbacks() {
   }
 }
 
+// `writeSync(2, ...)` (FD-level, syscall-synchronous) for the same
+// reason as the STARTUP stamp above — `process.stderr.write` is
+// libuv-async to a pipe, and these stamps fire on the exact paths where
+// the process is about to die, so an async write can get lost.
 process.on('SIGINT', () => {
+  writeSync(
+    2,
+    `[worker-manager] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   shutdown();
 });
 process.on('SIGTERM', () => {
+  writeSync(
+    2,
+    `[worker-manager] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   shutdown();
 });
 process.on('disconnect', () => {
+  writeSync(
+    2,
+    `[worker-manager] disconnect received pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   log.info(`Parent IPC disconnected, shutting down worker manager...`);
   shutdown();
 });
 process.on('uncaughtException', (err) => {
+  writeSync(
+    2,
+    `[worker-manager] uncaughtException pid=${process.pid} ppid=${process.ppid}\n`,
+  );
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
 });

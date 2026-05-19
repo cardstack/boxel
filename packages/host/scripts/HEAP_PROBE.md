@@ -80,7 +80,7 @@ SNAPSHOT_AT="10,50,90" \
   nohup node packages/host/scripts/heap-snapshot-runner.js > /tmp/snap-runner.log 2>&1 &
 
 # 2. Open a fresh test tab
-ENCODED=$(node -e 'console.log(encodeURIComponent("http://localhost:4200/tests/index.html?hidepassed&filter=card-basics"))')
+ENCODED=$(node -e 'console.log(encodeURIComponent("https://localhost:4200/tests/index.html?hidepassed&filter=card-basics"))')
 curl -sX PUT "http://localhost:9333/json/new?${ENCODED}"
 
 # 3. After runner exits — diff and trace

@@ -665,6 +665,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           {
             realmURL,
             realmUsername: owner,
+            // The grafana reindex path passes clearLastModified: true so
+            // every file in boxel_index re-renders even when its mtime
+            // hasn't changed. Surfaced in args so the from-scratch
+            // coalesce can refuse to attach this kind of publish to an
+            // already-running same-realm from-scratch.
+            clearLastModified: true,
           },
           'realm args are correct',
         );

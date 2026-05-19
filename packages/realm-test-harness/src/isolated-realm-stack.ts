@@ -468,8 +468,23 @@ export async function startIsolatedRealmStack({
       );
     }
 
+    // Strip the dev TLS env vars exported by env-vars.sh when CI's init
+    // action provisions the cert. The harness drives plain
+    // `http://localhost:<port>/...` URLs against the spawned
+    // realm-server; if the child inherits the cert env vars it binds
+    // the HTTPS+HTTP/2 dispatcher and every harness HTTP request gets
+    // 301-redirected, breaking benchmarks and tests that don't follow
+    // redirects through their auth handshake.
+    let {
+      REALM_SERVER_TLS_CERT_FILE: _certFile,
+      REALM_SERVER_TLS_KEY_FILE: _keyFile,
+      ...rest
+    } = process.env;
+    void _certFile;
+    void _keyFile;
+
     let env = {
-      ...process.env,
+      ...rest,
       PGHOST: DEFAULT_PG_HOST,
       PGPORT: DEFAULT_PG_PORT,
       PGUSER: DEFAULT_PG_USER,

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
@@ -166,7 +166,7 @@ module(basename(__filename), function () {
         },
         {
           type: 'card-type-summary',
-          id: 'http://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
+          id: 'https://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
           attributes: {
             displayName: 'FriendWithUsedLink',
             total: 2,

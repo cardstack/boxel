@@ -1,9 +1,9 @@
 #! /bin/sh
 
-BASE_REALM="http-get://localhost:4201/base/"
-EXPERIMENTS_REALM="http-get://localhost:4201/experiments/"
-NODE_TEST_REALM="http-get://localhost:4202/node-test/"
-TEST_REALM="http-get://localhost:4202/test/"
+BASE_REALM="https-get://localhost:4201/base/"
+EXPERIMENTS_REALM="https-get://localhost:4201/experiments/"
+NODE_TEST_REALM="https-get://localhost:4202/node-test/"
+TEST_REALM="https-get://localhost:4202/test/"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
@@ -16,7 +16,11 @@ SYNAPSE_URL="http://localhost:8008"
 SMTP_4_DEV_URL="http://localhost:5001"
 ICONS_URL="http://localhost:4206"
 
-WAIT_ON_TIMEOUT=900000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 start-server-and-test \
+# START_SERVER_AND_TEST_INSECURE=1: see test-wait-for-servers.sh — wait-on
+# needs strictSSL relaxation for the mkcert leaf on
+# https-get://localhost:4201|4202.
+WAIT_ON_TIMEOUT=900000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 \
+  START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'run-p start:pg start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$BASE_REALM_READY|$EXPERIMENTS_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL|$ICONS_URL" \
   'run-p start:worker-test start:test-realms' \

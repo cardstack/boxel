@@ -397,7 +397,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/ai-command-example',
+                module: 'https://localhost:4202/test/ai-command-example',
                 name: 'AiCommandExample',
               },
             },

@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { removeSync, writeJSONSync, writeFileSync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';

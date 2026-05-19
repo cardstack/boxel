@@ -5,6 +5,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { provide } from 'ember-provide-consume-context';
 
+import { cn, eq, gte } from '@cardstack/boxel-ui/helpers';
+
 import {
   CardCrudFunctionsContextName,
   type CommandContext,
@@ -105,7 +107,14 @@ export default class OperatorModeStack extends Component<Signature> {
   };
 
   <template>
-    <div class='operator-mode-stack' ...attributes>
+    <div
+      class={{cn
+        'operator-mode-stack'
+        stack-medium-padding-top=(eq @stackItems.length 2)
+        stack-small-padding-top=(gte @stackItems.length 3)
+      }}
+      ...attributes
+    >
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
@@ -125,23 +134,40 @@ export default class OperatorModeStack extends Component<Signature> {
 
     <style scoped>
       :global(:root) {
-        --stack-padding-top: calc(
+        --stack-lg-padding-top: calc(
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
+        --stack-md-padding-top: calc(var(--stack-lg-padding-top) / 2);
+        --stack-sm-padding-top: var(--operator-mode-spacing);
+
+        --stack-padding-top: var(--stack-lg-padding-top);
         --stack-padding-bottom: var(--boxel-sp-lg);
+        --stack-padding-inline: var(--boxel-sp-lg);
       }
       .operator-mode-stack {
-        z-index: 0;
+        position: relative;
         height: 100%;
         width: 100%;
         background-position: center;
         background-size: cover;
         padding-top: var(--stack-padding-top);
-        padding-inline: var(--operator-mode-spacing);
+        padding-inline: var(--stack-padding-inline);
         padding-bottom: var(--stack-padding-bottom);
-        position: relative;
-        transition: padding-top var(--boxel-transition);
+        z-index: 0;
+        transition:
+          padding-top var(--boxel-transition),
+          padding-inline var(--boxel-transition);
+      }
+      .stack-medium-padding-top:not(:has(.item.expanded)) {
+        --stack-padding-top: var(--stack-md-padding-top);
+      }
+      .stack-small-padding-top:not(:has(.item.expanded)) {
+        --stack-padding-top: var(--stack-sm-padding-top);
+      }
+      .operator-mode-stack:has(.item.expanded) {
+        --stack-padding-inline: 0;
+        --stack-padding-bottom: 0;
       }
       .operator-mode-stack
         :deep(.field-component-card.fitted-format .missing-template) {
@@ -151,6 +177,7 @@ export default class OperatorModeStack extends Component<Signature> {
         border-bottom-right-radius: var(--boxel-form-control-border-radius);
       }
       .inner {
+        width: 100%;
         height: 100%;
         position: relative;
         display: flex;

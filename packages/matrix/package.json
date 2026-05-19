@@ -41,6 +41,8 @@
     "register-skills-writer": "MATRIX_USERNAME=skills_writer MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-homepage-writer": "MATRIX_USERNAME=homepage_writer MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-realm-users": "ts-node --transpileOnly ./scripts/register-matrix-users.ts realms-only",
+    "migrate-account-data-http-to-https": "ts-node --transpileOnly ./scripts/migrate-account-data-http-to-https.ts",
+    "migrate-account-data-https-to-http": "ts-node --transpileOnly ./scripts/migrate-account-data-http-to-https.ts --reverse",
     "register-test-admin": "MATRIX_IS_ADMIN=TRUE MATRIX_USERNAME=admin MATRIX_PASSWORD=password ts-node --transpileOnly ./scripts/register-test-user.ts",
     "register-test-admin-and-token": "pnpm register-test-admin && ts-node --transpileOnly ./scripts/register-test-token.ts",
     "register-all": "ts-node --transpileOnly ./scripts/register-matrix-users.ts all",

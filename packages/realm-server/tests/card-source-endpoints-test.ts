@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { existsSync, readFileSync } from 'fs-extra';
 import {
@@ -234,14 +234,14 @@ module(basename(__filename), function () {
           );
         });
 
-        // CS-11043. clearLocalCaches() is the public surface the
+        // CS-11043. clearLocalSourceCaches() is the public surface the
         // publish-realm handler invokes after the FS swap so that the
-        // pre-swap bytes living in #sourceCache / #moduleCache don't get
+        // pre-swap bytes living in #sourceCache / #transpiledModuleCache don't get
         // served to the reindex job (which would then write stale
         // isolated_html into boxel_index). Functionally equivalent to
         // __testOnlyClearCaches minus the test-only transpile-counter
         // reset.
-        test('clearLocalCaches drops cached source bytes', async function (assert) {
+        test('clearLocalSourceCaches drops cached source bytes', async function (assert) {
           let cacheTestPath = 'clear-local-caches.gts';
           await testRealm.write(
             cacheTestPath,
@@ -260,7 +260,7 @@ module(basename(__filename), function () {
             'precondition: second fetch hits the source cache',
           );
 
-          testRealm.clearLocalCaches();
+          testRealm.clearLocalSourceCaches();
 
           let afterClear = await request
             .get(`/${cacheTestPath}`)
@@ -268,7 +268,7 @@ module(basename(__filename), function () {
           assert.strictEqual(
             afterClear.headers['x-boxel-cache'],
             'miss',
-            'fetch after clearLocalCaches is a miss — the #sourceCache entry was dropped',
+            'fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped',
           );
         });
 

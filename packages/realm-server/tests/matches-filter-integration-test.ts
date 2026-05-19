@@ -25,13 +25,13 @@ const stubDefinitionLookup: DefinitionLookup = {
   async invalidate() {
     return [];
   },
-  async clearRealmCache() {},
-  async clearAllModules() {},
+  async clearRealmDefinitions() {},
+  async clearAllDefinitions() {},
   registerRealm() {},
-  async getModuleCacheEntry() {
+  async getCachedDefinitions() {
     return undefined;
   },
-  async getModuleCacheEntries() {
+  async getCachedDefinitionsBatch() {
     return {};
   },
   forRealm() {

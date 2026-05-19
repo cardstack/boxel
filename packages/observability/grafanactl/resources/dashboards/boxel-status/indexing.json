@@ -718,8 +718,57 @@
               },
               "properties": [
                 {
-                  "id": "custom.hidden",
-                  "value": true
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete reservation ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "reservation_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
                 }
               ]
             },
@@ -1104,6 +1153,155 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
+        "description": "Indexing jobs (from-scratch-index, incremental-index, full-reindex) that finished in the past 24 hours, newest first. `wait_seconds` is queue time (created_at → first reservation). `run_seconds` is the duration of the attempt that completed it (latest reservation → finished_at). Force-cancelled jobs that never got a reservation appear with NULL started_at / wait_seconds / run_seconds / worker_id.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 100
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "wait_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 54
+        },
+        "id": 22,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "finished_at"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  j.job_type,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  j.created_at,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (fr.first_started_at - j.created_at)) AS wait_seconds,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nLEFT JOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nLEFT JOIN LATERAL (\n  SELECT MIN(jr.created_at) AS first_started_at\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n) fr ON TRUE\nWHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY j.finished_at DESC\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Completed Indexing Jobs",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
         "description": "Top 10 from-scratch-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Use this to spot realms whose full reindex is regressing.",
         "fieldConfig": {
           "defaults": {
@@ -1197,7 +1395,7 @@
           "h": 10,
           "w": 12,
           "x": 0,
-          "y": 54
+          "y": 64
         },
         "id": 20,
         "options": {
@@ -1334,7 +1532,7 @@
           "h": 10,
           "w": 12,
           "x": 12,
-          "y": 54
+          "y": 64
         },
         "id": 21,
         "options": {

@@ -15,17 +15,17 @@ to_wait_url() {
   esac
 }
 
-DEFAULT_BASE_REALM_URL='http://localhost:4201/base/'
-DEFAULT_CATALOG_REALM_URL='http://localhost:4201/catalog/'
-DEFAULT_SKILLS_REALM_URL='http://localhost:4201/skills/'
+DEFAULT_BASE_REALM_URL='https://localhost:4201/base/'
+DEFAULT_CATALOG_REALM_URL='https://localhost:4201/catalog/'
+DEFAULT_SKILLS_REALM_URL='https://localhost:4201/skills/'
 
 BASE_REALM_URL=$(ensure_trailing_slash "${RESOLVED_BASE_REALM_URL:-$DEFAULT_BASE_REALM_URL}")
 CATALOG_REALM_URL=$(ensure_trailing_slash "${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}")
 SKILLS_REALM_URL=$(ensure_trailing_slash "${RESOLVED_SKILLS_REALM_URL:-$DEFAULT_SKILLS_REALM_URL}")
 SKIP_CATALOG="${SKIP_CATALOG:-}"
 
-NODE_TEST_REALM="http-get://localhost:4202/node-test/"
-TEST_REALM="http-get://localhost:4202/test/"
+NODE_TEST_REALM="https-get://localhost:4202/node-test/"
+TEST_REALM="https-get://localhost:4202/test/"
 
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
@@ -43,7 +43,16 @@ if [ "$SKIP_CATALOG" != "true" ]; then
   READY_URLS="$READY_URLS|$CATALOG_REALM_READY"
 fi
 
-WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 start-server-and-test \
+# START_SERVER_AND_TEST_INSECURE=1 disables wait-on's `strictSSL` for the
+# https-get://localhost:42XX readiness probes. start-server-and-test
+# passes `strictSSL: !isInsecure()` into wait-on options (overriding the
+# global NODE_TLS_REJECT_UNAUTHORIZED and even NODE_EXTRA_CA_CERTS when
+# the wait-on subprocess inherits them unevenly under CI load) — the
+# documented INSECURE flag is the right escape hatch. Scopes to the
+# readiness probe only; the test runner itself still validates TLS
+# normally.
+WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
+  start-server-and-test \
   'pnpm run wait' \
   "$READY_URLS" \
   'ember-test-pre-built'

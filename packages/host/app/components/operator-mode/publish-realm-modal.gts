@@ -340,10 +340,12 @@ export default class PublishRealmModal extends Component<Signature> {
   }
 
   private getProtocol(): string {
-    const environment = config.environment;
-    return environment === 'development' || environment === 'test'
-      ? 'http'
-      : 'https';
+    // The local dev stack speaks HTTPS+HTTP/2 across the board now (the
+    // realm-server reads the mkcert leaf via REALM_SERVER_TLS_CERT_FILE
+    // and the host bundle's vite preview / dev server terminates TLS on
+    // the same cert), so published-realm URLs are https in every
+    // environment.
+    return 'https';
   }
 
   private getMatrixUsername(): string {

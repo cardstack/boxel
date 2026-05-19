@@ -2,10 +2,17 @@
 
 To build the entire repository and run the application, follow these steps:
 
-1. The 2 main system dependencies to install are:
-
+1. The system dependencies to install are:
    - [mise](https://mise.jdx.dev/getting-started.html)
    - [docker](https://docs.docker.com/get-docker/)
+   - [mkcert](https://github.com/FiloSottile/mkcert) — provisions the
+     local TLS cert the realm-server needs to speak HTTPS+HTTP/2 (local
+     dev has no HTTP fallback). Install with
+     `sudo apt install -y mkcert libnss3-tools` on Debian/Ubuntu or
+     `brew install mkcert nss` on macOS. After install, run
+     `mise run infra:ensure-dev-cert` once before the first
+     `mise run dev` / `pnpm start:all`; subsequent runs are a no-op. See
+     the repo-root [README](README.md#local-https-dev-access) for details.
 
 2. Clone the repo:
 
@@ -52,7 +59,7 @@ To build the entire repository and run the application, follow these steps:
    Note: Ensure that the realm-server is completely started by looking out for tor the test-realm indexing output.
 
    ```zsh
-   Realm http://localhost:4202/test/ has started ({
+   Realm https://localhost:4202/test/ has started ({
    "instancesIndexed": 8,
    "instanceErrors": 0,
    "moduleErrors": 0
@@ -76,19 +83,16 @@ To build the entire repository and run the application, follow these steps:
    Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
 10. Host App
-
-    - Visit http://localhost:4201/
+    - Visit https://localhost:4200/
     - Enter the registration flow and create a Boxel Account
     - When prompted for an authentication token, type in "dev-token"
 
 11. Validate email for login
-
     - Visit SMTP UI at http://localhost:5001/
     - Validate email
-    - Go back to Host http://localhost:4201/ and login
+    - Go back to Host https://localhost:4200/ and login
 
 12. Perform "Setup up Secure Payment Method" flow
-
     - More detailed steps can be found in our [README](README.md) Payment Setup section
 
 13. Run ai bot (Optional):

@@ -33,7 +33,7 @@
         "module": "../online-product",
         "name": "OnlineProduct"
       },
-      "realmURL": "http://localhost:4201/catalog/"
+      "realmURL": "https://localhost:4201/catalog/"
     }
   }
 }

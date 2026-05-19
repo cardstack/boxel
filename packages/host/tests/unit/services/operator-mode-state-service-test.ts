@@ -151,4 +151,34 @@ module('Unit | Service | operator-mode-state-service', function (hooks) {
       'after reset, panel respects persisted closed preference',
     );
   });
+
+  test('expanded stack item is serialized and restored', function (assert) {
+    let item = new StackItem({
+      id: 'https://example.com/cards/1',
+      format: 'isolated',
+      stackIndex: 0,
+    });
+
+    service.addItemToStack(item);
+    service.setStackItemExpanded(item.instanceId, true);
+
+    let rawState = JSON.parse(service.serialize());
+    assert.deepEqual(
+      rawState.expandedStackItem,
+      {
+        id: 'https://example.com/cards/1',
+        stackIndex: 0,
+      },
+      'expanded item identity is included in serialized state',
+    );
+
+    service.resetState();
+    service.restore(rawState);
+
+    let restoredItem = service.state.stacks[0][0];
+    assert.true(
+      service.isStackItemExpanded(restoredItem.instanceId),
+      'expanded state is restored onto the rebuilt stack item',
+    );
+  });
 });

@@ -3,6 +3,11 @@
 #MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
@@ -18,4 +23,4 @@ NODE_ENV=development \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
   \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl='https://localhost:4201/base/'

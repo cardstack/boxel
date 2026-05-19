@@ -874,7 +874,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
     let resource = {
       attributes: {
         ref,
@@ -920,7 +920,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
+    let ref = { module: `https://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
     let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
       .data.attributes?.ref;
@@ -5745,7 +5745,7 @@ module('Integration | serialization', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: rri('http://localhost:4202/test/captain'),
+                module: rri('https://localhost:4202/test/captain'),
                 name: 'Captain',
               },
             },
@@ -5770,7 +5770,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: rri(`http://localhost:4202/test/captain`),
+              module: rri(`https://localhost:4202/test/captain`),
               name: 'Boat',
             },
           },
