@@ -440,6 +440,7 @@ export default class KanbanUsage extends Component {
               <KanbanColumnConfigSidebar
                 @columns={{this.sidebarColumns}}
                 @onColumnsChange={{this.handleSidebarColumnsChange}}
+                @onClose={{this.toggleSidebar}}
               />
             {{/if}}
           </div>

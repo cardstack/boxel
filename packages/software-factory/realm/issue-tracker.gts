@@ -27,14 +27,15 @@ import {
   ContextButton,
   Pill,
   Switch,
+  Tooltip,
   type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import LayoutSidebarRightCollapse from '@cardstack/boxel-icons/layout-sidebar-right-collapse';
 import LayoutSidebarRightExpand from '@cardstack/boxel-icons/layout-sidebar-right-expand';
-import SlidersHorizontal from '@cardstack/boxel-icons/sliders-horizontal';
+import Settings from '@cardstack/boxel-icons/settings';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { realmURL, type ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -1143,11 +1144,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
 
-  closeSidebar = (): void => {
-    this.isSidebarOpen = false;
-  };
-
-
   openCard = (index: number): void => {
     let card = this.args.model.cards?.[index];
     if (card) {
@@ -1295,16 +1291,29 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               @label='Hide empty columns'
             />
           </div>
-          <button
-            type='button'
-            class='configure-btn'
-            aria-pressed={{this.isSidebarOpen}}
-            {{on 'click' this.toggleSidebar}}
-            data-test-configure-columns-btn
-          >
-            <SlidersHorizontal width='14' height='14' />
-            Configure
-          </button>
+          <Tooltip @placement='bottom'>
+            <:trigger>
+              <ContextButton
+                class='configure-btn'
+                @icon={{Settings}}
+                @label={{if
+                  this.isSidebarOpen
+                  'Close config sidebar'
+                  'Open config sidebar'
+                }}
+                @variant='highlight'
+                @isToggle={{true}}
+                @isActive={{this.isSidebarOpen}}
+                data-test-configure-columns-btn
+                {{on 'click' this.toggleSidebar}}
+              />
+            </:trigger>
+            <:content>{{if
+                this.isSidebarOpen
+                'Close config'
+                'Configure columns'
+              }}</:content>
+          </Tooltip>
         </div>
       </header>
       <div class='kanban-body'>
@@ -1343,13 +1352,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           </KanbanPlane>
         </div>
 
-        {{#if this.isSidebarOpen}}
+        <div class={{cn 'config-sidebar-wrap' is-open=this.isSidebarOpen}}>
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
             @onColumnsChange={{this.handleColumnsChange}}
-            @onClose={{this.closeSidebar}}
           />
-        {{/if}}
+        </div>
       </div>
     </div>
     <style scoped>
@@ -1380,33 +1388,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         min-width: 0;
         overflow: hidden;
       }
-      .configure-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        padding: 0.3125rem 0.625rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-        font-family: inherit;
-        border: 1px solid var(--board-border);
-        border-radius: var(--radius, var(--boxel-border-radius-sm));
-        background: transparent;
-        color: var(--board-card-fg);
-        cursor: pointer;
-        transition: background-color 100ms ease;
-      }
-      .configure-btn:hover {
-        background: var(--board-muted-bg);
-      }
-      .configure-btn[aria-pressed='true'] {
-        background: var(--board-muted-bg);
-        border-color: color-mix(
-          in oklch,
-          var(--primary, var(--boxel-highlight)) 60%,
-          transparent
-        );
-        color: var(--primary, var(--boxel-highlight));
-      }
       .card-wrap {
         width: 100%;
         height: 100%;
@@ -1436,6 +1417,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         display: flex;
         align-items: center;
         gap: 0.375rem;
+        color: var(--board-muted-fg);
       }
       .column-visibility-toggle {
         display: flex;
@@ -1474,6 +1456,15 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         padding: 0.125rem 0.5rem;
         background: var(--board-muted-bg);
         border-radius: 4px;
+      }
+      .config-sidebar-wrap {
+        flex-shrink: 0;
+        width: 0;
+        overflow: hidden;
+        transition: width var(--boxel-transition);
+      }
+      .config-sidebar-wrap.is-open {
+        width: 19rem;
       }
     </style>
   </template>
