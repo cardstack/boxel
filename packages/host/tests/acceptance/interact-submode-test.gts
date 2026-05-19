@@ -682,7 +682,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Ctrl+E from inside the input flips edit→isolated without
       // requiring the user to click out first.
-      await triggerKeyEvent(fieldInput, 'keydown', 'KeyE', { ctrlKey: true });
+      await triggerKeyEvent(fieldInput, 'keydown', 'e', { ctrlKey: true });
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
@@ -703,7 +703,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Ctrl+E enters edit mode (bound on every platform — Mac too,
       // because Cmd+E is reserved by browsers).
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      await triggerKeyEvent(document.body, 'keydown', 'e', {
         ctrlKey: true,
       });
       assert
@@ -713,7 +713,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('Ctrl+E flipped the card into edit mode');
 
       // The toggle is symmetric — pressing again returns to isolated.
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      await triggerKeyEvent(document.body, 'keydown', 'e', {
         ctrlKey: true,
       });
       assert
@@ -724,7 +724,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Cmd+E (metaKey) is intentionally NOT bound — it stays free for
       // the browser's "Use Selection for Find" shortcut on Mac.
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      await triggerKeyEvent(document.body, 'keydown', 'e', {
         metaKey: true,
       });
       assert
@@ -732,6 +732,54 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
         )
         .exists('Cmd+E (metaKey) does not toggle edit mode');
+    });
+
+    test('Ctrl+E respects keyboard layout (CS-11092)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Dvorak user: the key that produces 'e' on their layout is on
+      // the physical "Period" keycap. event.key='e', event.code='Period'.
+      // triggerKeyEvent can't decouple key from code, so dispatch raw.
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'e',
+          code: 'Period',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('Ctrl+E fires on the Dvorak "e" key (code=Period)');
+
+      // The inverse: on a Dvorak keyboard the QWERTY-E keycap produces
+      // '.'. Pressing Ctrl + that physical key must NOT trigger the
+      // shortcut anymore — that was the pre-fix bug.
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '.',
+          code: 'KeyE',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists(
+          'Ctrl+. on Dvorak (physical QWERTY-E keycap) does not toggle — still in edit mode',
+        );
     });
 
     test('duplicate card in a stack is not allowed', async function (assert) {

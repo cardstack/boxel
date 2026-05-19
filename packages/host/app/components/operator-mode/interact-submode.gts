@@ -852,9 +852,10 @@ export default class InteractSubmode extends Component {
         }}
         style={{this.backgroundImageStyle}}
         {{onKeyMod 'Escape' this.handleEscape}}
-        {{! Bind Ctrl+E on every platform — Mac users get Ctrl+E too,
-           because Cmd+E is taken by browsers ("Use Selection for Find"). }}
-        {{onKeyMod 'ctrl+KeyE' this.handleToggleEdit}}
+        {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
+           Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
+           shortcut on whatever key produces 'e' on their layout. }}
+        {{onKeyMod 'ctrl+e' this.handleToggleEdit}}
       >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
