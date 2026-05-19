@@ -66,7 +66,7 @@ jobs:
 
       - name: Demo publish-preview-realm
         id: publish_demo
-        uses: cardstack/boxel/.github/actions/publish-preview-realm@${{ github.sha }}
+        uses: cardstack/boxel/.github/actions/publish-preview-realm@cs-11161-extract-workspace-sync-action
         with:
           realm-name: cs-11161-demo-${{ github.run_id }}
           display-name: "CS-11161 demo realm"
@@ -79,7 +79,7 @@ jobs:
           readiness-timeout-ms: "120000"
 
       - name: Demo workspace-sync (re-push to the just-created source realm)
-        uses: cardstack/boxel/.github/actions/workspace-sync@${{ github.sha }}
+        uses: cardstack/boxel/.github/actions/workspace-sync@cs-11161-extract-workspace-sync-action
         with:
           workspace-url: ${{ steps.publish_demo.outputs.source-realm-url }}
           source-path: /tmp/cs-11161-fixture
@@ -90,7 +90,7 @@ jobs:
 
       - name: Demo unpublish-preview-realm
         if: always() && steps.publish_demo.outcome == 'success'
-        uses: cardstack/boxel/.github/actions/unpublish-preview-realm@${{ github.sha }}
+        uses: cardstack/boxel/.github/actions/unpublish-preview-realm@cs-11161-extract-workspace-sync-action
         with:
           published-realm-url: http://cs-11161-demo-${{ github.run_id }}.localhost:4201/
           matrix-url: http://localhost:8008
