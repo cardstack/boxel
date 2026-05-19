@@ -39,6 +39,8 @@
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@playwright/test": "catalog:",
     "content-tag": "catalog:",
     "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
