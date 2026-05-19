@@ -57,7 +57,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{#let (get this.submodeIcons @submode) as |SubmodeIcon|}}
               <SubmodeIcon width='18px' height='18px' />
             {{/let}}
-            {{capitalize @submode}}
+            {{capitalize @submode}}!
             <div
               class='arrow-icon'
               data-test-submode-arrow-direction={{if
