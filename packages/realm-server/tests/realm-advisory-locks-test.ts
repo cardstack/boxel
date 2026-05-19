@@ -7,6 +7,18 @@ import {
 } from '@cardstack/postgres';
 import { setupDB } from './helpers';
 
+// Records each event with a relative timestamp so a failed ordering assertion
+// can tell us *when* each entry happened, not just the final order. The
+// timeline string is appended to the assertion message — handy when a flake
+// recurs and we need to know whether caller-1 entered its critical section
+// after caller-2 (real lock-ordering bug) or whether something else (e.g.
+// pool starvation) delayed an event by an unexpected amount.
+function timeline(events: string[], startedAt: number, eventTimes: number[]) {
+  return events
+    .map((e, i) => `${e}@${(eventTimes[i] - startedAt).toFixed(0)}ms`)
+    .join(',');
+}
+
 module(basename(__filename), function () {
   module('hashRealmUrlForAdvisoryLock', function () {
     test('is deterministic', function (assert) {
@@ -61,21 +73,38 @@ module(basename(__filename), function () {
     test('serializes two concurrent callers for the same URL', async function (assert) {
       const url = 'http://localhost:4201/serialize/';
       const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
 
       // First caller grabs the lock and holds it for a bit. Second caller
       // tries to acquire concurrently and should only run after the first
       // releases. We verify by appending to a shared array in a specific
       // order and checking the final ordering.
-      const p1 = dbAdapter.withWriteLock(url, async () => {
-        events.push('1-start');
-        await new Promise((r) => setTimeout(r, 150));
-        events.push('1-end');
+      //
+      // Synchronization: we cannot rely on a fixed-millisecond head start to
+      // ensure caller-1 acquires the advisory lock before caller-2 even
+      // tries — on a slow CI runner the postgres roundtrip can exceed the
+      // sleep, letting caller-2 win the race. Instead caller-1 resolves
+      // `p1Entered` from inside its callback (after the lock is held), and
+      // caller-2 is not constructed until that signal fires.
+      let signalP1Entered!: () => void;
+      const p1Entered = new Promise<void>((r) => {
+        signalP1Entered = r;
       });
-      // Give p1 a head start so it actually holds the lock first.
-      await new Promise((r) => setTimeout(r, 20));
+      const p1 = dbAdapter.withWriteLock(url, async () => {
+        push('1-start');
+        signalP1Entered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('1-end');
+      });
+      await p1Entered;
       const p2 = dbAdapter.withWriteLock(url, async () => {
-        events.push('2-start');
-        events.push('2-end');
+        push('2-start');
+        push('2-end');
       });
 
       await Promise.all([p1, p2]);
@@ -83,7 +112,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         events,
         ['1-start', '1-end', '2-start', '2-end'],
-        'second caller runs only after first releases the lock',
+        `second caller runs only after first releases the lock; timeline: ${timeline(events, startedAt, eventTimes)}`,
       );
     });
 
@@ -195,17 +224,32 @@ module(basename(__filename), function () {
     test('serializes two concurrent callers for the same user id', async function (assert) {
       const userId = '@alice:localhost';
       const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
 
-      const p1 = dbAdapter.withUserCostLock(userId, async () => {
-        events.push('1-start');
-        await new Promise((r) => setTimeout(r, 150));
-        events.push('1-end');
+      // In-process queue inside withUserCostLock chains same-user callers
+      // synchronously, so ordering is guaranteed regardless of timing — but
+      // we still wait for caller-1 to enter its critical section before
+      // constructing caller-2, to match the rest of the file and to remain
+      // robust if the in-process queue is ever refactored away.
+      let signalP1Entered!: () => void;
+      const p1Entered = new Promise<void>((r) => {
+        signalP1Entered = r;
       });
-      // Give p1 a head start so it actually holds the lock first.
-      await new Promise((r) => setTimeout(r, 20));
+      const p1 = dbAdapter.withUserCostLock(userId, async () => {
+        push('1-start');
+        signalP1Entered();
+        await new Promise((r) => setTimeout(r, 150));
+        push('1-end');
+      });
+      await p1Entered;
       const p2 = dbAdapter.withUserCostLock(userId, async () => {
-        events.push('2-start');
-        events.push('2-end');
+        push('2-start');
+        push('2-end');
       });
 
       await Promise.all([p1, p2]);
@@ -213,7 +257,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         events,
         ['1-start', '1-end', '2-start', '2-end'],
-        'second caller runs only after first releases the lock',
+        `second caller runs only after first releases the lock; timeline: ${timeline(events, startedAt, eventTimes)}`,
       );
     });
 
@@ -312,16 +356,30 @@ module(basename(__filename), function () {
       // in parallel, not serialize.
       const shared = 'http://localhost:4201/shared/';
       const events: string[] = [];
+      const eventTimes: number[] = [];
+      const startedAt = Date.now();
+      const push = (e: string) => {
+        events.push(e);
+        eventTimes.push(Date.now());
+      };
 
-      const writePromise = dbAdapter.withWriteLock(shared, async () => {
-        events.push('write-start');
-        await new Promise((r) => setTimeout(r, 100));
-        events.push('write-end');
+      // Synchronize on write entering its critical section before kicking
+      // off the cost-lock acquisition. A fixed-millisecond head start raced
+      // the postgres roundtrip on slow CI runners.
+      let signalWriteEntered!: () => void;
+      const writeEntered = new Promise<void>((r) => {
+        signalWriteEntered = r;
       });
-      await new Promise((r) => setTimeout(r, 10));
+      const writePromise = dbAdapter.withWriteLock(shared, async () => {
+        push('write-start');
+        signalWriteEntered();
+        await new Promise((r) => setTimeout(r, 100));
+        push('write-end');
+      });
+      await writeEntered;
       const costPromise = dbAdapter.withUserCostLock(shared, async () => {
-        events.push('cost-start');
-        events.push('cost-end');
+        push('cost-start');
+        push('cost-end');
       });
 
       await Promise.all([writePromise, costPromise]);
@@ -331,7 +389,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         events,
         ['write-start', 'cost-start', 'cost-end', 'write-end'],
-        'realm-write and user-cost lock spaces are disjoint',
+        `realm-write and user-cost lock spaces are disjoint; timeline: ${timeline(events, startedAt, eventTimes)}`,
       );
     });
   });
