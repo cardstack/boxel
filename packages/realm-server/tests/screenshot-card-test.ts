@@ -36,6 +36,9 @@ module(basename(__filename), function () {
         async withWriteLock(_url, fn) {
           return await fn(undefined);
         },
+        async withUserCostLock(_userId, fn) {
+          return await fn();
+        },
       };
     }
 
