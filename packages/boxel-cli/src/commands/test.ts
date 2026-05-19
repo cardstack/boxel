@@ -691,6 +691,9 @@ export function registerTestCommand(program: Command): void {
 
       if (result.testFiles.length === 0) {
         console.log(`${DIM}No .test.gts files found in the realm.${RESET}`);
+        if (result.status !== 'passed') {
+          process.exit(1);
+        }
         return;
       }
 

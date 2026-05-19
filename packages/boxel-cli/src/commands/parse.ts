@@ -21,6 +21,7 @@ import {
 import { FG_RED, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
 import { findBoxelCliRoot } from '../lib/find-package-root';
+import { validateRealmRelativePath } from '../lib/realm-relative-path';
 import { search } from './search';
 
 /**
@@ -141,6 +142,10 @@ export async function parseRealm(
 
   if (options?.path) {
     let path = options.path;
+    let pathError = validateRealmRelativePath(path);
+    if (pathError) {
+      return emptyErrorResult(pathError);
+    }
     if (PARSEABLE_GTS_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       gtsFiles = [path];
     } else if (path.endsWith(PARSEABLE_JSON_EXTENSION)) {
@@ -412,9 +417,17 @@ async function runGlintCheck(
 
   try {
     for (let file of files) {
+      let pathError = validateRealmRelativePath(file.path);
+      if (pathError) {
+        throw new Error(pathError);
+      }
       let normalized = join(tempDir, file.path);
       let resolved = resolve(normalized);
-      if (!resolved.startsWith(tempDir + '/')) continue;
+      if (!resolved.startsWith(tempDir + '/')) {
+        throw new Error(
+          `Path "${file.path}" resolves outside the parse workspace and was rejected.`,
+        );
+      }
       mkdirSync(dirname(resolved), { recursive: true });
       writeFileSync(resolved, file.content, 'utf8');
     }

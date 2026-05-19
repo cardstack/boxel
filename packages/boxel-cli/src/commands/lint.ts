@@ -8,6 +8,7 @@ import {
 } from '../lib/profile-manager';
 import { FG_RED, FG_YELLOW, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
+import { validateRealmRelativePath } from '../lib/realm-relative-path';
 import { lint as lintSingleFile, type LintMessage } from './file/lint';
 import { listFiles } from './file/list';
 
@@ -62,6 +63,10 @@ export async function lintRealm(
   let lintableFiles: string[];
   if (options?.path) {
     let path = options.path;
+    let pathError = validateRealmRelativePath(path);
+    if (pathError) {
+      return emptyErrorResult(pathError);
+    }
     if (!LINTABLE_EXTENSIONS.some((ext) => path.endsWith(ext))) {
       return emptyErrorResult(
         `Path "${path}" is not lintable — must end with one of ${LINTABLE_EXTENSIONS.join(', ')}`,
