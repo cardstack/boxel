@@ -196,14 +196,6 @@ export default class OperatorModeStateService extends Service {
     }
     this.schedulePersist();
   }
-  // Drop ALL expand intents — called when a new card lands on any
-  // stack so the expanded surface doesn't end up under the new card
-  // (which would otherwise overlap awkwardly on the workspace
-  // background, see addItemToStack).
-  clearAllStackItemExpanded() {
-    this.expandedStackItems.clear();
-    this.schedulePersist();
-  }
   // True when at least one stack's TOP card has expand intent — used
   // to drive the bar's glass-morphism + .has-expanded-card class. Only
   // top cards count: when a card with expand intent gets buried under
