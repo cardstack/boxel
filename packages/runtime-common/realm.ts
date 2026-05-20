@@ -1108,21 +1108,21 @@ export class Realm {
         },
       );
 
-    // CS-11182: each post-completion step is independent — a failure or
-    // hang in one must not silently swallow the others. Previously the
-    // sequential `await clearRealmDefinitions; #dropAllTranspiledModuleCacheEntries; ...`
-    // chain meant a throw or stall in `clearRealmDefinitions` left the
-    // transpile-cache rows live, so clients kept being served pre-reindex
-    // bytes. Each step is wrapped in its own try/catch and the outer
-    // promise resolves once they've all been attempted.
+    // CS-11182: previously the chain was
+    //   await clearRealmDefinitions;
+    //   #dropAllTranspiledModuleCacheEntries();
+    //   broadcastIncrementalInvalidationEvent(...);
+    //   broadcastRealmEvent(...);
+    // — so a throw or hang in clearRealmDefinitions left the transpile-
+    // cache rows live and the broadcasts unsent, and clients kept being
+    // served pre-reindex bytes. Reorder so the synchronous, no-upstream-
+    // dependency work (L1 wipe, fire-and-forget L2 tombstone, broadcasts)
+    // happens first, and the awaited clearRealmDefinitions runs last
+    // where its rejection or stall can no longer block the rest. The
+    // broadcast helpers are fire-and-forget by design (the adapter call
+    // inside `broadcastRealmEvent` is invoked without `await`) so we
+    // call them without a try/catch, matching every other call site.
     let completed = indexingCompleted.then(async ({ invalidations }) => {
-      try {
-        await this.#definitionLookup.clearRealmDefinitions(this.url);
-      } catch (err: unknown) {
-        this.#log.error(
-          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
-        );
-      }
       try {
         this.#dropAllTranspiledModuleCacheEntries();
       } catch (err: unknown) {
@@ -1131,23 +1131,18 @@ export class Realm {
         );
       }
       if (invalidations.length > 0) {
-        try {
-          this.broadcastIncrementalInvalidationEvent(invalidations);
-        } catch (err: unknown) {
-          this.#log.error(
-            `broadcastIncrementalInvalidationEvent failed after reindex of ${this.url}: ${String(err)}`,
-          );
-        }
+        this.broadcastIncrementalInvalidationEvent(invalidations);
       }
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: this.url,
+      });
       try {
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'full',
-          realmURL: this.url,
-        });
+        await this.#definitionLookup.clearRealmDefinitions(this.url);
       } catch (err: unknown) {
         this.#log.error(
-          `broadcastRealmEvent failed after reindex of ${this.url}: ${String(err)}`,
+          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
         );
       }
     });
@@ -3297,7 +3292,7 @@ export class Realm {
         'RETURNING canonical_path',
       ])) as { canonical_path: string }[];
       if (updated.length === 0) {
-        this.#log.info(
+        this.#log.warn(
           `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched zero rows`,
         );
       } else {
