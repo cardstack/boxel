@@ -1469,11 +1469,13 @@ export default class OperatorModeStateService extends Service {
         name: this.realm.info(url).name,
         type: 'user-workspace' as const,
       }));
-      let catalogWorkspaces = this.realmServer.catalogRealmIdentifiers.map((url) => ({
-        url,
-        name: this.realm.info(url).name,
-        type: 'catalog-workspace' as const,
-      }));
+      let catalogWorkspaces = this.realmServer.catalogRealmIdentifiers.map(
+        (url) => ({
+          url,
+          name: this.realm.info(url).name,
+          type: 'catalog-workspace' as const,
+        }),
+      );
       let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',

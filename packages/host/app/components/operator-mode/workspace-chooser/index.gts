@@ -189,7 +189,10 @@ export default class WorkspaceChooser extends Component<Signature> {
             {{else}}
               <div class='workspace-list' data-test-workspace-list>
                 {{#each this.filteredUserRealmIdentifiers as |realmIdentifier|}}
-                  <Workspace @realmIdentifier={{realmIdentifier}} @showMenu={{true}} />
+                  <Workspace
+                    @realmIdentifier={{realmIdentifier}}
+                    @showMenu={{true}}
+                  />
                 {{/each}}
                 {{#if this.matrixService.isInitializingNewUser}}
                   <WorkspaceLoadingIndicator />
@@ -211,7 +214,10 @@ export default class WorkspaceChooser extends Component<Signature> {
                 >{{this.catalogEmptyMessage}}</span>
               {{else}}
                 <div class='workspace-list' data-test-catalog-list>
-                  {{#each this.filteredCatalogRealmIdentifiers as |realmIdentifier|}}
+                  {{#each
+                    this.filteredCatalogRealmIdentifiers
+                    as |realmIdentifier|
+                  }}
                     <Workspace @realmIdentifier={{realmIdentifier}} />
                   {{/each}}
                 </div>

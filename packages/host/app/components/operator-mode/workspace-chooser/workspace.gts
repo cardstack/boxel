@@ -128,7 +128,10 @@ export default class Workspace extends Component<Signature> {
           </button>
 
           {{#if this.isHostDropdownOpen}}
-            <div class='host-dropdown' data-test-host-dropdown={{@realmIdentifier}}>
+            <div
+              class='host-dropdown'
+              data-test-host-dropdown={{@realmIdentifier}}
+            >
               <span class='dropdown-header'>Launch in new window</span>
               <ul class='dropdown-list'>
                 {{#each this.publishedRealmURLs as |url|}}
@@ -774,7 +777,9 @@ export default class Workspace extends Component<Signature> {
   </template>
 
   get isFavorited() {
-    return this.matrixService.workspaceFavorites.includes(this.args.realmIdentifier);
+    return this.matrixService.workspaceFavorites.includes(
+      this.args.realmIdentifier,
+    );
   }
 
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -827,7 +832,9 @@ export default class Workspace extends Component<Signature> {
 
   @action async toggleFavorite() {
     if (this.isFavorited) {
-      await this.matrixService.removeWorkspaceFavorite(this.args.realmIdentifier);
+      await this.matrixService.removeWorkspaceFavorite(
+        this.args.realmIdentifier,
+      );
     } else {
       await this.matrixService.addWorkspaceFavorite(this.args.realmIdentifier);
     }
@@ -934,7 +941,9 @@ export default class Workspace extends Component<Signature> {
   }
 
   @action async openWorkspace() {
-    await this.operatorModeStateService.openWorkspace(this.args.realmIdentifier);
+    await this.operatorModeStateService.openWorkspace(
+      this.args.realmIdentifier,
+    );
   }
 
   @action openDeleteModal() {
@@ -1001,8 +1010,12 @@ export default class Workspace extends Component<Signature> {
         );
 
       await this.realmServer.deleteRealm(this.args.realmIdentifier);
-      await this.matrixService.removeRealmFromAccountData(this.args.realmIdentifier);
-      this.recentFilesService.removeRecentFilesForRealmURL(this.args.realmIdentifier);
+      await this.matrixService.removeRealmFromAccountData(
+        this.args.realmIdentifier,
+      );
+      this.recentFilesService.removeRecentFilesForRealmURL(
+        this.args.realmIdentifier,
+      );
       for (let publishedRealmURL of this.publishedRealmURLs) {
         this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
       }

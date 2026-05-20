@@ -1368,7 +1368,7 @@ async function setupTestRealm({
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmIdentifiers.includes(ri(realmURL))) {
-    await realmServer.setAvailableRealmIdentifiers([realmURL]);
+    await realmServer.setAvailableRealmIdentifiers([ri(realmURL)]);
   }
 
   return { realm, adapter };

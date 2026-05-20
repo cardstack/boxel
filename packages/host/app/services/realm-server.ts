@@ -391,22 +391,22 @@ export default class RealmServerService extends Service {
     }
   }
 
-  async setAvailableRealmIdentifiers(userRealmIdentifiers: string[]) {
+  async setAvailableRealmIdentifiers(userRealmIdentifiers: RealmIdentifier[]) {
     await this._ready.promise;
-    userRealmIdentifiers.forEach((userRealmURL) => {
-      if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
+    userRealmIdentifiers.forEach((userRealmIdentifier) => {
+      if (!this.availableRealms.find((r) => r.url === userRealmIdentifier)) {
         this.availableRealms.push({
           type: 'user',
-          url: userRealmURL,
+          url: userRealmIdentifier,
         });
       }
     });
 
-    // pluck out any user realms that aren't a part of the userRealmsURLs
+    // pluck out any user realms that aren't a part of userRealmIdentifiers
     this.availableRealms
       .filter((r) => r.type === 'user')
       .forEach((realm) => {
-        if (!userRealmIdentifiers.includes(realm.url)) {
+        if (!userRealmIdentifiers.includes(ri(realm.url))) {
           this.availableRealms.splice(
             this.availableRealms.findIndex((r) => r.url === realm.url),
             1,

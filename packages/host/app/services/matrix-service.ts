@@ -33,6 +33,7 @@ import {
   logger,
   isCardInstance,
   Deferred,
+  ri,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
@@ -372,7 +373,7 @@ export default class MatrixService extends Service {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
               await this.realmServer.setAvailableRealmIdentifiers(
-                e.event.content.realms,
+                (e.event.content.realms as string[]).map(ri),
               );
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
@@ -654,7 +655,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
   }
 
   public async removeRealmFromAccountData(realmURLString: string) {
@@ -667,7 +668,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmIdentifiers(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
   }
 
   public async getWorkspaceFavorites(): Promise<string[]> {
@@ -768,7 +769,7 @@ export default class MatrixService extends Service {
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(
-            accountDataContent?.realms ?? [],
+            (accountDataContent?.realms ?? []).map(ri),
           ),
         ]);
 

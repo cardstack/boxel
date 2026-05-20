@@ -207,22 +207,26 @@ export default class Card extends Route {
     let cardUrl;
     if (hostsOwnAssets) {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmIdentifiers.find((realmUrl) => {
-        let realmPathParts = new URL(realmUrl).pathname
-          .split('/')
-          .filter((part) => part !== '');
-        let cardPathParts = cardPath!.split('/').filter((part) => part !== '');
-        let isMatch = false;
-        for (let i = 0; i < realmPathParts.length; i++) {
-          if (realmPathParts[i] === cardPathParts[i]) {
-            isMatch = true;
-          } else {
-            isMatch = false;
-            break;
+      let realmUrl = this.realmServer.availableRealmIdentifiers.find(
+        (realmUrl) => {
+          let realmPathParts = new URL(realmUrl).pathname
+            .split('/')
+            .filter((part) => part !== '');
+          let cardPathParts = cardPath!
+            .split('/')
+            .filter((part) => part !== '');
+          let isMatch = false;
+          for (let i = 0; i < realmPathParts.length; i++) {
+            if (realmPathParts[i] === cardPathParts[i]) {
+              isMatch = true;
+            } else {
+              isMatch = false;
+              break;
+            }
           }
-        }
-        return isMatch;
-      });
+          return isMatch;
+        },
+      );
       cardUrl = new URL(
         `/${cardPath}`,
         realmUrl ?? this.realm.defaultReadableRealm.path,
