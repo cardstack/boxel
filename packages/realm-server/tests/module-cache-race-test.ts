@@ -11,9 +11,11 @@ import {
   SupportedMimeType,
   param,
   query,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
+import { RealmFileChangesListener } from '../lib/realm-file-changes-listener';
 import {
   setupPermissionedRealmCached,
   setupDB,
@@ -1296,6 +1298,151 @@ module(basename(__filename), function () {
           await countLiveRowsForRealm(),
           0,
           'bulk L2 tombstone ran even though clearRealmDefinitions threw',
+        );
+      });
+    },
+  );
+
+  // CS-11182 follow-up: the original fix only fired the L2 bulk
+  // tombstone from `Realm.startReindex`'s post-completion `.then`, which
+  // only covers `POST <realm>/_full-reindex` / `POST <realm>/_reindex`.
+  // Production reindexes triggered via the operator-action endpoints
+  // (`/_grafana-reindex`, `/_grafana-full-reindex`, `/_post-deployment`)
+  // and the publish-realm flow (`Realm.fullIndex`) all bypass
+  // `startReindex` and so left the L2 row live with pre-reindex bytes.
+  // The wider fix emits `notifyAllFileChanges(dbAdapter, realmURL)` from
+  // the worker side of the `from-scratch-index` task — every replica's
+  // `realm_file_changes` wildcard listener then drops L1 and fires the
+  // L2 bulk tombstone. This test exercises the bypass path
+  // (`realmIndexUpdater.fullIndex`, which never wires up the
+  // `startReindex` callback) and pins the new cross-replica behavior.
+  module(
+    'Worker-side notify covers reindexes that bypass Realm.startReindex (CS-11182)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+      let listener: RealmFileChangesListener | undefined;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      hooks.beforeEach(async function () {
+        // Production wires `RealmFileChangesListener` up in `main.ts`; the
+        // permissioned-realm test fixture doesn't, so set up the equivalent
+        // here. Without it, the worker's NOTIFY would fire into the void
+        // and no replica would receive the wildcard wipe — the test
+        // would erroneously pass on the listener side regardless of the
+        // worker-side emit.
+        listener = new RealmFileChangesListener({
+          dbAdapter,
+          lookupMountedRealm: (url) =>
+            url === realmURL.href ? testRealm : undefined,
+        });
+        await listener.start();
+      });
+
+      hooks.afterEach(async function () {
+        await listener?.shutDown();
+        listener = undefined;
+      });
+
+      const reindexSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class WorkerNotifyCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-worker-notify><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      async function countLiveRowsForRealm(): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function seedL2Row(modulePath: string): Promise<void> {
+        await testRealm.write(modulePath, reindexSource);
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        if (response.status !== 200) {
+          throw new Error(
+            `seedL2Row: expected 200 for /${modulePath}, got ${response.status}`,
+          );
+        }
+      }
+
+      async function waitForZeroLiveRows(timeoutMs = 5000): Promise<number> {
+        // The worker emits NOTIFY synchronously after batch.done(); the
+        // listener's clearLocalSourceCaches fires-and-forgets the L2 bulk
+        // tombstone. Both legs settle quickly but neither is on the
+        // job.done critical path. Poll briefly so the assertion isn't
+        // racing the tombstone landing.
+        const started = Date.now();
+        while (true) {
+          const n = await countLiveRowsForRealm();
+          if (n === 0) return n;
+          if (Date.now() - started > timeoutMs) return n;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+
+      test('realmIndexUpdater.fullIndex (no startReindex .then wired up) still tombstones L2 rows via the worker-side NOTIFY', async function (assert) {
+        await seedL2Row('worker-notify.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row before reindex',
+        );
+
+        // Bypass `Realm.startReindex` (which DOES wire up the cache-drop
+        // .then per the original CS-11182 fix) and go straight through
+        // `RealmIndexUpdater.fullIndex`. This mirrors the production
+        // bypass paths (`handle-reindex.ts:reindex`, the `full-reindex`
+        // queue task, `Realm.fullIndex`) — none of them touch the
+        // `startReindex` chain. With only the original fix in place this
+        // assertion would fail; the worker-side `notifyAllFileChanges`
+        // is what makes it pass.
+        await testRealm.realmIndexUpdater.fullIndex(userInitiatedPriority);
+
+        assert.strictEqual(
+          await waitForZeroLiveRows(),
+          0,
+          'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
         );
       });
     },
