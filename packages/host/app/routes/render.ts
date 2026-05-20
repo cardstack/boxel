@@ -1170,14 +1170,23 @@ export default class RenderRoute extends Route<Model> {
     // The persisted error doc is useless if `message` is empty or
     // undefined — the indexer's index-writer guard refuses such rows
     // and fails the whole indexing job. Guarantee a non-empty message
-    // here as the last stop before serialization to the DOM.
+    // here as the last stop before serialization to the DOM. The
+    // synthesized fallback names the affected URL (from error.id,
+    // the first dep, or the most recent render base param) so the
+    // persisted row is at least diagnosable by URL.
+    let urlContext =
+      (typeof withRuntimeDeps.error.id === 'string' &&
+        withRuntimeDeps.error.id) ||
+      withRuntimeDeps.error.deps?.[0] ||
+      this.renderBaseParams?.[0] ||
+      'unknown URL';
     let withGuaranteedMessage: RenderError = {
       ...withRuntimeDeps,
       error: {
         ...withRuntimeDeps.error,
         message: coerceErrorMessage(
           withRuntimeDeps.error,
-          'Render failed (host produced no error message)',
+          `Render failed for ${urlContext} (host produced no error message)`,
         ),
       },
     };
