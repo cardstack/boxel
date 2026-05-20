@@ -11,6 +11,7 @@
     "dist/**/*",
     "src/**/*.ts",
     "api.ts",
+    "bundled-types/**/*",
     "README.md"
   ],
   "engines": {
@@ -29,19 +30,24 @@
   "author": "Cardstack",
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
+    "@glint/ember-tsc": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "commander": "^13.1.0",
+    "content-tag": "catalog:",
     "dotenv": "^16.4.7",
     "ignore": "catalog:",
     "jsonwebtoken": "catalog:",
-    "p-limit": "^7.3.0"
+    "p-limit": "^7.3.0",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
-    "content-tag": "catalog:",
     "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -53,15 +59,15 @@
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
     "ts-node": "^10.9.1",
-    "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
-    "build": "pnpm clean && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
+    "build": "pnpm clean && pnpm build:types && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
     "build:plugin": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-plugin.ts",
     "build:skills": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-skills.ts",
-    "clean": "rm -rf dist/*",
+    "build:types": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-types.ts",
+    "clean": "rm -rf dist/* bundled-types",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
