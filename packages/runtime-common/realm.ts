@@ -6088,11 +6088,10 @@ export class Realm {
   }
 
   // CS-10054: read host routing rules from the indexed RealmConfig card.
-  // Reads searchDoc.hostRoutingRules where each rule is
-  // `{ path, instance }` — `instance` is the card URL as a string
-  // (absolute, or relative to the realm root like `./whitepaper`).
-  // Stored flat in attributes so the indexed searchDoc matches the
-  // file shape one-to-one. Returns absolute URLs.
+  // The `instance` field is `linksTo(CardDef)`, so the indexed
+  // searchDoc flattens each rule's link as `{ id, ...flattened
+  // linked-card attrs }`. We only need the absolute `id` here.
+  // Returns absolute URLs.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
@@ -6107,34 +6106,30 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return [];
       }
-      let realmBase = new URL(this.url);
       return rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
-        if (typeof instance !== 'string' || instance.length === 0) return [];
+        if (!instance || typeof instance !== 'object') return [];
+        let id = (instance as Record<string, unknown>).id;
+        if (typeof id !== 'string') return [];
         let idURL: URL;
         try {
-          idURL = new URL(instance, realmBase);
+          idURL = new URL(id);
         } catch {
           return [];
         }
-        let id = idURL.href;
         // Defensive same-realm guard. The project spec restricts
         // routing rules to cards within the same realm; CS-10052
         // enforces that in the UI but the file is hand-editable, so
         // the read path filters too. Without this guard a realm owner
         // could point `instance` at a private realm's card and the
         // serve-index cardURL rewrite would surface its prerendered
-        // HTML through their public realm's routed path. We use
-        // `RealmPaths.inRealm` rather than a string `startsWith` so
-        // edge cases like a missing trailing slash or a neighbouring
-        // realm with a shared prefix (`/realm-evil/`) are handled
-        // correctly. The `new URL(...)` above already normalizes
-        // dot-segments, so a clever `https://host/realm/../private/x`
-        // input lands at `https://host/private/x` here and fails the
-        // containment check naturally.
+        // HTML through their public realm's routed path. `inRealm`
+        // is URL-aware, so neighbouring realms with shared prefixes
+        // (`/realm-evil/` vs `/realm/`) and trailing-slash variance
+        // are handled correctly.
         if (!this.paths.inRealm(idURL)) {
           this.#log.warn(
             `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,

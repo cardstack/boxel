@@ -4,6 +4,7 @@ import {
   field,
   contains,
   containsMany,
+  linksTo,
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
@@ -18,16 +19,9 @@ export class RoutingRuleField extends FieldDef {
     description: 'Static path within the realm, e.g. "/" or "/pricing"',
   });
 
-  // Reference to the card instance to render when the realm is
-  // navigated at `path`. Accepts any form the runtime's RRI resolver
-  // accepts — absolute URLs, registered prefixes (e.g.
-  // `@cardstack/catalog/foo`), `$REALM/foo`, or relative references
-  // (`./foo`) — all resolved against the realm root by the routing-
-  // map reader. Stored as a string (rather than `linksTo`) so the
-  // rule serializes flat alongside `path` inside `attributes` — no
-  // JSON:API relationships split.
-  @field instance = contains(StringField, {
-    description: 'Card instance to render when the realm is navigated at this path',
+  @field instance = linksTo(CardDef, {
+    description:
+      'Card instance to render when the realm is navigated at this path',
   });
 }
 

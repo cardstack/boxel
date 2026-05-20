@@ -367,9 +367,12 @@ test.describe('Host mode', () => {
           type: 'card',
           attributes: {
             cardInfo: { name: `Routed Realm ${randomUUID()}` },
-            hostRoutingRules: [
-              { path: '/whitepaper', instance: './white-paper' },
-            ],
+            hostRoutingRules: [{ path: '/whitepaper' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './white-paper' },
+            },
           },
           meta: {
             adoptsFrom: {

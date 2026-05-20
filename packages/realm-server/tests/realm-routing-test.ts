@@ -38,16 +38,23 @@ function makeRoutingFixture(): Record<
         type: 'card',
         attributes: {
           cardInfo: { name: 'Routing Test Realm' },
-          hostRoutingRules: [
-            // Relative — resolves against the realm root.
-            { path: '/rel', instance: './white-paper' },
-            // Cross-realm: must be filtered out by the same-realm
-            // guard. The project spec restricts routing rules to cards
-            // within the same realm; this verifies the read path
-            // enforces that even when the UI guard is bypassed by
-            // hand-editing realm.json.
-            { path: '/foreign', instance: 'http://otherrealm.test/x' },
-          ],
+          // `instance` is a linksTo on RoutingRuleField, so the link
+          // target lives in `relationships` keyed by the field path
+          // (`hostRoutingRules.<i>.instance`), not inline in attributes.
+          hostRoutingRules: [{ path: '/rel' }, { path: '/foreign' }],
+        },
+        relationships: {
+          'hostRoutingRules.0.instance': {
+            links: { self: './white-paper' },
+          },
+          // Cross-realm: must be filtered out by the same-realm
+          // guard. The project spec restricts routing rules to cards
+          // within the same realm; this verifies the read path
+          // enforces that even when the UI guard is bypassed by
+          // hand-editing realm.json.
+          'hostRoutingRules.1.instance': {
+            links: { self: 'http://otherrealm.test/x' },
+          },
         },
         meta: {
           adoptsFrom: {
