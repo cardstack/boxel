@@ -1108,17 +1108,48 @@ export class Realm {
         },
       );
 
+    // CS-11182: each post-completion step is independent — a failure or
+    // hang in one must not silently swallow the others. Previously the
+    // sequential `await clearRealmDefinitions; #dropAllTranspiledModuleCacheEntries; ...`
+    // chain meant a throw or stall in `clearRealmDefinitions` left the
+    // transpile-cache rows live, so clients kept being served pre-reindex
+    // bytes. Each step is wrapped in its own try/catch and the outer
+    // promise resolves once they've all been attempted.
     let completed = indexingCompleted.then(async ({ invalidations }) => {
-      await this.#definitionLookup.clearRealmDefinitions(this.url);
-      this.#dropAllTranspiledModuleCacheEntries();
-      if (invalidations.length > 0) {
-        this.broadcastIncrementalInvalidationEvent(invalidations);
+      try {
+        await this.#definitionLookup.clearRealmDefinitions(this.url);
+      } catch (err: unknown) {
+        this.#log.error(
+          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
+        );
       }
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-        realmURL: this.url,
-      });
+      try {
+        this.#dropAllTranspiledModuleCacheEntries();
+      } catch (err: unknown) {
+        this.#log.error(
+          `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
+      if (invalidations.length > 0) {
+        try {
+          this.broadcastIncrementalInvalidationEvent(invalidations);
+        } catch (err: unknown) {
+          this.#log.error(
+            `broadcastIncrementalInvalidationEvent failed after reindex of ${this.url}: ${String(err)}`,
+          );
+        }
+      }
+      try {
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+          realmURL: this.url,
+        });
+      } catch (err: unknown) {
+        this.#log.error(
+          `broadcastRealmEvent failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
     });
 
     void completed.catch((error: unknown) => {
@@ -3249,7 +3280,12 @@ export class Realm {
       // for one of those paths that captured generation 0 would still
       // succeed post-wipe, but that's a narrow window and currently
       // limited to the __testOnly bulk-wipe path.
-      await query(this.#dbAdapter, [
+      //
+      // CS-11182: RETURNING canonical_path so we can surface a zero-row
+      // result as a warning — a silent no-op here used to mask a
+      // realm_url mismatch between writer and bulk-wiper, leaving rows
+      // live across a reindex.
+      let updated = (await query(this.#dbAdapter, [
         'UPDATE',
         MODULE_TRANSPILE_CACHE_TABLE,
         'SET body = NULL, headers = NULL, dependency_keys = NULL,',
@@ -3258,7 +3294,17 @@ export class Realm {
         param(Date.now()),
         'WHERE realm_url =',
         param(this.url),
-      ]);
+        'RETURNING canonical_path',
+      ])) as { canonical_path: string }[];
+      if (updated.length === 0) {
+        this.#log.info(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched zero rows`,
+        );
+      } else {
+        this.#log.debug(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched ${updated.length} row(s)`,
+        );
+      }
     } catch (err: unknown) {
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone failed for ${this.url}: ${String(err)}`,
