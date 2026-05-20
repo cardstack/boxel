@@ -6073,20 +6073,28 @@ export class Realm {
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
         if (typeof instance !== 'string' || instance.length === 0) return [];
-        let id: string;
+        let idURL: URL;
         try {
-          id = new URL(instance, realmBase).href;
+          idURL = new URL(instance, realmBase);
         } catch {
           return [];
         }
+        let id = idURL.href;
         // Defensive same-realm guard. The project spec restricts
         // routing rules to cards within the same realm; CS-10052
         // enforces that in the UI but the file is hand-editable, so
         // the read path filters too. Without this guard a realm owner
         // could point `instance` at a private realm's card and the
         // serve-index cardURL rewrite would surface its prerendered
-        // HTML through their public realm's routed path.
-        if (!id.startsWith(this.url)) {
+        // HTML through their public realm's routed path. We use
+        // `RealmPaths.inRealm` rather than a string `startsWith` so
+        // edge cases like a missing trailing slash or a neighbouring
+        // realm with a shared prefix (`/realm-evil/`) are handled
+        // correctly. The `new URL(...)` above already normalizes
+        // dot-segments, so a clever `https://host/realm/../private/x`
+        // input lands at `https://host/private/x` here and fails the
+        // containment check naturally.
+        if (!this.paths.inRealm(idURL)) {
           this.#log.warn(
             `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
           );
