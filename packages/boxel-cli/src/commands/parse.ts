@@ -573,15 +573,38 @@ async function runGlintCheck(
 
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
-    let emberTscBin = join(BOXEL_CLI_PATH, 'node_modules', '.bin', 'ember-tsc');
+    // Resolve the package's JS bin entry directly and run it with
+    // `node`. Avoids the `.bin/ember-tsc` shim, which is a shell script
+    // on POSIX and `ember-tsc.cmd` on Windows — invoking it cross-
+    // platform via execFile is fiddly. The package's `bin/ember-tsc.js`
+    // is the same JS the shim ultimately exec()s into, and using it
+    // directly works everywhere Node runs.
+    //
+    // `@glint/ember-tsc`'s package.json has a catch-all `exports`
+    // entry (`./*` → `./lib/*.js`) that swallows both `package.json`
+    // and `bin/ember-tsc.js` lookups (turning the latter into the
+    // nonexistent `bin/ember-tsc.js.js`). Resolve the package's main
+    // entry — which IS in the exports map — and walk back to the
+    // package root to find the bin file deterministically.
+    let mainEntry = require.resolve('@glint/ember-tsc', {
+      paths: [BOXEL_CLI_PATH],
+    });
+    // mainEntry is `<pkg>/lib/index.js`; pkg root is two levels up.
+    let pkgRoot = resolve(dirname(mainEntry), '..');
+    let emberTscEntry = join(pkgRoot, 'bin', 'ember-tsc.js');
 
     let { output, exitedWithError } = await new Promise<{
       output: string;
       exitedWithError: boolean;
     }>((resolvePromise, reject) => {
       let child = execFile(
-        emberTscBin,
-        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        process.execPath,
+        [
+          emberTscEntry,
+          '--noEmit',
+          '--project',
+          join(tempDir, 'tsconfig.json'),
+        ],
         {
           cwd: tempDir,
           timeout: 120_000,

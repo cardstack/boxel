@@ -411,9 +411,9 @@ QUnit card tests" below.
    inside the workspace dir, run `boxel parse` (no flags — it
    defaults to reading the cwd). This catches type errors and
    malformed Spec JSON in seconds, without a realm round-trip. If
-   it reports errors, fix the files locally and re-run `boxel
-parse` until clean. Only then proceed to step 7. This step
-   does NOT produce a `Validations/parse_*.json` artifact —
+   it reports errors, fix the files locally and re-run
+   `boxel parse` until clean. Only then proceed to step 7. This
+   step does NOT produce a `Validations/parse_*.json` artifact —
    that's reserved for the post-push validator pass below.
 7. **Push the workspace** to the target realm.
 8. **Run the realm-side validators and iterate until they all

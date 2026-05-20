@@ -61,7 +61,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import { Preprocessor } from 'content-tag';
 import * as ts from 'typescript';
@@ -252,8 +252,7 @@ function runTscEmitOnly(tsconfigPath: string, outDir: string): void {
     onError,
     sources,
   ) => {
-    let normalized = ts.sys.resolvePath(fileName);
-    if (!normalized.startsWith(normalizedOut)) {
+    if (!isUnder(ts.sys.resolvePath(fileName), normalizedOut)) {
       // Drop. Without this, TS would write to the source-file's
       // original location for any compiled file outside rootDir.
       return;
@@ -267,6 +266,18 @@ function runTscEmitOnly(tsconfigPath: string, outDir: string): void {
   // Errors are expected (TS6059, TS2307 from imports that reach
   // outside rootDir).
   program.emit();
+}
+
+/**
+ * Containment test that won't false-positive on shared prefixes like
+ * `/tmp/out` matching `/tmp/out-side`. Uses `path.relative` and rejects
+ * `..` segments / absolute results — the canonical TS-recommended
+ * shape for "is `descendant` inside `ancestor`".
+ */
+function isUnder(descendant: string, ancestor: string): boolean {
+  let rel = relative(ancestor, descendant);
+  if (rel === '') return true;
+  return !rel.startsWith('..') && !isAbsolute(rel);
 }
 
 /**
