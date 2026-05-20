@@ -1,8 +1,9 @@
 import { fn, get } from '@ember/helper';
-import { action } from '@ember/object';
+import { action, set } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { type FittedFormatId, fittedFormatById } from '../../helpers.ts';
 import {
@@ -26,23 +27,6 @@ import { KanbanPlane } from './plane.gts';
 interface DemoCard {
   kind: string;
   title: string;
-}
-
-interface DemoKeyedPlacement {
-  cardIndex: number;
-  columnKey: string | null;
-  sortOrder: number;
-}
-
-function toKeyedPlacements(
-  placements: KanbanPlacement[],
-  columns: KanbanColumnConfig[],
-): DemoKeyedPlacement[] {
-  return placements.map((p) => ({
-    columnKey: columns[p.column]?.key ?? null,
-    cardIndex: p.index,
-    sortOrder: p.sortOrder,
-  }));
 }
 
 const INITIAL_COLUMNS: KanbanColumnConfig[] = [
@@ -110,35 +94,27 @@ const KANBAN_VIEW_TO_SIZE: Record<string, FittedFormatId> = {
 export default class KanbanUsage extends Component {
   fittedFormats = KANBAN_CARD_SIZE_OPTIONS;
   sizeViewOptions = KANBAN_VIEW_OPTIONS;
-  @tracked columns = INITIAL_COLUMNS;
+  columns = TrackedArray.from(
+    INITIAL_COLUMNS.map(
+      (c) =>
+        new TrackedObject(
+          c as unknown as Record<PropertyKey, unknown>,
+        ) as unknown as KanbanColumnConfig,
+    ),
+  );
   @tracked cards = INITIAL_CARDS;
-  @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, 4);
-  @tracked hideEmpty = false;
+  @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, this.columns);
+  get hideEmpty(): boolean {
+    let emptyCols = this.columns.filter(
+      (col) => cardsInColumn(col.key, this.placements).length === 0,
+    );
+    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+  }
   @tracked selectedIndex: number | null = null;
   @tracked openedIndex: number | null = null;
   @tracked cardSizeView = 'tile';
   @tracked cardSize: FittedFormatId = 'regular-tile';
-
-  // Column config sidebar demo state
-  @tracked sidebarColumns = INITIAL_COLUMNS;
-  @tracked sidebarKeyedPlacements: DemoKeyedPlacement[] = toKeyedPlacements(
-    autoPlaceKanban(INITIAL_CARDS.length, 4),
-    INITIAL_COLUMNS,
-  );
   @tracked showSidebar = true;
-
-  get sidebarPlacements(): KanbanPlacement[] {
-    return this.sidebarKeyedPlacements
-      .map((p) => {
-        let colIdx = this.sidebarColumns.findIndex(
-          (c) => c.key === p.columnKey,
-        );
-        return colIdx === -1
-          ? null
-          : { column: colIdx, index: p.cardIndex, sortOrder: p.sortOrder };
-      })
-      .filter((p): p is KanbanPlacement => p !== null);
-  }
 
   @action handlePlacementsChange(placements: KanbanPlacement[]): void {
     this.placements = placements;
@@ -166,10 +142,6 @@ export default class KanbanUsage extends Component {
     return this.cards[this.openedIndex] ?? null;
   }
 
-  get secondColumn(): KanbanColumnConfig {
-    return this.columns[1] ?? this.columns[0]!;
-  }
-
   formatTitle(size: FittedFormatId) {
     return fittedFormatById.get(size)?.title ?? size;
   }
@@ -180,31 +152,20 @@ export default class KanbanUsage extends Component {
   }
 
   @action toggleHideEmpty(): void {
-    this.hideEmpty = !this.hideEmpty;
+    let next = !this.hideEmpty;
+    this.columns.forEach((col) => {
+      if (cardsInColumn(col.key, this.placements).length === 0) {
+        set(col, 'collapsed', next);
+      }
+    });
   }
 
-  @action handleToggleCollapsed(
-    columnKey: string | null,
-    collapsed: boolean,
-  ): void {
-    this.columns = this.columns.map((col) =>
-      col.key === columnKey ? { ...col, collapsed } : col,
-    );
-  }
-
-  @action handleShowEmptyColumns(): void {
-    this.hideEmpty = false;
-  }
-
-  @action handleSidebarColumnsChange(columns: KanbanColumnConfig[]): void {
-    this.sidebarColumns = columns;
-  }
-
-  @action handleSidebarPlacementsChange(placements: KanbanPlacement[]): void {
-    this.sidebarKeyedPlacements = toKeyedPlacements(
-      placements,
-      this.sidebarColumns,
-    );
+  @action toggleCollapsed(columnKey: string | null): void {
+    this.columns.forEach((col) => {
+      if (col.key === columnKey) {
+        set(col, 'collapsed', !col.collapsed);
+      }
+    });
   }
 
   @action toggleSidebar(): void {
@@ -213,11 +174,13 @@ export default class KanbanUsage extends Component {
 
   @action addCard(columnKey: string | null): void {
     let nextIndex = this.cards.length;
-    let columnIndex = this.columns.findIndex(
-      (column) => column.key === columnKey,
-    );
-    let resolvedColumnIndex = columnIndex === -1 ? 0 : columnIndex;
-    let existingCards = cardsInColumn(resolvedColumnIndex, this.placements);
+    let column = this.columns.find((column) => column.key === columnKey);
+    let resolvedColumnKey = column?.key ?? this.columns[0]?.key;
+    if (!resolvedColumnKey) {
+      console.error(`Kanban column for key '${columnKey}' could not be found.`);
+      return;
+    }
+    let existingCards = cardsInColumn(resolvedColumnKey, this.placements);
     let nextOrder =
       (existingCards[existingCards.length - 1]?.sortOrder ?? 0) + 1;
 
@@ -232,7 +195,7 @@ export default class KanbanUsage extends Component {
       ...this.placements,
       {
         index: nextIndex,
-        column: resolvedColumnIndex,
+        columnId: resolvedColumnKey,
         sortOrder: nextOrder,
       },
     ];
@@ -302,8 +265,7 @@ export default class KanbanUsage extends Component {
               @cardSize={{this.cardSize}}
               @hideEmpty={{this.hideEmpty}}
               @onAddCard={{this.addCard}}
-              @onToggleCollapsed={{this.handleToggleCollapsed}}
-              @onShowEmptyColumns={{this.handleShowEmptyColumns}}
+              @onToggleCollapsed={{this.toggleCollapsed}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
@@ -361,10 +323,6 @@ export default class KanbanUsage extends Component {
           @description='Invoked with the column key when a column is collapsed via its header button or restored from the Hidden Columns tray.'
         />
         <Args.Action
-          @name='onShowEmptyColumns'
-          @description='Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again.'
-        />
-        <Args.Action
           @name='onOpen'
           @description='Invoked with a card index when the internally owned drag manager treats a pointer interaction as open.'
         />
@@ -396,9 +354,8 @@ export default class KanbanUsage extends Component {
           toggle individual column visibility.
         </p>
         <p>
-          It is a stateless component: every change is reported via
-          <code>onColumnsChange</code>
-          and the caller owns the resulting array.
+          It mutates column objects directly via tracked properties, so the
+          caller only needs to supply a tracked columns array.
         </p>
       </:description>
       <:example>
@@ -415,9 +372,9 @@ export default class KanbanUsage extends Component {
           </div>
           <div class='sidebar-demo-board'>
             <KanbanPlane
-              @columns={{this.sidebarColumns}}
-              @placements={{this.sidebarPlacements}}
-              @onChange={{this.handleSidebarPlacementsChange}}
+              @columns={{this.columns}}
+              @placements={{this.placements}}
+              @onChange={{this.handlePlacementsChange}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
@@ -438,8 +395,7 @@ export default class KanbanUsage extends Component {
             </KanbanPlane>
             {{#if this.showSidebar}}
               <KanbanColumnConfigSidebar
-                @columns={{this.sidebarColumns}}
-                @onColumnsChange={{this.handleSidebarColumnsChange}}
+                @columns={{this.columns}}
                 @onClose={{this.toggleSidebar}}
               />
             {{/if}}
@@ -451,11 +407,7 @@ export default class KanbanUsage extends Component {
           @name='columns'
           @description='Array of KanbanColumnConfig objects to display and edit.'
           @required={{true}}
-          @value={{this.sidebarColumns}}
-        />
-        <Args.Action
-          @name='onColumnsChange'
-          @description='Called with the updated columns array whenever any config changes (label, color, WIP limit, visibility, or order).'
+          @value={{this.columns}}
         />
         <Args.Action
           @name='onClose'

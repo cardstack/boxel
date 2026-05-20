@@ -8,8 +8,6 @@ import { type KanbanDragManagerArgs, KanbanDragManager } from './drag.gts';
 import { type KanbanColumnConfig, type KanbanPlacement } from './engine.ts';
 import { KanbanPlaneInner } from './plane-inner.gts';
 
-export type KanbanColumnState = 'collapsed' | 'empty' | 'visible';
-
 export class KanbanPlane extends Component<{
   Args: {
     boardLabel?: string;
@@ -20,10 +18,8 @@ export class KanbanPlane extends Component<{
     onChange?: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
-    onShowEmptyColumns?: (columnKey?: string | null) => void;
-    onToggleCollapsed?: (columnKey: string | null, collapsed: boolean) => void;
+    onToggleCollapsed?: (columnKey: string | null) => void;
     placements: KanbanPlacement[];
-    visibilityStates?: Array<KanbanColumnState>;
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -37,6 +33,9 @@ export class KanbanPlane extends Component<{
 
     let self = this;
     let managerArgs = {
+      get columns() {
+        return self.args.columns;
+      },
       get columnCount() {
         return self.args.columns.length;
       },
@@ -73,21 +72,9 @@ export class KanbanPlane extends Component<{
     this.args.onSelect?.(index);
   };
 
-  isColumnVisible = (colIndex: number): boolean => {
-    let explicitState = this.args.visibilityStates?.[colIndex];
-    if (explicitState) {
-      return explicitState === 'visible';
-    }
-    let column = this.args.columns[colIndex];
-    if (!column || column.collapsed) {
-      return false;
-    }
-    if (!this.args.hideEmpty) {
-      return true;
-    }
-    return this.args.placements.some(
-      (placement) => placement.column === colIndex,
-    );
+  isColumnVisible = (colId: string): boolean => {
+    let column = this.args.columns.find((c) => c.key === colId);
+    return !column?.collapsed;
   };
 
   <template>
@@ -100,9 +87,7 @@ export class KanbanPlane extends Component<{
       @manager={{this.ownedManager}}
       @onAddCard={{@onAddCard}}
       @onToggleCollapsed={{@onToggleCollapsed}}
-      @onShowEmptyColumns={{@onShowEmptyColumns}}
       @placements={{@placements}}
-      @visibilityStates={{@visibilityStates}}
     >
       <:card as |placement|>
         {{yield placement to='card'}}

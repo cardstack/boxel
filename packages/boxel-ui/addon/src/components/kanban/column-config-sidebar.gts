@@ -6,7 +6,7 @@ import EyeOff from '@cardstack/boxel-icons/eye-off';
 import XIcon from '@cardstack/boxel-icons/x';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
+import { action, set } from '@ember/object';
 import Component from '@glimmer/component';
 
 import FieldContainer from '../field-container/index.gts';
@@ -16,114 +16,59 @@ import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
   Args: {
-    cardCounts?: number[];
     columns: KanbanColumnConfig[];
-    hideEmpty?: boolean;
     onClose?: () => void;
-    onColumnsChange: (columns: KanbanColumnConfig[]) => void;
-    onShowEmptyColumns?: (columnKey?: string | null) => void;
     onToggleCollapsed?: (key: string | null, collapsed: boolean) => void;
-    visibilityStates?: Array<'collapsed' | 'empty' | 'visible'>;
   };
   Element: HTMLElement;
 }
 
 export class KanbanColumnConfigSidebar extends Component<Signature> {
-  @action update(index: number, patch: Partial<KanbanColumnConfig>): void {
-    this.args.onColumnsChange(
-      this.args.columns.map((col, i) =>
-        i === index ? { ...col, ...patch } : col,
-      ),
-    );
+  @action moveUp(column: KanbanColumnConfig, index: number): void {
+    let order = column.sortOrder ?? index;
+    if (order === 0) return;
+    set(column, 'sortOrder', order - 1);
   }
 
-  @action moveUp(index: number): void {
-    if (index === 0) return;
-    let cols = [...this.args.columns];
-    [cols[index - 1], cols[index]] = [cols[index]!, cols[index - 1]!];
-    this.args.onColumnsChange(
-      cols.map((col, i) => ({ ...col, sortOrder: i + 1 })),
-    );
+  @action moveDown(column: KanbanColumnConfig, index: number): void {
+    let order = column.sortOrder ?? index;
+    if (order >= this.args.columns.length - 1) return;
+    set(column, 'sortOrder', order + 1);
   }
 
-  @action moveDown(index: number): void {
-    if (index >= this.args.columns.length - 1) return;
-    let cols = [...this.args.columns];
-    [cols[index], cols[index + 1]] = [cols[index + 1]!, cols[index]!];
-    this.args.onColumnsChange(
-      cols.map((col, i) => ({ ...col, sortOrder: i + 1 })),
-    );
+  @action onColorChange(column: KanbanColumnConfig, val: string): void {
+    set(column, 'color', val);
   }
 
-  @action onColorChange(index: number, event: Event): void {
-    this.update(index, {
-      color: (event.target as HTMLInputElement).value,
-    });
+  @action onLabelInput(column: KanbanColumnConfig, val: string): void {
+    set(column, 'label', val);
   }
 
-  @action onLabelInput(index: number, val: string): void {
-    this.update(index, { label: val });
-  }
-
-  @action onWipInput(index: number, val: string): void {
+  @action onWipInput(column: KanbanColumnConfig, val: string): void {
     let raw = parseInt(val, 10);
-    this.update(index, { wipLimit: isNaN(raw) || raw < 0 ? 0 : raw });
+    let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    set(column, 'wipLimit', wipLimit);
   }
 
-  @action toggleVisible(index: number): void {
-    let col = this.args.columns[index];
-    if (!col) return;
-
-    let hiddenReason = this.visibilityState(index);
-    if (hiddenReason === 'empty') {
-      this.args.onShowEmptyColumns?.(col.key);
-      return;
-    }
-
-    if (this.args.onToggleCollapsed) {
-      this.args.onToggleCollapsed(
-        col.key,
-        hiddenReason === 'collapsed' ? false : true,
-      );
-    } else {
-      this.update(index, {
-        collapsed: hiddenReason === 'collapsed' ? false : true,
-      });
-    }
-
-    if (
-      hiddenReason === 'collapsed' &&
-      this.args.hideEmpty &&
-      this.cardCount(index) === 0
-    ) {
-      this.args.onShowEmptyColumns?.(col.key);
-    }
+  @action toggleVisible(column: KanbanColumnConfig): void {
+    set(column, 'collapsed', !this.isVisible(column));
   }
 
-  isFirst = (index: number): boolean => index === 0;
-  isLast = (index: number): boolean => index >= this.args.columns.length - 1;
-  cardCount = (index: number): number => this.args.cardCounts?.[index] ?? 0;
-  isVisible = (index: number): boolean =>
-    this.visibilityState(index) === 'visible';
-
-  visibilityState = (index: number): 'collapsed' | 'empty' | 'visible' => {
-    let explicitState = this.args.visibilityStates?.[index];
-    if (explicitState) {
-      return explicitState;
-    }
-
-    let col = this.args.columns[index];
-    if (!col) {
-      return 'visible';
-    }
-    if (col.collapsed) {
-      return 'collapsed';
-    }
-    if (this.args.hideEmpty && this.cardCount(index) === 0) {
-      return 'empty';
-    }
-    return 'visible';
+  isFirst = (
+    colOrder: KanbanColumnConfig['sortOrder'],
+    index: number,
+  ): boolean => {
+    let order = colOrder ?? index;
+    return order === 0;
   };
+  isLast = (
+    colOrder: KanbanColumnConfig['sortOrder'],
+    index: number,
+  ): boolean => {
+    let order = colOrder ?? index;
+    return order >= this.args.columns.length - 1;
+  };
+  isVisible = (column: KanbanColumnConfig): boolean => !column?.collapsed;
 
   <template>
     <aside class='col-config-sidebar' ...attributes>
@@ -141,22 +86,22 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       </header>
 
       <ul class='col-list'>
-        {{#each @columns key='key' as |column colIdx|}}
-          <li class='col-row' data-test-col-config-row={{colIdx}}>
+        {{#each @columns key='key' as |column i|}}
+          <li class='col-row' data-test-col-config-row={{column.key}}>
             <div class='col-row-order'>
               <IconButton
                 @icon={{ChevronUp}}
                 @size='extra-small'
-                @disabled={{this.isFirst colIdx}}
+                @disabled={{this.isFirst column.sortOrder i}}
                 aria-label='Move column up'
-                {{on 'click' (fn this.moveUp colIdx)}}
+                {{on 'click' (fn this.moveUp column)}}
               />
               <IconButton
                 @icon={{ChevronDown}}
                 @size='extra-small'
-                @disabled={{this.isLast colIdx}}
+                @disabled={{this.isLast column.sortOrder i}}
                 aria-label='Move column down'
-                {{on 'click' (fn this.moveDown colIdx)}}
+                {{on 'click' (fn this.moveDown column)}}
               />
             </div>
 
@@ -166,8 +111,8 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
               <BoxelInput
                 @type='color'
                 @value={{if column.color column.color '#94a3b8'}}
-                @onChange={{fn this.onColorChange colIdx}}
-                data-test-col-config-color={{colIdx}}
+                @onChange={{fn this.onColorChange column}}
+                data-test-col-config-color={{column.key}}
               />
             </label>
 
@@ -175,9 +120,9 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
               class='col-label-input'
               @value={{if column.label column.label ''}}
               @placeholder='Label'
-              @onInput={{fn this.onLabelInput colIdx}}
+              @onInput={{fn this.onLabelInput column}}
               aria-label='Column label'
-              data-test-col-config-label={{colIdx}}
+              data-test-col-config-label={{column.key}}
             />
 
             <FieldContainer
@@ -190,22 +135,22 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
                 @value={{if column.wipLimit column.wipLimit 0}}
                 @type='number'
                 @min={{0}}
-                @onInput={{fn this.onWipInput colIdx}}
-                data-test-col-config-wip={{colIdx}}
+                @onInput={{fn this.onWipInput column}}
+                data-test-col-config-wip={{column.key}}
               />
             </FieldContainer>
 
             <IconButton
               class='col-visible-btn'
-              @icon={{if (this.isVisible colIdx) Eye EyeOff}}
+              @icon={{if (this.isVisible column) Eye EyeOff}}
               @size='extra-small'
               aria-label={{if
-                (this.isVisible colIdx)
+                (this.isVisible column)
                 'Hide column'
                 'Show column'
               }}
-              data-test-col-config-visible={{colIdx}}
-              {{on 'click' (fn this.toggleVisible colIdx)}}
+              data-test-col-config-visible={{column.key}}
+              {{on 'click' (fn this.toggleVisible column)}}
             />
           </li>
         {{/each}}
