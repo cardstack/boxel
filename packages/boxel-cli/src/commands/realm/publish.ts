@@ -193,7 +193,7 @@ async function waitForPublishedRealmReady(
       }
       lastError = `HTTP ${response.status}`;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = describeFetchError(error);
     }
     let remaining = timeoutMs - (Date.now() - startedAt);
     if (remaining <= 0) break;
@@ -215,6 +215,21 @@ async function safeReadResponseText(response: Response): Promise<string> {
   } catch {
     return '<no response body>';
   }
+}
+
+// Node's fetch error surface is shallow: the outer error is always
+// `TypeError: fetch failed`, and the *real* reason (ECONNRESET, TLS
+// failure, undici socket error, etc.) lives on `error.cause`. Inline both
+// when summarizing for log output so opaque "fetch failed" lines don't
+// reach the operator without context.
+function describeFetchError(error: unknown): string {
+  let msg = error instanceof Error ? error.message : String(error);
+  if (error instanceof Error && error.cause) {
+    let cause = error.cause;
+    let causeMsg = cause instanceof Error ? cause.message : String(cause);
+    return `${msg} (caused by: ${causeMsg})`;
+  }
+  return msg;
 }
 
 export interface PublishCliOptions {
@@ -276,6 +291,12 @@ export function registerPublishCommand(realm: Command): void {
           console.error(
             `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
           );
+          // Node's fetch surfaces the actual transport error (ECONNRESET,
+          // TLS failure, undici socket error, etc.) on `error.cause`. Print
+          // it so opaque "fetch failed" messages don't strand the caller.
+          if (err instanceof Error && err.cause) {
+            console.error(`${FG_RED}Caused by:${RESET}`, err.cause);
+          }
           process.exit(1);
         }
       },
