@@ -83,6 +83,7 @@
     "clean": "rm -rf dist",
     "perf:build": "node scripts/perf-browser.mjs",
     "perf:browser": "node scripts/perf-browser.mjs --serve",
+    "perf:computed": "node scripts/run-ts-entry.mjs scripts/bench-boxel-computed.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests examples",
     "test": "node scripts/run-tests.mjs",

@@ -24,3 +24,6 @@ stack.cards/
 
 # TypeDoc-generated API reference (regenerate with `npm run docs:api`).
 docs/api-reference/
+
+# Local benchmark artifacts.
+.perf/

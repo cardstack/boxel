@@ -43,7 +43,16 @@ export type {
   ResolvedBuiltinRegistry,
 } from './bxl/registry/index.js';
 
-export { evaluateBxl, evaluateBxlSafe, prepareBxl, prepareBxlSafe, bxl } from './index.js';
+export {
+  beginBxlComputeCycle,
+  bxl,
+  clearBxlComputeMemoization,
+  currentBxlComputeCycle,
+  evaluateBxl,
+  evaluateBxlSafe,
+  prepareBxl,
+  prepareBxlSafe,
+} from './index.js';
 export type {
   BxlErrorRecord,
   BxlOptions,

@@ -303,6 +303,57 @@ export interface BxlOptions {
    * rather than a plain object that hits "could not identify card".
    */
   as?: new () => unknown;
+  /**
+   * Cache `bxl()` / `expression()` results per compute function and
+   * card instance. This only affects the Boxel computeVia factory, not
+   * `evaluateBxl` or `prepareBxl`.
+   *
+   * - `true` / `'microtask'` / omitted: cache within the current
+   *   microtask. This catches repeated synchronous reads during a
+   *   serializer/search pass without holding stale values after the
+   *   current turn completes.
+   * - `'manual'`: cache until {@link beginBxlComputeCycle} is called.
+   *   Boxel can use this for an explicit render/index cycle boundary.
+   * - `false`: disable computeVia memoization for this expression.
+   */
+  memoize?: boolean | BxlComputeMemoizationMode;
+}
+
+export type BxlComputeMemoizationMode = 'microtask' | 'manual' | false;
+
+export interface BxlComputeMetadata {
+  source: string;
+  compiledSource: string;
+  warnings: ReadableSyntaxWarning[];
+  deps: string[];
+  memoize: BxlComputeMemoizationMode;
+}
+
+export interface BxlComputeFunction {
+  (this: object): unknown;
+  readonly bxl: BxlComputeMetadata;
+}
+
+let bxlComputeCycle = 0;
+let bxlMicrotaskCycleScheduled = false;
+
+/**
+ * Start a new explicit BXL compute cycle and invalidate all per-cycle
+ * `expression()` memo entries. Boxel render/index code can call this
+ * once around a logical serialization or indexing pass when it wants
+ * memoization to span async boundaries inside that pass.
+ */
+export function beginBxlComputeCycle(): number {
+  bxlComputeCycle += 1;
+  bxlMicrotaskCycleScheduled = false;
+  return bxlComputeCycle;
+}
+
+/** Alias for callers that want the operation name to read as invalidation. */
+export const clearBxlComputeMemoization = beginBxlComputeCycle;
+
+export function currentBxlComputeCycle(): number {
+  return bxlComputeCycle;
 }
 
 function assertComputeViaDeriveProfile(source: string, options: BxlOptions) {
@@ -682,6 +733,42 @@ function materializeAs(
   return materializeShape(raw, ShapeClass);
 }
 
+function normalizeMemoizationMode(
+  value: BxlOptions['memoize'],
+): BxlComputeMemoizationMode {
+  if (value === false) return false;
+  if (value === 'manual') return 'manual';
+  return 'microtask';
+}
+
+function scheduleMicrotaskCycleBump() {
+  if (bxlMicrotaskCycleScheduled) return;
+  bxlMicrotaskCycleScheduled = true;
+  const run = () => {
+    bxlComputeCycle += 1;
+    bxlMicrotaskCycleScheduled = false;
+  };
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(run);
+  } else {
+    void Promise.resolve().then(run);
+  }
+}
+
+function memoEpochFor(mode: BxlComputeMemoizationMode): number | null {
+  if (mode === false) return null;
+  if (mode === 'microtask') {
+    scheduleMicrotaskCycleBump();
+  }
+  return bxlComputeCycle;
+}
+
+function objectMemoKey(value: unknown): object | null {
+  return value !== null && (typeof value === 'object' || typeof value === 'function')
+    ? (value as object)
+    : null;
+}
+
 /**
  * Factory that compiles a BXL expression into a function bound to
  * `this` (the value of `.` at evaluation time). The returned
@@ -695,16 +782,18 @@ function materializeAs(
  * - `` fx`…` `` — Excel-like readable BXL; identical to a plain
  *   string today, explicit at the call site for cross-tag clarity.
  *
- * Beyond plain `evaluateBxl`, the factory adds four behaviors that
+ * Beyond plain `evaluateBxl`, the factory adds five behaviors that
  * Boxel realms need:
- * 1. **Derive-profile validation** — the source must be deterministic
+ * 1. **Prepare-once evaluation** — parse/compile happens when the
+ *    compute function is constructed, not on every field access.
+ * 2. **Derive-profile validation** — the source must be deterministic
  *    record-local computation before a compute function is returned.
- * 2. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
+ * 3. **Excel-error catch** — a thrown `#N/A`, `#DIV/0!`, `#VALUE!`,
  *    etc. is captured at the boundary and surfaced as `null` so the
  *    indexer doesn't tear down the card mid-render.
- * 3. **`as: SomeFieldDef`** — the raw output is materialized as an
+ * 4. **`as: SomeFieldDef`** — the raw output is materialized as an
  *    instance of the given class via {@link BxlOptions.as}.
- * 4. **Tag-aware `readableSyntax` default** — `jq` tag → false,
+ * 5. **Tag-aware `readableSyntax` default** — `jq` tag → false,
  *    everything else → true. Explicit `options.readableSyntax` always
  *    wins.
  *
@@ -724,7 +813,7 @@ function materializeAs(
 export function bxl(
   input: string | BxlTaggedSource,
   options: BxlOptions = {},
-) {
+): BxlComputeFunction {
   const tagged = isTaggedSource(input) ? input : null;
   const source = tagged ? tagged.source : (input as string);
   // Default readable-syntax mode is determined by the tag:
@@ -738,11 +827,27 @@ export function bxl(
     readableSyntax: options.readableSyntax ?? defaultReadable,
   };
   assertComputeViaDeriveProfile(source, merged);
+  const prepared = prepareBxl(source, merged);
   const ShapeClass = options.as;
-  return function computeViaBxl(this: object) {
+  const memoize = normalizeMemoizationMode(merged.memoize);
+  const memoCache =
+    memoize === false
+      ? undefined
+      : new WeakMap<object, { cycle: number; value: unknown }>();
+
+  const computeViaBxl = function computeViaBxl(this: object) {
+    const memoKey = objectMemoKey(this);
+    const cycle = memoEpochFor(memoize);
+    if (memoCache && memoKey && cycle !== null) {
+      const cached = memoCache.get(memoKey);
+      if (cached?.cycle === cycle) {
+        return cached.value;
+      }
+    }
+
     let raw: unknown;
     try {
-      raw = evaluateBxl(source, this, merged).value;
+      raw = prepared.evaluate(this).value;
     } catch (error) {
       // Excel-style errors (#N/A, #DIV/0!, #VALUE!, etc.) are first-class
       // values in spreadsheet semantics — they should land in the field,
@@ -755,8 +860,25 @@ export function bxl(
       }
       throw error;
     }
-    return materializeAs(raw, ShapeClass);
-  };
+    const value = materializeAs(raw, ShapeClass);
+    if (memoCache && memoKey && cycle !== null) {
+      memoCache.set(memoKey, { cycle, value });
+    }
+    return value;
+  } as BxlComputeFunction;
+
+  Object.defineProperty(computeViaBxl, 'bxl', {
+    value: Object.freeze({
+      source: prepared.source,
+      compiledSource: prepared.compiledSource,
+      warnings: prepared.warnings,
+      deps: prepared.deps,
+      memoize,
+    } satisfies BxlComputeMetadata),
+    enumerable: false,
+  });
+
+  return computeViaBxl;
 }
 
 const EXCEL_ERROR_SENTINELS = new Set([

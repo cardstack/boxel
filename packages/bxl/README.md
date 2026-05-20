@@ -661,7 +661,7 @@ Full API reference in [`docs/api.md`](./docs/api.md).
 
 ## Authoring inside Boxel
 
-`evaluateBxl` is the right entry for ad-hoc evaluation, but Boxel realms author expressions inside `@field` decorators where each compute runs against a card instance. The `expression` factory binds the source to `this` (the card) and post-processes the raw value:
+`evaluateBxl` is the right entry for ad-hoc evaluation, but Boxel realms author expressions inside `@field` decorators where each compute runs against a card instance. The `expression` factory prepares the expression once, binds evaluation to `this` (the card), memoizes repeated reads within a compute cycle, and post-processes the raw value:
 
 ```ts
 import { expression, fx, jq } from '@cardstack/bxl';
@@ -699,11 +699,13 @@ class HospitalPatient extends CardDef {
 | `'Severity'`               | plain string | PascalCase fallback resolves bare identifiers to `.camelCase` field paths.                                                                         |
 | `fx\`ROUND(Salary / 2080, 2)\`` | `fx`        | Marks the source as Excel-like at the call site. Same compilation as a plain string today, but explicit when other tags appear in the same file.  |
 | `jq\`"\(.foo)/\(.bar)"\``  | `jq`        | Backticks preserve `\(…)` interpolation — a regular JS string silently drops the backslash, then the runtime never sees the interpolation.        |
-| Pure jq with no PascalCase | `jq`        | Skips the readable-syntax compile step, slightly faster per invocation.                                                                            |
+| Pure jq with no PascalCase | `jq`        | Skips the readable-syntax compile step when the compute function is constructed.                                                                   |
 
 Other authoring helpers worth knowing:
 
 - `expression(source, { as: SomeFieldDef })` — for `contains(BaseField, …)` / `containsMany(BaseField, …)` computeds whose output should materialize as a subclass instance. Mirrors jqxl's `{ as: ... }`.
+- `expression(source).bxl` exposes the prepared `source`, `compiledSource`, `warnings`, `deps`, and memoization mode so a host runtime can inspect dependency metadata without reparsing.
+- `expression(source, { memoize: false })` disables per-instance computeVia memoization for the rare expression that must re-run on every access. The default memoization mode is microtask-scoped; Boxel can call `beginBxlComputeCycle()` around a render/index pass to make the cache boundary explicit.
 - Excel error sentinels (`#N/A`, `#DIV/0!`, `#VALUE!`, …) raised inside the compute are caught at the factory boundary and surfaced as `null` instead of crashing the indexer.
 - The runtime tolerates null/undefined operands on `-`, `*`, `/`, `%` — the result propagates as `null` rather than throwing. Iterating null yields an empty stream.
 
@@ -761,7 +763,10 @@ npm install
 npm test           # tests/unit/ + tests/smoke/ — 489+ cases
 npm run typecheck  # tsc --noEmit
 npm run build      # esbuild → dist/
+npm run perf:computed -- --iterations 3 --reads-per-field 2
 ```
+
+`perf:computed` extracts Boxel `expression(fx|jq\`...\`)` fields from a local realm, hydrates a plain-object card graph, calibrates a successful field/card execution plan, and times direct evaluation, prepared evaluation, non-memoized `expression()`, and memoized `expression()`. The JSON artifact is written to `.perf/boxel-computed/latest.json` and is intentionally ignored by git.
 
 ### Layout
 

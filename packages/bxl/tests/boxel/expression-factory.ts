@@ -12,7 +12,14 @@
 //          materialization, and Excel-error tolerance.
 
 import { ok, strictEqual } from 'node:assert';
-import { bxl, expr, expression, fx, jq } from '../../src/index.js';
+import {
+  beginBxlComputeCycle,
+  bxl,
+  expr,
+  expression,
+  fx,
+  jq,
+} from '../../src/index.js';
 import { baselinePatient, fuzzEmptyVitals } from './fixtures/hospital.js';
 
 let pass = 0;
@@ -71,6 +78,54 @@ check('§11 explicit { readableSyntax: false } overrides the default', () => {
 check('§11 expression is an alias of bxl', () => {
   strictEqual(expression, bxl);
   strictEqual(expr, bxl);
+});
+
+check('§11 expression exposes prepared metadata for invalidation', () => {
+  const compute = expression(fx`FirstName & " " & LastName`);
+  strictEqual(compute.bxl.source, 'FirstName & " " & LastName');
+  ok(compute.bxl.compiledSource.includes('.firstName'));
+  ok(compute.bxl.deps.includes('firstName'));
+  ok(compute.bxl.deps.includes('lastName'));
+  strictEqual(compute.bxl.memoize, 'microtask');
+});
+
+check('§11 expression memoizes repeated reads in one compute cycle', () => {
+  let reads = 0;
+  const card = {
+    get firstName() {
+      reads++;
+      return 'Margo';
+    },
+    lastName: 'Okonkwo',
+  };
+  const compute = expression(fx`FirstName & " " & LastName`);
+  strictEqual(compute.call(card), 'Margo Okonkwo');
+  strictEqual(compute.call(card), 'Margo Okonkwo');
+  strictEqual(reads, 1);
+});
+
+check('§11 beginBxlComputeCycle invalidates expression memoization', () => {
+  const card = { firstName: 'Margo', lastName: 'Okonkwo' };
+  const compute = expression(fx`FirstName & " " & LastName`);
+  strictEqual(compute.call(card), 'Margo Okonkwo');
+  card.firstName = 'Margaret';
+  beginBxlComputeCycle();
+  strictEqual(compute.call(card), 'Margaret Okonkwo');
+});
+
+check('§11 expression memoization can be disabled', () => {
+  let reads = 0;
+  const card = {
+    get severity() {
+      reads++;
+      return 'Moderate';
+    },
+  };
+  const compute = expression('Severity', { memoize: false });
+  strictEqual(compute.call(card), 'Moderate');
+  strictEqual(compute.call(card), 'Moderate');
+  strictEqual(reads, 2);
+  strictEqual(compute.bxl.memoize, false);
 });
 
 check('§11 expression factory enforces derive profile at construction', () => {
