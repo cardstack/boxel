@@ -146,7 +146,7 @@ module('buildPromptForModel', (hooks) => {
                 currentFile: 'http://localhost:4201/experiments/Author/1',
                 moduleInspectorPanel: 'preview',
                 previewPanelSelection: {
-                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  cardId: rri('http://localhost:4201/experiments/Author/1'),
                   format: 'isolated',
                 },
               },
@@ -245,7 +245,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 },
                 moduleInspectorPanel: 'preview',
                 previewPanelSelection: {
-                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  cardId: rri('http://localhost:4201/experiments/Author/1'),
                   format: 'isolated',
                 },
               },
@@ -464,7 +464,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           body: 'Hey',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Author/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Author/1')],
               tools: [],
               submode: 'interact',
               realmUrl: 'http://localhost:4201/experiments',
@@ -1426,7 +1426,7 @@ Attached Files (files with newer versions don't show their content):
               },
             ],
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               submode: 'interact',
               tools: [],
               functions: [],
@@ -1593,16 +1593,19 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    type: 'object',
-                    properties: {
-                      firstName: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Friend/1'),
+                  {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        firstName: { type: 'string' },
+                      },
                     },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -1679,7 +1682,7 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [],
               submode: 'code',
               functions: [],
@@ -1755,7 +1758,7 @@ Attached Files (files with newer versions don't show their content):
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
     cardMessageContent.data.context.tools = [
-      getPatchTool('http://localhost:4201/drafts/Author/1', {
+      getPatchTool(rri('http://localhost:4201/drafts/Author/1'), {
         attributes: { firstName: { type: 'string' } },
       }),
     ];
@@ -1811,13 +1814,16 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    firstName: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Friend/1'),
+                  {
+                    attributes: {
+                      firstName: { type: 'string' },
+                    },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -1842,16 +1848,19 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the location to home',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
+              openCardIds: [rri('http://localhost:4201/experiments/Meeting/2')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Meeting/2', {
-                  attributes: {
-                    type: 'object',
-                    properties: {
-                      location: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Meeting/2'),
+                  {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string' },
+                      },
                     },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -2364,7 +2373,7 @@ Attached Files (files with newer versions don't show their content):
           clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [
                 {
                   type: 'function',
@@ -2485,7 +2494,7 @@ Attached Files (files with newer versions don't show their content):
           clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [
                 {
                   type: 'function',
@@ -2583,7 +2592,7 @@ Attached Files (files with newer versions don't show their content):
           format: 'org.matrix.custom.html',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               functions: [],
             },
           },
@@ -2665,7 +2674,7 @@ Attached Files (files with newer versions don't show their content):
               }),
             },
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [],
               submode: 'interact',
               functions: [],

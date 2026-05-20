@@ -1,6 +1,9 @@
 import { service } from '@ember/service';
 
-import { isFieldDef } from '@cardstack/runtime-common';
+import {
+  isFieldDef,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -42,7 +45,7 @@ export default class OpenCreateListingModalCommand extends HostBaseCommand<
     this.operatorModeStateService.showCreateListingModal({
       codeRef: input.codeRef,
       targetRealm: input.targetRealm,
-      openCardIds: input.openCardIds,
+      openCardIds: input.openCardIds as RealmResourceIdentifier[] | undefined,
       declarationKind,
     });
   }

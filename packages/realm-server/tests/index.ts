@@ -216,6 +216,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-registry-writes-test',
   './realm-file-changes-listener-test',
   './realm-index-updated-listener-test',
+  './realm-routing-test',
   './module-cache-invalidation-listener-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',

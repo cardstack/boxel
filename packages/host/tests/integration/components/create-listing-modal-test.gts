@@ -3,6 +3,8 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
+
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import { testRealmURL, testRRI } from '../../helpers';
@@ -119,7 +121,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardIds: [`${testRealmURL}Pet/mango`],
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
       declarationKind: 'card',
     });
 
@@ -155,7 +157,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardIds: [`${testRealmURL}Pet/mango`],
+      openCardIds: [rri(`${testRealmURL}Pet/mango`)],
       declarationKind: 'card',
     });
 

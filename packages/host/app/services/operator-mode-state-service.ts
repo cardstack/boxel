@@ -80,7 +80,7 @@ import type IndexController from '../controllers';
 export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
-  openCardIds?: string[];
+  openCardIds?: RealmResourceIdentifier[];
   declarationKind: 'card' | 'field';
 }
 
@@ -687,15 +687,15 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  getOpenCardIds(): string[] {
+  getOpenCardIds(): RealmResourceIdentifier[] {
     if (this._state.submode === Submodes.Code) {
-      let openCardsInCodeMode = [];
+      let openCardsInCodeMode: RealmResourceIdentifier[] = [];
       if (this.playgroundPanelSelection) {
         openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
       if (this.isViewingCardInCodeMode) {
-        let cardId = this.codePathString!.replace(/\.json$/, '');
+        let cardId = rri(this.codePathString!.replace(/\.json$/, ''));
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -706,7 +706,7 @@ export default class OperatorModeStateService extends Service {
       return this.topMostStackItems()
         .filter((stackItem: StackItem) => stackItem)
         .map((stackItem: StackItem) => stackItem.id)
-        .filter(Boolean) as string[];
+        .filter(Boolean) as RealmResourceIdentifier[];
     }
   }
 
@@ -820,8 +820,10 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  get codePathString() {
-    return this._state.codePath?.toString();
+  get codePathString(): RealmResourceIdentifier | undefined {
+    return this._state.codePath?.toString() as
+      | RealmResourceIdentifier
+      | undefined;
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
@@ -1460,7 +1462,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   async getSummaryForAIBot(
-    openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIdsSet: Set<RealmResourceIdentifier> = new Set([
+      ...this.getOpenCardIds(),
+    ]),
   ): Promise<BoxelContext> {
     let codeMode: BoxelContext['codeMode'] = undefined;
     if (this._state.workspaceChooserOpened) {
@@ -1508,7 +1512,7 @@ export default class OperatorModeStateService extends Service {
       if (this.isViewingCardInCodeMode) {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {
-          cardId: this.codePathString!.replace(/\.json$/, ''),
+          cardId: rri(this.codePathString!.replace(/\.json$/, '')),
           format: this.currentViewingFormat ?? 'isolated',
         };
       } else {
@@ -1556,7 +1560,9 @@ export default class OperatorModeStateService extends Service {
     return result;
   }
 
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
+  private makeRemoteIdsList(
+    ids: (RealmResourceIdentifier | undefined)[],
+  ): RealmResourceIdentifier[] {
     return ids
       .map((id) => {
         if (!id) {
@@ -1576,7 +1582,7 @@ export default class OperatorModeStateService extends Service {
         }
         return id;
       })
-      .filter(Boolean) as string[];
+      .filter(Boolean) as RealmResourceIdentifier[];
   }
 }
 

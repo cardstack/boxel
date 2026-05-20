@@ -11,6 +11,7 @@ import {
   localId as localIdSymbol,
   loadCardDocument,
   loadFileMetaDocument,
+  rri,
   trackRuntimeFileDependency,
   trackRuntimeInstanceDependency,
   logger,
@@ -794,7 +795,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         localId = remoteId.split('/').pop()!;
         item = bucket.get(localId) ?? silentBucket.get(localId);
         if (item && type === 'instance' && isCardOrFileInstance(item)) {
-          item.id = remoteId;
+          item.id = rri(remoteId);
         }
       }
     }
