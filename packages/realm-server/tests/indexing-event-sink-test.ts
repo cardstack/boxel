@@ -33,6 +33,9 @@ function makeRecordingAdapter(): {
       async withWriteLock(_url, fn) {
         return await fn(undefined);
       },
+      async withUserCostLock(_userId, fn) {
+        return await fn();
+      },
     },
   };
 }
@@ -381,6 +384,9 @@ module(basename(__filename), function () {
         async notify() {},
         async withWriteLock(_url, fn) {
           return await fn(undefined);
+        },
+        async withUserCostLock(_userId, fn) {
+          return await fn();
         },
       };
       let sink = new IndexingEventSink({ flushIntervalMs: 10 });

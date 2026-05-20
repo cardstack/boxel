@@ -99,6 +99,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -245,6 +246,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -467,6 +469,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -563,6 +566,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -702,6 +706,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -916,6 +921,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);
@@ -1037,6 +1043,7 @@ module('command runner', () => {
       close: async () => {},
       getColumnNames: async () => [],
       withWriteLock: async (_url, fn) => fn(undefined),
+      withUserCostLock: async (_userId, fn) => fn(),
     } as DBAdapter;
 
     let commandRunner = makeRunner(dbAdapter, queuePublisher, githubClient);

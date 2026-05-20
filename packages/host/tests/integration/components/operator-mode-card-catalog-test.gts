@@ -902,6 +902,34 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
   });
 
+  test(`+ button creates a new instance directly when the filtered type has no spec`, async function (assert) {
+    // Author has no Spec card in the test realm — the + button should still
+    // open a new Author instance in edit mode instead of silently failing.
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-boxel-filter-list-button="Author"]`);
+    await click(`[data-test-boxel-filter-list-button="Author"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    await click(`[data-test-create-new-card-button]`);
+
+    assert
+      .dom('[data-test-card-catalog-modal]')
+      .doesNotExist('no spec chooser appears for a type without a spec');
+
+    await waitFor('[data-test-stack-card-index="1"]');
+    assert
+      .dom(
+        '[data-test-stack-card-index="1"] [data-test-boxel-card-header-title]',
+      )
+      .hasText('Author');
+  });
+
   test(`cancel button closes the field picker`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
@@ -1399,7 +1427,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -1413,7 +1441,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 15 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -1426,7 +1454,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
   });
 

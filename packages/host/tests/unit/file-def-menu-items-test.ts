@@ -46,6 +46,59 @@ module('Unit | FileDef menu items', function (hooks) {
     assert.ok(texts.includes('Copy File URL'), 'contains Copy File URL');
   });
 
+  test('interact context mirrors the CardDef action set (Copy as Markdown, Open in Code Mode, Delete)', function (assert: Assert) {
+    let file = new DummyFile(
+      'https://example.com/realm/file-1.txt',
+    ) as unknown as FileDef;
+    let items = getDefaultFileMenuItems(file, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(texts.includes('Copy as Markdown'), 'contains Copy as Markdown');
+    assert.ok(
+      texts.includes('Open in Code Mode'),
+      'contains Open in Code Mode',
+    );
+    assert.ok(texts.includes('Delete'), 'contains Delete when canEdit');
+    let deleteItem = items.find((i: MenuItemOptions) => i.label === 'Delete');
+    assert.true(
+      Boolean(deleteItem?.dangerous),
+      'Delete is marked as a dangerous action',
+    );
+  });
+
+  test('interact context omits Delete when canEdit is false', function (assert: Assert) {
+    let file = new DummyFile(
+      'https://example.com/realm/file-2.txt',
+    ) as unknown as FileDef;
+    let items = getDefaultFileMenuItems(file, {
+      canEdit: false,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.notOk(
+      texts.includes('Delete'),
+      'Delete is hidden for read-only contexts',
+    );
+    // Copy as Markdown and Open in Code Mode are not edit operations, so
+    // they remain available even without write permission.
+    assert.ok(
+      texts.includes('Copy as Markdown'),
+      'Copy as Markdown is available read-only',
+    );
+    assert.ok(
+      texts.includes('Open in Code Mode'),
+      'Open in Code Mode is available read-only',
+    );
+  });
+
   test('code-mode-preview includes Copy File URL and Open in Interact Mode', function (assert: Assert) {
     let file = new DummyFile(
       'https://example.com/realm/file-3.txt',

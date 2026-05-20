@@ -32,6 +32,8 @@ import {
   isSingleCardDocument,
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
+  X_BOXEL_JOB_PRIORITY_HEADER,
+  userInitiatedPriority,
   Deferred,
   delay,
   mergeRelationships,
@@ -69,6 +71,7 @@ import {
   type LooseSingleResourceDocument,
   type StoreReadType,
   type CardResource,
+  type LinkableCollectionDocument,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -88,6 +91,8 @@ import {
   duringPrerenderHeaders,
   jobIdHeader,
 } from '../lib/prerender-fetch-headers';
+import { searchCacheKey } from '../lib/search-cache-key';
+import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
 import { getSearch } from '../resources/search';
 import {
@@ -123,6 +128,77 @@ let waiter = buildWaiter('store-service');
 const realmEventsLogger = logger('realm:events');
 const storeLogger = logger('store');
 
+// Companion to `jobIdHeader()` (re-exported from
+// `../lib/prerender-fetch-headers`). Policy is two-state, gated by
+// `__boxelDuringPrerender`, not by the presence of
+// `__boxelJobPriority`:
+//
+// 1. Inside a prerender tab: forward the worker job's priority as-is.
+//    The render-runner injects `__boxelJobPriority` alongside
+//    `__boxelJobId` on each visit — a priority of 0 is meaningful
+//    (the originating job is system-initiated background indexing)
+//    and must be preserved, not upgraded. Sub-`prerenderModule`
+//    calls fired by `_federated-search` for a `lookupDefinition`
+//    cache miss inherit this priority so they don't outrun the
+//    parent. If `__boxelJobPriority` is missing here (older
+//    render-runner build, test fixture, etc.) treat as 0 — the
+//    safe default for prerender-context work.
+//
+// 2. Outside a prerender tab (the host SPA in a real user's browser):
+//    stamp `userInitiatedPriority` (10). User clicks driving a
+//    search are by definition user-initiated work and should outrank
+//    background indexing on the realm-server's PagePool. Without
+//    this, a user search whose definition lookup misses the modules
+//    cache would fire its sub-prerender at priority 0 and queue
+//    behind concurrent indexing fan-out.
+//
+// External (non-host) HTTP callers — anything that doesn't run in
+// the host SPA's JS runtime — bypass this helper entirely and set
+// `X-Boxel-Job-Priority` directly on their request if they care.
+// This helper covers the host SPA only.
+//
+// Both globals are checked with `=== true` / strict-number rather
+// than truthy coercion: `__boxelDuringPrerender` is typed as a
+// boolean and a stray truthy string from a future code path
+// shouldn't silently flip the policy from "user-priority" to
+// "preserve 0."
+// Pure resolver — exported for the unit test in
+// `tests/integration/job-priority-header-test.ts`. See the comment
+// above for the policy rationale; the function is the literal
+// translation of that policy to numbers.
+export function resolveOutboundJobPriority({
+  duringPrerender,
+  jobPriority,
+}: {
+  duringPrerender: unknown;
+  jobPriority: unknown;
+}): number {
+  let valid =
+    typeof jobPriority === 'number' &&
+    Number.isSafeInteger(jobPriority) &&
+    jobPriority >= 0
+      ? jobPriority
+      : undefined;
+  if (duringPrerender === true) {
+    return valid ?? 0;
+  }
+  return valid ?? userInitiatedPriority;
+}
+
+function jobPriorityHeader(): Record<string, string> {
+  let g = globalThis as unknown as {
+    __boxelDuringPrerender?: boolean;
+    __boxelJobPriority?: number;
+  };
+  return {
+    [X_BOXEL_JOB_PRIORITY_HEADER]: String(
+      resolveOutboundJobPriority({
+        duringPrerender: g.__boxelDuringPrerender,
+        jobPriority: g.__boxelJobPriority,
+      }),
+    ),
+  };
+}
 const queryFieldSeedFromSearchSymbol = Symbol.for(
   'cardstack-query-field-seed-from-search',
 );
@@ -161,6 +237,52 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private inflightCardLoads: Map<string, Deferred<void>> = new Map();
+  // Coalesce concurrent same-(realms, query) `_federated-search` HTTP
+  // calls during a prerender. Mirrors
+  // `RealmIndexQueryEngine.#inFlightSearch` server-side. Gated on
+  // `__boxelRenderContext` so live user searches stay uncoalesced —
+  // write-then-read freshness story unchanged outside prerender.
+  // Entries self-clear on `.finally()` via identity check.
+  private inflightSearch: Map<string, Promise<LinkableCollectionDocument>> =
+    new Map();
+  // Resolved-doc cache for same-realm `_federated-search` calls during
+  // a prerender. Layered *above* `inflightSearch`: a cache hit skips
+  // the network round-trip entirely; a miss falls through to the
+  // in-flight Map and the cache is populated on resolve. Keyed by
+  // (jobId, consumingRealm, query) — gated to same-realm-only so a
+  // cross-realm read can't freeze a value while a peer realm-server
+  // replica swaps mid-job.
+  //
+  // Lifetime: the entire indexing job. One job typically spans many
+  // card renders in the same prerender tab (each navigation activates
+  // and deactivates the render route but all those visits share one
+  // `__boxelJobId`); the cache must survive those route bounces so
+  // earlier renders' work is reusable by later ones. Only clear when
+  // the job actually changes — `fetchSearchDoc` does this at
+  // fetch-entry via the jobId-change check, and `resetState` /
+  // `resetCache` do it on harder service resets. The render route's
+  // `deactivate` deliberately does NOT clear this cache. See
+  // `search-cache-key.ts` for the digest and the realm-server's
+  // `job-scoped-search-cache.ts` for the server-side prior art on
+  // storing resolved docs rather than promises (avoids tail-latency
+  // stalls on slow first populate).
+  private searchCache: Map<string, LinkableCollectionDocument> = new Map();
+  // The jobId the `searchCache` entries belong to. When a request
+  // arrives carrying a different `__boxelJobId` we drop the cache
+  // before serving — belt-and-braces beside `resetState()` and the
+  // render-route deactivate clear, in case a prerender tab is reused
+  // across jobs without driving either of those paths.
+  private searchCacheJobId: string | undefined = undefined;
+  // Monotonic counter bumped on every clear of `searchCache` (every
+  // path that empties the map: `clearSearchCache`, `resetState`,
+  // `resetCache`, the jobId-change clear at fetch-entry). A
+  // `fetchSearchDoc` call captures this at entry and checks it before
+  // populating on resolve — if the cache was intentionally cleared
+  // while the request was in flight, the resolved doc must not
+  // repopulate against the new generation. Mirrors the identity
+  // check on the in-flight Map but for the resolved-doc layer where
+  // we can't compare against a stored Promise.
+  private searchCacheGeneration = 0;
   private store: CardStore;
   protected isRenderStore = false;
 
@@ -208,6 +330,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.inflightSearch = new Map();
+    this.searchCache = new Map();
+    this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -216,6 +342,29 @@ export default class StoreService extends Service implements StoreInterface {
 
   async ensureSetupComplete(): Promise<void> {
     await this.ready;
+  }
+
+  // Drop every pending in-flight search entry. Callers awaiting an
+  // existing promise still get their answer (the underlying HTTP is
+  // already in motion); only *new* same-key callers after the drop
+  // miss the map and re-fetch. Wire this to anything the host
+  // recognizes as an invalidation boundary — render-route deactivate
+  // is the obvious one inside a prerender tab.
+  clearInFlightSearch(): void {
+    this.inflightSearch.clear();
+  }
+
+  // Drop every resolved-doc search-cache entry. Used for hard resets
+  // (`resetState`, `resetCache`) and by tests; NOT called from the
+  // render route's per-visit deactivate, because the cache is meant
+  // to survive across renders within a single indexing job. Cross-job
+  // invalidation is handled by `fetchSearchDoc`'s entry-time
+  // jobId-change clear, which fires the first time a new
+  // `__boxelJobId` is observed.
+  clearSearchCache(): void {
+    this.searchCache.clear();
+    this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
   }
 
   resetCache(opts?: { preserveReferences?: boolean }) {
@@ -230,6 +379,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
     this.inflightCardLoads = new Map();
+    this.inflightSearch = new Map();
+    this.searchCache = new Map();
+    this.searchCacheJobId = undefined;
+    this.searchCacheGeneration++;
     this.autoSaveQueues = new Map();
     this.autoSavePromises = new Map();
     this.store = this.createCardStore();
@@ -819,44 +972,7 @@ export default class StoreService extends Service implements StoreInterface {
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
-    let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
-    // TODO remove this assertion after multi-realm server/federated identity is supported
-    this.realmServer.assertOwnRealmServer(realmServerURLs);
-    let [realmServerURL] = realmServerURLs;
-    let searchURL = new URL('_federated-search', realmServerURL);
-    let response = await this.realmServer.maybeAuthedFetchForRealms(
-      searchURL.href,
-      realms,
-      {
-        method: 'QUERY',
-        headers: {
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': 'application/json',
-          ...duringPrerenderHeaders(),
-          ...consumingRealmHeader(),
-          ...jobIdHeader(),
-        },
-        body: JSON.stringify({ ...query, realms }),
-      },
-    );
-    if (!response.ok) {
-      let responseText = await response.text();
-      let err = new Error(
-        `status: ${response.status} - ${response.statusText}. ${responseText}`,
-      ) as any;
-      err.status = response.status;
-      err.responseText = responseText;
-      err.responseHeaders = response.headers;
-      throw err;
-    }
-    let json = await response.json();
-    if (!isLinkableCollectionDocument(json)) {
-      throw new Error(
-        `The realm search response was not a valid collection document:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-    let collectionDoc = json;
+    let collectionDoc = await this.fetchSearchDoc(query, realms);
 
     // Hydrate each result into the store
     let instances = (
@@ -888,6 +1004,122 @@ export default class StoreService extends Service implements StoreInterface {
     resources: (CardResource<Saved> | FileMetaResource)[];
     meta: QueryResultsMeta;
   }> {
+    let doc = await this.fetchSearchDoc(query, realms);
+    return { resources: doc.data, meta: doc.meta };
+  }
+
+  // Shared HTTP+JSON path for both `fetchSearchData` (raw resources for
+  // data-only callers) and `fetchAndHydrateSearchResults` (instances
+  // hydrated into the store). Sits between `store.search` and
+  // `_federated-search`.
+  //
+  // Two layers of dedup, both prerender-gated:
+  //
+  //   1. Resolved-doc cache (`searchCache`). Keyed by
+  //      (jobId, consumingRealm, query). Same-realm-only so a
+  //      cross-realm read can't freeze a value while a peer
+  //      realm-server replica swaps mid-job. Hit → return cached doc
+  //      synchronously, no network. Miss → fall through.
+  //   2. In-flight Map (`inflightSearch`). Concurrent same-(realms,
+  //      query) callers share one pending fetch. Sequential repeats
+  //      that don't hit layer 1 still pay the round-trip; layer 1 is
+  //      what closes the sequential-repeat window.
+  //
+  // Outside a prerender both layers are bypassed so live-SPA
+  // write-then-read flows keep their current freshness semantics.
+  private async fetchSearchDoc(
+    query: Query,
+    realms: string[],
+  ): Promise<LinkableCollectionDocument> {
+    let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
+    let jobId = inPrerender
+      ? ((globalThis as any).__boxelJobId as string | undefined)
+      : undefined;
+    let consumingRealm = inPrerender
+      ? ((globalThis as any).__boxelConsumingRealm as string | undefined)
+      : undefined;
+
+    // Belt-and-braces jobId-change clear at fetch-entry. `resetState`
+    // and the render-route deactivate hook are the primary paths; this
+    // catches a prerender tab reused across jobs without either firing.
+    if (typeof jobId === 'string' && jobId !== this.searchCacheJobId) {
+      this.searchCache.clear();
+      this.searchCacheJobId = jobId;
+      this.searchCacheGeneration++;
+    }
+
+    // Resolved-doc cache eligibility: prerender + jobId + same-realm.
+    // Cross-realm reads bypass — see field comment.
+    let cacheKey: string | undefined;
+    if (
+      inPrerender &&
+      typeof jobId === 'string' &&
+      typeof consumingRealm === 'string' &&
+      realms.length === 1 &&
+      realms[0] === consumingRealm
+    ) {
+      cacheKey = searchCacheKey(jobId, consumingRealm, query);
+      if (cacheKey !== undefined) {
+        let cached = this.searchCache.get(cacheKey);
+        if (cached !== undefined) {
+          return cached;
+        }
+      }
+    }
+    // Snapshot the generation *after* the entry-time clear so a
+    // concurrent clear arriving during the await below is observable
+    // as a generation drift and we skip the populate. Mirrors the
+    // identity check used by the in-flight Map below.
+    let captureGeneration = this.searchCacheGeneration;
+
+    let inflightKey = inPrerender
+      ? searchInFlightKey(realms, query)
+      : undefined;
+    let doc: LinkableCollectionDocument;
+    if (inflightKey !== undefined) {
+      let existing = this.inflightSearch.get(inflightKey);
+      if (existing) {
+        doc = await existing;
+      } else {
+        let pending = this.fetchSearchDocUncoalesced(query, realms).finally(
+          () => {
+            // Identity-check before deletion: a concurrent
+            // `clearInFlightSearch()` could in principle have removed
+            // (and a later caller re-set) this slot while we were
+            // in-flight. Only clean up if the map still points at *this*
+            // pending promise. Mirrors
+            // `RealmIndexQueryEngine.searchCards` server-side.
+            if (this.inflightSearch.get(inflightKey) === pending) {
+              this.inflightSearch.delete(inflightKey);
+            }
+          },
+        );
+        this.inflightSearch.set(inflightKey, pending);
+        doc = await pending;
+      }
+    } else {
+      doc = await this.fetchSearchDocUncoalesced(query, realms);
+    }
+
+    // Populate only if the cache generation hasn't moved under us. A
+    // route deactivate (clearSearchCache) or `resetState` between
+    // fetch-entry and resolve would bump the generation; in that case
+    // the resolved doc belongs to a now-stale window and must not
+    // repopulate the cleared cache. The caller still receives `doc`
+    // — only the *cache write* is suppressed.
+    if (
+      cacheKey !== undefined &&
+      this.searchCacheGeneration === captureGeneration
+    ) {
+      this.searchCache.set(cacheKey, doc);
+    }
+    return doc;
+  }
+
+  private async fetchSearchDocUncoalesced(
+    query: Query,
+    realms: string[],
+  ): Promise<LinkableCollectionDocument> {
     let realmServerURLs = this.realmServer.getRealmServersForRealms(realms);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.realmServer.assertOwnRealmServer(realmServerURLs);
@@ -904,6 +1136,7 @@ export default class StoreService extends Service implements StoreInterface {
           ...duringPrerenderHeaders(),
           ...consumingRealmHeader(),
           ...jobIdHeader(),
+          ...jobPriorityHeader(),
         },
         body: JSON.stringify({ ...query, realms }),
       },
@@ -925,7 +1158,7 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    return { resources: json.data, meta: json.meta };
+    return json;
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(

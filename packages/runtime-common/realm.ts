@@ -307,20 +307,27 @@ const CARD_JSON_ETAG_VARIANT = 'card';
 export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
 export const REALM_FILE_CHANGES_WILDCARD = '*';
 
-// CS-11119: Postgres NOTIFY channel announcing that a realm's index has
-// just been updated (the worker's batch.done() has committed
-// boxel_index). Payload is the realm URL.
+// CS-11119: Postgres NOTIFY channel announcing that a realm's read-side
+// derived caches (`#inFlightSearch`, `#cachedRealmInfo`) must drop.
+// Payload is the realm URL.
 //
 // Distinct from REALM_FILE_CHANGES_CHANNEL (which fires at file-WRITE
-// time, before indexing has run) — this channel fires at INDEX-UPDATE
-// time, after the swap of boxel_index has landed. Peer replicas
-// subscribe and drop their RealmIndexQueryEngine.#inFlightSearch so a new
-// caller arriving after a peer's update does not coalesce into a
-// pre-update pending promise and receive pre-update data.
+// time, before indexing has run). Originally introduced for INDEX-UPDATE
+// fan-out — emitted after the worker's batch.done() committed
+// boxel_index — but the receiver also drops `#cachedRealmInfo`, which is
+// derived from `realm_permissions`. CS-11178 extends the publisher list
+// so a `realm_permissions` write (`patchRealmPermissions`) fires the
+// same NOTIFY: peers drop their cached RealmInfo (whose `visibility`
+// field is permissions-derived) and an unrelated in-flight searchCards
+// pays at most one extra DB round-trip — admin-rare PATCHes make the
+// over-invalidation negligible. If a future caller needs to invalidate
+// permissions-derived state without touching index-derived state,
+// introduce a dedicated `realm_permissions_changed` channel.
 //
 // Same best-effort semantics as the other realm-server NOTIFY channels: a
 // missed NOTIFY leaves a bounded staleness window (one in-flight
-// searchCards walk), not data corruption.
+// searchCards walk plus a stale RealmInfo on `_info` until the next swap
+// or write), not data corruption.
 export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
 
 // Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
@@ -472,15 +479,18 @@ function buildCardJsonEtag(
 // list of validators, and individual entries may be weak (`W/`-
 // prefixed). For GET we don't distinguish weak vs. strong (spec
 // says weak comparison is fine for non-range requests), so strip
-// the `W/` prefix and compare the bare quoted value to our ETag.
-function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
+// the `W/` prefix on *both* sides and compare the bare quoted
+// values — a server-emitted weak ETag must still match an echoed
+// `If-None-Match: W/"..."` from the client.
+export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
   let value = headerValue.trim();
   if (value === '*') {
     return true;
   }
+  let normalizedEtag = etag.replace(/^W\//, '');
   return value
     .split(',')
-    .some((token) => token.trim().replace(/^W\//, '') === etag);
+    .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -685,6 +695,11 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
+  // [readiness-diag] — opt-in logger, off in production, enabled in CI
+  // host tests via `readiness-diag=debug` in HOST_TEST_LOG_LEVELS.
+  // Remove this field together with the [readiness-diag] call sites
+  // once the CI readiness-check timeout flake is rooted out.
+  #readinessDiag = logger('readiness-diag');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -765,17 +780,6 @@ export class Realm {
   // template that we clone for each indexing operation
   readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
-
-  private visibilityPromise?: Promise<RealmVisibility>;
-
-  // We are caching world readable permissions for realms such that we can avoid
-  // having to look up the realm permissions for world-read realms on every HTTP
-  // HEAD and GET request. the tradeoff is that if there is an out-of-band
-  // update to the permissions that effects world readability (e.g. directly
-  // updating the DB), that will mean we need to restart the realm server to
-  // pick up the permissions change.
-  #worldReadable?: boolean;
-  #worldReadablePromise?: Promise<boolean>;
 
   get url(): string {
     return this.paths.url;
@@ -1065,7 +1069,19 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
+    // [readiness-diag] — entry / fulfillment markers. The per-realm
+    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
+    // probe cadence doesn't multiply heartbeat intervals (~300 of them
+    // accumulating across a 10-minute hang) on a single Deferred.
+    let waitStart = Date.now();
+    this.#readinessDiag.debug(
+      `readiness check requested for realm ${this.url}`,
+    );
     await this.#startedUp.promise;
+    let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
+    this.#readinessDiag.debug(
+      `readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
+    );
 
     return createResponse({
       body: null,
@@ -1471,19 +1487,19 @@ export class Realm {
   }
   #testOnlyTranspileDelay?: () => Promise<void>;
 
-  // CS-11119: Drop every read-side cache whose content derives from the
-  // realm's index — currently `#inFlightSearch` (the searchCards
-  // coalesce map) and `#cachedRealmInfo` (cached `RealmInfo` +
-  // ETag-hash; the ETag's hash component derives from indexed metadata
-  // and `realm_registry` rows, so a from-scratch reindex pass that
-  // re-reads /realm.json invalidates both). Called by the
+  // CS-11119: Drop every read-side cache whose content derives from
+  // server-side state — currently `#inFlightSearch` (the searchCards
+  // coalesce map, index-derived) and `#cachedRealmInfo` (cached
+  // `RealmInfo` + ETag-hash; mostly index-derived but its `visibility`
+  // field is permissions-derived per CS-11178). Called by the
   // realm_index_updated LISTEN handler on peer instances after a swap
-  // commits somewhere else in the fleet. Public so the realm-server
-  // process can wire the listener without reaching into private state.
-  // Callers awaiting a pre-clear in-flight searchCards promise still
-  // receive its pre-update result (the SQL was already in motion);
-  // only NEW callers after the clear miss the map and fire a fresh
-  // search against the now-current index.
+  // commits — or after a `realm_permissions` PATCH lands — somewhere
+  // else in the fleet. Public so the realm-server process can wire the
+  // listener without reaching into private state. Callers awaiting a
+  // pre-clear in-flight searchCards promise still receive its
+  // pre-update result (the SQL was already in motion); only NEW callers
+  // after the clear miss the map and fire a fresh search against the
+  // now-current index.
   clearRealmIndexCaches(): void {
     this.#realmIndexQueryEngine.clearInFlightSearch();
     this.invalidateCachedRealmInfo();
@@ -2405,34 +2421,88 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    if (this.#copiedFromRealm) {
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-        realmURL: this.url,
-      });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (isNewIndex || this.#fullIndexOnStartup) {
-        let priority =
-          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-        let promise = this.#realmIndexUpdater.fullIndex(priority);
-        if (isNewIndex) {
-          // we only await the full indexing at boot if this is a brand new index
-          await promise;
-        }
-        // not sure how useful this event is--nothing is currently listening for
-        // it, and it may happen during or after the full index...
+    // [readiness-diag] — every `this.#readinessDiag.debug(...)` line in
+    // this method is a temporary phase marker for the CI readiness-check
+    // timeout flake. The whole logger is opt-in (off in production, on
+    // in CI host tests via HOST_TEST_LOG_LEVELS). Remove the call sites
+    // together with the `#readinessDiag` field once root cause is found.
+    this.#readinessDiag.debug(`startup begin for realm ${this.url}`);
+    // [readiness-diag] — one heartbeat per realm-lifetime, not per
+    // readiness-probe (wait-on polls every 0.5–2s; a per-request
+    // heartbeat would multiply to hundreds of concurrent intervals).
+    // Cleared in the finally below so a startup that fails or throws
+    // doesn't leak the timer past the lifetime of this method.
+    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
+      () => {
+        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        this.#readinessDiag.debug(
+          `startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
+        );
+      },
+      15_000,
+    );
+    if (
+      heartbeat &&
+      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
+        'function'
+    ) {
+      (heartbeat as unknown as { unref: () => void }).unref();
+    }
+    try {
+      if (this.#copiedFromRealm) {
+        this.#readinessDiag.debug(
+          `startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
+        );
+        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+        this.#readinessDiag.debug(
+          `startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+        );
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'full',
+          indexType: 'copy',
+          sourceRealmURL: this.#copiedFromRealm.href,
           realmURL: this.url,
         });
+      } else {
+        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+        this.#readinessDiag.debug(
+          `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
+        );
+        if (isNewIndex || this.#fullIndexOnStartup) {
+          let priority =
+            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+          let promise = this.#realmIndexUpdater.fullIndex(priority);
+          if (isNewIndex) {
+            // we only await the full indexing at boot if this is a brand new index
+            this.#readinessDiag.debug(
+              `startup awaiting fullIndex (new index) for realm ${this.url}`,
+            );
+            await promise;
+            this.#readinessDiag.debug(
+              `startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+            );
+          } else {
+            this.#readinessDiag.debug(
+              `startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
+            );
+          }
+          // not sure how useful this event is--nothing is currently listening for
+          // it, and it may happen during or after the full index...
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'full',
+            realmURL: this.url,
+          });
+        }
+      }
+      this.#readinessDiag.debug(
+        `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
+      );
+    } finally {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
       }
     }
-    await this.isWorldReadable();
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
@@ -4730,40 +4800,64 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    localPath = localPath.replace(/\.json$/, '');
-    let url = this.paths.fileURL(localPath);
-    let entry = await this.#realmIndexQueryEngine.instance(url, {
+    let trimmedLocalPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(trimmedLocalPath);
+    let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
       includeErrors: true,
     });
-    if (!entry) {
-      if (await this.nonJsonFileExists(localPath)) {
-        return unsupportedMediaType(request, requestContext);
+    if (instanceEntry) {
+      if (instanceEntry.type === 'instance-error') {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation unavailable: ${request.url} has an indexing error`,
+        );
       }
-      return notFound(request, requestContext);
-    }
-    if (entry.type === 'instance-error') {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation unavailable: ${request.url} has an indexing error`,
-      );
-    }
-    if (entry.markdown == null) {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation not available for ${request.url}`,
-      );
-    }
-    return createResponse({
-      body: entry.markdown,
-      init: {
-        headers: {
-          'content-type': 'text/markdown; charset=utf-8',
+      if (instanceEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: instanceEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
         },
-      },
-      requestContext,
-    });
+        requestContext,
+      });
+    }
+    // No instance row — for FileDef rows (e.g. `.md`, `.csv`, `.gts`) the
+    // markdown lives on the `file` entry instead. Look the unstripped local
+    // path up against the file index before giving up. Without this branch
+    // CardsGrid's "Copy as Markdown" action 415s on any non-card file.
+    let fileURL = this.paths.fileURL(localPath);
+    let fileEntry = await this.#realmIndexQueryEngine.file(fileURL);
+    if (fileEntry) {
+      if (fileEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: fileEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
+        },
+        requestContext,
+      });
+    }
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
+    return notFound(request, requestContext);
   }
 
   private async removeCard(
@@ -5837,12 +5931,19 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
-    if (Object.prototype.hasOwnProperty.call(patch, '*')) {
-      let worldReadable =
-        Array.isArray(patch['*']) && patch['*'].includes('read');
-      this.#worldReadable = worldReadable;
-      this.#worldReadablePromise = Promise.resolve(worldReadable);
-    }
+    // CS-11178: `RealmInfo.visibility` is derived from `realm_permissions`
+    // and memoized into `#cachedRealmInfo` by `parseRealmInfo`. Without
+    // this invalidation a PATCH on this replica leaves the *local*
+    // `_info` response stale until the next index swap, and a PATCH on
+    // any peer replica leaves *every* replica's `_info` response stale
+    // until process restart — the same multi-replica staleness pattern
+    // CS-11126 closed at the auth layer, surviving one layer up.
+    // Reuses the existing realm_index_updated channel: the peer listener
+    // calls `clearRealmIndexCaches()` which drops `#cachedRealmInfo`
+    // (exactly what we need) and `#inFlightSearch` (a no-op when empty;
+    // permission PATCHes are admin-rare so the over-invalidation is
+    // negligible).
+    await this.clearRealmIndexCachesAndBroadcast();
     return await this.getRealmPermissions(request, requestContext);
   }
 
@@ -6525,45 +6626,31 @@ export class Realm {
     );
   }
 
-  private async isWorldReadable(): Promise<boolean> {
-    if (this.#worldReadable !== undefined) {
-      return this.#worldReadable;
-    }
-    if (!this.#worldReadablePromise) {
-      this.#worldReadablePromise = (async () => {
-        let permissions = await fetchRealmPermissions(
-          this.#dbAdapter,
-          new URL(this.url),
-        );
-        let worldReadable = permissions['*']?.includes('read') ?? false;
-        if (this.#worldReadable === undefined) {
-          this.#worldReadable = worldReadable;
-          return worldReadable;
-        }
-        return this.#worldReadable;
-      })();
-    }
-    return await this.#worldReadablePromise;
-  }
-
+  // CS-11126: no memoization. `realm_permissions` is indexed by
+  // realm_url and a permissions PATCH from a peer replica must take
+  // effect here without a restart, so every read-path callsite fetches
+  // fresh. For requests, this is one extra indexed SELECT; for
+  // world-readable reads `createRequestContext` derives the flag from
+  // the same single fetch rather than calling this helper plus a
+  // second fetch.
   private async createRequestContext(
     requiredPermission: RealmAction,
   ): Promise<RequestContext> {
-    let permissions: RealmPermissions;
-    let shouldUseWorldReadable =
-      requiredPermission === 'read' && (await this.isWorldReadable());
-
-    if (shouldUseWorldReadable) {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        '*': ['read'],
-      };
-    } else {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
-      };
-    }
+    let fetched = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    let isWorldReadable = fetched['*']?.includes('read') ?? false;
+    let permissions: RealmPermissions =
+      requiredPermission === 'read' && isWorldReadable
+        ? {
+            [this.#matrixClientUserId]: ['assume-user'],
+            '*': ['read'],
+          }
+        : {
+            [this.#matrixClientUserId]: ['assume-user'],
+            ...fetched,
+          };
 
     return {
       realm: this,
@@ -6572,31 +6659,21 @@ export class Realm {
   }
 
   public async visibility(): Promise<RealmVisibility> {
-    if (this.visibilityPromise) {
-      return this.visibilityPromise;
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
+    let usernames = Object.keys(permissions).filter(
+      (username) => !username.startsWith('@realm/'),
+    );
+    if (usernames.includes('*')) {
+      return 'public';
+    } else if (usernames.includes('users') || usernames.length > 1) {
+      return 'shared';
+    } else {
+      return 'private';
     }
-
-    this.visibilityPromise = (async () => {
-      let permissions = await fetchRealmPermissions(
-        this.#dbAdapter,
-        new URL(this.url),
-      );
-
-      let usernames = Object.keys(permissions).filter(
-        (username) => !username.startsWith('@realm/'),
-      );
-      if (usernames.includes('*')) {
-        return 'public';
-      } else if (usernames.includes('users')) {
-        return 'shared';
-      } else if (usernames.length > 1) {
-        return 'shared';
-      } else {
-        return 'private';
-      }
-    })();
-
-    return this.visibilityPromise;
   }
 
   #logRequestPerformance(
