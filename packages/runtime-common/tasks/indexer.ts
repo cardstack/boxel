@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index';
 import {
   jobIdentity,
+  notifyAllFileChanges,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
@@ -365,6 +366,20 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         args.realmURL
       }:\n${JSON.stringify(stats, null, 2)}`,
     );
+    // CS-11182: emit the cross-replica `<realmURL>:*` wildcard so every
+    // mounted Realm drops its in-memory `#sourceCache` / `#transpiledModuleCache`
+    // and fires the L2 `module_transpile_cache` bulk tombstone for this
+    // realm. This is the single chokepoint that every from-scratch
+    // reindex flows through — startReindex's post-completion `.then`
+    // (the original fix) only covered POST /_full-reindex and
+    // POST /_reindex; the Grafana `/_grafana-reindex`,
+    // `/_grafana-full-reindex`, `/_post-deployment`, publish-realm
+    // `Realm.fullIndex`, and direct `enqueueReindexRealmJob` paths all
+    // bypassed it, leaving stale L1+L2 even after a successful reindex.
+    // Doing it here covers them all uniformly. Best-effort: failures
+    // fall back to a bounded staleness window because the next
+    // reader's transpile path re-tombstones the L2 row.
+    await notifyAllFileChanges(dbAdapter, args.realmURL);
     reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,

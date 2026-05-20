@@ -1118,9 +1118,28 @@ export class Realm {
         },
       );
 
+    // CS-11182: previously the chain was
+    //   await clearRealmDefinitions;
+    //   #dropAllTranspiledModuleCacheEntries();
+    //   broadcastIncrementalInvalidationEvent(...);
+    //   broadcastRealmEvent(...);
+    // — so a throw or hang in clearRealmDefinitions left the transpile-
+    // cache rows live and the broadcasts unsent, and clients kept being
+    // served pre-reindex bytes. Reorder so the synchronous, no-upstream-
+    // dependency work (L1 wipe, fire-and-forget L2 tombstone, broadcasts)
+    // happens first, and the awaited clearRealmDefinitions runs last
+    // where its rejection or stall can no longer block the rest. The
+    // broadcast helpers are fire-and-forget by design (the adapter call
+    // inside `broadcastRealmEvent` is invoked without `await`) so we
+    // call them without a try/catch, matching every other call site.
     let completed = indexingCompleted.then(async ({ invalidations }) => {
-      await this.#definitionLookup.clearRealmDefinitions(this.url);
-      this.#dropAllTranspiledModuleCacheEntries();
+      try {
+        this.#dropAllTranspiledModuleCacheEntries();
+      } catch (err: unknown) {
+        this.#log.error(
+          `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -1129,6 +1148,13 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+      try {
+        await this.#definitionLookup.clearRealmDefinitions(this.url);
+      } catch (err: unknown) {
+        this.#log.error(
+          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
     });
 
     void completed.catch((error: unknown) => {
@@ -3259,7 +3285,12 @@ export class Realm {
       // for one of those paths that captured generation 0 would still
       // succeed post-wipe, but that's a narrow window and currently
       // limited to the __testOnly bulk-wipe path.
-      await query(this.#dbAdapter, [
+      //
+      // CS-11182: RETURNING canonical_path so we can surface a zero-row
+      // result as a warning — a silent no-op here used to mask a
+      // realm_url mismatch between writer and bulk-wiper, leaving rows
+      // live across a reindex.
+      let updated = (await query(this.#dbAdapter, [
         'UPDATE',
         MODULE_TRANSPILE_CACHE_TABLE,
         'SET body = NULL, headers = NULL, dependency_keys = NULL,',
@@ -3268,7 +3299,17 @@ export class Realm {
         param(Date.now()),
         'WHERE realm_url =',
         param(this.url),
-      ]);
+        'RETURNING canonical_path',
+      ])) as { canonical_path: string }[];
+      if (updated.length === 0) {
+        this.#log.warn(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched zero rows`,
+        );
+      } else {
+        this.#log.debug(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched ${updated.length} row(s)`,
+        );
+      }
     } catch (err: unknown) {
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone failed for ${this.url}: ${String(err)}`,
