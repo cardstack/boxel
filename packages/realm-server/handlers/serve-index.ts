@@ -324,7 +324,12 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
     }
-    let publicPermissions = await hasPublicPermissions(cardURL, routingDeps);
+    // Resolve the realm once and reuse for both the permissions check and
+    // the routing-map lookup below. `findOrMountRealm` can fall back to a
+    // DB probe when the in-memory registry is cold, so we don't want to
+    // pay that cost twice on the hot HTML path.
+    let routedRealm = await findOrMountRealm(requestURL, routingDeps);
+    let publicPermissions = await hasPublicPermissions(routedRealm, routingDeps);
 
     if (!publicPermissions) {
       ctxt.body = injectHeadHTML(
@@ -341,7 +346,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // the @cardstack/host/config/environment meta tag further down so the
     // SPA can resolve the path post-hydration.
     let routingMap: { path: string; id: string }[] = [];
-    let routedRealm = await findOrMountRealm(requestURL, routingDeps);
     if (routedRealm) {
       routingMap = await routedRealm.getHostRoutingMap();
       if (routingMap.length > 0) {
