@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
 import type { RealmHttpServer as Server } from '../server';
@@ -1164,6 +1165,138 @@ module(basename(__filename), function () {
           await coordA.shutDown();
           await coordB.shutDown();
         }
+      });
+    },
+  );
+
+  // CS-11182: a from-scratch reindex must tombstone every
+  // module_transpile_cache row for the realm so the next reader misses
+  // L2 and re-transpiles. The post-completion chain in
+  // Realm.startReindex used to await clearRealmDefinitions before
+  // dropping the L2 rows — a throw in clearRealmDefinitions short-
+  // circuited the rest of the callback and left rows live with their
+  // pre-reindex bodies, so clients kept being served stale transpiles.
+  // These tests pin both the happy-path tombstone and the failure-
+  // isolation: a broken clearRealmDefinitions must not block the L2
+  // wipe.
+  module(
+    'Realm.reindex L2 module_transpile_cache tombstone (CS-11182)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      hooks.afterEach(function () {
+        sinon.restore();
+      });
+
+      const reindexSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class ReindexCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-reindex><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      async function countLiveRowsForRealm(): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function seedL2Row(modulePath: string): Promise<void> {
+        await testRealm.write(modulePath, reindexSource);
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        if (response.status !== 200) {
+          throw new Error(
+            `seedL2Row: expected 200 for /${modulePath}, got ${response.status}`,
+          );
+        }
+      }
+
+      test('reindex tombstones live L2 rows for the realm', async function (assert) {
+        await seedL2Row('reindex-happy.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row for the realm',
+        );
+
+        await testRealm.reindex();
+
+        assert.strictEqual(
+          await countLiveRowsForRealm(),
+          0,
+          'reindex tombstoned every live L2 row for the realm',
+        );
+      });
+
+      test('reindex still tombstones L2 rows when clearRealmDefinitions throws', async function (assert) {
+        // Reproduce the staging failure mode: a throw inside the
+        // post-completion .then's first awaited step used to short-
+        // circuit the rest of the callback, leaving the L2 rows live.
+        // The fix wraps each step in its own try/catch so a
+        // clearRealmDefinitions failure surfaces as a log line but
+        // does not block the bulk tombstone.
+        await seedL2Row('reindex-isolated.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row for the realm',
+        );
+
+        let stub = sinon
+          .stub(CachingDefinitionLookup.prototype, 'clearRealmDefinitions')
+          .rejects(new Error('synthetic clearRealmDefinitions failure'));
+
+        try {
+          await testRealm.reindex();
+        } finally {
+          stub.restore();
+        }
+
+        assert.strictEqual(
+          await countLiveRowsForRealm(),
+          0,
+          'bulk L2 tombstone ran even though clearRealmDefinitions threw',
+        );
       });
     },
   );
