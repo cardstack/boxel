@@ -4,9 +4,10 @@ import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from './helpers';
 
-// CS-10054: fixture for Realm.getHostRoutingMap coverage. The fixture is a
-// realm.json RealmConfig card with one routing rule mapping `/whitepaper`
-// to a white-paper card in the same realm.
+// CS-10054: fixture for Realm.getHostRoutingMap coverage. One rule uses
+// a relative reference (the recommended form, portable across realm URL
+// changes) and one is cross-realm — the latter must be dropped by the
+// same-realm guard.
 function makeRoutingFixture(): Record<
   string,
   string | LooseSingleCardDocument
@@ -38,7 +39,14 @@ function makeRoutingFixture(): Record<
         attributes: {
           cardInfo: { name: 'Routing Test Realm' },
           hostRoutingRules: [
-            { path: '/whitepaper', instance: './white-paper' },
+            // Relative — resolves against the realm root.
+            { path: '/rel', instance: './white-paper' },
+            // Cross-realm: must be filtered out by the same-realm
+            // guard. The project spec restricts routing rules to cards
+            // within the same realm; this verifies the read path
+            // enforces that even when the UI guard is bypassed by
+            // hand-editing realm.json.
+            { path: '/foreign', instance: 'http://otherrealm.test/x' },
           ],
         },
         meta: {
@@ -70,13 +78,13 @@ module(basename(__filename), function () {
       await testRealm.indexing();
     });
 
-    test('reads routing rules from the indexed RealmConfig card', async function (assert) {
+    test('resolves relative references and drops cross-realm rules', async function (assert) {
       let map = await testRealm.getHostRoutingMap();
 
       assert.deepEqual(
         map,
-        [{ path: '/whitepaper', id: `${realmURL.href}white-paper` }],
-        'returns one rule mapping /whitepaper to the absolute white-paper URL',
+        [{ path: '/rel', id: `${realmURL.href}white-paper` }],
+        'relative reference resolved against the realm root; cross-realm rule filtered',
       );
     });
   });

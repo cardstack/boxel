@@ -1,9 +1,7 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
-  resolveRRI,
   rri,
-  unresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -6051,9 +6049,9 @@ export class Realm {
   // CS-10054: read host routing rules from the indexed RealmConfig card.
   // Reads searchDoc.hostRoutingRules where each rule is
   // `{ path, instance }` — `instance` is the card URL as a string
-  // (resolved against the realm root for relative inputs like
-  // `./whitepaper`). Stored flat in attributes, so the indexed
-  // searchDoc matches the file shape one-to-one.
+  // (absolute, or relative to the realm root like `./whitepaper`).
+  // Stored flat in attributes so the indexed searchDoc matches the
+  // file shape one-to-one. Returns absolute URLs.
   async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
     let realmConfigCardURL = new URL(
       this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
@@ -6068,41 +6066,27 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return [];
       }
-      let realmRRI = rri(this.url);
-      // Canonical form of this realm for the same-realm comparison
-      // below. `unresolveCardReference` rewrites a URL-form realm to
-      // its registered prefix form (e.g. `@cardstack/catalog/`) when
-      // there's a mapping, so a rule whose `instance` is the URL form
-      // of a card in this realm still matches even if `this.url` is
-      // the prefix form (or vice-versa).
-      let realmCanonical = unresolveCardReference(realmRRI);
+      let realmBase = new URL(this.url);
       return rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
         if (typeof instance !== 'string' || instance.length === 0) return [];
-        let id: RealmResourceIdentifier;
+        let id: string;
         try {
-          // resolveRRI accepts URL form, registered-prefix form
-          // (`@cardstack/foo/...`), `$REALM/...`, and relative
-          // references — and preserves whichever canonical form the
-          // input/realm are in. That's what we want here so the same-
-          // realm guard below stays robust to either addressing scheme.
-          id = resolveRRI(instance, realmRRI);
+          id = new URL(instance, realmBase).href;
         } catch {
           return [];
         }
-        // Defensive same-realm guard. The project spec restricts routing
-        // rules to cards within the same realm, and CS-10052 enforces
-        // that in the UI — but the file is hand-editable, so the read
-        // path must filter too. Without this guard, a realm owner could
-        // point `instance` at a private realm's card and the serve-index
-        // cardURL rewrite would surface its prerendered HTML through
-        // their public realm's routed path, bypassing the private
-        // realm's permissions.
-        let idCanonical = unresolveCardReference(id);
-        if (!idCanonical.startsWith(realmCanonical)) {
+        // Defensive same-realm guard. The project spec restricts
+        // routing rules to cards within the same realm; CS-10052
+        // enforces that in the UI but the file is hand-editable, so
+        // the read path filters too. Without this guard a realm owner
+        // could point `instance` at a private realm's card and the
+        // serve-index cardURL rewrite would surface its prerendered
+        // HTML through their public realm's routed path.
+        if (!id.startsWith(this.url)) {
           this.#log.warn(
             `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
           );
