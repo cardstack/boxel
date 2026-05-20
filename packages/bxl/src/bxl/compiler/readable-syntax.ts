@@ -2701,22 +2701,15 @@ class Compiler {
           );
         }
 
-        if (
-          startEndpoint.family === 'front' &&
-          endEndpoint.family === 'front'
-        ) {
-          return {
-            source: `[${base}[${startEndpoint.oneBased - 1}:${endEndpoint.oneBased}][]`,
-            changed: true,
-            warnings: [],
-            next: this.index,
-            valueScope: item,
-            arrayItemScope: item,
-            streamItemScope: item,
-            openMaterialized: true,
-          };
-        }
-
+        // Always route through the `as $__seq` template, even for purely
+        // front-anchored ranges like `[#1..#3]`. The direct form
+        // `arr[a:b][]` is theoretically valid jq but the bundled native-
+        // jq parser mis-handles immediate post-slice iteration when it
+        // appears mid-pipeline (it can mis-bind the trailing `.field`
+        // access as if the iterator emitted a string, producing
+        // "Cannot index string with string"). The seq-binding template
+        // emits one extra `as $__seq | $__seq[...][...]` indirection
+        // that the parser handles reliably, and the cost is one binding.
         const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
         const seqVar = '$__seq';
         const lengthExpr = `(${seqVar} | length)`;
@@ -2752,8 +2745,13 @@ class Compiler {
     const humanIndex = indexTextFromHumanIndex(inner);
     if (humanIndex !== undefined) {
       if (humanIndex.includes(':')) {
+        // Same parser hazard as the `[#N..#M]` front-anchored branch
+        // above — emitting `arr[a:b][]` directly trips the bundled
+        // native-jq parser when a trailing `.field` access follows.
+        // Bind the array first, then slice/iterate via $__seq.
+        const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
         return {
-          source: `[${base}[${humanIndex}][]`,
+          source: `[(${closedBase}) as $__seq | $__seq[${humanIndex}][]`,
           changed: true,
           warnings: [],
           next: this.index,
@@ -2805,8 +2803,13 @@ class Compiler {
         rootPathPrefix,
         bindings: this.bindings,
       }).compile(currentScope);
+      // Bind the base first; emitting `arr[a:b][]` directly trips the
+      // bundled native-jq parser when a trailing `.field` access follows
+      // ("Cannot index string with string"). Same workaround as the
+      // `[#N..#M]` branch above.
+      const closedBase = hasUnclosedMaterializedArray(base) ? `${base}]` : base;
       return {
-        source: `[${base}[${compiled.source}][]`,
+        source: `[(${closedBase}) as $__seq | $__seq[${compiled.source}][]`,
         changed: compiled.changed,
         warnings: compiled.warnings,
         next: this.index,
