@@ -25,6 +25,14 @@ import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs'
 // vars whenever the cert exists; absent the cert, the dev stack stays
 // on HTTP end-to-end and this falls through to Vite's default.
 function devHttpsConfig() {
+  // Env mode: Traefik terminates TLS in front of a plain-HTTP vite, so
+  // we must NOT enable HTTPS here even if the TLS env vars are still
+  // set (e.g. inherited from a previous standard-mode shell session,
+  // or from a parent zsh that ran env-vars.sh before BOXEL_ENVIRONMENT
+  // was exported). Without this guard, vite expects a TLS handshake on
+  // its upstream port and Traefik's plain-HTTP proxy hits
+  // "HTTP/0.9 when not allowed" → 502 Bad Gateway in the browser.
+  if (process.env.BOXEL_ENVIRONMENT) return undefined;
   let certPath = process.env.REALM_SERVER_TLS_CERT_FILE;
   let keyPath = process.env.REALM_SERVER_TLS_KEY_FILE;
   if (!certPath || !keyPath) return undefined;
@@ -326,7 +334,15 @@ export default defineConfig(({ mode }) => ({
       allowedHosts: [envHostname],
       hmr: {
         host: envHostname,
-        clientPort: 80,
+        // The page is served by Traefik over https on :443, so the
+        // HMR client must connect via wss:// on the same port. With
+        // clientPort: 80, the browser opens `wss://host.<slug>.localhost:80/`
+        // which Traefik's :80 entrypoint returns a 404 for — the HMR
+        // WebSocket handshake fails, the prerender's standby load
+        // never finishes initializing, and realm-server boot stalls
+        // waiting on the prerender.
+        clientPort: 443,
+        protocol: 'wss',
       },
     }),
   },

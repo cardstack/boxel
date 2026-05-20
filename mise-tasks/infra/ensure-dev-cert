@@ -35,6 +35,30 @@ set -euo pipefail
 CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
 CERT_FILE="$CERT_DIR/localhost.pem"
 KEY_FILE="$CERT_DIR/localhost-key.pem"
+# Persists the set of env-mode slugs (BOXEL_ENVIRONMENT values) that any
+# worktree on this machine has used, so the leaf cert can carry a
+# `*.<slug>.localhost` SAN for each. RFC 6125 wildcards only cover one
+# DNS label, so `*.localhost` does NOT match `host.<slug>.localhost`;
+# we have to pre-declare the slug's wildcard explicitly.
+SLUGS_FILE="$CERT_DIR/known-env-slugs.txt"
+
+# Source the shared slug-computation helper. Resolved relative to this
+# script's location: mise-tasks/infra/ensure-dev-cert → scripts/env-slug.sh.
+_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$_REPO_ROOT/scripts/env-slug.sh"
+unset _REPO_ROOT
+
+CURRENT_SLUG="$(resolve_env_slug 2>/dev/null || true)"
+
+# Stamp the current slug into the persistent slug list so subsequent
+# regenerations keep covering it. Done up-front (before the idempotent
+# skip check) so adding a fresh worktree triggers exactly one regen.
+mkdir -p "$CERT_DIR"
+touch "$SLUGS_FILE"
+if [ -n "$CURRENT_SLUG" ] && ! grep -qxF "$CURRENT_SLUG" "$SLUGS_FILE"; then
+  echo "$CURRENT_SLUG" >> "$SLUGS_FILE"
+  echo "[ensure-dev-cert] Recorded new env-mode slug '$CURRENT_SLUG' in $SLUGS_FILE"
+fi
 
 # mkcert is required even on the idempotent-skip path: env-vars.sh needs
 # `mkcert -CAROOT` to populate `NODE_EXTRA_CA_CERTS` so Node clients
@@ -159,26 +183,53 @@ echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
 # Idempotent skip when the leaf cert already exists, isn't within 7
 # days of expiry, AND covers the subdomains the matrix harness's
 # publish-realm fixtures use (`*.localhost` for tenant subdomains and
-# `published.realm` for the host-resolver-mapped custom domain).
+# `published.realm` for the host-resolver-mapped custom domain) AND
+# every env-mode slug recorded in $SLUGS_FILE (`*.<slug>.localhost`).
 # Older certs were issued for `localhost 127.0.0.1 ::1` only and silently
 # fail with `TypeError: fetch failed` against any subdomain even though
 # Node trusts the mkcert root CA.
+cert_has_san() {
+  openssl x509 -in "$CERT_FILE" -noout -ext subjectAltName 2>/dev/null \
+    | grep -qF "DNS:$1"
+}
+
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
-    if openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null \
-      | grep -q 'DNS:\*\.localhost'; then
+    needs_regen=
+    if ! cert_has_san '*.localhost'; then
+      echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.localhost SAN; regenerating."
+      needs_regen=1
+    fi
+    if [ -z "$needs_regen" ]; then
+      while IFS= read -r slug; do
+        [ -z "$slug" ] && continue
+        if ! cert_has_san "*.$slug.localhost"; then
+          echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.$slug.localhost SAN; regenerating."
+          needs_regen=1
+          break
+        fi
+      done < "$SLUGS_FILE"
+    fi
+    if [ -z "$needs_regen" ]; then
       exit 0
     fi
-    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.localhost SAN; regenerating."
   else
     echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
   fi
 fi
 
-mkdir -p "$CERT_DIR"
-
 echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
+# Build SAN list: base names + a `*.<slug>.localhost` for every
+# recorded env-mode slug. The leaf is shared across worktrees, so we
+# accumulate slugs rather than overwriting them — see $SLUGS_FILE
+# stamping above.
+SANS=(localhost 127.0.0.1 ::1 "*.localhost" published.realm)
+while IFS= read -r slug; do
+  [ -z "$slug" ] && continue
+  SANS+=("*.$slug.localhost")
+done < "$SLUGS_FILE"
+
 mkcert \
   -cert-file "$CERT_FILE" \
   -key-file "$KEY_FILE" \
-  localhost 127.0.0.1 ::1 "*.localhost" published.realm
+  "${SANS[@]}"

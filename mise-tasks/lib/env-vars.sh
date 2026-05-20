@@ -47,6 +47,16 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ENV_SLUG
   export ENV_MODE=true
 
+  # Drop standard-mode TLS env vars if they leaked in from a parent
+  # shell or a prior mise activation. In env mode Traefik terminates
+  # TLS in front of plain-HTTP services; leaving these set tells vite
+  # and the realm-server to terminate TLS themselves, so Traefik then
+  # speaks HTTP to a TLS-expecting upstream and every request fails
+  # with "HTTP/0.9 when not allowed". NODE_EXTRA_CA_CERTS is kept —
+  # Node clients still need to trust Traefik's mkcert leaf.
+  unset REALM_SERVER_TLS_CERT_FILE
+  unset REALM_SERVER_TLS_KEY_FILE
+
   # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
   # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
   # traefik/dynamic/tls.yml references). Plain :80 routes 308-redirect

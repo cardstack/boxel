@@ -75,6 +75,25 @@ function registerWithTraefik(slug, hostname, port) {
   const tmpPath = configPath + '.tmp';
   fs.writeFileSync(tmpPath, entry, 'utf-8');
   fs.renameSync(tmpPath, configPath);
+  kickTraefikIfNeeded();
+}
+
+// Bounce Traefik on macOS after a config write — see the matching
+// helper in packages/realm-server/lib/dev-service-registry.ts for the
+// rationale (Docker Desktop's bind mounts don't propagate inotify,
+// and Traefik v3 file provider has no polling option).
+function kickTraefikIfNeeded() {
+  if (process.platform !== 'darwin') return;
+  const { spawn } = require('child_process');
+  const child = spawn('docker', ['restart', 'boxel-traefik'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  child.on('error', () => {
+    // Docker not running, container missing, etc. — readiness probes
+    // through Traefik will surface the underlying problem.
+  });
+  child.unref();
 }
 
 module.exports = { getEnvSlug, getTraefikDynamicDir, registerWithTraefik };

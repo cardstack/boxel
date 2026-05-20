@@ -11,12 +11,17 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   cd "$(dirname "$0")/../../boxel-icons" && npx http-server --cors=Origin,X-Requested-With,Content-Type,Accept,Range,Authorization,X-Boxel-Assume-User --port "${ICONS_PORT}" dist &
   ICONS_PID=$!
 
-  # Register icons service with Traefik via a small node script
+  # Register icons service with Traefik via a small node script.
+  # Mirrors dev-service-registry.ts: a `websecure` router terminates TLS
+  # at Traefik (mkcert leaf) and a sibling `-http` router on :80
+  # 308-redirects to https. The host bundle is loaded over https, so an
+  # `http://icons.<slug>.localhost/...` upstream would be mixed-content
+  # blocked AND fail the CORS preflight on the redirect.
   ENV_SLUG=$(resolve_env_slug)
   node -e "
     const fs = require('fs');
     const path = require('path');
-    const { execSync } = require('child_process');
+    const { execSync, spawn } = require('child_process');
     let dir;
     try {
       const mounted = execSync(
@@ -28,6 +33,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
     if (!dir) dir = path.resolve(__dirname, '..', '..', 'traefik', 'dynamic');
     const slug = '${ENV_SLUG}';
     const routerKey = 'icons-' + slug;
+    const redirectMiddleware = routerKey + '-https-redirect';
     const configPath = path.join(dir, slug + '-icons.yml');
     const entry = [
       'http:',
@@ -36,7 +42,20 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
       '      rule: \"Host(\`icons.${ENV_SLUG}.localhost\`)\"',
       '      service: ' + routerKey,
       '      entryPoints:',
+      '        - websecure',
+      '      tls: {}',
+      '    ' + routerKey + '-http:',
+      '      rule: \"Host(\`icons.${ENV_SLUG}.localhost\`)\"',
+      '      entryPoints:',
       '        - web',
+      '      middlewares:',
+      '        - ' + redirectMiddleware,
+      '      service: ' + routerKey,
+      '  middlewares:',
+      '    ' + redirectMiddleware + ':',
+      '      redirectScheme:',
+      '        scheme: https',
+      '        permanent: true',
       '  services:',
       '    ' + routerKey + ':',
       '      loadBalancer:',
@@ -48,6 +67,16 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
     fs.writeFileSync(tmp, entry, 'utf-8');
     fs.renameSync(tmp, configPath);
     console.log('Registered icons at icons.${ENV_SLUG}.localhost -> localhost:${ICONS_PORT}');
+    // Bounce Traefik on macOS — Docker Desktop's bind mounts don't
+    // propagate inotify, and Traefik v3 file provider has no polling
+    // option. See dev-service-registry.ts for the full rationale.
+    if (process.platform === 'darwin') {
+      const child = spawn('docker', ['restart', 'boxel-traefik'], {
+        stdio: 'ignore', detached: true,
+      });
+      child.on('error', () => {});
+      child.unref();
+    }
   "
 
   wait $ICONS_PID

@@ -83,7 +83,13 @@ kill_from_pidfile() {
 #
 # Implementation notes:
 #   - `setsid` puts the guardian in its own session so it doesn't get
-#     SIGHUP'd when dev-all's session dies.
+#     SIGHUP'd when dev-all's session dies. macOS doesn't ship setsid in
+#     the base system (it's a Linux util-linux tool); we fall through to
+#     plain `&` + `disown` + nohup-style ignored SIGHUP. The trap path is
+#     still the primary cleanup signal — this guardian is a safety net
+#     that only matters when the trap is denied a chance to fire — so
+#     the marginal session-isolation guarantee setsid adds isn't worth
+#     a hard dependency on util-linux.
 #   - stdin/stdout/stderr are redirected away from the terminal so the
 #     guardian can survive after the user's shell exits.
 #   - Output goes to a log file so the user can audit what fired.
@@ -97,7 +103,16 @@ spawn_cleanup_guardian() {
   _scg_parent_pid="$1"
   _scg_log="${BOXEL_DEV_ALL_GUARDIAN_LOG:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log}"
   _scg_lib="$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
-  setsid sh -c "
+  if command -v setsid >/dev/null 2>&1; then
+    _scg_session_prefix="setsid"
+  else
+    # macOS fallback: no session-leader detachment, but `trap '' HUP` in
+    # the guardian body makes SIGHUP a no-op so a terminal hangup on the
+    # parent shell doesn't kill us before cleanup runs.
+    _scg_session_prefix=""
+  fi
+  $_scg_session_prefix sh -c "
+    trap '' HUP
     exec </dev/null >>'$_scg_log' 2>&1
     echo \"[guardian \$(date +%H:%M:%S)] watching dev-all pid $_scg_parent_pid (pidfile $PIDFILE)\"
     while kill -0 $_scg_parent_pid 2>/dev/null; do
