@@ -1464,12 +1464,12 @@ export default class OperatorModeStateService extends Service {
   ): Promise<BoxelContext> {
     let codeMode: BoxelContext['codeMode'] = undefined;
     if (this._state.workspaceChooserOpened) {
-      let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
+      let userWorkspaces = this.realmServer.userRealmIdentifiers.map((url) => ({
         url,
         name: this.realm.info(url).name,
         type: 'user-workspace' as const,
       }));
-      let catalogWorkspaces = this.realmServer.catalogRealmURLs.map((url) => ({
+      let catalogWorkspaces = this.realmServer.catalogRealmIdentifiers.map((url) => ({
         url,
         name: this.realm.info(url).name,
         type: 'catalog-workspace' as const,

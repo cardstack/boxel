@@ -13,11 +13,11 @@ export function isSearchKeyEmpty(searchKey: string): boolean {
 
 export function resolveSearchKeyAsURL(
   searchKey: string,
-  availableRealmURLs: string[],
+  availableRealmIdentifiers: string[],
 ): string | undefined {
   if (!isURLSearchKey(searchKey)) {
     return undefined;
   }
-  let maybeIndexCardURL = availableRealmURLs.find((u) => u === searchKey + '/');
+  let maybeIndexCardURL = availableRealmIdentifiers.find((u) => u === searchKey + '/');
   return maybeIndexCardURL ?? searchKey;
 }

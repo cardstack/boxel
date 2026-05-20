@@ -206,8 +206,8 @@ export default class Card extends Route {
   private async getCardUrl(cardPath: string): Promise<string | undefined> {
     let cardUrl;
     if (hostsOwnAssets) {
-      // availableRealmURLs is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
+      // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
+      let realmUrl = this.realmServer.availableRealmIdentifiers.find((realmUrl) => {
         let realmPathParts = new URL(realmUrl).pathname
           .split('/')
           .filter((part) => part !== '');

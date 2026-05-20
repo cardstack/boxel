@@ -15,6 +15,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import type {
   QueryResultsMeta,
   ErrorEntry,
+  RealmIdentifier,
   RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
@@ -73,7 +74,7 @@ export class SearchResource<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
-  @tracked private realmsToSearch: string[] = [];
+  @tracked private realmsToSearch: RealmIdentifier[] = [];
   // Resist the urge to expose this property publicly as that may entice
   // consumers of this resource to use it in a non-reactive manner (pluck off
   // the instances and throw away the resource).
@@ -206,8 +207,8 @@ export class SearchResource<
     this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
-        ? this.realmServer.availableRealmURLs
-        : realms;
+        ? this.realmServer.availableRealmIdentifiers
+        : realms.map(ri);
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
@@ -302,7 +303,7 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
-        let realmPath = new RealmPaths(ri(realm));
+        let realmPath = new RealmPaths(realm);
         let cards = this.instances.filter((card) =>
           realmPath.inRealm(rri(card.id)),
         );

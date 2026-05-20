@@ -371,7 +371,7 @@ export default class MatrixService extends Service {
         async (e) => {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
-              await this.realmServer.setAvailableRealmURLs(
+              await this.realmServer.setAvailableRealmIdentifiers(
                 e.event.content.realms,
               );
               // Only do this after we've completed our overall login
@@ -654,7 +654,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmURLs(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms);
   }
 
   public async removeRealmFromAccountData(realmURLString: string) {
@@ -667,7 +667,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmURLs(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms);
   }
 
   public async getWorkspaceFavorites(): Promise<string[]> {
@@ -767,13 +767,13 @@ export default class MatrixService extends Service {
 
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
-          this.realmServer.setAvailableRealmURLs(
+          this.realmServer.setAvailableRealmIdentifiers(
             accountDataContent?.realms ?? [],
           ),
         ]);
 
         await this.realm.prefetchRealmInfos(
-          this.realmServer.availableRealmURLs,
+          this.realmServer.availableRealmIdentifiers,
         );
 
         await this.initSlidingSync(accountDataContent);
@@ -882,7 +882,7 @@ export default class MatrixService extends Service {
   async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
-    let activeRealms = this.realmServer.availableRealmURLs;
+    let activeRealms = this.realmServer.availableRealmIdentifiers;
 
     await Promise.all(
       activeRealms.map(async (realmURL: string) => {

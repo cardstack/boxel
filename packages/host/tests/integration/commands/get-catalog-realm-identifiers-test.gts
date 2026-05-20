@@ -59,7 +59,7 @@ module(
       );
 
       let realmServer = getService('realm-server') as RealmServerService;
-      Object.defineProperty(realmServer, 'catalogRealmURLs', {
+      Object.defineProperty(realmServer, 'catalogRealmIdentifiers', {
         get: () => ['https://example.com/catalog/'],
         configurable: true,
       });

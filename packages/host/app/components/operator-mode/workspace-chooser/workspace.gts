@@ -33,9 +33,9 @@ import {
 import {
   hasExecutableExtension,
   RealmPaths,
-  ri,
   rri,
   SupportedMimeType,
+  type RealmIdentifier,
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -52,7 +52,7 @@ import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    realmURL: string;
+    realmIdentifier: RealmIdentifier;
     showMenu?: boolean;
   };
 }
@@ -94,7 +94,7 @@ export default class Workspace extends Component<Signature> {
           @width='16'
           @height='16'
           {{on 'click' this.toggleFavorite}}
-          data-test-workspace-favorite-btn={{@realmURL}}
+          data-test-workspace-favorite-btn={{@realmIdentifier}}
         />
         <div class='tile-menu-btn'>
           <BoxelDropdown>
@@ -104,7 +104,7 @@ export default class Workspace extends Component<Signature> {
                 @variant='ghost'
                 @width='16'
                 @height='16'
-                data-test-workspace-menu-trigger={{@realmURL}}
+                data-test-workspace-menu-trigger={{@realmIdentifier}}
                 {{bindings}}
               />
             </:trigger>
@@ -117,7 +117,7 @@ export default class Workspace extends Component<Signature> {
           <button
             class='host-trigger'
             type='button'
-            data-test-host-trigger={{@realmURL}}
+            data-test-host-trigger={{@realmIdentifier}}
             {{on 'click' this.toggleHostDropdown}}
           >
             <span class='trigger-house'><Home width='13' height='13' /></span>
@@ -128,7 +128,7 @@ export default class Workspace extends Component<Signature> {
           </button>
 
           {{#if this.isHostDropdownOpen}}
-            <div class='host-dropdown' data-test-host-dropdown={{@realmURL}}>
+            <div class='host-dropdown' data-test-host-dropdown={{@realmIdentifier}}>
               <span class='dropdown-header'>Launch in new window</span>
               <ul class='dropdown-list'>
                 {{#each this.publishedRealmURLs as |url|}}
@@ -180,7 +180,7 @@ export default class Workspace extends Component<Signature> {
           @size='medium'
           @cardContainerClass='workspace-chooser-delete-modal'
           class='workspace-chooser-delete-modal-container'
-          data-test-delete-modal={{@realmURL}}
+          data-test-delete-modal={{@realmIdentifier}}
         >
           <:content>
             <div class='delete-modal__header'>
@@ -774,7 +774,7 @@ export default class Workspace extends Component<Signature> {
   </template>
 
   get isFavorited() {
-    return this.matrixService.workspaceFavorites.includes(this.args.realmURL);
+    return this.matrixService.workspaceFavorites.includes(this.args.realmIdentifier);
   }
 
   @service declare private operatorModeStateService: OperatorModeStateService;
@@ -795,13 +795,13 @@ export default class Workspace extends Component<Signature> {
   }
 
   private loadRealmTask = task(async () => {
-    await this.realm.login(this.args.realmURL);
-    await this.realm.ensureRealmMeta(this.args.realmURL);
+    await this.realm.login(this.args.realmIdentifier);
+    await this.realm.ensureRealmMeta(this.args.realmIdentifier);
   });
 
   @cached
   private get realmInfo() {
-    return this.realm.info(this.args.realmURL);
+    return this.realm.info(this.args.realmIdentifier);
   }
 
   private get name() {
@@ -827,9 +827,9 @@ export default class Workspace extends Component<Signature> {
 
   @action async toggleFavorite() {
     if (this.isFavorited) {
-      await this.matrixService.removeWorkspaceFavorite(this.args.realmURL);
+      await this.matrixService.removeWorkspaceFavorite(this.args.realmIdentifier);
     } else {
-      await this.matrixService.addWorkspaceFavorite(this.args.realmURL);
+      await this.matrixService.addWorkspaceFavorite(this.args.realmIdentifier);
     }
   }
 
@@ -901,7 +901,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   private get canDeleteWorkspace() {
-    return this.realm.isRealmOwner(this.args.realmURL);
+    return this.realm.isRealmOwner(this.args.realmIdentifier);
   }
 
   private get deleteSummaryText() {
@@ -934,7 +934,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   @action async openWorkspace() {
-    await this.operatorModeStateService.openWorkspace(this.args.realmURL);
+    await this.operatorModeStateService.openWorkspace(this.args.realmIdentifier);
   }
 
   @action openDeleteModal() {
@@ -958,7 +958,7 @@ export default class Workspace extends Component<Signature> {
   private loadDeleteSummaryTask = dropTask(async () => {
     try {
       let response = await this.network.authedFetch(
-        `${this.args.realmURL}_mtimes`,
+        `${this.args.realmIdentifier}_mtimes`,
         {
           headers: {
             Accept: SupportedMimeType.Mtimes,
@@ -990,23 +990,23 @@ export default class Workspace extends Component<Signature> {
     this.deleteError = undefined;
 
     try {
-      let realmPath = new RealmPaths(ri(this.args.realmURL));
+      let realmPath = new RealmPaths(this.args.realmIdentifier);
       let isActiveWorkspace =
-        this.operatorModeStateService.realmURL === this.args.realmURL ||
+        this.operatorModeStateService.realmURL === this.args.realmIdentifier ||
         this.operatorModeStateService
           .getOpenCardIds()
           .some((cardId) => realmPath.inRealm(rri(cardId))) ||
         this.operatorModeStateService.codePathString?.startsWith(
-          this.args.realmURL,
+          this.args.realmIdentifier,
         );
 
-      await this.realmServer.deleteRealm(this.args.realmURL);
-      await this.matrixService.removeRealmFromAccountData(this.args.realmURL);
-      this.recentFilesService.removeRecentFilesForRealmURL(this.args.realmURL);
+      await this.realmServer.deleteRealm(this.args.realmIdentifier);
+      await this.matrixService.removeRealmFromAccountData(this.args.realmIdentifier);
+      this.recentFilesService.removeRecentFilesForRealmURL(this.args.realmIdentifier);
       for (let publishedRealmURL of this.publishedRealmURLs) {
         this.recentFilesService.removeRecentFilesForRealmURL(publishedRealmURL);
       }
-      this.realm.removeRealm(this.args.realmURL);
+      this.realm.removeRealm(this.args.realmIdentifier);
 
       if (isActiveWorkspace) {
         this.operatorModeStateService.clearStacks();
