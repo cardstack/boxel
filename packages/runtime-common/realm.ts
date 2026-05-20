@@ -1,7 +1,9 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
+  resolveRRI,
   rri,
+  unresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -6043,16 +6045,28 @@ export class Realm {
       if (!Array.isArray(rules)) {
         return [];
       }
-      let realmBase = new URL(this.url);
+      let realmRRI = rri(this.url);
+      // Canonical form of this realm for the same-realm comparison
+      // below. `unresolveCardReference` rewrites a URL-form realm to
+      // its registered prefix form (e.g. `@cardstack/catalog/`) when
+      // there's a mapping, so a rule whose `instance` is the URL form
+      // of a card in this realm still matches even if `this.url` is
+      // the prefix form (or vice-versa).
+      let realmCanonical = unresolveCardReference(realmRRI);
       return rules.flatMap((rule) => {
         if (!rule || typeof rule !== 'object') return [];
         let path = (rule as Record<string, unknown>).path;
         let instance = (rule as Record<string, unknown>).instance;
         if (typeof path !== 'string') return [];
         if (typeof instance !== 'string' || instance.length === 0) return [];
-        let id: string;
+        let id: RealmResourceIdentifier;
         try {
-          id = new URL(instance, realmBase).href;
+          // resolveRRI accepts URL form, registered-prefix form
+          // (`@cardstack/foo/...`), `$REALM/...`, and relative
+          // references — and preserves whichever canonical form the
+          // input/realm are in. That's what we want here so the same-
+          // realm guard below stays robust to either addressing scheme.
+          id = resolveRRI(instance, realmRRI);
         } catch {
           return [];
         }
@@ -6064,7 +6078,8 @@ export class Realm {
         // cardURL rewrite would surface its prerendered HTML through
         // their public realm's routed path, bypassing the private
         // realm's permissions.
-        if (!id.startsWith(this.url)) {
+        let idCanonical = unresolveCardReference(id);
+        if (!idCanonical.startsWith(realmCanonical)) {
           this.#log.warn(
             `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
           );

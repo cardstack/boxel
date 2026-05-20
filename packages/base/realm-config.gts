@@ -18,14 +18,16 @@ export class RoutingRuleField extends FieldDef {
     description: 'Static path within the realm, e.g. "/" or "/pricing"',
   });
 
-  // Card URL of the instance to render when the realm is navigated at
-  // `path`. Stored as a string (rather than a `linksTo`) so the rule
-  // serializes flat alongside `path` inside `attributes` — no JSON:API
-  // relationships split. Relative URLs (e.g. `./whitepaper`) are
-  // resolved against the realm root by the routing-map reader.
+  // Reference to the card instance to render when the realm is
+  // navigated at `path`. Accepts any form the runtime's RRI resolver
+  // accepts — absolute URLs, registered prefixes (e.g.
+  // `@cardstack/catalog/foo`), `$REALM/foo`, or relative references
+  // (`./foo`) — all resolved against the realm root by the routing-
+  // map reader. Stored as a string (rather than `linksTo`) so the
+  // rule serializes flat alongside `path` inside `attributes` — no
+  // JSON:API relationships split.
   @field instance = contains(StringField, {
-    description:
-      'Card URL to render at this path. Relative URLs are resolved against the realm root.',
+    description: 'Card instance to render when the realm is navigated at this path',
   });
 }
 
