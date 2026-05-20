@@ -46,6 +46,7 @@ import {
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
+import { serializeFatalReason } from './lib/serialize-fatal-reason';
 
 let log = logger('worker');
 
@@ -253,7 +254,17 @@ let autoMigrate = migrateDB || undefined;
       return;
     }
     isFatalHandlerRunning = true;
-    log.error(`Fatal ${source} in worker child ${workerId}:`, reason as Error);
+    // FD-level synchronous write for the same reason as the STARTUP
+    // stamp at the top of this file: stderr is libuv-async when piped
+    // to worker-manager, so `log.error` here can be dropped before the
+    // child exits via `process.exit(1)` below. Without this, the
+    // captured server log shows the child as having silently exited
+    // `code=1, signal=null` and we lose the actual stack trace (see
+    // CS-11200).
+    writeSync(
+      2,
+      `[worker] FATAL ${source} pid=${process.pid} workerId=${workerId}: ${serializeFatalReason(reason)}\n`,
+    );
     try {
       Sentry.captureException(reason);
     } catch {
@@ -266,7 +277,10 @@ let autoMigrate = migrateDB || undefined;
           new Promise<void>((r) => setTimeout(r, 5000).unref()),
         ]);
       } catch (e) {
-        log.error(`Fatal handler finalize failed for ${workerId}:`, e);
+        writeSync(
+          2,
+          `[worker] FATAL finalize-failed pid=${process.pid} workerId=${workerId}: ${serializeFatalReason(e)}\n`,
+        );
       } finally {
         process.exit(1);
       }
@@ -279,10 +293,17 @@ let autoMigrate = migrateDB || undefined;
     fatalExit(err, 'uncaughtException');
   });
 })().catch((e: any) => {
-  Sentry.captureException(e);
-  log.error(
-    `worker: Unexpected error encountered starting worker, stopping worker`,
-    e,
+  try {
+    Sentry.captureException(e);
+  } catch {
+    // best-effort
+  }
+  // Same FD-level rationale as fatalExit above: this is the startup
+  // path's fatal-exit, and `log.error` immediately before
+  // `process.exit(1)` can be lost on the libuv-async stderr pipe.
+  writeSync(
+    2,
+    `[worker] FATAL startup-error pid=${process.pid}: ${serializeFatalReason(e)}\n`,
   );
   process.exit(1);
 });

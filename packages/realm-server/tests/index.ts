@@ -204,6 +204,7 @@ const ALL_TEST_FILES: string[] = [
   './queue-test',
   './finalize-orphan-reservations-test',
   './finalize-child-fatal-failure-test',
+  './serialize-fatal-reason-test',
   './screenshot-card-test',
   './run-command-task-test',
   './realm-endpoints-test',
