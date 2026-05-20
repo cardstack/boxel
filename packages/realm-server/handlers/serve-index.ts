@@ -444,6 +444,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       );
     }
 
+    if (headFragments.length > 0) {
+      responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
+    }
+
     if (routingMap.length > 0 && routedRealm) {
       // Rules are stored realm-relative ('/whitepaper'). The client sees URL
       // paths that include the realm's mount segment ('/routing/whitepaper'
@@ -455,16 +459,22 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         path: realmPathname + rule.path.replace(/^\//, ''),
         id: rule.id,
       }));
-      // Escape `<` so any embedded `</script>` or `<!--` in the JSON can't
-      // break out of the script context.
-      let safeMap = JSON.stringify(hostScopedMap).replace(/</g, '\\u003c');
-      headFragments.push(
-        `<script>window.__hostRoutingMap = ${safeMap};</script>`,
+      // Per-request merge into the already-rewritten config meta tag.
+      // The retrieveIndexHTML rewrite is cached process-wide because the
+      // fields it touches are global; the routing map is per-realm so it
+      // can't share that cache. This second regex pass parses the URL-
+      // encoded JSON, sets hostRoutingMap, and re-encodes — keeping the
+      // routing data on the same typed channel the host already reads
+      // for hostsOwnAssets / realmServerURL / matrixURL etc., rather
+      // than via a separate `window.__hostRoutingMap` global.
+      responseHTML = responseHTML.replace(
+        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
+        (_match, g1, g2, g3) => {
+          let cfg = JSON.parse(decodeURIComponent(g2));
+          cfg.hostRoutingMap = hostScopedMap;
+          return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
+        },
       );
-    }
-
-    if (headFragments.length > 0) {
-      responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
     }
 
     if (isolatedHTML != null) {

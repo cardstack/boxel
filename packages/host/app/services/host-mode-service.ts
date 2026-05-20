@@ -114,10 +114,13 @@ export default class HostModeService extends Service {
   }
 
   // CS-10055: routing rules from the realm config card. The realm-server
-  // injects this map as `window.__hostRoutingMap` in the SPA shell so the
-  // first-render decision in the index route is synchronous.
+  // merges this into the @cardstack/host/config/environment meta tag
+  // per-request when the request hits a realm whose config card has
+  // hostRoutingRules — so the first-render decision in the index route
+  // is synchronous and the field is part of the typed config surface
+  // rather than a window global.
   get hostRoutingMap(): { path: string; id: string }[] {
-    let map = (window as { __hostRoutingMap?: unknown }).__hostRoutingMap;
+    let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
     return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
   }
 
