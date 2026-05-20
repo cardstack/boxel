@@ -506,6 +506,42 @@ export function serializableError(err: any): any {
   return result;
 }
 
+// Coerce an arbitrary thrown / serialized value into a non-empty
+// human-readable string. Used to guarantee the `message` of an
+// instance-/file-/module-error row carries enough text to debug.
+// Order of preference:
+//   1. err.message (if a non-empty string)
+//   2. err.title (if a non-empty string)
+//   3. err.stack first line (if available)
+//   4. String(err) (catches primitives, falls back to "[object Object]")
+//   5. the supplied placeholder
+export function coerceErrorMessage(err: unknown, placeholder: string): string {
+  let candidates: unknown[] = [];
+  if (err != null && typeof err === 'object') {
+    candidates.push(
+      (err as { message?: unknown }).message,
+      (err as { title?: unknown }).title,
+    );
+    let stack = (err as { stack?: unknown }).stack;
+    if (typeof stack === 'string') {
+      let firstLine = stack.split('\n', 1)[0]?.trim();
+      if (firstLine) {
+        candidates.push(firstLine);
+      }
+    }
+  } else if (typeof err === 'string') {
+    candidates.push(err);
+  } else if (err !== undefined && err !== null) {
+    candidates.push(String(err));
+  }
+  for (let candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+  return placeholder;
+}
+
 export function responseWithError(
   error: CardError,
   requestContext: RequestContext,

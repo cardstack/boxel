@@ -32,7 +32,10 @@ import {
   logger as runtimeLogger,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { serializableError } from '@cardstack/runtime-common/error';
+import {
+  coerceErrorMessage,
+  serializableError,
+} from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -1164,8 +1167,22 @@ export default class RenderRoute extends Route<Model> {
       withTimerSummary,
       fallbackDeps,
     );
+    // The persisted error doc is useless if `message` is empty or
+    // undefined — the indexer's index-writer guard refuses such rows
+    // and fails the whole indexing job. Guarantee a non-empty message
+    // here as the last stop before serialization to the DOM.
+    let withGuaranteedMessage: RenderError = {
+      ...withRuntimeDeps,
+      error: {
+        ...withRuntimeDeps.error,
+        message: coerceErrorMessage(
+          withRuntimeDeps.error,
+          'Render failed (host produced no error message)',
+        ),
+      },
+    };
     return JSON.stringify(
-      this.#stripLastKnownGoodHtml(withRuntimeDeps),
+      this.#stripLastKnownGoodHtml(withGuaranteedMessage),
       null,
       2,
     );
