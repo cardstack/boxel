@@ -21,12 +21,19 @@ const ERROR_DOC_MAX_BYTES = 8 * 1024 * 1024;
 //   enough to commit a fresh (clamped) replacement row, and the realm
 //   loops forever on the same trigger file.
 //
-// One-shot scrub: where octet_length(error_doc::text) >
-// ERROR_DOC_MAX_BYTES, replace error_doc with a minimal
-// SerializedError-shaped placeholder. has_error stays true so the
+// One-shot scrub: where has_error = TRUE and
+// octet_length(error_doc::text) > ERROR_DOC_MAX_BYTES, replace
+// error_doc with a minimal SerializedError-shaped placeholder. The
 // row's error semantics are preserved, but the body is small enough
 // to read without OOM. Once a row is touched by a regular indexing
 // cycle thereafter, the normal write-path clamp keeps things bounded.
+//
+// The has_error filter is deliberate. The standard write path
+// maintains the invariant has_error = TRUE ↔ error_doc IS NOT NULL,
+// so this filter is a no-op for invariant-respecting rows. A row
+// with has_error = FALSE and a large error_doc would be an invariant
+// violation we don't want to speculatively repair from inside a data
+// migration; leave it for separate triage.
 //
 // Both tables get the same scrub:
 //   - boxel_index         : committed table the dep walk reads
@@ -50,7 +57,8 @@ exports.up = (pgm) => {
         'message', 'error_doc body exceeded the ${ERROR_DOC_MAX_BYTES}-byte budget and was replaced by a data migration. The row remains marked has_error = true; the original additionalErrors chain is not preserved.',
         'additionalErrors', NULL
       )
-      WHERE error_doc IS NOT NULL
+      WHERE has_error = TRUE
+        AND error_doc IS NOT NULL
         AND octet_length(error_doc::text) > ${ERROR_DOC_MAX_BYTES};
     `);
   }
