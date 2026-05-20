@@ -337,8 +337,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // CS-10055: host routing rules in the realm config can map a bare path
     // (e.g. /whitepaper) to a target card. When the requested path matches
     // a rule, rewrite cardURL so the head/isolated/scoped CSS fetched
-    // below render the routed target. The same map is also injected as
-    // a <script> further down so the SPA can resolve the path post-hydration.
+    // below render the routed target. The same map is also written into
+    // the @cardstack/host/config/environment meta tag further down so the
+    // SPA can resolve the path post-hydration.
     let routingMap: { path: string; id: string }[] = [];
     let routedRealm = await findOrMountRealm(requestURL, routingDeps);
     if (routedRealm) {
