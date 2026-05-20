@@ -329,7 +329,10 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // DB probe when the in-memory registry is cold, so we don't want to
     // pay that cost twice on the hot HTML path.
     let routedRealm = await findOrMountRealm(requestURL, routingDeps);
-    let publicPermissions = await hasPublicPermissions(routedRealm, routingDeps);
+    let publicPermissions = await hasPublicPermissions(
+      routedRealm,
+      routingDeps,
+    );
 
     if (!publicPermissions) {
       ctxt.body = injectHeadHTML(
