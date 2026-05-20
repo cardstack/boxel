@@ -13,7 +13,12 @@ import {
   type RenderResponse,
   type TimingDiagnostics,
 } from '../index';
-import { CardError, isCardError, serializableError } from '../error';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from '../error';
 import { unresolveResourceInstanceURLs } from '../url';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
@@ -93,6 +98,10 @@ export async function performCardIndexing({
      * entry with an error, rejects malformed entries missing error payloads,
      * and synthesizes an ErrorEntry from either a CardError or generic Error.
      */
+    // The synthesized fallback message names the instance URL so the
+    // persisted error doc is at least diagnosable by URL when an
+    // upstream caller produced an entry with no usable message text.
+    let missingMessageFallback = `Render error for ${instanceURL.href} produced no error message (upstream entry-construction site dropped the underlying render error text)`;
     let normalizeToErrorEntry = (
       entry: ErrorEntry | undefined,
       err: unknown,
@@ -102,6 +111,10 @@ export async function performCardIndexing({
         normalizedError.additionalErrors =
           normalizedError.additionalErrors ?? null;
         normalizedError.status = normalizedError.status ?? 500;
+        normalizedError.message = coerceErrorMessage(
+          normalizedError,
+          coerceErrorMessage(err, missingMessageFallback),
+        );
         return {
           ...entry,
           type: 'instance-error',
@@ -114,10 +127,15 @@ export async function performCardIndexing({
         });
       }
       if (isCardError(err)) {
-        return { type: 'instance-error', error: serializableError(err) };
+        let serialized = serializableError(err);
+        serialized.message = coerceErrorMessage(
+          serialized,
+          missingMessageFallback,
+        );
+        return { type: 'instance-error', error: serialized };
       }
       let fallback = new CardError(
-        (err as Error)?.message ?? 'unknown render error',
+        coerceErrorMessage(err, missingMessageFallback),
         { status: 500 },
       );
       fallback.stack = (err as Error)?.stack;
@@ -210,9 +228,16 @@ export async function performCardIndexing({
       instanceURL,
     );
   if (dependencyError) {
+    let normalizedDependencyError = {
+      ...dependencyError,
+      message: coerceErrorMessage(
+        dependencyError,
+        `Indexing failed because a dependency of ${instanceURL.href} is in error state`,
+      ),
+    };
     await updateEntry(instanceURL, {
       type: 'instance-error',
-      error: dependencyError,
+      error: normalizedDependencyError,
       searchData: searchDoc ?? undefined,
       types: types ?? undefined,
       cardType:
