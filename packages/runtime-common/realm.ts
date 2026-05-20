@@ -6087,6 +6087,65 @@ export class Realm {
     }
   }
 
+  // CS-10054: read host routing rules from the indexed RealmConfig card.
+  // The `instance` field is `linksTo(CardDef)`, so the indexed
+  // searchDoc flattens each rule's link as `{ id, ...flattened
+  // linked-card attrs }`. We only need the absolute `id` here.
+  // Returns absolute URLs.
+  async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+      if (indexEntry?.type !== 'instance') {
+        return [];
+      }
+      let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
+      if (!Array.isArray(rules)) {
+        return [];
+      }
+      return rules.flatMap((rule) => {
+        if (!rule || typeof rule !== 'object') return [];
+        let path = (rule as Record<string, unknown>).path;
+        let instance = (rule as Record<string, unknown>).instance;
+        if (typeof path !== 'string') return [];
+        if (!instance || typeof instance !== 'object') return [];
+        let id = (instance as Record<string, unknown>).id;
+        if (typeof id !== 'string') return [];
+        let idURL: URL;
+        try {
+          idURL = new URL(id);
+        } catch {
+          return [];
+        }
+        // Defensive same-realm guard. The project spec restricts
+        // routing rules to cards within the same realm; CS-10052
+        // enforces that in the UI but the file is hand-editable, so
+        // the read path filters too. Without this guard a realm owner
+        // could point `instance` at a private realm's card and the
+        // serve-index cardURL rewrite would surface its prerendered
+        // HTML through their public realm's routed path. `inRealm`
+        // is URL-aware, so neighbouring realms with shared prefixes
+        // (`/realm-evil/` vs `/realm/`) and trailing-slash variance
+        // are handled correctly.
+        if (!this.paths.inRealm(idURL)) {
+          this.#log.warn(
+            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+          );
+          return [];
+        }
+        return [{ path, id }];
+      });
+    } catch (e) {
+      this.#log.warn(
+        `failed to read host routing map from RealmConfig card: ${e}`,
+      );
+      return [];
+    }
+  }
+
   // Upserts the patch into realm_metadata for this realm. Only the
   // provided keys are written; absent keys retain their existing column
   // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit

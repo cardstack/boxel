@@ -21,7 +21,7 @@ export class RoutingRuleField extends FieldDef {
 
   @field instance = linksTo(CardDef, {
     description:
-      'Card instance to render when the realm is navigated at the given path',
+      'Card instance to render when the realm is navigated at this path',
   });
 }
 
