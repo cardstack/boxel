@@ -34,7 +34,6 @@ import {
   hasExecutableExtension,
   RealmPaths,
   ri,
-  rri,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
@@ -995,7 +994,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService.realmURL === this.args.realmURL ||
         this.operatorModeStateService
           .getOpenCardIds()
-          .some((cardId) => realmPath.inRealm(rri(cardId))) ||
+          .some((cardId) => realmPath.inRealm(cardId)) ||
         this.operatorModeStateService.codePathString?.startsWith(
           this.args.realmURL,
         );

@@ -32,6 +32,7 @@ import {
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
+  rri,
   type CodeRef,
 } from '@cardstack/runtime-common';
 
@@ -1313,10 +1314,10 @@ module('Integration | card-basics', function (hooks) {
       }
 
       let mango = new Person();
-      mango.id = `${testRealmURL}Person/mango`;
+      mango.id = rri(`${testRealmURL}Person/mango`);
       assert.strictEqual(mango.id, `${testRealmURL}Person/mango`);
 
-      let vanGogh = new Person({ id: `${testRealmURL}Person/vanGogh` });
+      let vanGogh = new Person({ id: rri(`${testRealmURL}Person/vanGogh`) });
       assert.strictEqual(vanGogh.id, `${testRealmURL}Person/vanGogh`);
     });
 
@@ -1344,7 +1345,7 @@ module('Integration | card-basics', function (hooks) {
       await saveCard(card, `${testRealmURL}Person/mango`, loader);
 
       try {
-        card.id = 'boom';
+        card.id = rri('boom');
         throw new Error(`expected exception not thrown`);
       } catch (err: any) {
         assert.ok(
