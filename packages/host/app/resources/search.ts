@@ -302,9 +302,7 @@ export class SearchResource<
     return this.realmsToSearch
       .map((realm) => {
         let realmPath = new RealmPaths(ri(realm));
-        let cards = this.instances.filter((card) =>
-          realmPath.inRealm(card.id),
-        );
+        let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
         return { realm, cards };
       })
       .filter((r) => r.cards.length > 0);
