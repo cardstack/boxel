@@ -283,7 +283,13 @@ export class RuntimeDependencyTracker {
     }
 
     let context = explicitContext ?? this.#currentContext();
+
+    // The short-circuit cache only applies to stack-top contexts. Those frames
+    // are constructed inside withContext() and never mutated afterward, so
+    // reference equality is sound. Caller-supplied explicit contexts are
+    // structurally mutable, so identity equality does not imply field equality.
     if (
+      !explicitContext &&
       rawURL === this.#lastTrackRawURL &&
       kind === this.#lastTrackKind &&
       context === this.#lastTrackContext
@@ -296,9 +302,11 @@ export class RuntimeDependencyTracker {
       return;
     }
 
-    this.#lastTrackKind = kind;
-    this.#lastTrackRawURL = rawURL;
-    this.#lastTrackContext = context;
+    if (!explicitContext) {
+      this.#lastTrackKind = kind;
+      this.#lastTrackRawURL = rawURL;
+      this.#lastTrackContext = context;
+    }
 
     let label = contextLabel(context);
     let consumer = this.#normalizeConsumer(context, label);
