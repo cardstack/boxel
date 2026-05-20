@@ -4,9 +4,9 @@ import { rri } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from './helpers';
 
-// CS-10054 TDD: pin the desired behavior of Realm.getHostRoutingMap before
-// the method exists. The fixture is a realm.json RealmConfig card with one
-// routing rule mapping `/whitepaper` to a white-paper card in the same realm.
+// CS-10054: fixture for Realm.getHostRoutingMap coverage. The fixture is a
+// realm.json RealmConfig card with one routing rule mapping `/whitepaper`
+// to a white-paper card in the same realm.
 function makeRoutingFixture(): Record<
   string,
   string | LooseSingleCardDocument
