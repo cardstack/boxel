@@ -1,6 +1,6 @@
 ---
 name: pr-privacy
-description: Redact user data before publishing anything to GitHub. This repo is open source, so PR titles, PR descriptions, PR review comments, PR review replies, issue comments on PRs, commit messages, and committed file content are all public forever and indexed by search engines. Use this skill whenever you are about to call `gh pr create`, `gh pr comment`, `gh pr review`, `gh issue comment`, or any `mcp__github__*` tool that posts content (create_pull_request, add_comment_to_pending_review, add_issue_comment, pull_request_review_write, update_pull_request, etc.), and whenever you are about to write a commit message or check in a file that quotes data observed from production or staging — CloudWatch logs, the boxel_index database, EFS filesystem listings, realm metadata, Matrix room state, or a user's browser. Linear (tickets, comments, attachments) is staff-only and exempt; full detail belongs there.
+description: Redact user data before publishing anything to GitHub. This repo is open source, so PR titles, PR descriptions, PR review comments, PR review replies, issue comments on PRs, commit messages, source-code strings, code comments, test fixtures, snapshot files, and any other committed file content are all public forever and indexed by search engines. Use this skill whenever you are about to call `gh pr create`, `gh pr comment`, `gh pr review`, `gh issue comment`, or any `mcp__github__*` tool that posts content (create_pull_request, add_comment_to_pending_review, add_issue_comment, pull_request_review_write, update_pull_request, etc.); whenever you are about to write a commit message; and whenever you are about to `git add` / `git commit` source code, code comments, fixtures, or snapshot files that quote data observed from production or staging — CloudWatch logs, the boxel_index database, EFS filesystem listings, realm metadata, Matrix room state, or a user's browser. Linear (tickets, comments, attachments) is staff-only and exempt; full detail belongs there.
 allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *)
 ---
 
@@ -51,7 +51,12 @@ Public — REDACT before posting:
 - `mcp__github__add_comment_to_pending_review`, `mcp__github__add_reply_to_pull_request_comment`, `mcp__github__pull_request_review_write`
 - `mcp__github__add_issue_comment`, `mcp__github__issue_write`
 - Commit messages (also public on GitHub once pushed)
-- File content you check in — test fixtures, documentation, code comments, snapshot files
+- **The code itself and code comments** — anything you put in a tracked source file is just as public as a PR comment once pushed. This includes:
+  - Hardcoded URLs, slugs, or paths in test files, fixtures, seed data, snapshots, migration scripts, or sample JSON
+  - Comments that quote a real user's realm URL, card, or Matrix handle (`// reproduces the bug seen at <real-username>/<real-realm>/...` — no, even as a "fixed this for X" note)
+  - Variable names, string literals, or example values derived from a real user ("const REAL_USER_REALM = ...")
+  - TODO/FIXME comments that reference a real ticket repro by URL
+  - Error messages or log strings that interpolate a real-looking path as the literal example
 
 Staff-only — OK to include full detail:
 
@@ -61,11 +66,17 @@ Staff-only — OK to include full detail:
 
 ## Self-check before publishing
 
-Before any tool call that posts content to GitHub, re-read what you are about to send and ask:
+Apply this check at **two** moments — not just when calling a GitHub tool:
 
-1. Does this contain a path of the form `<word>/<word>/...` where the first word could be a username?
-2. Does this quote a log line, DB row, or screenshot taken from staging or prod?
-3. Would a search engine indexing this give someone outside Cardstack information about a specific user's data?
+1. **Before any `git add` / `git commit` of source-code changes** — diff the files about to be staged and scan strings, comments, fixtures, and snapshots for user data. Code is just as public as a PR comment once pushed, and reviewers won't always catch a string buried in a test fixture or a comment.
+2. **Before any tool call that posts content to GitHub** — re-read the title, body, or comment you are about to send.
+
+In both cases, ask:
+
+1. Does this contain a path of the form `<word>/<word>/...` where the first word could be a real username?
+2. Does this quote a log line, DB row, card document, or screenshot taken from staging or prod?
+3. Is this a hardcoded test value, fixture, or comment derived from something a real user actually has in their realm?
+4. Would a search engine indexing this give someone outside Cardstack information about a specific user's data?
 
 If yes to any: redact to the placeholder form above, or move the concrete detail to a linked Linear ticket and reference it by ID.
 
