@@ -1,4 +1,9 @@
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
+
+import { createTokenRequestHandler } from '@cardstack/host/utils/auth-service-worker-registration';
+import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 // Test the auth service worker's fetch interception logic by simulating
 // the SW environment. The actual SW is at public/auth-service-worker.js.
@@ -15,10 +20,21 @@ function createServiceWorkerEnv(
     clientTokenLookup?: (
       requestURL: string,
     ) => Promise<{ realmURL: string; token: string } | undefined>;
-    // Mirrors the SW's TOKEN_REQUEST_TIMEOUT_MS. When `clientTokenLookup`
-    // does not settle within this timeout, the scaffold resolves to
-    // `undefined` just like the real SW would.
+    // Two-phase variant: the test gets a `post` callback that can be
+    // invoked multiple times to simulate the real page-side handler
+    // sending `{type:'pending'}` first, then the actual reply later.
+    // Mirrors auth-service-worker.js's MessageChannel handling.
+    clientRespond?: (
+      requestURL: string,
+      post: (msg: any) => void,
+    ) => Promise<void> | void;
+    // Mirrors the SW's TOKEN_REQUEST_TIMEOUT_MS. When the client doesn't
+    // settle within this timeout, the scaffold resolves to `undefined`
+    // just like the real SW would.
     tokenRequestTimeoutMs?: number;
+    // Mirrors TOKEN_REQUEST_REFRESH_TIMEOUT_MS — the extended budget
+    // applied after the client posts `{type:'pending'}`.
+    tokenRequestRefreshTimeoutMs?: number;
   } = {},
 ) {
   const realmTokens = new Map<string, string>();
@@ -83,27 +99,55 @@ function createServiceWorkerEnv(
   ): Promise<string | undefined> {
     let existing = inflightTokenRequests.get(requestURL);
     if (existing) return existing;
-    let promise = (async () => {
-      if (!opts.clientTokenLookup) return undefined;
-      let lookup = opts.clientTokenLookup(requestURL);
-      let reply: { realmURL: string; token: string } | undefined;
+    let promise = new Promise<string | undefined>((resolve) => {
+      if (!opts.clientTokenLookup && !opts.clientRespond) {
+        resolve(undefined);
+        return;
+      }
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       if (typeof opts.tokenRequestTimeoutMs === 'number') {
-        reply = await Promise.race([
-          lookup,
-          new Promise<undefined>((resolve) =>
-            setTimeout(() => resolve(undefined), opts.tokenRequestTimeoutMs),
-          ),
-        ]);
-      } else {
-        reply = await lookup;
+        timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resolve(undefined);
+        }, opts.tokenRequestTimeoutMs);
       }
-      if (reply && reply.realmURL && reply.token) {
-        realmTokens.set(reply.realmURL, reply.token);
-        recordRealmHost(reply.realmURL);
-        return reply.token;
+      let post = (msg: any) => {
+        if (settled) return;
+        // Two-phase extension: page asked for more time.
+        if (msg && msg.type === 'pending') {
+          if (timer) clearTimeout(timer);
+          if (typeof opts.tokenRequestRefreshTimeoutMs === 'number') {
+            timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              resolve(undefined);
+            }, opts.tokenRequestRefreshTimeoutMs);
+          } else {
+            timer = undefined;
+          }
+          return;
+        }
+        settled = true;
+        if (timer) clearTimeout(timer);
+        if (msg && msg.realmURL && msg.token) {
+          realmTokens.set(msg.realmURL, msg.token);
+          recordRealmHost(msg.realmURL);
+          resolve(msg.token);
+        } else {
+          resolve(undefined);
+        }
+      };
+      if (opts.clientRespond) {
+        void opts.clientRespond(requestURL, post);
+      } else if (opts.clientTokenLookup) {
+        opts.clientTokenLookup(requestURL).then(
+          (reply) => post(reply),
+          () => post(undefined),
+        );
       }
-      return undefined;
-    })();
+    });
     inflightTokenRequests.set(requestURL, promise);
     promise.finally(() => inflightTokenRequests.delete(requestURL));
     return promise;
@@ -577,5 +621,227 @@ module('Unit | auth-service-worker', function () {
       );
       assert.strictEqual(result, 'fallthrough-fetch');
     });
+
+    test('two-phase: pending extends timeout so a slow refresh still resolves', async function (assert) {
+      // Initial budget is short (would normally fall through), but the
+      // page first posts {type:'pending'} to claim the longer budget,
+      // then posts the real reply after a delay that exceeds the short
+      // budget but fits within the refresh budget.
+      let sw = createServiceWorkerEnv({
+        tokenRequestTimeoutMs: 10,
+        tokenRequestRefreshTimeoutMs: 200,
+        clientRespond: async (_url, post) => {
+          post({ type: 'pending' });
+          await new Promise((r) => setTimeout(r, 50));
+          post({
+            realmURL: 'http://localhost:4201/r/',
+            token: 'refreshed-token',
+          });
+        },
+      });
+
+      let result = await sw.processFetch(
+        new Request('http://localhost:4201/r/image.png'),
+      );
+
+      assert.ok(result instanceof Request, 'request was intercepted with auth');
+      assert.strictEqual(
+        (result as Request).headers.get('Authorization'),
+        'Bearer refreshed-token',
+      );
+    });
+
+    test('two-phase: pending without follow-up still times out within refresh budget', async function (assert) {
+      // Page signals pending but never replies. The SW must still fall
+      // through after the extended budget elapses.
+      let sw = createServiceWorkerEnv({
+        tokenRequestTimeoutMs: 5,
+        tokenRequestRefreshTimeoutMs: 20,
+        clientRespond: async (_url, post) => {
+          post({ type: 'pending' });
+          // intentionally never post the real reply
+        },
+      });
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: 'http://localhost:4201/seed/',
+        token: 'seed',
+      });
+
+      let result = await sw.processFetch(
+        new Request('http://localhost:4201/r/image.png'),
+      );
+      assert.strictEqual(result, 'fallthrough-fetch');
+    });
   });
 });
+
+// Direct tests of the page-side `request-realm-token` handler factory.
+// These exercise the real exported function (not the SW-side scaffold
+// above), including the on-miss reauthenticate path that lets the page
+// refresh a stale/missing JWT in response to the SW.
+module(
+  'Unit | auth-service-worker | createTokenRequestHandler',
+  function (hooks) {
+    setupWindowMock(hooks);
+
+    interface PostedMessage {
+      realmURL?: string;
+      token?: string;
+      type?: 'pending';
+    }
+
+    function makeEvent(
+      requestURL: string | undefined,
+      posted: PostedMessage[],
+    ) {
+      return {
+        data: { type: 'request-realm-token', requestURL },
+        ports: [
+          {
+            postMessage: (msg: PostedMessage) => posted.push(msg),
+          },
+        ],
+      } as unknown as MessageEvent;
+    }
+
+    function makeDeps(opts: {
+      isLoggedIn?: boolean;
+      realmOf?: (url: URL) => string | undefined;
+      reauthenticate?: (realmURL: string) => Promise<string | undefined>;
+    }) {
+      let reauthCalls: string[] = [];
+      let deps = {
+        matrixService: { isLoggedIn: opts.isLoggedIn ?? true },
+        realmService: {
+          realmOf: opts.realmOf ?? (() => undefined),
+          reauthenticate: async (realmURL: string) => {
+            reauthCalls.push(realmURL);
+            return opts.reauthenticate
+              ? opts.reauthenticate(realmURL)
+              : undefined;
+          },
+        },
+      };
+      return { deps, reauthCalls };
+    }
+
+    test('localStorage hit posts token without calling reauthenticate', async function (assert) {
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ 'http://realm/': 'tok-from-storage' }),
+      );
+      let posted: PostedMessage[] = [];
+      let { deps, reauthCalls } = makeDeps({
+        realmOf: () => 'http://realm/',
+        reauthenticate: async () => 'should-not-be-called',
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('http://realm/img.png', posted),
+      );
+
+      assert.deepEqual(posted, [
+        { realmURL: 'http://realm/', token: 'tok-from-storage' },
+      ]);
+      assert.deepEqual(reauthCalls, [], 'reauthenticate not invoked');
+    });
+
+    test('localStorage miss + logged-in + known realm triggers reauthenticate and two-phase posts pending then fresh token', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps, reauthCalls } = makeDeps({
+        isLoggedIn: true,
+        realmOf: () => 'http://realm/',
+        reauthenticate: async () => 'fresh-token',
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('http://realm/img.png', posted),
+      );
+
+      assert.deepEqual(reauthCalls, ['http://realm/']);
+      assert.deepEqual(posted, [
+        { type: 'pending' },
+        { realmURL: 'http://realm/', token: 'fresh-token' },
+      ]);
+    });
+
+    test('logged-out user posts empty reply without calling reauthenticate', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps, reauthCalls } = makeDeps({
+        isLoggedIn: false,
+        realmOf: () => 'http://realm/',
+        reauthenticate: async () => 'should-not-be-called',
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('http://realm/img.png', posted),
+      );
+
+      assert.deepEqual(posted, [{}]);
+      assert.deepEqual(reauthCalls, [], 'reauthenticate not invoked');
+    });
+
+    test('unknown realm posts empty reply without calling reauthenticate', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps, reauthCalls } = makeDeps({
+        isLoggedIn: true,
+        realmOf: () => undefined,
+        reauthenticate: async () => 'should-not-be-called',
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('https://cdn.example.com/img.png', posted),
+      );
+
+      assert.deepEqual(posted, [{}]);
+      assert.deepEqual(reauthCalls, [], 'reauthenticate not invoked');
+    });
+
+    test('reauthenticate returning undefined posts pending then empty reply', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps } = makeDeps({
+        isLoggedIn: true,
+        realmOf: () => 'http://realm/',
+        reauthenticate: async () => undefined,
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('http://realm/img.png', posted),
+      );
+
+      assert.deepEqual(posted, [{ type: 'pending' }, {}]);
+    });
+
+    test('reauthenticate throwing posts pending then empty reply', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps } = makeDeps({
+        isLoggedIn: true,
+        realmOf: () => 'http://realm/',
+        reauthenticate: async () => {
+          throw new Error('matrix down');
+        },
+      });
+
+      await createTokenRequestHandler(deps)(
+        makeEvent('http://realm/img.png', posted),
+      );
+
+      assert.deepEqual(posted, [{ type: 'pending' }, {}]);
+    });
+
+    test('ignores events that are not request-realm-token', async function (assert) {
+      let posted: PostedMessage[] = [];
+      let { deps, reauthCalls } = makeDeps({});
+      let handler = createTokenRequestHandler(deps);
+
+      await handler({
+        data: { type: 'some-other-message' },
+        ports: [{ postMessage: (m: PostedMessage) => posted.push(m) }],
+      } as unknown as MessageEvent);
+
+      assert.deepEqual(posted, [], 'no reply posted');
+      assert.deepEqual(reauthCalls, []);
+    });
+  },
+);

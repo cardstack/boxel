@@ -10,7 +10,18 @@ import window from 'ember-window-mock';
 
 import { SessionLocalStorageKey } from './local-storage-keys';
 
-function isServiceWorkerSupported(): boolean {
+// Structural so tests can stub without the full service surface.
+export interface AuthServiceWorkerDeps {
+  realmService: {
+    realmOf(input: URL): string | undefined;
+    reauthenticate(realmURL: string): Promise<string | undefined>;
+  };
+  matrixService: {
+    readonly isLoggedIn: boolean;
+  };
+}
+
+export function isServiceWorkerSupported(): boolean {
   return (
     !isTesting() &&
     typeof navigator !== 'undefined' &&
@@ -18,7 +29,9 @@ function isServiceWorkerSupported(): boolean {
   );
 }
 
-export async function registerAuthServiceWorker(): Promise<void> {
+export async function registerAuthServiceWorker(
+  deps: AuthServiceWorkerDeps,
+): Promise<void> {
   if (!isServiceWorkerSupported()) {
     return;
   }
@@ -32,22 +45,10 @@ export async function registerAuthServiceWorker(): Promise<void> {
     }
   });
 
-  // Respond to on-miss token lookups from the SW. The SW asks here when it
-  // intercepts a GET to a known realm host but has no token in its in-memory
-  // map (SW activation race, post-upload window before per-realm sync lands,
-  // etc.). localStorage is the authoritative source of currently-valid
-  // tokens — the SW's map is a derived cache.
-  navigator.serviceWorker.addEventListener('message', (event) => {
-    if (!event.data || event.data.type !== 'request-realm-token') {
-      return;
-    }
-    let port = event.ports?.[0];
-    if (!port) {
-      return;
-    }
-    let { realmURL, token } = resolveTokenForRequestURL(event.data.requestURL);
-    port.postMessage({ realmURL, token });
-  });
+  navigator.serviceWorker.addEventListener(
+    'message',
+    createTokenRequestHandler(deps),
+  );
 
   try {
     await navigator.serviceWorker.register('/auth-service-worker.js', {
@@ -65,6 +66,58 @@ export async function registerAuthServiceWorker(): Promise<void> {
   } catch (e) {
     console.warn('Failed to register auth service worker:', e);
   }
+}
+
+export function createTokenRequestHandler(deps: AuthServiceWorkerDeps) {
+  return async (event: MessageEvent) => {
+    if (!event.data || event.data.type !== 'request-realm-token') {
+      return;
+    }
+    let port = event.ports?.[0];
+    if (!port) {
+      return;
+    }
+    let requestURL: string | undefined = event.data.requestURL;
+
+    let { realmURL, token } = resolveTokenForRequestURL(requestURL);
+    if (realmURL && token) {
+      port.postMessage({ realmURL, token });
+      return;
+    }
+
+    let owningRealm: string | undefined;
+    if (requestURL) {
+      try {
+        owningRealm = deps.realmService.realmOf(new URL(requestURL));
+      } catch {
+        owningRealm = undefined;
+      }
+    }
+    if (!owningRealm || !deps.matrixService.isLoggedIn) {
+      port.postMessage({});
+      return;
+    }
+
+    // Tell the SW to use its refresh budget; reauthenticate is single-flighted
+    // per realm and syncs the new token to the SW as a side effect.
+    try {
+      port.postMessage({ type: 'pending' });
+    } catch {
+      return;
+    }
+    try {
+      let refreshed = await deps.realmService.reauthenticate(owningRealm);
+      port.postMessage(
+        refreshed ? { realmURL: owningRealm, token: refreshed } : {},
+      );
+    } catch {
+      try {
+        port.postMessage({});
+      } catch {
+        // port closed (page navigated)
+      }
+    }
+  };
 }
 
 export function syncTokenToServiceWorker(

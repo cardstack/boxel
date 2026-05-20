@@ -20,7 +20,9 @@ const realmHosts = new Set();
 // of <img> tags doesn't trigger a burst of postMessages.
 const inflightTokenRequests = new Map();
 
+// Common-case budget. Refresh path posts `{type:'pending'}` to extend.
 const TOKEN_REQUEST_TIMEOUT_MS = 200;
+const TOKEN_REQUEST_REFRESH_TIMEOUT_MS = 3000;
 
 function recordRealmHost(realmURL) {
   try {
@@ -134,9 +136,18 @@ async function requestTokenFromClient(requestURL, initiatingClientId) {
       }, TOKEN_REQUEST_TIMEOUT_MS);
       channel.port1.onmessage = (event) => {
         if (settled) return;
+        let reply = event.data;
+        if (reply && reply.type === 'pending') {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            resolve(undefined);
+          }, TOKEN_REQUEST_REFRESH_TIMEOUT_MS);
+          return;
+        }
         settled = true;
         clearTimeout(timer);
-        let reply = event.data;
         if (reply && reply.realmURL && reply.token) {
           realmTokens.set(reply.realmURL, reply.token);
           recordRealmHost(reply.realmURL);
