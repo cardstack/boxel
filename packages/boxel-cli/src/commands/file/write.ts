@@ -54,6 +54,23 @@ export async function write(
   let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
   let isBinary = typeof content !== 'string';
 
+  // Defense-in-depth for programmatic callers (BoxelClient.write, tests).
+  // The CLI wrapper has an earlier guard against `--file image.png` →
+  // `notes.md` style misuse, but the library function is also reachable
+  // without going through that branch. Reject the mismatch here so raw
+  // bytes never land at a text extension (corrupt-on-read) and a UTF-8
+  // string never lands at a binary extension (corrupt-on-write).
+  let pathIsBinary = isBinaryFilename(path);
+  if (pathIsBinary !== isBinary) {
+    return {
+      ok: false,
+      error:
+        `Path ${path} is ${pathIsBinary ? 'binary' : 'text'} by extension ` +
+        `but content is ${isBinary ? 'bytes' : 'a string'}. ` +
+        `Refusing to write to avoid silent corruption.`,
+    };
+  }
+
   try {
     let response = await pm.authedRealmFetch(url, {
       method: 'POST',

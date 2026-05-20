@@ -65,6 +65,11 @@ async function throwUploadError(
   throw err;
 }
 
+// Shared shape for per-file upload errors that need to bubble back to
+// callers (push.ts / sync.ts) so they can format hints and decide which
+// successes to persist alongside the failures.
+type UploadFailure = { path: string; status: number; title: string };
+
 export const SupportedMimeType = {
   CardSource: 'application/vnd.card+source',
   DirectoryListing: 'application/vnd.api+json',
@@ -485,7 +490,7 @@ export abstract class RealmSyncBase {
     succeeded: string[];
     error?: {
       status: number;
-      perFile: Array<{ path: string; status: number; title: string }>;
+      perFile: UploadFailure[];
       message: string;
     };
   }> {
@@ -508,7 +513,9 @@ export abstract class RealmSyncBase {
     // `attributes.content` string, which can't carry raw binary bytes.
     // Match the host pattern: keep /_atomic for text files only, and
     // for each binary file fall back to a per-file octet-stream POST
-    // (the same wire format `uploadFile` uses for a single binary).
+    // (the same wire format `uploadBinaryFile` uses for a single binary).
+    // The two batches run concurrently — neither helper rejects, so the
+    // outer Promise.all just joins their structured results.
     const textEntries: Array<[string, string]> = [];
     const binaryEntries: Array<[string, string]> = [];
     for (const entry of entries) {
@@ -519,7 +526,52 @@ export abstract class RealmSyncBase {
       }
     }
 
-    const binaryResults = await Promise.all(
+    const [binaryOutcome, textOutcome] = await Promise.all([
+      this.uploadBinaryBatch(binaryEntries),
+      this.uploadTextAtomic(textEntries, addPaths),
+    ]);
+
+    const succeeded = [...textOutcome.succeeded, ...binaryOutcome.succeeded];
+
+    if (textOutcome.fatal) {
+      return {
+        succeeded,
+        error: {
+          status: textOutcome.fatal.status,
+          perFile: [...textOutcome.failed, ...binaryOutcome.failed],
+          message: textOutcome.fatal.message,
+        },
+      };
+    }
+
+    if (binaryOutcome.failed.length > 0) {
+      return {
+        succeeded,
+        error: {
+          status: binaryOutcome.failed[0].status,
+          perFile: binaryOutcome.failed,
+          message: `Binary upload failed for ${binaryOutcome.failed.length} file(s)`,
+        },
+      };
+    }
+
+    return { succeeded };
+  }
+
+  // Fan out the per-file octet-stream POSTs for the binary slice of an
+  // atomic batch. Each upload is wrapped in try/catch so a single failure
+  // is folded into the result instead of rejecting the fan-out;
+  // Promise.allSettled is used at the boundary as defense-in-depth so a
+  // future change that drops the inner catch still surfaces a structured
+  // failure rather than silently aborting other in-flight uploads.
+  private async uploadBinaryBatch(
+    binaryEntries: Array<[string, string]>,
+  ): Promise<{ succeeded: string[]; failed: UploadFailure[] }> {
+    if (binaryEntries.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const settled = await Promise.allSettled(
       binaryEntries.map(([relativePath, localPath]) =>
         this.remoteLimit(async () => {
           try {
@@ -544,36 +596,46 @@ export abstract class RealmSyncBase {
       ),
     );
 
-    const binarySucceeded: string[] = [];
-    const binaryFailed: Array<{
-      path: string;
-      status: number;
-      title: string;
-    }> = [];
-    for (const result of binaryResults) {
-      if (result.ok) {
-        binarySucceeded.push(result.relativePath);
+    const succeeded: string[] = [];
+    const failed: UploadFailure[] = [];
+    for (let i = 0; i < settled.length; i++) {
+      const outcome = settled[i];
+      if (outcome.status === 'fulfilled') {
+        if (outcome.value.ok) {
+          succeeded.push(outcome.value.relativePath);
+        } else {
+          failed.push({
+            path: outcome.value.relativePath,
+            status: outcome.value.status,
+            title: outcome.value.title,
+          });
+        }
       } else {
-        binaryFailed.push({
-          path: result.relativePath,
-          status: result.status,
-          title: result.title,
+        failed.push({
+          path: binaryEntries[i][0],
+          status: 500,
+          title: String(outcome.reason),
         });
       }
     }
 
+    return { succeeded, failed };
+  }
+
+  // POST the text slice of a mixed batch to /_atomic and decode the
+  // result. `fatal` is set when the server rejected the whole batch
+  // (non-201) — callers map that to a top-level error message; `failed`
+  // carries the per-operation errors the server returned alongside.
+  private async uploadTextAtomic(
+    textEntries: Array<[string, string]>,
+    addPaths: Set<string>,
+  ): Promise<{
+    succeeded: string[];
+    failed: UploadFailure[];
+    fatal?: { status: number; message: string };
+  }> {
     if (textEntries.length === 0) {
-      if (binaryFailed.length > 0) {
-        return {
-          succeeded: binarySucceeded,
-          error: {
-            status: binaryFailed[0].status,
-            perFile: binaryFailed,
-            message: `Binary upload failed for ${binaryFailed.length} file(s)`,
-          },
-        };
-      }
-      return { succeeded: binarySucceeded };
+      return { succeeded: [], failed: [] };
     }
 
     const operations = await Promise.all(
@@ -605,13 +667,14 @@ export abstract class RealmSyncBase {
       body: JSON.stringify({ 'atomic:operations': operations }),
     });
 
+    const hrefToRelative = new Map(
+      textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+    );
+
     if (response.status === 201) {
       const body = (await response.json()) as {
         'atomic:results'?: Array<{ data?: { id?: string } }>;
       };
-      const hrefToRelative = new Map(
-        textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
-      );
       // The realm normalizes hrefs: a path with a space goes out as
       // `Knowledge Articles/...` but comes back URL-encoded as
       // `Knowledge%20Articles/...`. Decode the response id before the
@@ -625,18 +688,7 @@ export abstract class RealmSyncBase {
       for (const rel of atomicSucceeded) {
         console.log(`  Uploaded: ${rel}`);
       }
-      const succeeded = [...atomicSucceeded, ...binarySucceeded];
-      if (binaryFailed.length > 0) {
-        return {
-          succeeded,
-          error: {
-            status: binaryFailed[0].status,
-            perFile: binaryFailed,
-            message: `Binary upload failed for ${binaryFailed.length} file(s)`,
-          },
-        };
-      }
-      return { succeeded };
+      return { succeeded: atomicSucceeded, failed: [] };
     }
 
     let errorBody: {
@@ -648,25 +700,22 @@ export abstract class RealmSyncBase {
       // ignore JSON parse failures — fall through to the generic message
     }
 
-    const perFile = (errorBody.errors ?? []).map((e) => {
+    const failed: UploadFailure[] = (errorBody.errors ?? []).map((e) => {
       const detail = e.detail ?? '';
       const match = detail.match(/Resource (\S+) /);
       const href = match ? decodeAtomicResultId(match[1]) : '';
-      const relMap = new Map(
-        textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
-      );
       return {
-        path: relMap.get(href) ?? href,
+        path: hrefToRelative.get(href) ?? href,
         status: e.status ?? response.status,
         title: e.title ?? 'Error',
       };
     });
 
     return {
-      succeeded: binarySucceeded,
-      error: {
+      succeeded: [],
+      failed,
+      fatal: {
         status: response.status,
-        perFile: [...perFile, ...binaryFailed],
         message: `Atomic upload failed: ${response.status} ${response.statusText}`,
       },
     };
