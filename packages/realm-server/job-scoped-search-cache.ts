@@ -4,17 +4,19 @@ import {
   sortKeysDeep,
   type Query,
 } from '@cardstack/runtime-common';
+import { md5 } from 'super-fast-md5';
 
 const log = logger('job-scoped-search-cache');
 
 // Default entry TTL. Picked to comfortably outlive a single indexing
-// batch (workers cap from-scratch jobs at 6 min, incremental jobs are
-// shorter) while bounding the worst case where a job ends without a
-// NOTIFY-driven eviction reaching this process — a leaked entry persists
-// at most this long. Cross-job collision is impossible because the cache
-// key includes `jobId`, so a stale leak only hurts memory, never
-// correctness.
-const DEFAULT_TTL_MS = 10 * 60 * 1000;
+// batch — from-scratch reindexes of large realms can run for an hour
+// or more, so the TTL has to comfortably exceed that worst case while
+// bounding the leak window when a job ends without an explicit
+// eviction reaching this process. Cross-job collision is impossible
+// because the cache key includes `jobId` (the `<jobId>.<reservationId>`
+// composite, so a re-run of a failed job hashes to a different entry),
+// so a stale leak only hurts memory, never correctness.
+const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Hard cap on total entries across all jobs. When the cap is reached
 // the FIFO-oldest entry is evicted to make room. Cap exists to bound
@@ -30,14 +32,19 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_ENTRIES = 5000;
 
 type CachedEntry = {
-  // Result is stored opaquely so both `_federated-search`'s
-  // `LinkableCollectionDocument` and `_federated-search-prerendered`'s
-  // `PrerenderedCardCollectionDocument` can share the same cache
-  // instance. Inner-key canonicalisation already includes the
-  // endpoint-distinguishing params (htmlFormat / cardUrls / renderType
-  // are passed through `opts`), so two endpoints' entries cannot
-  // collide on a key they don't both fully share.
-  result: unknown;
+  // Entries store the *serialized* JSON response body, not the parsed
+  // document. The handler hands off a populate thunk that wraps its
+  // `searchRealms` / `searchPrerenderedRealms` call in
+  // `JSON.stringify(..., null, 2)`, so the cache holds the exact bytes
+  // shipped to the next caller — no re-stringify on hit, no parsed
+  // object graph kept alive for the TTL window. Both
+  // `_federated-search` (`LinkableCollectionDocument`) and
+  // `_federated-search-prerendered` (`PrerenderedCardCollectionDocument`)
+  // share this single instance: inner-key canonicalisation already
+  // includes the endpoint-distinguishing params (htmlFormat /
+  // cardUrls / renderType pass through `opts`), so two endpoints'
+  // entries cannot collide on a key they don't both fully share.
+  result: string;
   timer: ReturnType<typeof setTimeout>;
   // Position in the FIFO eviction ring. Stored on the entry so a
   // cache hit doesn't need a separate map lookup to know its slot.
@@ -79,13 +86,14 @@ type CachedEntry = {
 // only stamped by indexer-driven prerender requests, so user-facing
 // API callers always bypass and see live state.
 //
-// Entries store the *resolved* doc, not the in-flight promise.
-// Concurrent same-key callers each run their own `populate` (Phase 1's
-// in-flight dedup at `RealmIndexQueryEngine.searchCards` already
-// coalesces the heavy inner SQL+loadLinks walk for same-realm calls
-// arriving concurrently). The first to finish stores its result here;
-// later sequential callers within the same job see the cached doc and
-// short-circuit before re-entering `searchRealms`.
+// Entries store the *resolved, serialized* response bytes, not the
+// in-flight promise. Concurrent same-key callers each run their own
+// `populate` (Phase 1's in-flight dedup at
+// `RealmIndexQueryEngine.searchCards` already coalesces the heavy
+// inner SQL+loadLinks walk for same-realm calls arriving concurrently).
+// The first to finish stores its serialized bytes here; later
+// sequential callers within the same job see the cached string and
+// ship it directly with no re-stringify pass.
 //
 // Storing promises was tempting (it would also dedupe at this layer)
 // but creates a tail-latency stall: a slow first populate blocks every
@@ -117,13 +125,13 @@ export class JobScopedSearchCache {
     this.#maxEntries = opts?.maxEntries ?? DEFAULT_MAX_ENTRIES;
   }
 
-  async getOrPopulate<T>(args: {
+  async getOrPopulate(args: {
     jobId: string;
     realms: string[];
     query: Query;
     opts: unknown | undefined;
-    populate: () => Promise<T>;
-  }): Promise<T> {
+    populate: () => Promise<string>;
+  }): Promise<string> {
     let innerKey = buildInnerKey(args.realms, args.query, args.opts);
     let jobMap = this.#byJob.get(args.jobId);
     let existing = jobMap?.get(innerKey);
@@ -133,7 +141,7 @@ export class JobScopedSearchCache {
       // test ever pre-seeds entries without going through populate.
       let stat = this.#stats.get(args.jobId);
       if (stat) stat.hits += 1;
-      return existing.result as T;
+      return existing.result;
     }
 
     let result = await args.populate();
@@ -259,6 +267,38 @@ export class JobScopedSearchCache {
 
   jobIds(): string[] {
     return [...this.#byJob.keys()];
+  }
+
+  // Look up the cached body without populating or touching stats.
+  // Used by the handler's 304 path to confirm the slot still exists
+  // before returning Not-Modified — otherwise an If-None-Match whose
+  // expected ETag matches a TTL-evicted slot would short-circuit to
+  // 304 with no body to back it up on a follow-up.
+  peek(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string | undefined {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return this.#byJob.get(args.jobId)?.get(innerKey)?.result;
+  }
+
+  // Job-id-based ETag. Same `(jobId, realms, query, opts)` always
+  // produces the same value for an entry's lifetime; a different
+  // jobId yields a different ETag so a stale If-None-Match from a
+  // previous batch never matches a fresh entry. Weak-form (`W/`)
+  // because the underlying body is pretty-printed JSON and we
+  // validate by recomputing-and-comparing, not by byte-exact match
+  // of the body itself.
+  computeETag(args: {
+    jobId: string;
+    realms: string[];
+    query: Query;
+    opts: unknown | undefined;
+  }): string {
+    let innerKey = buildInnerKey(args.realms, args.query, args.opts);
+    return `W/"${args.jobId}-${md5(innerKey)}"`;
   }
 }
 
