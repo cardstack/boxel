@@ -32,12 +32,13 @@ import {
 import {
   MenuDivider,
   MenuItem,
+  copyCardURLToClipboard,
   getContrastColor,
   toMenuItems,
 } from '@cardstack/boxel-ui/helpers';
 import { cn, cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash } from '@cardstack/boxel-ui/icons';
+import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import type { CommandContext } from '@cardstack/runtime-common';
 import {
@@ -619,6 +620,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return undefined;
     }
     return [
+      new MenuItem({
+        label: 'Copy Card URL',
+        action: () =>
+          this.cardIdentifier &&
+          copyCardURLToClipboard(this.cardIdentifier),
+        icon: IconLink,
+        disabled: !this.cardIdentifier,
+      }),
       new MenuItem({
         label: 'Delete Card',
         action: () =>
