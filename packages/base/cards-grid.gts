@@ -1,7 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
@@ -12,12 +12,15 @@ import { HighlightIcon } from '@cardstack/boxel-ui/icons';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
+import AllFilesIcon from '@cardstack/boxel-icons/files';
+import FileIcon from '@cardstack/boxel-icons/file';
 
 import {
   cardIdToURL,
   chooseCard,
   specRef,
   baseRealm,
+  baseFileRef,
   isCardInstance,
   SupportedMimeType,
   subscribeToRealm,
@@ -101,21 +104,26 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
+  private fileTypeFilters: FilterOption[] = new TrackedArray();
   private highlightsCards: BoxComponent[] = new TrackedArray();
-  private filterOptions: FilterOption[] = [];
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
 
   @tracked private activeViewId: ViewOption['id'] = this.viewOptions[1].id;
   @tracked private activeFilter!: FilterOption;
   @tracked private activeSort: SortOption = this.sortOptions[0];
+  // Tracked separately from `fileTypeFilters.length` so the All Files
+  // group still appears when the only file summaries the realm has are
+  // bare `FileDef` rows (we exclude those from the leaf list to avoid
+  // duplicating the group's own root). Without this, a realm that only
+  // contains binary/unmapped files would silently hide the entire group.
+  @tracked private hasAnyFileSummary = false;
 
   #unsubscribeFromRealm: (() => void) | undefined;
   #subscribedRealm: string | undefined;
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.setupFilterOptions();
     this.activeFilter = this.filterOptions[0];
     this.loadHighlightsCards.perform();
     registerDestructor(this, () => this.teardownRealmSubscription());
@@ -148,6 +156,12 @@ class Isolated extends Component<typeof CardsGrid> {
     return realmHref?.includes('/personal/') ?? false;
   }
 
+  // The per-group filter wrappers are `@cached` so their object identity
+  // stays stable across re-computations of `filterOptions`. `FilterList`'s
+  // `isSelected` is an identity comparison (`@filter === @activeFilter`), so
+  // returning a fresh object on every getter access would break the active
+  // highlight after the first render.
+  @cached
   private get highlightFilter(): FilterOption {
     return {
       displayName: 'Highlights',
@@ -156,6 +170,7 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
+  @cached
   private get allCardsFilter(): FilterOption {
     return {
       displayName: 'All Cards',
@@ -174,12 +189,45 @@ class Isolated extends Component<typeof CardsGrid> {
     };
   }
 
-  private setupFilterOptions() {
-    this.filterOptions.splice(0, this.filterOptions.length);
+  @cached
+  private get allFilesFilter(): FilterOption {
+    return {
+      displayName: 'All Files',
+      icon: AllFilesIcon,
+      query: {
+        filter: {
+          type: baseFileRef,
+        },
+      },
+      filters: this.fileTypeFilters,
+      isExpanded: false,
+    };
+  }
+
+  // Derived from tracked state — `isPersonalRealm` and `hasAnyFileSummary`
+  // are the only deps that change the visible group set. We avoid the
+  // previous `splice + push` approach because mutating a `TrackedArray`
+  // during the component constructor (which runs mid-render) fires Glimmer's
+  // "you attempted to update X but it was already used in this computation"
+  // assertion. A `@cached` getter only re-runs when its tracked deps change
+  // and stays stable otherwise, so identity-based comparisons keep working.
+  @cached
+  private get filterOptions(): FilterOption[] {
+    let options: FilterOption[] = [];
     if (this.isPersonalRealm) {
-      this.filterOptions.push(this.highlightFilter);
+      options.push(this.highlightFilter);
     }
-    this.filterOptions.push(this.allCardsFilter);
+    options.push(this.allCardsFilter);
+    // Hide the All Files group only when the realm has no file rows at all
+    // — matches the "empty groups: hide" decision in the Linear plan. We
+    // can't use `fileTypeFilters.length > 0` here because bare `FileDef`
+    // rows are intentionally excluded from the leaf list (they would be a
+    // duplicate of the group itself), so a realm with only bare FileDef
+    // files would otherwise lose the entire group.
+    if (this.hasAnyFileSummary) {
+      options.push(this.allFilesFilter);
+    }
+    return options;
   }
 
   private teardownRealmSubscription() {
@@ -262,6 +310,13 @@ class Isolated extends Component<typeof CardsGrid> {
       await this.args.createCard?.(spec.ref, cardIdToURL(spec.id!), {
         realmURL: this.args.model[realmURL],
       });
+    } else if (activeFilterRef) {
+      // No spec exists for the active type filter — create an instance of
+      // the type directly. `activeFilterRef` is an absolute CodeRef sourced
+      // from the realm's `_types` summary, so no `relativeTo` is needed.
+      await this.args.createCard?.(activeFilterRef, undefined, {
+        realmURL: this.args.model[realmURL],
+      });
     }
   });
 
@@ -293,21 +348,54 @@ class Isolated extends Component<typeof CardsGrid> {
         displayName: string;
         total: number;
         iconHTML: string | null;
+        // Older realm-server builds may not stamp `kind` yet — treat missing
+        // as 'instance' so this client stays compatible during a rolling
+        // deploy. New servers always set the discriminator.
+        kind?: 'instance' | 'file';
       };
     }[];
     let excludedCardTypeIds = [
       `${baseRealm.url}card-api/CardDef`,
       `${baseRealm.url}cards-grid/CardsGrid`,
     ];
+    // The "All Files" group already represents the bare FileDef root — listing
+    // it again as a leaf would just be a duplicate row.
+    let excludedFileTypeIds = [`${baseRealm.url}card-api/FileDef`];
 
     this.cardTypeFilters.splice(0, this.cardTypeFilters.length);
+    this.fileTypeFilters.splice(0, this.fileTypeFilters.length);
+    let sawFileSummary = false;
 
     cardTypeSummaries.forEach((summary) => {
-      if (!summary.id || excludedCardTypeIds.includes(summary.id)) {
+      if (!summary.id) {
         return;
       }
       let codeRef = codeRefFromInternalKey(summary.id);
       if (!codeRef) {
+        return;
+      }
+      let kind = summary.attributes.kind ?? 'instance';
+      if (kind === 'file') {
+        // Even when the only file summary is the bare-FileDef root (which
+        // we exclude from the leaf list), we still want the All Files
+        // group to appear in the sidebar — otherwise the user has no way
+        // to reach those files. Flip this flag before the leaf-list gate.
+        sawFileSummary = true;
+        if (excludedFileTypeIds.includes(summary.id)) {
+          return;
+        }
+        this.fileTypeFilters.push({
+          displayName: summary.attributes.displayName ?? codeRef.name,
+          icon: summary.attributes.iconHTML ?? FileIcon,
+          query: {
+            filter: {
+              type: codeRef,
+            },
+          },
+        });
+        return;
+      }
+      if (excludedCardTypeIds.includes(summary.id)) {
         return;
       }
       this.cardTypeFilters.push({
@@ -320,6 +408,13 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       });
     });
+
+    this.hasAnyFileSummary = sawFileSummary;
+
+    // `filterOptions` is a @cached getter that derives the group list from
+    // tracked state — `fileTypeFilters.length` changing here causes it to
+    // re-compute on the next read, which adds/removes the All Files group
+    // without any imperative array mutation.
 
     let flattenedFilters: FilterOption[] = [];
     this.filterOptions.map((f) =>

@@ -24,6 +24,7 @@ function makeDBAdapter(
     close: async () => {},
     getColumnNames: async () => [],
     withWriteLock: async (_url, fn) => fn(undefined),
+    withUserCostLock: async (_userId, fn) => fn(),
   };
 }
 

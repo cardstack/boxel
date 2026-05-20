@@ -200,7 +200,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search-prerendered',
     multiRealmAuthorization(args),
-    handleSearchPrerendered(),
+    handleSearchPrerendered({ searchCache }),
   );
   router.post(
     '/_prerender-card',

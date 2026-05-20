@@ -194,7 +194,7 @@ export async function performFileIndexing({
       ...(extractResult.searchDoc ?? {}),
     },
     types: fileTypes,
-    displayNames: [],
+    displayNames: extractResult.displayNames ?? [],
     isolatedHtml: renderResult?.isolatedHTML ?? undefined,
     headHtml: renderResult?.headHTML ?? undefined,
     atomHtml: renderResult?.atomHTML ?? undefined,

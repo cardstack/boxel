@@ -8,6 +8,7 @@ import { Memoize } from 'typescript-memoize';
 
 import {
   logger,
+  hasCardExtension,
   hasExecutableExtension,
   SupportedMimeType,
   jobIdentity,
@@ -53,6 +54,8 @@ export class IndexRunner {
   #log = logger('index-runner');
   #fetch: typeof globalThis.fetch;
   #perfLog = logger('index-perf');
+  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
+  #readinessDiag = logger('readiness-diag');
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #prerenderer: Prerenderer;
@@ -203,7 +206,17 @@ export class IndexRunner {
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
-    await current.preWarmModulesTable(invalidations);
+    // Pre-warm the modules cache. Combines per-row deps (which catch
+    // most modules used during a from-scratch pass) with the realm-
+    // wide `.gts` / `.gjs` sweep (which catches sibling card modules
+    // referenced by string in templates — the typical
+    // `<Search @query={{filter: {type: {module: '.../cohort.gts', name: 'Cohort'}}}}>`
+    // pattern). The filesystem-mtimes walk was already paid by
+    // discoverInvalidations above; we just filter and reuse it.
+    let allRealmCardModules = Object.keys(
+      discoverResult.filesystemMtimes,
+    ).filter(hasCardExtension);
+    await current.preWarmModulesTable(invalidations, allRealmCardModules);
     let resumedRows = current.batch.resumedRows;
     let resumedSkipped = 0;
     current.#onProgress?.({
@@ -216,6 +229,15 @@ export class IndexRunner {
     });
     try {
       let filesCompleted = 0;
+      // [readiness-diag] — visit-loop heartbeat. Today the only
+      // markers between `completed invalidations in Xms` and
+      // `completed index visit in Yms` are per-file onProgress events
+      // (callback-routed, not in the worker log). A stuck visit looks
+      // like a 10-minute log gap. Emit a progress line every 25 files
+      // so the realm-server/worker artifact pinpoints WHERE the loop
+      // parked. Opt-in via the `readiness-diag` logger. Remove with
+      // the other [readiness-diag] blocks once root cause is found.
+      const VISIT_PROGRESS_INTERVAL = 25;
       for (let invalidation of invalidations) {
         // Resume guard. If a previous attempt of this same job already
         // wrote URL_X to the working table AND the EFS mtime hasn't
@@ -252,6 +274,14 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+        if (
+          filesCompleted % VISIT_PROGRESS_INTERVAL === 0 ||
+          filesCompleted === invalidations.length
+        ) {
+          current.#readinessDiag.debug(
+            `${jobIdentity(current.#jobInfo)} visit progress ${filesCompleted}/${invalidations.length} for realm ${current.realmURL.href} (elapsedMs=${Date.now() - visitStart}, last=${invalidation.href})`,
+          );
+        }
       }
       if (resumedSkipped > 0) {
         current.#perfLog.debug(
@@ -354,7 +384,14 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
-    await current.preWarmModulesTable(invalidations);
+    // Pre-warm: combine per-row deps with a realm-wide `.gts`/`.gjs`
+    // sweep. Incremental skips `discoverInvalidations` so the
+    // filesystem-mtimes walk hasn't happened yet — call it here.
+    // Typical realm sizes make this < 200 ms; one call per job.
+    let incrementalMtimes = await current.#reader.mtimes();
+    let allRealmCardModules =
+      Object.keys(incrementalMtimes).filter(hasCardExtension);
+    await current.preWarmModulesTable(invalidations, allRealmCardModules);
 
     let hrefs = urls.map((u) => u.href);
     let resumedRows = current.batch.resumedRows;
@@ -568,11 +605,38 @@ export class IndexRunner {
   // Failures here are warned but do not fail the batch — a mid-render
   // sub-prerender will still fire on demand if pre-warm misses a
   // module.
-  private async preWarmModulesTable(invalidations: URL[]): Promise<void> {
-    if (invalidations.length === 0) {
+  private async preWarmModulesTable(
+    invalidations: URL[],
+    allRealmCardModules: string[] = [],
+  ): Promise<void> {
+    if (invalidations.length === 0 && allRealmCardModules.length === 0) {
       return;
     }
     let preWarmStart = Date.now();
+
+    // Base layer: every `.gts` / `.gjs` file in the realm, regardless of
+    // whether it appears in this batch's invalidation set. Catches sibling
+    // card modules referenced by *string* in templates (e.g.
+    // `<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`)
+    // — those don't appear in any instance's runtime `deps`. Without
+    // this layer the search fires a same-affinity `prerenderModule`
+    // mid-card-render at lookup time, which is the wait-shape the
+    // PagePool's tab-materialization for module/command callers is
+    // meant to relieve.
+    //
+    // `.gts` / `.gjs` only is an optimization, not a correctness gate:
+    // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input
+    // cards). If pre-warm misses such a module, the on-demand
+    // `lookupDefinition` read-through during the visit fires a
+    // `prerenderModule` for it — safe because the PagePool now
+    // materializes a tab for the sub-prerender instead of queueing it
+    // behind the render that triggered the lookup. Restricting the
+    // sweep to the extensions where cards live almost exclusively
+    // avoids paying the prerender cost on every reindex for files that
+    // rarely define a card (typical realms have many helper `.ts`
+    // files alongside their cards).
+    let toWarm = new Set<string>(allRealmCardModules);
+
     let hrefs = invalidations.map((u) => u.href);
     let existingRows = await this.batch.getDependencyRows(hrefs);
     let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
@@ -585,13 +649,15 @@ export class IndexRunner {
       }
     }
 
-    let toWarm = new Set<string>();
     let novelJsonUrls: URL[] = [];
     for (let url of invalidations) {
       // Module files in the invalidation set are deps that instances
       // in the same batch will consume — pre-warm them directly. This
       // covers from-scratch and atomic-update batches where most rows
-      // have no prior `deps` data yet.
+      // have no prior `deps` data yet. Unlike the realm-wide layer
+      // above, this includes `.ts` / `.js` helpers — only the ones the
+      // batch is actually touching, so cost is bounded by invalidation
+      // size rather than realm size.
       if (hasExecutableExtension(url.href)) {
         toWarm.add(url.href);
       }
@@ -630,7 +696,9 @@ export class IndexRunner {
     let failed = 0;
     for (let moduleUrl of toWarm) {
       try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl);
+        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+          priority: this.#jobPriority,
+        });
       } catch {
         failed += 1;
       }

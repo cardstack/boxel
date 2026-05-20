@@ -258,8 +258,21 @@ export interface PopulateCoordinator {
   waitForKey(coalesceKey: string, timeoutMs: number): Promise<void>;
 }
 
+// Public option shape for definition lookup calls. `priority` is forwarded to
+// the prerender server when a cache miss requires a sub-prerender — same
+// numeric scale as worker-job priority (0 = system-initiated background,
+// 10 = userInitiatedPriority). Callers in the indexer thread their job
+// priority through here so user-initiated reindex work doesn't silently
+// downgrade to background priority for its module sub-renders.
+export interface DefinitionLookupOptions {
+  priority?: number;
+}
+
 export interface DefinitionLookup {
-  lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition>;
   // Like lookupDefinition but does not trigger a prerenderer call or
   // populate missing definitions. It may still perform lookup-context
   // resolution (including remote visibility probing) before reading from the
@@ -274,6 +287,7 @@ export interface DefinitionLookup {
   forRealm(realm: LocalRealm): DefinitionLookup;
   getCachedDefinitions(
     moduleUrl: string,
+    opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined>;
   getCachedDefinitionsBatch(
     query: DefinitionCacheEntryQuery,
@@ -282,6 +296,13 @@ export interface DefinitionLookup {
 
 interface LookupContext {
   requestingRealm?: LocalRealm;
+  // Worker-job priority forwarded into sub-`prerenderModule` calls for
+  // definition cache misses. Origin is the `x-boxel-job-priority`
+  // header on `_federated-search` calls during a prerendered card
+  // render — `handle-search` sanitizes the header and passes it into
+  // `RealmIndexQueryEngine`'s search opts; the search engine threads
+  // it here when it calls `lookupDefinition`.
+  priority?: number;
 }
 
 export class CachingDefinitionLookup implements DefinitionLookup {
@@ -339,8 +360,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     this.#populateCoordinator = populateCoordinator;
   }
 
-  async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-    return await this.lookupDefinitionWithContext(codeRef);
+  async lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition> {
+    return await this.lookupDefinitionWithContext(codeRef, {
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+    });
   }
 
   async lookupCachedDefinition(
@@ -385,6 +411,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async getCachedDefinitions(
     moduleUrl: string,
+    opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
     let canonicalModuleURL = canonicalURL(moduleUrl);
     let context = await this.buildLookupContext(canonicalModuleURL);
@@ -405,6 +432,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       cacheUserId,
       prerenderUserId,
+      priority: opts?.priority,
     });
   }
 
@@ -419,6 +447,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
+    priority?: number;
   }): Promise<DefinitionCacheEntry | undefined> {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
@@ -492,6 +521,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope: CacheScope;
       cacheUserId: string;
       prerenderUserId: string;
+      priority?: number;
     },
     coordinator: PopulateCoordinator,
   ): Promise<DefinitionCacheEntry | undefined> {
@@ -540,6 +570,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope,
     cacheUserId,
     prerenderUserId,
+    priority,
   }: {
     moduleURL: string;
     realmURL: string;
@@ -547,6 +578,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope;
     cacheUserId: string;
     prerenderUserId: string;
+    priority?: number;
   }): Promise<DefinitionCacheEntry | undefined> {
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
@@ -584,6 +616,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         candidateURL,
         realmURL,
         prerenderUserId,
+        priority,
       );
       if (
         response.status === 'error' &&
@@ -756,6 +789,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       cacheUserId,
       prerenderUserId,
+      priority: contextOpts?.priority,
     });
 
     if (!moduleEntry) {
@@ -991,9 +1025,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   async lookupDefinitionForRealm(
     codeRef: ResolvedCodeRef,
     realm: LocalRealm,
+    opts?: DefinitionLookupOptions,
   ): Promise<Definition> {
     return await this.lookupDefinitionWithContext(codeRef, {
       requestingRealm: realm,
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
     });
   }
 
@@ -1088,6 +1124,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     moduleUrl: string,
     realmURL: string,
     userId: string,
+    priority?: number,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
@@ -1097,6 +1134,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       realm: realmURL,
       url: moduleUrl,
       auth,
+      priority,
     });
   }
 
@@ -1707,8 +1745,15 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     this.#realm = realm;
   }
 
-  async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
-    return await this.#inner.lookupDefinitionForRealm(codeRef, this.#realm);
+  async lookupDefinition(
+    codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
+  ): Promise<Definition> {
+    return await this.#inner.lookupDefinitionForRealm(
+      codeRef,
+      this.#realm,
+      opts,
+    );
   }
 
   async lookupCachedDefinition(
@@ -1741,8 +1786,9 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async getCachedDefinitions(
     moduleUrl: string,
+    opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
-    return await this.#inner.getCachedDefinitions(moduleUrl);
+    return await this.#inner.getCachedDefinitions(moduleUrl, opts);
   }
 
   async getCachedDefinitionsBatch(

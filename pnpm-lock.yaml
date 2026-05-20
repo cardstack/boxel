@@ -1044,6 +1044,12 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@5.9.3)
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.60.0
       '@types/jsonwebtoken':
         specifier: 'catalog:'
         version: 9.0.10

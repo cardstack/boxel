@@ -30,6 +30,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import {
+  MenuDivider,
   MenuItem,
   getContrastColor,
   toMenuItems,
@@ -543,7 +544,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     const totalAvailableCount = availableCards.length;
     const allSelected = selectedCount >= totalAvailableCount;
 
-    const menuItems: (MenuItem | { type: 'divider' })[] = [];
+    const menuItems: (MenuItem | MenuDivider)[] = [];
 
     // Add "Select All" option if not all cards are selected
     if (!allSelected && totalAvailableCount > selectedCount) {
@@ -566,8 +567,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }),
     );
 
-    // Add divider before delete action
-    menuItems.push({ type: 'divider' });
+    menuItems.push(new MenuDivider());
 
     // Add "Delete N items" option
     menuItems.push(

@@ -718,8 +718,57 @@
               },
               "properties": [
                 {
-                  "id": "custom.hidden",
-                  "value": true
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete reservation ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "reservation_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
                 }
               ]
             },

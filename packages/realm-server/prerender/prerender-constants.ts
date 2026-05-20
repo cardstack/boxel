@@ -42,6 +42,16 @@ export function sanitizePrerenderRequestId(
 // imports keep working unchanged.
 export { X_BOXEL_JOB_ID_HEADER as PRERENDER_JOB_ID_HEADER } from '@cardstack/runtime-common';
 
+// Worker-job priority of the request that triggered this prerender.
+// Producer side stamps this header so any sub-`prerenderModule` the
+// host fires during render inherits the originating priority instead
+// of silently dropping to 0 — see prerender-headers.ts for the full
+// chain rationale.
+export {
+  X_BOXEL_JOB_PRIORITY_HEADER as PRERENDER_JOB_PRIORITY_HEADER,
+  sanitizeJobPriorityHeader,
+} from '@cardstack/runtime-common';
+
 // Stamped on the host's outbound _federated-search / _search calls
 // when the host SPA detects it's running inside a prerender tab. The
 // prerender server signals "you are in a prerender" by injecting
