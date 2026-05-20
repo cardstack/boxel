@@ -26,7 +26,7 @@ Treat any of the following as user data that must be redacted before it touches 
 - **Job IDs and other opaque integers** that don't map to a person (`job 209668`, internal queue IDs).
 - **System realms that ship publicly** — base realm, skills realm, catalog realm, experiments realm. Their slugs are part of the platform.
 - **Infra identifiers** — ECS task names, CloudWatch log group names, RDS instance names, EFS paths like `/persistent/`.
-- **Synthesized or generic examples** — `user1/test-realm/example.json`, `alice/demo/card-1.json`. Make it obviously fake.
+- **Synthesized or generic examples** — `example-user/example-realm/example-card.json`, `placeholder-user/test-realm/sample.json`. Pick names that read as obviously synthetic — avoid common first names (`alice`, `bob`, `chris`) since those can collide with real Matrix handles.
 - **Numbers in aggregate** — "3 affected cards across 3 user realms", "p95 latency 800ms", row counts, byte sizes.
 
 ## How to redact
