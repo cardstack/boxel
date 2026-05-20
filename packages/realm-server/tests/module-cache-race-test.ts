@@ -1255,6 +1255,20 @@ module(basename(__filename), function () {
         }
       }
 
+      // `#dropAllTranspiledModuleCacheEntries` fires the L2 bulk DELETE as
+      // a fire-and-forget — the .then chain doesn't await it. Poll briefly
+      // so the assertion isn't racing the UPDATE landing on slower CI
+      // machines.
+      async function waitForZeroLiveRows(timeoutMs = 5000): Promise<number> {
+        let started = Date.now();
+        let n = await countLiveRowsForRealm();
+        while (n > 0 && Date.now() - started <= timeoutMs) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          n = await countLiveRowsForRealm();
+        }
+        return n;
+      }
+
       test('reindex tombstones live L2 rows for the realm', async function (assert) {
         await seedL2Row('reindex-happy.gts');
         assert.ok(
@@ -1265,7 +1279,7 @@ module(basename(__filename), function () {
         await testRealm.reindex();
 
         assert.strictEqual(
-          await countLiveRowsForRealm(),
+          await waitForZeroLiveRows(),
           0,
           'reindex tombstoned every live L2 row for the realm',
         );
@@ -1295,7 +1309,7 @@ module(basename(__filename), function () {
         }
 
         assert.strictEqual(
-          await countLiveRowsForRealm(),
+          await waitForZeroLiveRows(),
           0,
           'bulk L2 tombstone ran even though clearRealmDefinitions threw',
         );
@@ -1413,13 +1427,13 @@ module(basename(__filename), function () {
         // tombstone. Both legs settle quickly but neither is on the
         // job.done critical path. Poll briefly so the assertion isn't
         // racing the tombstone landing.
-        const started = Date.now();
-        while (true) {
-          const n = await countLiveRowsForRealm();
-          if (n === 0) return n;
-          if (Date.now() - started > timeoutMs) return n;
+        let started = Date.now();
+        let n = await countLiveRowsForRealm();
+        while (n > 0 && Date.now() - started <= timeoutMs) {
           await new Promise((resolve) => setTimeout(resolve, 50));
+          n = await countLiveRowsForRealm();
         }
+        return n;
       }
 
       test('realmIndexUpdater.fullIndex (no startReindex .then wired up) still tombstones L2 rows via the worker-side NOTIFY', async function (assert) {
