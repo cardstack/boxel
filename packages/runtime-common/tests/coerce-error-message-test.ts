@@ -96,6 +96,30 @@ const tests = Object.freeze({
     );
     assert.strictEqual(result, PLACEHOLDER);
   },
+
+  // Object with a custom toString() — codex review feedback: prefer
+  // the real text the wrapper exposes over a generic placeholder.
+  'prefers custom toString() output over placeholder': async (assert) => {
+    let err = {
+      toString() {
+        return 'wrapper-specific failure text';
+      },
+    };
+    assert.strictEqual(
+      coerceErrorMessage(err, PLACEHOLDER),
+      'wrapper-specific failure text',
+    );
+  },
+
+  // Plain object's default String(err) is "[object Object]" — that's
+  // less informative than the placeholder (which names the URL), so
+  // it must NOT win. Same for the Object.prototype output of
+  // objects with a tagged toStringTag.
+  'skips the default "[object Object]" output': async (assert) => {
+    assert.strictEqual(coerceErrorMessage({}, PLACEHOLDER), PLACEHOLDER);
+    let tagged = { [Symbol.toStringTag]: 'TaggedError' };
+    assert.strictEqual(coerceErrorMessage(tagged, PLACEHOLDER), PLACEHOLDER);
+  },
 } as SharedTests<{}>);
 
 export default tests;

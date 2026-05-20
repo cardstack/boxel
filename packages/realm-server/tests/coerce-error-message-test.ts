@@ -48,5 +48,13 @@ module(basename(__filename), function () {
     test('guarantees non-empty for the CS-11185 production shape', async function (assert) {
       await runSharedTest(coerceErrorMessageTests, assert, {});
     });
+
+    test('prefers custom toString() output over placeholder', async function (assert) {
+      await runSharedTest(coerceErrorMessageTests, assert, {});
+    });
+
+    test('skips the default "[object Object]" output', async function (assert) {
+      await runSharedTest(coerceErrorMessageTests, assert, {});
+    });
   });
 });

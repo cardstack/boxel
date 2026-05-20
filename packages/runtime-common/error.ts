@@ -513,8 +513,16 @@ export function serializableError(err: any): any {
 //   1. err.message (if a non-empty string)
 //   2. err.title (if a non-empty string)
 //   3. err.stack first line (if available)
-//   4. String(err) (catches primitives, falls back to "[object Object]")
-//   5. the supplied placeholder
+//   4. For object-shaped errors, String(err) — but only if it's not
+//      the useless default Object.prototype.toString output. A class
+//      with a custom toString() (or some host-provided error wrapper)
+//      may surface real failure text here even when message/title/
+//      stack are absent. The "[object Object]" / "[object …]" output
+//      from the default toString is filtered out: it carries no
+//      diagnostic value, and the placeholder (which names the URL)
+//      is strictly more informative.
+//   5. For primitives, String(err) (numbers, booleans, symbols).
+//   6. the supplied placeholder
 export function coerceErrorMessage(err: unknown, placeholder: string): string {
   let candidates: unknown[] = [];
   if (err != null && typeof err === 'object') {
@@ -528,6 +536,15 @@ export function coerceErrorMessage(err: unknown, placeholder: string): string {
       if (firstLine) {
         candidates.push(firstLine);
       }
+    }
+    let stringified: string;
+    try {
+      stringified = String(err);
+    } catch {
+      stringified = '';
+    }
+    if (stringified && !/^\[object [^\]]*\]$/.test(stringified)) {
+      candidates.push(stringified);
     }
   } else if (typeof err === 'string') {
     candidates.push(err);
