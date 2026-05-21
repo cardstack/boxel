@@ -4271,18 +4271,37 @@ module(basename(__filename), function () {
         onRealmSetup,
       });
 
-      test('rejects HTTP requests to file URLs', async function (assert) {
-        let response;
-        response = await request
+      test('GET on a file URL with a card+json Accept returns a file-meta JSON document', async function (assert) {
+        let response = await request
           .get('/greeting.txt')
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(
           response.status,
-          415,
-          'rejects GET for a file URL with 415 status',
+          200,
+          'GET serves a file-meta document instead of 415',
         );
+        assert.true(
+          (response.headers['content-type'] ?? '').startsWith(
+            'application/vnd.card+json',
+          ),
+          'response is JSON, not raw file bytes',
+        );
+        let doc = JSON.parse(response.text);
+        assert.strictEqual(
+          doc?.data?.type,
+          'file-meta',
+          'data.type identifies the resource as file-meta',
+        );
+        assert.strictEqual(
+          doc?.data?.attributes?.name,
+          'greeting.txt',
+          'attributes.name carries the file name',
+        );
+      });
 
+      test('rejects write requests to file URLs', async function (assert) {
+        let response;
         response = await request
           .patch('/greeting.txt')
           .send({

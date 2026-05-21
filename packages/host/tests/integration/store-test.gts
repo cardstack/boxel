@@ -548,27 +548,31 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('file-meta reads do not reuse card errors for the same id', async function (assert) {
+  test('card read of a binary file URL is rerouted to file-meta', async function (assert) {
     await testRealm.write('hero.png', 'mock hero image');
     let fileUrl = `${testRealmURL}hero.png`;
 
-    let cardError = await storeService.get(fileUrl);
-    assert.false(
-      isCardInstance(cardError),
-      'card read returns an error for file url',
+    let result = await storeService.get(fileUrl);
+    assert.ok(
+      (result as any).constructor?.isFileDef,
+      'card read returns a FileDef via the safety-net reroute',
     );
 
     let fileInstance = await storeService.get(fileUrl, { type: 'file-meta' });
     assert.ok(
       (fileInstance as any).constructor?.isFileDef,
-      'file meta instance is a FileDef',
+      'file-meta read returns a FileDef',
     );
 
-    assert.ok(storeService.peekError(fileUrl), 'card error remains cached');
+    assert.strictEqual(
+      storeService.peekError(fileUrl),
+      undefined,
+      'no error cached on the card bucket',
+    );
     assert.strictEqual(
       storeService.peekError(fileUrl, { type: 'file-meta' }),
       undefined,
-      'file-meta error cache remains clear',
+      'no error cached on the file-meta bucket',
     );
   });
 

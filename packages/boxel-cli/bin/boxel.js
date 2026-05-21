@@ -24,7 +24,27 @@ function maybeReExecWithMkcertCA() {
     stdio: 'inherit',
     env: env,
   });
-  process.exit(result.status == null ? 0 : result.status);
+  // Preserve the child's failure mode so CI / scripts see real exits.
+  // - spawn error (binary missing / EACCES) → result.error set
+  // - terminated by signal → result.signal set, result.status === null
+  // - normal exit → result.status is the integer exit code
+  // - clean exit (0) → also result.status, just zero
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.signal) {
+    // Re-raise the same signal so parent shells see the child died from
+    // SIGINT etc.; if signal can't be raised, fall back to 128+signum
+    // (the conventional bash exit code for signal termination).
+    try {
+      process.kill(process.pid, result.signal);
+    } catch {
+      // pass through to exit below
+    }
+    let signumMap = { SIGINT: 2, SIGTERM: 15, SIGKILL: 9, SIGHUP: 1 };
+    process.exit(128 + (signumMap[result.signal] || 0));
+  }
+  process.exit(result.status == null ? 1 : result.status);
 }
 
 function mkcertRootCAPath() {

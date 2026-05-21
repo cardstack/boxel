@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type { Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -27,7 +29,7 @@ export default class UpdatePlaygroundSelectionCommand extends HostBaseCommand<
   ): Promise<undefined> {
     this.playgroundPanelService.persistSelections(
       input.moduleId,
-      input.cardId,
+      rri(input.cardId),
       input.format as Format,
       input.fieldIndex,
     );

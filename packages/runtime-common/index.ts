@@ -519,6 +519,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
   clampSerializedError,
+  coerceErrorMessage,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';

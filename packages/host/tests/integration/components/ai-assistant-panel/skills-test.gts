@@ -11,6 +11,7 @@ import {
   SEARCH_MARKER,
   SEPARATOR_MARKER,
   baseRealm,
+  rri,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -430,7 +431,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   test('skill pill menu opens the skill card', async function (assert) {
     await renderAiAssistantPanel();
 
-    let skillId = `${testRealmURL}Skill/example`;
+    let skillId = rri(`${testRealmURL}Skill/example`);
     await addSkillToAiAssistant(skillId);
     assert.false(
       operatorModeStateService.getOpenCardIds().includes(skillId),

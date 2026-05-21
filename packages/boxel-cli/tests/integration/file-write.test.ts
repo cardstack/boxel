@@ -13,6 +13,7 @@ import {
   setupTestProfile,
   uniqueRealmName,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
@@ -90,6 +91,35 @@ describe('file write (integration)', () => {
     expect(response.ok).toBe(true);
     let doc = await response.json();
     expect((doc as any).data.attributes.title).toBe('Written Card');
+  });
+
+  it('writes a PNG byte-identically and reads it back', async () => {
+    let writeResult = await write(realmUrl, 'image.png', TINY_PNG_BYTES, {
+      profileManager,
+    });
+    expect(writeResult.ok, `write failed: ${writeResult.error}`).toBe(true);
+
+    let response = await profileManager.authedRealmFetch(
+      `${realmUrl}image.png`,
+      { method: 'GET', headers: { Accept: 'application/vnd.card+source' } },
+    );
+    expect(response.ok).toBe(true);
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+  });
+
+  it('writes a PDF byte-identically', async () => {
+    let writeResult = await write(realmUrl, 'doc.pdf', TINY_PDF_BYTES, {
+      profileManager,
+    });
+    expect(writeResult.ok).toBe(true);
+
+    let response = await profileManager.authedRealmFetch(`${realmUrl}doc.pdf`, {
+      method: 'GET',
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    let remote = Buffer.from(await response.arrayBuffer());
+    expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
   });
 
   it('returns error result when no active profile', async () => {

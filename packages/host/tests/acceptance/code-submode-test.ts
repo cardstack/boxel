@@ -1983,7 +1983,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
-          cardId: `${testRealmURL}Person/with-friends`,
+          cardId: rri(`${testRealmURL}Person/with-friends`),
           format: 'isolated',
         },
       });

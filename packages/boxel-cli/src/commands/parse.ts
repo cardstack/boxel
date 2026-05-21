@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -846,7 +846,13 @@ function walkWorkspaceFiles(root: string, visit: (rel: string) => void): void {
         if (entry.name === 'node_modules' || entry.name === '.git') continue;
         walk(full);
       } else if (entry.isFile()) {
-        visit(relative(absRoot, full));
+        // Normalize to POSIX `/` separators. Realm-relative paths
+        // throughout the codebase use `/`, and `validateRealmRelativePath`
+        // (called downstream by `runGlintCheck`) rejects backslashes.
+        // On Windows, `relative()` returns native `\`-separated paths
+        // — convert before forwarding.
+        let rel = relative(absRoot, full).split(sep).join('/');
+        visit(rel);
       }
     }
   };

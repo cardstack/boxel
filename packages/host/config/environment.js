@@ -137,6 +137,9 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
+    // CS-10055: realm-server injects per-request when the request is for
+    // a realm whose config card has hostRoutingRules; empty otherwise.
+    hostRoutingMap: [],
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
