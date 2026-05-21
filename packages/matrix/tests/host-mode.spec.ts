@@ -528,6 +528,20 @@ test.describe('Host mode', () => {
 
     let noSlashURL = publishedRealmURL.replace(/\/$/, '');
     await page.goto(noSlashURL);
-    await expect(page.locator('[data-test-white-paper]')).toBeVisible();
+    // `[data-test-host-mode-card="<id>"]` is set by the host SPA's
+    // CardRenderer — that attribute exists ONLY post-hydration (it's
+    // not in the SSR'd isolated_html). Pinning it to the rule's target
+    // id means:
+    //   (a) `toBeVisible` implicitly waits for hydration to finish,
+    //       so it can't pass on the brief SSR flash before the SPA
+    //       replaces it; and
+    //   (b) if the resolveRoutedPath miss makes the SPA fall back to
+    //       the realm index card, the attribute value is `…/index`
+    //       (or similar) and this assertion fails with a clear diff
+    //       instead of silently catching the SSR'd marker.
+    let expectedRoutedCardId = `${publishedRealmURL}white-paper`;
+    await expect(
+      page.locator(`[data-test-host-mode-card="${expectedRoutedCardId}"]`),
+    ).toBeVisible();
   });
 });
