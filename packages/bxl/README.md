@@ -719,9 +719,11 @@ When BXL's source changes and you want a running realm to pick up the bundle plu
 npm run realm:sync                            # uses .bxl-realm-sync.json defaults
 npm run realm:sync -- --workspace /abs/path   # override target
 npm run realm:sync -- --no-reindex            # build + sync only
+npm run realm:sync -- --no-minify             # readable debug bundle
+npm run realm:sync -- --split-chunks          # legacy chunked bundle
 ```
 
-It rebuilds the bundle, pushes it via `boxel sync`, then runs `boxel run-command full-reindex-realm`. With the realm URL configured (`realmUrl` in `.bxl-realm-sync.json`), the reindex step fires automatically; without it, the script prints the run-command incantation to copy.
+It rebuilds the bundle, pushes it via `boxel sync`, then runs `boxel run-command full-reindex-realm`. The normal realm artifact is one minified `bxl/index.ts` file with all formula/function libraries included; stale `bxl-chunks/` files are removed during mirroring and sync. With the realm URL configured (`realmUrl` in `.bxl-realm-sync.json`), the reindex step fires automatically; without it, the script prints the run-command incantation to copy.
 
 The same script ships as the `bxl-sync` bin so it's reachable as `npx @cardstack/bxl-sync` once published. Pair with `BXL_BUILD_INFO.buildTime` to confirm the served bundle is the one you just pushed.
 
