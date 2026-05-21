@@ -99,7 +99,11 @@ async function safeStep<T>(
 // Pre-existing card absent, sidecar has zero migratable keys → no-op
 // (don't write an empty card; a card with no attributes is not
 // equivalent to "no card").
-function migrateOne(sidecarPath: string, cardPath: string, url: string): boolean {
+function migrateOne(
+  sidecarPath: string,
+  cardPath: string,
+  url: string,
+): boolean {
   if (existsSync(cardPath)) {
     return false;
   }

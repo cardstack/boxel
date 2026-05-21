@@ -326,7 +326,11 @@ module(basename(__filename), function () {
         bootstrapRealms: [],
       });
 
-      assert.deepEqual(readCard(realmDir), firstCard, 'card unchanged on rerun');
+      assert.deepEqual(
+        readCard(realmDir),
+        firstCard,
+        'card unchanged on rerun',
+      );
       assert.deepEqual(
         readSidecar(realmDir),
         firstSidecar,
