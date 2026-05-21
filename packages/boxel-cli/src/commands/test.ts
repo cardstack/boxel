@@ -439,6 +439,26 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       });
     }
 
+    // Manifest capture (BOXEL_TEST_HARNESS_MANIFEST=/path/to/out.json):
+    // every same-origin request to the test-page server, recorded as a
+    // sorted unique list of paths. This is what `build-test-harness.ts`
+    // uses to slim `bundled-test-harness/` down from the full host dist
+    // to just the files chromium actually loads under a card test.
+    let manifestPath = process.env.BOXEL_TEST_HARNESS_MANIFEST;
+    let manifestPaths = new Set<string>();
+    if (manifestPath) {
+      page.on('request', (req) => {
+        try {
+          let u = new URL(req.url());
+          if (u.origin === testPageUrl) {
+            manifestPaths.add(u.pathname);
+          }
+        } catch {
+          // ignore non-URL refs
+        }
+      });
+    }
+
     // Realm-server auth only applies in remote mode — the local module
     // mounts on this same server don't gate on tokens.
     if (!options.realmMounts) {
@@ -472,6 +492,14 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
         (window as unknown as { __qunitResults: QunitResults }).__qunitResults,
     )) as QunitResults;
 
+    if (manifestPath) {
+      let sorted = [...manifestPaths].sort();
+      let { writeFileSync } = await import('node:fs');
+      writeFileSync(manifestPath, JSON.stringify(sorted, null, 2));
+      process.stderr.write(
+        `[manifest] wrote ${sorted.length} paths to ${manifestPath}\n`,
+      );
+    }
     return { qunitResults, durationMs: Date.now() - start };
   } finally {
     if (browser) {
@@ -626,9 +654,7 @@ interface TestPageServerOptions {
  * request against the same origin; that sidesteps CORS preflights and
  * the loader's URL-mapping edge cases.
  */
-async function startTestPageServer(
-  opts: TestPageServerOptions,
-): Promise<{
+async function startTestPageServer(opts: TestPageServerOptions): Promise<{
   url: string;
   server: Server;
   setHtml: (h: string) => void;
@@ -667,10 +693,7 @@ async function startTestPageServer(
     html = h;
   };
 
-  function resolveExisting(
-    mountRoot: string,
-    relPath: string,
-  ): string | null {
+  function resolveExisting(mountRoot: string, relPath: string): string | null {
     for (let ext of FALLBACK_EXTS) {
       let candidate = resolve(mountRoot, relPath + ext);
       if (candidate !== mountRoot && !candidate.startsWith(mountRoot + sep)) {
