@@ -54,19 +54,27 @@ function createTempProfileHome(options: {
   username: string;
   matrixUrl: string;
   realmServerUrl: string;
-  password: string;
 }): string {
   let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
   let boxelCliDir = join(tempHome, '.boxel-cli');
   mkdirSync(boxelCliDir, { recursive: true });
 
   let profileId = `@${options.username}:localhost`;
+  // CS-10725 swapped stored password for the Matrix access token —
+  // `getStoredMatrixAuth` now refuses any profile without a
+  // `matrixAccessToken` field. The mock matrix server in this test
+  // returns `'matrix-access-token'` from `/v3/login`; pre-populate the
+  // same value so the factory startup path skips the login and uses
+  // the stored token directly (same behavior as a real `boxel
+  // profile add` having already run on the user's machine).
   let config = {
     profiles: {
       [profileId]: {
         matrixUrl: options.matrixUrl,
         realmServerUrl: options.realmServerUrl,
-        password: options.password,
+        matrixAccessToken: 'matrix-access-token',
+        matrixUserId: profileId,
+        matrixDeviceId: 'device-id',
       },
     },
     activeProfile: profileId,
@@ -313,7 +321,6 @@ module('factory-entrypoint integration', function () {
       username: 'testuser',
       matrixUrl: `${origin}/`,
       realmServerUrl: `${origin}/`,
-      password: 'secret',
     });
 
     try {
