@@ -1318,6 +1318,49 @@ module(`Integration | search resource`, function (hooks) {
           'returns the books matching the query',
         );
       });
+
+      test(`empty unresolved seed still falls back to a fetch in prerender (cards=[], no searchURL)`, async function (assert) {
+        // This is the captureQueryFieldSeedData "unresolved" shape:
+        // - seedRecords resolved to [] because no nested instances
+        //   landed inline on the parent search result.
+        // - seedSearchURL was nulled out via
+        //   `shouldTreatEmptySeedAsUnresolved`.
+        // Result must still run the client-side fallback query —
+        // otherwise relationship items that should have appeared in
+        // the rendered HTML go missing.
+        releaseFetch.fulfill();
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards: [],
+              // searchURL intentionally omitted — the "unresolved"
+              // signal from query-field-support.
+              realms: [testRealmURL],
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+
+        assert.ok(
+          fetchCalls >= 1,
+          'empty unresolved seed in prerender falls back to fetch',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          2,
+          'fallback fetch returns the books matching the query',
+        );
+      });
     },
   );
 });
