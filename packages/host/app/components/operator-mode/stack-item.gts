@@ -581,7 +581,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
 
     return {
-      triggerText: `${selectedCount} Selected`,
+      triggerText: `${selectedCount}`,
+      headerText: `${selectedCount} Selected`,
       menuItems,
     };
   }

@@ -62,6 +62,12 @@ export class PrerenderedCard implements PrerenderedCardLike {
       if (data.isError) {
         extraAttributes['data-is-error'] = 'true';
       }
+      if (data.cardType) {
+        // Expose the prerendered card's type display name so consumers (e.g.
+        // OperatorModeOverlays) can label the card before its CardDef is
+        // loaded into the store.
+        extraAttributes['data-card-type-display-name'] = data.cardType;
+      }
       this.component = wrapWithModifier(
         htmlComponent(data.html, extraAttributes),
         cardComponentModifier,

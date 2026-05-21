@@ -138,13 +138,13 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection state is active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .containsText('1', 'Selection chip shows count');
 
     // Select additional cards
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('.utility-menu-trigger').containsText('2');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -249,7 +249,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection state is active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .containsText('1', 'Selection chip shows count');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -260,7 +260,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify all cards are selected
     assert
       .dom('.utility-menu-trigger')
-      .containsText(`${totalCardCount} Selected`, 'All cards are now selected');
+      .containsText(`${totalCardCount}`, 'All cards are now selected');
 
     // Open utility menu again to verify "Select All" is no longer available
     await click('.utility-menu-trigger');
