@@ -683,7 +683,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             meta.fields[fieldName] = {
               adoptsFrom: identifyCard(
                 override,
-                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
               ),
             };
           }
@@ -995,7 +995,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
               [this.name]: {
                 adoptsFrom: identifyCard(
                   this.card,
-                  opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                  opts?.useAbsoluteURL
+                    ? undefined
+                    : opts?.maybeRelativeReference,
                 ),
               },
             },
@@ -2248,11 +2250,11 @@ export class BaseDef {
       if (stack.includes(value)) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeURL: string) {
+      function makeAbsoluteURL(maybeRelativeReference: string) {
         if (!value[relativeTo]) {
-          return maybeRelativeURL;
+          return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
+        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(

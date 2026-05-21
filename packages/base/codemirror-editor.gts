@@ -10,7 +10,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import {
   resolveCardReference,
   trimJsonExtension,
-  maybeRelativeURL,
+  maybeRelativeReference,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from './card-api';
 import { CardContextConsumer } from './field-component';
@@ -100,7 +100,7 @@ function makeCardRef(
 ): string {
   if (!baseUrl) return cardUrl;
   try {
-    return maybeRelativeURL(new URL(cardUrl), new URL(baseUrl), undefined);
+    return maybeRelativeReference(new URL(cardUrl), new URL(baseUrl), undefined);
   } catch {
     return cardUrl;
   }
