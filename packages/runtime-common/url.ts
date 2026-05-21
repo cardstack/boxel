@@ -2,6 +2,10 @@ import type { LooseCardResource, FileMetaResource } from './index';
 import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
 import { unresolveCardReference } from './card-reference-resolver';
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
+} from './card-reference-resolver';
 
 export function maybeURL(
   possibleURL: string,
@@ -18,22 +22,37 @@ export function maybeURL(
 }
 
 export function relativeURL(
-  url: URL,
-  relativeTo: URL,
-  realmURL: URL | undefined,
+  url: RealmResourceIdentifier | URL,
+  relativeTo: RealmResourceIdentifier | URL,
+  realmURL: RealmIdentifier | URL | undefined,
 ): string | undefined {
-  if (url.origin !== relativeTo.origin) {
+  let urlStr = url instanceof URL ? url.href : url;
+  let relativeToStr = relativeTo instanceof URL ? relativeTo.href : relativeTo;
+
+  // Path math is meaningful only past a shared namespace prefix — URL origin
+  // for URL pairs, `@scope/name` for scoped RRI pairs. Cross-form pairs can't
+  // be relativized without resolving back to URL space (which we deliberately
+  // avoid here so this module doesn't depend on prefixMappings).
+  let namespace = sharedNamespace(urlStr, relativeToStr);
+  if (namespace === undefined) {
     return undefined;
   }
+
   if (realmURL) {
-    let realmPath = new RealmPaths(realmURL);
-    // don't return a relative URL for URL that is outside of our realm
+    // Branch so each arm resolves to one of RealmPaths' constructor
+    // overloads — a union argument doesn't match either overload alone.
+    let realmPath =
+      realmURL instanceof URL
+        ? new RealmPaths(realmURL)
+        : new RealmPaths(realmURL);
+    // don't return a relative URL for a resource that escapes our realm
     if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(url)) {
       return undefined;
     }
   }
-  let ourParts = url.pathname.split('/');
-  let theirParts = relativeTo.pathname.split('/');
+
+  let ourParts = urlStr.slice(namespace.length).split('/');
+  let theirParts = relativeToStr.slice(namespace.length).split('/');
 
   let lastPart: string | undefined;
   while (
@@ -54,17 +73,60 @@ export function relativeURL(
   }
 }
 
+function isURLForm(s: string): boolean {
+  return s.startsWith('http://') || s.startsWith('https://');
+}
+
+function sharedNamespace(a: string, b: string): string | undefined {
+  let aURL = isURLForm(a);
+  let bURL = isURLForm(b);
+
+  if (aURL && bURL) {
+    try {
+      let aOrigin = new URL(a).origin;
+      let bOrigin = new URL(b).origin;
+      if (aOrigin === bOrigin) {
+        return aOrigin;
+      }
+    } catch {
+      // fall through to undefined
+    }
+    return undefined;
+  }
+
+  if (!aURL && !bURL) {
+    // Scoped RRIs share a namespace when their first two `/`-separated
+    // segments match (e.g. both start with `@cardstack/base/`). We don't
+    // consult a prefix registry here so the algorithm stays string-only.
+    let aParts = a.split('/');
+    let bParts = b.split('/');
+    if (
+      aParts.length >= 2 &&
+      bParts.length >= 2 &&
+      aParts[0] === bParts[0] &&
+      aParts[1] === bParts[1]
+    ) {
+      return `${aParts[0]}/${aParts[1]}`;
+    }
+    return undefined;
+  }
+
+  // Mixed forms: would need cross-form resolution, which this module avoids.
+  return undefined;
+}
+
 export function maybeRelativeURL(
-  url: URL,
-  relativeTo: URL,
-  realmURL: URL | undefined,
+  url: RealmResourceIdentifier | URL,
+  relativeTo: RealmResourceIdentifier | URL,
+  realmURL: RealmIdentifier | URL | undefined,
 ): string {
   let rel = relativeURL(url, relativeTo, realmURL);
   if (rel) {
     return rel;
-  } else {
-    return url.href;
   }
+  // Preserve the input form on fallback: prefix-form RRIs are already in
+  // canonical portable form, so return them as-is; URLs return their href.
+  return url instanceof URL ? url.href : url;
 }
 
 export function trimJsonExtension(str: string) {
