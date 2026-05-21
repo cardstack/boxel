@@ -303,6 +303,40 @@ module(basename(__filename), function () {
       assert.deepEqual(readSidecar(publishedDir), {});
     });
 
+    test('migrates a published realm even when realm_registry has no row for it', async function (assert) {
+      // Models the multi-instance startup race called out in PR review:
+      // a peer process holds the registry-backfill advisory lock while
+      // this process wins the config-card-backfill lock, so the
+      // registry table is empty (or sparse) when this pass runs. The
+      // disk-walk must still migrate the realm.
+      const publishedRoot = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
+      const uuid = '00000000-0000-0000-0000-000000000002';
+      const publishedDir = join(publishedRoot, uuid);
+      seedSidecar(publishedDir, {
+        name: 'Orphan Published Realm',
+        backgroundURL: 'https://example.com/orphan-bg.png',
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      const card = readCard(publishedDir) as {
+        data: { attributes: Record<string, unknown> };
+      };
+      assert.deepEqual(card.data.attributes.cardInfo, {
+        name: 'Orphan Published Realm',
+      });
+      assert.strictEqual(
+        card.data.attributes.backgroundURL,
+        'https://example.com/orphan-bg.png',
+      );
+      assert.deepEqual(readSidecar(publishedDir), {});
+    });
+
     test('is idempotent across reruns', async function (assert) {
       const realmDir = join(realmsRootPath, 'luke', 'rerun');
       seedSidecar(realmDir, {

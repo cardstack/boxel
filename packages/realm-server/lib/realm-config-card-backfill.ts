@@ -233,25 +233,39 @@ async function backfillPublishedRealms(
   if (!existsSync(publishedRoot)) {
     return 0;
   }
-  // Map disk uuid → published URL via realm_registry. Mirrors the
-  // realm-metadata-backfill lookup; disk alone doesn't carry the URL.
-  const rows = (await query(opts.dbAdapter, [
-    `SELECT disk_id, url FROM realm_registry WHERE kind = 'published'`,
-  ])) as Array<{ disk_id: string; url: string }>;
-  const byId = new Map(rows.map((r) => [r.disk_id, r.url]));
+
+  // Best-effort lookup for log messages only. Under multi-instance
+  // startup wave, a peer process can hold the registry-backfill lock
+  // while this process wins the config-card-backfill lock, so
+  // realm_registry may be empty or sparse here. Don't gate the
+  // migration on registry state — the migration itself only needs the
+  // sidecar/card file paths.
+  let byId: Map<string, string>;
+  try {
+    const rows = (await query(opts.dbAdapter, [
+      `SELECT disk_id, url FROM realm_registry WHERE kind = 'published'`,
+    ])) as Array<{ disk_id: string; url: string }>;
+    byId = new Map(rows.map((r) => [r.disk_id, r.url]));
+  } catch (err: unknown) {
+    log.warn(
+      `could not read realm_registry for url lookup; ` +
+        `continuing without URLs in log messages: ${String(err)}`,
+    );
+    byId = new Map();
+  }
 
   let count = 0;
   for (const entry of readdirSync(publishedRoot, { withFileTypes: true })) {
     if (!entry.isDirectory()) {
       continue;
     }
-    const url = byId.get(entry.name);
-    if (!url) {
-      continue;
-    }
     const realmDir = join(publishedRoot, entry.name);
     const sidecarPath = join(realmDir, '.realm.json');
     const cardPath = join(realmDir, 'realm.json');
+    // URL is informational only inside migrateOne (used in error log
+    // lines). Fall back to a disk-derived identifier so a missing
+    // registry row doesn't suppress the migration.
+    const url = byId.get(entry.name) ?? `published-disk:${entry.name}`;
     if (migrateOne(sidecarPath, cardPath, url)) {
       count += 1;
     }
