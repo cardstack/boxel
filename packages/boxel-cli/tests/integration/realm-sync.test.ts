@@ -159,16 +159,17 @@ async function establishBaseline(
 
 // Read a remote source file, retrying for up to `timeoutMs` if the body
 // doesn't yet contain `expectedSubstring`. Returns the final body either way
-// — callers assert on it. Built for the conflict-resolution tests where the
-// sync push has already returned 201 but the assertion sometimes reads
-// stale bytes; if a retry resolves it, the eventual `pollMs` value points
-// at a post-write visibility race rather than the sync logic itself.
+// — callers assert on it. `retries` is the number of additional fetches
+// performed beyond the first attempt (0 = matched on first read), so
+// `retries > 0` is the unambiguous signal that the post-sync read had to
+// wait for the realm to settle. `elapsedMs` is for context only; it tracks
+// network + sleep, so it is non-zero even on a first-shot success.
 async function fetchRemoteFileEventually(
   realmUrl: string,
   relPath: string,
   expectedSubstring: string,
   timeoutMs = 2000,
-): Promise<{ body: string; pollMs: number; attempts: number }> {
+): Promise<{ body: string; elapsedMs: number; retries: number }> {
   const start = Date.now();
   let attempts = 0;
   let body = '';
@@ -176,11 +177,11 @@ async function fetchRemoteFileEventually(
     attempts++;
     body = await fetchRemoteFile(realmUrl, relPath);
     if (body.includes(expectedSubstring)) {
-      return { body, pollMs: Date.now() - start, attempts };
+      return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
     }
     await sleep(100);
   }
-  return { body, pollMs: Date.now() - start, attempts };
+  return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
 }
 
 beforeAll(async () => {
@@ -293,12 +294,13 @@ describe('realm sync (integration)', () => {
     });
 
     // Poll-retry to distinguish "sync didn't push" from "push landed but a
-    // brief visibility race made the GET read stale bytes". pollMs > 0 in
-    // the diagnostic dump points at the latter.
+    // brief visibility race made the GET read stale bytes". `retries > 0`
+    // on a passing assertion points at the latter; a miss with retries
+    // exhausted means the bytes never settled within the timeout.
     const {
       body: remoteAfter,
-      pollMs,
-      attempts,
+      elapsedMs,
+      retries,
     } = await fetchRemoteFileEventually(
       realmUrl,
       'conflict.gts',
@@ -312,7 +314,7 @@ describe('realm sync (integration)', () => {
           `preRemote=${JSON.stringify(preRemote)} ` +
           `localAfter=${JSON.stringify(localAfter)} ` +
           `remoteAfter=${JSON.stringify(remoteAfter)} ` +
-          `pollMs=${pollMs} attempts=${attempts} realmUrl=${realmUrl}`,
+          `retries=${retries} elapsedMs=${elapsedMs} realmUrl=${realmUrl}`,
       );
     }
 
