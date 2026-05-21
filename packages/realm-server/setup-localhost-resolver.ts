@@ -1,8 +1,16 @@
-// In environment mode, Node.js fetch() (backed by undici) may fail to resolve
-// *.localhost subdomains because getaddrinfo() doesn't always handle them per
-// RFC 6761.  This module installs a global undici dispatcher that short-circuits
-// DNS for *.localhost → 127.0.0.1 so that inter-service fetch() calls through
-// Traefik work reliably.
+// In environment mode, Node.js fetch() (backed by undici) needs two
+// adjustments to talk to *.localhost subdomains over HTTPS:
+//
+//   1. DNS: getaddrinfo() doesn't always resolve *.localhost per RFC 6761,
+//      so the Agent's connect.lookup short-circuits *.localhost → 127.0.0.1
+//      and inter-service fetch()es through Traefik resolve reliably.
+//
+//   2. TLS: the dev mkcert leaf advertises DNS:*.localhost as a SAN, but
+//      tls.checkServerIdentity refuses two-label wildcards per RFC 6125
+//      §7.2 — so the Agent's connect.checkServerIdentity wraps the default
+//      check and accepts the *.localhost wildcard for single-label
+//      .localhost hosts when the cert really does advertise it. Strict
+//      validation is preserved for every other host/cert combination.
 //
 // NOTE: This runs before logger setup, so we check the env var directly instead
 // of importing isEnvironmentMode() (which would trigger a logger import).
