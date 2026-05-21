@@ -384,9 +384,10 @@ boxel test --realm <url> --json | jq      # machine-readable
 boxel test --realm <url> --debug          # stream browser console
 ```
 
-**Monorepo-only:** test discovers the host app's `dist/` directory
-relative to this CLI. The host app must be built first
-(`pnpm --filter @cardstack/host build`).
+The CLI ships its own test harness (`bundled-test-harness/`) so this
+works on a published install. In-monorepo dev falls back to the
+sibling `packages/host/dist/`; build it with
+`pnpm --filter @cardstack/host build` if it isn't there yet.
 
 A test run with zero tests, or with all tests skipped, returns
 `status: "failed"` — **never use `QUnit.skip()` / `QUnit.todo()`** in

@@ -32,10 +32,10 @@ async function loadChromium(): Promise<ChromiumApi> {
   } catch (err) {
     let message = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Could not load @playwright/test (${message}). \`boxel test\` ` +
-        'is monorepo-only — install Playwright in the boxel-cli package ' +
-        'via `pnpm --filter @cardstack/boxel-cli install` and run ' +
-        '`npx playwright install chromium` once.',
+      `Could not load @playwright/test (${message}). Reinstall ` +
+        '`@cardstack/boxel-cli` (Playwright ships as a runtime ' +
+        'dependency) and run `npx playwright install chromium` once ' +
+        'to fetch the browser binary.',
     );
   }
 }
@@ -48,11 +48,16 @@ async function loadChromium(): Promise<ChromiumApi> {
  * `runTestsInMemory` path) during CS-11149 so the same engine is
  * reachable from a subscription-billed Claude Code session via Bash.
  *
- * Like `boxel parse`, this is a monorepo-only command — it locates
- * the host app's `dist/` (test bundles + assets) via either
- * `TEST_HARNESS_HOST_DIST_PACKAGE_DIR`, the sibling `packages/host`
- * directory, or the root repo's `packages/host` directory when run
- * from a git worktree. It does not work in the published CLI.
+ * The host's compiled `dist/` (test page + bundles + assets) comes
+ * from one of three places, resolved by `resolveHostDistDir` below:
+ *
+ *   1. `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` env override.
+ *   2. `bundled-test-harness/` shipped with the CLI, populated at
+ *      release time by `scripts/build-test-harness.ts` from
+ *      `packages/host/dist/`. This is what makes `boxel test` work
+ *      outside the monorepo on a published install (CS-11164).
+ *   3. Sibling `packages/host/dist/` for in-monorepo dev when
+ *      `bundled-test-harness/` hasn't been built.
  *
  * Unlike the factory's `executeTestRunFromRealm`, this command does
  * NOT create or update a TestRun card — it returns in-memory results
@@ -226,13 +231,7 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
   let testPageServer: Server | undefined;
 
   try {
-    let hostDistDir =
-      options.hostDistDir ??
-      join(
-        findHostDistPackageDir() ??
-          join(resolve(findBoxelCliRoot(__dirname), '..'), 'host'),
-        'dist',
-      );
+    let hostDistDir = options.hostDistDir ?? resolveHostDistDir();
 
     if (!fileExists(join(hostDistDir, 'tests', 'index.html'))) {
       throw new Error(
@@ -506,6 +505,42 @@ function fileExists(path: string): boolean {
   }
 }
 
+/**
+ * Locate the host's compiled `dist/` that QUnit + the test page run
+ * against. Three sources, tried in this order (CS-11164):
+ *
+ *   1. `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` env override (lets devs
+ *      point at any dist on disk — historically used for testing).
+ *   2. `bundled-test-harness/` shipped alongside the CLI by
+ *      `scripts/build-test-harness.ts` at release time. This is what
+ *      a published `@cardstack/boxel-cli` install has; it makes
+ *      `boxel test` work outside the monorepo.
+ *   3. Sibling `packages/host/dist/` (in-monorepo dev, when
+ *      `bundled-test-harness/` hasn't been built — e.g. running
+ *      `pnpm start` on boxel-cli before any release-mode build).
+ */
+function resolveHostDistDir(): string {
+  if (process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR) {
+    return join(
+      resolve(process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR),
+      'dist',
+    );
+  }
+  let cliRoot = findBoxelCliRoot(__dirname);
+  let bundled = join(cliRoot, 'bundled-test-harness');
+  if (fileExists(join(bundled, 'tests', 'index.html'))) {
+    return bundled;
+  }
+  let monorepoFallback = findHostDistPackageDir();
+  if (monorepoFallback) {
+    return join(monorepoFallback, 'dist');
+  }
+  // Last resort: the sibling `packages/host/dist/` even if its
+  // `tests/index.html` is missing (the caller will surface the
+  // "host dist not found" error with this path in the message).
+  return join(resolve(cliRoot, '..'), 'host', 'dist');
+}
+
 function findHostDistPackageDir(): string | undefined {
   let packageRoot = findBoxelCliRoot(__dirname);
   let packagesDir = resolve(packageRoot, '..');
@@ -649,7 +684,7 @@ export function registerTestCommand(program: Command): void {
   program
     .command('test')
     .description(
-      "Run the realm's QUnit test suite (every `*.test.gts` file) in a headless Chromium driven against the host app. Monorepo-only: relies on the host app's compiled `dist/` being reachable from this CLI's location (or via TEST_HARNESS_HOST_DIST_PACKAGE_DIR).",
+      "Run the realm's QUnit test suite (every `*.test.gts` file) in a headless Chromium driven against the host app. The CLI ships its own copy of the host's test bundle so this works on a published install; in-monorepo dev falls back to the sibling `packages/host/dist/`.",
     )
     .requiredOption('--realm <realm-url>', 'The realm URL to test')
     .option(

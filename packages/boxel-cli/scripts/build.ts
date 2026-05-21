@@ -15,9 +15,9 @@ const commonConfig = {
     // Playwright (drives `boxel test`) and its native-module transitive
     // deps (fsevents on macOS, etc.) can't be bundled by esbuild — they
     // contain `.node` files and runtime `require.resolve` calls. boxel-cli
-    // keeps them as runtime requires; they're picked up from node_modules
-    // when `boxel test` actually runs. Monorepo-only by consequence —
-    // matches `boxel test`'s existing monorepo-only constraint.
+    // keeps them as runtime `require`s and ships `@playwright/test` as a
+    // runtime dependency, so node resolves them from node_modules when
+    // `boxel test` runs on a published install.
     '@playwright/test',
     'playwright',
     'playwright-core',

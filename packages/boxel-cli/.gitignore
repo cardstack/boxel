@@ -6,6 +6,12 @@ dist/
 # at release time. Committed-via-publish, never in git.
 bundled-types/
 
+# Vendored host test harness for `boxel test` outside the monorepo
+# (CS-11164). Populated by `pnpm build:test-harness` from
+# `packages/host/dist/` at release time. Shipped via the `files`
+# array in package.json; never in git.
+bundled-test-harness/
+
 # Cached shallow clone of cardstack/boxel-skills used by scripts/build-skills.ts
 .boxel-skills-cache/
 
