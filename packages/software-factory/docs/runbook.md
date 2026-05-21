@@ -29,11 +29,16 @@ The user has done the following outside Claude Code:
 - A running realm server reachable at the URL they intend to use. For
   local work that is `mise run dev-all` in the boxel monorepo; for
   staging/prod they have credentials in their profile.
-- `boxel parse` and `boxel test` need a few extra bits available
-  (monorepo-only, until the realm-server `_parse` endpoint and the
-  built-in QUnit harness ship in follow-up tickets):
+- `boxel test` needs a few extra bits available (monorepo-only, until
+  the built-in QUnit harness ships per CS-11164):
   - The host app's `dist/` is built: `pnpm --filter @cardstack/host build`.
   - Playwright's headless Chromium is installed: `npx playwright install chromium`. One-time per machine.
+- `boxel parse` is self-contained from the published CLI as of
+  CS-11165 — no monorepo needed. From inside the workspace dir,
+  just run `boxel parse` (no flags) to type-check local files
+  before pushing. That's the loop's default shape: catch type
+  errors locally, fix, then push once clean. `--realm <url>` is
+  only for the post-push case.
 - Claude Code is launched from `packages/software-factory/` so the
   `.claude/skills` symlink (→ `.agents/skills/`) is discovered.
   The agent creates its own scratch workspace inside `mktemp -d`
@@ -116,20 +121,20 @@ session.
 
 ## What the agent calls (and from where)
 
-| Capability              | How the agent invokes it                                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Realm creation          | `boxel realm create <slug> "<display-name>"` (native subcommand; `<slug>` must match `^[a-z0-9-]+$`)                                                                                                        |
-| Workspace pull / push   | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)                                                                                                                          |
-| Federated search        | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                                                                                                                                             |
-| Card-type schema        | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'`                                                           |
-| Lint                    | `boxel lint [path] --realm <url>` (whole-realm or single-file)                                                                                                                                              |
-| Parse / type-check      | `boxel parse [path] --realm <url>` (monorepo-only — glint + JSON validation)                                                                                                                                |
-| Evaluate module         | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`                                           |
-| Instantiate card        | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'` |
-| Run QUnit tests         | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)                                                                                                                                       |
-| Read transpiled output  | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors)                                                                                                                        |
-| Write files             | native `Write` / `Edit`                                                                                                                                                                                     |
-| Read / search workspace | native `Read` / `Glob` / `Grep`                                                                                                                                                                             |
+| Capability              | How the agent invokes it                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Realm creation          | `boxel realm create <slug> "<display-name>"` (native subcommand; `<slug>` must match `^[a-z0-9-]+$`)                                                                                                             |
+| Workspace pull / push   | `boxel realm pull <url> <dir>` / `boxel realm push <dir> <url>` (realm-sync skill)                                                                                                                               |
+| Federated search        | `boxel search --realm <url> --query '<json>'` (boxel-api skill)                                                                                                                                                  |
+| Card-type schema        | `boxel run-command @cardstack/boxel-host/commands/get-card-type-schema/default --realm <url> --input '{"codeRef":{"module":"...","name":"..."}}'`                                                                |
+| Lint                    | `boxel lint [path] --realm <url>` (whole-realm or single-file)                                                                                                                                                   |
+| Parse / type-check      | `boxel parse [path]` from inside the workspace dir — defaults to type-checking **local files before push**. Add `--realm <url>` only when you want to check files already on the realm. glint + JSON validation. |
+| Evaluate module         | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`                                                |
+| Instantiate card        | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'`      |
+| Run QUnit tests         | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)                                                                                                                                            |
+| Read transpiled output  | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors)                                                                                                                             |
+| Write files             | native `Write` / `Edit`                                                                                                                                                                                          |
+| Read / search workspace | native `Read` / `Glob` / `Grep`                                                                                                                                                                                  |
 
 There are no factory MCP tools. `signal_done` and
 `request_clarification` are replaced by writing the issue's `status`
@@ -144,14 +149,10 @@ A few rough edges remain — not blocking, but worth tracking:
   as a slash command (or a `boxel factory run` CLI that spawns
   `claude` with the prompt baked in) so the user doesn't paste
   prose every time.
-- **Realm-server `_parse` endpoint** — replace the monorepo-bound
-  `boxel parse` with a server-side endpoint mirroring `_lint`, so
-  the published `boxel-cli` can lint AND parse without checking
-  out the repo.
-- **Dev `boxel-cli` setup automation** — the ~30 lines of bash the
-  agent runs at the start of every session (find monorepo, rename
-  stale `dist/`, symlink to PATH) should collapse into a single
-  per-machine prerequisite, not per-session boilerplate.
+- **Self-contained `boxel test`** — track [CS-11164](https://linear.app/cardstack/issue/CS-11164).
+  Today `boxel test` still needs the monorepo (host `dist/` +
+  Playwright). The plan is to bundle a QUnit harness into the CLI the
+  same way CS-11165 bundled the type-check toolchain.
 - **Orchestrator retirement** — once this runbook has shipped and
   run in production for long enough, delete the SDK orchestrator
   code (`issue-loop.ts`, `factory-agent/`, etc.).

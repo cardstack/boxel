@@ -13,14 +13,12 @@ files in the workspace mirror of the target realm, push them, run
 validators against the realm, fix anything they catch, and flip the
 Issue status when you're done.
 
-## Prerequisite: dev `boxel` CLI must be wired up
+## Prerequisite: `boxel` must be on PATH
 
-Every command in this skill uses `boxel <subcommand>`. Phase 1 does
-**not** assume `boxel` is on PATH — the CLI is run from the
-in-monorepo dev source. Before running any `boxel <cmd>` below,
-complete the wiring block in the `software-factory-scheduling`
-skill (or the equivalent block in `software-factory-bootstrap`).
-The block is idempotent; running it again here is safe and cheap.
+Every command in this skill uses `boxel <subcommand>`. The
+`software-factory-scheduling` and `software-factory-bootstrap`
+skills verify `boxel` is installed at their start; if you got
+this far, that check has passed.
 
 ## Realm roles
 
@@ -271,22 +269,27 @@ boxel lint --realm http://localhost:4201/alice/my-realm/   # whole realm
 Exit code is non-zero when any error-severity violation exists.
 Pass `--json` for a structured result you can pipe through `jq`.
 
-### `boxel parse [path] --realm <url>`
+### `boxel parse [path]`
 
 Type-checks `.gts` / `.gjs` / `.ts` via glint (template-aware
-TypeScript) and validates the document structure of `.json` files
-linked as Spec `linkedExamples`. Without a path, parses every
-parseable file in the realm. With a path, parses just that file —
-the extension is required (`.gts` / `.gjs` / `.ts` / `.json`).
+TypeScript) and validates the document structure of `.json`
+files. From inside the workspace dir, it defaults to checking
+the local files — use this as a pre-flight before pushing. With
+a path argument, parses just that file (extension required:
+`.gts` / `.gjs` / `.ts` / `.json`).
 
 ```bash
-boxel parse sticky-note.gts --realm http://localhost:4201/alice/my-realm/
-boxel parse --realm http://localhost:4201/alice/my-realm/
+# from inside the workspace dir
+boxel parse                        # whole workspace
+boxel parse sticky-note.gts        # single file
+boxel parse Spec/sticky-note.json  # one Catalog Spec
 ```
 
-**Monorepo-only:** parse runs glint locally against the host app's
-node_modules + monorepo paths. It will fail outside the boxel
-monorepo with a clear error.
+The realm form is for checking files already pushed:
+
+```bash
+boxel parse --realm http://localhost:4201/alice/my-realm/
+```
 
 ### `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default`
 
@@ -404,15 +407,26 @@ QUnit card tests" below.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) — adopts
    from `https://cardstack.com/base/spec` / `Spec`. Link sample
    instances via `relationships.linkedExamples`.
-6. **Push the workspace** to the target realm.
-7. **Run the validators and iterate until all five pass — or
-   until you hit a bail-out limit.** Each pass through the loop:
+6. **Pre-flight: `boxel parse` locally — _before_ any push.** From
+   inside the workspace dir, run `boxel parse` (no flags — it
+   defaults to reading the cwd). This catches type errors and
+   malformed Spec JSON in seconds, without a realm round-trip. If
+   it reports errors, fix the files locally and re-run
+   `boxel parse` until clean. Only then proceed to step 7. This
+   step does NOT produce a `Validations/parse_*.json` artifact —
+   that's reserved for the post-push validator pass below.
+7. **Push the workspace** to the target realm.
+8. **Run the realm-side validators and iterate until they all
+   pass — or until you hit a bail-out limit.** Each pass through
+   the loop:
    1. Run each validator (in this order — cheap to expensive):
-      `boxel lint <changed-file>`, `boxel parse <changed-file>`,
+      `boxel lint <changed-file>`, `boxel parse <changed-file> --realm <url>`,
       `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --input '{"moduleIdentifier":"<absolute-module-url>","realmIdentifier":"<absolute-realm-url>"}'`,
       `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --input '{"moduleIdentifier":"<absolute-module-url>","cardName":"<ClassName>","realmIdentifier":"<absolute-realm-url>","instanceData":"<json-string-with-absolute-adoptsFrom>"}'`,
       `boxel test`. Use `--json` so the structured result is
-      available.
+      available. The post-push parse with `--realm` is what
+      produces the `Validations/parse_*.json` audit-trail card —
+      step 6's local parse is a pre-flight, not an audit.
    2. After each validator, write a corresponding
       `Validations/<type>_<issue-slug>-<n>.json` artifact card
       (see "Validation artifact cards" below). The card captures
@@ -450,14 +464,14 @@ QUnit card tests" below.
      validator has 5+ failed cards and no passed card, the
      problem is outside this Issue's scope.
 
-8. **Push the workspace** so the final validation cards land on
+9. **Push the workspace** so the final validation cards land on
    the realm.
-9. **Either mark done or bail out.**
-   - If all five validators passed: edit
-     `Issues/<slug>.json:data.attributes.status` to `"done"` and
-     push. (See `software-factory-scheduling` for the full
-     status-transition rules.)
-   - If you hit a bail-out limit: see "Bailing out" below.
+10. **Either mark done or bail out.**
+    - If all five validators passed: edit
+      `Issues/<slug>.json:data.attributes.status` to `"done"` and
+      push. (See `software-factory-scheduling` for the full
+      status-transition rules.)
+    - If you hit a bail-out limit: see "Bailing out" below.
 
 ## Bailing out (when validators won't go green)
 

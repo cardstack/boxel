@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["reading", "list", "books", "relationships"],
+      "content": "## Overview\n\nA reading list. Two card types:\n\n- A `ReadingList` card — a name plus a collection of books.\n- A `Book` card — a single book, used standalone or as part of one or more `ReadingList`s.\n\nThe books are real `Book` card instances linked from the `ReadingList`, **not** an inline `containsMany` field. The point of this brief is to exercise card-to-card relationships, not just nested fields.\n\n## What a book captures\n\nThe usual stuff — title, author, page count, a reading status (`to-read` / `reading` / `finished`), maybe a one-line note. Pick a sensible field shape.\n\n## What the isolated views should do\n\n### `ReadingList`\n\n- A header showing the list's name and a tiny stats line — e.g. how many to-read, how many finished, total pages. Your call which numbers are worth surfacing.\n- The list of linked books, most recently added first. Each entry shows title, author, status, and a remove control (unlinks the book from the list — does not delete the `Book` card).\n- A way to add a book: either select an existing `Book` card to link, or create a new `Book` and link it. Your call which (or both).\n- Empty state when nothing's linked.\n\n### `Book`\n\n- Title and author prominently. Page count, status, and the note.\n- Small enough to render reasonably in embedded / fitted formats (since the `ReadingList` will use those to show its linked books).\n\n## Design direction\n\nLibrary / bookshelf vibe — calm, readable, no neon. Use the design system.\n\n## Out of scope\n\n- Cover images. Title + author is enough.\n- Editing books from inside the list (open the `Book` card itself for that).\n- Author cards. Authors are just strings on `Book`.\n- **Real QUnit rendering tests.** Write a single-line placeholder `.test.gts` — `module(...)` with one `test('placeholder', (assert) => { assert.ok(true); })`. Do NOT import host test helpers; do NOT `new` either card. Real rendering tests are a follow-up.",
+      "cardInfo": {
+        "name": "Reading List",
+        "notes": null,
+        "summary": "Two cards in a one-to-many relationship: a ReadingList with linksToMany Book. Exercises card-to-card relationships, embedded/fitted formats for linked cards, and a small stats panel.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

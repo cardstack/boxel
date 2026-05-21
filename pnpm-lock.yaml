@@ -1019,9 +1019,21 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@glint/ember-tsc':
+        specifier: 'catalog:'
+        version: 1.5.0(typescript@5.9.3)
+      '@types/qunit':
+        specifier: 'catalog:'
+        version: 2.19.14
+      '@universal-ember/test-support':
+        specifier: 'catalog:'
+        version: 0.5.1(@babel/core@7.29.0)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.25.0)
       commander:
         specifier: ^13.1.0
         version: 13.1.0
+      content-tag:
+        specifier: 'catalog:'
+        version: 4.2.0
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
@@ -1034,6 +1046,15 @@ importers:
       p-limit:
         specifier: ^7.3.0
         version: 7.3.0
+      qunit:
+        specifier: 'catalog:'
+        version: 2.25.0
+      qunit-dom:
+        specifier: 'catalog:'
+        version: 3.5.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
     devDependencies:
       '@cardstack/local-types':
         specifier: workspace:*
@@ -1044,9 +1065,6 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
-      '@glint/ember-tsc':
-        specifier: 'catalog:'
-        version: 1.5.0(typescript@5.9.3)
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.60.0
@@ -1065,9 +1083,6 @@ importers:
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
-      content-tag:
-        specifier: 'catalog:'
-        version: 4.2.0
       esbuild:
         specifier: ^0.19.0
         version: 0.19.12
@@ -1086,9 +1101,6 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
-      typescript:
-        specifier: 'catalog:'
-        version: 5.9.3
       vite:
         specifier: 'catalog:'
         version: 6.4.2(@types/node@24.12.4)(lightningcss@1.32.0)(terser@5.47.1)(yaml@2.9.0)
