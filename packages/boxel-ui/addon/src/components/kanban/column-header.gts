@@ -57,7 +57,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
             'Hide column'
           }}
           {{on 'click' @onCollapse}}
-          data-test-column-collapse-button
+          data-test-column-collapse-button={{@column.key}}
         />
       {{/if}}
       {{#if @onAddCard}}
@@ -71,7 +71,7 @@ const KanbanColumnHeader: TemplateOnlyComponent<Signature> = <template>
           @icon='add'
           @variant='ghost'
           {{on 'click' @onAddCard}}
-          data-test-column-add-button
+          data-test-column-add-button={{@column.key}}
         />
       {{/if}}
     </div>

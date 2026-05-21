@@ -337,11 +337,11 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
 
   function buildBoard() {
     let column0 = document.createElement('div');
-    column0.setAttribute('data-kanban-column', '0');
+    column0.setAttribute('data-kanban-column-index', '0');
     stubRect(column0, { left: 0, top: 0, width: 200, height: 400 });
 
     let column1 = document.createElement('div');
-    column1.setAttribute('data-kanban-column', '1');
+    column1.setAttribute('data-kanban-column-index', '1');
     stubRect(column1, { left: 220, top: 0, width: 200, height: 400 });
 
     let card0 = document.createElement('div');
@@ -378,11 +378,11 @@ module('Unit | kanban-engine | findInsertionFromPointer', function (hooks) {
 
   test('returns start position for an empty target column', function (assert) {
     let column0 = document.createElement('div');
-    column0.setAttribute('data-kanban-column', '0');
+    column0.setAttribute('data-kanban-column-index', '0');
     stubRect(column0, { left: 0, top: 0, width: 200, height: 400 });
 
     let column1 = document.createElement('div');
-    column1.setAttribute('data-kanban-column', '1');
+    column1.setAttribute('data-kanban-column-index', '1');
     stubRect(column1, { left: 220, top: 0, width: 200, height: 400 });
 
     let card0 = document.createElement('div');

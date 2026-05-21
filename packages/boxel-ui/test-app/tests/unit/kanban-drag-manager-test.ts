@@ -47,8 +47,8 @@ function makeMultiBoard(): {
   let card1 = document.createElement('div');
   let card2 = document.createElement('div');
 
-  col0.setAttribute('data-kanban-column', '0');
-  col1.setAttribute('data-kanban-column', '1');
+  col0.setAttribute('data-kanban-column-index', '0');
+  col1.setAttribute('data-kanban-column-index', '1');
   body0.setAttribute('data-kanban-col-body', '');
   body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');
@@ -88,8 +88,8 @@ function makeBoard(): HTMLElement {
   let card0 = document.createElement('div');
   let card1 = document.createElement('div');
 
-  column0.setAttribute('data-kanban-column', '0');
-  column1.setAttribute('data-kanban-column', '1');
+  column0.setAttribute('data-kanban-column-index', '0');
+  column1.setAttribute('data-kanban-column-index', '1');
   body0.setAttribute('data-kanban-col-body', '');
   body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');

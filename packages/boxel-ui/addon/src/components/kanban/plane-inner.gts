@@ -194,6 +194,7 @@ export class KanbanPlaneInner extends Component<{
       class={{cn 'board' is-dragging=this.isDragging}}
       role={{if @boardLabel 'region'}}
       aria-label={{@boardLabel}}
+      data-test-kanban-board
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
       {{on 'pointermove' this.manager.onPointerMove}}
@@ -211,7 +212,7 @@ export class KanbanPlaneInner extends Component<{
         aria-atomic='true'
       >{{this.manager.announcement}}</div>
 
-      {{#each this.columns as |column|}}
+      {{#each this.columns as |column i|}}
         {{#unless column.collapsed}}
           <div
             class={{cn
@@ -223,6 +224,7 @@ export class KanbanPlaneInner extends Component<{
             aria-label={{if column.label column.label 'Untitled'}}
             style={{this.columnStyle}}
             data-kanban-column={{column.key}}
+            data-kanban-column-index='{{i}}'
             data-test-column-is-over-wip={{this.isOverWip column}}
           >
             <KanbanColumnHeader

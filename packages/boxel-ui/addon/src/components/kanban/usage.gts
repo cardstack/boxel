@@ -1,5 +1,5 @@
 import { fn, get } from '@ember/helper';
-import { action, set } from '@ember/object';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -36,7 +36,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#64748b',
     wipLimit: 0,
     collapsed: false,
-    sortOrder: 1,
+    sortOrder: 0,
   },
   {
     key: 'in-progress',
@@ -44,7 +44,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#d97706',
     wipLimit: 2,
     collapsed: false,
-    sortOrder: 2,
+    sortOrder: 1,
   },
   {
     key: 'review',
@@ -52,7 +52,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#0f766e',
     wipLimit: 1,
     collapsed: false,
-    sortOrder: 3,
+    sortOrder: 2,
   },
   {
     key: 'done',
@@ -60,7 +60,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#15803d',
     wipLimit: null,
     collapsed: false,
-    sortOrder: 4,
+    sortOrder: 3,
   },
 ];
 
@@ -155,7 +155,7 @@ export default class KanbanUsage extends Component {
     let next = !this.hideEmpty;
     this.columns.forEach((col) => {
       if (cardsInColumn(col.key, this.placements).length === 0) {
-        set(col, 'collapsed', next);
+        col.collapsed = next;
       }
     });
   }
@@ -163,7 +163,7 @@ export default class KanbanUsage extends Component {
   @action toggleCollapsed(columnKey: string | null): void {
     this.columns.forEach((col) => {
       if (col.key === columnKey) {
-        set(col, 'collapsed', !col.collapsed);
+        col.collapsed = !col.collapsed;
       }
     });
   }

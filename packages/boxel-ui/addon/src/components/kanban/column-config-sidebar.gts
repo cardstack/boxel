@@ -5,9 +5,9 @@ import EyeOff from '@cardstack/boxel-icons/eye-off';
 import XIcon from '@cardstack/boxel-icons/x';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action, set } from '@ember/object';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { TrackedArray } from 'tracked-built-ins';
 
 import FieldContainer from '../field-container/index.gts';
 import IconButton from '../icon-button/index.gts';
@@ -16,38 +16,28 @@ import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
   Args: {
-    columns: KanbanColumnConfig[];
+    columns: TrackedArray<KanbanColumnConfig>;
     onClose?: () => void;
+    onColumnsChange?: (columns: KanbanColumnConfig[]) => void;
   };
   Element: HTMLElement;
 }
 
 export class KanbanColumnConfigSidebar extends Component<Signature> {
-  @tracked private mutationRevision = 0;
-
-  get columns(): KanbanColumnConfig[] {
-    this.mutationRevision;
-    return this.args.columns;
-  }
-
-  private touch(): void {
-    this.mutationRevision++;
-  }
-
   private normalizeSortOrders(): void {
-    this.columns.forEach((column, index) => {
-      set(column, 'sortOrder', index);
+    this.args.columns.forEach((column, index) => {
+      column.sortOrder = index;
     });
   }
 
   private reorderColumns(fromIndex: number, toIndex: number): void {
-    let [column] = this.columns.splice(fromIndex, 1);
+    let [column] = this.args.columns.splice(fromIndex, 1);
     if (!column) {
       return;
     }
-    this.columns.splice(toIndex, 0, column);
+    this.args.columns.splice(toIndex, 0, column);
     this.normalizeSortOrders();
-    this.touch();
+    this.args.onColumnsChange?.([...this.args.columns]);
   }
 
   @action moveUp(index: number): void {
@@ -56,30 +46,29 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
   }
 
   @action moveDown(index: number): void {
-    if (index >= this.columns.length - 1) return;
+    if (index >= this.args.columns.length - 1) return;
     this.reorderColumns(index, index + 1);
   }
 
   @action onColorChange(column: KanbanColumnConfig, event: Event): void {
-    set(column, 'color', (event.target as HTMLInputElement).value);
-    this.touch();
+    column.color = (event.target as HTMLInputElement).value;
+    this.args.onColumnsChange?.([...this.args.columns]);
   }
 
   @action onLabelInput(column: KanbanColumnConfig, val: string): void {
-    set(column, 'label', val);
-    this.touch();
+    column.label = val;
+    this.args.onColumnsChange?.([...this.args.columns]);
   }
 
   @action onWipInput(column: KanbanColumnConfig, val: string): void {
     let raw = parseInt(val, 10);
-    let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
-    set(column, 'wipLimit', wipLimit);
-    this.touch();
+    column.wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.args.onColumnsChange?.([...this.args.columns]);
   }
 
   @action toggleVisible(column: KanbanColumnConfig): void {
-    set(column, 'collapsed', this.isVisible(column));
-    this.touch();
+    column.collapsed = this.isVisible(column);
+    this.args.onColumnsChange?.([...this.args.columns]);
   }
 
   isFirst = (
@@ -94,7 +83,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
     index: number,
   ): boolean => {
     let order = colOrder ?? index;
-    return order >= this.columns.length - 1;
+    return order >= this.args.columns.length - 1;
   };
   isVisible = (column: KanbanColumnConfig): boolean => !column?.collapsed;
 
@@ -114,7 +103,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       </header>
 
       <ul class='col-list'>
-        {{#each this.columns key='key' as |column i|}}
+        {{#each @columns key='key' as |column i|}}
           <li class='col-row' data-test-col-config-row={{column.key}}>
             <div class='col-row-order'>
               <IconButton
@@ -177,7 +166,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
                 'Hide column'
                 'Show column'
               }}
-              data-test-col-config-visible={{column.key}}
+              data-test-col-config-toggle-visible={{column.key}}
               {{on 'click' (fn this.toggleVisible column)}}
             />
           </li>

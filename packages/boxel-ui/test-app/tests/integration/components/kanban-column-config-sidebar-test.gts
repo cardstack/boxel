@@ -9,39 +9,40 @@ import {
 } from '@ember/test-helpers';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 import { tracked } from '@glimmer/tracking';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import {
   KanbanColumnConfigSidebar,
   type KanbanColumnConfig,
 } from '@cardstack/boxel-ui/components';
 
 // sortOrders are 0-indexed so boundary checks (=== 0, >= length - 1) work correctly.
-function makeColumns(): KanbanColumnConfig[] {
-  return [
-    {
+function makeColumns(): TrackedArray<KanbanColumnConfig> {
+  return new TrackedArray([
+    new TrackedObject({
       key: 'backlog',
       label: 'Backlog',
       color: '#64748b',
       wipLimit: 0,
       collapsed: false,
       sortOrder: 0,
-    },
-    {
+    }) as KanbanColumnConfig,
+    new TrackedObject({
       key: 'in-progress',
       label: 'In Progress',
       color: '#d97706',
       wipLimit: 2,
       collapsed: false,
       sortOrder: 1,
-    },
-    {
+    }) as KanbanColumnConfig,
+    new TrackedObject({
       key: 'done',
       label: 'Done',
       color: '#15803d',
       wipLimit: null,
       collapsed: false,
       sortOrder: 2,
-    },
-  ];
+    }) as KanbanColumnConfig,
+  ]);
 }
 
 module(
@@ -251,10 +252,10 @@ module(
 
       assert.dom('[data-test-col-config-label="backlog"]').hasValue('Backlog');
 
-      state.cols = [
-        { ...state.cols[0]!, label: 'Queue' },
+      state.cols = new TrackedArray([
+        new TrackedObject({ ...state.cols[0]!, label: 'Queue' }) as KanbanColumnConfig,
         ...state.cols.slice(1),
-      ];
+      ]);
       await new Promise((r) => requestAnimationFrame(r));
 
       assert.dom('[data-test-col-config-label="backlog"]').hasValue('Queue');

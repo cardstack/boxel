@@ -3239,6 +3239,9 @@ importers:
       tmp:
         specifier: 'catalog:'
         version: 0.2.5
+      tracked-built-ins:
+        specifier: ^4.1.2
+        version: 4.1.2(@babel/core@7.29.0)
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)

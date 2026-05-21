@@ -27,10 +27,6 @@ const issueTrackerModule: string = new URL('./issue-tracker', import.meta.url)
 const projectId = `${testRealmURL}Projects/test-project`;
 const boardId = `${testRealmURL}Boards/test-board`;
 
-// Default status column indices (issueStatusOptions order in kanban-config.gts):
-//   0: backlog  1: in_progress  2: blocked  3: review  4: done
-const COL = { backlog: 0, in_progress: 1, blocked: 2, review: 3, done: 4 };
-
 function makeIssue(
   issueId: string,
   status: string,
@@ -122,13 +118,13 @@ export function runTests() {
 
         assert.dom('[data-test-issue-tracker-card-count]').hasText('3 cards');
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
           .hasText('IT-1', 'backlog issue is in the Backlog column');
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="in_progress"] [data-test-issue-id]`)
           .hasText('IT-2', 'in-progress issue is in the In Progress column');
         assert
-          .dom(`[data-kanban-column="${COL.done}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="done"] [data-test-issue-id]`)
           .hasText('IT-3', 'done issue is in the Done column');
       });
 
@@ -152,10 +148,10 @@ export function runTests() {
             'only 3 non-empty columns visible after toggle',
           );
         assert
-          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .dom(`[data-kanban-column="blocked"]`)
           .doesNotExist('blocked column hidden');
         assert
-          .dom(`[data-kanban-column="${COL.review}"]`)
+          .dom(`[data-kanban-column="review"]`)
           .doesNotExist('review column hidden');
       });
 
@@ -173,15 +169,13 @@ export function runTests() {
         });
         await waitFor('[data-test-issue-id]');
 
-        assert.dom(`[data-kanban-column="${COL.backlog}"]`).exists();
+        assert.dom(`[data-kanban-column="backlog"]`).exists();
 
-        await click(
-          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
-        );
+        await click(`[data-test-column-collapse-button="backlog"]`);
         await waitFor('[aria-label="Show Backlog"]');
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist('backlog column is hidden after collapsing');
         assert
           .dom('[aria-label="Show Backlog"]')
@@ -213,11 +207,11 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         await click('[data-test-configure-columns-btn]');
-        await click('[data-test-col-config-visible="0"]');
+        await click('[data-test-col-config-toggle-visible="backlog"]');
         await waitFor('[aria-label="Show Backlog"]');
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist(
             'backlog column is hidden after collapsing from the sidebar',
           );
@@ -231,11 +225,11 @@ export function runTests() {
           'sidebar collapse persists backlog as collapsed',
         );
 
-        await click('[data-test-col-config-visible="0"]');
-        await waitFor(`[data-kanban-column="${COL.backlog}"]`);
+        await click('[data-test-col-config-toggle-visible="backlog"]');
+        await waitFor(`[data-kanban-column="backlog"]`);
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .exists(
             'backlog column is shown again after revealing from the sidebar',
           );
@@ -257,22 +251,22 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         assert
-          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .dom(`[data-kanban-column="blocked"]`)
           .exists('blocked starts visible while hide-empty is off');
 
         await click('[data-test-configure-columns-btn]');
-        await click('[data-test-col-config-visible="2"]');
+        await click('[data-test-col-config-toggle-visible="blocked"]');
         await waitFor('[aria-label="Show Blocked"]');
 
         assert
-          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .dom(`[data-kanban-column="blocked"]`)
           .doesNotExist('blocked is hidden after sidebar toggle');
 
         await click('.column-visibility-toggle input[role="switch"]');
         await click('.column-visibility-toggle input[role="switch"]');
 
         assert
-          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .dom(`[data-kanban-column="blocked"]`)
           .exists(
             'blocked is visible again after hide-empty is turned back off',
           );
@@ -328,23 +322,19 @@ export function runTests() {
 
         assert.dom('[data-kanban-column]').exists({ count: 5 });
 
-        await click(
-          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
-        );
+        await click(`[data-test-column-collapse-button="backlog"]`);
         await waitFor('[aria-label="Show Backlog"]');
 
         assert
           .dom('[data-kanban-column]')
           .exists({ count: 4 }, 'only the collapsed column is removed');
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist('backlog is hidden');
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .dom(`[data-kanban-column="in_progress"]`)
           .exists('in_progress still visible');
-        assert
-          .dom(`[data-kanban-column="${COL.done}"]`)
-          .exists('done still visible');
+        assert.dom(`[data-kanban-column="done"]`).exists('done still visible');
       });
 
       test('can hide a column from the header and reveal it from the sidebar, and vice versa', async function (assert) {
@@ -354,34 +344,32 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         // Hide backlog from the column header
-        await click(
-          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
-        );
+        await click(`[data-test-column-collapse-button="backlog"]`);
         await waitFor('[aria-label="Show Backlog"]');
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist('backlog hidden via column header');
 
         // Reveal backlog from the sidebar toggle
         await click('[data-test-configure-columns-btn]');
-        await click('[data-test-col-config-visible="0"]');
-        await waitFor(`[data-kanban-column="${COL.backlog}"]`);
+        await click('[data-test-col-config-toggle-visible="backlog"]');
+        await waitFor(`[data-kanban-column="backlog"]`);
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .exists('backlog revealed via sidebar toggle');
 
         // Hide in-progress from the sidebar toggle
-        await click('[data-test-col-config-visible="1"]');
+        await click('[data-test-col-config-toggle-visible="in_progress"]');
         await waitFor('[aria-label="Show In Progress"]');
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .dom(`[data-kanban-column="in_progress"]`)
           .doesNotExist('in-progress hidden via sidebar toggle');
 
         // Reveal in-progress from the hidden-columns tray in the header
         await click('[aria-label="Show In Progress"]');
-        await waitFor(`[data-kanban-column="${COL.in_progress}"]`);
+        await waitFor(`[data-kanban-column="in_progress"]`);
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .dom(`[data-kanban-column="in_progress"]`)
           .exists('in-progress revealed via hidden-columns tray');
         assert.dom('[data-test-hidden-columns]').doesNotExist('tray gone');
       });
@@ -404,9 +392,7 @@ export function runTests() {
           .exists({ count: 3 }, 'two empty columns hidden');
 
         // Also collapse backlog from the column header
-        await click(
-          `[data-kanban-column="${COL.backlog}"] [data-test-column-collapse-button]`,
-        );
+        await click(`[data-test-column-collapse-button="backlog"]`);
         await waitFor('[data-test-hidden-column-count]');
         assert
           .dom('[data-test-hidden-column-count]')
@@ -414,7 +400,7 @@ export function runTests() {
 
         // Also collapse in-progress from the sidebar
         await click('[data-test-configure-columns-btn]');
-        await click('[data-test-col-config-visible="1"]');
+        await click('[data-test-col-config-toggle-visible="in_progress"]');
         await waitFor('[aria-label="Show In Progress"]');
         assert
           .dom('[data-test-hidden-column-count]')
@@ -433,18 +419,18 @@ export function runTests() {
           .dom('.column-visibility-toggle [data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'off', 'switch now off');
         assert
-          .dom(`[data-kanban-column="${COL.blocked}"]`)
+          .dom(`[data-kanban-column="blocked"]`)
           .exists('blocked is visible again (was empty-hidden)');
         assert
-          .dom(`[data-kanban-column="${COL.review}"]`)
+          .dom(`[data-kanban-column="review"]`)
           .exists('review is visible again (was empty-hidden)');
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"]`)
+          .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist(
             'backlog stays hidden (was manually collapsed, has cards)',
           );
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"]`)
+          .dom(`[data-kanban-column="in_progress"]`)
           .doesNotExist(
             'in-progress stays hidden (was manually collapsed, has cards)',
           );
@@ -470,59 +456,83 @@ export function runTests() {
       });
 
       test<TestContextWithSave>('renaming a column in the sidebar updates the matching project issueStatusOption label, and recoloring updates its color', async function (assert) {
-        let resolveLabelSave: (doc: any) => void;
-        let labelSavePromise = new Promise<any>((r) => {
-          resolveLabelSave = r;
-        });
-        let resolveColorSave: (doc: any) => void;
-        let colorSavePromise = new Promise<any>((r) => {
-          resolveColorSave = r;
-        });
-        let labelSaveSeen = false;
+        let savedBoardDocs: any[] = [];
+        let savedProjectDocs: any[] = [];
         this.onSave((url, doc) => {
-          if (url.href !== projectId) return;
-          if (!labelSaveSeen) {
-            labelSaveSeen = true;
-            resolveLabelSave!(doc);
-          } else {
-            resolveColorSave!(doc);
-          }
+          if (url.href === boardId) savedBoardDocs.push(doc);
+          if (url.href === projectId) savedProjectDocs.push(doc);
         });
 
         await visitOperatorMode({
-          stacks: [[{ id: boardId, format: 'isolated' }]],
+          stacks: [
+            [{ id: boardId, format: 'isolated' }],
+            [{ id: projectId, format: 'isolated' }],
+          ],
         });
         await waitFor('[data-kanban-column]');
+        await waitFor('[data-test-operator-mode-stack="1"]');
 
         // Open sidebar and rename "To Do" → "Planning"
         await click('[data-test-configure-columns-btn]');
-        await fillIn('[data-test-col-config-label="0"]', 'Planning');
+        await fillIn('[data-test-col-config-label="todo"]', 'Planning');
+        await settled();
 
-        let labelSaveDoc = await labelSavePromise;
-        let updatedOptions = labelSaveDoc.data.attributes.issueStatusOptions;
+        let afterLabelDoc = savedBoardDocs[savedBoardDocs.length - 1];
+        let columnsAfterRename = afterLabelDoc?.data?.attributes?.columns;
+        let todoColumn = columnsAfterRename?.find(
+          (c: { key: string }) => c.key === 'todo',
+        );
         assert.strictEqual(
-          updatedOptions[0].label,
+          todoColumn?.label,
           'Planning',
-          'project issueStatusOption label updated to match sidebar rename',
+          'board column label updated to match sidebar rename',
+        );
+        let doingColumn = columnsAfterRename?.find(
+          (c: { key: string }) => c.key === 'doing',
         );
         assert.strictEqual(
-          updatedOptions[1].label,
+          doingColumn?.label,
           'Doing',
-          'other project options unchanged',
+          'other column labels unchanged',
         );
 
-        // Recolor the first column and verify the project option color syncs
+        // Recolor the first column and verify the board column color syncs
         let colorInput = document.querySelector(
-          '[data-test-col-config-color="0"]',
+          '[data-test-col-config-color="todo"]',
         ) as HTMLInputElement;
         colorInput.value = '#ff0000';
         await triggerEvent(colorInput, 'change');
+        await settled();
 
-        let colorSaveDoc = await colorSavePromise;
+        let afterColorDoc = savedBoardDocs[savedBoardDocs.length - 1];
+        let columnsAfterRecolor = afterColorDoc?.data?.attributes?.columns;
+        let todoColumnAfterRecolor = columnsAfterRecolor?.find(
+          (c: { key: string }) => c.key === 'todo',
+        );
         assert.strictEqual(
-          colorSaveDoc.data.attributes.issueStatusOptions[0].color,
+          todoColumnAfterRecolor?.color,
           '#ff0000',
-          'project issueStatusOption color updated to match sidebar recolor',
+          'board column color updated to match sidebar recolor',
+        );
+        assert.strictEqual(
+          todoColumnAfterRecolor?.label,
+          'Planning',
+          'label is preserved after recolor',
+        );
+
+        // The project card is open in the second stack — verify its
+        // issueStatusOptions were synced and saved.
+        let projectDoc = savedProjectDocs[savedProjectDocs.length - 1];
+        let projectOptions = projectDoc?.data?.attributes?.issueStatusOptions;
+        assert.strictEqual(
+          projectOptions?.[0]?.label,
+          'Planning',
+          'project issueStatusOption label synced and persisted',
+        );
+        assert.strictEqual(
+          projectOptions?.[0]?.color,
+          '#ff0000',
+          'project issueStatusOption color synced and persisted',
         );
       });
     });
@@ -549,7 +559,7 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
           .hasText(
             'IT-1',
             'unknown status falls back to first column (index 0)',
@@ -587,10 +597,10 @@ export function runTests() {
           .dom('[data-kanban-column]')
           .exists({ count: 3 }, 'exactly 3 custom columns rendered');
         assert
-          .dom('[data-kanban-column="0"] [data-test-issue-id]')
+          .dom('[data-kanban-column-index="0"] [data-test-issue-id]')
           .hasText('IT-1', 'IT-1 in first custom column (todo)');
         assert
-          .dom('[data-kanban-column="2"] [data-test-issue-id]')
+          .dom('[data-kanban-column-index="2"] [data-test-issue-id]')
           .hasText('IT-2', 'IT-2 in last custom column (done)');
       });
     });
@@ -617,7 +627,7 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
           .hasText('IT-1', 'IT-1 starts in backlog');
 
         await click(`[data-test-card="${testRealmURL}Issues/issue-backlog"]`);
@@ -637,12 +647,12 @@ export function runTests() {
 
         assert
           .dom(
-            `[data-test-stack-card-index="0"] [data-kanban-column="${COL.in_progress}"] [data-test-issue-id]`,
+            `[data-test-stack-card-index="0"] [data-kanban-column="in_progress"] [data-test-issue-id]`,
           )
           .hasText('IT-1', 'IT-1 moved to In Progress after status edit');
         assert
           .dom(
-            `[data-test-stack-card-index="0"] [data-kanban-column="${COL.backlog}"] [data-test-issue-id]`,
+            `[data-test-stack-card-index="0"] [data-kanban-column="backlog"] [data-test-issue-id]`,
           )
           .doesNotExist('IT-1 no longer in backlog');
       });
@@ -663,35 +673,45 @@ export function runTests() {
         });
       });
 
-      test('moving a card to another column updates its status', async function (assert) {
+      test<TestContextWithSave>('moving a card to another column updates its status', async function (assert) {
+        let savedIssueDocs: any[] = [];
+        this.onSave((url, doc) => {
+          if (url.href === `${testRealmURL}Issues/issue-backlog`) {
+            savedIssueDocs.push(doc);
+          }
+        });
+
         await visitOperatorMode({
           stacks: [[{ id: boardId, format: 'isolated' }]],
         });
         await waitFor('[data-test-issue-id]');
 
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
           .hasText('IT-1', 'IT-1 starts in backlog');
 
         await triggerKeyEvent('[data-card-index="0"]', 'keydown', ' ');
         await triggerKeyEvent(
-          '[role="region"][aria-label="Kanban board"]',
+          '[data-test-kanban-board]',
           'keydown',
           'ArrowRight',
         );
-        await triggerKeyEvent(
-          '[role="region"][aria-label="Kanban board"]',
-          'keydown',
-          ' ',
-        );
+        await triggerKeyEvent('[data-test-kanban-board]', 'keydown', ' ');
         await settled();
 
         assert
-          .dom(`[data-kanban-column="${COL.in_progress}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="in_progress"] [data-test-issue-id]`)
           .hasText('IT-1', 'IT-1 moved to In Progress column');
         assert
-          .dom(`[data-kanban-column="${COL.backlog}"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
           .doesNotExist('IT-1 no longer in backlog');
+
+        let savedIssueDoc = savedIssueDocs[savedIssueDocs.length - 1];
+        assert.strictEqual(
+          savedIssueDoc?.data?.attributes?.status,
+          'in_progress',
+          'issue status is persisted as in_progress',
+        );
       });
     });
 
@@ -717,9 +737,7 @@ export function runTests() {
 
         assert.dom('[data-test-issue-tracker-card]').doesNotExist();
 
-        await click(
-          `[data-kanban-column="${COL.in_progress}"] [data-test-column-add-button]`,
-        );
+        await click(`[data-test-column-add-button="in_progress"]`);
         await waitFor('[data-test-stack-card-index="1"]');
 
         assert
@@ -732,7 +750,7 @@ export function runTests() {
         assert.dom('[data-test-issue-tracker-card]').exists({ count: 1 });
         assert
           .dom(
-            `[data-kanban-column="${COL.in_progress}"] [data-test-issue-tracker-card="0"]`,
+            `[data-kanban-column="in_progress"] [data-test-issue-tracker-card="0"]`,
           )
           .containsText('Issue 1');
       });

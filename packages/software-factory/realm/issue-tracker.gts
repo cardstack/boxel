@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/helper';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
@@ -1054,22 +1055,30 @@ export class Project extends CardDef {
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   @tracked isSidebarOpen = false;
+  columns!: TrackedArray<KanbanColumnConfig>;
 
-  get columns(): KanbanColumnConfig[] {
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+
     let stored = this.args.model.columns ?? [];
     let source = stored.length
-      ? stored
+      ? [...stored].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       : buildColumnsFromStatusOptions(
           getProjectIssueStatusOptions(this.args.model?.project),
         );
-    return source.map((col) => ({
-      key: col.key ?? '',
-      label: col.label ?? null,
-      color: col.color ?? null,
-      collapsed: col.collapsed ?? null,
-      sortOrder: col.sortOrder ?? null,
-      wipLimit: col.wipLimit ?? null,
-    }));
+    this.columns = new TrackedArray(
+      source.map(
+        (col) =>
+          new TrackedObject({
+            key: col.key ?? '',
+            label: col.label ?? null,
+            color: col.color ?? null,
+            collapsed: col.collapsed ?? null,
+            sortOrder: col.sortOrder ?? null,
+            wipLimit: col.wipLimit ?? null,
+          }) as unknown as KanbanColumnConfig,
+      ),
+    );
   }
 
   get statusColor(): string | undefined {
@@ -1089,29 +1098,22 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     );
   }
 
-  revealEmptyColumns = (): void => {
-    this.args.model.hideEmptyColumns = false;
-    this.args.model.columns = this.columns.map((col, colIdx) =>
-      Object.assign(new KanbanColumnField(), {
-        key: col.key,
-        label: col.label,
-        color: col.color,
-        collapsed:
-          this.columnCardCounts[colIdx] === 0
-            ? false
-            : (col.collapsed ?? false),
-        sortOrder: col.sortOrder,
-        wipLimit: col.wipLimit,
-      }),
+  get hideEmpty(): boolean {
+    let emptyCols = this.columns.filter(
+      (_, i) => (this.columnCardCounts[i] ?? 0) === 0,
     );
-  };
+    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+  }
 
   toggleHideEmptyColumns = (): void => {
-    if (this.args.model.hideEmptyColumns) {
-      this.revealEmptyColumns();
-      return;
-    }
-    this.args.model.hideEmptyColumns = true;
+    let next = !this.hideEmpty;
+    this.columnCardCounts.forEach((count, i) => {
+      let col = this.columns[i];
+      if (col && count === 0) {
+        col.collapsed = next;
+      }
+    });
+    this.handleColumnsChange([...this.columns]);
   };
 
   handleToggleCollapsed = (columnKey: string | null): void => {
@@ -1119,20 +1121,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       return;
     }
 
-    let current = this.columns.find((col) => col.key === columnKey);
-    let willCollapse = !current?.collapsed;
-
-    this.args.model.columns = this.columns.map((col) =>
-      Object.assign(new KanbanColumnField(), {
-        key: col.key,
-        label: col.label,
-        color: col.color,
-        collapsed:
-          col.key === columnKey ? willCollapse : (col.collapsed ?? false),
-        sortOrder: col.sortOrder,
-        wipLimit: col.wipLimit,
-      }),
-    );
+    let col = this.columns.find((c) => c.key === columnKey);
+    if (col) {
+      col.collapsed = !col.collapsed;
+    }
+    this.handleColumnsChange([...this.columns]);
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
@@ -1288,7 +1281,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               <@fields.cardTitle />
             </h2>
             {{#if @model.project}}
-              <div class='kanban-project'>
+              <div class='kanban-project' data-test-issue-tracker-project-link>
                 <span class='dim-label'>Project</span>
                 <@fields.project @format='atom' />
               </div>
@@ -1309,7 +1302,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           <div class='column-visibility-toggle'>
             <span class='group-by-label'>Hide empty</span>
             <Switch
-              @isEnabled={{@model.hideEmptyColumns}}
+              @isEnabled={{this.hideEmpty}}
               @onChange={{this.toggleHideEmptyColumns}}
               @label='Hide empty columns'
             />
@@ -1345,7 +1338,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
-            @hideEmpty={{@model.hideEmptyColumns}}
+            @hideEmpty={{this.hideEmpty}}
             @onChange={{this.handleChange}}
             @onOpen={{this.openCard}}
             @onAddCard={{this.addCardTask.perform}}
@@ -1515,35 +1508,6 @@ export class IssueTracker extends KanbanBoard {
         : (this.boardTitle ?? this.project?.cardTitle ?? 'Issue Tracker Board');
     },
   });
-
-  static edit = class Edit extends Component<typeof IssueTracker> {
-    <template>
-      <div class='board-edit'>
-        <FieldContainer @label='Project' @vertical={{true}}>
-          <@fields.project />
-        </FieldContainer>
-        <p class='board-edit-note'>
-          Board columns default to the linked project&apos;s issue status
-          options. Use the Configure button in the board view to customise them.
-        </p>
-        <FieldContainer @label='Hide Empty Columns' @vertical={{true}}>
-          <@fields.hideEmptyColumns />
-        </FieldContainer>
-      </div>
-      <style scoped>
-        .board-edit {
-          display: grid;
-          gap: var(--boxel-sp);
-          padding: var(--boxel-sp-xl);
-        }
-        .board-edit-note {
-          margin: 0;
-          font-size: 0.875rem;
-          color: var(--muted-foreground, var(--boxel-500));
-        }
-      </style>
-    </template>
-  };
 
   static isolated = IssueTrackerIsolated;
 }

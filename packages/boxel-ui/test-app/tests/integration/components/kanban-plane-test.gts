@@ -75,14 +75,16 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert.dom('[data-test-column-is-over-wip]').exists();
     assert.dom('[data-test-kanban-col-wip]').hasText('Max 1');
     assert.dom('[data-card-index]').exists({ count: 3 });
-    assert.dom('[data-kanban-column="0"]').exists();
-    assert.dom('[data-kanban-column="1"]').exists();
+    assert.dom('[data-kanban-column-index="0"]').exists();
+    assert.dom('[data-kanban-column-index="1"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
 
-    await click('[data-kanban-column="0"] [data-test-column-collapse-button]');
+    await click(
+      '[data-kanban-column-index="0"] [data-test-column-collapse-button]',
+    );
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('[data-kanban-column="0"]').doesNotExist();
+    assert.dom('[data-kanban-column-index="0"]').doesNotExist();
     assert.dom('[data-test-hidden-columns]').containsText('Hidden');
     assert.dom('[data-test-hidden-column-count]').hasText('1');
     assert.dom('[aria-label="Show Todo"]').exists();
@@ -92,7 +94,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
     await click('[aria-label="Show Todo"]');
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="0"]').exists();
+    assert.dom('[data-kanban-column-index="0"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
   });
 
@@ -154,14 +156,14 @@ module('Integration | Component | kanban-plane', function (hooks) {
     );
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="0"]').exists();
+    assert.dom('[data-kanban-column-index="0"]').exists();
     assert.dom('[data-test-empty-column="0"]').hasText('No cards');
     assert.dom('[data-test-hidden-columns]').doesNotExist();
 
     await click('button');
 
     assert.dom('[data-kanban-column]').exists({ count: 1 });
-    assert.dom('[data-kanban-column="0"]').doesNotExist();
+    assert.dom('[data-kanban-column-index="0"]').doesNotExist();
     assert.dom('[data-test-hidden-column-count]').hasText('1');
     assert.dom('[aria-label="Show Todo"]').exists();
     assert.dom('[data-test-hidden-column-row="0"]').includesText('Todo');
@@ -169,7 +171,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
     await click('[aria-label="Show Todo"]');
 
-    assert.dom('[data-kanban-column="0"]').exists();
+    assert.dom('[data-kanban-column-index="0"]').exists();
     assert.dom('[data-test-empty-column="0"]').hasText('No cards');
     assert.dom('[data-kanban-column]').exists({ count: 2 });
     assert.dom('[data-test-hidden-columns]').doesNotExist();

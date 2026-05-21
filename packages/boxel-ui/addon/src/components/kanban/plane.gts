@@ -88,6 +88,7 @@ export class KanbanPlane extends Component<{
       @onAddCard={{@onAddCard}}
       @onToggleCollapsed={{@onToggleCollapsed}}
       @placements={{@placements}}
+      data-test-kanban-board
     >
       <:card as |placement|>
         {{yield placement to='card'}}
