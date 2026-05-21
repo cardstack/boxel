@@ -157,6 +157,32 @@ async function establishBaseline(
   await sleep(1100);
 }
 
+// Read a remote source file, retrying for up to `timeoutMs` if the body
+// doesn't yet contain `expectedSubstring`. Returns the final body either way
+// — callers assert on it. Built for the conflict-resolution tests where the
+// sync push has already returned 201 but the assertion sometimes reads
+// stale bytes; if a retry resolves it, the eventual `pollMs` value points
+// at a post-write visibility race rather than the sync logic itself.
+async function fetchRemoteFileEventually(
+  realmUrl: string,
+  relPath: string,
+  expectedSubstring: string,
+  timeoutMs = 2000,
+): Promise<{ body: string; pollMs: number; attempts: number }> {
+  const start = Date.now();
+  let attempts = 0;
+  let body = '';
+  while (Date.now() - start < timeoutMs) {
+    attempts++;
+    body = await fetchRemoteFile(realmUrl, relPath);
+    if (body.includes(expectedSubstring)) {
+      return { body, pollMs: Date.now() - start, attempts };
+    }
+    await sleep(100);
+  }
+  return { body, pollMs: Date.now() - start, attempts };
+}
+
 beforeAll(async () => {
   await startTestRealmServer();
 
@@ -254,16 +280,44 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    // Pre-sync snapshot — captures whether each side actually has the
+    // content we just wrote. If a future failure shows mismatched state
+    // here, the bug is upstream of sync (writeLocalFile / writeRemoteFile
+    // didn't land), not in conflict resolution.
+    const preLocal = readLocalFile(localDir, 'conflict.gts');
+    const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
     await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
 
-    // Local version should win
-    expect(await fetchRemoteFile(realmUrl, 'conflict.gts')).toContain(
+    // Poll-retry to distinguish "sync didn't push" from "push landed but a
+    // brief visibility race made the GET read stale bytes". pollMs > 0 in
+    // the diagnostic dump points at the latter.
+    const {
+      body: remoteAfter,
+      pollMs,
+      attempts,
+    } = await fetchRemoteFileEventually(
+      realmUrl,
+      'conflict.gts',
       'v = "local"',
     );
-    expect(readLocalFile(localDir, 'conflict.gts')).toContain('v = "local"');
+    const localAfter = readLocalFile(localDir, 'conflict.gts');
+
+    if (!remoteAfter.includes('v = "local"')) {
+      console.error(
+        `[conflict-prefer-local diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `localAfter=${JSON.stringify(localAfter)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `pollMs=${pollMs} attempts=${attempts} realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(remoteAfter).toContain('v = "local"');
+    expect(localAfter).toContain('v = "local"');
   });
 
   it('resolves conflict with --prefer-remote: remote version wins', async () => {
@@ -282,13 +336,33 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    const preLocal = readLocalFile(localDir, 'conflict.gts');
+    const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
     await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });
 
-    // Remote version should win
-    expect(readLocalFile(localDir, 'conflict.gts')).toContain('v = "remote"');
+    // For prefer-remote the local file is overwritten by the pulled
+    // remote bytes. The local-side read is a direct fs read with no
+    // visibility race, so no retry helper is needed — but the diagnostic
+    // dump on miss mirrors the prefer-local test so a regression on
+    // either side surfaces the same shape of evidence.
+    const localAfter = readLocalFile(localDir, 'conflict.gts');
+    const remoteAfter = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
+    if (!localAfter.includes('v = "remote"')) {
+      console.error(
+        `[conflict-prefer-remote diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `localAfter=${JSON.stringify(localAfter)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(localAfter).toContain('v = "remote"');
   });
 
   it('deletes remote file when local is deleted with --prefer-local', async () => {
