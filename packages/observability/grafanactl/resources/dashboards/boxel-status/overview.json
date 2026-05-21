@@ -479,10 +479,10 @@
       },
       {
         "datasource": {
-          "type": "loki",
-          "uid": "loki"
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
         },
-        "description": "Realm-server HTTP throughput, errors, and target response time. Throughput / errors come from Loki (`httpLogging` exit lines `--> METHOD ACCEPT URL: STATUS` and any line matching `error|exception|fatal`). p50 / p95 / p99 come from the realm-server ALB's `AWS/ApplicationELB.TargetResponseTime` metric (CloudWatch ExtendedStatistic) on the right axis in seconds — locally these read 'No data' but throughput/errors keep working. Legend shows the mean over the visible time range.",
+        "description": "Realm-server ALB metrics: request count, error rate (target 5XX + ELB-emitted 5XX combined), client 4xx rate, and target response time (p50/p95/p99 on the right axis in seconds). All series come from `AWS/ApplicationELB` CloudWatch metrics; request/error/4xx counts are normalized to per-minute regardless of the selected time range. Locally these read 'No data' — CloudWatch is staging/production only. Legend shows the mean over the visible window.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -519,8 +519,8 @@
             "decimals": 1,
             "links": [
               {
-                "title": "Open Realm Server dashboard",
-                "url": "/d/boxel-svc-realm-server",
+                "title": "Open Application Load Balancer dashboard",
+                "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
                 "targetBlank": false
               }
             ],
@@ -881,8 +881,8 @@
         "type": "timeseries",
         "links": [
           {
-            "title": "Open Realm Server dashboard",
-            "url": "/d/boxel-svc-realm-server",
+            "title": "Open Application Load Balancer dashboard",
+            "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -903,8 +903,8 @@
             "decimals": 0,
             "links": [
               {
-                "title": "Open Realm Server dashboard",
-                "url": "/d/boxel-svc-realm-server",
+                "title": "Open Application Load Balancer dashboard",
+                "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
                 "targetBlank": false
               }
             ],
@@ -977,8 +977,8 @@
         "type": "stat",
         "links": [
           {
-            "title": "Open Realm Server dashboard",
-            "url": "/d/boxel-svc-realm-server",
+            "title": "Open Application Load Balancer dashboard",
+            "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
