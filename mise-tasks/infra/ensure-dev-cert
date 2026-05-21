@@ -203,8 +203,20 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     if [ -z "$needs_regen" ]; then
       while IFS= read -r slug; do
         [ -z "$slug" ] && continue
+        # The env-mode services live at `<service>.<slug>.localhost`
+        # (covered by `*.<slug>.localhost`) but published realms live
+        # one level deeper at `<user>.realm-server.<slug>.localhost`
+        # (the `publishedRealmBoxelSiteDomain` default in env-mode is
+        # `realm-server.<slug>.localhost`). RFC 6125 wildcards only
+        # match one label, so a second SAN is required to keep the
+        # publish-realm flow off cert errors.
         if ! cert_has_san "*.$slug.localhost"; then
           echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.$slug.localhost SAN; regenerating."
+          needs_regen=1
+          break
+        fi
+        if ! cert_has_san "*.realm-server.$slug.localhost"; then
+          echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.realm-server.$slug.localhost SAN; regenerating."
           needs_regen=1
           break
         fi
@@ -219,14 +231,21 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
 fi
 
 echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
-# Build SAN list: base names + a `*.<slug>.localhost` for every
-# recorded env-mode slug. The leaf is shared across worktrees, so we
-# accumulate slugs rather than overwriting them — see $SLUGS_FILE
-# stamping above.
+# Build SAN list: base names + per-recorded-slug wildcards. For each
+# env-mode slug we include two SANs:
+#   * `*.<slug>.localhost`              — env-mode services
+#                                         (host.<slug>.localhost,
+#                                          matrix.<slug>.localhost, etc.)
+#   * `*.realm-server.<slug>.localhost` — published realms living one
+#                                         label deeper under the
+#                                         realm-server hostname.
+# The leaf is shared across worktrees, so we accumulate slugs rather
+# than overwriting them — see $SLUGS_FILE stamping above.
 SANS=(localhost 127.0.0.1 ::1 "*.localhost" published.realm)
 while IFS= read -r slug; do
   [ -z "$slug" ] && continue
   SANS+=("*.$slug.localhost")
+  SANS+=("*.realm-server.$slug.localhost")
 done < "$SLUGS_FILE"
 
 mkcert \
