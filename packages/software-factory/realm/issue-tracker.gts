@@ -1116,15 +1116,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.handleColumnsChange([...this.columns]);
   };
 
-  handleToggleCollapsed = (columnKey: string | null): void => {
-    if (!columnKey) {
+  handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
+    if (!col) {
       return;
     }
-
-    let col = this.columns.find((c) => c.key === columnKey);
-    if (col) {
-      col.collapsed = !col.collapsed;
-    }
+    col.collapsed = !col.collapsed;
     this.handleColumnsChange([...this.columns]);
   };
 
@@ -1272,7 +1268,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   }
 
   <template>
-    <div class='board-surface'>
+    <div class='kanban-board-isolated'>
       <header class='kanban-toolbar'>
         <div class='toolbar-left'>
           <div class='kanban-heading'>
@@ -1282,13 +1278,13 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             </h2>
             {{#if @model.project}}
               <div class='kanban-project' data-test-issue-tracker-project-link>
-                <span class='dim-label'>Project</span>
+                <span class='kanban-project-label'>Project</span>
                 <@fields.project @format='atom' />
               </div>
             {{/if}}
           </div>
           <div>
-            <span class='card-count' data-test-issue-tracker-card-count>
+            <span class='kanban-card-count' data-test-issue-tracker-card-count>
               {{#if (eq this.cardCount 1)}}
                 1 card
               {{else}}
@@ -1299,8 +1295,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           </div>
         </div>
         <div class='toolbar-right'>
-          <div class='column-visibility-toggle'>
-            <span class='group-by-label'>Hide empty</span>
+          <div class='kanban-column-visibility-toggle'>
+            <span class='kanban-header-label'>Hide empty</span>
             <Switch
               @isEnabled={{this.hideEmpty}}
               @onChange={{this.toggleHideEmptyColumns}}
@@ -1348,7 +1344,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               {{#let (get @fields.cards placement.index) as |CardField|}}
                 {{#if CardField}}
                   <div
-                    class='card-wrap'
+                    class='kanban-card-wrap'
                     data-test-issue-tracker-card={{placement.index}}
                   >
                     <CardField @format='fitted' />
@@ -1359,7 +1355,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             <:ghost as |dragIdx|>
               {{#let (get @fields.cards dragIdx) as |CardField|}}
                 {{#if CardField}}
-                  <div class='card-wrap'>
+                  <div class='kanban-card-wrap'>
                     <CardField @format='fitted' />
                   </div>
                 {{/if}}
@@ -1368,7 +1364,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           </KanbanPlane>
         </div>
 
-        <div class={{cn 'config-sidebar-wrap' is-open=this.isSidebarOpen}}>
+        <div
+          class={{cn 'kanban-config-sidebar-wrap' is-open=this.isSidebarOpen}}
+        >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
             @onColumnsChange={{this.handleColumnsChange}}
@@ -1377,8 +1375,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       </div>
     </div>
     <style scoped>
-      .board-surface {
-        --board-bg: var(--background, var(--boxel-200));
+      .kanban-board-isolated {
+        --board-bg: var(--background, var(--boxel-100));
         --board-fg: var(--foreground, var(--boxel-700));
         --board-card-bg: var(--card, var(--boxel-light));
         --board-card-fg: var(--foreground, var(--boxel-dark));
@@ -1386,29 +1384,20 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         --board-muted-fg: var(--muted-foreground, var(--boxel-500));
         --board-border: var(--border, var(--boxel-border-color));
 
+        /* setting boxel-ui component variables */
+        --boxel-kanban-bg: var(--board-bg);
+        --boxel-kanban-fg: var(--board-fg);
+        --boxel-kanban-card-bg: var(--board-card-bg);
+        --boxel-kanban-card-fg: var(--board-card-fg);
+        --boxel-kanban-muted-fg: var(--board-muted-fg);
+        --boxel-kanban-border: var(--board-border);
+
         height: 100%;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
         background-color: var(--board-bg);
         color: var(--board-fg);
-      }
-      .kanban-body {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        overflow: hidden;
-      }
-      .kanban-area {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .card-wrap {
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        border-radius: inherit;
       }
       .kanban-toolbar {
         display: flex;
@@ -1435,16 +1424,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         gap: 0.375rem;
         color: var(--board-muted-fg);
       }
-      .column-visibility-toggle {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-      .group-by-label {
-        font-size: 0.75rem;
-        color: var(--board-muted-fg);
-        white-space: nowrap;
-      }
       .kanban-title {
         display: flex;
         align-items: center;
@@ -1454,32 +1433,59 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         margin: 0;
         letter-spacing: -0.01em;
       }
-      .kanban-project {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-      }
-      .dim-label {
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: var(--board-muted-fg);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .card-count {
+      .kanban-card-count {
         font-size: 0.75rem;
         color: var(--board-muted-fg);
         padding: 0.125rem 0.5rem;
         background: var(--board-muted-bg);
         border-radius: 4px;
       }
-      .config-sidebar-wrap {
+      .kanban-project {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .kanban-project-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--board-muted-fg);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .kanban-column-visibility-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .kanban-header-label {
+        font-size: 0.75rem;
+        color: var(--board-muted-fg);
+        white-space: nowrap;
+      }
+      .kanban-body {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        overflow: hidden;
+      }
+      .kanban-area {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+      }
+      .kanban-card-wrap {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: inherit;
+      }
+      .kanban-config-sidebar-wrap {
         flex-shrink: 0;
         width: 0;
         overflow: hidden;
         transition: width var(--boxel-transition);
       }
-      .config-sidebar-wrap.is-open {
+      .kanban-config-sidebar-wrap.is-open {
         width: 19rem;
       }
     </style>
@@ -1492,15 +1498,11 @@ export class IssueTracker extends KanbanBoard {
   static displayName = 'Issue Tracker Board';
 
   @field project = linksTo(() => Project);
-
   @field cards = linksToMany(() => Issue, {
     computeVia: function (this: IssueTracker) {
       return this.project?.issues;
     },
   });
-
-  @field placements = containsMany(KanbanBoardPlacement);
-
   @field cardTitle = contains(StringField, {
     computeVia: function (this: IssueTracker) {
       return this.cardInfo.name?.trim()?.length

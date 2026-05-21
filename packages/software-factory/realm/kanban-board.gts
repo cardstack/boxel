@@ -1,5 +1,7 @@
 import { get } from '@ember/helper';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import {
@@ -12,20 +14,21 @@ import {
   StringField,
   type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
 
 import {
+  ContextButton,
   KanbanColumnConfigSidebar,
   KanbanPlane,
   Switch,
+  Tooltip,
 } from '@cardstack/boxel-ui/components';
 import type {
   KanbanColumnConfig,
   KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import SlidersHorizontal from '@cardstack/boxel-icons/sliders-horizontal';
+import Settings from '@cardstack/boxel-icons/settings';
 import SquareKanban from '@cardstack/boxel-icons/square-kanban';
 
 import { KanbanColumnField } from './kanban-column';
@@ -33,16 +36,31 @@ import { KanbanBoardPlacement } from './kanban-board-placement';
 
 class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   @tracked isSidebarOpen = false;
+  columns!: TrackedArray<KanbanColumnConfig>;
 
-  get columns(): KanbanColumnConfig[] {
-    return (this.args.model.columns ?? []).map((col) => ({
-      key: col.key ?? '',
-      label: col.label ?? null,
-      color: col.color ?? null,
-      collapsed: col.collapsed ?? null,
-      sortOrder: col.sortOrder ?? null,
-      wipLimit: col.wipLimit ?? null,
-    }));
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+
+    let stored = this.args.model.columns ?? [];
+    if (!stored.length) {
+      return;
+    }
+    let source = [...stored].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
+    this.columns = new TrackedArray(
+      source.map(
+        (col) =>
+          new TrackedObject({
+            key: col.key ?? '',
+            label: col.label ?? null,
+            color: col.color ?? null,
+            collapsed: col.collapsed ?? null,
+            sortOrder: col.sortOrder ?? null,
+            wipLimit: col.wipLimit ?? null,
+          }) as unknown as KanbanColumnConfig,
+      ),
+    );
   }
 
   get placements(): KanbanPlacement[] {
@@ -68,27 +86,10 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   }
 
   get columnCardCounts(): number[] {
-    return this.columns.map(
-      (col) => this.placements.filter((p) => p.columnId === col.key).length,
+    return this.columns?.map(
+      (col) => this.placements?.filter((p) => p.columnId === col.key).length,
     );
   }
-
-  revealEmptyColumns = (): void => {
-    this.args.model.hideEmptyColumns = false;
-    this.args.model.columns = this.columns.map((col, colIdx) =>
-      Object.assign(new KanbanColumnField(), {
-        key: col.key,
-        label: col.label,
-        color: col.color,
-        collapsed:
-          this.columnCardCounts[colIdx] === 0
-            ? false
-            : (col.collapsed ?? false),
-        sortOrder: col.sortOrder,
-        wipLimit: col.wipLimit,
-      }),
-    );
-  };
 
   handleChange = (newPlacements: KanbanPlacement[]) => {
     let cards = this.args.model.cards ?? [];
@@ -99,6 +100,32 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         sortOrder: p.sortOrder,
       }),
     );
+  };
+
+  get hideEmpty(): boolean {
+    let emptyCols =
+      this.columns?.filter((_, i) => (this.columnCardCounts[i] ?? 0) === 0) ??
+      [];
+    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+  }
+
+  toggleHideEmptyColumns = (): void => {
+    let next = !this.hideEmpty;
+    this.columnCardCounts.forEach((count, i) => {
+      let col = this.columns[i];
+      if (col && count === 0) {
+        col.collapsed = next;
+      }
+    });
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
+    if (!col) {
+      return;
+    }
+    col.collapsed = !col.collapsed;
+    this.handleColumnsChange([...this.columns]);
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
@@ -114,46 +141,20 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
     );
   };
 
-  toggleHideEmptyColumns = (): void => {
-    if (this.args.model.hideEmptyColumns) {
-      this.revealEmptyColumns();
-      return;
-    }
-    this.args.model.hideEmptyColumns = true;
-  };
-
   toggleSidebar = (): void => {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
 
-  handleToggleCollapsed = (columnKey: string | null): void => {
-    if (!columnKey) {
-      return;
+  openCard = (index: number): void => {
+    let card = this.args.model.cards?.[index];
+    if (card) {
+      this.args.viewCard?.(card, 'isolated');
     }
-
-    let current = this.columns.find((col) => col.key === columnKey);
-    let willCollapse = !current?.collapsed;
-
-    this.args.model.columns = this.columns.map((col) =>
-      Object.assign(new KanbanColumnField(), {
-        key: col.key,
-        label: col.label,
-        color: col.color,
-        collapsed:
-          col.key === columnKey ? willCollapse : (col.collapsed ?? false),
-        sortOrder: col.sortOrder,
-        wipLimit: col.wipLimit,
-      }),
-    );
-  };
-
-  closeSidebar = (): void => {
-    this.isSidebarOpen = false;
   };
 
   <template>
     <div class='kanban-board-isolated'>
-      <header class='kanban-board-header'>
+      <header class='kanban-toolbar'>
         <div class='toolbar-left'>
           <div class='kanban-heading'>
             <h1 class='kanban-title'>
@@ -173,87 +174,100 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
           </div>
         </div>
         <div class='toolbar-right'>
-          <div class='kanban-column-visibility-toggle'>
-            <span class='kanban-header-label'>Hide empty</span>
-            <Switch
-              @isEnabled={{@model.hideEmptyColumns}}
-              @onChange={{this.toggleHideEmptyColumns}}
-              @label='Hide empty columns'
-            />
-          </div>
-          <button
-            type='button'
-            class='kanban-configure-btn'
-            aria-pressed={{this.isSidebarOpen}}
-            {{on 'click' this.toggleSidebar}}
-            data-test-configure-columns-btn
-          >
-            <SlidersHorizontal width='14' height='14' />
-            Configure
-          </button>
+          {{#if this.columns.length}}
+            <div class='kanban-column-visibility-toggle'>
+              <span class='kanban-header-label'>Hide empty</span>
+              <Switch
+                @isEnabled={{this.hideEmpty}}
+                @onChange={{this.toggleHideEmptyColumns}}
+                @label='Hide empty columns'
+              />
+            </div>
+          {{/if}}
+          <Tooltip @placement='bottom'>
+            <:trigger>
+              <ContextButton
+                class='configure-btn'
+                @icon={{Settings}}
+                @label={{if
+                  this.isSidebarOpen
+                  'Close config sidebar'
+                  'Open config sidebar'
+                }}
+                @variant='highlight'
+                @isToggle={{true}}
+                @isActive={{this.isSidebarOpen}}
+                data-test-configure-columns-btn
+                {{on 'click' this.toggleSidebar}}
+              />
+            </:trigger>
+            <:content>{{if
+                this.isSidebarOpen
+                'Close config'
+                'Configure columns'
+              }}</:content>
+          </Tooltip>
         </div>
       </header>
       <div class='kanban-body'>
         <div class='kanban-area'>
-          {{#if this.columns.length}}
-            <KanbanPlane
-              @boardLabel={{@model.cardTitle}}
-              @columns={{this.columns}}
-              @placements={{this.placements}}
-              @hideEmpty={{@model.hideEmptyColumns}}
-              @onChange={{this.handleChange}}
-              @onToggleCollapsed={{this.handleToggleCollapsed}}
-            >
-              <:card as |placement|>
-                {{#let (get @fields.cards placement.index) as |CardField|}}
-                  {{#if CardField}}
-                    <div class='kanban-card-wrap'>
-                      <CardField @format='fitted' @displayContainer={{false}} />
-                    </div>
-                  {{/if}}
-                {{/let}}
-              </:card>
-              <:ghost as |dragIdx|>
-                {{#let (get @fields.cards dragIdx) as |CardField|}}
-                  {{#if CardField}}
-                    <div class='kanban-card-wrap'>
-                      <CardField @format='fitted' @displayContainer={{false}} />
-                    </div>
-                  {{/if}}
-                {{/let}}
-              </:ghost>
-            </KanbanPlane>
-          {{else}}
-            <div class='kanban-empty-state'>
-              <SquareKanban />
-              <div class='kanban-empty-copy'>
-                <h2>No content yet</h2>
-                <p>
-                  Add columns and cards to this board to start organizing work.
-                </p>
-              </div>
-            </div>
-          {{/if}}
+          <KanbanPlane
+            @boardLabel={{@model.cardTitle}}
+            @columns={{this.columns}}
+            @placements={{this.placements}}
+            @hideEmpty={{this.hideEmpty}}
+            @onChange={{this.handleChange}}
+            @onOpen={{this.openCard}}
+            @onToggleCollapsed={{this.handleToggleCollapsed}}
+          >
+            <:card as |placement|>
+              {{#let (get @fields.cards placement.index) as |CardField|}}
+                {{#if CardField}}
+                  <div class='kanban-card-wrap'>
+                    <CardField @format='fitted' @displayContainer={{false}} />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </:card>
+            <:ghost as |dragIdx|>
+              {{#let (get @fields.cards dragIdx) as |CardField|}}
+                {{#if CardField}}
+                  <div class='kanban-card-wrap'>
+                    <CardField @format='fitted' @displayContainer={{false}} />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </:ghost>
+          </KanbanPlane>
         </div>
 
-        {{#if this.isSidebarOpen}}
+        <div
+          class={{cn 'kanban-config-sidebar-wrap' is-open=this.isSidebarOpen}}
+        >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
             @onColumnsChange={{this.handleColumnsChange}}
-            @onClose={{this.closeSidebar}}
           />
-        {{/if}}
+        </div>
       </div>
     </div>
     <style scoped>
       .kanban-board-isolated {
-        --board-bg: var(--background, var(--boxel-200));
+        --board-bg: var(--background, var(--boxel-100));
         --board-fg: var(--foreground, var(--boxel-700));
         --board-card-bg: var(--card, var(--boxel-light));
         --board-card-fg: var(--foreground, var(--boxel-dark));
         --board-muted-bg: var(--muted, var(--boxel-100));
         --board-muted-fg: var(--muted-foreground, var(--boxel-500));
         --board-border: var(--border, var(--boxel-border-color));
+
+        /* setting boxel-ui component variables */
+        --boxel-kanban-bg: var(--board-bg);
+        --boxel-kanban-fg: var(--board-fg);
+        --boxel-kanban-card-bg: var(--board-card-bg);
+        --boxel-kanban-card-fg: var(--board-card-fg);
+        --boxel-kanban-muted-fg: var(--board-muted-fg);
+        --boxel-kanban-border: var(--board-border);
 
         height: 100%;
         overflow-y: auto;
@@ -262,7 +276,7 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         background-color: var(--board-bg);
         color: var(--board-fg);
       }
-      .kanban-board-header {
+      .kanban-toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -303,42 +317,15 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         background: var(--board-muted-bg);
         border-radius: 4px;
       }
-      .kanban-header-label {
-        font-size: 0.75rem;
-        color: var(--board-muted-fg);
-        white-space: nowrap;
-      }
       .kanban-column-visibility-toggle {
         display: flex;
         align-items: center;
         gap: 0.5rem;
       }
-      .kanban-configure-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        padding: 0.3125rem 0.625rem;
+      .kanban-header-label {
         font-size: 0.75rem;
-        font-weight: 500;
-        font-family: inherit;
-        border: 1px solid var(--board-border);
-        border-radius: var(--radius, var(--boxel-border-radius-sm));
-        background: transparent;
-        color: var(--board-card-fg);
-        cursor: pointer;
-        transition: background-color 100ms ease;
-      }
-      .kanban-configure-btn:hover {
-        background: var(--board-muted-bg);
-      }
-      .kanban-configure-btn[aria-pressed='true'] {
-        background: var(--board-muted-bg);
-        border-color: color-mix(
-          in oklch,
-          var(--primary, var(--boxel-highlight)) 60%,
-          transparent
-        );
-        color: var(--primary, var(--boxel-highlight));
+        color: var(--board-muted-fg);
+        white-space: nowrap;
       }
       .kanban-body {
         flex: 1;
@@ -357,42 +344,14 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         overflow: hidden;
         border-radius: inherit;
       }
-      .kanban-empty-state {
-        height: 100%;
-        display: grid;
-        place-items: center;
-        padding: 2rem;
+      .kanban-config-sidebar-wrap {
+        flex-shrink: 0;
+        width: 0;
+        overflow: hidden;
+        transition: width var(--boxel-transition);
       }
-      .kanban-empty-copy {
-        max-width: 24rem;
-        text-align: center;
-        display: grid;
-        gap: 0.5rem;
-        padding: 1.5rem;
-        border: 1px solid var(--board-border);
-        border-radius: 0.75rem;
-        background: var(--board-card-bg);
-        color: var(--board-card-fg);
-        box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
-      }
-      .kanban-empty-copy h2,
-      .kanban-empty-copy p {
-        margin: 0;
-      }
-      .kanban-empty-copy h2 {
-        font-size: 1rem;
-        font-weight: 600;
-      }
-      .kanban-empty-copy p {
-        font-size: 0.875rem;
-        line-height: 1.5;
-        color: var(--board-muted-fg);
-      }
-      .kanban-empty-state :deep(svg) {
-        width: 1.5rem;
-        height: 1.5rem;
-        margin: 0 auto 0.25rem;
-        color: var(--board-muted-fg);
+      .kanban-config-sidebar-wrap.is-open {
+        width: 19rem;
       }
     </style>
   </template>
@@ -405,7 +364,6 @@ export class KanbanBoard extends CardDef {
   @field boardKey = contains(StringField);
   @field boardTitle = contains(StringField);
   @field cards = linksToMany(CardDef);
-  @field hideEmptyColumns = contains(BooleanField);
   @field columns = containsMany(KanbanColumnField);
   @field placements = containsMany(KanbanBoardPlacement);
 

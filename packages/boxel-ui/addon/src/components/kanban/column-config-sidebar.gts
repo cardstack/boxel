@@ -102,76 +102,80 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
         {{/if}}
       </header>
 
-      <ul class='col-list'>
-        {{#each @columns key='key' as |column i|}}
-          <li class='col-row' data-test-col-config-row={{column.key}}>
-            <div class='col-row-order'>
-              <IconButton
-                @icon={{ChevronUp}}
-                @size='extra-small'
-                @disabled={{this.isFirst column.sortOrder i}}
-                aria-label='Move column up'
-                {{on 'click' (fn this.moveUp i)}}
-              />
-              <IconButton
-                @icon={{ChevronDown}}
-                @size='extra-small'
-                @disabled={{this.isLast column.sortOrder i}}
-                aria-label='Move column down'
-                {{on 'click' (fn this.moveDown i)}}
-              />
-            </div>
+      {{#if @columns.length}}
+        <ul class='col-list'>
+          {{#each @columns key='key' as |column i|}}
+            <li class='col-row' data-test-col-config-row={{column.key}}>
+              <div class='col-row-order'>
+                <IconButton
+                  @icon={{ChevronUp}}
+                  @size='extra-small'
+                  @disabled={{this.isFirst column.sortOrder i}}
+                  aria-label='Move column up'
+                  {{on 'click' (fn this.moveUp i)}}
+                />
+                <IconButton
+                  @icon={{ChevronDown}}
+                  @size='extra-small'
+                  @disabled={{this.isLast column.sortOrder i}}
+                  aria-label='Move column down'
+                  {{on 'click' (fn this.moveDown i)}}
+                />
+              </div>
 
-            <label class='col-color-wrap'>
-              <span class='boxel-sr-only'>Color for
-                {{if column.label column.label 'column'}}</span>
+              <label class='col-color-wrap'>
+                <span class='boxel-sr-only'>Color for
+                  {{if column.label column.label 'column'}}</span>
+                <BoxelInput
+                  @type='color'
+                  @value={{if column.color column.color '#94a3b8'}}
+                  @onChange={{fn this.onColorChange column}}
+                  data-test-col-config-color={{column.key}}
+                />
+              </label>
+
               <BoxelInput
-                @type='color'
-                @value={{if column.color column.color '#94a3b8'}}
-                @onChange={{fn this.onColorChange column}}
-                data-test-col-config-color={{column.key}}
+                class='col-label-input'
+                @value={{if column.label column.label ''}}
+                @placeholder='Label'
+                @onInput={{fn this.onLabelInput column}}
+                aria-label='Column label'
+                data-test-col-config-label={{column.key}}
               />
-            </label>
 
-            <BoxelInput
-              class='col-label-input'
-              @value={{if column.label column.label ''}}
-              @placeholder='Label'
-              @onInput={{fn this.onLabelInput column}}
-              aria-label='Column label'
-              data-test-col-config-label={{column.key}}
-            />
+              <FieldContainer
+                class='col-wip-field'
+                @tag='label'
+                @label='Max'
+                @inline={{true}}
+              >
+                <BoxelInput
+                  @value={{if column.wipLimit column.wipLimit 0}}
+                  @type='number'
+                  @min={{0}}
+                  @onInput={{fn this.onWipInput column}}
+                  data-test-col-config-wip={{column.key}}
+                />
+              </FieldContainer>
 
-            <FieldContainer
-              class='col-wip-field'
-              @tag='label'
-              @label='Max'
-              @inline={{true}}
-            >
-              <BoxelInput
-                @value={{if column.wipLimit column.wipLimit 0}}
-                @type='number'
-                @min={{0}}
-                @onInput={{fn this.onWipInput column}}
-                data-test-col-config-wip={{column.key}}
+              <IconButton
+                class='col-visible-btn'
+                @icon={{if (this.isVisible column) Eye EyeOff}}
+                @size='extra-small'
+                aria-label={{if
+                  (this.isVisible column)
+                  'Hide column'
+                  'Show column'
+                }}
+                data-test-col-config-toggle-visible={{column.key}}
+                {{on 'click' (fn this.toggleVisible column)}}
               />
-            </FieldContainer>
-
-            <IconButton
-              class='col-visible-btn'
-              @icon={{if (this.isVisible column) Eye EyeOff}}
-              @size='extra-small'
-              aria-label={{if
-                (this.isVisible column)
-                'Hide column'
-                'Show column'
-              }}
-              data-test-col-config-toggle-visible={{column.key}}
-              {{on 'click' (fn this.toggleVisible column)}}
-            />
-          </li>
-        {{/each}}
-      </ul>
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        <p class='empty-sidebar'><em>No columns available.</em></p>
+      {{/if}}
     </aside>
 
     <style scoped>
@@ -255,6 +259,11 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
 
       .col-visible-btn[aria-label='Show column'] {
         opacity: 0.4;
+      }
+
+      .empty-sidebar {
+        padding: 0.5rem 0.75rem;
+        opacity: 0.7;
       }
     </style>
   </template>

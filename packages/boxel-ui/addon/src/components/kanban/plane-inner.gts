@@ -36,7 +36,7 @@ export class KanbanPlaneInner extends Component<{
     hideEmpty?: boolean;
     manager: KanbanDragManager;
     onAddCard?: (columnKey: string | null) => void;
-    onToggleCollapsed?: (columnKey: string) => void;
+    onToggleCollapsed?: (column: KanbanColumnConfig) => void;
     placements: KanbanPlacement[];
   };
   Blocks: {
@@ -182,11 +182,8 @@ export class KanbanPlaneInner extends Component<{
       }));
   }
 
-  restoreColumn = (hc: {
-    cardCount: number;
-    config: KanbanColumnConfig;
-  }): void => {
-    this.args.onToggleCollapsed?.(hc.config.key);
+  restoreColumn = (hc: KanbanColumnConfig): void => {
+    this.args.onToggleCollapsed?.(hc);
   };
 
   <template>
@@ -235,7 +232,7 @@ export class KanbanPlaneInner extends Component<{
               @onAddCard={{if @onAddCard (fn @onAddCard column.key)}}
               @onCollapse={{if
                 @onToggleCollapsed
-                (fn @onToggleCollapsed column.key)
+                (fn @onToggleCollapsed column)
               }}
             />
 
@@ -296,7 +293,7 @@ export class KanbanPlaneInner extends Component<{
                   (concat 'Show ' hc.config.label)
                   'Show column'
                 }}
-                {{on 'click' (fn this.restoreColumn hc)}}
+                {{on 'click' (fn this.restoreColumn hc.config)}}
                 data-test-hidden-column-row={{i}}
               >
                 <span

@@ -63,12 +63,24 @@ function makeProject(
   };
 }
 
-function makeBoard(): Record<string, Record<string, unknown>> {
+function makeBoard(
+  columns?: {
+    key: string;
+    label: string | null;
+    color: string | null;
+    wipLimit: number | null;
+    collapsed: boolean;
+    sortOrder: number;
+  }[],
+): Record<string, Record<string, unknown>> {
   return {
     'Boards/test-board.json': {
       data: {
         type: 'card',
-        attributes: { boardTitle: 'Test Board' },
+        attributes: {
+          boardTitle: 'Test Board',
+          ...(columns ? { columns } : {}),
+        },
         relationships: { project: { links: { self: projectId } } },
         meta: {
           adoptsFrom: { module: issueTrackerModule, name: 'IssueTracker' },
@@ -535,6 +547,100 @@ export function runTests() {
           'project issueStatusOption color synced and persisted',
         );
       });
+      test<TestContextWithSave>('reordering a column in the sidebar persists the new sortOrder and is respected on reload', async function (assert) {
+        let savedBoardDocs: any[] = [];
+        this.onSave((url, doc) => {
+          if (url.href === boardId) savedBoardDocs.push(doc);
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-kanban-column]');
+
+        await click('[data-test-configure-columns-btn]');
+        await click(
+          '[data-test-col-config-row="todo"] [aria-label="Move column down"]',
+        );
+        await settled();
+
+        let savedDoc = savedBoardDocs[savedBoardDocs.length - 1];
+        let savedColumns = savedDoc?.data?.attributes?.columns;
+        assert.strictEqual(
+          savedColumns?.[0]?.key,
+          'doing',
+          'doing is first in saved columns after reorder',
+        );
+        assert.strictEqual(
+          savedColumns?.[1]?.key,
+          'todo',
+          'todo moved to second position in saved columns',
+        );
+        assert.strictEqual(
+          savedColumns?.[0]?.sortOrder,
+          0,
+          'doing sortOrder is 0',
+        );
+        assert.strictEqual(
+          savedColumns?.[1]?.sortOrder,
+          1,
+          'todo sortOrder is 1',
+        );
+
+        // Reload the board and verify the stored order is respected
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-kanban-column]');
+
+        let colEls = document.querySelectorAll('[data-kanban-column]');
+        assert.strictEqual(
+          colEls[0]?.getAttribute('data-kanban-column'),
+          'doing',
+          'doing appears first after reload',
+        );
+        assert.strictEqual(
+          colEls[1]?.getAttribute('data-kanban-column'),
+          'todo',
+          'todo appears second after reload',
+        );
+      });
+
+      test<TestContextWithSave>('changing the WIP limit in the sidebar persists to the board', async function (assert) {
+        let savedBoardDocs: any[] = [];
+        this.onSave((url, doc) => {
+          if (url.href === boardId) savedBoardDocs.push(doc);
+        });
+
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-kanban-column]');
+
+        await click('[data-test-configure-columns-btn]');
+        await fillIn('[data-test-col-config-wip="todo"]', '3');
+        await settled();
+
+        let savedDoc = savedBoardDocs[savedBoardDocs.length - 1];
+        let savedColumns = savedDoc?.data?.attributes?.columns;
+        let todoColumn = savedColumns?.find(
+          (c: { key: string }) => c.key === 'todo',
+        );
+        assert.strictEqual(
+          todoColumn?.wipLimit,
+          3,
+          'todo WIP limit persisted as 3',
+        );
+
+        let doingColumn = savedColumns?.find(
+          (c: { key: string }) => c.key === 'doing',
+        );
+        assert.strictEqual(
+          doingColumn?.wipLimit,
+          0,
+          'other column WIP limits unchanged',
+        );
+      });
     });
 
     // ── unknown status ────────────────────────────────────────────────────────
@@ -668,6 +774,7 @@ export function runTests() {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             ...makeProject(),
             ...makeIssue('IT-1', 'backlog', 'Issues/issue-backlog.json'),
+            ...makeIssue('IT-2', 'backlog', 'Issues/issue-backlog-2.json'),
             ...makeBoard(),
           },
         });
@@ -703,7 +810,7 @@ export function runTests() {
           .dom(`[data-kanban-column="in_progress"] [data-test-issue-id]`)
           .hasText('IT-1', 'IT-1 moved to In Progress column');
         assert
-          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id="IT-1"]`)
           .doesNotExist('IT-1 no longer in backlog');
 
         let savedIssueDoc = savedIssueDocs[savedIssueDocs.length - 1];
@@ -711,6 +818,41 @@ export function runTests() {
           savedIssueDoc?.data?.attributes?.status,
           'in_progress',
           'issue status is persisted as in_progress',
+        );
+      });
+
+      test('moving a card down within the same column reorders it', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        let backlogIds = () =>
+          [
+            ...document.querySelectorAll(
+              '[data-kanban-column="backlog"] [data-test-issue-id]',
+            ),
+          ].map((el) => el.textContent?.trim());
+
+        assert.deepEqual(
+          backlogIds(),
+          ['IT-1', 'IT-2'],
+          'IT-1 appears before IT-2 initially',
+        );
+
+        await triggerKeyEvent('[data-card-index="0"]', 'keydown', ' ');
+        await triggerKeyEvent(
+          '[data-test-kanban-board]',
+          'keydown',
+          'ArrowDown',
+        );
+        await triggerKeyEvent('[data-test-kanban-board]', 'keydown', ' ');
+        await settled();
+
+        assert.deepEqual(
+          backlogIds(),
+          ['IT-2', 'IT-1'],
+          'IT-2 appears before IT-1 after moving IT-1 down',
         );
       });
     });

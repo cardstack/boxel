@@ -160,12 +160,11 @@ export default class KanbanUsage extends Component {
     });
   }
 
-  @action toggleCollapsed(columnKey: string | null): void {
-    this.columns.forEach((col) => {
-      if (col.key === columnKey) {
-        col.collapsed = !col.collapsed;
-      }
-    });
+  @action toggleCollapsed(col: KanbanColumnConfig | null): void {
+    if (!col) {
+      return;
+    }
+    col['collapsed'] = !col.collapsed;
   }
 
   @action toggleSidebar(): void {
