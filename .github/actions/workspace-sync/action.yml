@@ -61,8 +61,12 @@ runs:
       # In-repo short-circuit: see sibling publish-preview-realm action
       # for the rationale. External consumers (boxel-catalog, -home,
       # -skills) still go through the full clone + install path.
+      # An empty BOXEL_REPO means a path-relative `uses: ./.github/...`
+      # invocation — `github.action_repository` is only populated for
+      # external `uses: org/repo/...@ref` references — so that path
+      # also counts as in-repo.
       run: |
-        if [ "$BOXEL_REPO" = "$CURRENT_REPO" ]; then
+        if [ -z "$BOXEL_REPO" ] || [ "$BOXEL_REPO" = "$CURRENT_REPO" ]; then
           echo "BOXEL_SRC=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
           echo "in_repo=true" >> "$GITHUB_OUTPUT"
         else
