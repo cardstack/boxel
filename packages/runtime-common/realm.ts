@@ -1752,7 +1752,20 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    await this.incrementalIndexing();
+    // The /_atomic endpoint (and any other writeMany caller that opts
+    // out of post-write indexing via waitForIndex:false) does not read
+    // its response from the index, so it has no reason to wait for
+    // prior incremental indexing to settle either. Skipping the gate
+    // here is what keeps consecutive atomic writes responsive when a
+    // previous mutation's deferred indexing job is back-pressured in
+    // the worker pool — without it, every follow-up POST /_atomic
+    // stalls on whichever earlier write/delete is still draining.
+    // Callers that DO read indexed state after the write (the JSON-API
+    // postCardInstance / patchCardInstance handlers) keep the original
+    // deadlock-prevention semantics by omitting waitForIndex.
+    if (options?.waitForIndex !== false) {
+      await this.incrementalIndexing();
+    }
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
