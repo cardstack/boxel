@@ -56,9 +56,9 @@ export default class RenderMetaRoute extends Route<Model> {
 
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
-      maybeRelativeReference: (url: string) =>
+      maybeRelativeReference: (reference: string) =>
         maybeRelativeReference(
-          cardIdToURL(url),
+          cardIdToURL(reference),
           cardIdToURL(instance.id),
           instance[realmURL],
         ),

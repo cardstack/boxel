@@ -42,8 +42,12 @@ export default async function serialize({
     ...codeRefOpts,
     allowRelative: true as true,
     ...(realmURL && {
-      maybeRelativeReference: (url: string) =>
-        makeRelativeReference(new URL(url, relativeTo), relativeTo, realmURL),
+      maybeRelativeReference: (reference: string) =>
+        makeRelativeReference(
+          new URL(reference, relativeTo),
+          relativeTo,
+          realmURL,
+        ),
     }),
   };
 
