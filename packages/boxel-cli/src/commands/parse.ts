@@ -1,14 +1,18 @@
 import type { Command } from 'commander';
 import { execFile } from 'node:child_process';
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
+  readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -42,12 +46,17 @@ const SPEC_TYPE = {
  * `.json` files linked as `Spec.linkedExamples`. Source is fetched
  * from the realm; type-checking happens locally.
  *
- * Path resolution assumes a Boxel monorepo layout — `packages/base`,
- * `packages/host`, `packages/boxel-ui`, and `@glint/ember-tsc` are
- * discovered relative to this file. The published CLI installed
- * outside the monorepo will not be able to run this command (the
- * binary won't be present and the type-path mappings won't resolve);
- * `boxel parse` is a factory-developer tool, not an end-user one.
+ * Type sources come from one of two places (CS-11165):
+ *
+ * - **Published install**: `bundled-types/` next to the CLI, populated
+ *   by `scripts/build-types.ts` at release time from sibling monorepo
+ *   packages. Lets `boxel parse` work outside the monorepo.
+ * - **Monorepo dev** (`pnpm start`, before `pnpm build:types`): the
+ *   sibling `packages/base`, `packages/host`, `packages/boxel-ui`.
+ *
+ * `@glint/ember-tsc`, `typescript`, and `content-tag` are runtime
+ * dependencies (moved from devDependencies in CS-11165), so the
+ * published `boxel-cli`'s own `node_modules` carries the binary.
  *
  * Lifted from `packages/software-factory/src/parse-execution.ts`
  * during CS-11149 so the same engine is reachable from a
@@ -59,10 +68,54 @@ const PARSEABLE_JSON_EXTENSION = '.json';
 
 const BOXEL_CLI_PATH = findBoxelCliRoot(__dirname);
 const PACKAGES_PATH = resolve(BOXEL_CLI_PATH, '..');
-const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
-const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
-const BOXEL_UI_PATH = join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src');
-const NODE_MODULES_PATH = join(HOST_PKG_PATH, 'node_modules');
+
+// CS-11165: a published `@cardstack/boxel-cli` install vendors the type
+// sources from sibling packages into `bundled-types/` (built by
+// `scripts/build-types.ts`). Prefer those when present so parse works
+// outside the monorepo. Fall back to the monorepo sibling layout for
+// in-monorepo dev (`pnpm start`, before `pnpm build:types` has run).
+const BUNDLED_TYPES_DIR = (() => {
+  let candidate = join(BOXEL_CLI_PATH, 'bundled-types');
+  if (existsSync(join(candidate, 'base'))) return candidate;
+  return undefined;
+})();
+
+const BASE_PKG_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'base')
+  : join(PACKAGES_PATH, 'base');
+const HOST_APP_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'host-app')
+  : join(PACKAGES_PATH, 'host', 'app');
+const HOST_TESTS_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'host-tests')
+  : join(PACKAGES_PATH, 'host', 'tests');
+const HOST_TYPES_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'host-types')
+  : join(PACKAGES_PATH, 'host', 'types');
+const BOXEL_UI_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'boxel-ui')
+  : join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src');
+const LOCAL_TYPES_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'local-types')
+  : join(PACKAGES_PATH, 'local-types');
+// Ambient module decls for paths boxel-cli doesn't ship full types
+// for (e.g. `@cardstack/boxel-icons/*` — 130MB if shipped). Generated
+// by `scripts/build-types.ts`. Only present in published / built
+// installs; the monorepo-dev path resolves these naturally.
+const SHIMS_PATH = BUNDLED_TYPES_DIR
+  ? join(BUNDLED_TYPES_DIR, 'shims')
+  : undefined;
+
+// Node modules: in-monorepo, host has every transitive dep glint needs
+// already installed. In a published install we don't ship host's
+// node_modules, so we fall back to boxel-cli's own node_modules — which
+// has `@glint/ember-tsc`, `typescript`, and `content-tag` as runtime
+// dependencies (CS-11165). Diagnostics from third-party imports that
+// exist only in host/node_modules but not in boxel-cli's will surface as
+// "Cannot find module …"; we filter those out in `runGlintCheck` below.
+const NODE_MODULES_PATH = BUNDLED_TYPES_DIR
+  ? join(BOXEL_CLI_PATH, 'node_modules')
+  : join(PACKAGES_PATH, 'host', 'node_modules');
 
 let cachedTsconfigContent: string | undefined;
 
@@ -91,6 +144,19 @@ export interface ParseRealmOptions {
    * `.json` paths are validated for card document structure.
    */
   path?: string;
+  /**
+   * Local workspace dir to read files from instead of fetching over
+   * HTTP from the realm. The factory's main use case (CS-11165): the
+   * agent writes `.gts` files to a `mktemp -d` workspace, runs
+   * `boxel parse --workspace <that-dir>` to type-check pre-sync, fixes
+   * errors, and only pushes when clean. When set, `realmUrl` is
+   * optional — pass it only if you also want Spec linkedExamples
+   * discovered via the realm's search index for cross-checking JSON
+   * instances on the realm. With no realmUrl, parse skips remote
+   * Spec discovery and only validates the workspace's `.gts`/`.ts`
+   * and any local `.json` files passed by `path`.
+   */
+  workspace?: string;
   profileManager?: ProfileManager;
 }
 
@@ -125,16 +191,30 @@ async function retryWithPoll<T>(
 // ---------------------------------------------------------------------------
 
 export async function parseRealm(
-  realmUrl: string,
+  realmUrl: string | undefined,
   options?: ParseRealmOptions,
 ): Promise<ParseRealmResult> {
-  let pm = options?.profileManager ?? getProfileManager();
-  let active = pm.getActiveProfile();
-  if (!active) {
-    return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
+  // Default to local-file type-checking: read from the working dir
+  // (or an explicit --workspace dir). Pass --realm to fetch source
+  // over HTTP from a realm instead. Two modes; --realm wins if both.
+  let useWorkspace = !realmUrl;
+  let workspace =
+    options?.workspace ?? (useWorkspace ? process.cwd() : undefined);
+
+  if (useWorkspace && workspace && !safeIsDirectory(workspace)) {
+    return emptyErrorResult(`workspace directory not found: ${workspace}`);
   }
 
-  let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+  let pm = options?.profileManager ?? getProfileManager();
+  // Only require an active profile when we're going to hit the realm.
+  if (!useWorkspace) {
+    let active = pm.getActiveProfile();
+    if (!active) {
+      return emptyErrorResult(NO_ACTIVE_PROFILE_ERROR);
+    }
+  }
+
+  let normalizedRealmUrl = realmUrl ? ensureTrailingSlash(realmUrl) : '';
   let startedAt = Date.now();
 
   let gtsFiles: string[] = [];
@@ -153,6 +233,15 @@ export async function parseRealm(
     } else {
       return emptyErrorResult(
         `Path "${path}" is not parseable — must end with one of ${PARSEABLE_GTS_EXTENSIONS.join(', ')}, or ${PARSEABLE_JSON_EXTENSION}`,
+      );
+    }
+  } else if (useWorkspace) {
+    try {
+      gtsFiles = discoverWorkspaceGtsFiles(workspace!);
+      jsonFiles = discoverWorkspaceJsonInstanceFiles(workspace!);
+    } catch (err) {
+      return emptyErrorResult(
+        `Failed to walk workspace ${workspace}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   } else {
@@ -182,13 +271,18 @@ export async function parseRealm(
     };
   }
 
+  let readSource = (path: string) =>
+    useWorkspace
+      ? readWorkspaceSource(workspace!, path)
+      : fetchSource(normalizedRealmUrl, path, pm);
+
   let errors: ParseError[] = [];
   let filesWithErrors = new Set<string>();
 
   if (gtsFiles.length > 0) {
     let gtsContents: { path: string; content: string }[] = [];
     for (let file of gtsFiles) {
-      let readResult = await fetchSource(normalizedRealmUrl, file, pm);
+      let readResult = await readSource(file);
       if (!readResult.ok) {
         errors.push({
           file,
@@ -223,7 +317,7 @@ export async function parseRealm(
   }
 
   for (let jsonUrl of jsonFiles) {
-    let readResult = await fetchSource(normalizedRealmUrl, jsonUrl, pm);
+    let readResult = await readSource(jsonUrl);
     if (!readResult.ok) {
       errors.push({
         file: jsonUrl,
@@ -447,19 +541,26 @@ async function runGlintCheck(
           skipLibCheck: true,
           noUnusedLocals: false,
           noUnusedParameters: false,
-          types: ['qunit-dom', '@cardstack/local-types'],
+          // `@cardstack/local-types` is workspace-only — fed via `include`
+          // below instead of `types` so the published CLI doesn't need a
+          // resolvable `@cardstack/local-types` package in node_modules.
+          types: ['qunit-dom'],
           paths: {
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
-            '@cardstack/host/tests/*': [`${HOST_PKG_PATH}/tests/*`],
-            '@cardstack/host/*': [`${HOST_PKG_PATH}/app/*`],
-            '@cardstack/boxel-host/commands/*': [
-              `${HOST_PKG_PATH}/app/commands/*`,
-            ],
+            '@cardstack/host/tests/*': [`${HOST_TESTS_PATH}/*`],
+            '@cardstack/host/*': [`${HOST_APP_PATH}/*`],
+            '@cardstack/boxel-host/commands/*': [`${HOST_APP_PATH}/commands/*`],
             '@cardstack/boxel-ui/*': [`${BOXEL_UI_PATH}/*`],
-            '*': [`${HOST_PKG_PATH}/types/*`],
+            '*': [`${HOST_TYPES_PATH}/*`],
           },
         },
-        include: ['**/*.ts', '**/*.gts', '**/*.gjs'],
+        include: [
+          '**/*.ts',
+          '**/*.gts',
+          '**/*.gjs',
+          `${LOCAL_TYPES_PATH}/**/*.d.ts`,
+          ...(SHIMS_PATH ? [`${SHIMS_PATH}/**/*.d.ts`] : []),
+        ],
         exclude: ['node_modules'],
       };
       cachedTsconfigContent = JSON.stringify(tsconfig, null, 2);
@@ -472,15 +573,38 @@ async function runGlintCheck(
 
     symlinkSync(NODE_MODULES_PATH, join(tempDir, 'node_modules'));
 
-    let emberTscBin = join(BOXEL_CLI_PATH, 'node_modules', '.bin', 'ember-tsc');
+    // Resolve the package's JS bin entry directly and run it with
+    // `node`. Avoids the `.bin/ember-tsc` shim, which is a shell script
+    // on POSIX and `ember-tsc.cmd` on Windows — invoking it cross-
+    // platform via execFile is fiddly. The package's `bin/ember-tsc.js`
+    // is the same JS the shim ultimately exec()s into, and using it
+    // directly works everywhere Node runs.
+    //
+    // `@glint/ember-tsc`'s package.json has a catch-all `exports`
+    // entry (`./*` → `./lib/*.js`) that swallows both `package.json`
+    // and `bin/ember-tsc.js` lookups (turning the latter into the
+    // nonexistent `bin/ember-tsc.js.js`). Resolve the package's main
+    // entry — which IS in the exports map — and walk back to the
+    // package root to find the bin file deterministically.
+    let mainEntry = require.resolve('@glint/ember-tsc', {
+      paths: [BOXEL_CLI_PATH],
+    });
+    // mainEntry is `<pkg>/lib/index.js`; pkg root is two levels up.
+    let pkgRoot = resolve(dirname(mainEntry), '..');
+    let emberTscEntry = join(pkgRoot, 'bin', 'ember-tsc.js');
 
     let { output, exitedWithError } = await new Promise<{
       output: string;
       exitedWithError: boolean;
     }>((resolvePromise, reject) => {
       let child = execFile(
-        emberTscBin,
-        ['--noEmit', '--project', join(tempDir, 'tsconfig.json')],
+        process.execPath,
+        [
+          emberTscEntry,
+          '--noEmit',
+          '--project',
+          join(tempDir, 'tsconfig.json'),
+        ],
         {
           cwd: tempDir,
           timeout: 120_000,
@@ -654,6 +778,114 @@ function validateCardDocumentStructure(
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Workspace-mode helpers (read from local disk instead of the realm)
+// ---------------------------------------------------------------------------
+
+function discoverWorkspaceGtsFiles(workspaceDir: string): string[] {
+  let results: string[] = [];
+  walkWorkspaceFiles(workspaceDir, (rel) => {
+    if (PARSEABLE_GTS_EXTENSIONS.some((ext) => rel.endsWith(ext))) {
+      results.push(rel);
+    }
+  });
+  return results.sort();
+}
+
+function discoverWorkspaceJsonInstanceFiles(workspaceDir: string): string[] {
+  // In workspace mode we don't have realm search to find Spec
+  // linkedExamples. We approximate by validating every `.json` file
+  // that lives next to a card definition (i.e. in any subdir other
+  // than `Validations/`, which holds artifact cards that aren't card
+  // instances). The agent's normal layout puts instances under
+  // `<CardType>/<slug>.json` and Specs under `Spec/<slug>.json`, both
+  // of which we want to JSON-validate. Anything wrong here surfaces
+  // as a card-document structural error, never a type error.
+  let results: string[] = [];
+  walkWorkspaceFiles(workspaceDir, (rel) => {
+    if (!rel.endsWith(PARSEABLE_JSON_EXTENSION)) return;
+    // Skip non-card JSON: tooling/metadata files, the realm-sync
+    // sidecar `.boxel-sync.json` written by `boxel realm pull/push`,
+    // and `Validations/*` artifact cards (we wrote those ourselves
+    // and don't want to re-validate them against the current spec —
+    // they reference now-obsolete schemas).
+    let basename = rel.split('/').pop()!;
+    if (
+      basename === 'tsconfig.json' ||
+      basename === 'package.json' ||
+      basename === 'realm.json' ||
+      basename === 'index.json' ||
+      basename === '.boxel-sync.json'
+    ) {
+      return;
+    }
+    if (rel.startsWith('Validations/')) return;
+    results.push(rel);
+  });
+  return results.sort();
+}
+
+function walkWorkspaceFiles(root: string, visit: (rel: string) => void): void {
+  // Resolve to an absolute root so `relative()` produces correct
+  // workspace-relative paths regardless of whether the caller passed
+  // `.`, a relative path, or an absolute one. Manual string slicing
+  // is hostile to `.` (because `join('.', 'X')` returns `'X'`, not
+  // `'./X'`, so `slice('.'.length + 1)` eats the first 2 chars of
+  // 'X' — observed bug in development).
+  let absRoot = resolve(root);
+  let walk = (dir: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (let entry of entries) {
+      let full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '.git') continue;
+        walk(full);
+      } else if (entry.isFile()) {
+        // Normalize to POSIX `/` separators. Realm-relative paths
+        // throughout the codebase use `/`, and `validateRealmRelativePath`
+        // (called downstream by `runGlintCheck`) rejects backslashes.
+        // On Windows, `relative()` returns native `\`-separated paths
+        // — convert before forwarding.
+        let rel = relative(absRoot, full).split(sep).join('/');
+        visit(rel);
+      }
+    }
+  };
+  walk(absRoot);
+}
+
+function readWorkspaceSource(
+  workspaceDir: string,
+  path: string,
+): { ok: true; content: string } | { ok: false; error: string } {
+  let abs = join(workspaceDir, path);
+  let normalized = resolve(abs);
+  if (!normalized.startsWith(resolve(workspaceDir) + '/')) {
+    return { ok: false, error: 'path resolves outside workspace' };
+  }
+  try {
+    return { ok: true, content: readFileSync(normalized, 'utf8') };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function safeIsDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function emptyErrorResult(message: string): ParseRealmResult {
   return {
     status: 'error',
@@ -672,7 +904,8 @@ function emptyErrorResult(message: string): ParseRealmResult {
 // ---------------------------------------------------------------------------
 
 interface ParseCliOptions {
-  realm: string;
+  realm?: string;
+  workspace?: string;
   json?: boolean;
 }
 
@@ -680,18 +913,28 @@ export function registerParseCommand(program: Command): void {
   program
     .command('parse')
     .description(
-      "Type-check every .gts / .gjs / .ts file in a realm with glint, plus validate the document structure of any .json files linked as Spec.linkedExamples. Pass a realm-relative path to parse a single file. Monorepo-only (relies on packages/base, packages/host, packages/boxel-ui, and @glint/ember-tsc resolvable from this CLI's location).",
+      "Type-check .gts / .gjs / .ts files with glint, plus validate the document structure of any .json card instances. Defaults to reading from the current working directory — the factory's pre-push validator (write files locally, parse, fix, then push). Pass --realm <url> to fetch source from a realm over HTTP instead, or --workspace <dir> to point at a non-cwd directory.",
     )
     .argument(
       '[path]',
-      'Optional realm-relative file path. When omitted, parses every parseable file (gts/gjs/ts + Spec linkedExamples JSON) in the realm.',
+      'Optional workspace-relative (default) or realm-relative (with --realm) file path. When omitted, parses every parseable file in the workspace / realm.',
     )
-    .requiredOption('--realm <realm-url>', 'The realm URL to parse against')
+    .option(
+      '--realm <realm-url>',
+      'Fetch source from this realm over HTTP instead of reading from the workspace.',
+    )
+    .option(
+      '--workspace <dir>',
+      'Read source from this directory (default: cwd). Ignored when --realm is set.',
+    )
     .option('--json', 'Output structured JSON result')
     .action(async (path: string | undefined, opts: ParseCliOptions) => {
       let result: ParseRealmResult;
       try {
-        result = await parseRealm(opts.realm, path ? { path } : {});
+        result = await parseRealm(opts.realm, {
+          ...(path ? { path } : {}),
+          ...(opts.workspace ? { workspace: opts.workspace } : {}),
+        });
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,

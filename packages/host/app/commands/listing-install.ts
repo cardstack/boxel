@@ -11,6 +11,7 @@ import {
   PlanBuilder,
   extractRelationshipIds,
   type Relationship,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
@@ -162,11 +163,11 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
   // Walk relationships by fetching linked cards and enqueueing their ids.
   private async expandInstances(instances: CardDef[]): Promise<CardDef[]> {
-    let instancesById = new Map<string, CardDef>();
-    let visited = new Set<string>();
-    let queue: string[] = instances
+    let instancesById = new Map<RealmResourceIdentifier, CardDef>();
+    let visited = new Set<RealmResourceIdentifier>();
+    let queue: RealmResourceIdentifier[] = instances
       .map((instance) => instance.id)
-      .filter((id): id is string => typeof id === 'string');
+      .filter((id): id is RealmResourceIdentifier => typeof id === 'string');
 
     // - Queue of ids to traverse; visited prevents duplicate relationship ids.
     // - Each loop extracts relationship ids and enqueues them, so we descend

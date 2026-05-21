@@ -81,7 +81,15 @@ export default class Card extends Route {
   }) {
     if (this.hostModeService.isActive) {
       let normalizedPath = params.path ?? '';
-      let cardUrl = `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
+      // CS-10055: a routing rule in the realm config can map a bare path
+      // to a target card. When the path matches a rule, use the rule's
+      // target id directly; otherwise resolve the path as a card URL
+      // under the host-mode origin.
+      let routedId = this.hostModeService.resolveRoutedPath(
+        normalizedPath || '/',
+      );
+      let cardUrl =
+        routedId ?? `${this.hostModeService.hostModeOrigin}/${normalizedPath}`;
 
       return this.store.get(cardUrl);
     }
@@ -206,23 +214,27 @@ export default class Card extends Route {
   private async getCardUrl(cardPath: string): Promise<string | undefined> {
     let cardUrl;
     if (hostsOwnAssets) {
-      // availableRealmURLs is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
-        let realmPathParts = new URL(realmUrl).pathname
-          .split('/')
-          .filter((part) => part !== '');
-        let cardPathParts = cardPath!.split('/').filter((part) => part !== '');
-        let isMatch = false;
-        for (let i = 0; i < realmPathParts.length; i++) {
-          if (realmPathParts[i] === cardPathParts[i]) {
-            isMatch = true;
-          } else {
-            isMatch = false;
-            break;
+      // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
+      let realmUrl = this.realmServer.availableRealmIdentifiers.find(
+        (realmUrl) => {
+          let realmPathParts = new URL(realmUrl).pathname
+            .split('/')
+            .filter((part) => part !== '');
+          let cardPathParts = cardPath!
+            .split('/')
+            .filter((part) => part !== '');
+          let isMatch = false;
+          for (let i = 0; i < realmPathParts.length; i++) {
+            if (realmPathParts[i] === cardPathParts[i]) {
+              isMatch = true;
+            } else {
+              isMatch = false;
+              break;
+            }
           }
-        }
-        return isMatch;
-      });
+          return isMatch;
+        },
+      );
       cardUrl = new URL(
         `/${cardPath}`,
         realmUrl ?? this.realm.defaultReadableRealm.path,

@@ -1436,6 +1436,110 @@ module(basename(__filename), function () {
         );
       });
 
+      test('batch invalidation clears has_error and error_doc when tombstoning a previously-errored row', async function (assert) {
+        // The primary key is `(url, realm_url, type)` — no `realm_version` —
+        // so a tombstone upsert always collides with the prior row for the
+        // same URL. Any column NOT in the tombstone upsert's SET list keeps
+        // its previous value. Before this guard, `has_error` and `error_doc`
+        // were not in that list, so an errored row stayed errored across
+        // every subsequent reindex even after the file was deleted —
+        // producing a "has_error = true, error_doc = jsonb null" shape
+        // that propagates forever and is invisible to UI / DB triage.
+        let mangoURL = new URL(`${testRealm}mango.json`);
+
+        // 1. Plant an error row in boxel_index by writing an
+        //    instance-error entry and committing the batch.
+        let errorBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+        );
+        await errorBatch.updateEntry(mangoURL, {
+          type: 'instance-error',
+          error: {
+            id: mangoURL.href,
+            status: 500,
+            title: 'synthetic test error',
+            message: 'synthetic test error to verify tombstone clears it',
+            additionalErrors: null,
+          },
+        });
+        await errorBatch.done();
+
+        let plantedRows = (await testDbAdapter.execute(
+          `SELECT has_error, error_doc
+             FROM boxel_index
+             WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+          { bind: [realm.url, mangoURL.href] },
+        )) as { has_error: boolean; error_doc: unknown }[];
+        assert.strictEqual(plantedRows.length, 1, 'planted row is present');
+        assert.true(
+          plantedRows[0].has_error,
+          'planted row carries has_error = true',
+        );
+        assert.ok(plantedRows[0].error_doc, 'planted row has an error_doc');
+
+        // 2. Tombstone the URL.
+        let tombstoneBatch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+        );
+        await tombstoneBatch.invalidate([mangoURL]);
+        await tombstoneBatch.done();
+
+        // 3. The resulting row must be tombstoned AND have the stale
+        //    error state cleared, not preserved by the upsert.
+        let postRows = (await testDbAdapter.execute(
+          `SELECT is_deleted, has_error, error_doc
+             FROM boxel_index
+             WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+          { bind: [realm.url, mangoURL.href] },
+        )) as {
+          is_deleted: boolean;
+          has_error: boolean;
+          error_doc: unknown;
+        }[];
+        assert.strictEqual(postRows.length, 1, 'tombstone row is present');
+        assert.true(postRows[0].is_deleted, 'row is marked is_deleted');
+        assert.false(
+          postRows[0].has_error,
+          'tombstone clears has_error from prior errored state',
+        );
+        assert.strictEqual(
+          postRows[0].error_doc,
+          null,
+          'tombstone clears error_doc from prior errored state',
+        );
+      });
+
+      test('updateEntry refuses to write an instance-error entry with no error.message', async function (assert) {
+        // Defense at the write boundary: a row with `has_error = true`
+        // and `error_doc` that lacks a human-readable message is a
+        // black hole for triage (the UI surface, the worker stderr,
+        // and the DB all show nothing useful). Throw here so the
+        // worker reservation can finalize against the per-job cap
+        // instead of silently writing the unusable row.
+        let batch = await new IndexWriter(testDbAdapter).createBatch(
+          new URL(realm.url),
+        );
+
+        for (let badError of [
+          undefined,
+          {},
+          { status: 500, additionalErrors: null },
+          { message: '', status: 500, additionalErrors: null },
+        ]) {
+          await assert.rejects(
+            batch.updateEntry(new URL(`${testRealm}mango.json`), {
+              type: 'instance-error',
+              // The cast is required because the type system already
+              // forbids these shapes — the runtime guard exists for
+              // the path where bad data slips past TypeScript.
+              error: badError as never,
+            }),
+            /indexer refused instance-error entry/,
+            `rejected error shape: ${JSON.stringify(badError)}`,
+          );
+        }
+      });
+
       test('can incrementally index updated instance', async function (assert) {
         await realm.write(
           'mango.json',

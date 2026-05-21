@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import sinon from 'sinon';
 import { dirSync } from 'tmp';
 import type { SuperTest, Test } from 'supertest';
 import type { RealmHttpServer as Server } from '../server';
@@ -10,9 +11,11 @@ import {
   SupportedMimeType,
   param,
   query,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { ModuleCacheCoordinator } from '../lib/module-cache-coordination';
+import { RealmFileChangesListener } from '../lib/realm-file-changes-listener';
 import {
   setupPermissionedRealmCached,
   setupDB,
@@ -373,34 +376,155 @@ module(basename(__filename), function () {
         );
       }
 
+      // Same shape as waitForInflight but polls the join counter — the
+      // dedup tests use it to confirm a concurrent caller actually
+      // joined an in-flight entry before releasing the gate. Without
+      // this signal, an error-path test using a real .gts that throws
+      // fast at babel can settle the first caller (and run its identity-
+      // checked .finally cleanup) before the second caller's HTTP
+      // request reaches #transpileModuleDeduped — at which point the
+      // second caller installs its own pending and the "shared one
+      // transpile" assertion fails non-deterministically on CI under
+      // load. Together with __testOnlyDelayTranspile this gives the
+      // tests an explicit "B has joined" handle.
+      async function waitForJoinCount(
+        expected: number,
+        timeoutMs = 5000,
+      ): Promise<void> {
+        let deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (testRealm.__testOnlyGetTranspileJoinCount() === expected) {
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        throw new Error(
+          `timed out waiting for join count to reach ${expected}; saw ${testRealm.__testOnlyGetTranspileJoinCount()}`,
+        );
+      }
+
+      // Timestamped event log used by the dedup tests to capture the
+      // hook entries, gate releases, counter readings, and HTTP responses
+      // around the concurrent-arrive window. Dumped to stderr only on
+      // assertion failure, so a CI flake leaves a forensic trail in the
+      // realm-server log artifacts that future investigations can grep
+      // for the event timeline. `assert.pushResult({ result: true })`
+      // does NOT work here: this repo's QUnit JUnit reporter only
+      // serializes `data.errors` for failed tests, so passing diagnostic
+      // rows are silently dropped from the CI report.
+      function createDiagLog(testLabel: string) {
+        let started = Date.now();
+        let events: string[] = [];
+        return {
+          note(label: string, extra: Record<string, unknown> = {}) {
+            let snapshot = {
+              t: Date.now() - started,
+              inflight: testRealm.__testOnlyGetInFlightTranspileCount(),
+              transpileCalls: testRealm.__testOnlyGetTranspileCallCount(),
+              joinCount: testRealm.__testOnlyGetTranspileJoinCount(),
+              ...extra,
+            };
+            events.push(`[${label}] ${JSON.stringify(snapshot)}`);
+          },
+          dump() {
+            console.error(`[dedup-flake-diag] test=${testLabel}`);
+            for (let line of events) {
+              console.error(`[dedup-flake-diag]   ${line}`);
+            }
+          },
+        };
+      }
+
       test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
         let modulePath = 'dedup-same-path.gts';
         await testRealm.write(modulePath, transpilerHeavySource);
         testRealm.__testOnlyClearCaches();
 
-        let before = testRealm.__testOnlyGetTranspileCallCount();
-        let responses = await Promise.all([
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-        ]);
-        let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+        // Park A at the gate so the in-flight window is held open until
+        // B and C have demonstrably joined. transpilerHeavySource takes
+        // 50–500 ms in babel which usually masks this race, but on a
+        // saturated CI runner A can settle before later fireRequests
+        // reach #transpileModuleDeduped — same shape as the error-path
+        // flake; deterministic for the same reasons.
+        //
+        // signalAEntered fires from inside the gate hook, so the test
+        // can wait on the actual hook-entry event rather than the
+        // in-flight slot being set — the slot is installed BEFORE the
+        // hook fires (there's a DB read + file read in between), so
+        // polling inflight=1 doesn't prove A has reached the gate.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        let signalAEntered: () => void = () => {};
+        let aEntered = new Promise<void>((r) => {
+          signalAEntered = r;
+        });
+        let hookEntries = 0;
+        testRealm.__testOnlyDelayTranspile(() => {
+          hookEntries += 1;
+          signalAEntered();
+          return gate;
+        });
 
-        assert.deepEqual(
-          responses.map((r) => r.status),
-          [200, 200, 200],
-          'all three concurrent same-path requests succeed',
-        );
-        assert.strictEqual(
-          delta,
-          1,
-          'exactly one transpileJS call serviced three concurrent same-path readers',
-        );
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          0,
-          'in-flight slot released after the shared transpile settled',
-        );
+        // Hoist the pending* promises so the finally block can settle
+        // them with Promise.allSettled before teardown — otherwise a
+        // throw between fireRequest and the explicit await would leak
+        // background requests into the next test's afterEach.
+        let pendingA: ReturnType<typeof fireRequest> | undefined;
+        let pendingB: ReturnType<typeof fireRequest> | undefined;
+        let pendingC: ReturnType<typeof fireRequest> | undefined;
+        let diag = createDiagLog('N concurrent same-path readers');
+        let passed = false;
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          diag.note('start', { before });
+
+          pendingA = fireRequest(modulePath);
+          await aEntered;
+          diag.note('A-entered-hook');
+
+          pendingB = fireRequest(modulePath);
+          pendingC = fireRequest(modulePath);
+          await waitForJoinCount(2);
+          diag.note('B-and-C-joined', { hookEntries });
+
+          releaseGate();
+          diag.note('gate-released');
+          let responses = await Promise.all([pendingA, pendingB, pendingC]);
+          diag.note('all-responded', {
+            statuses: responses.map((r) => r.status),
+          });
+          let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+
+          assert.deepEqual(
+            responses.map((r) => r.status),
+            [200, 200, 200],
+            'all three concurrent same-path requests succeed',
+          );
+          assert.strictEqual(
+            delta,
+            1,
+            'exactly one transpileJS call serviced three concurrent same-path readers',
+          );
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            0,
+            'in-flight slot released after the shared transpile settled',
+          );
+          passed = true;
+        } finally {
+          releaseGate();
+          testRealm.__testOnlyDelayTranspile(undefined);
+          await Promise.allSettled(
+            [pendingA, pendingB, pendingC].filter(
+              (p): p is ReturnType<typeof fireRequest> => p !== undefined,
+            ),
+          );
+          if (!passed) {
+            diag.dump();
+          }
+        }
       });
 
       test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
@@ -633,39 +757,140 @@ module(basename(__filename), function () {
         );
         testRealm.__testOnlyClearCaches();
 
-        let before = testRealm.__testOnlyGetTranspileCallCount();
-        let [resA, resB] = await Promise.all([
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-        ]);
-        let deltaShared = testRealm.__testOnlyGetTranspileCallCount() - before;
+        // Without a gate, transpileJS throws fast on invalid source — A
+        // can settle and its identity-checked .finally can clear the
+        // in-flight slot before B's HTTP request even reaches
+        // #transpileModuleDeduped on a loaded CI runner, at which point
+        // B installs its own pending and the "shared one transpile"
+        // assertion observes deltaShared = 2 (one per request). Park A
+        // at a gate so the in-flight overlap window is held open until
+        // both callers have demonstrably reached the dedup site, then
+        // release to let the rejection propagate to both.
+        //
+        // signalAEntered fires from inside the gate hook, NOT from
+        // waitForInflight: the in-flight slot is set BEFORE the hook
+        // fires (#transpileWithLayers reads the L2 cache row +
+        // materializes the file ref in between), so polling inflight=1
+        // doesn't prove A is actually parked at the gate. Without the
+        // explicit signal, a slow DB read can let B's joinCount tick
+        // before A's hook entry, and the later hookEntries === 1
+        // assertion would observe 0.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        let signalAEntered: () => void = () => {};
+        let aEntered = new Promise<void>((r) => {
+          signalAEntered = r;
+        });
+        let hookEntries = 0;
+        testRealm.__testOnlyDelayTranspile(() => {
+          hookEntries += 1;
+          signalAEntered();
+          return gate;
+        });
 
-        assert.strictEqual(
-          resA.status,
-          406,
-          'first errored request returns a transpile-failed response',
-        );
-        assert.strictEqual(
-          resB.status,
-          406,
-          'concurrent waiter shares the same error response',
-        );
-        assert.strictEqual(
-          deltaShared,
-          1,
-          'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
-        );
+        // Hoist pending promises so the finally block can settle them
+        // with Promise.allSettled before the next test's afterEach
+        // tears the realm down — otherwise a throw between fireRequest
+        // and the explicit await leaks background HTTP requests across
+        // the test boundary.
+        let pendingA: ReturnType<typeof fireRequest> | undefined;
+        let pendingB: ReturnType<typeof fireRequest> | undefined;
+        let diag = createDiagLog('errored transpile shared');
+        let passed = false;
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          diag.note('start', { before });
 
-        // After both fail, the in-flight slot must release so a fresh
-        // caller re-attempts transpile against current source.
-        let resC = await fireRequest(modulePath);
-        assert.strictEqual(resC.status, 406);
-        let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
-        assert.strictEqual(
-          deltaAfter,
-          2,
-          'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
-        );
+          // Fire A but DON'T await — we need it parked at the gate so
+          // B can race in.
+          pendingA = fireRequest(modulePath);
+          await aEntered;
+          diag.note('A-entered-hook', { hookEntries });
+
+          // Fire B. B's HTTP request travels through Express +
+          // supertest until it reaches #transpileModuleDeduped, where
+          // it should observe A's pending in #inFlightTranspiles and
+          // take the `existing` branch — bumping joinCount to 1 —
+          // instead of installing its own.
+          pendingB = fireRequest(modulePath);
+          await waitForJoinCount(1);
+          diag.note('B-joined', { hookEntries });
+
+          // Sanity: only A's hook fired. We awaited aEntered above and
+          // hold releaseGate, so hookEntries can't be anything other
+          // than 1 here — if it is, B bypassed the dedup, which is a
+          // real bug worth surfacing.
+          assert.strictEqual(
+            hookEntries,
+            1,
+            'only A entered the transpile hook — B joined A’s pending',
+          );
+
+          // Release the gate. A's transpileJS throws on the invalid
+          // source. Both pendingA and pendingB receive the same
+          // rejection through the shared promise.
+          releaseGate();
+          diag.note('gate-released');
+          let [resA, resB] = await Promise.all([pendingA, pendingB]);
+          diag.note('both-responded', {
+            statusA: resA.status,
+            statusB: resB.status,
+          });
+
+          let deltaShared =
+            testRealm.__testOnlyGetTranspileCallCount() - before;
+
+          assert.strictEqual(
+            resA.status,
+            406,
+            'first errored request returns a transpile-failed response',
+          );
+          assert.strictEqual(
+            resB.status,
+            406,
+            'concurrent waiter shares the same error response',
+          );
+          assert.strictEqual(
+            deltaShared,
+            1,
+            'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
+          );
+
+          // After both fail, the in-flight slot must release so a
+          // fresh caller re-attempts transpile against current source.
+          // Drop the gate hook so C runs unblocked (and so we don't
+          // park forever on a stale gate Promise).
+          testRealm.__testOnlyDelayTranspile(undefined);
+          let resC = await fireRequest(modulePath);
+          diag.note('C-responded', { statusC: resC.status });
+          assert.strictEqual(resC.status, 406);
+          let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
+          assert.strictEqual(
+            deltaAfter,
+            2,
+            'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
+          );
+
+          passed = true;
+        } finally {
+          // Release the gate in case we threw before reaching the
+          // explicit release (e.g. waitForJoinCount timed out), then
+          // settle any background pending requests before this test's
+          // afterEach tears the realm down — otherwise orphaned
+          // requests would race teardown and leak into the next test.
+          releaseGate();
+          testRealm.__testOnlyDelayTranspile(undefined);
+          await Promise.allSettled(
+            [pendingA, pendingB].filter(
+              (p): p is ReturnType<typeof fireRequest> => p !== undefined,
+            ),
+          );
+          if (!passed) {
+            diag.dump();
+          }
+        }
       });
     },
   );
@@ -1164,6 +1389,297 @@ module(basename(__filename), function () {
           await coordA.shutDown();
           await coordB.shutDown();
         }
+      });
+    },
+  );
+
+  // CS-11182: a from-scratch reindex must tombstone every
+  // module_transpile_cache row for the realm so the next reader misses
+  // L2 and re-transpiles. The post-completion chain in
+  // Realm.startReindex used to await clearRealmDefinitions before
+  // dropping the L2 rows — a throw in clearRealmDefinitions short-
+  // circuited the rest of the callback and left rows live with their
+  // pre-reindex bodies, so clients kept being served stale transpiles.
+  // These tests pin both the happy-path tombstone and the failure-
+  // isolation: a broken clearRealmDefinitions must not block the L2
+  // wipe.
+  module(
+    'Realm.reindex L2 module_transpile_cache tombstone (CS-11182)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      hooks.afterEach(function () {
+        sinon.restore();
+      });
+
+      const reindexSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class ReindexCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-reindex><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      async function countLiveRowsForRealm(): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function seedL2Row(modulePath: string): Promise<void> {
+        await testRealm.write(modulePath, reindexSource);
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        if (response.status !== 200) {
+          throw new Error(
+            `seedL2Row: expected 200 for /${modulePath}, got ${response.status}`,
+          );
+        }
+      }
+
+      // `#dropAllTranspiledModuleCacheEntries` fires the L2 bulk DELETE as
+      // a fire-and-forget — the .then chain doesn't await it. Poll briefly
+      // so the assertion isn't racing the UPDATE landing on slower CI
+      // machines.
+      async function waitForZeroLiveRows(timeoutMs = 5000): Promise<number> {
+        let started = Date.now();
+        let n = await countLiveRowsForRealm();
+        while (n > 0 && Date.now() - started <= timeoutMs) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          n = await countLiveRowsForRealm();
+        }
+        return n;
+      }
+
+      test('reindex tombstones live L2 rows for the realm', async function (assert) {
+        await seedL2Row('reindex-happy.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row for the realm',
+        );
+
+        await testRealm.reindex();
+
+        assert.strictEqual(
+          await waitForZeroLiveRows(),
+          0,
+          'reindex tombstoned every live L2 row for the realm',
+        );
+      });
+
+      test('reindex still tombstones L2 rows when clearRealmDefinitions throws', async function (assert) {
+        // Reproduce the staging failure mode: a throw inside the
+        // post-completion .then's first awaited step used to short-
+        // circuit the rest of the callback, leaving the L2 rows live.
+        // The fix wraps each step in its own try/catch so a
+        // clearRealmDefinitions failure surfaces as a log line but
+        // does not block the bulk tombstone.
+        await seedL2Row('reindex-isolated.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row for the realm',
+        );
+
+        let stub = sinon
+          .stub(CachingDefinitionLookup.prototype, 'clearRealmDefinitions')
+          .rejects(new Error('synthetic clearRealmDefinitions failure'));
+
+        try {
+          await testRealm.reindex();
+        } finally {
+          stub.restore();
+        }
+
+        assert.strictEqual(
+          await waitForZeroLiveRows(),
+          0,
+          'bulk L2 tombstone ran even though clearRealmDefinitions threw',
+        );
+      });
+    },
+  );
+
+  // CS-11182 follow-up: the original fix only fired the L2 bulk
+  // tombstone from `Realm.startReindex`'s post-completion `.then`, which
+  // only covers `POST <realm>/_full-reindex` / `POST <realm>/_reindex`.
+  // Production reindexes triggered via the operator-action endpoints
+  // (`/_grafana-reindex`, `/_grafana-full-reindex`, `/_post-deployment`)
+  // and the publish-realm flow (`Realm.fullIndex`) all bypass
+  // `startReindex` and so left the L2 row live with pre-reindex bytes.
+  // The wider fix emits `notifyAllFileChanges(dbAdapter, realmURL)` from
+  // the worker side of the `from-scratch-index` task — every replica's
+  // `realm_file_changes` wildcard listener then drops L1 and fires the
+  // L2 bulk tombstone. This test exercises the bypass path
+  // (`realmIndexUpdater.fullIndex`, which never wires up the
+  // `startReindex` callback) and pins the new cross-replica behavior.
+  module(
+    'Worker-side notify covers reindexes that bypass Realm.startReindex (CS-11182)',
+    function (hooks) {
+      let realmURL = new URL('http://127.0.0.1:4444/test/');
+      let testRealm: Realm;
+      let request: RealmRequest;
+      let dbAdapter: PgAdapter;
+      let listener: RealmFileChangesListener | undefined;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        testRealmHttpServer: Server;
+        request: SuperTest<Test>;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = withRealmPath(args.request, realmURL);
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        fixture: 'blank',
+        realmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          user: ['read', 'write', 'realm-owner'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup,
+      });
+
+      hooks.beforeEach(async function () {
+        // Production wires `RealmFileChangesListener` up in `main.ts`; the
+        // permissioned-realm test fixture doesn't, so set up the equivalent
+        // here. Without it, the worker's NOTIFY would fire into the void
+        // and no replica would receive the wildcard wipe — the test
+        // would erroneously pass on the listener side regardless of the
+        // worker-side emit.
+        listener = new RealmFileChangesListener({
+          dbAdapter,
+          lookupMountedRealm: (url) =>
+            url === realmURL.href ? testRealm : undefined,
+        });
+        await listener.start();
+      });
+
+      hooks.afterEach(async function () {
+        await listener?.shutDown();
+        listener = undefined;
+      });
+
+      const reindexSource = `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class WorkerNotifyCard extends CardDef {
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-worker-notify><@fields.name/></div>
+            </template>
+          }
+        }
+      `;
+
+      function authHeader() {
+        return `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+      }
+
+      async function countLiveRowsForRealm(): Promise<number> {
+        let rows = (await query(dbAdapter, [
+          'SELECT COUNT(*)::int AS n FROM module_transpile_cache WHERE realm_url =',
+          param(realmURL.href),
+          'AND body IS NOT NULL',
+        ])) as { n: number }[];
+        return rows[0]?.n ?? 0;
+      }
+
+      async function seedL2Row(modulePath: string): Promise<void> {
+        await testRealm.write(modulePath, reindexSource);
+        let response = await request
+          .get(`/${modulePath}`)
+          .set('Accept', SupportedMimeType.All)
+          .set('Authorization', authHeader());
+        if (response.status !== 200) {
+          throw new Error(
+            `seedL2Row: expected 200 for /${modulePath}, got ${response.status}`,
+          );
+        }
+      }
+
+      async function waitForZeroLiveRows(timeoutMs = 5000): Promise<number> {
+        // The worker emits NOTIFY synchronously after batch.done(); the
+        // listener's clearLocalSourceCaches fires-and-forgets the L2 bulk
+        // tombstone. Both legs settle quickly but neither is on the
+        // job.done critical path. Poll briefly so the assertion isn't
+        // racing the tombstone landing.
+        let started = Date.now();
+        let n = await countLiveRowsForRealm();
+        while (n > 0 && Date.now() - started <= timeoutMs) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          n = await countLiveRowsForRealm();
+        }
+        return n;
+      }
+
+      test('realmIndexUpdater.fullIndex (no startReindex .then wired up) still tombstones L2 rows via the worker-side NOTIFY', async function (assert) {
+        await seedL2Row('worker-notify.gts');
+        assert.ok(
+          (await countLiveRowsForRealm()) >= 1,
+          'precondition: at least one live L2 row before reindex',
+        );
+
+        // Bypass `Realm.startReindex` (which DOES wire up the cache-drop
+        // .then per the original CS-11182 fix) and go straight through
+        // `RealmIndexUpdater.fullIndex`. This mirrors the production
+        // bypass paths (`handle-reindex.ts:reindex`, the `full-reindex`
+        // queue task, `Realm.fullIndex`) — none of them touch the
+        // `startReindex` chain. With only the original fix in place this
+        // assertion would fail; the worker-side `notifyAllFileChanges`
+        // is what makes it pass.
+        await testRealm.realmIndexUpdater.fullIndex(userInitiatedPriority);
+
+        assert.strictEqual(
+          await waitForZeroLiveRows(),
+          0,
+          'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
+        );
       });
     },
   );

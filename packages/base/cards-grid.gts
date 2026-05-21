@@ -310,6 +310,13 @@ class Isolated extends Component<typeof CardsGrid> {
       await this.args.createCard?.(spec.ref, cardIdToURL(spec.id!), {
         realmURL: this.args.model[realmURL],
       });
+    } else if (activeFilterRef) {
+      // No spec exists for the active type filter — create an instance of
+      // the type directly. `activeFilterRef` is an absolute CodeRef sourced
+      // from the realm's `_types` summary, so no `relativeTo` is needed.
+      await this.args.createCard?.(activeFilterRef, undefined, {
+        realmURL: this.args.model[realmURL],
+      });
     }
   });
 

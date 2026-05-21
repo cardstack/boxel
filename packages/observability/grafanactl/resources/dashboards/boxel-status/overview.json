@@ -31,6 +31,29 @@
     "links": [],
     "panels": [
       {
+        "id": 32,
+        "type": "text",
+        "title": "",
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "description": "Which Grafana environment you are looking at. Rendered from the `env` constant template variable, which apply.sh substitutes to local / staging / production at push time. Designed to make staging vs production unmistakable at a glance.",
+        "transparent": true,
+        "options": {
+          "mode": "html",
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "<div style=\"display:flex;align-items:center;justify-content:center;height:100%;width:100%;overflow:hidden;font-size:36px;font-weight:700;letter-spacing:2px;text-transform:capitalize;font-family:Inter,system-ui,sans-serif;color:var(--text-primary)\">${env}</div>"
+        },
+        "pluginVersion": "12.4.3"
+      },
+      {
         "datasource": {
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
@@ -87,7 +110,7 @@
           "h": 8,
           "w": 8,
           "x": 0,
-          "y": 0
+          "y": 3
         },
         "id": 21,
         "links": [
@@ -105,7 +128,9 @@
           "justifyMode": "auto",
           "orientation": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -187,7 +212,7 @@
           "h": 8,
           "w": 8,
           "x": 8,
-          "y": 0
+          "y": 3
         },
         "id": 22,
         "links": [
@@ -205,7 +230,9 @@
           "justifyMode": "auto",
           "orientation": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -287,7 +314,7 @@
           "h": 5,
           "w": 8,
           "x": 16,
-          "y": 0
+          "y": 3
         },
         "id": 30,
         "links": [
@@ -397,7 +424,7 @@
           "h": 3,
           "w": 8,
           "x": 16,
-          "y": 5
+          "y": 8
         },
         "id": 31,
         "options": {
@@ -452,10 +479,10 @@
       },
       {
         "datasource": {
-          "type": "loki",
-          "uid": "loki"
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
         },
-        "description": "Realm-server HTTP throughput, errors, and target response time. Throughput / errors come from Loki (`httpLogging` exit lines `--> METHOD ACCEPT URL: STATUS` and any line matching `error|exception|fatal`). p50 / p95 / p99 come from the realm-server ALB's `AWS/ApplicationELB.TargetResponseTime` metric (CloudWatch ExtendedStatistic) on the right axis in seconds — locally these read 'No data' but throughput/errors keep working. Legend shows the mean over the visible time range.",
+        "description": "Realm-server ALB metrics: request count, error rate (target 5XX + ELB-emitted 5XX combined), client 4xx rate, and target response time (p50/p95/p99 on the right axis in seconds). All series come from `AWS/ApplicationELB` CloudWatch metrics; request/error/4xx counts are normalized to per-minute regardless of the selected time range. Locally these read 'No data' — CloudWatch is staging/production only. Legend shows the mean over the visible window.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -492,8 +519,8 @@
             "decimals": 1,
             "links": [
               {
-                "title": "Open Realm Server dashboard",
-                "url": "/d/boxel-svc-realm-server",
+                "title": "Open Application Load Balancer dashboard",
+                "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
                 "targetBlank": false
               }
             ],
@@ -543,15 +570,46 @@
             {
               "matcher": {
                 "id": "byName",
+                "options": "HTTP 4xx/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#f2cc0c"
+                  }
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
                 "options": "p50"
               },
               "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "custom.axisPlacement", "value": "right" },
-                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
                 {
                   "id": "color",
-                  "value": { "mode": "fixed", "fixedColor": "#73bf69" }
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#73bf69"
+                  }
                 }
               ]
             },
@@ -561,12 +619,24 @@
                 "options": "p95"
               },
               "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "custom.axisPlacement", "value": "right" },
-                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
                 {
                   "id": "color",
-                  "value": { "mode": "fixed", "fixedColor": "#ff9830" }
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff9830"
+                  }
                 }
               ]
             },
@@ -576,12 +646,24 @@
                 "options": "p99"
               },
               "properties": [
-                { "id": "unit", "value": "s" },
-                { "id": "custom.axisPlacement", "value": "right" },
-                { "id": "custom.fillOpacity", "value": 0 },
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
                 {
                   "id": "color",
-                  "value": { "mode": "fixed", "fixedColor": "#f2495c" }
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#f2495c"
+                  }
                 }
               ]
             }
@@ -591,12 +673,14 @@
           "h": 8,
           "w": 8,
           "x": 0,
-          "y": 8
+          "y": 11
         },
         "id": 1,
         "options": {
           "legend": {
-            "calcs": ["mean"],
+            "calcs": [
+              "mean"
+            ],
             "displayMode": "list",
             "placement": "bottom",
             "showLegend": true
@@ -610,31 +694,146 @@
         "targets": [
           {
             "datasource": {
-              "type": "loki",
-              "uid": "loki"
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [1m])) or vector(0)",
-            "queryType": "range",
-            "legendFormat": "HTTP req/min",
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "RequestCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "a",
+            "hide": true,
             "refId": "A"
           },
           {
             "datasource": {
-              "type": "loki",
-              "uid": "loki"
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [1m])) or vector(0)",
-            "queryType": "range",
-            "legendFormat": "HTTP err/min",
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "b",
+            "hide": true,
             "refId": "B"
           },
           {
-            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_ELB_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "h",
+            "hide": true,
+            "refId": "H"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_4XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "i",
+            "hide": true,
+            "refId": "I"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "FILL(a, 0) / PERIOD(a) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP req/min",
+            "refId": "e1",
+            "id": "e1"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "(FILL(b, 0) + FILL(h, 0)) / PERIOD(b) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP err/min",
+            "refId": "e2",
+            "id": "e2"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "FILL(i, 0) / PERIOD(i) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP 4xx/min",
+            "refId": "e3",
+            "id": "e3"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": { "LoadBalancer": "$realm_server_alb" },
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
             "statistic": "p50",
             "period": "",
             "region": "default",
@@ -642,12 +841,17 @@
             "refId": "C"
           },
           {
-            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": { "LoadBalancer": "$realm_server_alb" },
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
             "statistic": "p95",
             "period": "",
             "region": "default",
@@ -655,12 +859,17 @@
             "refId": "D"
           },
           {
-            "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
             "namespace": "AWS/ApplicationELB",
             "metricName": "TargetResponseTime",
             "metricEditorMode": 0,
             "metricQueryType": 0,
-            "dimensions": { "LoadBalancer": "$realm_server_alb" },
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
             "statistic": "p99",
             "period": "",
             "region": "default",
@@ -668,12 +877,12 @@
             "refId": "E"
           }
         ],
-        "title": "Web Requests",
+        "title": "Application Load Balancer",
         "type": "timeseries",
         "links": [
           {
-            "title": "Open Realm Server dashboard",
-            "url": "/d/boxel-svc-realm-server",
+            "title": "Open Application Load Balancer dashboard",
+            "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
             "targetBlank": false,
             "type": "link",
             "icon": "external link"
@@ -685,7 +894,7 @@
           "type": "grafana-postgresql-datasource",
           "uid": "cef5v5sl9k7i8f"
         },
-        "description": "Priority-pending worker jobs (status='unfulfilled' with no active reservation AND priority < 0). Sparkline shows resolved jobs/min over the dashboard time range, with the trailing point set to the current priority-pending count so `lastNotNull` matches the displayed value. Color thresholds: green \u22643, yellow >3, red >10. Counts ALL job types \u2014 for indexing-only depth see the Indexing dashboard.",
+        "description": "Priority-pending worker jobs (status='unfulfilled' with no active reservation AND priority < 0). Sparkline shows resolved jobs/min over the dashboard time range, with the trailing point set to the current priority-pending count so `lastNotNull` matches the displayed value. Color thresholds: green ≤3, yellow >3, red >10. Counts ALL job types — for indexing-only depth see the Indexing dashboard.",
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -725,7 +934,7 @@
           "h": 8,
           "w": 8,
           "x": 8,
-          "y": 8
+          "y": 11
         },
         "id": 4,
         "links": [
@@ -743,7 +952,9 @@
           "justifyMode": "auto",
           "orientation": "vertical",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -848,7 +1059,7 @@
           "h": 8,
           "w": 8,
           "x": 16,
-          "y": 8
+          "y": 11
         },
         "id": 5,
         "links": [
@@ -862,7 +1073,9 @@
         ],
         "options": {
           "legend": {
-            "calcs": ["mean"],
+            "calcs": [
+              "mean"
+            ],
             "displayMode": "list",
             "placement": "bottom",
             "showLegend": true
@@ -1006,7 +1219,7 @@
           "h": 4,
           "w": 4,
           "x": 0,
-          "y": 16
+          "y": 19
         },
         "id": 13,
         "options": {
@@ -1020,7 +1233,9 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           }
@@ -1122,7 +1337,7 @@
           "h": 3,
           "w": 4,
           "x": 0,
-          "y": 20
+          "y": 23
         },
         "id": 23,
         "options": {
@@ -1131,7 +1346,9 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "e1",
             "values": false
           },
@@ -1333,7 +1550,7 @@
           "h": 4,
           "w": 4,
           "x": 4,
-          "y": 16
+          "y": 19
         },
         "id": 14,
         "options": {
@@ -1347,7 +1564,9 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           }
@@ -1449,7 +1668,7 @@
           "h": 3,
           "w": 4,
           "x": 4,
-          "y": 20
+          "y": 23
         },
         "id": 24,
         "options": {
@@ -1458,7 +1677,9 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "e1",
             "values": false
           },
@@ -1660,7 +1881,7 @@
           "h": 4,
           "w": 4,
           "x": 8,
-          "y": 16
+          "y": 19
         },
         "id": 15,
         "options": {
@@ -1674,7 +1895,9 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           }
@@ -1776,7 +1999,7 @@
           "h": 3,
           "w": 4,
           "x": 8,
-          "y": 20
+          "y": 23
         },
         "id": 25,
         "options": {
@@ -1785,7 +2008,9 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "e1",
             "values": false
           },
@@ -1987,7 +2212,7 @@
           "h": 4,
           "w": 4,
           "x": 12,
-          "y": 16
+          "y": 19
         },
         "id": 16,
         "options": {
@@ -2001,7 +2226,9 @@
           "maxVizHeight": 300,
           "sizing": "auto",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           }
@@ -2103,7 +2330,7 @@
           "h": 3,
           "w": 4,
           "x": 12,
-          "y": 20
+          "y": 23
         },
         "id": 26,
         "options": {
@@ -2112,7 +2339,9 @@
           "justifyMode": "center",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "e1",
             "values": false
           },
@@ -2310,7 +2539,7 @@
           "h": 7,
           "w": 4,
           "x": 16,
-          "y": 16
+          "y": 19
         },
         "id": 17,
         "links": [
@@ -2337,7 +2566,9 @@
             "valueSize": 21
           },
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           }
@@ -2409,7 +2640,7 @@
           "h": 7,
           "w": 4,
           "x": 20,
-          "y": 16
+          "y": 19
         },
         "id": 18,
         "options": {
@@ -2418,7 +2649,9 @@
           "justifyMode": "auto",
           "orientation": "vertical",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -2447,7 +2680,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 33
+          "y": 36
         },
         "id": 6,
         "options": {
@@ -2512,7 +2745,7 @@
           "h": 4,
           "w": 6,
           "x": 0,
-          "y": 23
+          "y": 26
         },
         "id": 7,
         "options": {
@@ -2521,7 +2754,9 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -2578,7 +2813,7 @@
           "h": 4,
           "w": 6,
           "x": 6,
-          "y": 23
+          "y": 26
         },
         "id": 8,
         "options": {
@@ -2587,7 +2822,9 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -2653,7 +2890,7 @@
           "h": 4,
           "w": 6,
           "x": 12,
-          "y": 23
+          "y": 26
         },
         "id": 9,
         "options": {
@@ -2662,7 +2899,9 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -2723,7 +2962,7 @@
           "h": 4,
           "w": 6,
           "x": 18,
-          "y": 23
+          "y": 26
         },
         "id": 10,
         "options": {
@@ -2732,7 +2971,9 @@
           "justifyMode": "auto",
           "orientation": "horizontal",
           "reduceOptions": {
-            "calcs": ["lastNotNull"],
+            "calcs": [
+              "lastNotNull"
+            ],
             "fields": "",
             "values": false
           },
@@ -2865,7 +3106,7 @@
           "h": 6,
           "w": 24,
           "x": 0,
-          "y": 27
+          "y": 30
         },
         "id": 11,
         "options": {
@@ -2924,7 +3165,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 41
+          "y": 44
         },
         "id": 12,
         "options": {
@@ -2943,7 +3184,9 @@
     ],
     "refresh": "30s",
     "schemaVersion": 42,
-    "tags": ["overview"],
+    "tags": [
+      "overview"
+    ],
     "templating": {
       "list": [
         {
@@ -2955,7 +3198,10 @@
         },
         {
           "current": {},
-          "datasource": { "type": "cloudwatch", "uid": "cef5x9o3yzawwf" },
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
           "definition": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
           "hide": 2,
           "includeAll": false,

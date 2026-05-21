@@ -1,4 +1,3 @@
-import { logger } from './log';
 import { executableExtensions } from './index';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
@@ -34,12 +33,6 @@ interface NodeRecord {
   queryContexts: Set<string>;
   nonQueryContexts: Set<string>;
   hasUnscopedAccess: boolean;
-}
-
-interface EdgeRecord {
-  from: string;
-  to: string;
-  contexts: Set<string>;
 }
 
 interface ContextStackEntry {
@@ -132,14 +125,18 @@ function isPromiseLike<T = unknown>(value: unknown): value is Promise<T> {
 }
 
 export class RuntimeDependencyTracker {
-  #summaryLog: ReturnType<typeof logger> | undefined;
-  #edgesLog: ReturnType<typeof logger> | undefined;
   #sessionKey: string | undefined;
   #isActive = false;
   #contextStack: ContextStackEntry[] = [];
   #nodes = new Map<string, NodeRecord>();
-  #edges = new Map<string, EdgeRecord>();
   #rootCandidates = new Set<string>();
+
+  // Short-circuit cache: repeated field reads under the same context call
+  // #track with the same (kind, rawURL, context) triple. Skipping those is
+  // safe because all downstream work (normalization, Set.add) is idempotent.
+  #lastTrackKind: RuntimeDependencyNodeKind | undefined;
+  #lastTrackRawURL: string | undefined;
+  #lastTrackContext: RuntimeDependencyTrackingContext | undefined;
 
   startSession({
     sessionKey,
@@ -152,23 +149,22 @@ export class RuntimeDependencyTracker {
     }
     this.#isActive = true;
     this.#setRoot(rootURL, rootKind);
-    this.#summaryLogger().debug(`start session ${sessionKey}`);
   }
 
   stopSession(): void {
     if (!this.#isActive) {
       return;
     }
-    this.#summaryLogger().debug(`stop session ${this.#sessionKey ?? '(none)'}`);
     this.#isActive = false;
     this.#contextStack = [];
+    this.#clearTrackCache();
   }
 
   reset(): void {
     this.#nodes.clear();
-    this.#edges.clear();
     this.#rootCandidates.clear();
     this.#contextStack = [];
+    this.#clearTrackCache();
   }
 
   withContext<T>(context: RuntimeDependencyTrackingContext, cb: () => T): T {
@@ -254,10 +250,6 @@ export class RuntimeDependencyTracker {
     excludedQueryOnlyDeps.sort();
     unscopedDeps.sort();
 
-    this.#summaryLogger().debug(
-      `session=${this.#sessionKey ?? '(none)'} deps=${deps.length} excludedQueryOnly=${excludedQueryOnlyDeps.length} unscoped=${unscopedDeps.length} nodes=${this.#nodes.size} edges=${this.#edges.size}`,
-    );
-
     return { deps, excludedQueryOnlyDeps, unscopedDeps };
   }
 
@@ -289,28 +281,43 @@ export class RuntimeDependencyTracker {
     if (!this.#isActive) {
       return;
     }
+
+    let context = explicitContext ?? this.#currentContext();
+
+    // The short-circuit cache only applies to stack-top contexts. Those frames
+    // are constructed inside withContext() and never mutated afterward, so
+    // reference equality is sound. Caller-supplied explicit contexts are
+    // structurally mutable, so identity equality does not imply field equality.
+    if (
+      !explicitContext &&
+      rawURL === this.#lastTrackRawURL &&
+      kind === this.#lastTrackKind &&
+      context === this.#lastTrackContext
+    ) {
+      return;
+    }
+
     let dep = normalizeByKind(kind, rawURL);
     if (!dep) {
       return;
     }
 
-    let context = explicitContext ?? this.#currentContext();
-    let label = contextLabel(context);
-    let consumer = this.#normalizeConsumer(context);
-
-    this.#recordNode(dep, kind, context, !consumer);
-    if (!consumer) {
-      this.#edgesLogger().debug(`unscoped ${kind} ${dep} context=${label}`);
-      return;
+    if (!explicitContext) {
+      this.#lastTrackKind = kind;
+      this.#lastTrackRawURL = rawURL;
+      this.#lastTrackContext = context;
     }
 
-    this.#recordEdge(consumer.url, dep, label);
-    this.#edgesLogger().debug(
-      `edge ${consumer.url} -> ${dep} context=${label} source=${context.source ?? '(unknown-source)'}`,
-    );
+    let label = contextLabel(context);
+    let consumer = this.#normalizeConsumer(context, label);
+
+    this.#recordNode(dep, kind, context.mode, label, !consumer);
   }
 
-  #normalizeConsumer(context: RuntimeDependencyTrackingContext): {
+  #normalizeConsumer(
+    context: RuntimeDependencyTrackingContext,
+    label: string,
+  ): {
     url: string;
     kind: RuntimeDependencyNodeKind;
   } | null {
@@ -320,13 +327,13 @@ export class RuntimeDependencyTracker {
     let preferredKind = context.consumerKind ?? 'instance';
     let preferredURL = normalizeByKind(preferredKind, context.consumer);
     if (preferredURL) {
-      this.#recordNode(preferredURL, preferredKind, context, false);
+      this.#recordNode(preferredURL, preferredKind, context.mode, label, false);
       return { url: preferredURL, kind: preferredKind };
     }
 
     let fallbackFile = normalizeFileURL(context.consumer);
     if (fallbackFile) {
-      this.#recordNode(fallbackFile, 'file', context, false);
+      this.#recordNode(fallbackFile, 'file', context.mode, label, false);
       return { url: fallbackFile, kind: 'file' };
     }
     return null;
@@ -335,7 +342,8 @@ export class RuntimeDependencyTracker {
   #recordNode(
     dep: string,
     kind: RuntimeDependencyNodeKind,
-    context: RuntimeDependencyTrackingContext,
+    mode: RuntimeDependencyContextMode | undefined,
+    label: string,
     unscoped: boolean,
   ) {
     let record = this.#nodes.get(dep);
@@ -350,46 +358,24 @@ export class RuntimeDependencyTracker {
     }
 
     record.kinds.add(kind);
-    if (context.mode === 'query') {
-      record.queryContexts.add(contextLabel(context));
+    if (mode === 'query') {
+      record.queryContexts.add(label);
     } else {
-      record.nonQueryContexts.add(contextLabel(context));
+      record.nonQueryContexts.add(label);
     }
     if (unscoped) {
       record.hasUnscopedAccess = true;
     }
   }
 
-  #recordEdge(from: string, to: string, context: string) {
-    let key = `${from}|${to}`;
-    let edge = this.#edges.get(key);
-    if (!edge) {
-      edge = {
-        from,
-        to,
-        contexts: new Set(),
-      };
-      this.#edges.set(key, edge);
-    }
-    edge.contexts.add(context);
-  }
-
   #currentContext(): RuntimeDependencyTrackingContext {
     return this.#contextStack[this.#contextStack.length - 1]?.context ?? {};
   }
 
-  #summaryLogger(): ReturnType<typeof logger> {
-    if (!this.#summaryLog) {
-      this.#summaryLog = logger('dependency-tracker:summary');
-    }
-    return this.#summaryLog;
-  }
-
-  #edgesLogger(): ReturnType<typeof logger> {
-    if (!this.#edgesLog) {
-      this.#edgesLog = logger('dependency-tracker:edges');
-    }
-    return this.#edgesLog;
+  #clearTrackCache(): void {
+    this.#lastTrackKind = undefined;
+    this.#lastTrackRawURL = undefined;
+    this.#lastTrackContext = undefined;
   }
 }
 

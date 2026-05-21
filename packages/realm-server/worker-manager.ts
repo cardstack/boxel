@@ -839,7 +839,7 @@ async function startWorker(
 
   workers.push(worker);
 
-  worker.on('exit', () => {
+  worker.on('exit', (code, signal) => {
     clearInterval(watchdog);
     // Remove from workers array
     const index = workers.indexOf(worker);
@@ -850,7 +850,15 @@ async function startWorker(
     // Spawn the replacement first so a stalled DB call inside finalize
     // (connection lock, network blip, etc.) can't delay recovery.
     if (!isExiting) {
-      log.info(`worker ${name} exited. spawning replacement worker`);
+      // `code` and `signal` are mutually exclusive: a clean process exit
+      // sets `code`, a kill-by-signal sets `signal`. The distinction
+      // matters when triaging why a child died — silent SIGKILLs (cgroup
+      // OOM, external kill) bypass the in-process fatal handlers in
+      // worker.ts, and we currently can't tell those apart from a clean
+      // exit without this on the parent side.
+      log.info(
+        `worker ${name} exited (code=${code}, signal=${signal}). spawning replacement worker`,
+      );
       startWorker(priority, urlMappings);
     }
 

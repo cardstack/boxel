@@ -9,6 +9,7 @@ import {
   planModuleInstall,
   type ListingPathResolver,
   type LooseSingleCardDocument,
+  type RealmResourceIdentifier,
   type Relationship,
 } from '@cardstack/runtime-common';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
@@ -310,11 +311,11 @@ export default class CollectSubmissionFilesCommand extends Command<
     let getCardCommand = new GetCardCommand(this.commandContext);
     let serializeCardCommand = new SerializeCardCommand(this.commandContext);
 
-    const instancesById = new Map<string, CardDef>();
-    const visited = new Set<string>();
-    const queue: string[] = instances
+    const instancesById = new Map<RealmResourceIdentifier, CardDef>();
+    const visited = new Set<RealmResourceIdentifier>();
+    const queue: RealmResourceIdentifier[] = instances
       .map((instance) => instance.id)
-      .filter((id): id is string => typeof id === 'string');
+      .filter((id): id is RealmResourceIdentifier => typeof id === 'string');
 
     while (queue.length > 0) {
       const id = queue.shift();

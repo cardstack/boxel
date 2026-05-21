@@ -11,6 +11,7 @@ import {
   baseRRI,
   Deferred,
   isFileDefInstance,
+  rri,
   type Realm,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -626,11 +627,11 @@ module(`Integration | search resource`, function (hooks) {
     assert.ok(search.instances.length >= 2, 'returns file-meta instances');
     let ids = search.instances.map((i) => i.id);
     assert.ok(
-      ids.includes(`${testRealmURL}files/hello.txt`),
+      ids.includes(rri(`${testRealmURL}files/hello.txt`)),
       'hello.txt is in results',
     );
     assert.ok(
-      ids.includes(`${testRealmURL}files/notes.txt`),
+      ids.includes(rri(`${testRealmURL}files/notes.txt`)),
       'notes.txt is in results',
     );
     for (let instance of search.instances) {
@@ -672,7 +673,7 @@ module(`Integration | search resource`, function (hooks) {
 
     let ids = search.instances.map((i) => i.id);
     assert.ok(
-      ids.includes(`${testRealmURL}files/new-file.txt`),
+      ids.includes(rri(`${testRealmURL}files/new-file.txt`)),
       'new file appears in live search results',
     );
     assert.ok(

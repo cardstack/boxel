@@ -10,6 +10,29 @@ REPO_ROOT="$(cd "../.." && pwd)"
 # reliable regardless of how the binary was originally resolved by PATH.
 export PATH="${REPO_ROOT}/node_modules/.bin:${REPO_ROOT}/packages/realm-server/node_modules/.bin:./node_modules/.bin:$PATH"
 
+# In *standard* dev mode, pin the published-realm domain to a 3-label
+# form that browsers and Node accept as a wildcard SAN
+# (`*.boxel-dev.localhost`). RFC 6125 §7.2 refuses single-label
+# wildcards like `*.localhost`, so the dev cert can't usefully cover
+# `<tenant>.localhost` no matter what's in the SAN list.
+#
+# Skip when BOXEL_ENVIRONMENT is set — env-mode uses Traefik-routed
+# `https://realm-server.<slug>.localhost` URLs on dynamic ports
+# (see lib/env-vars.sh), and forcing `boxel-dev.localhost:4201`
+# there would steer the publish-realm modal at a host that isn't
+# being served. Env-mode harnesses set their own
+# PUBLISHED_REALM_BOXEL_* values explicitly when they need them.
+#
+# Setting these here (rather than in lib/env-vars.sh) also keeps
+# matrix-test runs unaffected: the matrix harness doesn't source
+# dev-common.sh, so it keeps relying on the `localhost:4201` literal
+# sentinel that handlers/serve-index.ts rewrites on the fly.
+# Per-shell overrides still win via the `:-` default.
+if [ -z "${BOXEL_ENVIRONMENT:-}" ]; then
+  export PUBLISHED_REALM_BOXEL_SPACE_DOMAIN="${PUBLISHED_REALM_BOXEL_SPACE_DOMAIN:-boxel-dev.localhost:4201}"
+  export PUBLISHED_REALM_BOXEL_SITE_DOMAIN="${PUBLISHED_REALM_BOXEL_SITE_DOMAIN:-boxel-dev.localhost:4201}"
+fi
+
 # How long to wait for SIGTERM'd processes to exit before escalating to
 # SIGKILL. The dev stack has slow propagators in it (pnpm, npm exec, vite,
 # start-server-and-test, run-p) that don't immediately forward SIGTERM to

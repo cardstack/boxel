@@ -319,6 +319,190 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       }
     });
 
+    test('QUERY /_federated-search emits an ETag on cacheable responses', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+      };
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .set('x-boxel-job-id', '42.1')
+        .set('x-boxel-consuming-realm', testRealm.url)
+        .send({ ...query, realms: [testRealm.url, secondaryRealm.url] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let etag = response.headers['etag'];
+      assert.ok(etag, 'ETag header is present on cacheable responses');
+      assert.ok(
+        /^W\/"42\.1-[0-9a-f]+"$/.test(etag),
+        `ETag is weak-form quoted "<jobId>-<digest>": ${etag}`,
+      );
+    });
+
+    test('QUERY /_federated-search does not emit ETag on non-cacheable requests', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+      };
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      // No x-boxel-job-id / x-boxel-consuming-realm — user-facing call.
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.notOk(
+        response.headers['etag'],
+        'non-indexer callers do not see an ETag header',
+      );
+    });
+
+    test('QUERY /_federated-search returns 304 when If-None-Match matches and cache is warm', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+      };
+      let searchURL = new URL('/_federated-search', testRealm.url);
+      let post = (opts: { ifNoneMatch?: string } = {}) => {
+        let r = request
+          .post(`${searchURL.pathname}${searchURL.search}`)
+          .set('Accept', 'application/vnd.card+json')
+          .set('Content-Type', 'application/json')
+          .set('X-HTTP-Method-Override', 'QUERY')
+          .set('Authorization', `Bearer ${realmServerToken}`)
+          .set('x-boxel-job-id', '42.1')
+          .set('x-boxel-consuming-realm', testRealm.url);
+        if (opts.ifNoneMatch) {
+          r = r.set('If-None-Match', opts.ifNoneMatch);
+        }
+        return r.send({ ...query, realms: [testRealm.url] });
+      };
+
+      let primer = await post();
+      assert.strictEqual(primer.status, 200, 'primer: HTTP 200');
+      let etag = primer.headers['etag'];
+      assert.ok(etag, 'primer carries an ETag');
+
+      let revalidation = await post({ ifNoneMatch: etag });
+      assert.strictEqual(
+        revalidation.status,
+        304,
+        'matching If-None-Match returns 304 Not Modified',
+      );
+      assert.strictEqual(revalidation.text, '', '304 response has no body');
+      assert.strictEqual(
+        revalidation.headers['etag'],
+        etag,
+        '304 echoes the same ETag header',
+      );
+    });
+
+    test('QUERY /_federated-search returns 200 fresh when If-None-Match is from a previous jobId', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+      };
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let priorBatch = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .set('x-boxel-job-id', '42.1')
+        .set('x-boxel-consuming-realm', testRealm.url)
+        .send({ ...query, realms: [testRealm.url] });
+      let staleEtag = priorBatch.headers['etag'];
+      assert.ok(staleEtag, 'prior batch carries an ETag');
+
+      // New jobId — fresh entry. Caller mistakenly sends the old
+      // batch's ETag. Expected: ignored, 200 with a fresh ETag.
+      let nextBatch = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .set('x-boxel-job-id', '43.1')
+        .set('x-boxel-consuming-realm', testRealm.url)
+        .set('If-None-Match', staleEtag)
+        .send({ ...query, realms: [testRealm.url] });
+
+      assert.strictEqual(
+        nextBatch.status,
+        200,
+        'stale ETag does not match → fresh body',
+      );
+      assert.notStrictEqual(
+        nextBatch.headers['etag'],
+        staleEtag,
+        'fresh ETag for the new jobId',
+      );
+      assert.ok(nextBatch.body.data, 'body carries fresh search results');
+    });
+
+    test('QUERY /_federated-search ignores If-None-Match without job headers', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: { on: baseCardRef, eq: { cardTitle: 'Shared Card' } },
+      };
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      // Pretend to be a user-facing caller (no job headers) but try
+      // to slip in an `If-None-Match`. Expected: bypassed entirely.
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .set('If-None-Match', 'W/"anything-goes"')
+        .send({ ...query, realms: [testRealm.url] });
+
+      assert.strictEqual(
+        response.status,
+        200,
+        'user-facing caller is served fresh, never 304',
+      );
+      assert.notOk(
+        response.headers['etag'],
+        'no ETag emitted to non-indexer callers',
+      );
+      assert.ok(response.body.data, 'response carries the body');
+    });
+
     test('GET /_federated-search returns 400 for unsupported method', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },

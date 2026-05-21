@@ -1,6 +1,11 @@
 # Build output
 dist/
 
+# Vendored type sources for `boxel parse` outside the monorepo
+# (CS-11165). Populated by `pnpm build:types` from sibling packages
+# at release time. Committed-via-publish, never in git.
+bundled-types/
+
 # Cached shallow clone of cardstack/boxel-skills used by scripts/build-skills.ts
 .boxel-skills-cache/
 

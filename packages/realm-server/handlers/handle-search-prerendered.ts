@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   buildSearchErrorResponse,
+  ifNoneMatchMatches,
   SupportedMimeType,
   X_BOXEL_CONSUMING_REALM_HEADER,
   parsePrerenderedSearchRequestFromPayload,
@@ -56,11 +57,15 @@ export default function handleSearchPrerendered(opts?: {
       cardUrls: parsed.cardUrls,
       renderType: parsed.renderType,
     };
-    let runSearch = () =>
-      searchPrerenderedRealms(
-        realmList.map((realmURL) => realmByURL.get(realmURL)),
-        parsed.cardsQuery,
-        searchOpts,
+    let runSearch = async () =>
+      JSON.stringify(
+        await searchPrerenderedRealms(
+          realmList.map((realmURL) => realmByURL.get(realmURL)),
+          parsed.cardsQuery,
+          searchOpts,
+        ),
+        null,
+        2,
       );
 
     // Symmetric to `_federated-search`'s gating. Cache is consulted
@@ -92,19 +97,57 @@ export default function handleSearchPrerendered(opts?: {
       : null;
     let cacheable = searchCache && jobId && consumingRealm;
 
-    let combined = cacheable
-      ? await searchCache!.getOrPopulate({
+    if (cacheable) {
+      // Symmetric to `_federated-search`: emit a job-id-based ETag
+      // on every cacheable response and honor If-None-Match against
+      // the same expected value. Inner-key canonicalisation already
+      // segregates this endpoint's entries from `_federated-search`
+      // via the `htmlFormat` / `cardUrls` / `renderType` keys folded
+      // into `opts`, so the two endpoints' ETags cannot collide on
+      // a key they don't both fully share.
+      let expectedEtag = searchCache!.computeETag({
+        jobId: jobId!,
+        realms: realmList,
+        query: parsed.cardsQuery,
+        opts: searchOpts,
+      });
+      let ifNoneMatch = ctxt.get('If-None-Match');
+      if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
+        let cached = searchCache!.peek({
           jobId: jobId!,
           realms: realmList,
           query: parsed.cardsQuery,
           opts: searchOpts,
-          populate: runSearch,
-        })
-      : await runSearch();
+        });
+        if (cached !== undefined) {
+          ctxt.status = 304;
+          ctxt.set('ETag', expectedEtag);
+          return;
+        }
+      }
+      let body = await searchCache!.getOrPopulate({
+        jobId: jobId!,
+        realms: realmList,
+        query: parsed.cardsQuery,
+        opts: searchOpts,
+        populate: runSearch,
+      });
+      await setContextResponse(
+        ctxt,
+        new Response(body, {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            ETag: expectedEtag,
+          },
+        }),
+      );
+      return;
+    }
 
+    let body = await runSearch();
     await setContextResponse(
       ctxt,
-      new Response(JSON.stringify(combined, null, 2), {
+      new Response(body, {
         headers: { 'content-type': SupportedMimeType.CardJson },
       }),
     );

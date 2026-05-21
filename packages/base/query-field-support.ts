@@ -91,7 +91,18 @@ export function ensureQueryFieldSearchResource(
   }
   let searchResource = fieldState.searchResource;
   if (searchResource) {
-    trackQueryFieldLoads(store, field.name, fieldState);
+    // Intentionally do NOT call `trackQueryFieldLoads` here. The barrier
+    // it registers exists to plug a one-shot timing race at resource
+    // creation, between the field getter returning and the resource's
+    // `modify` lifecycle running `store.trackLoad` for the real search.
+    // On the reuse path that race no longer applies — the resource
+    // already exists and its own `modify`-driven trackLoad is the
+    // authoritative signal for render-stability. Re-arming the barrier
+    // on every read creates a feedback loop: the barrier registers a
+    // tracked load, its resolution invalidates the read-tracker that
+    // drove the read, Glimmer reads again, a fresh barrier registers,
+    // and so on. With N query-field consumers in a single render the
+    // loop saturates the JS thread for minutes per card.
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );

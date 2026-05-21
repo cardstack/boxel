@@ -25,6 +25,7 @@ import {
   setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: (() => void) | undefined;
@@ -208,6 +209,27 @@ async function writeRemoteFile(
   await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
 }
 
+async function writeRemoteBytes(
+  realm: string,
+  relPath: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  let previousMtime = (await fetchRemoteMtimes(realm))[
+    buildFileUrl(realm, relPath)
+  ];
+  let response = await remoteMutation(realm, relPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: bytes,
+  });
+  if (!response.ok) {
+    throw new Error(
+      `writeRemoteBytes ${relPath} failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
+}
+
 async function deleteRemoteFile(realm: string, relPath: string): Promise<void> {
   let response = await remoteMutation(realm, relPath, {
     method: 'DELETE',
@@ -278,25 +300,30 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
+    try {
+      await watcher.initialize();
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    expect(watcher.pendingCount).toBeGreaterThanOrEqual(1);
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      expect(watcher.pendingCount).toBeGreaterThanOrEqual(1);
 
-    let result = await watcher.flushPending();
-    expect(result.pulled).toContain(watchFixture('first-poll'));
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('first-poll')), 'utf8'),
-    ).toContain('a = 1');
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain(watchFixture('first-poll'));
+      expect(
+        fs.readFileSync(
+          path.join(localDir, watchFixture('first-poll')),
+          'utf8',
+        ),
+      ).toContain('a = 1');
 
-    expect(result.checkpoint).not.toBeNull();
-    expect(result.checkpoint!.source).toBe('remote');
+      expect(result.checkpoint).not.toBeNull();
+      expect(result.checkpoint!.source).toBe('remote');
 
-    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
-    expect(checkpoints.length).toBe(1);
-
-    watcher.shutdown();
+      let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+      expect(checkpoints.length).toBe(1);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('detects remote modifications across ticks and pulls them', async () => {
@@ -311,35 +338,37 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
 
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
-    ).toContain('v = 1');
+      expect(
+        fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+      ).toContain('v = 1');
 
-    // Realm mtimes are second-precision — wait so the next write bumps it.
-    await sleep(1100);
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('mod'),
-      'export const v = 2;\n',
-    );
+      // Realm mtimes are second-precision — wait so the next write bumps it.
+      await sleep(1100);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('mod'),
+        'export const v = 2;\n',
+      );
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    let result = await watcher.flushPending();
-    expect(result.pulled).toContain(watchFixture('mod'));
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
-    ).toContain('v = 2');
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain(watchFixture('mod'));
+      expect(
+        fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+      ).toContain('v = 2');
 
-    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
-    // One per applied poll.
-    expect(checkpoints.length).toBe(2);
-
-    watcher.shutdown();
+      let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+      // One per applied poll.
+      expect(checkpoints.length).toBe(2);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('detects remote deletions and removes the local copy', async () => {
@@ -354,24 +383,26 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
-      true,
-    );
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
+      expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+        true,
+      );
 
-    await deleteRemoteFile(realmUrl, watchFixture('doomed'));
+      await deleteRemoteFile(realmUrl, watchFixture('doomed'));
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    let result = await watcher.flushPending();
-    expect(result.deleted).toContain(watchFixture('doomed'));
-    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
-      false,
-    );
-
-    watcher.shutdown();
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      let result = await watcher.flushPending();
+      expect(result.deleted).toContain(watchFixture('doomed'));
+      expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+        false,
+      );
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('groups bursts of remote changes into a single debounced flush', async () => {
@@ -382,57 +413,59 @@ describe('realm watch (integration)', () => {
       debounceMs,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
 
-    let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
-    let resolveFlush!: () => void;
-    let flushTimeout: ReturnType<typeof setTimeout>;
-    let flushSettled = new Promise<void>((resolve, reject) => {
-      flushTimeout = setTimeout(() => {
-        reject(
-          new Error(
-            `debounced flush did not settle within ${debounceMs + 1_000}ms during "${currentTestName()}"`,
-          ),
-        );
-      }, debounceMs + 1_000);
-      resolveFlush = () => {
-        clearTimeout(flushTimeout);
-        resolve();
+      let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
+      let resolveFlush!: () => void;
+      let flushTimeout: ReturnType<typeof setTimeout>;
+      let flushSettled = new Promise<void>((resolve, reject) => {
+        flushTimeout = setTimeout(() => {
+          reject(
+            new Error(
+              `debounced flush did not settle within ${debounceMs + 1_000}ms during "${currentTestName()}"`,
+            ),
+          );
+        }, debounceMs + 1_000);
+        resolveFlush = () => {
+          clearTimeout(flushTimeout);
+          resolve();
+        };
+      });
+      let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
+        flushes.push(result);
+        resolveFlush();
       };
-    });
-    let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
-      flushes.push(result);
-      resolveFlush();
-    };
 
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('burst-a'),
-      'export const a = 1;\n',
-    );
-    await watcher.poll();
-    watcher.scheduleFlush(onFlush);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('burst-a'),
+        'export const a = 1;\n',
+      );
+      await watcher.poll();
+      watcher.scheduleFlush(onFlush);
 
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('burst-b'),
-      'export const b = 2;\n',
-    );
-    await watcher.poll();
-    watcher.scheduleFlush(onFlush);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('burst-b'),
+        'export const b = 2;\n',
+      );
+      await watcher.poll();
+      watcher.scheduleFlush(onFlush);
 
-    await flushSettled;
-    await sleep(60);
+      await flushSettled;
+      await sleep(60);
 
-    expect(flushes.length).toBe(1);
-    expect(flushes[0].pulled.sort()).toEqual([
-      watchFixture('burst-a'),
-      watchFixture('burst-b'),
-    ]);
-
-    watcher.shutdown();
+      expect(flushes.length).toBe(1);
+      expect(flushes[0].pulled.sort()).toEqual([
+        watchFixture('burst-a'),
+        watchFixture('burst-b'),
+      ]);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('runs the watchRealms loop end-to-end and stops on AbortSignal', async () => {
@@ -467,6 +500,27 @@ describe('realm watch (integration)', () => {
     let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
     expect(checkpoints.length).toBeGreaterThanOrEqual(1);
     expect(checkpoints[0].source).toBe('remote');
+  });
+
+  it('pulls a remote PNG byte-identically (CS-11075)', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteBytes(realmUrl, 'image.png', TINY_PNG_BYTES);
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain('image.png');
+
+      let pulled = fs.readFileSync(path.join(localDir, 'image.png'));
+      expect(pulled.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('returns an error when the realm URL is unreachable', async () => {
@@ -517,26 +571,28 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
-      true,
-    );
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
+      expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+        true,
+      );
 
-    // Force the next poll to fail (simulating a transient fetch error). The
-    // file must remain on disk and `lastKnownMtimes` must be untouched, so a
-    // subsequent successful poll observes no change.
-    (watcher as any).getRemoteMtimes = async () => {
-      throw new Error('simulated network failure');
-    };
-    await expect(watcher.poll()).rejects.toThrow('simulated network failure');
-    expect(watcher.pendingCount).toBe(0);
-    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
-      true,
-    );
-
-    watcher.shutdown();
+      // Force the next poll to fail (simulating a transient fetch error). The
+      // file must remain on disk and `lastKnownMtimes` must be untouched, so a
+      // subsequent successful poll observes no change.
+      (watcher as any).getRemoteMtimes = async () => {
+        throw new Error('simulated network failure');
+      };
+      await expect(watcher.poll()).rejects.toThrow('simulated network failure');
+      expect(watcher.pendingCount).toBe(0);
+      expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+        true,
+      );
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('blocks a second concurrent watch against the same localDir', async () => {
@@ -617,10 +673,13 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await primer.initialize();
-    await primer.poll();
-    await primer.flushPending();
-    primer.shutdown();
+    try {
+      await primer.initialize();
+      await primer.poll();
+      await primer.flushPending();
+    } finally {
+      primer.shutdown();
+    }
 
     let baseline = await new CheckpointManager(localDir).getCheckpoints();
     expect(baseline.length).toBe(1);
@@ -752,30 +811,32 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
 
-    await sleep(1100);
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('flip'),
-      'export const x = 2;\n',
-    );
-    await watcher.poll();
-    expect(watcher.pendingCount).toBe(1);
+      await sleep(1100);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('flip'),
+        'export const x = 2;\n',
+      );
+      await watcher.poll();
+      expect(watcher.pendingCount).toBe(1);
 
-    await deleteRemoteFile(realmUrl, watchFixture('flip'));
-    await watcher.poll();
+      await deleteRemoteFile(realmUrl, watchFixture('flip'));
+      await watcher.poll();
 
-    let result = await watcher.flushPending();
-    expect(result.deleted).toContain(watchFixture('flip'));
-    expect(result.pulled).not.toContain(watchFixture('flip'));
-    expect(fs.existsSync(path.join(localDir, watchFixture('flip')))).toBe(
-      false,
-    );
-
-    watcher.shutdown();
+      let result = await watcher.flushPending();
+      expect(result.deleted).toContain(watchFixture('flip'));
+      expect(result.pulled).not.toContain(watchFixture('flip'));
+      expect(fs.existsSync(path.join(localDir, watchFixture('flip')))).toBe(
+        false,
+      );
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   // CS-11062: watch must protect locally-edited files from being silently

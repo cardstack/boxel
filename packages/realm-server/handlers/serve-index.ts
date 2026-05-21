@@ -7,6 +7,7 @@ import {
   logger,
   param,
   query,
+  RealmPaths,
   sanitizeHeadHTMLToString,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -19,6 +20,7 @@ import {
 } from '../lib/index-html-injection';
 import { retrieveScopedCSS } from '../lib/retrieve-scoped-css';
 import {
+  findOrMountRealm,
   getPublishedRealmInfo,
   hasPublicPermissions,
   isIndexedCardInstance,
@@ -96,7 +98,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     let work = (async () => {
       let indexHTML = (await getIndexHTML()).replace(
-        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
+        // Closing matches both HTML5-style `">` and Vite's XHTML-style `" />`
+        // so the rewrite runs against both production build and Vite dev HTML.
+        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*?)("\s*\/?>)/,
         (_match, g1, g2, g3) => {
           let config = JSON.parse(decodeURIComponent(g2));
 
@@ -320,7 +324,15 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         return;
       }
     }
-    let publicPermissions = await hasPublicPermissions(cardURL, routingDeps);
+    // Resolve the realm once and reuse for both the permissions check and
+    // the routing-map lookup below. `findOrMountRealm` can fall back to a
+    // DB probe when the in-memory registry is cold, so we don't want to
+    // pay that cost twice on the hot HTML path.
+    let routedRealm = await findOrMountRealm(requestURL, routingDeps);
+    let publicPermissions = await hasPublicPermissions(
+      routedRealm,
+      routingDeps,
+    );
 
     if (!publicPermissions) {
       ctxt.body = injectHeadHTML(
@@ -328,6 +340,27 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         `<title>Boxel</title>\n${defaultIconLinks().join('\n')}`,
       );
       return;
+    }
+
+    // CS-10055: host routing rules in the realm config can map a bare path
+    // (e.g. /whitepaper) to a target card. When the requested path matches
+    // a rule, rewrite cardURL so the head/isolated/scoped CSS fetched
+    // below render the routed target. The same map is also written into
+    // the @cardstack/host/config/environment meta tag further down so the
+    // SPA can resolve the path post-hydration.
+    let routingMap: { path: string; id: string }[] = [];
+    if (routedRealm) {
+      routingMap = await routedRealm.getHostRoutingMap();
+      if (routingMap.length > 0) {
+        let realmURL = new URL(routedRealm.url);
+        realmURL.protocol = requestURL.protocol;
+        let realmPaths = new RealmPaths(realmURL);
+        let pathInRealm = '/' + realmPaths.local(requestURL);
+        let rule = routingMap.find((r) => r.path === pathInRealm);
+        if (rule) {
+          cardURL = new URL(rule.id);
+        }
+      }
     }
 
     headLog.debug(`Fetching head HTML for ${cardURL.href}`);
@@ -421,6 +454,35 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
 
     if (headFragments.length > 0) {
       responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
+    }
+
+    if (routingMap.length > 0 && routedRealm) {
+      // Rules are stored realm-relative ('/whitepaper'). The client sees URL
+      // paths that include the realm's mount segment ('/routing/whitepaper'
+      // when the realm is mounted at '/routing/' on the published host). For
+      // the SPA's path lookup to be a direct equality match, prefix each
+      // rule path with the realm's pathname before serializing.
+      let realmPathname = new URL(routedRealm.url).pathname;
+      let hostScopedMap = routingMap.map((rule) => ({
+        path: realmPathname + rule.path.replace(/^\//, ''),
+        id: rule.id,
+      }));
+      // Per-request merge into the already-rewritten config meta tag.
+      // The retrieveIndexHTML rewrite is cached process-wide because the
+      // fields it touches are global; the routing map is per-realm so it
+      // can't share that cache. This second regex pass parses the URL-
+      // encoded JSON, sets hostRoutingMap, and re-encodes — keeping the
+      // routing data on the same typed channel the host already reads
+      // for hostsOwnAssets / realmServerURL / matrixURL etc., rather
+      // than via a separate `window.__hostRoutingMap` global.
+      responseHTML = responseHTML.replace(
+        /(<meta name="@cardstack\/host\/config\/environment" content=")([^"]+)("\s*\/?>)/,
+        (_match, g1, g2, g3) => {
+          let cfg = JSON.parse(decodeURIComponent(g2));
+          cfg.hostRoutingMap = hostScopedMap;
+          return `${g1}${encodeURIComponent(JSON.stringify(cfg))}${g3}`;
+        },
+      );
     }
 
     if (isolatedHTML != null) {

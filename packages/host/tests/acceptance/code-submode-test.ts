@@ -1983,7 +1983,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
-          cardId: `${testRealmURL}Person/with-friends`,
+          cardId: rri(`${testRealmURL}Person/with-friends`),
           format: 'isolated',
         },
       });
@@ -2320,7 +2320,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
-      await waitUntil(() => getMonacoContent().includes('Fadhlan'));
+      await waitUntil(() => getMonacoContent().includes('Fadhlan'), {
+        timeout: 5_000,
+      });
 
       await realm.write(
         'Person/fadhlan.json',
@@ -2340,7 +2342,48 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
+      // The realm-write → matrix-broadcast → message-service → file-resource
+      // refetch → monaco rerender chain crosses a setTimeout(0) hop in
+      // mock-matrix's addRoomEvent, so realm.write resolves before the event
+      // is even dispatched. Default waitUntil timeout (1s) is too tight for
+      // this chain under CI load — matches sibling 'card preview live updates
+      // when there is a change in module' which already uses 5s for the same
+      // reason. On timeout we dump enough state to tell next time whether the
+      // failure was monaco-side render lag, file-resource refetch never firing,
+      // or the source file itself never updating.
+      try {
+        await waitUntil(() => getMonacoContent().includes('FadhlanXXX'), {
+          timeout: 5_000,
+        });
+      } catch (err) {
+        let monacoContent = getMonacoContent();
+        let sourceProbe: string;
+        let sourceOk: boolean;
+        try {
+          let network = getService('network');
+          let res = await network.authedFetch(
+            `${testRealmURL}Person/fadhlan.json`,
+            { headers: { Accept: 'application/vnd.card+source' } },
+          );
+          let body = await res.text();
+          sourceOk = res.ok;
+          sourceProbe = sourceOk
+            ? body
+            : `<source-probe non-ok: ${res.status} ${res.statusText} body=${JSON.stringify(body)}>`;
+        } catch (e: any) {
+          sourceOk = false;
+          sourceProbe = `<source-probe error: ${e?.message ?? e}>`;
+        }
+        console.warn(
+          '[monaco-live-updates flake-probe] waitUntil timed out. ' +
+            `monaco includes "FadhlanXXX"=${monacoContent.includes('FadhlanXXX')}; ` +
+            `source fetch ok=${sourceOk}; ` +
+            `source on disk includes "FadhlanXXX"=${sourceOk && sourceProbe.includes('FadhlanXXX')}. ` +
+            `monaco snapshot: ${JSON.stringify(monacoContent)}. ` +
+            `source snapshot: ${JSON.stringify(sourceProbe)}.`,
+        );
+        throw err;
+      }
       assert.true(
         getMonacoContent().includes('FadhlanXXX'),
         'monaco editor updated from index event',
