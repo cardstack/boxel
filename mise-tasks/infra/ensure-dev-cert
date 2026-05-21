@@ -175,11 +175,23 @@ echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
 # regenerate when an older shape is detected.
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
-    if openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null \
-      | grep -q 'DNS:\*\.boxel-dev\.localhost'; then
+    # Validate the SAN set against the current recipe — checking just
+    # the wildcard isn't enough, because a cert with `*.boxel-dev
+    # .localhost` but missing `user.localhost` (the explicit
+    # source-realm SAN) or `published.realm` would silently pass and
+    # then fail at runtime against URLs we expect to cover.
+    CERT_TEXT=$(openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null || true)
+    cert_has_san() {
+      printf '%s\n' "$CERT_TEXT" | grep -q -- "$1"
+    }
+    if cert_has_san 'DNS:localhost' \
+      && cert_has_san 'DNS:user\.localhost' \
+      && cert_has_san 'DNS:\*\.boxel-dev\.localhost' \
+      && cert_has_san 'DNS:published\.realm' \
+      && cert_has_san 'IP Address:127\.0\.0\.1'; then
       exit 0
     fi
-    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.boxel-dev.localhost SAN; regenerating."
+    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing one or more required SANs; regenerating."
   else
     echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
   fi
