@@ -6,6 +6,7 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { describeFetchError } from '../../lib/describe-fetch-error';
 
 export interface UnpublishOptions {
   /**
@@ -67,9 +68,7 @@ export async function unpublishRealm(
     return {
       publishedRealmURL: normalized,
       unpublished: false,
-      error: `Failed to reach realm server: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      error: `Failed to reach realm server: ${describeFetchError(err)}`,
     };
   }
 
