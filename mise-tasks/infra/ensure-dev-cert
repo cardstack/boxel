@@ -157,19 +157,29 @@ fi
 echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
 
 # Idempotent skip when the leaf cert already exists, isn't within 7
-# days of expiry, AND covers the subdomains the matrix harness's
-# publish-realm fixtures use (`*.localhost` for tenant subdomains and
-# `published.realm` for the host-resolver-mapped custom domain).
-# Older certs were issued for `localhost 127.0.0.1 ::1` only and silently
-# fail with `TypeError: fetch failed` against any subdomain even though
-# Node trusts the mkcert root CA.
+# days of expiry, AND covers the subdomains the dev + matrix-harness
+# publish-realm flows use.
+#
+# SAN layout note: published-realm tenant subdomains use a 3-label
+# wildcard (`*.boxel-dev.localhost`). RFC 6125 §7.2 — which Node's
+# tls.checkServerIdentity and every mainstream browser enforce —
+# refuses 2-label wildcards (e.g. `*.localhost`), so a single-label
+# `.localhost` SAN cannot wildcard-cover dev tenant subdomains. The
+# second label `boxel-dev` exists purely as the RFC-required filler
+# and reads as obviously-local-only in browser tabs. Source realms
+# in the dev stack (`user.localhost`) are covered as an explicit
+# SAN entry, no wildcard needed.
+#
+# Older certs were issued for `localhost 127.0.0.1 ::1` only, or with
+# the no-longer-effective `*.localhost`; the SAN check below forces a
+# regenerate when an older shape is detected.
 if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
     if openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null \
-      | grep -q 'DNS:\*\.localhost'; then
+      | grep -q 'DNS:\*\.boxel-dev\.localhost'; then
       exit 0
     fi
-    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.localhost SAN; regenerating."
+    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing *.boxel-dev.localhost SAN; regenerating."
   else
     echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
   fi
@@ -181,4 +191,4 @@ echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
 mkcert \
   -cert-file "$CERT_FILE" \
   -key-file "$KEY_FILE" \
-  localhost 127.0.0.1 ::1 "*.localhost" published.realm
+  localhost user.localhost 127.0.0.1 ::1 "*.boxel-dev.localhost" published.realm

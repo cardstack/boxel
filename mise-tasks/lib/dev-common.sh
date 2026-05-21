@@ -10,6 +10,22 @@ REPO_ROOT="$(cd "../.." && pwd)"
 # reliable regardless of how the binary was originally resolved by PATH.
 export PATH="${REPO_ROOT}/node_modules/.bin:${REPO_ROOT}/packages/realm-server/node_modules/.bin:./node_modules/.bin:$PATH"
 
+# Pin the published-realm domain for the local dev stack to a
+# 3-label form that browsers and Node accept as a wildcard SAN
+# (`*.boxel-dev.localhost`). RFC 6125 §7.2 refuses single-label
+# wildcards like `*.localhost`, so the dev cert can't usefully cover
+# `<tenant>.localhost` no matter what's in the SAN list.
+#
+# Setting these here (rather than in lib/env-vars.sh) deliberately
+# scopes the override to the dev tasks that source dev-common.sh —
+# the matrix-test harness spawns its own realm-server with its own
+# PUBLISHED_REALM_BOXEL_* values and relies on the `localhost:4201`
+# literal sentinel that handlers/serve-index.ts rewrites on the fly.
+# Bleeding `boxel-dev.localhost:4201` into that path would break the
+# rewrite. Per-shell overrides still win via the `:-` default.
+export PUBLISHED_REALM_BOXEL_SPACE_DOMAIN="${PUBLISHED_REALM_BOXEL_SPACE_DOMAIN:-boxel-dev.localhost:4201}"
+export PUBLISHED_REALM_BOXEL_SITE_DOMAIN="${PUBLISHED_REALM_BOXEL_SITE_DOMAIN:-boxel-dev.localhost:4201}"
+
 # How long to wait for SIGTERM'd processes to exit before escalating to
 # SIGKILL. The dev stack has slow propagators in it (pnpm, npm exec, vite,
 # start-server-and-test, run-p) that don't immediately forward SIGTERM to
