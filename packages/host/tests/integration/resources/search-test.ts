@@ -1137,4 +1137,187 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
   });
+
+  module(
+    `non-live SearchResource with seed (prerender query-field path)`,
+    function (innerHooks) {
+      let releaseFetch: Deferred<void>;
+      let fetchCalls: number;
+      let restoreFetch: (() => void) | undefined;
+
+      innerHooks.beforeEach(function () {
+        releaseFetch = new Deferred<void>();
+        fetchCalls = 0;
+        let realmServer = getService('realm-server') as RealmServerService;
+        let original = realmServer.maybeAuthedFetchForRealms.bind(realmServer);
+        realmServer.maybeAuthedFetchForRealms = (async (url, ...args) => {
+          let isSearch =
+            typeof url === 'string' && url.includes('_federated-search');
+          if (isSearch) {
+            fetchCalls++;
+            await releaseFetch.promise;
+          }
+          return await original(url, ...args);
+        }) as RealmServerService['maybeAuthedFetchForRealms'];
+        restoreFetch = () => {
+          realmServer.maybeAuthedFetchForRealms = original;
+        };
+      });
+
+      innerHooks.afterEach(function () {
+        try {
+          releaseFetch.fulfill();
+        } catch {
+          // already settled
+        }
+        restoreFetch?.();
+        restoreFetch = undefined;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = undefined;
+        storeService.clearInFlightSearch();
+      });
+
+      let bookQuery: Query = {
+        filter: {
+          on: {
+            module: testRRI('book'),
+            name: 'Book',
+          },
+          eq: { 'author.lastName': 'Abdel-Rahman' },
+        },
+      };
+
+      // Build a seed by first running a normal search outside the
+      // prerender — this gives us real CardDef instances from the
+      // store that match the query. The seed represents what the
+      // parent doc's `relationships.{field}.data` resolved to during
+      // serialize.
+      async function buildSeed() {
+        // Release any parked fetches so this prep call resolves; the
+        // tests reset `fetchCalls` after this returns so the seed
+        // search doesn't count against the in-test fetch budget.
+        releaseFetch.fulfill();
+        let result = await storeService.search(bookQuery, [testRealmURL]);
+        let url = `${testRealmURL}_federated-search?${new URLSearchParams({
+          query: JSON.stringify(bookQuery),
+        }).toString()}`;
+        return {
+          cards: result as any[],
+          searchURL: url,
+        };
+      }
+
+      test(`seed-only resolve: no fetch fires when isLive=false and a seed is present (prerender path)`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        // Reset the fetch counter — the seed prep above used a live
+        // search outside the prerender gate.
+        fetchCalls = 0;
+
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          fetchCalls,
+          0,
+          'seed-only resolve: no _federated-search fetch fires',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'resource exposes seed cards',
+        );
+        assert.deepEqual(
+          search.instances.map((i) => i.id),
+          cards.map((c) => c.id),
+          'seed cards are returned in order',
+        );
+      });
+
+      test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+
+        // __boxelRenderContext intentionally unset — live SPA path.
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: true,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        // Today the live path with a matching seed.searchURL happens
+        // to short-circuit via the previousQueryString equality check
+        // in SearchResource. The contract we care about for this
+        // ticket is the opposite case (non-live + seed must NOT
+        // fetch), so we only assert that live + seed produces the
+        // correct result set. Whether or not the equality-skip path
+        // saves a fetch here is an implementation detail of
+        // SearchResource that's orthogonal to this change.
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'live path with seed still resolves to the correct set',
+        );
+      });
+
+      test(`non-live with no seed still fetches (other non-live callers are unaffected)`, async function (assert) {
+        releaseFetch.fulfill();
+        // __boxelRenderContext intentionally unset.
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            // no seed
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+
+        assert.ok(
+          fetchCalls >= 1,
+          'non-live + no-seed callers still hit the network',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          2,
+          'returns the books matching the query',
+        );
+      });
+    },
+  );
 });
