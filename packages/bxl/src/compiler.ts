@@ -17,11 +17,6 @@ import {
   type BxlAttachment,
   type BxlProfile,
 } from './bxl/ast/index.js';
-import {
-  BxlPredicateSqlError,
-  compileBxlPredicateAstToSql,
-  compileBxlPredicateToSql,
-} from './bxl/sql/index.js';
 
 export {
   compileReadableSyntax,

@@ -281,7 +281,7 @@ function excelText(valueLike: unknown, formatTextLike: unknown) {
 
   const currencySymbol = formatTextLike.startsWith('$') ? '$' : '';
   const isPercent = formatTextLike.endsWith('%');
-  let formatText = formatTextLike.replace(/%/g, '').replace(/\$/g, '');
+  const formatText = formatTextLike.replace(/%/g, '').replace(/\$/g, '');
   const decimalPlaces = formatText.includes('.')
     ? (formatText.split('.')[1].match(/0/g) ?? []).length
     : 0;
@@ -2095,7 +2095,6 @@ const bareNativeFilters: Record<string, BareNativeFilter> = {
     const serial = Math.floor(parseExcelNumber(serialDate));
     const epoch = new Date(1899, 11, 30);
     const date = new Date(epoch.getTime() + serial * 86400000);
-    const jan4 = new Date(date.getFullYear(), 0, 4);
     const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 1).getTime()) / 86400000) + 1;
     const dow = date.getDay() || 7; // Mon=1..Sun=7
     const woy = Math.floor((dayOfYear - dow + 10) / 7);

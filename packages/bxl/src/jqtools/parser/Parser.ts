@@ -267,7 +267,7 @@ export class Parser {
     this.skipPunc(':');
     const body = this.parseExpression();
     this.skipPunc(';');
-    let out: DefAst = {
+    const out: DefAst = {
       type: 'def',
       name,
       args,

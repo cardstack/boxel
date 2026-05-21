@@ -17,7 +17,7 @@ export function setPath(input: any, path: Path, value: any) {
     path
   );
   const accessor = normalizedPath[0];
-  let clone =
+  const clone =
     input === undefined || input === null
       ? typeOf(accessor) === Type.string
         ? {}

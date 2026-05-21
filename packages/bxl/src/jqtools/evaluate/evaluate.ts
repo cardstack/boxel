@@ -535,7 +535,7 @@ class Environment {
       case 'num':
       case 'bool':
       case 'null':
-        for (const item of input) {
+        for (const _item of input) {
           checkRuntimeBudget();
           yield createItem(ast.value);
         }
@@ -669,7 +669,7 @@ class Environment {
         yield* this.evaluateForeach({ ...ast, type: 'foreach' }, input, true);
         break;
       case 'var':
-        for (const item of input) {
+        for (const _item of input) {
           checkRuntimeBudget();
           yield createItem(this.getVarValue(ast.name));
         }

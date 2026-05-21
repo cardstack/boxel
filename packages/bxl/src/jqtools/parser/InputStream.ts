@@ -17,7 +17,7 @@ export class InputStream {
   constructor(private input: string) {}
 
   next() {
-    let ch = this.input.charAt(this.state.pos++);
+    const ch = this.input.charAt(this.state.pos++);
     if (ch == '\n') {
       this.state.line++;
       this.state.col = 0;

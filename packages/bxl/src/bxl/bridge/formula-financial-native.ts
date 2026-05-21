@@ -34,7 +34,7 @@ import {
   excelXnpv,
 } from '../../formulajs/financial.js';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
-import { parseExcelNumber, parseExcelString } from '../../formulajs/common.js';
+import { parseExcelString } from '../../formulajs/common.js';
 import {
   BareNativeFilter,
   wrapBareNativeFilters,

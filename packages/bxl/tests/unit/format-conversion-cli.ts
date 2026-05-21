@@ -8,17 +8,11 @@
 //   - collapse handles multi-line user input (textarea paste)
 //   - Both functions are crash-safe on un-tokenizable input
 
-import { deepStrictEqual, strictEqual } from 'node:assert';
+import { strictEqual } from 'node:assert';
 import {
   collapseBxlExpression,
   expandBxlExpression,
-  jqToReadableBxlExpression,
 } from '../../src/index.js';
-import { bxlExampleSchema } from '../../examples/bxl-150-examples.js';
-
-function canonical(source: string): string {
-  return jqToReadableBxlExpression(source, { schema: bxlExampleSchema }).source;
-}
 
 // -- Inline cases (short enough to not wrap) -----------------------------
 

@@ -665,8 +665,8 @@ export function excelDisc(
   settlementLike: unknown, maturityLike: unknown,
   prLike: unknown, redemptionLike: unknown, basisLike: unknown = 0,
 ) {
-  const settlement = parseExcelDate(settlementLike);
-  const maturity = parseExcelDate(maturityLike);
+  const _settlement = parseExcelDate(settlementLike);
+  const _maturity = parseExcelDate(maturityLike);
   const pr = parseExcelNumber(prLike);
   const redemption = parseExcelNumber(redemptionLike);
   if (pr <= 0 || redemption <= 0) throwExcelError(EXCEL_ERROR.num);

@@ -427,7 +427,7 @@ function isRemovedStringWordOperator(value: string): boolean {
   const lower = value.toLowerCase();
   return (
     value !== lower &&
-    (lower === 'contains' || lower === 'startswith' || lower === 'endswith')
+    REMOVED_STRING_WORD_OPERATORS.has(value.toUpperCase())
   );
 }
 
@@ -3152,7 +3152,7 @@ function excelOperandExtent(
 
   // RHS: anchor at the token just after the op and walk right over
   //      dotted path + bracket suffixes.
-  let anchor = startIdx;
+  const anchor = startIdx;
   let endIdx = startIdx;
   if (first.type === 'punc' && (first.value === '(' || first.value === '[')) {
     endIdx = matchClose(tokens, anchor);

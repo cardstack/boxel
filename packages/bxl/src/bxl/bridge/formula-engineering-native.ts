@@ -51,7 +51,7 @@ import {
   excelOct2Hex,
 } from '../../formulajs/engineering.js';
 import { EXCEL_ERROR, throwExcelError } from '../../formulajs/errors.js';
-import { parseExcelNumber, parseExcelString } from '../../formulajs/common.js';
+import { parseExcelNumber } from '../../formulajs/common.js';
 import {
   BareNativeFilter,
   wrapBareNativeFilters,

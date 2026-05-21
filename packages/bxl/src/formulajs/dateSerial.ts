@@ -273,8 +273,12 @@ export function excelDays360(startLike: unknown, endLike: unknown, methodLike: u
   const end = parseExcelDate(endLike);
   const european = Boolean(methodLike);
 
-  let sd = start.getUTCDate(), sm = start.getUTCMonth() + 1, sy = start.getUTCFullYear();
-  let ed = end.getUTCDate(), em = end.getUTCMonth() + 1, ey = end.getUTCFullYear();
+  let sd = start.getUTCDate();
+  const sm = start.getUTCMonth() + 1;
+  const sy = start.getUTCFullYear();
+  let ed = end.getUTCDate();
+  const em = end.getUTCMonth() + 1;
+  const ey = end.getUTCFullYear();
 
   if (european) {
     if (sd === 31) sd = 30;

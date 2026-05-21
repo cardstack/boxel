@@ -320,7 +320,7 @@ export function deepMerge(a: any, b: any): any {
   if (typesMatch(a, b, Type.object, Type.object)) {
     const keys = new Set(Object.keys(a).concat(Object.keys(b)));
     const entries: [string, any][] = [];
-    for (let key of keys) {
+    for (const key of keys) {
       entries.push([key, deepMerge(a[key], b[key])]);
     }
     return Object.fromEntries(entries);

@@ -16,7 +16,6 @@ import {
   ItemIterator,
   relativizePath,
   repeatString,
-  someOfType,
   Type,
   typeOf,
   typesEqual,
@@ -42,10 +41,6 @@ function cannotApplyOperatorToError(op: BinaryOperator, left: any, right: any) {
 
 function cannotApplyOperator(op: BinaryOperator) {
   return new JqEvaluateError(`applyBinary: Cannot apply operator '${op}'`);
-}
-
-function divisionByZeroError() {
-  return new JqEvaluateError('Division by zero');
 }
 
 // Excel-style numeric coercion for arithmetic operators.

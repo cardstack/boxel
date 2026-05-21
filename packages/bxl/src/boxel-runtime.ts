@@ -265,8 +265,6 @@ export interface PreparedBoxelRuntimeAsync {
   createSession(initialInput: unknown): BoxelRuntimeAsyncSession;
 }
 
-type RuleKind = BoxelRuntimeRuleSummary['kind'];
-
 interface PreparedExpression {
   expression: string;
   deps: string[];
@@ -1507,7 +1505,7 @@ export function prepareBoxelRuntime(
   const runtime = prepareBoxelRuntimeInternals(definition, options);
 
   const evaluateInput = (input: unknown): BoxelRuntimeResult => {
-    let source = structuredClone(input);
+    const source = structuredClone(input);
     let state = structuredClone(input);
     const formulaOutputs = new Map<string, FormulaRuleOutput>();
     const constraintOutputs = new Map<string, ConstraintRuleOutput>();

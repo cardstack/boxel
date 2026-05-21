@@ -9,16 +9,13 @@ import type {
   FormatAst,
   IfAst,
   IndexAst,
-  IteratorAst,
   LabelAst,
   ObjectAst,
   ProgAst,
   ReduceAst,
-  SliceAst,
   StrAst,
   TryAst,
   UnaryAst,
-  VarAst,
   VarDeclarationAst,
 } from '../../jqtools/parser/AST.js';
 import {
