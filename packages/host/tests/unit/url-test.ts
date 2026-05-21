@@ -3,14 +3,17 @@ import { module, test } from 'qunit';
 import {
   type LooseCardResource,
   type RealmResourceIdentifier,
-  relativeURL,
+  maybeRelativeReference,
+  relativeReference,
+  ri,
+  rri,
   visitInstanceURLs,
 } from '@cardstack/runtime-common';
 
 module('Unit | url', function () {
-  module('relativeURL', function () {
+  module('relativeReference', function () {
     test('returns undefined for different origins', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://other.example.com/a'),
         new URL('https://example.com/a'),
         undefined,
@@ -21,7 +24,7 @@ module('Unit | url', function () {
 
     test('returns undefined when realm URL blocks escaping the realm', function (assert) {
       let realm = new URL('https://example.com/realm/');
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/outside/card'),
         new URL('https://example.com/realm/card'),
         realm,
@@ -31,7 +34,7 @@ module('Unit | url', function () {
     });
 
     test('returns absolute path when first path segment differs and relativeTo is nested', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/d/e'),
         new URL('https://example.com/a/b/c'),
         undefined,
@@ -41,7 +44,7 @@ module('Unit | url', function () {
     });
 
     test('creates relative path to upper-level sibling', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/d'),
         new URL('https://example.com/a/b'),
         undefined,
@@ -51,7 +54,7 @@ module('Unit | url', function () {
     });
 
     test('creates sibling-relative path', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b/other'),
         new URL('https://example.com/a/b/file'),
         undefined,
@@ -61,7 +64,7 @@ module('Unit | url', function () {
     });
 
     test('creates parent-relative path', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b/e'),
         new URL('https://example.com/a/b/c/d'),
         undefined,
@@ -71,7 +74,7 @@ module('Unit | url', function () {
     });
 
     test('returns ./file when URL matches relativeTo exactly', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b'),
         new URL('https://example.com/a/b'),
         undefined,
@@ -81,13 +84,85 @@ module('Unit | url', function () {
     });
 
     test('returns ./file when relativeTo is root', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/b'),
         new URL('https://example.com/'),
         undefined,
       );
 
       assert.strictEqual(result, './b');
+    });
+
+    test('creates sibling-relative path between two prefix-form RRIs in the same scope', function (assert) {
+      let result = relativeReference(
+        rri('@cardstack/base/foo'),
+        rri('@cardstack/base/bar'),
+        undefined,
+      );
+
+      assert.strictEqual(result, './foo');
+    });
+
+    test('returns undefined for prefix-form RRIs in different scopes', function (assert) {
+      let result = relativeReference(
+        rri('@cardstack/base/foo'),
+        rri('@cardstack/catalog/bar'),
+        undefined,
+      );
+
+      assert.strictEqual(result, undefined);
+    });
+
+    test('returns undefined for mixed URL + prefix-form RRI inputs', function (assert) {
+      let result = relativeReference(
+        rri('@cardstack/base/foo'),
+        new URL('https://my-realm.com/bar'),
+        undefined,
+      );
+
+      assert.strictEqual(result, undefined);
+    });
+
+    test('produces a relative path within a prefix-form realm', function (assert) {
+      let result = relativeReference(
+        rri('@cardstack/base/foo'),
+        rri('@cardstack/base/sub/bar'),
+        ri('@cardstack/base/'),
+      );
+
+      assert.strictEqual(result, '../foo');
+    });
+
+    test('returns undefined when a prefix-form realm blocks escaping', function (assert) {
+      let result = relativeReference(
+        rri('@cardstack/base/outside'),
+        rri('@cardstack/base/sub/inside'),
+        ri('@cardstack/base/sub/'),
+      );
+
+      assert.strictEqual(result, undefined);
+    });
+  });
+
+  module('maybeRelativeReference', function () {
+    test('falls back to absolute href for un-relativizable URL inputs', function (assert) {
+      let result = maybeRelativeReference(
+        new URL('https://a.com/foo'),
+        new URL('https://b.com/bar'),
+        undefined,
+      );
+
+      assert.strictEqual(result, 'https://a.com/foo');
+    });
+
+    test('falls back to the prefix-form RRI as-is for un-relativizable RRI inputs', function (assert) {
+      let result = maybeRelativeReference(
+        rri('@cardstack/base/foo'),
+        new URL('https://my-realm.com/bar'),
+        undefined,
+      );
+
+      assert.strictEqual(result, '@cardstack/base/foo');
     });
   });
 
