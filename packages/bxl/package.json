@@ -89,6 +89,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:smoke": "node scripts/run-ts-entry.mjs tests/smoke/bxl-smoke.ts",
     "test:boxel": "node scripts/run-tests.mjs tests/boxel",
+    "test:computed-equivalence": "node scripts/run-ts-entry.mjs scripts/verify-boxel-computed-equivalence.ts",
     "test:size": "node scripts/size-report.mjs --check",
     "realm": "node scripts/build-realm-bundle.mjs",
     "realm:local": "node scripts/build-realm-bundle.mjs --no-sync",

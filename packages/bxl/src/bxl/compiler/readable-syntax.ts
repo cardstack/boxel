@@ -70,6 +70,12 @@ interface FieldResolution {
   arrayItemScope?: ReadableSchema;
 }
 
+interface CompiledSchemaIndex {
+  exact: Map<string, Set<ReadableField>>;
+  normalized: Map<string, Set<ReadableField>>;
+  resolutions: Map<string, FieldResolution | undefined>;
+}
+
 export type ReadableArgumentSeparator = 'comma' | 'semicolon' | 'none';
 export type ReadableFunctionDialect = 'excel' | 'jq' | 'bxl-helper' | 'unknown';
 
@@ -735,6 +741,50 @@ function itemScope(field: ReadableField): ReadableSchema | undefined {
   return undefined;
 }
 
+const schemaIndexCache = new WeakMap<ReadableSchema, CompiledSchemaIndex>();
+
+function addIndexedField(
+  map: Map<string, Set<ReadableField>>,
+  key: string,
+  field: ReadableField,
+) {
+  let fields = map.get(key);
+  if (!fields) {
+    fields = new Set();
+    map.set(key, fields);
+  }
+  fields.add(field);
+}
+
+function schemaIndex(scope: ReadableSchema): CompiledSchemaIndex {
+  let cached = schemaIndexCache.get(scope);
+  if (cached) {
+    return cached;
+  }
+
+  cached = {
+    exact: new Map(),
+    normalized: new Map(),
+    resolutions: new Map(),
+  };
+
+  for (const field of scope.fields) {
+    const labels = [
+      field.displayName,
+      field.label,
+      field.key,
+    ].filter((entry): entry is string => Boolean(entry));
+
+    for (const label of labels) {
+      addIndexedField(cached.exact, label, field);
+      addIndexedField(cached.normalized, normalizeLabel(label), field);
+    }
+  }
+
+  schemaIndexCache.set(scope, cached);
+  return cached;
+}
+
 function resolveField(
   scope: ReadableSchema | undefined,
   label: string,
@@ -743,35 +793,38 @@ function resolveField(
     return undefined;
   }
 
-  const normalized = normalizeLabel(label);
-  const candidates = scope.fields.filter((field) => {
-    const labels = [
-      field.displayName,
-      field.label,
-      field.key,
-    ].filter((entry): entry is string => Boolean(entry));
+  const index = schemaIndex(scope);
+  if (index.resolutions.has(label)) {
+    return index.resolutions.get(label);
+  }
 
-    return labels.some(
-      (entry) => entry === label || normalizeLabel(entry) === normalized,
-    );
-  });
+  const candidates = new Set<ReadableField>();
+  for (const field of index.exact.get(label) ?? []) {
+    candidates.add(field);
+  }
+  for (const field of index.normalized.get(normalizeLabel(label)) ?? []) {
+    candidates.add(field);
+  }
 
-  if (candidates.length > 1) {
+  if (candidates.size > 1) {
     throw new ReadableSyntaxError(
       `Ambiguous readable label '${label}' in schema scope`,
     );
   }
 
-  const field = candidates[0];
+  const [field] = candidates;
   if (!field) {
+    index.resolutions.set(label, undefined);
     return undefined;
   }
 
-  return {
+  const resolution = {
     field,
     valueScope: childScope(field),
     arrayItemScope: itemScope(field),
   };
+  index.resolutions.set(label, resolution);
+  return resolution;
 }
 
 /**

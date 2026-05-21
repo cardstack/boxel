@@ -6,7 +6,7 @@ import type {
   ProgAst,
 } from '../../jqtools/parser/AST.js';
 import { InputStream } from '../../jqtools/parser/InputStream.js';
-import { parse } from '../../jqtools/parser/Parser.js';
+import { Parser } from '../../jqtools/parser/Parser.js';
 import { Tokenizer } from '../../jqtools/parser/Tokenizer.js';
 import type { Token } from '../../jqtools/parser/Tokenizer.js';
 import { evaluateWithRegistry } from '../../jqtools/evaluate/evaluate.js';
@@ -126,21 +126,30 @@ export function parseNativeJq(
   program: string,
   options: NativeDialectOptions = {},
 ): ParsedNativeProgram {
+  return parseNativeProgram(program, options, true);
+}
+
+function parseNativeProgram(
+  program: string,
+  options: NativeDialectOptions,
+  includeTokens: boolean,
+): ParsedNativeProgram {
   const compiled = compileProgram(program, options);
-  const tokens = tokenizeNativeJq(compiled.source, {
-    ...options,
-    readableSyntax: false,
-  });
+  const tokenizer = new Tokenizer(
+    new InputStream(compiled.source),
+    includeTokens,
+  );
   try {
+    const ast = new Parser(tokenizer).parse();
     return {
-      tokens,
-      ast: parse(compiled.source),
+      tokens: includeTokens ? tokenizer.consumedTokens() : [],
+      ast,
       source: program,
       compiledSource: compiled.source,
       readableWarnings: compiled.warnings,
     };
   } catch (error) {
-    throw wrapPhaseError('parse', error);
+    throw wrapPhaseError(tokenizer.lastErrorPhase, error);
   }
 }
 
@@ -185,10 +194,28 @@ export function runNativeJq(
   input: unknown,
   options: NativeDialectOptions = {},
 ): NativeDialectRun {
-  const parsed = parseNativeJq(program, options);
+  return runNativeProgram(program, input, options, true);
+}
+
+export function runNativeJqForRuntime(
+  program: string,
+  input: unknown,
+  options: NativeDialectOptions = {},
+): NativeDialectRun {
+  return runNativeProgram(program, input, options, false);
+}
+
+function runNativeProgram(
+  program: string,
+  input: unknown,
+  options: NativeDialectOptions,
+  includeTokens: boolean,
+): NativeDialectRun {
+  const parsed = parseNativeProgram(program, options, includeTokens);
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
+  annotateNativeProgramForRuntime(parsed.ast, registry);
 
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
@@ -204,6 +231,7 @@ export async function runNativeJqAsync(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
   const registry = resolveBuiltinRegistry(libraries);
+  annotateNativeProgramForRuntime(parsed.ast, registry);
 
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
@@ -579,14 +607,147 @@ function extractNativeJqDepsFromAst(ast: AstNode): string[] {
   return [...deps];
 }
 
+function annotateBuiltinFilters(
+  node: ExpressionAst | undefined,
+  registry: ResolvedBuiltinRegistry,
+  localDefs: Set<string>,
+) {
+  if (!node) return;
+
+  switch (node.type) {
+    case 'binary':
+      annotateBuiltinFilters(node.left, registry, localDefs);
+      annotateBuiltinFilters(node.right, registry, localDefs);
+      return;
+    case 'def': {
+      const nextDefs = new Set(localDefs);
+      nextDefs.add(node.name);
+      annotateBuiltinFilters(node.body, registry, nextDefs);
+      annotateBuiltinFilters(node.next, registry, nextDefs);
+      return;
+    }
+    case 'filter':
+      if (!localDefs.has(node.name)) {
+        const resolvedJq = registry.jq[node.name];
+        if (resolvedJq) {
+          node.resolvedJq = resolvedJq;
+        } else {
+          node.resolvedNative = registry.native[node.name];
+        }
+      }
+      for (const arg of node.args) {
+        annotateBuiltinFilters(arg, registry, localDefs);
+      }
+      return;
+    case 'if':
+      annotateBuiltinFilters(node.cond, registry, localDefs);
+      annotateBuiltinFilters(node.then, registry, localDefs);
+      for (const branch of node.elifs ?? []) {
+        annotateBuiltinFilters(branch.cond, registry, localDefs);
+        annotateBuiltinFilters(branch.then, registry, localDefs);
+      }
+      annotateBuiltinFilters(node.else, registry, localDefs);
+      return;
+    case 'try':
+      annotateBuiltinFilters(node.body, registry, localDefs);
+      annotateBuiltinFilters(node.catch, registry, localDefs);
+      return;
+    case 'reduce':
+    case 'foreach':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      annotateBuiltinFilters(node.init, registry, localDefs);
+      annotateBuiltinFilters(node.update, registry, localDefs);
+      if (node.type === 'foreach') {
+        annotateBuiltinFilters(node.extract, registry, localDefs);
+      }
+      return;
+    case 'varDeclaration':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      annotateBuiltinFilters(node.next, registry, localDefs);
+      return;
+    case 'label':
+      annotateBuiltinFilters(node.next, registry, localDefs);
+      return;
+    case 'unary':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      return;
+    case 'index':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      if (typeof node.index !== 'string') {
+        annotateBuiltinFilters(node.index, registry, localDefs);
+      }
+      return;
+    case 'slice':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      annotateBuiltinFilters(node.from, registry, localDefs);
+      annotateBuiltinFilters(node.to, registry, localDefs);
+      return;
+    case 'iterator':
+    case 'array':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      return;
+    case 'object':
+      for (const entry of node.entries) {
+        if (typeof entry.key !== 'string') {
+          annotateBuiltinFilters(entry.key, registry, localDefs);
+        }
+        if ('value' in entry) {
+          annotateBuiltinFilters(entry.value, registry, localDefs);
+        }
+      }
+      return;
+    case 'str':
+      if (node.interpolated) {
+        for (const part of node.parts) {
+          if (typeof part !== 'string') {
+            annotateBuiltinFilters(part, registry, localDefs);
+          }
+        }
+      }
+      return;
+    case 'format':
+    case 'identity':
+    case 'num':
+    case 'bool':
+    case 'null':
+    case 'var':
+    case 'break':
+    case 'recursiveDescent':
+      return;
+  }
+}
+
+function annotateNativeProgramForRuntime(
+  ast: AstNode,
+  registry: ResolvedBuiltinRegistry,
+) {
+  annotateBuiltinFilters(ast.expr, registry, new Set());
+}
+
 export function prepareNativeJq(
   program: string,
   options: NativeDialectOptions = {},
 ): PreparedNativeJq {
-  const parsed = parseNativeJq(program, options);
+  return prepareNativeProgram(program, options, true);
+}
+
+export function prepareNativeJqForRuntime(
+  program: string,
+  options: NativeDialectOptions = {},
+): PreparedNativeJq {
+  return prepareNativeProgram(program, options, false);
+}
+
+function prepareNativeProgram(
+  program: string,
+  options: NativeDialectOptions,
+  includeTokens: boolean,
+): PreparedNativeJq {
+  const parsed = parseNativeProgram(program, options, includeTokens);
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
+  annotateNativeProgramForRuntime(parsed.ast, registry);
   const deps = extractNativeJqDepsFromAst(parsed.ast);
 
   return {
@@ -613,6 +774,7 @@ export async function prepareNativeJqAsync(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
   const registry = resolveBuiltinRegistry(libraries);
+  annotateNativeProgramForRuntime(parsed.ast, registry);
   const deps = extractNativeJqDepsFromAst(parsed.ast);
 
   return {

@@ -50,6 +50,13 @@ export interface BxlAstOptions extends NativeDialectOptions {
   attachment?: BxlAttachment;
 }
 
+export interface NativeParsedForBxlAst {
+  ast: ProgAst;
+  source: string;
+  compiledSource: string;
+  readableWarnings: ReadableSyntaxWarning[];
+}
+
 export interface BxlAstProgram {
   type: 'program';
   source: string;
@@ -276,6 +283,13 @@ export function parseBxlAst(
   options: BxlAstOptions = {},
 ): BxlAstProgram {
   const parsed = parseNativeJq(source, options);
+  return bxlAstProgramFromNativeParsed(parsed, options);
+}
+
+export function bxlAstProgramFromNativeParsed(
+  parsed: NativeParsedForBxlAst,
+  options: BxlAstOptions = {},
+): BxlAstProgram {
   const program: BxlAstProgram = {
     type: 'program',
     source: parsed.source,

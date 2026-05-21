@@ -13,8 +13,11 @@ import {
   parseNativeJq,
   prepareNativeJqAsync,
   prepareNativeJq,
+  prepareNativeJqForRuntime,
   runNativeJq,
+  runNativeJqForRuntime,
   runNativeJqAsync,
+  type PreparedNativeJq,
   tokenizeNativeJq,
 } from './bxl/bridge/native.js';
 import type { NativeRuntimeLimits } from './jqtools/evaluate/runtimeState.js';
@@ -53,6 +56,7 @@ import {
 } from './bxl/registry/index.js';
 import {
   assertValidBxlProfile,
+  bxlAstProgramFromNativeParsed,
   parseBxlAst,
   validateBxlAst,
   visitBxlAst,
@@ -356,14 +360,21 @@ export function currentBxlComputeCycle(): number {
   return bxlComputeCycle;
 }
 
-function assertComputeViaDeriveProfile(source: string, options: BxlOptions) {
-  const program = parseBxlAst(source, {
+function assertComputeViaDeriveProfile(
+  source: string,
+  options: BxlOptions,
+  prepared?: PreparedNativeJq,
+) {
+  const astOptions = {
     attachment: 'formula',
     libraries: options.libraries,
     profile: 'derive',
     readableSyntax: options.readableSyntax,
     schema: options.schema,
-  });
+  } satisfies BxlAstOptions;
+  const program = prepared
+    ? bxlAstProgramFromNativeParsed(prepared, astOptions)
+    : parseBxlAst(source, astOptions);
   const issues = program.profileIssues.filter(
     (issue) => issue.severity === 'error',
   );
@@ -470,7 +481,7 @@ export function evaluateBxl(
   input: unknown,
   options: BxlOptions = {},
 ): BxlEvaluation {
-  const run = runNativeJq(expression, input, {
+  const run = runNativeJqForRuntime(expression, input, {
     schema: options.schema,
     readableSyntax: options.readableSyntax,
     libraries: options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
@@ -531,13 +542,20 @@ export function prepareBxl(
   expression: string,
   options: BxlOptions = {},
 ): PreparedBxl {
-  const prepared = prepareNativeJq(expression, {
+  const prepared = prepareNativeJqForRuntime(expression, {
     schema: options.schema,
     readableSyntax: options.readableSyntax,
     libraries: options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
     runtimeLimits: options.runtimeLimits,
   });
 
+  return preparedBxlFromNative(prepared, options);
+}
+
+function preparedBxlFromNative(
+  prepared: PreparedNativeJq,
+  options: BxlOptions,
+): PreparedBxl {
   return {
     source: prepared.source,
     compiledSource: prepared.compiledSource,
@@ -826,8 +844,14 @@ export function bxl(
     ...options,
     readableSyntax: options.readableSyntax ?? defaultReadable,
   };
-  assertComputeViaDeriveProfile(source, merged);
-  const prepared = prepareBxl(source, merged);
+  const preparedNative = prepareNativeJqForRuntime(source, {
+    schema: merged.schema,
+    readableSyntax: merged.readableSyntax,
+    libraries: merged.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
+    runtimeLimits: merged.runtimeLimits,
+  });
+  assertComputeViaDeriveProfile(source, merged, preparedNative);
+  const prepared = preparedBxlFromNative(preparedNative, merged);
   const ShapeClass = options.as;
   const memoize = normalizeMemoizationMode(merged.memoize);
   const memoCache =

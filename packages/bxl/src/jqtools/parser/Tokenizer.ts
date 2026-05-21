@@ -71,6 +71,8 @@ export type Token<Type extends TokenType = TokenType> = Extract<
 
 export class Tokenizer {
   private current: Token | null = null;
+  private consumed: Token[] = [];
+  lastErrorPhase: 'tokenize' | 'parse' = 'parse';
   private static tokenTypeToString = {
     punc: 'punctuation',
     op: 'operator',
@@ -149,12 +151,19 @@ export class Tokenizer {
 
   private interpolationContexts: number[] = [];
 
-  constructor(private input: InputStream) {}
+  constructor(
+    private input: InputStream,
+    private readonly recordConsumedTokens = false,
+  ) {}
 
   next() {
     const tok = this.current;
     this.current = null;
-    return tok || this.readNext();
+    const next = tok || this.readNext();
+    if (next && this.recordConsumedTokens) {
+      this.consumed.push(next);
+    }
+    return next;
   }
 
   peek() {
@@ -165,9 +174,14 @@ export class Tokenizer {
     return this.peek() === null;
   }
 
-  croak(msg: string) {
+  croak(msg: string, phase: 'tokenize' | 'parse' = 'parse') {
+    this.lastErrorPhase = phase;
     this.input.restore();
     return this.input.croak(msg);
+  }
+
+  consumedTokens(): Token[] {
+    return this.consumed.slice();
   }
 
   toArray(): Token[] {
@@ -213,7 +227,7 @@ export class Tokenizer {
       return this.readOp();
     }
 
-    throw this.croak(`Can't handle character: ${c}`);
+    throw this.croak(`Can't handle character: ${c}`, 'tokenize');
   }
 
   private readWhile(predicate: (c: string) => boolean) {
@@ -269,7 +283,10 @@ export class Tokenizer {
     let value = this.input.next();
     if (value == '\\') {
       if (this.input.peek() !== '(')
-        throw this.croak(`Can't handle character: ${this.input.peek()}`);
+        throw this.croak(
+          `Can't handle character: ${this.input.peek()}`,
+          'tokenize'
+        );
       value += this.input.next();
       this.interpolationContexts.push(1);
     } else {
@@ -368,7 +385,7 @@ export class Tokenizer {
   private getEscaped(c: string) {
     const key = c as keyof typeof Tokenizer.escapeCharacters;
     if (!Tokenizer.escapeCharacters[key])
-      throw this.croak(`Can't parse an escape character: ${c}`);
+      throw this.croak(`Can't parse an escape character: ${c}`, 'tokenize');
     return Tokenizer.escapeCharacters[key];
   }
 

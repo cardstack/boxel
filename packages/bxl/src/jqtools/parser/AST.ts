@@ -93,6 +93,9 @@ export interface FormatAst {
 export interface FilterAst {
   type: 'filter';
   name: string;
+  arity?: number;
+  resolvedNative?: unknown;
+  resolvedJq?: DefAst;
   args: ExpressionAst[];
 }
 

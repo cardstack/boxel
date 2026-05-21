@@ -22,6 +22,12 @@ def triple(x): x * 3;
     expected: 81,
   },
   {
+    name: 'local helper shadows builtin',
+    src: `def length: 42; .items | length`,
+    input: { items: ['a', 'b', 'c'] },
+    expected: 42,
+  },
+  {
     name: 'recursion — factorial',
     src: `def fact: if . <= 1 then 1 else . * (. - 1 | fact) end; .n | fact`,
     input: { n: 6 },

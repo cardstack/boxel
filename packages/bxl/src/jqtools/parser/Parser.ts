@@ -562,8 +562,9 @@ export class Parser {
     const args = this.isPunc('(')
       ? this.delimited('(', ')', ';', () => this.parseExpression())
       : [];
-    const name = Parser.getFilterName(nameIdent, args.length);
-    return { type: 'filter', name, args };
+    const arity = args.length;
+    const name = Parser.getFilterName(nameIdent, arity);
+    return { type: 'filter', name, arity, args };
   }
 
   parseFormat(): FormatAst | StrAst {

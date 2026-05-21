@@ -80,8 +80,17 @@ export const CORE_REGISTRY: Record<string, BuiltinLibrary> = {
   core: coreLibrary,
 };
 
+const coreRegistryCache = new Map<string, ResolvedBuiltinRegistry>();
+
 export function resolveCoreRegistry(
   libraries: string[] = ['core'],
 ): ResolvedBuiltinRegistry {
-  return resolveRegistry(CORE_REGISTRY, libraries);
+  const uniqueLibraries = [...new Set(libraries)];
+  const key = uniqueLibraries.join('\0');
+  let cached = coreRegistryCache.get(key);
+  if (!cached) {
+    cached = resolveRegistry(CORE_REGISTRY, uniqueLibraries);
+    coreRegistryCache.set(key, cached);
+  }
+  return cached;
 }

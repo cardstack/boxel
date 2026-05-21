@@ -44,10 +44,22 @@ export const DEFAULT_BUILTIN_LIBRARIES: BuiltinLibraryName[] = [
   'formula',
 ];
 
+const resolvedRegistryCache = new Map<string, ResolvedBuiltinRegistry>();
+
+function registryCacheKey(libraries: BuiltinLibraryName[]): string {
+  return [...new Set(libraries)].join('\0');
+}
+
 export function resolveBuiltinRegistry(
   libraries: BuiltinLibraryName[] = DEFAULT_BUILTIN_LIBRARIES,
 ): ResolvedBuiltinRegistry {
-  return resolveRegistry(BXL_REGISTRY, libraries);
+  const key = registryCacheKey(libraries);
+  let cached = resolvedRegistryCache.get(key);
+  if (!cached) {
+    cached = resolveRegistry(BXL_REGISTRY, [...new Set(libraries)]);
+    resolvedRegistryCache.set(key, cached);
+  }
+  return cached;
 }
 
 export function registerBuiltinLibrary(
@@ -55,6 +67,7 @@ export function registerBuiltinLibrary(
   library: BuiltinLibrary,
 ) {
   BXL_REGISTRY[name] = library;
+  resolvedRegistryCache.clear();
 }
 
 export type { ResolvedBuiltinRegistry, BuiltinLibrary };

@@ -289,27 +289,47 @@ class Environment {
       case 'filter':
         for (const item of input) {
           checkRuntimeBudget();
-          const arity = Parser.getFilterArity(ast.name);
-          const def: Var<DefAst | NativeFilter> = this.getVar(ast.name);
+          const arity = ast.arity ?? Parser.getFilterArity(ast.name);
+          const resolvedNative = ast.resolvedNative as NativeFilter | undefined;
 
-          if (isNativeFilter(def.value)) {
+          if (resolvedNative) {
             const argSets: any[][] = [];
+            const rootItem = createItem(item.value);
             for (let i = 0; i < arity; i++) {
               const argExprAst = ast.args[i];
               argSets.push(
-                Array.from(
-                  this.evaluate(argExprAst, single(createItem(item.value)))
-                )
+                Array.from(this.evaluate(argExprAst, single(rootItem)))
               );
             }
             for (const combination of generateCombinations(argSets)) {
               checkRuntimeBudget();
-              for (const nativeItem of def.value(item, ...combination)) {
+              for (const nativeItem of resolvedNative(item, ...combination)) {
                 checkRuntimeBudget();
                 yield nativeItem;
               }
             }
           } else {
+            const def: Var<DefAst | NativeFilter> = ast.resolvedJq
+              ? { scope: null, value: ast.resolvedJq }
+              : this.getVar(ast.name);
+            if (isNativeFilter(def.value)) {
+              const argSets: any[][] = [];
+              const rootItem = createItem(item.value);
+              for (let i = 0; i < arity; i++) {
+                const argExprAst = ast.args[i];
+                argSets.push(
+                  Array.from(this.evaluate(argExprAst, single(rootItem)))
+                );
+              }
+              for (const combination of generateCombinations(argSets)) {
+                checkRuntimeBudget();
+                for (const nativeItem of def.value(item, ...combination)) {
+                  checkRuntimeBudget();
+                  yield nativeItem;
+                }
+              }
+              continue;
+            }
             const argSets: ([ExpressionAst] | any[])[] = [];
             for (let i = 0; i < arity; i++) {
               const argDefAst = def.value.args[i];
