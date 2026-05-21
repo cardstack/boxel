@@ -8,11 +8,11 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import {
   type DragRect,
   type InsertionPoint,
+  type KanbanColumnConfig,
   type KanbanPlacement,
   cardsInColumn,
   findInsertionFromDragRect,
   findInsertionFromPointer,
-  KanbanColumnConfig,
   resolveInsertion,
 } from './engine.ts';
 

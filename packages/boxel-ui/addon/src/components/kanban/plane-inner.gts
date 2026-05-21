@@ -192,8 +192,8 @@ export class KanbanPlaneInner extends Component<{
   <template>
     <div
       class={{cn 'board' is-dragging=this.isDragging}}
-      role='region'
-      aria-label={{if @boardLabel @boardLabel 'Kanban board'}}
+      role={{if @boardLabel 'region'}}
+      aria-label={{@boardLabel}}
       {{CaptureElement this.captureRef}}
       {{BindPointerDown this.manager.onPointerDown}}
       {{on 'pointermove' this.manager.onPointerMove}}

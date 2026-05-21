@@ -33,11 +33,10 @@ import { KanbanBoardPlacement } from './kanban-board-placement';
 
 class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   @tracked isSidebarOpen = false;
-  @tracked revealedEmptyColumnKeys = new Set<string>();
 
   get columns(): KanbanColumnConfig[] {
     return (this.args.model.columns ?? []).map((col) => ({
-      key: col.key ?? null,
+      key: col.key ?? '',
       label: col.label ?? null,
       color: col.color ?? null,
       collapsed: col.collapsed ?? null,
@@ -52,11 +51,11 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
     return raw
       .map((p) => {
-        let colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
+        let col = this.columns.find((c) => c.key === p.columnKey);
         let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
-        if (colIdx === -1 || cardIdx === -1) return null;
+        if (!col || !col.key || cardIdx === -1) return null;
         return {
-          column: colIdx,
+          columnId: col.key,
           index: cardIdx,
           sortOrder: p.sortOrder ?? 0,
         } satisfies KanbanPlacement;
@@ -70,32 +69,11 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
   get columnCardCounts(): number[] {
     return this.columns.map(
-      (_, colIdx) =>
-        this.placements.filter((placement) => placement.column === colIdx)
-          .length,
+      (col) => this.placements.filter((p) => p.columnId === col.key).length,
     );
   }
 
-  get columnVisibilityStates(): Array<'collapsed' | 'empty' | 'visible'> {
-    return this.columns.map((column, colIdx) => {
-      if (column.collapsed) {
-        return 'collapsed';
-      }
-      if (column.key && this.revealedEmptyColumnKeys.has(column.key)) {
-        return 'visible';
-      }
-      if (
-        this.args.model.hideEmptyColumns &&
-        this.columnCardCounts[colIdx] === 0
-      ) {
-        return 'empty';
-      }
-      return 'visible';
-    });
-  }
-
   revealEmptyColumns = (): void => {
-    this.revealedEmptyColumnKeys = new Set();
     this.args.model.hideEmptyColumns = false;
     this.args.model.columns = this.columns.map((col, colIdx) =>
       Object.assign(new KanbanColumnField(), {
@@ -117,7 +95,7 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
     this.args.model.placements = newPlacements.map((p) =>
       Object.assign(new KanbanBoardPlacement(), {
         itemId: (cards[p.index] as any)?.id ?? '',
-        columnKey: this.columns[p.column]?.key ?? '',
+        columnKey: p.columnId,
         sortOrder: p.sortOrder,
       }),
     );
@@ -141,7 +119,6 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
       this.revealEmptyColumns();
       return;
     }
-    this.revealedEmptyColumnKeys = new Set();
     this.args.model.hideEmptyColumns = true;
   };
 
@@ -149,40 +126,25 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
 
-  handleToggleCollapsed = (
-    columnKey: string | null,
-    collapsed: boolean,
-  ): void => {
+  handleToggleCollapsed = (columnKey: string | null): void => {
     if (!columnKey) {
       return;
     }
 
-    if (collapsed) {
-      let nextKeys = new Set(this.revealedEmptyColumnKeys);
-      nextKeys.delete(columnKey);
-      this.revealedEmptyColumnKeys = nextKeys;
-    }
+    let current = this.columns.find((col) => col.key === columnKey);
+    let willCollapse = !current?.collapsed;
 
     this.args.model.columns = this.columns.map((col) =>
       Object.assign(new KanbanColumnField(), {
         key: col.key,
         label: col.label,
         color: col.color,
-        collapsed: col.key === columnKey ? collapsed : (col.collapsed ?? false),
+        collapsed:
+          col.key === columnKey ? willCollapse : (col.collapsed ?? false),
         sortOrder: col.sortOrder,
         wipLimit: col.wipLimit,
       }),
     );
-  };
-
-  handleShowEmptyColumns = (columnKey?: string | null): void => {
-    if (!columnKey) {
-      this.revealEmptyColumns();
-      return;
-    }
-    let nextKeys = new Set(this.revealedEmptyColumnKeys);
-    nextKeys.add(columnKey);
-    this.revealedEmptyColumnKeys = nextKeys;
   };
 
   closeSidebar = (): void => {
@@ -235,13 +197,12 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         <div class='kanban-area'>
           {{#if this.columns.length}}
             <KanbanPlane
+              @boardLabel={{@model.cardTitle}}
               @columns={{this.columns}}
               @placements={{this.placements}}
               @hideEmpty={{@model.hideEmptyColumns}}
               @onChange={{this.handleChange}}
               @onToggleCollapsed={{this.handleToggleCollapsed}}
-              @onShowEmptyColumns={{this.handleShowEmptyColumns}}
-              @visibilityStates={{this.columnVisibilityStates}}
             >
               <:card as |placement|>
                 {{#let (get @fields.cards placement.index) as |CardField|}}
@@ -277,14 +238,9 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
         {{#if this.isSidebarOpen}}
           <KanbanColumnConfigSidebar
-            @cardCounts={{this.columnCardCounts}}
             @columns={{this.columns}}
-            @hideEmpty={{@model.hideEmptyColumns}}
             @onColumnsChange={{this.handleColumnsChange}}
-            @onToggleCollapsed={{this.handleToggleCollapsed}}
             @onClose={{this.closeSidebar}}
-            @onShowEmptyColumns={{this.handleShowEmptyColumns}}
-            @visibilityStates={{this.columnVisibilityStates}}
           />
         {{/if}}
       </div>

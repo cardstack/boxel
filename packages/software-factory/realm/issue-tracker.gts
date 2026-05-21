@@ -1054,7 +1054,6 @@ export class Project extends CardDef {
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   @tracked isSidebarOpen = false;
-  @tracked revealedEmptyColumnKeys = new Set<string>();
 
   get columns(): KanbanColumnConfig[] {
     let stored = this.args.model.columns ?? [];
@@ -1064,7 +1063,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           getProjectIssueStatusOptions(this.args.model?.project),
         );
     return source.map((col) => ({
-      key: col.key ?? null,
+      key: col.key ?? '',
       label: col.label ?? null,
       color: col.color ?? null,
       collapsed: col.collapsed ?? null,
@@ -1086,32 +1085,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
   get columnCardCounts(): number[] {
     return this.columns.map(
-      (_, colIdx) =>
-        this.placements.filter((placement) => placement.column === colIdx)
-          .length,
+      (col) => this.placements.filter((p) => p.columnId === col.key).length,
     );
   }
 
-  get columnVisibilityStates(): Array<'collapsed' | 'empty' | 'visible'> {
-    return this.columns.map((column, colIdx) => {
-      if (column.collapsed) {
-        return 'collapsed';
-      }
-      if (column.key && this.revealedEmptyColumnKeys.has(column.key)) {
-        return 'visible';
-      }
-      if (
-        this.args.model.hideEmptyColumns &&
-        this.columnCardCounts[colIdx] === 0
-      ) {
-        return 'empty';
-      }
-      return 'visible';
-    });
-  }
-
   revealEmptyColumns = (): void => {
-    this.revealedEmptyColumnKeys = new Set();
     this.args.model.hideEmptyColumns = false;
     this.args.model.columns = this.columns.map((col, colIdx) =>
       Object.assign(new KanbanColumnField(), {
@@ -1133,44 +1111,28 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       this.revealEmptyColumns();
       return;
     }
-    this.revealedEmptyColumnKeys = new Set();
     this.args.model.hideEmptyColumns = true;
   };
 
-  handleToggleCollapsed = (
-    columnKey: string | null,
-    collapsed: boolean,
-  ): void => {
+  handleToggleCollapsed = (columnKey: string | null): void => {
     if (!columnKey) {
       return;
     }
 
-    if (collapsed) {
-      let nextKeys = new Set(this.revealedEmptyColumnKeys);
-      nextKeys.delete(columnKey);
-      this.revealedEmptyColumnKeys = nextKeys;
-    }
+    let current = this.columns.find((col) => col.key === columnKey);
+    let willCollapse = !current?.collapsed;
 
     this.args.model.columns = this.columns.map((col) =>
       Object.assign(new KanbanColumnField(), {
         key: col.key,
         label: col.label,
         color: col.color,
-        collapsed: col.key === columnKey ? collapsed : (col.collapsed ?? false),
+        collapsed:
+          col.key === columnKey ? willCollapse : (col.collapsed ?? false),
         sortOrder: col.sortOrder,
         wipLimit: col.wipLimit,
       }),
     );
-  };
-
-  handleShowEmptyColumns = (columnKey?: string | null): void => {
-    if (!columnKey) {
-      this.revealEmptyColumns();
-      return;
-    }
-    let nextKeys = new Set(this.revealedEmptyColumnKeys);
-    nextKeys.add(columnKey);
-    this.revealedEmptyColumnKeys = nextKeys;
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
@@ -1251,14 +1213,13 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   handleChange = (newPlacements: KanbanPlacement[]) => {
     let cards = this.args.model?.cards ?? [];
     this.args.model.placements = newPlacements.map((p) => {
-      let columnKey = this.columns[p.column]?.key ?? '';
       let card = cards[p.index] as any;
-      if (card && card.status !== columnKey) {
-        card.status = columnKey;
+      if (card && card.status !== p.columnId) {
+        card.status = p.columnId;
       }
       return Object.assign(new KanbanBoardPlacement(), {
         itemId: card?.id ?? '',
-        columnKey,
+        columnKey: p.columnId,
         sortOrder: p.sortOrder,
       });
     });
@@ -1275,12 +1236,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           if (cardIdx === -1) return null;
           let card = cards[cardIdx] as any;
           let effectiveKey = card?.status ?? p.columnKey;
-          let colIdx = this.columns.findIndex((c) => c.key === effectiveKey);
-          if (colIdx === -1)
-            colIdx = this.columns.findIndex((c) => c.key === p.columnKey);
-          if (colIdx === -1) return null;
+          let colKey =
+            this.columns.find((c) => c.key === effectiveKey)?.key ??
+            this.columns.find((c) => c.key === p.columnKey)?.key;
+          if (!colKey) return null;
           return {
-            column: colIdx,
+            columnId: colKey,
             index: cardIdx,
             sortOrder: p.sortOrder ?? 0,
           };
@@ -1294,9 +1255,11 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         .filter(({ card }) => !placedCardIds.has((card as any).id))
         .map(({ card, idx }, i) => {
           let status = (card as any).status ?? 'backlog';
-          let colIdx = this.columns.findIndex((c) => c.key === status);
+          let colKey =
+            this.columns.find((c) => c.key === status)?.key ??
+            this.columns[0]?.key;
           return {
-            column: colIdx === -1 ? 0 : colIdx,
+            columnId: colKey ?? '',
             index: idx,
             sortOrder: maxOrder + 1 + i,
           };
@@ -1305,9 +1268,10 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     }
     return cards.map((card, idx) => {
       let status = (card as any).status ?? 'backlog';
-      let colIdx = this.columns.findIndex((c) => c.key === status);
+      let colKey =
+        this.columns.find((c) => c.key === status)?.key ?? this.columns[0]?.key;
       return {
-        column: colIdx === -1 ? 0 : colIdx,
+        columnId: colKey ?? '',
         index: idx,
         sortOrder: idx,
       };
@@ -1378,6 +1342,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
       <div class='kanban-body'>
         <div class='kanban-area'>
           <KanbanPlane
+            @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
             @hideEmpty={{@model.hideEmptyColumns}}
@@ -1385,8 +1350,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @onOpen={{this.openCard}}
             @onAddCard={{this.addCardTask.perform}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
-            @onShowEmptyColumns={{this.handleShowEmptyColumns}}
-            @visibilityStates={{this.columnVisibilityStates}}
           >
             <:card as |placement|>
               {{#let (get @fields.cards placement.index) as |CardField|}}
@@ -1414,13 +1377,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
         <div class={{cn 'config-sidebar-wrap' is-open=this.isSidebarOpen}}>
           <KanbanColumnConfigSidebar
-            @cardCounts={{this.columnCardCounts}}
             @columns={{this.columns}}
-            @hideEmpty={{@model.hideEmptyColumns}}
             @onColumnsChange={{this.handleColumnsChange}}
-            @onShowEmptyColumns={{this.handleShowEmptyColumns}}
-            @onToggleCollapsed={{this.handleToggleCollapsed}}
-            @visibilityStates={{this.columnVisibilityStates}}
           />
         </div>
       </div>

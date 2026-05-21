@@ -257,6 +257,7 @@ export default class KanbanUsage extends Component {
 
           <div class='kanban-plane-demo'>
             <KanbanPlane
+              @boardLabel='Kanban plane demo'
               @columns={{this.columns}}
               @placements={{this.placements}}
               @onChange={{this.handlePlacementsChange}}
@@ -372,6 +373,7 @@ export default class KanbanUsage extends Component {
           </div>
           <div class='sidebar-demo-board'>
             <KanbanPlane
+              @boardLabel='Kanban sidebar demo'
               @columns={{this.columns}}
               @placements={{this.placements}}
               @onChange={{this.handlePlacementsChange}}

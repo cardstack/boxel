@@ -1,4 +1,3 @@
-// KanbanColumnConfigSidebar — Inline config panel for kanban column settings.
 import ChevronDown from '@cardstack/boxel-icons/chevron-down';
 import ChevronUp from '@cardstack/boxel-icons/chevron-up';
 import Eye from '@cardstack/boxel-icons/eye';
@@ -18,40 +17,64 @@ interface Signature {
   Args: {
     columns: KanbanColumnConfig[];
     onClose?: () => void;
-    onToggleCollapsed?: (key: string | null, collapsed: boolean) => void;
+    onColumnsChange?: (columns: KanbanColumnConfig[]) => void;
   };
   Element: HTMLElement;
 }
 
 export class KanbanColumnConfigSidebar extends Component<Signature> {
-  @action moveUp(column: KanbanColumnConfig, index: number): void {
-    let order = column.sortOrder ?? index;
-    if (order === 0) return;
-    set(column, 'sortOrder', order - 1);
+  private emitReorderedColumns(columns: KanbanColumnConfig[]): void {
+    let normalized = columns.map((column, index) => ({
+      ...column,
+      sortOrder: index,
+    }));
+    this.args.onColumnsChange?.(normalized);
   }
 
-  @action moveDown(column: KanbanColumnConfig, index: number): void {
-    let order = column.sortOrder ?? index;
-    if (order >= this.args.columns.length - 1) return;
-    set(column, 'sortOrder', order + 1);
+  @action moveUp(index: number): void {
+    if (index === 0) return;
+
+    let reordered = [...this.args.columns];
+    [reordered[index - 1], reordered[index]] = [
+      reordered[index]!,
+      reordered[index - 1]!,
+    ];
+
+    this.emitReorderedColumns(reordered);
   }
 
-  @action onColorChange(column: KanbanColumnConfig, val: string): void {
-    set(column, 'color', val);
+  @action moveDown(index: number): void {
+    if (index >= this.args.columns.length - 1) return;
+
+    let reordered = [...this.args.columns];
+    [reordered[index], reordered[index + 1]] = [
+      reordered[index + 1]!,
+      reordered[index]!,
+    ];
+
+    this.emitReorderedColumns(reordered);
+  }
+
+  @action onColorChange(column: KanbanColumnConfig, event: Event): void {
+    set(column, 'color', (event.target as HTMLInputElement).value);
+    this.args.onColumnsChange?.(this.args.columns);
   }
 
   @action onLabelInput(column: KanbanColumnConfig, val: string): void {
     set(column, 'label', val);
+    this.args.onColumnsChange?.(this.args.columns);
   }
 
   @action onWipInput(column: KanbanColumnConfig, val: string): void {
     let raw = parseInt(val, 10);
     let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
     set(column, 'wipLimit', wipLimit);
+    this.args.onColumnsChange?.(this.args.columns);
   }
 
   @action toggleVisible(column: KanbanColumnConfig): void {
     set(column, 'collapsed', !this.isVisible(column));
+    this.args.onColumnsChange?.(this.args.columns);
   }
 
   isFirst = (
@@ -94,14 +117,14 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
                 @size='extra-small'
                 @disabled={{this.isFirst column.sortOrder i}}
                 aria-label='Move column up'
-                {{on 'click' (fn this.moveUp column)}}
+                {{on 'click' (fn this.moveUp i)}}
               />
               <IconButton
                 @icon={{ChevronDown}}
                 @size='extra-small'
                 @disabled={{this.isLast column.sortOrder i}}
                 aria-label='Move column down'
-                {{on 'click' (fn this.moveDown column)}}
+                {{on 'click' (fn this.moveDown i)}}
               />
             </div>
 
