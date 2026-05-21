@@ -15,6 +15,9 @@ import { FG_RED, FG_GREEN, DIM, RESET } from '../lib/colors';
 import { cliLog } from '../lib/cli-log';
 import { findBoxelCliRoot } from '../lib/find-package-root';
 import { listFiles } from './file/list';
+import { readdirSync } from 'node:fs';
+import { sep } from 'node:path';
+import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 // `@playwright/test` is a devDependency and external in our esbuild
 // config, so it's not present in a published-from-npm install. Anything
@@ -211,13 +214,169 @@ export async function runTestsForRealm(
 }
 
 // ---------------------------------------------------------------------------
+// Local-mode entry point (default; no realm-server required)
+// ---------------------------------------------------------------------------
+
+export interface RunTestsLocallyOptions {
+  workspaceDir: string;
+  hostDistDir?: string;
+  debug?: boolean;
+  /** Override the bundled-realms root for tests; defaults to the CLI's vendored copy. */
+  bundledRealmsDir?: string;
+}
+
+export async function runTestsLocally(
+  options: RunTestsLocallyOptions,
+): Promise<RunTestsResult> {
+  let workspaceDir = resolve(options.workspaceDir);
+  let testFiles = walkTestFiles(workspaceDir);
+
+  if (testFiles.length === 0) {
+    return {
+      status: 'failed',
+      passedCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 0,
+      testFiles: [],
+      failures: [],
+      errorMessage:
+        `No \`*.test.gts\` files found in ${workspaceDir}. ` +
+        'Every implementation Issue must ship with at least one test file.',
+    };
+  }
+
+  let { baseDir, skillsDir } = resolveBundledRealms(options.bundledRealmsDir);
+
+  try {
+    let { qunitResults, durationMs } = await runQunitInBrowser({
+      pm: getProfileManager(),
+      // Placeholder URLs — the runner replaces these with the real
+      // origin/realm once the merged test-page server is listening,
+      // because targetRealm and hostAppUrl have to share that origin
+      // for the workspace mount to be reachable from the test page.
+      targetRealm: '__local__:workspace',
+      hostAppUrl: '__local__:',
+      hostDistDir: options.hostDistDir,
+      debug: options.debug,
+      realmMounts: [
+        { prefix: 'workspace', root: workspaceDir },
+        { prefix: 'base', root: baseDir },
+        { prefix: 'skills', root: skillsDir },
+      ],
+    });
+
+    let summary = summarizeQunitResults(qunitResults);
+    return {
+      ...summary,
+      durationMs,
+      testFiles,
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      passedCount: 0,
+      failedCount: 0,
+      skippedCount: 0,
+      durationMs: 0,
+      testFiles,
+      failures: [],
+      errorMessage: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function walkTestFiles(workspaceDir: string): string[] {
+  let results: string[] = [];
+  let walk = (current: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (let entry of entries) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      let full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.isFile() && entry.name.endsWith('.test.gts')) {
+        results.push(full.slice(workspaceDir.length + 1));
+      }
+    }
+  };
+  walk(workspaceDir);
+  return results.sort();
+}
+
+function resolveBundledRealms(override: string | undefined): {
+  baseDir: string;
+  skillsDir: string;
+} {
+  // Explicit override (tests): expect a directory containing `base/` and
+  // `skills/` subdirs.
+  if (override) {
+    return {
+      baseDir: join(override, 'base'),
+      skillsDir: join(override, 'skills'),
+    };
+  }
+  let cliRoot = findBoxelCliRoot(__dirname);
+  let bundled = join(cliRoot, 'bundled-realms');
+  if (dirExists(join(bundled, 'base'))) {
+    return {
+      baseDir: join(bundled, 'base'),
+      skillsDir: join(bundled, 'skills'),
+    };
+  }
+  // Monorepo dev fallback: read from sibling packages directly so
+  // local-mode `boxel test` works before `pnpm build` populates
+  // `bundled-realms/`.
+  let packagesDir = resolve(cliRoot, '..');
+  let baseDir = join(packagesDir, 'base');
+  let skillsDir = join(packagesDir, 'skills-realm', 'contents');
+  if (!dirExists(baseDir)) {
+    throw new Error(
+      `Could not locate base realm: ${bundled}/base does not exist ` +
+        `and sibling ${baseDir} is also missing. Run \`pnpm build\` ` +
+        'in packages/boxel-cli to populate the bundled realms.',
+    );
+  }
+  return { baseDir, skillsDir };
+}
+
+function dirExists(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // QUnit Runner
 // ---------------------------------------------------------------------------
 
 interface QunitRunnerOptions {
   pm: ProfileManager;
-  targetRealm: string;
-  hostAppUrl: string;
+  /**
+   * Remote-mode realm URL. Set this OR `realmMounts`, not both. In
+   * remote mode the host's loader fetches modules from `targetRealm`
+   * over the network.
+   */
+  targetRealm?: string;
+  /**
+   * Remote-mode host-app URL (a realm-server compat proxy). Only used
+   * when `targetRealm` is set; ignored in local mode (where the test
+   * page is served from the same origin as the realm mounts).
+   */
+  hostAppUrl?: string;
+  /**
+   * Local-mode realm mounts. The unified test-page server serves
+   * `<origin>/<prefix>/...` from each `root`, transpiling `.gts`/`.ts`
+   * on demand. Set this OR `targetRealm`, not both.
+   */
+  realmMounts?: RealmMount[];
   hostDistDir?: string;
   debug?: boolean;
 }
@@ -243,13 +402,27 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       url: testPageUrl,
       server,
       setHtml,
-    } = await startTestPageServer(hostDistDir);
+      realmURL,
+    } = await startTestPageServer({
+      hostDistDir,
+      ...(options.realmMounts ? { realmMounts: options.realmMounts } : {}),
+    });
     testPageServer = server;
+
+    // In local mode, both the realm URL and the host-app proxy URL
+    // originate from this same server. In remote mode, fall back to
+    // the caller-provided values.
+    let resolvedTargetRealm = options.realmMounts
+      ? realmURL('workspace')
+      : options.targetRealm!;
+    let resolvedHostAppUrl = options.realmMounts
+      ? testPageUrl + '/'
+      : options.hostAppUrl!;
 
     let html = buildQunitTestPageHtml({
       assetServerUrl: testPageUrl,
       hostDistDir,
-      realmProxyUrl: options.hostAppUrl,
+      realmProxyUrl: resolvedHostAppUrl,
     });
     setHtml(html);
 
@@ -266,19 +439,23 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       });
     }
 
-    let realmToken = options.pm.getRealmToken(options.targetRealm);
-    if (realmToken) {
-      let realmOrigin = new URL(options.targetRealm).origin;
-      await page.route(`${realmOrigin}/**`, (route) => {
-        let headers = {
-          ...route.request().headers(),
-          Authorization: realmToken!,
-        };
-        route.continue({ headers });
-      });
+    // Realm-server auth only applies in remote mode — the local module
+    // mounts on this same server don't gate on tokens.
+    if (!options.realmMounts) {
+      let realmToken = options.pm.getRealmToken(resolvedTargetRealm);
+      if (realmToken) {
+        let realmOrigin = new URL(resolvedTargetRealm).origin;
+        await page.route(`${realmOrigin}/**`, (route) => {
+          let headers = {
+            ...route.request().headers(),
+            Authorization: realmToken!,
+          };
+          route.continue({ headers });
+        });
+      }
     }
 
-    let realmParam = encodeURIComponent(options.targetRealm);
+    let realmParam = encodeURIComponent(resolvedTargetRealm);
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
@@ -419,10 +596,44 @@ function buildQunitTestPageHtml(opts: {
 </html>`;
 }
 
-async function startTestPageServer(hostDistDir: string): Promise<{
+interface RealmMount {
+  /** URL path segment (no slashes), e.g. "workspace" or "base". */
+  prefix: string;
+  /** Absolute path to the directory served at that prefix. */
+  root: string;
+}
+
+interface TestPageServerOptions {
+  hostDistDir: string;
+  /** Realm mounts served from this same server (local-mode only). */
+  realmMounts?: RealmMount[];
+}
+
+/**
+ * Single HTTP server for the test page.
+ *
+ * - `GET /` returns the QUnit test-page HTML (set via `setHtml`).
+ * - `GET /<prefix>/...` where `prefix` matches a realm mount: read the file
+ *   from the mount's root, transpile `.gts` / `.ts` via
+ *   `runtime-common.transpileJS`, serve the result. Implements the
+ *   `_mtimes` JSON:API endpoint so the host's `live-test` bundle can
+ *   discover test modules. This is what makes local-mode `boxel test`
+ *   work without a realm-server.
+ * - Everything else: served as a static file from `hostDistDir`
+ *   (the host's compiled test bundle).
+ *
+ * The two responsibilities live in one server so chromium issues every
+ * request against the same origin; that sidesteps CORS preflights and
+ * the loader's URL-mapping edge cases.
+ */
+async function startTestPageServer(
+  opts: TestPageServerOptions,
+): Promise<{
   url: string;
   server: Server;
   setHtml: (h: string) => void;
+  /** URL for a configured realm mount; throws if unknown. */
+  realmURL: (prefix: string) => string;
 }> {
   let mimeTypes: Record<string, string> = {
     '.js': 'application/javascript',
@@ -436,50 +647,213 @@ async function startTestPageServer(hostDistDir: string): Promise<{
     '.woff': 'font/woff',
     '.ttf': 'font/ttf',
   };
+  let hostDistRoot = resolve(opts.hostDistDir);
+
+  // Module-fallback extensions match the realm-server loader: prefer the
+  // bare path, then synthesize the extensions the host-app loader strips.
+  let FALLBACK_EXTS = ['', '.gts', '.ts', '.json'];
+
+  let mountByPrefix = new Map<string, RealmMount>();
+  for (let mount of opts.realmMounts ?? []) {
+    mountByPrefix.set(mount.prefix, {
+      prefix: mount.prefix,
+      root: resolve(mount.root),
+    });
+  }
+  let transpileCache = new Map<string, { mtimeMs: number; body: string }>();
 
   let html = '';
   let setHtml = (h: string) => {
     html = h;
   };
 
+  function resolveExisting(
+    mountRoot: string,
+    relPath: string,
+  ): string | null {
+    for (let ext of FALLBACK_EXTS) {
+      let candidate = resolve(mountRoot, relPath + ext);
+      if (candidate !== mountRoot && !candidate.startsWith(mountRoot + sep)) {
+        continue;
+      }
+      try {
+        if (statSync(candidate).isFile()) return candidate;
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  }
+
+  function walkRealm(
+    root: string,
+    current: string,
+    realmUrl: string,
+    out: Record<string, number>,
+  ): void {
+    let entries;
+    try {
+      entries = readdirSync(join(root, current), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (let entry of entries) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      let relPath = current ? `${current}/${entry.name}` : entry.name;
+      let abs = join(root, relPath);
+      let st;
+      try {
+        st = statSync(abs);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        walkRealm(root, relPath, realmUrl, out);
+      } else if (st.isFile()) {
+        out[`${realmUrl}${relPath}`] = Math.floor(st.mtimeMs);
+      }
+    }
+  }
+
   return new Promise((res, rej) => {
-    let server = createServer((req, reply) => {
+    let server = createServer(async (req, reply) => {
       let url = (req.url ?? '/').split('?')[0];
 
-      if (url !== '/') {
-        let normalized = normalize(url.slice(1));
-        if (normalized.startsWith('..') || normalized.startsWith('/')) {
-          reply.writeHead(403);
-          reply.end('Forbidden');
-          return;
-        }
-        let filePath = resolve(hostDistDir, normalized);
-        if (!filePath.startsWith(resolve(hostDistDir))) {
-          reply.writeHead(403);
-          reply.end('Forbidden');
-          return;
-        }
-        try {
-          let content = readFileSync(filePath);
-          let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
-          let contentType = mimeTypes[ext] ?? 'application/octet-stream';
+      // Preflight — chromium issues these when the realmURL is on the same
+      // origin via a different path. Bare `*` is fine; nothing on this
+      // server reads credentials.
+      if (req.method === 'OPTIONS') {
+        reply.writeHead(204, {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+          'Access-Control-Allow-Headers': '*',
+        });
+        reply.end();
+        return;
+      }
+
+      if (url === '/') {
+        reply.writeHead(200, {
+          'Content-Type': 'text/html',
+          'Access-Control-Allow-Origin': '*',
+        });
+        reply.end(html);
+        return;
+      }
+
+      let parts = url.replace(/^\/+/, '').split('/');
+      let firstSegment = parts[0] ?? '';
+      let mount = mountByPrefix.get(firstSegment);
+
+      if (mount) {
+        let rest = parts.slice(1).join('/');
+        let realmUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}/${mount.prefix}/`;
+
+        // `_mtimes` discovery: synthesize the JSON:API document the host's
+        // live-test bundle expects from a realm-server.
+        if (rest === '_mtimes') {
+          let mtimes: Record<string, number> = {};
+          walkRealm(mount.root, '', realmUrl, mtimes);
           reply.writeHead(200, {
-            'Content-Type': contentType,
+            'Content-Type': 'application/vnd.api+json',
             'Access-Control-Allow-Origin': '*',
           });
-          reply.end(content);
+          reply.end(
+            JSON.stringify({
+              data: {
+                id: realmUrl,
+                type: 'mtimes',
+                attributes: { mtimes },
+              },
+            }),
+          );
+          return;
+        }
+
+        let normalized = normalize(rest).split(sep).join('/');
+        if (normalized.startsWith('..') || normalized.startsWith('/')) {
+          reply.writeHead(403, { 'Access-Control-Allow-Origin': '*' });
+          reply.end('Forbidden');
+          return;
+        }
+        let filePath = resolveExisting(mount.root, normalized);
+        if (!filePath) {
+          reply.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
+          reply.end('Not found');
+          return;
+        }
+        let stat = statSync(filePath);
+        let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
+        let needsTranspile = ext === '.gts' || ext === '.ts';
+
+        if (needsTranspile) {
+          let cached = transpileCache.get(filePath);
+          if (!cached || cached.mtimeMs !== stat.mtimeMs) {
+            let source = readFileSync(filePath, 'utf8');
+            try {
+              cached = {
+                mtimeMs: stat.mtimeMs,
+                body: await transpileJS(source, '/' + normalized),
+              };
+            } catch (err) {
+              let message = err instanceof Error ? err.message : String(err);
+              reply.writeHead(500, {
+                'Content-Type': 'text/plain',
+                'Access-Control-Allow-Origin': '*',
+              });
+              reply.end(`transpile failed: ${message}`);
+              return;
+            }
+            transpileCache.set(filePath, cached);
+          }
+          reply.writeHead(200, {
+            'Content-Type': 'application/javascript',
+            'Access-Control-Allow-Origin': '*',
+            'X-Boxel-Cli-Transpiled': '1',
+          });
+          reply.end(cached.body);
+          return;
+        }
+
+        try {
+          reply.writeHead(200, {
+            'Content-Type': mimeTypes[ext] ?? 'application/octet-stream',
+            'Access-Control-Allow-Origin': '*',
+          });
+          reply.end(readFileSync(filePath));
         } catch {
-          reply.writeHead(404);
+          reply.writeHead(404, { 'Access-Control-Allow-Origin': '*' });
           reply.end('Not found');
         }
         return;
       }
 
-      reply.writeHead(200, {
-        'Content-Type': 'text/html',
-        'Access-Control-Allow-Origin': '*',
-      });
-      reply.end(html);
+      // Fall-through: static asset from the host's bundled dist.
+      let normalized = normalize(url.slice(1));
+      if (normalized.startsWith('..') || normalized.startsWith('/')) {
+        reply.writeHead(403);
+        reply.end('Forbidden');
+        return;
+      }
+      let filePath = resolve(hostDistRoot, normalized);
+      if (!filePath.startsWith(hostDistRoot)) {
+        reply.writeHead(403);
+        reply.end('Forbidden');
+        return;
+      }
+      try {
+        let content = readFileSync(filePath);
+        let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
+        let contentType = mimeTypes[ext] ?? 'application/octet-stream';
+        reply.writeHead(200, {
+          'Content-Type': contentType,
+          'Access-Control-Allow-Origin': '*',
+        });
+        reply.end(content);
+      } catch {
+        reply.writeHead(404);
+        reply.end('Not found');
+      }
     });
     server.on('error', rej);
     server.listen(0, '127.0.0.1', () => {
@@ -488,7 +862,18 @@ async function startTestPageServer(hostDistDir: string): Promise<{
         rej(new Error('Failed to start test page server'));
         return;
       }
-      res({ url: `http://127.0.0.1:${addr.port}`, server, setHtml });
+      let baseUrl = `http://127.0.0.1:${addr.port}`;
+      res({
+        url: baseUrl,
+        server,
+        setHtml,
+        realmURL: (prefix: string) => {
+          if (!mountByPrefix.has(prefix)) {
+            throw new Error(`Unknown realm mount prefix: ${prefix}`);
+          }
+          return `${baseUrl}/${prefix}/`;
+        },
+      });
     });
   });
 }
@@ -673,7 +1058,7 @@ function emptyErrorResult(message: string): RunTestsResult {
 // ---------------------------------------------------------------------------
 
 interface TestCliOptions {
-  realm: string;
+  realm?: string;
   hostAppUrl?: string;
   hostDistDir?: string;
   debug?: boolean;
@@ -684,12 +1069,19 @@ export function registerTestCommand(program: Command): void {
   program
     .command('test')
     .description(
-      "Run the realm's QUnit test suite (every `*.test.gts` file) in a headless Chromium driven against the host app. The CLI ships its own copy of the host's test bundle so this works on a published install; in-monorepo dev falls back to the sibling `packages/host/dist/`.",
+      'Run every `*.test.gts` file in a workspace directory in a headless Chromium driven against the host app. Defaults to type-checking and serving cards from the local workspace (cwd or [path]); pass `--realm <url>` to test cards already on a remote realm instead.',
     )
-    .requiredOption('--realm <realm-url>', 'The realm URL to test')
+    .argument(
+      '[path]',
+      'Local workspace directory to test (defaults to cwd). Ignored when --realm is set.',
+    )
+    .option(
+      '--realm <realm-url>',
+      'Test against a remote realm URL instead of the local workspace. Modules are fetched from the realm-server.',
+    )
     .option(
       '--host-app-url <url>',
-      "Host app URL (compat proxy). Defaults to the active profile's realm-server URL.",
+      "Host app URL (compat proxy). Defaults to the local module server in local mode, or the active profile's realm-server URL in --realm mode.",
     )
     .option(
       '--host-dist-dir <path>',
@@ -697,14 +1089,23 @@ export function registerTestCommand(program: Command): void {
     )
     .option('--debug', 'Stream browser console output to stderr')
     .option('--json', 'Output structured JSON result')
-    .action(async (opts: TestCliOptions) => {
+    .action(async (pathArg: string | undefined, opts: TestCliOptions) => {
       let result: RunTestsResult;
       try {
-        result = await runTestsForRealm(opts.realm, {
-          ...(opts.hostAppUrl ? { hostAppUrl: opts.hostAppUrl } : {}),
-          ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
-          ...(opts.debug ? { debug: true } : {}),
-        });
+        if (opts.realm) {
+          result = await runTestsForRealm(opts.realm, {
+            ...(opts.hostAppUrl ? { hostAppUrl: opts.hostAppUrl } : {}),
+            ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
+            ...(opts.debug ? { debug: true } : {}),
+          });
+        } else {
+          let workspaceDir = resolve(pathArg ?? process.cwd());
+          result = await runTestsLocally({
+            workspaceDir,
+            ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
+            ...(opts.debug ? { debug: true } : {}),
+          });
+        }
       } catch (err) {
         console.error(
           `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,

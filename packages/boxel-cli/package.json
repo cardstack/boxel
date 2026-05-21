@@ -13,6 +13,7 @@
     "api.ts",
     "bundled-types/**/*",
     "bundled-test-harness/**/*",
+    "bundled-realms/**/*",
     "README.md"
   ],
   "engines": {
@@ -64,12 +65,13 @@
     "vitest": "catalog:"
   },
   "scripts": {
-    "build": "pnpm clean && pnpm build:types && pnpm build:test-harness && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
+    "build": "pnpm clean && pnpm build:types && pnpm build:test-harness && pnpm build:realms && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
     "build:plugin": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-plugin.ts",
+    "build:realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-realms.ts",
     "build:skills": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-skills.ts",
     "build:test-harness": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-test-harness.ts",
     "build:types": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-types.ts",
-    "clean": "rm -rf dist/* bundled-types bundled-test-harness",
+    "clean": "rm -rf dist/* bundled-types bundled-test-harness bundled-realms",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",

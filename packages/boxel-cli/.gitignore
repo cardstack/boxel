@@ -12,6 +12,12 @@ bundled-types/
 # array in package.json; never in git.
 bundled-test-harness/
 
+# Vendored base + skills realm sources served by the CLI's local
+# module server for `boxel test` (CS-11164). Populated by
+# `pnpm build:realms` from sibling packages at release time.
+# Shipped via the `files` array in package.json; never in git.
+bundled-realms/
+
 # Cached shallow clone of cardstack/boxel-skills used by scripts/build-skills.ts
 .boxel-skills-cache/
 

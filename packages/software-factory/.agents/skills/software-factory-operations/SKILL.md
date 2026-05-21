@@ -372,22 +372,30 @@ realm, and the prerender refuses cross-origin module loads with
 Specs, run `boxel test` (which exercises the Spec's
 `linkedExamples` against the card class).
 
-### `boxel test --realm <url>`
+### `boxel test [path]`
 
 Drives a headless Chromium against the host app's compiled test
-bundle and runs every `*.test.gts` file in the realm. Returns
+bundle and runs every `*.test.gts` file in a workspace. Returns
 pass/fail counts plus per-failure details.
 
 ```bash
-boxel test --realm http://localhost:4201/alice/my-realm/
-boxel test --realm <url> --json | jq      # machine-readable
-boxel test --realm <url> --debug          # stream browser console
+boxel test                  # tests cwd against a local in-process
+                            # module server (no realm-server required)
+boxel test ./my-workspace   # explicit workspace dir
+boxel test --json | jq      # machine-readable
+boxel test --debug          # stream browser console
+boxel test --realm <url>    # opt back into testing a remote realm
 ```
 
-The CLI ships its own test harness (`bundled-test-harness/`) so this
-works on a published install. In-monorepo dev falls back to the
-sibling `packages/host/dist/`; build it with
-`pnpm --filter @cardstack/host build` if it isn't there yet.
+**Default is local mode** — there is no push step. The CLI starts an
+in-process transpiling server that serves cards from the workspace
+dir and the bundled base realm. `--realm <url>` is the older flow that
+fetches modules from a running realm-server; use it only when you
+specifically need to test cards already on a remote realm.
+
+The CLI ships its own test harness (`bundled-test-harness/`) and the
+base realm source (`bundled-realms/`) so this works on a published
+install with no monorepo on disk.
 
 A test run with zero tests, or with all tests skipped, returns
 `status: "failed"` — **never use `QUnit.skip()` / `QUnit.todo()`** in

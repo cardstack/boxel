@@ -3,5 +3,6 @@ dist/
 bin/
 bundled-types/
 bundled-test-harness/
+bundled-realms/
 *.tgz
 *.log
