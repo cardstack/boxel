@@ -11,6 +11,10 @@ import { Tokenizer } from '../../jqtools/parser/Tokenizer.js';
 import type { Token } from '../../jqtools/parser/Tokenizer.js';
 import { evaluateWithRegistry } from '../../jqtools/evaluate/evaluate.js';
 import {
+  compileScalarExpression,
+  type CompiledScalarExpression,
+} from '../../jqtools/evaluate/compiledScalar.js';
+import {
   BuiltinLibraryName,
   DEFAULT_BUILTIN_LIBRARIES,
   resolveBuiltinRegistry,
@@ -71,6 +75,7 @@ interface ParsedNativeProgram {
   source: string;
   compiledSource: string;
   readableWarnings: ReadableSyntaxWarning[];
+  compiledScalar?: CompiledScalarExpression;
 }
 
 export class NativeJqDialectError extends Error {
@@ -160,10 +165,14 @@ function runParsedNativeProgram(
   runtimeLimits?: NativeRuntimeLimits,
 ): NativeDialectRun {
   const outputs: unknown[] = [];
+  const compiledScalar = runtimeLimits ? undefined : parsed.compiledScalar;
 
   try {
     const runtime = withRuntimeDiagnostics(() => {
-      for (const value of evaluateWithRegistry(parsed.ast, [input], registry)) {
+      const values = compiledScalar
+        ? [compiledScalar(input)]
+        : evaluateWithRegistry(parsed.ast, [input], registry);
+      for (const value of values) {
         recordRuntimeOutput(value);
         outputs.push(value);
       }
@@ -215,7 +224,7 @@ function runNativeProgram(
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
-  annotateNativeProgramForRuntime(parsed.ast, registry);
+  parsed.compiledScalar = annotateNativeProgramForRuntime(parsed.ast, registry);
 
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
@@ -231,7 +240,7 @@ export async function runNativeJqAsync(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
   const registry = resolveBuiltinRegistry(libraries);
-  annotateNativeProgramForRuntime(parsed.ast, registry);
+  parsed.compiledScalar = annotateNativeProgramForRuntime(parsed.ast, registry);
 
   return runParsedNativeProgram(parsed, input, registry, options.runtimeLimits);
 }
@@ -745,8 +754,9 @@ function annotateBuiltinFilters(
 function annotateNativeProgramForRuntime(
   ast: AstNode,
   registry: ResolvedBuiltinRegistry,
-) {
+): CompiledScalarExpression | undefined {
   annotateBuiltinFilters(ast.expr, registry, new Set());
+  return compileScalarExpression(ast.expr);
 }
 
 export function prepareNativeJq(
@@ -772,7 +782,7 @@ function prepareNativeProgram(
   const registry = resolveBuiltinRegistry(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
-  annotateNativeProgramForRuntime(parsed.ast, registry);
+  parsed.compiledScalar = annotateNativeProgramForRuntime(parsed.ast, registry);
   const deps = extractNativeJqDepsFromAst(parsed.ast);
 
   return {
@@ -799,7 +809,7 @@ export async function prepareNativeJqAsync(
     options.libraries ?? DEFAULT_BUILTIN_LIBRARIES,
   );
   const registry = resolveBuiltinRegistry(libraries);
-  annotateNativeProgramForRuntime(parsed.ast, registry);
+  parsed.compiledScalar = annotateNativeProgramForRuntime(parsed.ast, registry);
   const deps = extractNativeJqDepsFromAst(parsed.ast);
 
   return {
