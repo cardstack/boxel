@@ -15,7 +15,7 @@ export default function handleFullReindex({
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realmUrls = await getFullReindexRealmUrls(dbAdapter);
 
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
 
     await queue.publish<void>({
       jobType: `full-reindex`,

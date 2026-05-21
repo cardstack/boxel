@@ -9,6 +9,11 @@
 # rejects it as "Illegal option", so this script must run under bash.
 set -o pipefail
 
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
 # Tee stdout+stderr to a per-service log file so the local Alloy scraper
 # (packages/observability/alloy/config.alloy) can pick this up via
 # loki.source.file. Alloy's Docker discovery doesn't see native processes.
@@ -17,7 +22,7 @@ LOG_TEE="../observability/scripts/dev-log-tee.sh"
 if [ -n "$ENV_MODE" ]; then
   DEFAULT_HOST_URL="${HOST_URL}"
 else
-  DEFAULT_HOST_URL="${HOST_URL:-http://localhost:4200}"
+  DEFAULT_HOST_URL="${HOST_URL:-https://localhost:4200}"
 fi
 
 # Dev mode only: gate startup on the host's `/_standby` route being
@@ -42,9 +47,20 @@ if [ -z "$ENV_MODE" ]; then
     ts-node --transpileOnly ./scripts/wait-for-host-standby.ts || exit $?
 fi
 
+# In local HTTPS dev (vite on https://localhost:4200 with HTTP/2),
+# the prerender's puppeteer chrome triggers vite's first cold-start of
+# ~1000 packages over h2. Even when wait-for-host-standby has already
+# warmed vite once, the new chrome instance re-downloads everything
+# and the initial `_standby` load can exceed the 30s default. Give it
+# headroom by default; production / hosted runners can override.
+case "${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" in
+  https://*) : "${PRERENDER_STANDBY_TIMEOUT_MS:=120000}" ;;
+esac
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
+  PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-}" \
   ts-node \
   --transpileOnly prerender/prerender-server \
   --port="${PRERENDER_PORT}" \

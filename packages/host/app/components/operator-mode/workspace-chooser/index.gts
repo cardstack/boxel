@@ -10,6 +10,8 @@ import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
+import { ri } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -54,13 +56,13 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get displayCatalogWorkspaces() {
     return (
-      this.realmServer.displayedCatalogRealmURLs &&
-      this.realmServer.displayedCatalogRealmURLs.length > 0
+      this.realmServer.displayedCatalogRealmIdentifiers &&
+      this.realmServer.displayedCatalogRealmIdentifiers.length > 0
     );
   }
 
-  private get communityRealmURLs() {
-    let realmURLs = this.realmServer.displayedCatalogRealmURLs ?? [];
+  private get communityRealmIdentifiers() {
+    let realmURLs = this.realmServer.displayedCatalogRealmIdentifiers ?? [];
     if (config.environment !== 'production') {
       return realmURLs;
     }
@@ -78,35 +80,35 @@ export default class WorkspaceChooser extends Component<Signature> {
     );
   };
 
-  private filterByHosted(urls: string[]): string[] {
+  private filterByHosted<T extends string>(urls: T[]): T[] {
     if (this.sortOrder === 'hosted-only') {
       return urls.filter(this.isHosted);
     }
     return urls;
   }
 
-  private get filteredUserRealmURLs() {
-    return this.filterByHosted(this.realmServer.userRealmURLs);
+  private get filteredUserRealmIdentifiers() {
+    return this.filterByHosted(this.realmServer.userRealmIdentifiers);
   }
 
-  private get filteredCatalogRealmURLs() {
-    return this.filterByHosted(this.communityRealmURLs);
+  private get filteredCatalogRealmIdentifiers() {
+    return this.filterByHosted(this.communityRealmIdentifiers);
   }
 
-  private get favoriteRealmURLs() {
+  private get favoriteRealmIdentifiers() {
     let favorites = this.matrixService.workspaceFavorites;
-    let allURLs = [
-      ...this.realmServer.userRealmURLs,
-      ...(this.realmServer.displayedCatalogRealmURLs ?? []),
-    ];
-    let filtered = favorites.filter((url) => allURLs.includes(url));
+    let allURLs = new Set<string>([
+      ...this.realmServer.userRealmIdentifiers,
+      ...(this.realmServer.displayedCatalogRealmIdentifiers ?? []),
+    ]);
+    let filtered = favorites.filter((url) => allURLs.has(url)).map(ri);
     return this.filterByHosted(filtered);
   }
 
   private get userWorkspacesEmptyMessage(): string | null {
     if (
       this.sortOrder === 'hosted-only' &&
-      this.filteredUserRealmURLs.length === 0
+      this.filteredUserRealmIdentifiers.length === 0
     ) {
       return 'No matching results';
     }
@@ -116,7 +118,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   private get catalogEmptyMessage(): string | null {
     if (
       this.sortOrder === 'hosted-only' &&
-      this.filteredCatalogRealmURLs.length === 0
+      this.filteredCatalogRealmIdentifiers.length === 0
     ) {
       return 'No matching results';
     }
@@ -127,7 +129,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     if (this.matrixService.workspaceFavorites.length === 0) {
       return 'You have no favorites yet';
     }
-    if (this.favoriteRealmURLs.length === 0) {
+    if (this.favoriteRealmIdentifiers.length === 0) {
       return 'No matching results';
     }
     return null;
@@ -168,8 +170,8 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.favoritesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-favorites-list>
-                {{#each this.favoriteRealmURLs as |realmURL|}}
-                  <Workspace @realmURL={{realmURL}} />
+                {{#each this.favoriteRealmIdentifiers as |realmIdentifier|}}
+                  <Workspace @realmIdentifier={{realmIdentifier}} />
                 {{/each}}
               </div>
             {{/if}}
@@ -186,8 +188,11 @@ export default class WorkspaceChooser extends Component<Signature> {
               >{{this.userWorkspacesEmptyMessage}}</span>
             {{else}}
               <div class='workspace-list' data-test-workspace-list>
-                {{#each this.filteredUserRealmURLs as |realmURL|}}
-                  <Workspace @realmURL={{realmURL}} @showMenu={{true}} />
+                {{#each this.filteredUserRealmIdentifiers as |realmIdentifier|}}
+                  <Workspace
+                    @realmIdentifier={{realmIdentifier}}
+                    @showMenu={{true}}
+                  />
                 {{/each}}
                 {{#if this.matrixService.isInitializingNewUser}}
                   <WorkspaceLoadingIndicator />
@@ -209,8 +214,11 @@ export default class WorkspaceChooser extends Component<Signature> {
                 >{{this.catalogEmptyMessage}}</span>
               {{else}}
                 <div class='workspace-list' data-test-catalog-list>
-                  {{#each this.filteredCatalogRealmURLs as |realmURL|}}
-                    <Workspace @realmURL={{realmURL}} />
+                  {{#each
+                    this.filteredCatalogRealmIdentifiers
+                    as |realmIdentifier|
+                  }}
+                    <Workspace @realmIdentifier={{realmIdentifier}} />
                   {{/each}}
                 </div>
               {{/if}}

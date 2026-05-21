@@ -29,9 +29,9 @@ const event = {
   type: 'app.boxel.bot-trigger',
   content: {
     type: 'show-card',
-    realm: 'http://localhost:4201/experiments/',
+    realm: 'https://localhost:4201/experiments/',
     input: {
-      cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+      cardId: 'https://localhost:4201/experiments/Author/jane-doe',
       format: 'isolated',
     },
   },
@@ -73,9 +73,9 @@ const event = {
   type: 'app.boxel.bot-trigger',
   content: {
     type: 'show-card',
-    realm: 'http://localhost:4201/experiments/',
+    realm: 'https://localhost:4201/experiments/',
     input: {
-      cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+      cardId: 'https://localhost:4201/experiments/Author/jane-doe',
       format: 'isolated',
     },
   },
@@ -91,12 +91,12 @@ const event = {
 
 ```json
 {
-  "realmURL": "http://localhost:4201/experiments/",
+  "realmURL": "https://localhost:4201/experiments/",
   "realmUsername": "@alice:localhost",
   "runAs": "@alice:localhost",
   "command": "@cardstack/boxel-host/commands/show-card/default",
   "commandInput": {
-    "cardId": "http://localhost:4201/experiments/Author/jane-doe",
+    "cardId": "https://localhost:4201/experiments/Author/jane-doe",
     "format": "isolated"
   }
 }
@@ -125,7 +125,7 @@ type CommandRunnerRouteParams = {
 const requestId = '6f5508cf-0f10-44a8-a288-0f11f74c4f20';
 const command = '@cardstack/boxel-host/commands/show-card/default';
 const input = {
-  cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+  cardId: 'https://localhost:4201/experiments/Author/jane-doe',
   format: 'isolated',
 };
 const nonce = '2';
@@ -140,11 +140,11 @@ localStorage.setItem(
   }),
 );
 
-const url = `http://localhost:4200/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(nonce)}`;
+const url = `https://localhost:4200/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(nonce)}`;
 ```
 
 ```txt
-http://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2
+https://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2
 ```
 
 ### Host-side consumption behavior
@@ -158,7 +158,7 @@ http://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2
 Use this when you want to test `command-runner` directly in the browser.
 
 1. Open host in a browser:
-  - `http://localhost:4200`
+  - `https://localhost:4200`
 2. Open browser devtools console and run:
 
 ```js
@@ -170,7 +170,7 @@ localStorage.setItem(
   JSON.stringify({
     command: '@cardstack/boxel-host/commands/show-card/default',
     input: {
-      cardId: 'http://localhost:4201/experiments/Author/jane-doe',
+      cardId: 'https://localhost:4201/experiments/Author/jane-doe',
       format: 'isolated',
     },
     nonce,
@@ -180,7 +180,7 @@ localStorage.setItem(
 ```
 
 3. Visit this URL (or refresh if already there):
-  - `http://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2`
+  - `https://localhost:4200/command-runner/6f5508cf-0f10-44a8-a288-0f11f74c4f20/2`
 
 Notes:
 - `request_id` in the URL must match the localStorage key suffix.

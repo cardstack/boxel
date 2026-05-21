@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, resolve, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import {
   copySync,
@@ -42,7 +42,6 @@ import {
   makeTestReconciler,
   matrixRegistrationSecret,
   testRealmInfo,
-  waitUntil,
   testRealmHref,
   createJWT,
   cardInfo,
@@ -51,7 +50,10 @@ import {
   type RealmRequest,
   withRealmPath,
 } from './helpers';
-import { expectIncrementalIndexEvent } from './helpers/indexing';
+import {
+  expectIncrementalIndexEvent,
+  waitForIncrementalIndexEvent,
+} from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -2206,30 +2208,6 @@ module(basename(__filename), function () {
     });
   });
 });
-
-async function waitForIncrementalIndexEvent(
-  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
-  since: number,
-) {
-  try {
-    await waitUntil(async () => {
-      let matrixMessages = await getMessagesSince(since);
-
-      return matrixMessages.some(
-        (m) =>
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
-      );
-    });
-  } catch (e) {
-    let matrixMessages = await getMessagesSince(since);
-
-    console.log('waitForIncrementalIndexEvent failed, no event found. Events:');
-    console.log(JSON.stringify(matrixMessages, null, 2));
-    throw e;
-  }
-}
 
 function findRealmEvent(
   events: MatrixEvent[],

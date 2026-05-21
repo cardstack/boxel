@@ -67,9 +67,13 @@ PSQL_OPTS="-U postgres -d $DB_NAME --quiet --no-psqlrc -v ON_ERROR_STOP=1"
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
   echo "Remapping URLs for environment '${SLUG}'..."
+  # Match both http and https canonicals — local dev now stores
+  # https://localhost:4201/... in the index (CS-11114), but older
+  # cached snapshots still have http://. Either prefix in the snapshot
+  # gets remapped to the env-mode Traefik hostname.
   gunzip -c "$CACHE_FILE" \
     | sed \
-      -e "s|http://localhost:4201|http://realm-server.${SLUG}.localhost|g" \
+      -e "s|https\\?://localhost:4201|http://realm-server.${SLUG}.localhost|g" \
       -e "s|http://localhost:4206|http://icons.${SLUG}.localhost|g" \
     | docker exec -i boxel-pg psql $PSQL_OPTS
 else

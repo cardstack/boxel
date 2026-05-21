@@ -7,6 +7,7 @@ import {
   typeIn,
   triggerKeyEvent,
   settled,
+  waitFor,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -680,8 +681,11 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom(fieldInput).isFocused();
 
       // Ctrl+E from inside the input flips edit→isolated without
-      // requiring the user to click out first.
-      await triggerKeyEvent(fieldInput, 'keydown', 'KeyE', { ctrlKey: true });
+      // requiring the user to click out first. (Numeric keyCode 69
+      // because triggerKeyEvent rejects lowercase strings and the
+      // `ctrl+e` listener matches against `event.key`, which the
+      // helper derives as 'e' from keyCode 69.)
+      await triggerKeyEvent(fieldInput, 'keydown', 69, { ctrlKey: true });
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
@@ -701,8 +705,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('card starts in isolated/view mode');
 
       // Ctrl+E enters edit mode (bound on every platform — Mac too,
-      // because Cmd+E is reserved by browsers).
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      // because Cmd+E is reserved by browsers). Numeric keyCode 69
+      // so the helper produces `event.key === 'e'` — the listener
+      // matches against `event.key`, not `event.code`.
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         ctrlKey: true,
       });
       assert
@@ -712,7 +718,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('Ctrl+E flipped the card into edit mode');
 
       // The toggle is symmetric — pressing again returns to isolated.
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         ctrlKey: true,
       });
       assert
@@ -723,7 +729,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // Cmd+E (metaKey) is intentionally NOT bound — it stays free for
       // the browser's "Use Selection for Find" shortcut on Mac.
-      await triggerKeyEvent(document.body, 'keydown', 'KeyE', {
+      await triggerKeyEvent(document.body, 'keydown', 69, {
         metaKey: true,
       });
       assert
@@ -731,6 +737,54 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
         )
         .exists('Cmd+E (metaKey) does not toggle edit mode');
+    });
+
+    test('Ctrl+E respects keyboard layout (CS-11092)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      // Dvorak user: the key that produces 'e' on their layout is on
+      // the physical "Period" keycap. event.key='e', event.code='Period'.
+      // triggerKeyEvent can't decouple key from code, so dispatch raw.
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'e',
+          code: 'Period',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists('Ctrl+E fires on the Dvorak "e" key (code=Period)');
+
+      // The inverse: on a Dvorak keyboard the QWERTY-E keycap produces
+      // '.'. Pressing Ctrl + that physical key must NOT trigger the
+      // shortcut anymore — that was the pre-fix bug.
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: '.',
+          code: 'KeyE',
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="edit"]`,
+        )
+        .exists(
+          'Ctrl+. on Dvorak (physical QWERTY-E keycap) does not toggle — still in edit mode',
+        );
     });
 
     test('duplicate card in a stack is not allowed', async function (assert) {
@@ -912,7 +966,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
-      setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
+      setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
       await visitOperatorMode({
         stacks: [
           [
@@ -923,7 +977,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
           [
             {
-              id: 'http://localhost:4202/test/hassan',
+              id: 'https://localhost:4202/test/hassan',
               format: 'isolated',
             },
           ],
@@ -1035,6 +1089,78 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
         )
         .hasValue('Updated Pet');
+    });
+  });
+
+  module('expand to full width', function () {
+    test('expanding a card in a two-stack layout hides the other stack', async function (assert) {
+      let fadhlanId = `${testRealmURL}Person/fadhlan`;
+      let mangoId = `${testRealmURL}Pet/mango`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: fadhlanId, format: 'isolated' }],
+          [{ id: mangoId, format: 'isolated' }],
+        ],
+      });
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"]')
+        .exists('stack 0 exists');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .exists('stack 1 exists');
+
+      await waitFor(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="0"] [data-test-stack-card="${fadhlanId}"]`,
+        )
+        .hasClass('expanded', 'fadhlan card is expanded');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .isNotVisible('stack 1 is hidden when stack 0 has an expanded card');
+    });
+
+    test('expanding the same card open in two stacks only expands one', async function (assert) {
+      let fadhlanId = `${testRealmURL}Person/fadhlan`;
+      await visitOperatorMode({
+        stacks: [
+          [{ id: fadhlanId, format: 'isolated' }],
+          [{ id: fadhlanId, format: 'isolated' }],
+        ],
+      });
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"]')
+        .exists('stack 0 exists');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .exists('stack 1 exists');
+
+      await waitFor(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-more-options-button]',
+      );
+      await click('[data-test-boxel-menu-item-text="Expand to Full Width"]');
+
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-stack-card]')
+        .hasClass('expanded', 'stack 0 card is expanded');
+      assert
+        .dom('[data-test-operator-mode-stack="1"]')
+        .isNotVisible('stack 1 is hidden');
+      assert
+        .dom('[data-test-stack-card].expanded')
+        .exists({ count: 1 }, 'only one card has the expanded class');
     });
   });
 

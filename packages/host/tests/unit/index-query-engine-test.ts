@@ -12,6 +12,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  rri,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Definition,
@@ -194,7 +195,7 @@ module('Unit | query', function (hooks) {
       numberFieldEntry,
     };
     for (let [name, card] of Object.entries(testCards)) {
-      card.id = `${testRealmURL}${name}`;
+      card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
 
@@ -240,17 +241,17 @@ module('Unit | query', function (hooks) {
         // no-op for tests
         return [];
       },
-      async clearRealmCache(_realmURL: string): Promise<void> {
+      async clearRealmDefinitions(_realmURL: string): Promise<void> {
         // no-op for tests
       },
-      async getModuleCacheEntry(): Promise<undefined> {
+      async getCachedDefinitions(): Promise<undefined> {
         return undefined;
       },
-      async getModuleCacheEntries(): Promise<Record<string, never>> {
+      async getCachedDefinitionsBatch(): Promise<Record<string, never>> {
         return {};
       },
       registerRealm() {},
-      async clearAllModules(): Promise<void> {
+      async clearAllDefinitions(): Promise<void> {
         // no-op for tests
       },
       forRealm() {

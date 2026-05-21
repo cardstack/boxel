@@ -243,7 +243,7 @@ module('Integration | enumField', function (hooks) {
     let t1b = (await createFromSerialized(
       doc1.data,
       doc1,
-      new URL('http://localhost:4202/test/'),
+      new URL('https://localhost:4202/test/'),
     )) as Task;
     assert.strictEqual(t1b.priority, 'Medium', 'single enum value round-trips');
 
@@ -253,7 +253,7 @@ module('Integration | enumField', function (hooks) {
     let t2b = (await createFromSerialized(
       doc2.data,
       doc2,
-      new URL('http://localhost:4202/test/'),
+      new URL('https://localhost:4202/test/'),
     )) as Task;
     assert.ok(
       Array.isArray(t2b.priorities),
@@ -724,7 +724,7 @@ module('Integration | enumField', function (hooks) {
     let t2 = (await createFromSerialized(
       doc.data,
       doc,
-      new URL('http://localhost:4202/test/'),
+      new URL('https://localhost:4202/test/'),
     )) as Task;
     assert.strictEqual(
       t2.priority,
@@ -840,7 +840,7 @@ module('Integration | enumField', function (hooks) {
     let t2 = (await createFromSerialized(
       doc.data,
       doc,
-      new URL('http://localhost:4202/test/'),
+      new URL('https://localhost:4202/test/'),
     )) as Task;
     assert.deepEqual(
       t2.priorities,

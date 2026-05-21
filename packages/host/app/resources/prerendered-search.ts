@@ -29,6 +29,11 @@ import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/d
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { PrerenderedCard } from '../components/prerendered-card-search';
+import {
+  consumingRealmHeader,
+  duringPrerenderHeaders,
+  jobIdHeader,
+} from '../lib/prerender-fetch-headers';
 import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';
 
 import type LoaderService from '../services/loader-service';
@@ -137,7 +142,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
     // Normalize realms
     let normalizedRealms = realms
       ? normalizeRealms(realms)
-      : normalizeRealms(this.realmServer.availableRealmURLs);
+      : normalizeRealms(this.realmServer.availableRealmIdentifiers);
 
     this.realmsToSearch = normalizedRealms;
 
@@ -274,6 +279,14 @@ export class PrerenderedSearchResource extends Resource<Args> {
       headers: {
         Accept: SupportedMimeType.CardJson,
         'Content-Type': 'application/json',
+        // Plumb the prerender-context headers so a worker-driven
+        // render hits the realm-server's job-scoped search cache
+        // (the same instance shared with `_federated-search`).
+        // Live (non-prerender) SPA fetches send no values for any of
+        // these globals and continue to bypass the cache.
+        ...duringPrerenderHeaders(),
+        ...consumingRealmHeader(),
+        ...jobIdHeader(),
       },
       body: JSON.stringify({
         ...query,

@@ -25,6 +25,7 @@ import {
   setupJwtTestProfile,
   TEST_REALM_SERVER_URL,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES } from '../helpers/binary-fixtures';
 
 let profileManager: ProfileManager;
 let cleanupProfile: (() => void) | undefined;
@@ -208,6 +209,27 @@ async function writeRemoteFile(
   await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
 }
 
+async function writeRemoteBytes(
+  realm: string,
+  relPath: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  let previousMtime = (await fetchRemoteMtimes(realm))[
+    buildFileUrl(realm, relPath)
+  ];
+  let response = await remoteMutation(realm, relPath, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: bytes,
+  });
+  if (!response.ok) {
+    throw new Error(
+      `writeRemoteBytes ${relPath} failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  await waitForRemoteVisibility(realm, relPath, 'present', { previousMtime });
+}
+
 async function deleteRemoteFile(realm: string, relPath: string): Promise<void> {
   let response = await remoteMutation(realm, relPath, {
     method: 'DELETE',
@@ -278,25 +300,30 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
+    try {
+      await watcher.initialize();
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    expect(watcher.pendingCount).toBeGreaterThanOrEqual(1);
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      expect(watcher.pendingCount).toBeGreaterThanOrEqual(1);
 
-    let result = await watcher.flushPending();
-    expect(result.pulled).toContain(watchFixture('first-poll'));
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('first-poll')), 'utf8'),
-    ).toContain('a = 1');
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain(watchFixture('first-poll'));
+      expect(
+        fs.readFileSync(
+          path.join(localDir, watchFixture('first-poll')),
+          'utf8',
+        ),
+      ).toContain('a = 1');
 
-    expect(result.checkpoint).not.toBeNull();
-    expect(result.checkpoint!.source).toBe('remote');
+      expect(result.checkpoint).not.toBeNull();
+      expect(result.checkpoint!.source).toBe('remote');
 
-    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
-    expect(checkpoints.length).toBe(1);
-
-    watcher.shutdown();
+      let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+      expect(checkpoints.length).toBe(1);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('detects remote modifications across ticks and pulls them', async () => {
@@ -311,35 +338,37 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
 
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
-    ).toContain('v = 1');
+      expect(
+        fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+      ).toContain('v = 1');
 
-    // Realm mtimes are second-precision — wait so the next write bumps it.
-    await sleep(1100);
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('mod'),
-      'export const v = 2;\n',
-    );
+      // Realm mtimes are second-precision — wait so the next write bumps it.
+      await sleep(1100);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('mod'),
+        'export const v = 2;\n',
+      );
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    let result = await watcher.flushPending();
-    expect(result.pulled).toContain(watchFixture('mod'));
-    expect(
-      fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
-    ).toContain('v = 2');
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain(watchFixture('mod'));
+      expect(
+        fs.readFileSync(path.join(localDir, watchFixture('mod')), 'utf8'),
+      ).toContain('v = 2');
 
-    let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
-    // One per applied poll.
-    expect(checkpoints.length).toBe(2);
-
-    watcher.shutdown();
+      let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
+      // One per applied poll.
+      expect(checkpoints.length).toBe(2);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('detects remote deletions and removes the local copy', async () => {
@@ -354,24 +383,26 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
-      true,
-    );
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
+      expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+        true,
+      );
 
-    await deleteRemoteFile(realmUrl, watchFixture('doomed'));
+      await deleteRemoteFile(realmUrl, watchFixture('doomed'));
 
-    let hasChanges = await watcher.poll();
-    expect(hasChanges).toBe(true);
-    let result = await watcher.flushPending();
-    expect(result.deleted).toContain(watchFixture('doomed'));
-    expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
-      false,
-    );
-
-    watcher.shutdown();
+      let hasChanges = await watcher.poll();
+      expect(hasChanges).toBe(true);
+      let result = await watcher.flushPending();
+      expect(result.deleted).toContain(watchFixture('doomed'));
+      expect(fs.existsSync(path.join(localDir, watchFixture('doomed')))).toBe(
+        false,
+      );
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('groups bursts of remote changes into a single debounced flush', async () => {
@@ -382,57 +413,59 @@ describe('realm watch (integration)', () => {
       debounceMs,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
 
-    let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
-    let resolveFlush!: () => void;
-    let flushTimeout: ReturnType<typeof setTimeout>;
-    let flushSettled = new Promise<void>((resolve, reject) => {
-      flushTimeout = setTimeout(() => {
-        reject(
-          new Error(
-            `debounced flush did not settle within ${debounceMs + 1_000}ms during "${currentTestName()}"`,
-          ),
-        );
-      }, debounceMs + 1_000);
-      resolveFlush = () => {
-        clearTimeout(flushTimeout);
-        resolve();
+      let flushes: Array<{ pulled: string[]; deleted: string[] }> = [];
+      let resolveFlush!: () => void;
+      let flushTimeout: ReturnType<typeof setTimeout>;
+      let flushSettled = new Promise<void>((resolve, reject) => {
+        flushTimeout = setTimeout(() => {
+          reject(
+            new Error(
+              `debounced flush did not settle within ${debounceMs + 1_000}ms during "${currentTestName()}"`,
+            ),
+          );
+        }, debounceMs + 1_000);
+        resolveFlush = () => {
+          clearTimeout(flushTimeout);
+          resolve();
+        };
+      });
+      let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
+        flushes.push(result);
+        resolveFlush();
       };
-    });
-    let onFlush = (result: { pulled: string[]; deleted: string[] }) => {
-      flushes.push(result);
-      resolveFlush();
-    };
 
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('burst-a'),
-      'export const a = 1;\n',
-    );
-    await watcher.poll();
-    watcher.scheduleFlush(onFlush);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('burst-a'),
+        'export const a = 1;\n',
+      );
+      await watcher.poll();
+      watcher.scheduleFlush(onFlush);
 
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('burst-b'),
-      'export const b = 2;\n',
-    );
-    await watcher.poll();
-    watcher.scheduleFlush(onFlush);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('burst-b'),
+        'export const b = 2;\n',
+      );
+      await watcher.poll();
+      watcher.scheduleFlush(onFlush);
 
-    await flushSettled;
-    await sleep(60);
+      await flushSettled;
+      await sleep(60);
 
-    expect(flushes.length).toBe(1);
-    expect(flushes[0].pulled.sort()).toEqual([
-      watchFixture('burst-a'),
-      watchFixture('burst-b'),
-    ]);
-
-    watcher.shutdown();
+      expect(flushes.length).toBe(1);
+      expect(flushes[0].pulled.sort()).toEqual([
+        watchFixture('burst-a'),
+        watchFixture('burst-b'),
+      ]);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('runs the watchRealms loop end-to-end and stops on AbortSignal', async () => {
@@ -467,6 +500,27 @@ describe('realm watch (integration)', () => {
     let checkpoints = await new CheckpointManager(localDir).getCheckpoints();
     expect(checkpoints.length).toBeGreaterThanOrEqual(1);
     expect(checkpoints[0].source).toBe('remote');
+  });
+
+  it('pulls a remote PNG byte-identically (CS-11075)', async () => {
+    let localDir = makeLocalDir();
+    await writeRemoteBytes(realmUrl, 'image.png', TINY_PNG_BYTES);
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      let result = await watcher.flushPending();
+      expect(result.pulled).toContain('image.png');
+
+      let pulled = fs.readFileSync(path.join(localDir, 'image.png'));
+      expect(pulled.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('returns an error when the realm URL is unreachable', async () => {
@@ -517,26 +571,28 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await watcher.initialize();
-    await watcher.poll();
-    await watcher.flushPending();
-    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
-      true,
-    );
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
+      expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+        true,
+      );
 
-    // Force the next poll to fail (simulating a transient fetch error). The
-    // file must remain on disk and `lastKnownMtimes` must be untouched, so a
-    // subsequent successful poll observes no change.
-    (watcher as any).getRemoteMtimes = async () => {
-      throw new Error('simulated network failure');
-    };
-    await expect(watcher.poll()).rejects.toThrow('simulated network failure');
-    expect(watcher.pendingCount).toBe(0);
-    expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
-      true,
-    );
-
-    watcher.shutdown();
+      // Force the next poll to fail (simulating a transient fetch error). The
+      // file must remain on disk and `lastKnownMtimes` must be untouched, so a
+      // subsequent successful poll observes no change.
+      (watcher as any).getRemoteMtimes = async () => {
+        throw new Error('simulated network failure');
+      };
+      await expect(watcher.poll()).rejects.toThrow('simulated network failure');
+      expect(watcher.pendingCount).toBe(0);
+      expect(fs.existsSync(path.join(localDir, watchFixture('survives')))).toBe(
+        true,
+      );
+    } finally {
+      watcher.shutdown();
+    }
   });
 
   it('blocks a second concurrent watch against the same localDir', async () => {
@@ -617,10 +673,13 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
-    await primer.initialize();
-    await primer.poll();
-    await primer.flushPending();
-    primer.shutdown();
+    try {
+      await primer.initialize();
+      await primer.poll();
+      await primer.flushPending();
+    } finally {
+      primer.shutdown();
+    }
 
     let baseline = await new CheckpointManager(localDir).getCheckpoints();
     expect(baseline.length).toBe(1);
@@ -752,28 +811,288 @@ describe('realm watch (integration)', () => {
       debounceMs: 0,
       quiet: true,
     });
+    try {
+      await watcher.initialize();
+      await watcher.poll();
+      await watcher.flushPending();
+
+      await sleep(1100);
+      await writeRemoteFile(
+        realmUrl,
+        watchFixture('flip'),
+        'export const x = 2;\n',
+      );
+      await watcher.poll();
+      expect(watcher.pendingCount).toBe(1);
+
+      await deleteRemoteFile(realmUrl, watchFixture('flip'));
+      await watcher.poll();
+
+      let result = await watcher.flushPending();
+      expect(result.deleted).toContain(watchFixture('flip'));
+      expect(result.pulled).not.toContain(watchFixture('flip'));
+      expect(fs.existsSync(path.join(localDir, watchFixture('flip')))).toBe(
+        false,
+      );
+    } finally {
+      watcher.shutdown();
+    }
+  });
+
+  // CS-11062: watch must protect locally-edited files from being silently
+  // overwritten on the next remote-change tick.
+  it('skips download when the local file diverges from the sync manifest', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('diverge');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 1',
+    );
+
+    // User edits the local file post-sync. Hash now diverges from manifest.
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    let hasChanges = await watcher.poll();
+    expect(hasChanges).toBe(true);
+    let result = await watcher.flushPending();
+
+    expect(result.skipped).toContain(rel);
+    expect(result.pulled).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toBe(
+      'local edit\n',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('writes no checkpoint when every change in a flush is skipped', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('skip-checkpoint');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    let firstFlush = await watcher.flushPending();
+    expect(firstFlush.checkpoint).not.toBeNull();
+
+    let checkpointsAfterFirstFlush = await new CheckpointManager(
+      localDir,
+    ).getCheckpoints();
+    expect(checkpointsAfterFirstFlush.length).toBe(1);
+
+    // Diverge locally, then change remote → flush will skip the only entry.
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let skippedFlush = await watcher.flushPending();
+
+    expect(skippedFlush.skipped).toContain(rel);
+    expect(skippedFlush.pulled).toHaveLength(0);
+    expect(skippedFlush.deleted).toHaveLength(0);
+    expect(skippedFlush.checkpoint).toBeNull();
+
+    let checkpointsAfterSkip = await new CheckpointManager(
+      localDir,
+    ).getCheckpoints();
+    expect(checkpointsAfterSkip.length).toBe(1);
+
+    watcher.shutdown();
+  });
+
+  it('overwrites diverged local files when overwriteLocal is enabled', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('force');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+      overwriteLocal: true,
+    });
     await watcher.initialize();
     await watcher.poll();
     await watcher.flushPending();
 
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
     await sleep(1100);
-    await writeRemoteFile(
-      realmUrl,
-      watchFixture('flip'),
-      'export const x = 2;\n',
-    );
-    await watcher.poll();
-    expect(watcher.pendingCount).toBe(1);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
 
-    await deleteRemoteFile(realmUrl, watchFixture('flip'));
     await watcher.poll();
-
     let result = await watcher.flushPending();
-    expect(result.deleted).toContain(watchFixture('flip'));
-    expect(result.pulled).not.toContain(watchFixture('flip'));
-    expect(fs.existsSync(path.join(localDir, watchFixture('flip')))).toBe(
-      false,
+
+    expect(result.pulled).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 2',
     );
+
+    watcher.shutdown();
+  });
+
+  it('skips first-run downloads when local files exist at remote paths and no manifest', async () => {
+    let localDir = makeLocalDir();
+    let collide = watchFixture('collide');
+    let onlyRemote = watchFixture('only-remote');
+
+    // Local content pre-exists with no sync manifest.
+    fs.writeFileSync(path.join(localDir, collide), 'precious local\n', 'utf8');
+
+    await writeRemoteFile(realmUrl, collide, 'export const v = 1;\n');
+    await writeRemoteFile(realmUrl, onlyRemote, 'export const r = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    // Colliding path is left alone, warned about.
+    expect(result.skipped).toContain(collide);
+    expect(result.pulled).not.toContain(collide);
+    expect(fs.readFileSync(path.join(localDir, collide), 'utf8')).toBe(
+      'precious local\n',
+    );
+
+    // Non-colliding path still pulled normally.
+    expect(result.pulled).toContain(onlyRemote);
+    expect(fs.readFileSync(path.join(localDir, onlyRemote), 'utf8')).toContain(
+      'r = 1',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('downloads when the local file still matches the manifest hash', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('clean');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    // No local edit. Bump remote.
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.pulled).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toContain(
+      'v = 2',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('does not delete a locally-edited file when the remote disappears', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('rescue');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await deleteRemoteFile(realmUrl, rel);
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.skipped).toContain(rel);
+    expect(result.deleted).not.toContain(rel);
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(true);
+    expect(fs.readFileSync(path.join(localDir, rel), 'utf8')).toBe(
+      'local edit\n',
+    );
+
+    watcher.shutdown();
+  });
+
+  it('deletes the local file when the remote disappears and the local matches the manifest', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('clean-delete');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(true);
+
+    // No local edit — local hash still matches the manifest.
+    await deleteRemoteFile(realmUrl, rel);
+    await watcher.poll();
+    let result = await watcher.flushPending();
+
+    expect(result.deleted).toContain(rel);
+    expect(result.skipped ?? []).not.toContain(rel);
+    expect(fs.existsSync(path.join(localDir, rel))).toBe(false);
+
+    watcher.shutdown();
+  });
+
+  it('keeps re-detecting a skipped divergence on subsequent polls until resolved', async () => {
+    let localDir = makeLocalDir();
+    let rel = watchFixture('nag');
+    await writeRemoteFile(realmUrl, rel, 'export const v = 1;\n');
+
+    let watcher = new RealmWatcher({ realmUrl, localDir }, profileManager, {
+      debounceMs: 0,
+      quiet: true,
+    });
+    await watcher.initialize();
+    await watcher.poll();
+    await watcher.flushPending();
+
+    fs.writeFileSync(path.join(localDir, rel), 'local edit\n', 'utf8');
+
+    await sleep(1100);
+    await writeRemoteFile(realmUrl, rel, 'export const v = 2;\n');
+
+    await watcher.poll();
+    let first = await watcher.flushPending();
+    expect(first.skipped).toContain(rel);
+
+    // No further remote change. The previous skip must not have advanced
+    // lastKnownMtimes, so the same divergence keeps surfacing.
+    await watcher.poll();
+    let second = await watcher.flushPending();
+    expect(second.skipped).toContain(rel);
 
     watcher.shutdown();
   });

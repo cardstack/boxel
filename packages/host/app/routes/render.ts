@@ -32,7 +32,10 @@ import {
   logger as runtimeLogger,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { serializableError } from '@cardstack/runtime-common/error';
+import {
+  coerceErrorMessage,
+  serializableError,
+} from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -154,6 +157,23 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
+    // Drop any pending `_federated-search` in-flight entries the
+    // render-context coalescer accumulated during this visit. Entries
+    // self-clear on settle, but a deactivate while one is still
+    // in-flight could otherwise let a same-key caller arriving in the
+    // next render coalesce onto a promise belonging to the previous
+    // visit. The window is small (typically <1s per search) but the
+    // cost of an explicit clear is also small.
+    this.store.clearInFlightSearch();
+    // The resolved-doc search cache is INTENTIONALLY NOT cleared
+    // here. A single indexing job renders many cards in the same
+    // prerender tab — each card navigation activates and deactivates
+    // this route, but all those visits share one `__boxelJobId` and
+    // a stable view of the consuming realm's `boxel_index`. Cached
+    // entries from earlier renders in the job are the entire point;
+    // dropping them per-render would defeat the cache. Cross-job
+    // invalidation is handled by `fetchSearchDoc`'s entry-time
+    // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
@@ -1147,8 +1167,31 @@ export default class RenderRoute extends Route<Model> {
       withTimerSummary,
       fallbackDeps,
     );
+    // The persisted error doc is useless if `message` is empty or
+    // undefined — the indexer's index-writer guard refuses such rows
+    // and fails the whole indexing job. Guarantee a non-empty message
+    // here as the last stop before serialization to the DOM. The
+    // synthesized fallback names the affected URL (from error.id,
+    // the first dep, or the most recent render base param) so the
+    // persisted row is at least diagnosable by URL.
+    let urlContext =
+      (typeof withRuntimeDeps.error.id === 'string' &&
+        withRuntimeDeps.error.id) ||
+      withRuntimeDeps.error.deps?.[0] ||
+      this.renderBaseParams?.[0] ||
+      'unknown URL';
+    let withGuaranteedMessage: RenderError = {
+      ...withRuntimeDeps,
+      error: {
+        ...withRuntimeDeps.error,
+        message: coerceErrorMessage(
+          withRuntimeDeps.error,
+          `Render failed for ${urlContext} (host produced no error message)`,
+        ),
+      },
+    };
     return JSON.stringify(
-      this.#stripLastKnownGoodHtml(withRuntimeDeps),
+      this.#stripLastKnownGoodHtml(withGuaranteedMessage),
       null,
       2,
     );

@@ -50,15 +50,22 @@ function getEnvSlug() {
 
 function environmentDefaults() {
   if (!process.env.BOXEL_ENVIRONMENT) {
+    // Local realm-server speaks HTTPS+HTTP/2 in every environment
+    // (dev + Host Tests + Live Tests). The dev cert is mandatory (see
+    // `infra:ensure-dev-cert`); there is no HTTP fallback. Test mode
+    // still uses these defaults — the host's in-memory test-realm
+    // registry intercepts `http://test-realm/...` fetches before they
+    // hit the wire, while fetches to the realm-server's real wire URL
+    // need to go to https to match the actual listener. See the
+    // repo-root README "Local HTTPS dev access".
     return {
-      realmServerURL: 'http://localhost:4201/',
+      realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
-      baseRealmURL: 'http://localhost:4201/base/',
-      catalogRealmURL: 'http://localhost:4201/catalog/',
-      legacyCatalogRealmURL: 'http://localhost:4201/legacy-catalog/',
-      skillsRealmURL: 'http://localhost:4201/skills/',
-      openRouterRealmURL: 'http://localhost:4201/openrouter/',
+      baseRealmURL: 'https://localhost:4201/base/',
+      catalogRealmURL: 'https://localhost:4201/catalog/',
+      skillsRealmURL: 'https://localhost:4201/skills/',
+      openRouterRealmURL: 'https://localhost:4201/openrouter/',
     };
   }
   let slug = getEnvSlug();
@@ -69,7 +76,6 @@ function environmentDefaults() {
     iconsURL: `http://icons.${slug}.localhost`,
     baseRealmURL: `http://${realmHost}/base/`,
     catalogRealmURL: `http://${realmHost}/catalog/`,
-    legacyCatalogRealmURL: `http://${realmHost}/legacy-catalog/`,
     skillsRealmURL: `http://${realmHost}/skills/`,
     openRouterRealmURL: `http://${realmHost}/openrouter/`,
   };
@@ -131,16 +137,15 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
+    // CS-10055: realm-server injects per-request when the request is for
+    // a realm whose config card has hostRoutingRules; empty otherwise.
+    hostRoutingMap: [],
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    resolvedLegacyCatalogRealmURL: skipCatalog
-      ? undefined
-      : process.env.RESOLVED_LEGACY_CATALOG_REALM_URL ||
-        defaults.legacyCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
@@ -170,7 +175,6 @@ module.exports = function (environment) {
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
-    ENV.resolvedLegacyCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }

@@ -992,6 +992,25 @@ export class PagePool {
       throwIfAborted(signal);
     }
     if (entry.affinityKey !== affinityKey) {
+      // The only path that returns an entry tagged for a different
+      // affinity is the brand-new-affinity cross-affinity-steal
+      // fallback in `#selectEntryForAffinity`. It runs only when
+      // `#ensureStandbyPool` couldn't produce a standby — usually a
+      // transient browser-context creation failure. The reassignment
+      // below keeps the donor entry's `pageId`, so callers that ask
+      // "did I get a distinct page from the previous render?" will
+      // observe equality across two different affinities. Surfacing
+      // the path here gives CI logs the breadcrumb when that
+      // assertion trips. Kept at `warn` because hitting this path
+      // also means we're rendering one affinity's content on a tab
+      // whose CDP runtime state was warmed for a different affinity.
+      log.warn(
+        `cross-affinity steal: reassigning pageId=${entry.pageId} ` +
+          `from ${entry.affinityKey} to ${affinityKey} ` +
+          `(standby refill failed to produce a fresh tab; ` +
+          `standbys=${this.#standbys.size} creating=${this.#creatingStandbys} ` +
+          `active=${this.#poolEntryCount()} maxPages=${this.#maxPages})`,
+      );
       entry = this.#reassignAffinityTab(entry, affinityKey);
       reused = false;
     }
@@ -1851,6 +1870,55 @@ export class PagePool {
         let releaseTab = await commandeered.queue.acquire(signal, priority);
         return { entry: commandeered, reused: false, releaseTab, tabStartupMs };
       }
+      // module / command callers must produce the reserved tab the
+      // file-admission cap is supposed to keep room for. The cap
+      // bounds file workload at `affinityTabMax − 1`, leaving global-
+      // pool headroom for a non-file call — but the headroom is only
+      // a reservation, not a spawned tab. Without this synchronous
+      // refill+retry, the call falls through to the busy-tab fallback
+      // below and queues behind the file render that's awaiting this
+      // sub-render: the self-referential prerender deadlock.
+      // `#ensureStandbyPool` respects `#maxPages` via
+      // `#prepareSlotForStandby`, so this can't oversubscribe the
+      // global pool. Note this path only fires under
+      // `entryList.length < #affinityTabMax` — the at-cap case (every
+      // tab held by file renders, no dynamic-expansion budget) still
+      // falls through to busy-tab below. That residual deadlock
+      // requires either operator-side capacity tuning or the high-
+      // priority tier escape hatch beneath this branch.
+      //
+      // We await `#ensureStandbyPool` UNCONDITIONALLY here (not gated
+      // on `current < desired`). Reason: `#currentStandbyCount` =
+      // `#standbys.size + #creatingStandbys`. If the file render that
+      // arrived just before this caller consumed the only standby and
+      // its post-acquire `#kickStandbyRefill` is already creating a
+      // replacement, `creatingStandbys > 0` inflates `current` to
+      // meet `desired` while `#standbys.size` is still 0. A
+      // `current < desired` guard would skip the await; the
+      // subsequent `commandeerDormantTab(standbyOnly:true)` would
+      // then fail to find a real standby and the caller would fall
+      // through to the busy-tab branch — exactly the deadlock this
+      // change is meant to prevent. Two scenarios produce no-op
+      // behavior: (a) the pool is genuinely healthy with
+      // `#standbys.size >= desired` and no refill in flight —
+      // `#ensureStandbyPoolInternal`'s loop returns at line 1266
+      // (`current >= desired`); (b) a refill is in flight —
+      // `#ensureStandbyPool` returns the existing `#ensuringStandbys`
+      // promise via dedup at line 1242 and we wait for it. Both
+      // produce the right shape: no spurious creation when not needed,
+      // wait when needed.
+      if (queue !== 'file' && entryList.length < this.#affinityTabMax) {
+        let startedAt = Date.now();
+        await this.#ensureStandbyPool();
+        tabStartupMs += Date.now() - startedAt;
+        let refilled = this.#commandeerDormantTab(affinityKey, {
+          standbyOnly: true,
+        });
+        if (refilled) {
+          let releaseTab = await refilled.queue.acquire(signal, priority);
+          return { entry: refilled, reused: false, releaseTab, tabStartupMs };
+        }
+      }
       // No orphan, no commandeer-able tab/standby. If we got here
       // through the dynamic-expansion escape hatch, drive an
       // expansion + fresh spawn so the saturated module/command
@@ -1905,6 +1973,18 @@ export class PagePool {
       // #ensureStandbyPool()` in `getPage` made this ordering implicit;
       // now we make it explicit here so brand-new affinities still get
       // a fresh standby in preference to busy-tab queueing.
+      //
+      // The gate here is intentional and asymmetric with the non-file
+      // spawn-branch above. There the deadlock cost of skipping is
+      // unbounded (the caller queues on the very tab whose work it
+      // blocks), so we await unconditionally. Here the cost of
+      // skipping is only a cross-affinity-steal hop — itself a
+      // designed fallback — so paying an extra microtask for a no-op
+      // await is the wrong trade. It also shifts microtask ordering
+      // against a concurrent same-affinity file caller arriving on
+      // an idle tab, which the
+      // `queues same-realm request when tab is transitioning` test in
+      // `prerendering-test.ts` pins.
       if (this.#currentStandbyCount() < this.#desiredStandbyCount()) {
         let startedAt = Date.now();
         await this.#ensureStandbyPool();

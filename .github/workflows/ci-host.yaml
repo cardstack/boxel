@@ -108,18 +108,23 @@ jobs:
 
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Start test services (icons + host dist + realm servers)
-        run: mise run test-services:host | tee -a /tmp/server.log &
-      - name: Create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-
+      # Install + restart dbus/upower BEFORE the test services come up.
+      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
+      # in any already-running chromium (the prerender's standby probe and
+      # the realm-server's prerender workers), which aborts every in-flight
+      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
+      # stuck waiting for #standby-ready that never lands.
       - name: Install D-Bus helpers
         run: |
           sudo apt-get update
           sudo apt-get install -y dbus-x11 upower
           sudo service dbus restart
           sudo service upower restart
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
 
       - name: Live test suite
         run: dbus-run-session -- pnpm test:live
@@ -170,6 +175,18 @@ jobs:
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
+      # Install + restart dbus/upower BEFORE the test services come up.
+      # `sudo service dbus restart` triggers chrome's NetworkChangeNotifier
+      # in any already-running chromium (the prerender's standby probe and
+      # the realm-server's prerender workers), which aborts every in-flight
+      # h2 stream with ERR_NETWORK_CHANGED and leaves wait-for-host-standby
+      # stuck waiting for #standby-ready that never lands.
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
@@ -177,13 +194,6 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-
-      - name: Install D-Bus helpers
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dbus-x11 upower
-          sudo service dbus restart
-          sudo service upower restart
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
@@ -241,6 +251,15 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          # [readiness-diag] — start-server-and-test reads DEBUG and
+          # propagates `log: true` + `verbose: true` to wait-on, so each
+          # readiness-probe attempt prints its HTTP status / connection
+          # error. Distinguishes "server not listening" from "server
+          # hanging mid-request" from "server returning 500" when the
+          # 10-minute wait-on timer fires. Remove together with the
+          # other [readiness-diag] markers once the root cause is
+          # identified.
+          DEBUG: start-server-and-test
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts

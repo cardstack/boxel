@@ -37,7 +37,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   requireInputFields = ['realm', 'listingId'];
 
   get submissionsRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/submissions/'),
     );
   }
@@ -165,7 +165,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   }
 
   private get catalogRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/catalog/'),
     );
   }

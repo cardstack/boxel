@@ -40,6 +40,7 @@ import type { TimingDiagnostics } from './index';
 import {
   coerceTypes,
   type BoxelIndexTable,
+  type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -393,6 +394,28 @@ export class Batch {
       // drop this band-aid
       return;
     }
+    // An instance-error / file-error entry whose `.error.message` is
+    // empty would persist as a row with `has_error = true` and an
+    // error_doc that is null or missing the human-readable text. Such
+    // a row is invisible to UI and DB-only triage, and historically
+    // produced indexing jobs that re-reserved indefinitely without
+    // ever rejecting. Throw at the boundary so the caller's stderr log
+    // carries the underlying render error and the worker can finalize
+    // the reservation against the per-job cap instead of silently
+    // writing a black-hole row.
+    if (
+      isErrorEntry(entry) &&
+      (!entry.error ||
+        typeof entry.error.message !== 'string' ||
+        entry.error.message.length === 0)
+    ) {
+      throw new Error(
+        `indexer refused ${entry.type} entry for ${url.href}: ` +
+          `error.message is empty. An upstream entry-construction site dropped ` +
+          `the underlying render error. Check worker stderr for the actual ` +
+          `failure text.`,
+      );
+    }
     let href = url.href;
     this.#invalidations.add(url.href);
     // Build the per-row timing_diagnostics blob. Render-side fields
@@ -640,31 +663,16 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index_working as i
-          WHERE`,
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type = ', param('instance')],
-        ['i.types IS NOT NULL'],
-        [
-          dbExpression({
-            pg: `(i.types->>0) IS NOT NULL`,
-            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
-          }),
-        ],
-        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
-      ]),
-      `GROUP BY i.display_names->>0, i.types->>0`,
-      `ORDER BY i.display_names->>0 ASC`,
-    ] as Expression);
+    let instances = await this.#fetchTypeSummary('instance');
+    let files = await this.#fetchTypeSummary('file');
+
+    let value = { instances, files };
 
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
         realm_version: this.realmVersion,
-        value: results,
+        value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
@@ -682,6 +690,46 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  // Aggregates per-type summaries (count, display name, code-ref key, icon)
+  // for one kind of row in boxel_index_working — either CardDef instances or
+  // FileDef files. The shape of the result rows matches `CardTypeSummary`
+  // exactly, so callers can drop them straight into `realm_meta.value`.
+  //
+  // Grouping is by `code_ref` only (not also by display_name). Display name
+  // is aggregated with `MAX(...)`, which skips NULLs — so if some rows for
+  // a given code_ref carry a populated display_name (extracted by the
+  // current FileDefAttributesExtractor) and others carry an empty
+  // `display_names` array (extracted by older indexer code that hadn't
+  // shipped Step 2 yet), the rollup still produces a single summary row
+  // with the non-null label. Without this, CardsGrid's sidebar shows two
+  // entries for the same type — one labeled "Markdown", one labeled
+  // "MarkdownDef" (the CodeRef-name fallback) — that resolve to identical
+  // searches and confuse users during the transition window.
+  async #fetchTypeSummary(
+    indexType: BoxelIndexTable['type'],
+  ): Promise<CardTypeSummary[]> {
+    let results = await this.#query([
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+       FROM boxel_index_working as i
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param(indexType)],
+        ['i.types IS NOT NULL'],
+        [
+          dbExpression({
+            pg: `(i.types->>0) IS NOT NULL`,
+            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
+          }),
+        ],
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+      ]),
+      `GROUP BY i.types->>0`,
+      `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
+    ] as Expression);
+    return results as unknown as CardTypeSummary[];
   }
 
   private async applyBatchUpdates() {
@@ -728,11 +776,20 @@ export class Batch {
   }
 
   private async pruneObsoleteEntries() {
+    // Delete every realm_meta row for this realm except the one we just
+    // wrote. The previous predicate (`realm_version < this.realmVersion`)
+    // only swept rows from incremental indexing where versions march
+    // forward. A from-scratch reindex resets the version to a low number,
+    // leaving older high-version rows orphaned forever — those legacy rows
+    // then poisoned `_types` reads when the SELECT picked the wrong one.
+    // Cleaning by `!=` covers both directions safely; the unique key on
+    // (realm_url, realm_version) guarantees we never accidentally keep
+    // two current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['realm_version <', param(this.realmVersion)],
+        ['realm_version !=', param(this.realmVersion)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
@@ -782,6 +839,15 @@ export class Batch {
       return;
     }
     let existingTypes = await this.existingIndexTypes(toTombstone);
+    // `has_error` and `error_doc` are listed (with explicit false / null
+    // values per row) so the upsert's ON CONFLICT SET clause clears them.
+    // The primary key is `(url, realm_url, type)` — no `realm_version` —
+    // so a tombstone always collides with the prior row, and any column
+    // NOT in this list keeps its previous value. Without these two,
+    // a row that ever held `has_error = true` would carry that flag
+    // (and whatever `error_doc` it had at the time, including
+    // `jsonb null`) through every subsequent reindex, producing a row
+    // that reads as "errored but with no message" indefinitely.
     let columns = [
       'url',
       'file_alias',
@@ -789,6 +855,8 @@ export class Batch {
       'realm_version',
       'realm_url',
       'is_deleted',
+      'has_error',
+      'error_doc',
       'timing_diagnostics',
       'job_id',
     ].map((c) => [c]);
@@ -815,7 +883,10 @@ export class Batch {
           type,
           this.realmVersion,
           this.realmURL.href,
-          true,
+          true, // is_deleted
+          false, // has_error — explicit clear so stale error state from
+          // a prior pass does not survive the deletion
+          null, // error_doc — same rationale
           tombstoneDiagnosticsJson,
           jobIdValue,
         ].map((v) => [param(v)]),

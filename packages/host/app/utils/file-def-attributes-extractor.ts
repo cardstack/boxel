@@ -40,6 +40,7 @@ export type FileDefExtractResult = {
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource;
   types?: string[];
+  displayNames?: string[];
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -200,6 +201,7 @@ export class FileDefAttributesExtractor {
       if (searchDoc) {
         let typeCodeRefs = getTypes(klass);
         let types = typeCodeRefs.map((type) => internalKeyFor(type, undefined));
+        let displayNames = getDisplayNames(klass);
         let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
         let queryFieldDefs = await this.extractQueryFieldDefs(klass);
         return {
@@ -212,6 +214,7 @@ export class FileDefAttributesExtractor {
             queryFieldDefs,
           ),
           types,
+          displayNames,
           deps,
           ...(error ? { error } : {}),
           ...(mismatch ? { mismatch: true } : {}),
@@ -375,6 +378,32 @@ export function getTypes(klass: FileDefConstructor): CodeRef[] {
     current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
   }
   return types;
+}
+
+// Walks the FileDef subclass prototype chain and collects each level's
+// `static displayName` (e.g. `MarkdownDef.displayName === 'Markdown'`).
+// Mirrors the card-side getDisplayNames in routes/render/meta.ts so the same
+// `boxel_index.display_names` semantics apply to file rows.
+export function getDisplayNames(klass: FileDefConstructor): string[] {
+  let displayNames: string[] = [];
+  let current: FileDefConstructor | undefined = klass;
+  while (current) {
+    let ref = identifyCard(current as unknown as typeof BaseDef);
+    if (!ref || isEqual(ref, baseRef)) {
+      break;
+    }
+    let kAny = current as {
+      displayName?: string;
+      name?: string;
+    };
+    if (typeof kAny.displayName === 'string' && kAny.displayName) {
+      displayNames.push(kAny.displayName);
+    } else if (typeof kAny.name === 'string' && kAny.name) {
+      displayNames.push(kAny.name);
+    }
+    current = Reflect.getPrototypeOf(current) as FileDefConstructor | undefined;
+  }
+  return displayNames;
 }
 
 export function buildFileResource(

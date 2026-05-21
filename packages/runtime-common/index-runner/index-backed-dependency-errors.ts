@@ -1,5 +1,5 @@
 import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
-import type { ModuleCacheEntries } from '../definition-lookup';
+import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
 import { cardIdToURL } from '../card-reference-resolver';
 import { canonicalURL } from './dependency-url';
@@ -11,26 +11,30 @@ import {
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
-  readModuleCacheEntries(moduleIds: string[]): Promise<ModuleCacheEntries>;
+  readDefinitionCacheEntries(
+    moduleIds: string[],
+  ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
   getInvalidations(): string[];
 }
 
 export class IndexBackedDependencyErrors {
   #realmURL: URL;
-  #readModuleCacheEntries: (moduleIds: string[]) => Promise<ModuleCacheEntries>;
+  #readDefinitionCacheEntries: (
+    moduleIds: string[],
+  ) => Promise<DefinitionCacheEntries>;
   #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
   #getInvalidations: () => string[];
   #relationshipDependencyRows = new Map<string, DependencyIndexRow[]>();
 
   constructor({
     realmURL,
-    readModuleCacheEntries,
+    readDefinitionCacheEntries,
     getDependencyRows,
     getInvalidations,
   }: IndexBackedDependencyErrorOptions) {
     this.#realmURL = realmURL;
-    this.#readModuleCacheEntries = readModuleCacheEntries;
+    this.#readDefinitionCacheEntries = readDefinitionCacheEntries;
     this.#getDependencyRows = getDependencyRows;
     this.#getInvalidations = getInvalidations;
   }
@@ -194,7 +198,7 @@ export class IndexBackedDependencyErrors {
     if (deps.length === 0) {
       return [];
     }
-    let entries = await this.#readModuleCacheEntries(deps);
+    let entries = await this.#readDefinitionCacheEntries(deps);
     let errors: SerializedError[] = [];
     for (let entry of Object.values(entries)) {
       if (!entry.error?.error) {

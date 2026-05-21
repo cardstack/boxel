@@ -10,7 +10,7 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, rri } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -1143,7 +1143,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click(`[data-test-option-id="${testRealmURL}pet-entry-2"]`);
 
     // Wait for linked examples to appear
-    const petId = `${testRealmURL}Pet/mango`;
+    const petId = rri(`${testRealmURL}Pet/mango`);
     assert.dom(`[data-test-card="${petId}"]`).exists();
 
     // Click on the first linked example
@@ -1205,8 +1205,8 @@ module('Acceptance | Spec preview', function (hooks) {
   });
 
   test('updatePlaygroundSelections preserves existing format when selecting different examples card', async function (assert) {
-    const firstPetId = `${testRealmURL}Pet/mango`;
-    const secondPetId = `${testRealmURL}Pet/pudding`;
+    const firstPetId = rri(`${testRealmURL}Pet/mango`);
+    const secondPetId = rri(`${testRealmURL}Pet/pudding`);
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,

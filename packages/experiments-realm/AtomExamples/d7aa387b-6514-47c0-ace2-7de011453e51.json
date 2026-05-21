@@ -93,22 +93,22 @@
       },
       "trip.country": {
         "links": {
-          "self": "http://localhost:4201/experiments/Country/argentina"
+          "self": "https://localhost:4201/experiments/Country/argentina"
         }
       },
       "trip.countries.0": {
         "links": {
-          "self": "http://localhost:4201/experiments/Country/brazil"
+          "self": "https://localhost:4201/experiments/Country/brazil"
         }
       },
       "trip.countries.1": {
         "links": {
-          "self": "http://localhost:4201/experiments/Country/4"
+          "self": "https://localhost:4201/experiments/Country/4"
         }
       },
       "trip.countries.2": {
         "links": {
-          "self": "http://localhost:4201/experiments/Country/1"
+          "self": "https://localhost:4201/experiments/Country/1"
         }
       },
       "trips.0.country": {

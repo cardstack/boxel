@@ -2,8 +2,7 @@ import { execSync } from 'child_process';
 import { writeFileSync, renameSync, unlinkSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { logger } from '@cardstack/runtime-common';
-import type { Server } from 'http';
-import type { AddressInfo } from 'net';
+import type { AddressInfo, Server } from 'net';
 import yaml from 'yaml';
 
 const log = logger('dev-service-registry');
@@ -63,7 +62,11 @@ export function serviceHostname(serviceName: string, env?: string): string {
 }
 
 export function serviceURL(serviceName: string, env?: string): string {
-  return `http://${serviceHostname(serviceName, env)}`;
+  // Traefik terminates TLS on :443 for every `*.<slug>.localhost`
+  // hostname using the mkcert leaf mounted via docker-compose
+  // (traefik/dynamic/tls.yml). HTTP requests on :80 308-redirect to
+  // https — see `registerService` below.
+  return `https://${serviceHostname(serviceName, env)}`;
 }
 
 export function isEnvironmentMode(): boolean {
@@ -107,13 +110,35 @@ export function registerService(
     ? `Host(\`${hostname}\`) || HostRegexp(\`^.+\\.${escapedHostname}$\`)`
     : `Host(\`${hostname}\`)`;
 
+  // Two routers per service. `websecure` (port 443) terminates TLS at
+  // Traefik using the mkcert leaf in traefik/dynamic/tls.yml. The
+  // `-http` router on :80 308-redirects to https so a stale http://
+  // link still works. Both point at the same upstream — the
+  // realm-server / worker / prerender process serves plain HTTP on
+  // its dynamic port; Traefik is the only place TLS is terminated.
+  let redirectMiddleware = `${routerKey}-https-redirect`;
   let config: any = {
     http: {
       routers: {
         [routerKey]: {
           rule,
           service: routerKey,
+          entryPoints: ['websecure'],
+          tls: {},
+        },
+        [`${routerKey}-http`]: {
+          rule,
           entryPoints: ['web'],
+          middlewares: [redirectMiddleware],
+          service: routerKey,
+        },
+      },
+      middlewares: {
+        [redirectMiddleware]: {
+          redirectScheme: {
+            scheme: 'https',
+            permanent: true,
+          },
         },
       },
       services: {

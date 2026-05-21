@@ -12,7 +12,7 @@ import {
   removeSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
@@ -905,7 +905,7 @@ module(basename(__filename), function () {
       // file-watcher catches up (potentially many hours later in
       // production), the published URL keeps serving stale HTML.
       //
-      // The fix (handle-publish-realm calling Realm.clearLocalCaches()
+      // The fix (handle-publish-realm calling Realm.clearLocalSourceCaches()
       // before enqueueing the reindex) is verified end-to-end by the
       // matrix Playwright test, but the data-layer invariant is faster
       // to assert here: after republish, the boxel_index row for the

@@ -7,6 +7,17 @@ export interface MatrixAuth {
 
 export type RealmTokens = Record<string, string>;
 
+// Thrown when Matrix rejects an access token (401/403). Callers can catch
+// this specifically to drive interactive re-auth without parsing messages.
+export class MatrixAuthError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'MatrixAuthError';
+    this.status = status;
+  }
+}
+
 interface MatrixLoginResponse {
   access_token: string;
   device_id: string;
@@ -69,6 +80,12 @@ async function getOpenIdToken(
 
   if (!response.ok) {
     let text = await response.text();
+    if (response.status === 401 || response.status === 403) {
+      throw new MatrixAuthError(
+        response.status,
+        `OpenID token request failed: ${response.status} ${text}`,
+      );
+    }
     throw new Error(`OpenID token request failed: ${response.status} ${text}`);
   }
 
@@ -138,17 +155,30 @@ function userRealmsAccountDataUrl(matrixAuth: MatrixAuth): string {
 export async function getUserRealmsFromMatrixAccountData(
   matrixAuth: MatrixAuth,
 ): Promise<string[]> {
+  let response: Response;
   try {
-    let response = await fetch(userRealmsAccountDataUrl(matrixAuth), {
+    response = await fetch(userRealmsAccountDataUrl(matrixAuth), {
       headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
     });
-    if (!response.ok) {
-      return [];
-    }
+  } catch {
+    // Network unreachable / DNS / similar — treat as empty (best-effort).
+    return [];
+  }
+  if (response.status === 401 || response.status === 403) {
+    let text = await response.text();
+    throw new MatrixAuthError(
+      response.status,
+      `Matrix account_data fetch failed: ${response.status} ${text}`,
+    );
+  }
+  if (!response.ok) {
+    // 404 just means the event has never been set — return empty list.
+    return [];
+  }
+  try {
     let data = (await response.json()) as { realms?: string[] };
     return Array.isArray(data.realms) ? [...data.realms] : [];
   } catch {
-    // Best-effort — treat unreachable account data as an empty list
     return [];
   }
 }
@@ -171,6 +201,12 @@ export async function addRealmToMatrixAccountData(
     });
     if (!putResponse.ok) {
       let text = await putResponse.text();
+      if (putResponse.status === 401 || putResponse.status === 403) {
+        throw new MatrixAuthError(
+          putResponse.status,
+          `Failed to update Matrix account data: ${putResponse.status} ${text}`,
+        );
+      }
       throw new Error(
         `Failed to update Matrix account data: ${putResponse.status} ${text}`,
       );
@@ -205,6 +241,12 @@ export async function removeRealmFromMatrixAccountData(
   });
   if (!putResponse.ok) {
     let text = await putResponse.text();
+    if (putResponse.status === 401 || putResponse.status === 403) {
+      throw new MatrixAuthError(
+        putResponse.status,
+        `Failed to update Matrix account data: ${putResponse.status} ${text}`,
+      );
+    }
     throw new Error(
       `Failed to update Matrix account data: ${putResponse.status} ${text}`,
     );

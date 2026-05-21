@@ -1,5 +1,16 @@
 (globalThis as any).__environment = 'test';
 
+// Strip the dev TLS env vars before any fixture realm-server is spun up.
+// `env-vars.sh` exports these whenever the local mkcert cert exists, which
+// is now the CI default. Without this delete, in-process fixture servers
+// would bind the HTTPS+HTTP/2 dispatcher on their random `127.0.0.1:444X`
+// ports and the dispatcher's plain-HTTP branch would 308-redirect every
+// supertest request to `https://…`, breaking every assertion that expects
+// `200`/`4xx`. In-process tests don't need TLS — they speak HTTP/1.1 to
+// supertest directly.
+delete process.env.REALM_SERVER_TLS_CERT_FILE;
+delete process.env.REALM_SERVER_TLS_KEY_FILE;
+
 // Ensure test timers don't hold the Node event loop open. Wrap setTimeout and
 // setInterval to unref timers so the process can exit once work is done. This
 // does have the effect of masking any issues where code should be clearing
@@ -166,9 +177,11 @@ const ALL_TEST_FILES: string[] = [
   './card-source-endpoints-test',
   './definition-lookup-test',
   './file-watcher-events-test',
+  './full-index-on-startup-test',
   './full-reindex-test',
   './indexing-test',
   './lazy-mount-test',
+  './listener-dispatcher-test',
   './module-cache-race-test',
   './module-syntax-test',
   './permissions/permission-checker-test',
@@ -198,10 +211,13 @@ const ALL_TEST_FILES: string[] = [
   './realm-advisory-locks-test',
   './realm-cleanup-transaction-test',
   './realm-config-card-backfill-test',
+  './data-plane-write-lock-test',
   './realm-registry-backfill-test',
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
   './realm-file-changes-listener-test',
+  './realm-index-updated-listener-test',
+  './realm-routing-test',
   './module-cache-invalidation-listener-test',
   './pg-adapter-subscribe-test',
   './module-cache-coordination-test',
@@ -232,6 +248,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/screenshot-card-endpoint-test',
   './server-endpoints/search-test',
   './server-endpoints/search-prerendered-test',
+  './serve-index-test',
   './server-config-test',
   './server-endpoints/info-test',
   './server-endpoints/stripe-session-test',
@@ -256,6 +273,8 @@ const ALL_TEST_FILES: string[] = [
   './query-matches-filter-test',
   './matches-filter-integration-test',
   './search-in-flight-key-test',
+  './coerce-error-message-test',
+  './normalize-realm-meta-value-test',
   './job-scoped-search-cache-test',
   './consuming-realm-header-test',
   './delete-boxel-claimed-domain-test',

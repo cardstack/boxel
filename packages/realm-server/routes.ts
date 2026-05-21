@@ -1,4 +1,3 @@
-import type { RealmInfo } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
@@ -11,7 +10,9 @@ import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session';
-import handleCreateRealmRequest from './handlers/handle-create-realm';
+import handleCreateRealmRequest, {
+  type CreateRealmDeps,
+} from './handlers/create-realm';
 import handleDeleteRealm from './handlers/handle-delete-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
@@ -84,19 +85,6 @@ export type CreateRoutesArgs = {
   reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
-  createRealm: ({
-    ownerUserId,
-    endpoint,
-    name,
-    backgroundURL,
-    iconURL,
-  }: {
-    ownerUserId: string;
-    endpoint: string;
-    name: string;
-    backgroundURL?: string;
-    iconURL?: string;
-  }) => Promise<{ url: string; realm: Realm; info: Partial<RealmInfo> }>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -129,6 +117,15 @@ export function createRoutes(args: CreateRoutesArgs) {
   // worst-case memory under a synthetic-jobId flood.
   let searchCache = new JobScopedSearchCache();
 
+  let createRealmDeps: CreateRealmDeps = {
+    serverURL: new URL(args.serverURL),
+    realms: args.realms,
+    dbAdapter: args.dbAdapter,
+    virtualNetwork: args.virtualNetwork,
+    realmsRootPath: args.realmsRootPath,
+    reconciler: args.reconciler,
+  };
+
   router.get(
     '/',
     healthCheck,
@@ -141,7 +138,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed),
-    handleCreateRealmRequest(args),
+    handleCreateRealmRequest(createRealmDeps),
   );
   router.delete(
     '/_delete-realm',
@@ -203,7 +200,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search-prerendered',
     multiRealmAuthorization(args),
-    handleSearchPrerendered(),
+    handleSearchPrerendered({ searchCache }),
   );
   router.post(
     '/_prerender-card',

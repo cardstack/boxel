@@ -102,7 +102,7 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('http://localhost:4202/test/');
+export const testModuleRealm = ri('https://localhost:4202/test/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
@@ -1367,8 +1367,8 @@ async function setupTestRealm({
   }
 
   let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    await realmServer.setAvailableRealmURLs([realmURL]);
+  if (!realmServer.availableRealmIdentifiers.includes(ri(realmURL))) {
+    await realmServer.setAvailableRealmIdentifiers([ri(realmURL)]);
   }
 
   return { realm, adapter };

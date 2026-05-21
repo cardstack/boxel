@@ -164,17 +164,17 @@ export {
 export function extractRelationshipIds(
   relationship: Relationship,
   baseUrl: string | URL,
-): string[] {
-  let ids: string[] = [];
+): RealmResourceIdentifier[] {
+  let ids: RealmResourceIdentifier[] = [];
   let data = relationship.data;
   if (!data || typeof data !== 'object') {
     return ids;
   }
-  let resolveId = (id: string) => {
+  let resolveId = (id: string): RealmResourceIdentifier => {
     try {
-      return resolveCardReference(id, baseUrl);
+      return resolveCardReference(id, baseUrl) as RealmResourceIdentifier;
     } catch {
-      return id;
+      return id as RealmResourceIdentifier;
     }
   };
   if (Array.isArray(data)) {

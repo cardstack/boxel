@@ -317,7 +317,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     setRecentFiles([
       [testRealmURL, 'index.json'],
-      ['http://localhost:4202/test/', 'français.json'],
+      ['https://localhost:4202/test/', 'français.json'],
       // @ts-ignore error on purpose
       'a-non-url-to-ignore',
     ]);
@@ -403,7 +403,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       [testRealmURL, 'index.json', null],
       [testRealmURL, 'français.json', null],
       [testRealmURL, 'Person/1.json', null],
-      ['http://localhost:4202/test/', 'français.json', null],
+      ['https://localhost:4202/test/', 'français.json', null],
     ]);
   });
 

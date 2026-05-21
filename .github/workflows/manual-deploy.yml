@@ -180,7 +180,7 @@ jobs:
           environment: ${{ inputs.environment }}
           dockerfile: "packages/realm-server/realm-server.Dockerfile"
           build-args: |
-            "realm_server_script=start:${{ inputs.environment }}"
+            "realm_server_script=scripts/start-${{ inputs.environment }}.sh"
 
   build-prerender-manager:
     name: Build prerender manager Docker image
@@ -199,7 +199,7 @@ jobs:
           environment: ${{ inputs.environment }}
           dockerfile: "packages/realm-server/prerender-manager.Dockerfile"
           build-args: |
-            "prerender_manager_script=start:prerender-manager"
+            "prerender_manager_script=scripts/start-prerender-manager.sh"
 
   build-prerender:
     name: Build prerender Docker image
@@ -218,7 +218,7 @@ jobs:
           environment: ${{ inputs.environment }}
           dockerfile: "packages/realm-server/prerender.Dockerfile"
           build-args: |
-            "prerender_script=start:prerender-${{ inputs.environment }}"
+            "prerender_script=scripts/start-prerender-${{ inputs.environment }}.sh"
 
   build-worker:
     name: Build worker Docker image
@@ -237,7 +237,7 @@ jobs:
           environment: ${{ inputs.environment }}
           dockerfile: "packages/realm-server/worker.Dockerfile"
           build-args: |
-            "worker_script=start:worker-${{ inputs.environment }}"
+            "worker_script=scripts/start-worker-${{ inputs.environment }}.sh"
 
   build-pg-migration:
     name: Build pg-migration Docker image

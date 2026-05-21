@@ -83,6 +83,13 @@ type Options = {
   // when file-meta responses are served during card prerendering (the single
   // prerender semaphore permit is already held).
   cacheOnlyDefinitions?: boolean;
+  // Worker-job priority threaded from the caller (typically
+  // `_federated-search`'s `x-boxel-job-priority` header, set by the
+  // host's fetch wrapper during a prerendered card render). Forwarded
+  // to `lookupDefinition` so any sub-`prerenderModule` fired for a
+  // missed `type:` filter resolution inherits the originating
+  // priority. Defaults to 0 when absent.
+  priority?: number;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -381,7 +388,9 @@ export class RealmIndexQueryEngine {
           return false;
         }
       } else {
-        definition = await this.#definitionLookup.lookupDefinition(codeRef);
+        definition = await this.#definitionLookup.lookupDefinition(codeRef, {
+          ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+        });
       }
       if (!definition) {
         return false;
@@ -715,7 +724,9 @@ export class RealmIndexQueryEngine {
     if (opts?.cacheOnlyDefinitions) {
       return await this.#definitionLookup.lookupCachedDefinition(codeRef);
     }
-    return await this.#definitionLookup.lookupDefinition(codeRef);
+    return await this.#definitionLookup.lookupDefinition(codeRef, {
+      ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+    });
   }
 
   // Populate query-based relationship fields using pre-extracted metadata

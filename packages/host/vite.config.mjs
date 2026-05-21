@@ -5,12 +5,39 @@ import {
   ember,
 } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
+import { readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { boxelUIChecksumPlugin } from './lib/build/boxel-ui-checksum-plugin.mjs';
+
+// Local HTTPS dev access: the realm-server speaks HTTPS+HTTP/2 in local
+// dev (see `infra:ensure-dev-cert`), and the browser hits both Vite and
+// the realm-server in the same page. Mixing schemes triggers CORS
+// preflight failures ("Redirect is not allowed for a preflight
+// request" when the http→https redirect runs) and mixed-content
+// blocking. When the same TLS cert/key the realm-server reads via
+// REALM_SERVER_TLS_CERT_FILE / _KEY_FILE is available, terminate TLS
+// in Vite too so http://localhost:4200 becomes https://localhost:4200
+// and both origins share the scheme. `env-vars.sh` exports those env
+// vars whenever the cert exists; absent the cert, the dev stack stays
+// on HTTP end-to-end and this falls through to Vite's default.
+function devHttpsConfig() {
+  let certPath = process.env.REALM_SERVER_TLS_CERT_FILE;
+  let keyPath = process.env.REALM_SERVER_TLS_KEY_FILE;
+  if (!certPath || !keyPath) return undefined;
+  try {
+    return {
+      cert: readFileSync(certPath),
+      key: readFileSync(keyPath),
+    };
+  } catch {
+    return undefined;
+  }
+}
+const _devHttps = devHttpsConfig();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -274,8 +301,10 @@ export default defineConfig(({ mode }) => ({
       'Cache-Control': 'no-store',
     },
     ...(envHostname ? { allowedHosts: [envHostname] } : {}),
+    ...(_devHttps ? { https: _devHttps } : {}),
   },
   server: {
+    ...(_devHttps ? { https: _devHttps } : {}),
     // Pre-warm the dep optimizer at server boot so the prerender's first
     // `/_standby` navigation doesn't race a cold Vite optimize. The host
     // transitive graph is ~1000 packages, and a cold optimize routinely

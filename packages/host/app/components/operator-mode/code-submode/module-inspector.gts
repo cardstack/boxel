@@ -411,7 +411,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       this.selectedDeclarationAsCodeRef,
       undefined,
     );
-    const cardId = id.replace(/\.json$/, '');
+    const cardId = rri(id.replace(/\.json$/, ''));
 
     const selections = window.localStorage.getItem(PlaygroundSelections);
     let existingFormat: Format = isField ? 'embedded' : 'isolated';
@@ -465,7 +465,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
-      () => this.realmServer.availableRealmURLs,
+      () => this.realmServer.availableRealmIdentifiers,
       { isLive: true, doWhileRefreshing: this.doWhileRefreshing },
     ) as ReturnType<getCards<Spec>>;
   };

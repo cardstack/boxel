@@ -197,7 +197,7 @@ export default class SearchSheet extends Component<Signature> {
   private get searchKeyAsURL() {
     return resolveSearchKeyAsURL(
       this.searchKey,
-      this.realmServer.availableRealmURLs,
+      this.realmServer.availableRealmIdentifiers,
     );
   }
 

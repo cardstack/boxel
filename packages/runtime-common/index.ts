@@ -225,6 +225,10 @@ export interface FileExtractResponse {
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource | null;
   types?: string[] | null;
+  // Display names walked from the resolved FileDef subclass up its prototype
+  // chain (e.g. `['Markdown', 'File']`). Persisted as `boxel_index.display_names`
+  // so CardsGrid's "All Files" sidebar can label each subtype.
+  displayNames?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -515,6 +519,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
   clampSerializedError,
+  coerceErrorMessage,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
@@ -645,6 +650,19 @@ export * from './pr-manifest';
 export * from './file-def-code-ref';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+// Extensions covered by the realm-wide pre-warm sweep that primes the
+// modules cache before the visit loop. This is an optimization, not a
+// correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
+// (e.g. command-input cards), and if pre-warm misses one the on-demand
+// `lookupDefinition` cache read-through fires a `prerenderModule` for
+// it during the visit. The PagePool's tab-materialization for
+// module/command callers makes that on-demand path safe (the sub-
+// prerender gets its own tab instead of queueing behind the render
+// that triggered it). Restricting the sweep to `.gts` / `.gjs` — where
+// cards live almost exclusively in practice — avoids paying the
+// prerender cost on every index for a file type that rarely contains
+// card definitions.
+export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
@@ -1001,6 +1019,15 @@ export interface CopyCardsWithCodeRef {
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
     if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasCardExtension(path: string): boolean {
+  for (let extension of cardExtensions) {
+    if (path.endsWith(extension)) {
       return true;
     }
   }

@@ -87,7 +87,11 @@ module(basename(__filename), function (hooks) {
       realmUrls: [sourceRealmURL, publishedRealmURL],
     });
 
-    type JobArgs = { realmURL: string; realmUsername: string };
+    type JobArgs = {
+      realmURL: string;
+      realmUsername: string;
+      clearLastModified: boolean;
+    };
     type JobRow = {
       job_type: string;
       concurrency_group: string | null;
@@ -116,6 +120,12 @@ module(basename(__filename), function (hooks) {
       {
         realmURL: sourceRealmURL,
         realmUsername: 'owner',
+        // full-reindex enqueues with clearLastModified: true so every
+        // file re-renders even when its mtime is unchanged. Surfaced in
+        // args so the from-scratch coalesce can refuse to attach a
+        // clearing publish to an already-running same-realm
+        // from-scratch.
+        clearLastModified: true,
       },
       'source job args are correct',
     );
@@ -137,6 +147,7 @@ module(basename(__filename), function (hooks) {
       {
         realmURL: publishedRealmURL,
         realmUsername: 'owner',
+        clearLastModified: true,
       },
       'published job args use the source owner',
     );

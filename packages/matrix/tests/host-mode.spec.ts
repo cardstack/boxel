@@ -2,6 +2,7 @@ import { expect, test } from './fixtures';
 import {
   createRealm,
   createSubscribedUserAndLogin,
+  login,
   logout,
   postCardSource,
   waitUntil,
@@ -10,6 +11,7 @@ import { appURL } from '../helpers/isolated-realm-server';
 import { randomUUID } from 'crypto';
 
 test.describe('Host mode', () => {
+  let realmURL: string;
   let publishedRealmURL: string;
   let publishedCardURL: string;
   let publishedWhitePaperCardURL: string;
@@ -31,7 +33,7 @@ test.describe('Host mode', () => {
     const realmName = `host-mode-${randomUUID()}`;
 
     await createRealm(page, realmName);
-    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
+    realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
 
     await page.goto(realmURL);
     await page.locator('[data-test-stack-item-content]').first().waitFor();
@@ -185,7 +187,7 @@ test.describe('Host mode', () => {
     await page.reload();
     await page.locator('[data-test-host-mode-isolated]').waitFor();
 
-    publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
+    publishedRealmURL = `https://published.localhost:4205/${username}/${realmName}/`;
 
     await page.evaluate(
       async ({ realmURL, publishedRealmURL }) => {
@@ -197,7 +199,7 @@ test.describe('Host mode', () => {
           throw new Error(`No session token found for ${realmURL}`);
         }
 
-        let response = await fetch('http://localhost:4205/_publish-realm', {
+        let response = await fetch('https://localhost:4205/_publish-realm', {
           method: 'POST',
           headers: {
             Accept: 'application/json',
@@ -222,7 +224,7 @@ test.describe('Host mode', () => {
     publishedCardURL = `${publishedRealmURL}index.json`;
     publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     publishedMyCardURL = `${publishedRealmURL}my-card.json`;
-    connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
+    connectRouteURL = `https://localhost:4205/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
 
@@ -318,7 +320,7 @@ test.describe('Host mode', () => {
     page,
   }) => {
     let response = await page.goto(
-      'http://localhost:4205/connect/http%3A%2F%2Fexample.com',
+      'https://localhost:4205/connect/http%3A%2F%2Fexample.com',
     );
 
     expect(response?.status()).toBe(404);
@@ -339,5 +341,99 @@ test.describe('Host mode', () => {
 
     const pageTitle = await page.title();
     expect(pageTitle).toBe('My Custom Title From Head Template');
+  });
+
+  // CS-10054 + CS-10055: routing rules in the realm config card resolve a
+  // bare path (no .json extension) to a target card and render it in host
+  // mode. This test fails until the host-mode request handler reads the
+  // routing map from the indexed RealmConfig card and applies it.
+  test('routing rule resolves a bare path to its target card', async ({
+    page,
+  }) => {
+    // beforeEach logged out — re-login so we can write to the source realm.
+    await login(page, username, password);
+    await page.goto(realmURL);
+    await page.locator('[data-test-stack-item-content]').first().waitFor();
+
+    // Overwrite realm.json with a routing rule mapping /whitepaper to the
+    // existing white-paper card. The auto-generated realm.json from
+    // createRealm has no rules; we replace it before re-publishing.
+    await postCardSource(
+      page,
+      realmURL,
+      'realm.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: `Routed Realm ${randomUUID()}` },
+            hostRoutingRules: [{ path: '/whitepaper' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './white-paper' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
+    );
+
+    // Re-publish so the routing rule lands in the published realm.
+    await page.evaluate(
+      async ({ realmURL, publishedRealmURL }) => {
+        let sessions = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        );
+        let token = sessions[realmURL];
+        if (!token) {
+          throw new Error(`No session token found for ${realmURL}`);
+        }
+        let response = await fetch('https://localhost:4205/_publish-realm', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({
+            sourceRealmURL: realmURL,
+            publishedRealmURL,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+      },
+      { realmURL, publishedRealmURL },
+    );
+
+    await logout(page);
+
+    // The _publish-realm POST returns 202 before the published realm has
+    // finished re-indexing the new realm.json. Poll the bare URL until the
+    // server-rendered HTML contains the target card's marker — that
+    // confirms the routing rule is indexed AND the server cardURL rewrite
+    // is applying it. Mirrors the waitUntil pattern in the
+    // `published card response` test above.
+    let routedURL = `${publishedRealmURL}whitepaper`;
+    await waitUntil(async () => {
+      let response = await page.request.get(routedURL, {
+        headers: { Accept: 'text/html' },
+      });
+      if (!response.ok()) {
+        return false;
+      }
+      let text = await response.text();
+      return text.includes('data-test-white-paper');
+    });
+
+    await page.goto(routedURL);
+    await expect(page.locator('[data-test-white-paper]')).toBeVisible();
   });
 });

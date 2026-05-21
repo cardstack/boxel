@@ -200,6 +200,23 @@ class RealmPusher extends RealmSyncBase {
 
       const result = await this.uploadFilesAtomic(filesToUpload, addPaths);
 
+      // Record every file the server actually wrote before surfacing
+      // errors. uploadFilesAtomic can return both `succeeded` and
+      // `error` when the atomic text batch lands but a per-file
+      // binary POST fails — dropping the manifest update in that
+      // case would force a re-add on the next push (409 cascade).
+      if (result.succeeded.length > 0) {
+        const uploaded = await Promise.all(
+          result.succeeded.map(async (rel) => ({
+            rel,
+            hash: await computeFileHash(filesToUpload.get(rel)!),
+          })),
+        );
+        for (const { rel, hash } of uploaded) {
+          newManifest.files[rel] = hash;
+        }
+      }
+
       if (result.error) {
         uploadFailed = true;
         this.hasError = true;
@@ -214,16 +231,6 @@ class RealmPusher extends RealmSyncBase {
             hint = `${entry.path}: ${entry.title}`;
           }
           console.error(`  ${hint}`);
-        }
-      } else if (result.succeeded.length > 0) {
-        const uploaded = await Promise.all(
-          result.succeeded.map(async (rel) => ({
-            rel,
-            hash: await computeFileHash(filesToUpload.get(rel)!),
-          })),
-        );
-        for (const { rel, hash } of uploaded) {
-          newManifest.files[rel] = hash;
         }
       }
     }
@@ -270,7 +277,11 @@ class RealmPusher extends RealmSyncBase {
       }
     }
 
-    if (!this.options.dryRun && !uploadFailed && filesToUpload.size > 0) {
+    // Refresh mtimes and save the manifest even on partial failure —
+    // newManifest.files only contains files the server actually wrote
+    // (unchanged carry-overs + succeeded uploads), so persisting it
+    // is always safe and avoids re-uploading text files that landed.
+    if (!this.options.dryRun && filesToUpload.size > 0) {
       try {
         const freshMtimes = await this.getRemoteMtimes();
         for (const rel of Object.keys(newManifest.files)) {
@@ -291,7 +302,7 @@ class RealmPusher extends RealmSyncBase {
       delete newManifest.remoteMtimes;
     }
 
-    if (!this.options.dryRun && !uploadFailed) {
+    if (!this.options.dryRun) {
       await saveManifest(this.options.localDir, newManifest);
     }
 
