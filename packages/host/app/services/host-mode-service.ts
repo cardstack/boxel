@@ -19,6 +19,16 @@ function ensureSingleTitle(headHTML: string): string {
     ? headHTML
     : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
 }
+
+// Normalize trailing-slash variance for routing-map matching. `/realm/`
+// and `/realm` are the same destination from the user's perspective,
+// but the injected map keys and Ember's `params.path` disagree on
+// the trailing slash. Stripping it on both sides makes the comparator
+// robust. Preserve the root `/` since stripping it would empty the path.
+function canonicalizeRoutingPath(path: string): string {
+  if (path === '/') return '/';
+  return path.replace(/\/+$/, '');
+}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -130,10 +140,19 @@ export default class HostModeService extends Service {
   // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
   // absent so the index path is matchable as either '' or '/'. The
   // server prefixes each rule's `path` with the realm's mount pathname
-  // before injecting the map, so the two sides line up as direct equality.
+  // before injecting the map, so the two sides line up as direct equality
+  // — except for the trailing-slash variance at the realm root. A `/`
+  // rule's injected key is the realm's mount pathname WITH trailing
+  // slash (e.g. `/progressive-cheetah/`), but Ember's catch-all strips
+  // it (`params.path === 'progressive-cheetah'` for either visit form).
+  // Canonicalize both sides by stripping trailing slashes (except the
+  // root `/` itself) before comparing so `/realm` ↔ `/realm/` resolve.
   resolveRoutedPath(path: string): string | null {
     let normalized = path.startsWith('/') ? path : `/${path}`;
-    let rule = this.hostRoutingMap.find((r) => r.path === normalized);
+    let canonical = canonicalizeRoutingPath(normalized);
+    let rule = this.hostRoutingMap.find(
+      (r) => canonicalizeRoutingPath(r.path) === canonical,
+    );
     return rule ? rule.id : null;
   }
 
