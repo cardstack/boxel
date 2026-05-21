@@ -384,6 +384,31 @@ describe('realm push (integration)', () => {
     expect(manifest.files['.boxel-sync.json']).toBeUndefined();
   });
 
+  it('respects .boxelignore patterns', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalFile(localDir, '.boxelignore', '*.ignore\nignore-dir/\n');
+    writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
+    writeLocalFile(localDir, 'test.ignore', 'should not be uploaded');
+    writeLocalFile(localDir, 'ignore-dir/ignored.json', '{"ignored":true}\n');
+
+    await pushCommand(localDir, realmUrl, { profileManager });
+
+    // Non-ignored file is uploaded
+    expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
+    // Files matching .boxelignore patterns are not uploaded
+    expect(await remoteFileExists(realmUrl, 'test.ignore')).toBe(false);
+    expect(await remoteFileExists(realmUrl, 'ignore-dir/ignored.json')).toBe(
+      false,
+    );
+    // The .boxelignore file itself is also not uploaded (dotfile rule)
+    expect(await remoteFileExists(realmUrl, '.boxelignore')).toBe(false);
+
+    let manifest = readManifest(localDir);
+    expect(Object.keys(manifest.files).sort()).toEqual(['card.gts']);
+  });
+
   it('pushes nested subdirectories recursively', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();

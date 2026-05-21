@@ -31,7 +31,6 @@ jobs:
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       bench-amd: ${{ steps.filter.outputs.bench-amd }}
       bench-realm: ${{ steps.filter.outputs.bench-realm }}
@@ -117,9 +116,6 @@ jobs:
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
-            workspace-sync-cli:
-              - *shared
-              - 'packages/workspace-sync-cli/**'
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
@@ -157,7 +153,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
@@ -862,72 +858,6 @@ jobs:
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
-
-  workspace-sync-cli-build:
-    name: Workspace Sync CLI Build
-    needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/init
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-
-  workspace-sync-cli-test:
-    name: Workspace Sync CLI Integration Tests
-    needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    concurrency:
-      group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/init
-      - name: Download test web assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ needs.test-web-assets.outputs.artifact_name }}
-          path: .test-web-assets-artifact
-      - name: Restore test web assets into workspace
-        shell: bash
-        run: |
-          shopt -s dotglob
-          cp -a .test-web-assets-artifact/. ./
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-      - name: Serve test assets (icons + host dist)
-        run: |
-          mise run ci:serve-test-assets &
-          timeout 180 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
-      - name: Start PostgreSQL for tests
-        run: pnpm start:pg | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Start Matrix services for tests
-        run: pnpm start:matrix | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Wait for PostgreSQL to accept connections
-        run: timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/5435) >/dev/null 2>&1; do sleep 1; done'
-      - name: Register realm users for tests
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-      - name: Run integration tests
-        run: pnpm test
-        working-directory: packages/workspace-sync-cli
-      - name: Upload test services log
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
-        with:
-          name: workspace-sync-cli-test-services-log
-          path: /tmp/test-services.log
-          retention-days: 30
 
   boxel-cli-build:
     name: Boxel CLI Build
