@@ -6,6 +6,7 @@ import {
   type ProfileManager,
 } from '../../lib/profile-manager';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { describeFetchError } from '../../lib/describe-fetch-error';
 
 export interface UnpublishOptions {
   /**
@@ -64,24 +65,10 @@ export async function unpublishRealm(
       },
     );
   } catch (err) {
-    // Node's fetch error surface is shallow: the outer error is always
-    // `TypeError: fetch failed`, and the *real* reason (ECONNRESET, TLS
-    // failure, undici socket error, etc.) lives on `error.cause`. Include
-    // it inline so opaque "fetch failed" lines don't reach the operator
-    // without context.
-    let msg = err instanceof Error ? err.message : String(err);
-    // `err.cause != null` rather than a truthy check so we don't drop
-    // falsy-but-defined causes (`''`, `0`, `false`, `NaN`). `!= null`
-    // matches both `null` and `undefined`.
-    if (err instanceof Error && err.cause != null) {
-      let cause = err.cause;
-      let causeMsg = cause instanceof Error ? cause.message : String(cause);
-      msg = `${msg} (caused by: ${causeMsg})`;
-    }
     return {
       publishedRealmURL: normalized,
       unpublished: false,
-      error: `Failed to reach realm server: ${msg}`,
+      error: `Failed to reach realm server: ${describeFetchError(err)}`,
     };
   }
 

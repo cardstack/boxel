@@ -7,6 +7,7 @@ import {
 } from '../../lib/profile-manager';
 import { unpublishRealm } from './unpublish';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { describeFetchError } from '../../lib/describe-fetch-error';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 const READINESS_POLL_INTERVAL_MS = 1000;
@@ -215,25 +216,6 @@ async function safeReadResponseText(response: Response): Promise<string> {
   } catch {
     return '<no response body>';
   }
-}
-
-// Node's fetch error surface is shallow: the outer error is always
-// `TypeError: fetch failed`, and the *real* reason (ECONNRESET, TLS
-// failure, undici socket error, etc.) lives on `error.cause`. Inline both
-// when summarizing for log output so opaque "fetch failed" lines don't
-// reach the operator without context.
-function describeFetchError(error: unknown): string {
-  let msg = error instanceof Error ? error.message : String(error);
-  // `error.cause != null` rather than a truthy check so we don't
-  // silently drop falsy-but-defined causes (`''`, `0`, `false`,
-  // `NaN`). `!= null` matches both `null` and `undefined` — i.e., the
-  // absence markers — and lets every explicit value through.
-  if (error instanceof Error && error.cause != null) {
-    let cause = error.cause;
-    let causeMsg = cause instanceof Error ? cause.message : String(cause);
-    return `${msg} (caused by: ${causeMsg})`;
-  }
-  return msg;
 }
 
 export interface PublishCliOptions {
