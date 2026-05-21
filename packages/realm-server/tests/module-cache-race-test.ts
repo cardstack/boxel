@@ -405,13 +405,14 @@ module(basename(__filename), function () {
 
       // Timestamped event log used by the dedup tests to capture the
       // hook entries, gate releases, counter readings, and HTTP responses
-      // around the concurrent-arrive window. Dumped via assert.pushResult
-      // only on assertion failure, so a CI flake leaves a forensic trail
-      // in the QUnit output instead of just the bare actual/expected
-      // line — future investigations can read CI logs to see WHICH
-      // event the race happened around. Each test fires at most a
-      // handful of events; no bounding needed.
-      function createDiagLog() {
+      // around the concurrent-arrive window. Dumped to stderr only on
+      // assertion failure, so a CI flake leaves a forensic trail in the
+      // realm-server log artifacts that future investigations can grep
+      // for the event timeline. `assert.pushResult({ result: true })`
+      // does NOT work here: this repo's QUnit JUnit reporter only
+      // serializes `data.errors` for failed tests, so passing diagnostic
+      // rows are silently dropped from the CI report.
+      function createDiagLog(testLabel: string) {
         let started = Date.now();
         let events: string[] = [];
         return {
@@ -425,14 +426,10 @@ module(basename(__filename), function () {
             };
             events.push(`[${label}] ${JSON.stringify(snapshot)}`);
           },
-          dump(assert: Assert) {
+          dump() {
+            console.error(`[dedup-flake-diag] test=${testLabel}`);
             for (let line of events) {
-              assert.pushResult({
-                result: true,
-                actual: line,
-                expected: line,
-                message: line,
-              });
+              console.error(`[dedup-flake-diag]   ${line}`);
             }
           },
         };
@@ -443,29 +440,91 @@ module(basename(__filename), function () {
         await testRealm.write(modulePath, transpilerHeavySource);
         testRealm.__testOnlyClearCaches();
 
-        let before = testRealm.__testOnlyGetTranspileCallCount();
-        let responses = await Promise.all([
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-        ]);
-        let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+        // Park A at the gate so the in-flight window is held open until
+        // B and C have demonstrably joined. transpilerHeavySource takes
+        // 50–500 ms in babel which usually masks this race, but on a
+        // saturated CI runner A can settle before later fireRequests
+        // reach #transpileModuleDeduped — same shape as the error-path
+        // flake; deterministic for the same reasons.
+        //
+        // signalAEntered fires from inside the gate hook, so the test
+        // can wait on the actual hook-entry event rather than the
+        // in-flight slot being set — the slot is installed BEFORE the
+        // hook fires (there's a DB read + file read in between), so
+        // polling inflight=1 doesn't prove A has reached the gate.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        let signalAEntered: () => void = () => {};
+        let aEntered = new Promise<void>((r) => {
+          signalAEntered = r;
+        });
+        let hookEntries = 0;
+        testRealm.__testOnlyDelayTranspile(() => {
+          hookEntries += 1;
+          signalAEntered();
+          return gate;
+        });
 
-        assert.deepEqual(
-          responses.map((r) => r.status),
-          [200, 200, 200],
-          'all three concurrent same-path requests succeed',
-        );
-        assert.strictEqual(
-          delta,
-          1,
-          'exactly one transpileJS call serviced three concurrent same-path readers',
-        );
-        assert.strictEqual(
-          testRealm.__testOnlyGetInFlightTranspileCount(),
-          0,
-          'in-flight slot released after the shared transpile settled',
-        );
+        // Hoist the pending* promises so the finally block can settle
+        // them with Promise.allSettled before teardown — otherwise a
+        // throw between fireRequest and the explicit await would leak
+        // background requests into the next test's afterEach.
+        let pendingA: ReturnType<typeof fireRequest> | undefined;
+        let pendingB: ReturnType<typeof fireRequest> | undefined;
+        let pendingC: ReturnType<typeof fireRequest> | undefined;
+        let diag = createDiagLog('N concurrent same-path readers');
+        let passed = false;
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          diag.note('start', { before });
+
+          pendingA = fireRequest(modulePath);
+          await aEntered;
+          diag.note('A-entered-hook');
+
+          pendingB = fireRequest(modulePath);
+          pendingC = fireRequest(modulePath);
+          await waitForJoinCount(2);
+          diag.note('B-and-C-joined', { hookEntries });
+
+          releaseGate();
+          diag.note('gate-released');
+          let responses = await Promise.all([pendingA, pendingB, pendingC]);
+          diag.note('all-responded', {
+            statuses: responses.map((r) => r.status),
+          });
+          let delta = testRealm.__testOnlyGetTranspileCallCount() - before;
+
+          assert.deepEqual(
+            responses.map((r) => r.status),
+            [200, 200, 200],
+            'all three concurrent same-path requests succeed',
+          );
+          assert.strictEqual(
+            delta,
+            1,
+            'exactly one transpileJS call serviced three concurrent same-path readers',
+          );
+          assert.strictEqual(
+            testRealm.__testOnlyGetInFlightTranspileCount(),
+            0,
+            'in-flight slot released after the shared transpile settled',
+          );
+          passed = true;
+        } finally {
+          releaseGate();
+          testRealm.__testOnlyDelayTranspile(undefined);
+          await Promise.allSettled(
+            [pendingA, pendingB, pendingC].filter(
+              (p): p is ReturnType<typeof fireRequest> => p !== undefined,
+            ),
+          );
+          if (!passed) {
+            diag.dump();
+          }
+        }
       });
 
       test('concurrent different-path readers each trigger their own transpile (no false coalesce)', async function (assert) {
@@ -707,17 +766,38 @@ module(basename(__filename), function () {
         // at a gate so the in-flight overlap window is held open until
         // both callers have demonstrably reached the dedup site, then
         // release to let the rejection propagate to both.
+        //
+        // signalAEntered fires from inside the gate hook, NOT from
+        // waitForInflight: the in-flight slot is set BEFORE the hook
+        // fires (#transpileWithLayers reads the L2 cache row +
+        // materializes the file ref in between), so polling inflight=1
+        // doesn't prove A is actually parked at the gate. Without the
+        // explicit signal, a slow DB read can let B's joinCount tick
+        // before A's hook entry, and the later hookEntries === 1
+        // assertion would observe 0.
         let releaseGate: () => void = () => {};
         let gate = new Promise<void>((r) => {
           releaseGate = r;
         });
+        let signalAEntered: () => void = () => {};
+        let aEntered = new Promise<void>((r) => {
+          signalAEntered = r;
+        });
         let hookEntries = 0;
         testRealm.__testOnlyDelayTranspile(() => {
           hookEntries += 1;
+          signalAEntered();
           return gate;
         });
 
-        let diag = createDiagLog();
+        // Hoist pending promises so the finally block can settle them
+        // with Promise.allSettled before the next test's afterEach
+        // tears the realm down — otherwise a throw between fireRequest
+        // and the explicit await leaks background HTTP requests across
+        // the test boundary.
+        let pendingA: ReturnType<typeof fireRequest> | undefined;
+        let pendingB: ReturnType<typeof fireRequest> | undefined;
+        let diag = createDiagLog('errored transpile shared');
         let passed = false;
         try {
           let before = testRealm.__testOnlyGetTranspileCallCount();
@@ -725,24 +805,23 @@ module(basename(__filename), function () {
 
           // Fire A but DON'T await — we need it parked at the gate so
           // B can race in.
-          let pendingA = fireRequest(modulePath);
-          await waitForInflight(1);
-          diag.note('A-parked-at-gate', { hookEntries });
+          pendingA = fireRequest(modulePath);
+          await aEntered;
+          diag.note('A-entered-hook', { hookEntries });
 
           // Fire B. B's HTTP request travels through Express +
           // supertest until it reaches #transpileModuleDeduped, where
           // it should observe A's pending in #inFlightTranspiles and
           // take the `existing` branch — bumping joinCount to 1 —
-          // instead of installing its own. Polling joinCount is
-          // deterministic; polling inflight=1 is not (already 1 from
-          // A).
-          let pendingB = fireRequest(modulePath);
+          // instead of installing its own.
+          pendingB = fireRequest(modulePath);
           await waitForJoinCount(1);
           diag.note('B-joined', { hookEntries });
 
-          // Sanity: only A's hook fired. If hookEntries > 1, the gate
-          // released early (impossible — we hold `releaseGate`) or B
-          // bypassed the dedup. Either is a real bug worth surfacing.
+          // Sanity: only A's hook fired. We awaited aEntered above and
+          // hold releaseGate, so hookEntries can't be anything other
+          // than 1 here — if it is, B bypassed the dedup, which is a
+          // real bug worth surfacing.
           assert.strictEqual(
             hookEntries,
             1,
@@ -797,13 +876,19 @@ module(basename(__filename), function () {
           passed = true;
         } finally {
           // Release the gate in case we threw before reaching the
-          // explicit release (e.g. waitForJoinCount timed out). Any
-          // still-parked pending then settles instead of leaking into
-          // the next test as an unhandled rejection.
+          // explicit release (e.g. waitForJoinCount timed out), then
+          // settle any background pending requests before this test's
+          // afterEach tears the realm down — otherwise orphaned
+          // requests would race teardown and leak into the next test.
           releaseGate();
           testRealm.__testOnlyDelayTranspile(undefined);
+          await Promise.allSettled(
+            [pendingA, pendingB].filter(
+              (p): p is ReturnType<typeof fireRequest> => p !== undefined,
+            ),
+          );
           if (!passed) {
-            diag.dump(assert);
+            diag.dump();
           }
         }
       });
