@@ -274,6 +274,7 @@ const ALL_TEST_FILES: string[] = [
   './search-in-flight-key-test',
   './coerce-error-message-test',
   './normalize-realm-meta-value-test',
+  './permissive-localhost-wildcard-tls-test',
   './job-scoped-search-cache-test',
   './consuming-realm-header-test',
   './delete-boxel-claimed-domain-test',

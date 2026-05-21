@@ -13,9 +13,13 @@ if (process.env.BOXEL_ENVIRONMENT) {
     const undici = require('undici') as typeof import('undici');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const dns = require('dns');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const wildcardTls = require('@cardstack/runtime-common/permissive-localhost-wildcard-tls');
 
     const agent = new undici.Agent({
       connect: {
+        checkServerIdentity:
+          wildcardTls.permissiveLocalhostWildcardCheckServerIdentity,
         lookup(hostname: string, options: any, cb: (...args: any[]) => void) {
           if (hostname?.endsWith('.localhost')) {
             if (options.all) {

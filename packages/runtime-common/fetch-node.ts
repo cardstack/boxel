@@ -1,3 +1,5 @@
+import { permissiveLocalhostWildcardCheckServerIdentity } from './permissive-localhost-wildcard-tls';
+
 /**
  * Creates a fetch implementation that's appropriate for the current environment.
  * In Node.js, it enhances localhost subdomain resolution using Undici agent.
@@ -22,6 +24,7 @@ export function createEnvironmentAwareFetch(): typeof globalThis.fetch {
     // Create a custom agent with localhost subdomain resolution
     const agent = new Agent({
       connect: {
+        checkServerIdentity: permissiveLocalhostWildcardCheckServerIdentity,
         // This replaces dns.lookup for sockets created by this Agent
         lookup(hostname: string, options: any, cb: any) {
           if (hostname?.endsWith('.localhost')) {
