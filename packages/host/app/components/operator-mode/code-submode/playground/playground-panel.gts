@@ -360,7 +360,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.fileSearchResults = this.getCards(
       this,
       () => this.fileMetaQuery,
-      () => this.realmServer.availableRealmURLs,
+      () => this.realmServer.availableRealmIdentifiers,
       { isLive: true },
     );
   };
@@ -703,7 +703,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     this.playgroundPanelService.persistSelections(
       this.moduleId,
-      trimJsonExtension(selectedCardId),
+      rri(trimJsonExtension(selectedCardId)),
       selectedFormat,
       index, // `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
@@ -997,7 +997,7 @@ export default class PlaygroundPanel extends Component<Signature> {
             <PrerenderedCardSearch
               @query={{this.expandedQuery}}
               @format='fitted'
-              @realms={{this.realmServer.availableRealmURLs}}
+              @realms={{this.realmServer.availableRealmIdentifiers}}
             >
               <:response as |maybeCards|>
                 {{! TODO: remove side-effects for instance chooser in CS-8746 }}
@@ -1139,7 +1139,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               {{else if this.maybeGenerateFieldSpec}}
                 <SpecSearch
                   @query={{this.specQuery}}
-                  @realms={{this.realmServer.availableRealmURLs}}
+                  @realms={{this.realmServer.availableRealmIdentifiers}}
                   @createNewCard={{this.createNew}}
                 />
               {{else if @isFileDef}}

@@ -506,6 +506,59 @@ export function serializableError(err: any): any {
   return result;
 }
 
+// Coerce an arbitrary thrown / serialized value into a non-empty
+// human-readable string. Used to guarantee the `message` of an
+// instance-/file-/module-error row carries enough text to debug.
+// Order of preference:
+//   1. err.message (if a non-empty string)
+//   2. err.title (if a non-empty string)
+//   3. err.stack first line (if available)
+//   4. For object-shaped errors, String(err) — but only if it's not
+//      the useless default Object.prototype.toString output. A class
+//      with a custom toString() (or some host-provided error wrapper)
+//      may surface real failure text here even when message/title/
+//      stack are absent. The "[object Object]" / "[object …]" output
+//      from the default toString is filtered out: it carries no
+//      diagnostic value, and the placeholder (which names the URL)
+//      is strictly more informative.
+//   5. For primitives, String(err) (numbers, booleans, symbols).
+//   6. the supplied placeholder
+export function coerceErrorMessage(err: unknown, placeholder: string): string {
+  let candidates: unknown[] = [];
+  if (err != null && typeof err === 'object') {
+    candidates.push(
+      (err as { message?: unknown }).message,
+      (err as { title?: unknown }).title,
+    );
+    let stack = (err as { stack?: unknown }).stack;
+    if (typeof stack === 'string') {
+      let firstLine = stack.split('\n', 1)[0]?.trim();
+      if (firstLine) {
+        candidates.push(firstLine);
+      }
+    }
+    let stringified: string;
+    try {
+      stringified = String(err);
+    } catch {
+      stringified = '';
+    }
+    if (stringified && !/^\[object [^\]]*\]$/.test(stringified)) {
+      candidates.push(stringified);
+    }
+  } else if (typeof err === 'string') {
+    candidates.push(err);
+  } else if (err !== undefined && err !== null) {
+    candidates.push(String(err));
+  }
+  for (let candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate;
+    }
+  }
+  return placeholder;
+}
+
 export function responseWithError(
   error: CardError,
   requestContext: RequestContext,

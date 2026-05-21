@@ -214,11 +214,9 @@ export async function hasExtensionlessSourceModule(
 }
 
 export async function hasPublicPermissions(
-  cardURL: URL,
+  realm: Realm | undefined,
   deps: RealmRoutingDeps,
 ): Promise<boolean> {
-  let realm = await findOrMountRealm(cardURL, deps);
-
   if (!realm) {
     return false;
   }

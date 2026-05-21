@@ -12,6 +12,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  rri,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Definition,
@@ -194,7 +195,7 @@ module('Unit | query', function (hooks) {
       numberFieldEntry,
     };
     for (let [name, card] of Object.entries(testCards)) {
-      card.id = `${testRealmURL}${name}`;
+      card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
 

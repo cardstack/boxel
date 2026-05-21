@@ -51,6 +51,15 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     targetPassword,
   );
 
+  // CS-10725: profile manager now requires `matrixAccessToken` on
+  // the stored profile instead of `password`. Log in once here so we
+  // can write the post-swap shape into the temp profile below.
+  let matrixAuth = await loginToMatrix(
+    matrixURL,
+    targetUsername,
+    targetPassword,
+  );
+
   // Serve the brief from a local HTTP server since the harness source realm
   // uses a fixture that doesn't include Wiki cards
   let briefServer = createServer((request, response) => {
@@ -73,7 +82,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   let tempProfileHome = createTempProfileHome(
     targetUsername,
-    targetPassword,
+    matrixAuth,
     matrixURL,
     realmServerURL,
   );
@@ -166,9 +175,43 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   }
 });
 
-function createTempProfileHome(
+interface MatrixAuth {
+  accessToken: string;
+  userId: string;
+  deviceId: string;
+}
+
+async function loginToMatrix(
+  matrixURL: string,
   username: string,
   password: string,
+): Promise<MatrixAuth> {
+  let baseUrl = matrixURL.endsWith('/') ? matrixURL : `${matrixURL}/`;
+  let response = await fetch(`${baseUrl}_matrix/client/v3/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': SupportedMimeType.JSON },
+    body: JSON.stringify({
+      type: 'm.login.password',
+      identifier: { type: 'm.id.user', user: username },
+      password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to login to Matrix as ${username}: HTTP ${response.status} ${await response.text()}`,
+    );
+  }
+  let { access_token, user_id, device_id } = (await response.json()) as {
+    access_token: string;
+    user_id: string;
+    device_id: string;
+  };
+  return { accessToken: access_token, userId: user_id, deviceId: device_id };
+}
+
+function createTempProfileHome(
+  username: string,
+  auth: MatrixAuth,
   matrixUrl: string,
   realmServerUrl: string,
 ): string {
@@ -181,7 +224,13 @@ function createTempProfileHome(
     join(boxelCliDir, 'profiles.json'),
     JSON.stringify({
       profiles: {
-        [profileId]: { matrixUrl, realmServerUrl, password },
+        [profileId]: {
+          matrixUrl,
+          realmServerUrl,
+          matrixAccessToken: auth.accessToken,
+          matrixUserId: auth.userId,
+          matrixDeviceId: auth.deviceId,
+        },
       },
       activeProfile: profileId,
     }),

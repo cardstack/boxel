@@ -75,7 +75,7 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
     input: BaseCommandModule.SearchCardsByQueryInput,
   ): Promise<BaseCommandModule.SearchCardsResult> {
     assertQuery(input.query);
-    let realmUrls = this.realmServer.availableRealmURLs;
+    let realmUrls = this.realmServer.availableRealmIdentifiers;
     let instances: CardDef[] = [];
     try {
       instances = await this.store.search(input.query, realmUrls);

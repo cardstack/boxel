@@ -113,6 +113,30 @@ export default class HostModeService extends Service {
     return this.operatorModeStateService.realmURL;
   }
 
+  // CS-10055: routing rules from the realm config card. The realm-server
+  // merges this into the @cardstack/host/config/environment meta tag
+  // per-request when the request hits a realm whose config card has
+  // hostRoutingRules — so the first-render decision in the index route
+  // is synchronous and the field is part of the typed config surface
+  // rather than a window global.
+  get hostRoutingMap(): { path: string; id: string }[] {
+    let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
+    return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
+  }
+
+  // Returns the target card id if `path` matches a routing rule, else null.
+  // `path` is the URL pathname on the host (what Ember's `/*path` catch-all
+  // route delivers — e.g. `<user>/<realm>/whitepaper` for a request to
+  // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
+  // absent so the index path is matchable as either '' or '/'. The
+  // server prefixes each rule's `path` with the realm's mount pathname
+  // before injecting the map, so the two sides line up as direct equality.
+  resolveRoutedPath(path: string): string | null {
+    let normalized = path.startsWith('/') ? path : `/${path}`;
+    let rule = this.hostRoutingMap.find((r) => r.path === normalized);
+    return rule ? rule.id : null;
+  }
+
   get currentCardId() {
     if (this.isActive) {
       let stack = this.hostModeStateService.stackItems;

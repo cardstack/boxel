@@ -2,6 +2,7 @@ import {
   isCardErrorJSONAPI,
   isCardError,
   CardError,
+  coerceErrorMessage,
   type CardErrorJSONAPI,
   type RenderError,
   type ErrorEntry,
@@ -45,12 +46,20 @@ export function windowErrorHandler({
       // leave as string
     }
   }
+  // Synthesized when an upstream caller hands us a value with no usable
+  // `message` text. Names the URL so the persisted error row at least
+  // identifies which card was being rendered.
+  let synthesizedMessage = `Unhandled render-time error at ${id ?? currentURL ?? 'unknown URL'} (host produced no message)`;
   let errorPayload: RenderError;
   if (reason) {
     if (isCardError(reason)) {
       errorPayload = {
         type: 'instance-error',
-        error: { ...reason, stack: reason.stack },
+        error: {
+          ...reason,
+          stack: reason.stack,
+          message: coerceErrorMessage(reason, synthesizedMessage),
+        },
       };
     } else if (isCardErrorJSONAPI(reason)) {
       errorPayload = errorJsonApiToErrorEntry({ ...reason });
@@ -70,10 +79,13 @@ export function windowErrorHandler({
         type: 'instance-error',
         error:
           reason instanceof CardError
-            ? { ...serializableError(reason) }
+            ? {
+                ...serializableError(reason),
+                message: coerceErrorMessage(reason, synthesizedMessage),
+              }
             : {
                 id,
-                message: reason.message,
+                message: coerceErrorMessage(reason, synthesizedMessage),
                 stack: reason.stack,
                 status: 500,
               },
@@ -85,6 +97,15 @@ export function windowErrorHandler({
       error: new CardError('indexing failed', { status: 500, id }),
     };
   }
+  // Final belt-and-suspenders: regardless of which branch above ran,
+  // guarantee the error.message is a non-empty string before we send
+  // it to the prerender server. The indexer-side guard at
+  // index-writer.ts:412 refuses entries with empty message and fails
+  // the whole indexing job.
+  errorPayload.error.message = coerceErrorMessage(
+    errorPayload.error,
+    synthesizedMessage,
+  );
 
   if ('stack' in errorPayload.error) {
     let updatedStack = appendRenderTimerSummaryToStack(

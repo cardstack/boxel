@@ -59,7 +59,7 @@ module(
       );
 
       let realmServer = getService('realm-server') as RealmServerService;
-      Object.defineProperty(realmServer, 'availableRealmURLs', {
+      Object.defineProperty(realmServer, 'availableRealmIdentifiers', {
         get: () => [
           'https://example.com/realm-a/',
           'https://example.com/realm-b/',

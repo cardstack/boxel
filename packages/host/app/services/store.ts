@@ -30,6 +30,7 @@ import {
   isFileDefInstance,
   isFileMetaResource,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   isLinkableCollectionDocument,
   resolveFileDefCodeRef,
   X_BOXEL_JOB_PRIORITY_HEADER,
@@ -942,7 +943,7 @@ export default class StoreService extends Service implements StoreInterface {
     let searchRealms =
       normalizedRealms.length > 0
         ? normalizedRealms
-        : this.realmServer.availableRealmURLs;
+        : this.realmServer.availableRealmIdentifiers;
     if (searchRealms.length === 0) {
       if (query.asData) {
         return opts?.includeMeta
@@ -1836,6 +1837,23 @@ export default class StoreService extends Service implements StoreInterface {
           json = await this.cardService.fetchJSON(url);
         }
         if (!isSingleCardDocument(json)) {
+          // The URL turned out to be a binary file (e.g. an uploaded
+          // image). The realm-server returns a file-meta JSON document
+          // in that case; reroute to the file-meta load path so the
+          // caller gets a FileDef instead of a hard failure.
+          if (isSingleFileMetaDocument(json)) {
+            // URL was a binary file; reroute to the file-meta bucket.
+            let fileMeta = await this.getFileMetaInstance<FileDef>({
+              idOrDoc: url,
+              opts: {
+                noCache: opts?.noCache,
+                dependencyTrackingContext: opts?.dependencyTrackingContext,
+              },
+            });
+            // Resolve inflightGetCards so concurrent callers don't hang.
+            deferred?.fulfill(fileMeta as unknown as T | CardErrorJSONAPI);
+            return fileMeta as unknown as T;
+          }
           throw new Error(
             `bug: server returned a non card document for ${url}:
         ${JSON.stringify(json, null, 2)}`,
