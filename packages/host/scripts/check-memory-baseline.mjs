@@ -44,6 +44,23 @@ const HARD_ABSOLUTE_MB = 50;
 
 const escapeMd = (s) => String(s).replace(/\|/g, '\\|');
 
+// Compare against the rolling-window mean of recent baseline samples so a
+// single noisy build can't trip — or anchor — the budget. Fall back to the
+// pre-rolling-window `delta_mb` shape so this script keeps working against
+// older baseline files until the next main run upgrades them in place.
+const baselineDelta = (entry) => {
+  if (Array.isArray(entry?.samples) && entry.samples.length > 0) {
+    const sum = entry.samples.reduce((a, b) => a + b, 0);
+    return sum / entry.samples.length;
+  }
+  return entry?.delta_mb;
+};
+
+const fmtSamples = (entry) =>
+  Array.isArray(entry?.samples) && entry.samples.length > 0
+    ? `[${entry.samples.map((s) => s.toFixed(1)).join(', ')}]`
+    : null;
+
 const warnings = [];
 const failures = [];
 const newModules = [];
@@ -58,7 +75,7 @@ for (const [mod, data] of Object.entries(current)) {
     continue;
   }
 
-  const baseDelta = base.delta_mb;
+  const baseDelta = baselineDelta(base);
   if (baseDelta == null) continue;
 
   // A negative baseline delta means the prior module's garbage was reclaimed
@@ -74,6 +91,7 @@ for (const [mod, data] of Object.entries(current)) {
   const hardThreshold = Math.max(HARD_ABSOLUTE_MB, effectiveBase * HARD_RELATIVE);
 
   const pct = effectiveBase > 0 ? ((diff / effectiveBase) * 100).toFixed(0) : null;
+  const samples = fmtSamples(base);
 
   if (diff >= hardThreshold) {
     failures.push({
@@ -82,6 +100,7 @@ for (const [mod, data] of Object.entries(current)) {
       current: data.delta_mb,
       diff,
       pct,
+      samples,
     });
   } else if (diff >= softThreshold) {
     warnings.push({
@@ -90,6 +109,7 @@ for (const [mod, data] of Object.entries(current)) {
       current: data.delta_mb,
       diff,
       pct,
+      samples,
     });
   }
 }
@@ -108,14 +128,18 @@ if (failures.length === 0 && warnings.length === 0) {
   lines.push('All modules within threshold. No memory regressions detected.\n');
 }
 
+const samplesWindow = baseline.samplesWindow ?? 1;
+const baselineHeader =
+  samplesWindow > 1 ? `Baseline (mean of last ${samplesWindow})` : 'Baseline';
+
 if (failures.length > 0) {
   lines.push(`### Failures (>${HARD_RELATIVE * 100}% increase or +${HARD_ABSOLUTE_MB}MB)\n`);
-  lines.push('| Module | Baseline | Current | Change |');
-  lines.push('|--------|----------|---------|--------|');
+  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push('|--------|----------|---------|--------|----------------|');
   for (const f of failures.sort((a, b) => b.diff - a.diff)) {
     const pctStr = f.pct != null ? ` (+${f.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB${pctStr} |`,
+      `| ${escapeMd(f.mod)} | ${f.baseline.toFixed(1)} MB | ${f.current.toFixed(1)} MB | +${f.diff.toFixed(1)} MB${pctStr} | ${f.samples ?? '—'} |`,
     );
   }
   lines.push('');
@@ -123,12 +147,12 @@ if (failures.length > 0) {
 
 if (warnings.length > 0) {
   lines.push(`### Warnings (>${SOFT_RELATIVE * 100}% + ${SOFT_ABSOLUTE_MB}MB increase)\n`);
-  lines.push('| Module | Baseline | Current | Change |');
-  lines.push('|--------|----------|---------|--------|');
+  lines.push(`| Module | ${baselineHeader} | Current | Change | Recent samples |`);
+  lines.push('|--------|----------|---------|--------|----------------|');
   for (const w of warnings.sort((a, b) => b.diff - a.diff)) {
     const pctStr = w.pct != null ? ` (+${w.pct}%)` : '';
     lines.push(
-      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB${pctStr} |`,
+      `| ${escapeMd(w.mod)} | ${w.baseline.toFixed(1)} MB | ${w.current.toFixed(1)} MB | +${w.diff.toFixed(1)} MB${pctStr} | ${w.samples ?? '—'} |`,
     );
   }
   lines.push('');
