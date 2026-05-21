@@ -744,6 +744,13 @@ export class Realm {
   // exactly one transpile call. Reset by __testOnlyClearCaches so each
   // test reasons from a clean baseline.
   #transpileCallCount = 0;
+  // Monotonic count of times the `existing` branch was taken in
+  // #transpileModuleDeduped — i.e., a concurrent caller joined a
+  // previously-installed in-flight promise instead of installing its
+  // own. Lets the dedup tests deterministically observe "B has joined
+  // A's pending" without racing on event-loop timing in CI. Reset by
+  // __testOnlyClearCaches alongside #transpileCallCount.
+  #transpileJoinCount = 0;
   // CS-11030: optional cross-process coalesce coordinator. When set, the
   // first realm-server in the fleet to miss the in-memory cache for a
   // given (realm_url, canonical_path) acquires an advisory lock, writes
@@ -1467,6 +1474,7 @@ export class Realm {
     // delta. Production never reads this counter — only the CS-11029
     // dedup tests do (CS-11029).
     this.#transpileCallCount = 0;
+    this.#transpileJoinCount = 0;
   }
 
   // CS-11043. Bulk-invalidate this realm's in-process byte caches.
@@ -1501,6 +1509,15 @@ export class Realm {
   }
   __testOnlyGetInFlightTranspileCount(): number {
     return this.#inFlightTranspiles.size;
+  }
+  // Counts every time a concurrent caller of #transpileModuleDeduped
+  // joined an existing in-flight entry instead of starting a new one.
+  // The dedup tests poll this to know "B has joined A's pending" so
+  // they can release the gate at a deterministic point — without it,
+  // tests using a real .gts that throws fast at babel can't reliably
+  // observe the in-flight overlap window before A settles.
+  __testOnlyGetTranspileJoinCount(): number {
+    return this.#transpileJoinCount;
   }
   // Test-only gate: when set, #materializeAndTranspile awaits the
   // returned promise before calling transpileJS. Lets the dedup tests
@@ -2958,6 +2975,7 @@ export class Realm {
   ): Promise<ModuleTranspileResult> {
     let existing = this.#inFlightTranspiles.get(localPath);
     if (existing) {
+      this.#transpileJoinCount += 1;
       return existing;
     }
     // Assign the chained `.finally` to `pending` and store/return THAT
