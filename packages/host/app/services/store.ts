@@ -943,7 +943,7 @@ export default class StoreService extends Service implements StoreInterface {
     let searchRealms =
       normalizedRealms.length > 0
         ? normalizedRealms
-        : this.realmServer.availableRealmURLs;
+        : this.realmServer.availableRealmIdentifiers;
     if (searchRealms.length === 0) {
       if (query.asData) {
         return opts?.includeMeta

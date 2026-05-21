@@ -84,7 +84,7 @@ export class SearchDataResource extends Resource<SearchDataArgs> {
     this.#isLive = isLive;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
-        ? this.realmServer.availableRealmURLs
+        ? this.realmServer.availableRealmIdentifiers
         : realms;
 
     if (

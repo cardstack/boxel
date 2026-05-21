@@ -465,7 +465,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
-      () => this.realmServer.availableRealmURLs,
+      () => this.realmServer.availableRealmIdentifiers,
       { isLive: true, doWhileRefreshing: this.doWhileRefreshing },
     ) as ReturnType<getCards<Spec>>;
   };

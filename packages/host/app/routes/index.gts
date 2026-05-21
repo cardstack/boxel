@@ -214,23 +214,27 @@ export default class Card extends Route {
   private async getCardUrl(cardPath: string): Promise<string | undefined> {
     let cardUrl;
     if (hostsOwnAssets) {
-      // availableRealmURLs is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmURLs.find((realmUrl) => {
-        let realmPathParts = new URL(realmUrl).pathname
-          .split('/')
-          .filter((part) => part !== '');
-        let cardPathParts = cardPath!.split('/').filter((part) => part !== '');
-        let isMatch = false;
-        for (let i = 0; i < realmPathParts.length; i++) {
-          if (realmPathParts[i] === cardPathParts[i]) {
-            isMatch = true;
-          } else {
-            isMatch = false;
-            break;
+      // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
+      let realmUrl = this.realmServer.availableRealmIdentifiers.find(
+        (realmUrl) => {
+          let realmPathParts = new URL(realmUrl).pathname
+            .split('/')
+            .filter((part) => part !== '');
+          let cardPathParts = cardPath!
+            .split('/')
+            .filter((part) => part !== '');
+          let isMatch = false;
+          for (let i = 0; i < realmPathParts.length; i++) {
+            if (realmPathParts[i] === cardPathParts[i]) {
+              isMatch = true;
+            } else {
+              isMatch = false;
+              break;
+            }
           }
-        }
-        return isMatch;
-      });
+          return isMatch;
+        },
+      );
       cardUrl = new URL(
         `/${cardPath}`,
         realmUrl ?? this.realm.defaultReadableRealm.path,

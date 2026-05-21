@@ -66,7 +66,7 @@ export default class SearchPanel extends Component<Signature> {
 
   private get selectedRealmURLs(): string[] {
     if (this.selectedRealms.length === 0) {
-      return this.realmServer.availableRealmURLs;
+      return this.realmServer.availableRealmIdentifiers;
     }
     return this.selectedRealms.map((url) => url.href);
   }
