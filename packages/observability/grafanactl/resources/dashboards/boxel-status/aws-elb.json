@@ -225,6 +225,171 @@
           "type": "cloudwatch",
           "uid": "cef5x9o3yzawwf"
         },
+        "description": "ALB target-group health: how many backend tasks the load balancer's health check considers healthy vs unhealthy. A task can be Running in ECS but failing the ALB health check — those show up here as UnHealthyHostCount. Healthy = 0 means clients get 503s. Filter by the TargetGroup template variable; defaults to all groups under the selected ALB.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisBorderShow": false,
+              "axisCenteredZero": false,
+              "axisColorMode": "text",
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "barWidthFactor": 0.6,
+              "drawStyle": "line",
+              "fillOpacity": 20,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "insertNulls": false,
+              "lineInterpolation": "stepAfter",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 0,
+            "mappings": [],
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HealthyHostCount"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#56a64b"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "UnHealthyHostCount"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#e02f44"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 24,
+          "x": 0,
+          "y": 7
+        },
+        "id": 16,
+        "options": {
+          "dataLinks": [],
+          "legend": {
+            "calcs": [
+              "mean",
+              "max",
+              "min"
+            ],
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "11.3.1",
+        "targets": [
+          {
+            "alias": "",
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "dimensions": {
+              "LoadBalancer": "$loadbalancername",
+              "TargetGroup": "$targetgroup"
+            },
+            "expression": "",
+            "id": "",
+            "metricEditorMode": 0,
+            "metricName": "HealthyHostCount",
+            "metricQueryType": 0,
+            "namespace": "AWS/ApplicationELB",
+            "period": "",
+            "refId": "A",
+            "region": "$region",
+            "returnData": false,
+            "statistic": "Average"
+          },
+          {
+            "alias": "",
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "dimensions": {
+              "LoadBalancer": "$loadbalancername",
+              "TargetGroup": "$targetgroup"
+            },
+            "expression": "",
+            "id": "",
+            "metricEditorMode": 0,
+            "metricName": "UnHealthyHostCount",
+            "metricQueryType": 0,
+            "namespace": "AWS/ApplicationELB",
+            "period": "",
+            "refId": "B",
+            "region": "$region",
+            "returnData": false,
+            "statistic": "Average"
+          }
+        ],
+        "title": "HealthyHostCount / UnHealthyHostCount",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
         "fieldConfig": {
           "defaults": {
             "color": {
@@ -286,7 +451,7 @@
           "h": 10,
           "w": 24,
           "x": 0,
-          "y": 7
+          "y": 14
         },
         "id": 1,
         "options": {
@@ -535,7 +700,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 17
+          "y": 24
         },
         "id": 12,
         "options": {
@@ -744,7 +909,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 24
+          "y": 31
         },
         "id": 10,
         "options": {
@@ -1012,7 +1177,7 @@
           "h": 8,
           "w": 24,
           "x": 0,
-          "y": 31
+          "y": 38
         },
         "id": 8,
         "options": {
@@ -1224,7 +1389,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 39
+          "y": 46
         },
         "id": 11,
         "options": {
@@ -1411,7 +1576,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 46
+          "y": 53
         },
         "id": 15,
         "options": {
@@ -1581,7 +1746,7 @@
           "h": 7,
           "w": 24,
           "x": 0,
-          "y": 53
+          "y": 60
         },
         "id": 13,
         "options": {
@@ -1729,7 +1894,7 @@
           "h": 14,
           "w": 24,
           "x": 0,
-          "y": 60
+          "y": 67
         },
         "id": 14,
         "options": {
@@ -1994,7 +2159,7 @@
           "h": 3,
           "w": 24,
           "x": 0,
-          "y": 74
+          "y": 81
         },
         "id": 2,
         "options": {
@@ -2047,6 +2212,24 @@
           "name": "loadbalancername",
           "options": [],
           "query": "dimension_values($region,AWS/ApplicationELB,ActiveConnectionCount,LoadBalancer)",
+          "refresh": 1,
+          "regex": "",
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$loadbalancername\"})",
+          "includeAll": true,
+          "label": "TargetGroup",
+          "multi": true,
+          "name": "targetgroup",
+          "options": [],
+          "query": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$loadbalancername\"})",
           "refresh": 1,
           "regex": "",
           "sort": 1,

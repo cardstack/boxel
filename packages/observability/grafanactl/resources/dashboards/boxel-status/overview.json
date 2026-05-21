@@ -671,7 +671,7 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 6,
+          "w": 8,
           "x": 0,
           "y": 11
         },
@@ -879,102 +879,6 @@
         ],
         "title": "Application Load Balancer",
         "type": "timeseries",
-        "links": [
-          {
-            "title": "Open Application Load Balancer dashboard",
-            "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
-            "targetBlank": false,
-            "type": "link",
-            "icon": "external link"
-          }
-        ]
-      },
-      {
-        "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
-        },
-        "description": "ALB target-group health: realm-server tasks currently passing the load balancer's health check. Distinct from the ECS Tasks stat — a task can be Running in ECS but failing ALB health checks. Zero means the LB sees no healthy backends and clients get 503s. Locally shows 'No data' — CloudWatch is staging/production only.",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "thresholds"
-            },
-            "decimals": 0,
-            "links": [
-              {
-                "title": "Open Application Load Balancer dashboard",
-                "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
-                "targetBlank": false
-              }
-            ],
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "red",
-                  "value": null
-                },
-                {
-                  "color": "yellow",
-                  "value": 1
-                },
-                {
-                  "color": "green",
-                  "value": 2
-                }
-              ]
-            },
-            "unit": "none"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 2,
-          "x": 6,
-          "y": 11
-        },
-        "id": 33,
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "justifyMode": "center",
-          "orientation": "vertical",
-          "reduceOptions": {
-            "calcs": [
-              "lastNotNull"
-            ],
-            "fields": "",
-            "values": false
-          },
-          "textMode": "value",
-          "wideLayout": true
-        },
-        "pluginVersion": "12.4.3",
-        "targets": [
-          {
-            "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
-            },
-            "namespace": "AWS/ApplicationELB",
-            "metricName": "HealthyHostCount",
-            "metricEditorMode": 0,
-            "metricQueryType": 0,
-            "dimensions": {
-              "LoadBalancer": "$realm_server_alb",
-              "TargetGroup": "$realm_server_tg"
-            },
-            "statistic": "Average",
-            "period": "",
-            "region": "default",
-            "refId": "A"
-          }
-        ],
-        "title": "Healthy Tasks",
-        "type": "stat",
         "links": [
           {
             "title": "Open Application Load Balancer dashboard",
@@ -3306,24 +3210,6 @@
           "query": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
           "refresh": 1,
           "regex": "/^(?<value>app\\/boxel-realm-server-${env}\\/[a-f0-9]+)$/",
-          "skipUrlSync": true,
-          "sort": 1,
-          "type": "query"
-        },
-        {
-          "current": {},
-          "datasource": {
-            "type": "cloudwatch",
-            "uid": "cef5x9o3yzawwf"
-          },
-          "definition": "dimension_values(default,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$realm_server_alb\"})",
-          "hide": 2,
-          "includeAll": false,
-          "name": "realm_server_tg",
-          "options": [],
-          "query": "dimension_values(default,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$realm_server_alb\"})",
-          "refresh": 1,
-          "regex": "/^(?<value>targetgroup\\/boxel-realm-server-${env}[^/]*\\/[a-f0-9]+)$/",
           "skipUrlSync": true,
           "sort": 1,
           "type": "query"
