@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { type FittedFormatId, fittedFormatById } from '../../helpers.ts';
+import { type FittedFormatId, cn, fittedFormatById } from '../../helpers.ts';
 import {
   Card as CardIcon,
   Grid3x3 as GridIcon,
@@ -36,7 +36,6 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#64748b',
     wipLimit: 0,
     collapsed: false,
-    sortOrder: 0,
   },
   {
     key: 'in-progress',
@@ -44,7 +43,6 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#d97706',
     wipLimit: 2,
     collapsed: false,
-    sortOrder: 1,
   },
   {
     key: 'review',
@@ -52,7 +50,6 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#0f766e',
     wipLimit: 1,
     collapsed: false,
-    sortOrder: 2,
   },
   {
     key: 'done',
@@ -60,7 +57,6 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#15803d',
     wipLimit: null,
     collapsed: false,
-    sortOrder: 3,
   },
 ];
 
@@ -104,12 +100,6 @@ export default class KanbanUsage extends Component {
   );
   @tracked cards = INITIAL_CARDS;
   @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, this.columns);
-  get hideEmpty(): boolean {
-    let emptyCols = this.columns.filter(
-      (col) => cardsInColumn(col.key, this.placements).length === 0,
-    );
-    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
-  }
   @tracked selectedIndex: number | null = null;
   @tracked openedIndex: number | null = null;
   @tracked cardSizeView = 'tile';
@@ -167,6 +157,28 @@ export default class KanbanUsage extends Component {
     col['collapsed'] = !col.collapsed;
   }
 
+  @action onLabelChange(col: KanbanColumnConfig | null, val: string): void {
+    if (!col) {
+      return;
+    }
+    col['label'] = val;
+  }
+
+  @action onColorChange(col: KanbanColumnConfig | null, val: string): void {
+    if (!col) {
+      return;
+    }
+    col['color'] = val;
+  }
+
+  @action onWipLimitChange(col: KanbanColumnConfig | null, val: string): void {
+    if (!col) {
+      return;
+    }
+    let raw = parseInt(val, 10);
+    col['wipLimit'] = isNaN(raw) || raw < 0 ? 0 : raw;
+  }
+
   @action toggleSidebar(): void {
     this.showSidebar = !this.showSidebar;
   }
@@ -200,6 +212,19 @@ export default class KanbanUsage extends Component {
     ];
   }
 
+  get columnCardCounts(): number[] {
+    return this.columns?.map(
+      (col) => this.placements?.filter((p) => p.columnId === col.key).length,
+    );
+  }
+
+  get hideEmpty(): boolean {
+    let emptyCols = this.columns.filter(
+      (_, i) => (this.columnCardCounts[i] ?? 0) === 0,
+    );
+    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+  }
+
   <template>
     <FreestyleUsage @name='Kanban Plane'>
       <:description>
@@ -214,13 +239,13 @@ export default class KanbanUsage extends Component {
           interaction layer.
         </p>
         <p>
-          Columns can be collapsed via the hide button in their header. Hidden
-          columns (collapsed or empty when
-          <code>hideEmpty</code>
-          is on) are collected into a
+          Columns can be collapsed via the hide button in their header.
+          Collapsed columns are collected into a
           <strong>Hidden Columns</strong>
           tray on the right side of the board. Clicking a row in the tray
-          restores that column.
+          restores that column. To hide empty columns, set
+          <code>collapsed: true</code>
+          on those columns — the example toolbar demonstrates this pattern.
         </p>
       </:description>
       <:example>
@@ -240,6 +265,14 @@ export default class KanbanUsage extends Component {
               @selectedId={{this.cardSizeView}}
               @onChange={{this.updateCardSizeView}}
             />
+            <label class='kanban-toggle'>
+              <span class='kanban-toggle-label'>Show sidebar</span>
+              <Switch
+                @label='Toggle column config sidebar'
+                @isEnabled={{this.showSidebar}}
+                @onChange={{this.toggleSidebar}}
+              />
+            </label>
             {{#if this.selectedCard}}
               <span class='kanban-meta'>
                 Selected:
@@ -256,6 +289,7 @@ export default class KanbanUsage extends Component {
 
           <div class='kanban-plane-demo'>
             <KanbanPlane
+              class='demo-plane'
               @boardLabel='Kanban plane demo'
               @columns={{this.columns}}
               @placements={{this.placements}}
@@ -263,7 +297,6 @@ export default class KanbanUsage extends Component {
               @onSelect={{this.handleSelect}}
               @onOpen={{this.handleOpen}}
               @cardSize={{this.cardSize}}
-              @hideEmpty={{this.hideEmpty}}
               @onAddCard={{this.addCard}}
               @onToggleCollapsed={{this.toggleCollapsed}}
             >
@@ -284,13 +317,23 @@ export default class KanbanUsage extends Component {
                 {{/let}}
               </:ghost>
             </KanbanPlane>
+            <div class={{cn 'demo-sidebar-wrap' is-open=this.showSidebar}}>
+              <KanbanColumnConfigSidebar
+                @columns={{this.columns}}
+                @onClose={{this.toggleSidebar}}
+                @onToggleCollapsed={{this.toggleCollapsed}}
+                @onLabelChange={{this.onLabelChange}}
+                @onColorChange={{this.onColorChange}}
+                @onWipLimitChange={{this.onWipLimitChange}}
+              />
+            </div>
           </div>
         </div>
       </:example>
       <:api as |Args|>
         <Args.Object
           @name='columns'
-          @description='Column definitions including key, label, color, WIP limit, collapse state, and sort order.'
+          @description='Column definitions including key, label, color, WIP limit, and collapse state.'
           @required={{true}}
           @value={{this.columns}}
         />
@@ -308,19 +351,13 @@ export default class KanbanUsage extends Component {
           @onInput={{fn (mut this.cardSize)}}
           @defaultValue='regular-tile'
         />
-        <Args.Bool
-          @name='hideEmpty'
-          @description='When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns.'
-          @value={{this.hideEmpty}}
-          @onInput={{fn (mut this.hideEmpty)}}
-        />
         <Args.Action
           @name='onChange'
           @description='Invoked with updated placements when the internally owned drag manager commits a move.'
         />
         <Args.Action
           @name='onToggleCollapsed'
-          @description='Invoked with the column key when a column is collapsed via its header button or restored from the Hidden Columns tray.'
+          @description='Invoked with the KanbanColumnConfig object when a column is collapsed via its header button or restored from the Hidden Columns tray. The caller is responsible for toggling the collapsed state on that column.'
         />
         <Args.Action
           @name='onOpen'
@@ -355,53 +392,20 @@ export default class KanbanUsage extends Component {
         </p>
         <p>
           It mutates column objects directly via tracked properties, so the
-          caller only needs to supply a tracked columns array.
+          caller only needs to supply a tracked columns array. Column reordering
+          via the up/down controls is handled internally — no callback is
+          required.
         </p>
       </:description>
       <:example>
-        <div class='sidebar-demo'>
-          <div class='sidebar-demo-toolbar'>
-            <label class='kanban-toggle'>
-              <span class='kanban-toggle-label'>Show sidebar</span>
-              <Switch
-                @label='Toggle column config sidebar'
-                @isEnabled={{this.showSidebar}}
-                @onChange={{this.toggleSidebar}}
-              />
-            </label>
-          </div>
-          <div class='sidebar-demo-board'>
-            <KanbanPlane
-              @boardLabel='Kanban sidebar demo'
-              @columns={{this.columns}}
-              @placements={{this.placements}}
-              @onChange={{this.handlePlacementsChange}}
-            >
-              <:card as |placement|>
-                {{#let (get this.cards placement.index) as |card|}}
-                  <CardContainer class='demo-card'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
-                    <h3>{{card.title}}</h3>
-                  </CardContainer>
-                {{/let}}
-              </:card>
-              <:ghost as |dragIndex|>
-                {{#let (get this.cards dragIndex) as |card|}}
-                  <CardContainer class='demo-card demo-card--ghost'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
-                    <h3>{{card.title}}</h3>
-                  </CardContainer>
-                {{/let}}
-              </:ghost>
-            </KanbanPlane>
-            {{#if this.showSidebar}}
-              <KanbanColumnConfigSidebar
-                @columns={{this.columns}}
-                @onClose={{this.toggleSidebar}}
-              />
-            {{/if}}
-          </div>
-        </div>
+        <KanbanColumnConfigSidebar
+          @columns={{this.columns}}
+          @onClose={{this.toggleSidebar}}
+          @onToggleCollapsed={{this.toggleCollapsed}}
+          @onLabelChange={{this.onLabelChange}}
+          @onColorChange={{this.onColorChange}}
+          @onWipLimitChange={{this.onWipLimitChange}}
+        />
       </:example>
       <:api as |Args|>
         <Args.Object
@@ -413,6 +417,22 @@ export default class KanbanUsage extends Component {
         <Args.Action
           @name='onClose'
           @description='Optional callback invoked when the close button is clicked. If omitted the close button is hidden.'
+        />
+        <Args.Action
+          @name='onToggleCollapsed'
+          @description='Optional callback invoked with the column when its visibility toggle is clicked.'
+        />
+        <Args.Action
+          @name='onLabelChange'
+          @description='Optional callback invoked with the column and new label string when the label input changes.'
+        />
+        <Args.Action
+          @name='onColorChange'
+          @description='Optional callback invoked with the column and new color hex string when the color picker changes.'
+        />
+        <Args.Action
+          @name='onWipLimitChange'
+          @description='Optional callback invoked with the column and new value string when the WIP limit input changes.'
         />
       </:api>
     </FreestyleUsage>
@@ -446,6 +466,7 @@ export default class KanbanUsage extends Component {
         color: var(--muted-foreground, var(--boxel-500));
       }
       .kanban-plane-demo {
+        display: flex;
         height: 34rem;
         border: 1px solid var(--border, var(--boxel-border-color));
         border-radius: 0.75rem;
@@ -471,25 +492,18 @@ export default class KanbanUsage extends Component {
         text-transform: uppercase;
         color: var(--muted-foreground, var(--boxel-500));
       }
-      .sidebar-demo {
-        display: grid;
-        gap: var(--boxel-sp);
-      }
-      .sidebar-demo-toolbar {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
-      .sidebar-demo-board {
-        display: flex;
-        height: 28rem;
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: 0.75rem;
-        overflow: hidden;
-      }
-      .sidebar-demo-board .kanban-plane {
+      .demo-plane {
         flex: 1;
         min-width: 0;
+      }
+      .demo-sidebar-wrap {
+        flex-shrink: 0;
+        width: 0;
+        overflow: hidden;
+        transition: width var(--boxel-transition);
+      }
+      .demo-sidebar-wrap.is-open {
+        width: 19rem;
       }
     </style>
   </template>

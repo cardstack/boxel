@@ -182,10 +182,6 @@ export class KanbanPlaneInner extends Component<{
       }));
   }
 
-  restoreColumn = (hc: KanbanColumnConfig): void => {
-    this.args.onToggleCollapsed?.(hc);
-  };
-
   <template>
     <div
       class={{cn 'board' is-dragging=this.isDragging}}
@@ -293,8 +289,9 @@ export class KanbanPlaneInner extends Component<{
                   (concat 'Show ' hc.config.label)
                   'Show column'
                 }}
-                {{on 'click' (fn this.restoreColumn hc.config)}}
+                {{on 'click' (fn @onToggleCollapsed hc.config)}}
                 data-test-hidden-column-row={{i}}
+                data-test-show-hidden-column={{hc.config.key}}
               >
                 <span
                   class='hidden-col-dot'

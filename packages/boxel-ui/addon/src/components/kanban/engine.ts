@@ -26,7 +26,6 @@ export interface KanbanColumnConfig {
   color: string | null;
   key: string;
   label: string | null;
-  sortOrder: number | null;
   wipLimit: number | null;
 }
 

@@ -15,7 +15,6 @@ import {
   type KanbanColumnConfig,
 } from '@cardstack/boxel-ui/components';
 
-// sortOrders are 0-indexed so boundary checks (=== 0, >= length - 1) work correctly.
 function makeColumns(): TrackedArray<KanbanColumnConfig> {
   return new TrackedArray([
     new TrackedObject({
@@ -24,7 +23,6 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#64748b',
       wipLimit: 0,
       collapsed: false,
-      sortOrder: 0,
     }) as KanbanColumnConfig,
     new TrackedObject({
       key: 'in-progress',
@@ -32,7 +30,6 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#d97706',
       wipLimit: 2,
       collapsed: false,
-      sortOrder: 1,
     }) as KanbanColumnConfig,
     new TrackedObject({
       key: 'done',
@@ -40,10 +37,28 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#15803d',
       wipLimit: null,
       collapsed: false,
-      sortOrder: 2,
     }) as KanbanColumnConfig,
   ]);
 }
+
+const onLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
+  if (col) col['label'] = val;
+};
+const onColorChange = (col: KanbanColumnConfig | null, val: string): void => {
+  if (col) col['color'] = val;
+};
+const onWipLimitChange = (
+  col: KanbanColumnConfig | null,
+  val: string,
+): void => {
+  if (col) {
+    let raw = parseInt(val, 10);
+    col['wipLimit'] = isNaN(raw) || raw < 0 ? 0 : raw;
+  }
+};
+const onToggleCollapsed = (col: KanbanColumnConfig | null): void => {
+  if (col) col['collapsed'] = !col.collapsed;
+};
 
 module(
   'Integration | Component | kanban-column-config-sidebar',
@@ -53,7 +68,13 @@ module(
     test('renders one row per column with label and wip values', async function (assert) {
       let columns = makeColumns();
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onLabelChange={{onLabelChange}}
+            @onWipLimitChange={{onWipLimitChange}}
+          />
+        </template>,
       );
 
       assert.dom('[data-test-col-config-row]').exists({ count: 3 });
@@ -101,41 +122,27 @@ module(
       );
 
       assert
-        .dom(
-          '[data-test-col-config-row="backlog"] [aria-label="Move column up"]',
-        )
+        .dom('[data-test-move-col-up-btn="backlog"]')
         .isDisabled('first row: up disabled');
       assert
-        .dom(
-          '[data-test-col-config-row="backlog"] [aria-label="Move column down"]',
-        )
+        .dom('[data-test-move-col-down-btn="backlog"]')
         .isNotDisabled('first row: down enabled');
       assert
-        .dom('[data-test-col-config-row="done"] [aria-label="Move column up"]')
+        .dom('[data-test-move-col-up-btn="done"]')
         .isNotDisabled('last row: up enabled');
       assert
-        .dom(
-          '[data-test-col-config-row="done"] [aria-label="Move column down"]',
-        )
+        .dom('[data-test-move-col-down-btn="done"]')
         .isDisabled('last row: down disabled');
 
-      // Move backlog down — callback receives columns sorted by sortOrder.
-      await click(
-        '[data-test-col-config-row="backlog"] [aria-label="Move column down"]',
-      );
+      await click('[data-test-move-col-down-btn="backlog"]');
       assert.strictEqual(
         columns[0]!.key,
         'in-progress',
         'in-progress is now first',
       );
-      assert.strictEqual(columns[0]!.sortOrder, 0, 'in-progress sortOrder = 0');
       assert.strictEqual(columns[1]!.key, 'backlog', 'backlog is second');
-      assert.strictEqual(columns[1]!.sortOrder, 1, 'backlog sortOrder = 1');
       assert.strictEqual(columns[2]!.key, 'done', 'done unchanged');
-      assert.strictEqual(columns[2]!.sortOrder, 2, 'done sortOrder = 2');
 
-      // Move up on in-progress (currently sortOrder 0 after swap) — should be
-      // disabled since it's now first. Verify with a fresh set of columns.
       let columns2 = makeColumns();
 
       await render(
@@ -145,27 +152,26 @@ module(
       );
 
       await click(
-        '[data-test-col-config-row="in-progress"] [aria-label="Move column up"]',
+        '[data-test-col-config-row="in-progress"] [data-test-move-col-up-btn]',
       );
       assert.strictEqual(
         columns2[0]!.key,
         'in-progress',
         'move-up on in-progress: in-progress is now first',
       );
-      assert.strictEqual(
-        columns2[0]!.sortOrder,
-        0,
-        'in-progress sortOrder = 0',
-      );
       assert.strictEqual(columns2[1]!.key, 'backlog');
-      assert.strictEqual(columns2[1]!.sortOrder, 1);
     });
 
     test('label input mutates only the targeted label', async function (assert) {
       let columns = makeColumns();
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onLabelChange={{onLabelChange}}
+          />
+        </template>,
       );
 
       await fillIn('[data-test-col-config-label="backlog"]', 'Queue');
@@ -182,7 +188,12 @@ module(
       let columns = makeColumns();
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onWipLimitChange={{onWipLimitChange}}
+          />
+        </template>,
       );
 
       await fillIn('[data-test-col-config-wip="in-progress"]', '5');
@@ -196,7 +207,12 @@ module(
       let columns = makeColumns();
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onToggleCollapsed={{onToggleCollapsed}}
+          />
+        </template>,
       );
 
       await click(
@@ -211,7 +227,10 @@ module(
 
       await render(
         <template>
-          <KanbanColumnConfigSidebar @columns={{collapsedFirst}} />
+          <KanbanColumnConfigSidebar
+            @columns={{collapsedFirst}}
+            @onToggleCollapsed={{onToggleCollapsed}}
+          />
         </template>,
       );
 
@@ -225,14 +244,19 @@ module(
       let columns = makeColumns();
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onColorChange={{onColorChange}}
+          />
+        </template>,
       );
 
       let input = document.querySelector(
         '[data-test-col-config-color="backlog"]',
       ) as HTMLInputElement;
       input.value = '#ff0000';
-      await triggerEvent(input, 'change');
+      await triggerEvent(input, 'input');
 
       assert.strictEqual(columns[0]!.color, '#ff0000');
       assert.strictEqual(columns[1]!.color, '#d97706', 'other cols unchanged');
@@ -246,14 +270,20 @@ module(
 
       await render(
         <template>
-          <KanbanColumnConfigSidebar @columns={{state.cols}} />
+          <KanbanColumnConfigSidebar
+            @columns={{state.cols}}
+            @onLabelChange={{onLabelChange}}
+          />
         </template>,
       );
 
       assert.dom('[data-test-col-config-label="backlog"]').hasValue('Backlog');
 
       state.cols = new TrackedArray([
-        new TrackedObject({ ...state.cols[0]!, label: 'Queue' }) as KanbanColumnConfig,
+        new TrackedObject({
+          ...state.cols[0]!,
+          label: 'Queue',
+        }) as KanbanColumnConfig,
         ...state.cols.slice(1),
       ]);
       await new Promise((r) => requestAnimationFrame(r));
@@ -265,7 +295,12 @@ module(
       let columns = makeColumns();
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @onLabelChange={{onLabelChange}}
+          />
+        </template>,
       );
 
       let input = document.querySelector(

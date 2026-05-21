@@ -26,6 +26,7 @@ export class KanbanPlane extends Component<{
     card: [KanbanPlacement];
     ghost: [number];
   };
+  Element: HTMLElement;
 }> {
   private ownedManager: KanbanDragManager;
 
@@ -91,6 +92,7 @@ export class KanbanPlane extends Component<{
         @onToggleCollapsed={{@onToggleCollapsed}}
         @placements={{@placements}}
         data-test-kanban-board
+        ...attributes
       >
         <:card as |placement|>
           {{yield placement to='card'}}

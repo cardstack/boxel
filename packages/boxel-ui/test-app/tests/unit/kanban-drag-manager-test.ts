@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 import { settled } from '@ember/test-helpers';
 import {
   KanbanDragManager,
+  type KanbanColumnConfig,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
 import { delay } from 'test-app/tests/helpers';
@@ -33,7 +34,21 @@ function stubRect(
   });
 }
 
-// Two cards in column 0 (sortOrder 1 & 2), one card in column 1 (sortOrder 1).
+const COL_A = 'col-a';
+const COL_B = 'col-b';
+const COL_C = 'col-c';
+
+const COLUMNS_AB: KanbanColumnConfig[] = [
+  { key: COL_A, label: 'A', color: null, wipLimit: null, collapsed: false },
+  { key: COL_B, label: 'B', color: null, wipLimit: null, collapsed: false },
+];
+
+const COLUMNS_ABC: KanbanColumnConfig[] = [
+  ...COLUMNS_AB,
+  { key: COL_C, label: 'C', color: null, wipLimit: null, collapsed: false },
+];
+
+// Two cards in col-a (sortOrder 1 & 2), one card in col-b (sortOrder 1).
 function makeMultiBoard(): {
   container: HTMLElement;
   placements: KanbanPlacement[];
@@ -47,8 +62,8 @@ function makeMultiBoard(): {
   let card1 = document.createElement('div');
   let card2 = document.createElement('div');
 
-  col0.setAttribute('data-kanban-column-index', '0');
-  col1.setAttribute('data-kanban-column-index', '1');
+  col0.setAttribute('data-kanban-column', COL_A);
+  col1.setAttribute('data-kanban-column', COL_B);
   body0.setAttribute('data-kanban-col-body', '');
   body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');
@@ -72,9 +87,9 @@ function makeMultiBoard(): {
   return {
     container,
     placements: [
-      { index: 0, column: 0, sortOrder: 1 },
-      { index: 2, column: 0, sortOrder: 2 },
-      { index: 1, column: 1, sortOrder: 1 },
+      { index: 0, columnId: COL_A, sortOrder: 1 },
+      { index: 2, columnId: COL_A, sortOrder: 2 },
+      { index: 1, columnId: COL_B, sortOrder: 1 },
     ],
   };
 }
@@ -88,8 +103,8 @@ function makeBoard(): HTMLElement {
   let card0 = document.createElement('div');
   let card1 = document.createElement('div');
 
-  column0.setAttribute('data-kanban-column-index', '0');
-  column1.setAttribute('data-kanban-column-index', '1');
+  column0.setAttribute('data-kanban-column', COL_A);
+  column1.setAttribute('data-kanban-column', COL_B);
   body0.setAttribute('data-kanban-col-body', '');
   body1.setAttribute('data-kanban-col-body', '');
   card0.setAttribute('data-card-index', '0');
@@ -118,8 +133,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
   hooks.beforeEach(function () {
     container = makeBoard();
     placements = [
-      { index: 0, column: 0, sortOrder: 1 },
-      { index: 1, column: 1, sortOrder: 1 },
+      { index: 0, columnId: COL_A, sortOrder: 1 },
+      { index: 1, columnId: COL_B, sortOrder: 1 },
     ];
   });
 
@@ -138,6 +153,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => assert.step('change'),
       onSelect: (index: number | null) => {
@@ -177,6 +193,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
@@ -207,7 +224,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     assert.strictEqual(manager.activeDragIndex, 0);
     assert.strictEqual(manager.dragGhostWidth, 184);
     assert.deepEqual(manager.insertion, {
-      column: 1,
+      columnId: COL_B,
       insertBeforeIndex: -1,
       position: 2,
     });
@@ -221,8 +238,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
     await delay(350);
 
     assert.deepEqual(changedPlacements, [
-      { index: 0, column: 1, sortOrder: 2 },
-      { index: 1, column: 1, sortOrder: 1 },
+      { index: 0, columnId: COL_B, sortOrder: 2 },
+      { index: 1, columnId: COL_B, sortOrder: 1 },
     ]);
   });
 
@@ -232,6 +249,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changes.push(nextPlacements);
@@ -274,6 +292,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {},
     });
@@ -312,6 +331,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {},
     });
@@ -358,6 +378,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: (nextPlacements: KanbanPlacement[]) => {
         changedPlacements = nextPlacements;
@@ -404,8 +425,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
     await delay(350);
 
     assert.deepEqual(changedPlacements, [
-      { index: 0, column: 1, sortOrder: 2 },
-      { index: 1, column: 1, sortOrder: 1 },
+      { index: 0, columnId: COL_B, sortOrder: 2 },
+      { index: 1, columnId: COL_B, sortOrder: 1 },
     ]);
     assert.strictEqual(manager.interactionMode, 'idle');
   });
@@ -414,6 +435,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {},
     });
@@ -439,7 +461,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     assert.strictEqual(manager.interactionMode, 'drag');
     assert.deepEqual(manager.insertion, {
-      column: 1,
+      columnId: COL_B,
       insertBeforeIndex: -1,
       position: 2,
     });
@@ -451,6 +473,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {},
       onSelect: (index: number | null) => {
@@ -480,6 +503,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {},
       onSelect: (index: number | null) => {
@@ -502,6 +526,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {
         dragActivated = true;
@@ -546,7 +571,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     function makeKbManager(
       opts: {
-        isColumnVisible?: (column: number) => boolean;
+        columns?: KanbanColumnConfig[];
+        isColumnVisible?: (columnId: string) => boolean;
         onChange?: (p: KanbanPlacement[]) => void;
         onSelect?: (i: number | null) => void;
       } = {},
@@ -554,6 +580,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = new KanbanDragManager({
         placements: mp,
         columnCount: 2,
+        columns: opts.columns ?? COLUMNS_AB,
         isColumnVisible: opts.isColumnVisible ?? (() => true),
         onChange: opts.onChange ?? (() => {}),
         onSelect: opts.onSelect,
@@ -610,9 +637,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = makeKbManager();
       const card0 = mc.querySelector('[data-card-index="0"]')!;
       mgr.onKeyDown(keyEvent(' ', card0).event);
-      // card0 is sortOrder 1; card2 is the next card (sortOrder 2) in col 0
       assert.deepEqual(mgr.insertion, {
-        column: 0,
+        columnId: COL_A,
         insertBeforeIndex: 2,
         position: 2,
       });
@@ -624,7 +650,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent(' ', card0).event);
       mgr.onKeyDown(keyEvent('ArrowDown').event);
       assert.deepEqual(mgr.insertion, {
-        column: 0,
+        columnId: COL_A,
         insertBeforeIndex: -1,
         position: 3,
       });
@@ -645,7 +671,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent('ArrowUp').event);
       // Should now be before card0 (the only remaining card)
       assert.deepEqual(mgr.insertion, {
-        column: 0,
+        columnId: COL_A,
         insertBeforeIndex: 0,
         position: 1,
       });
@@ -656,22 +682,23 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const card0 = mc.querySelector('[data-card-index="0"]')!;
       mgr.onKeyDown(keyEvent(' ', card0).event);
       mgr.onKeyDown(keyEvent('ArrowRight').event);
-      assert.strictEqual(mgr.insertion?.column, 1);
+      assert.strictEqual(mgr.insertion?.columnId, COL_B);
       assert.true(mgr.announcement.startsWith('Column 2'));
       mgr.onKeyDown(keyEvent('ArrowLeft').event);
-      assert.strictEqual(mgr.insertion?.column, 0);
+      assert.strictEqual(mgr.insertion?.columnId, COL_A);
     });
 
     test('keyboard drag skips hidden columns', function (assert) {
       mp = [
-        { index: 0, column: 0, sortOrder: 1 },
-        { index: 1, column: 1, sortOrder: 1 },
-        { index: 2, column: 2, sortOrder: 1 },
+        { index: 0, columnId: COL_A, sortOrder: 1 },
+        { index: 1, columnId: COL_B, sortOrder: 1 },
+        { index: 2, columnId: COL_C, sortOrder: 1 },
       ];
       const mgr = new KanbanDragManager({
         placements: mp,
         columnCount: 3,
-        isColumnVisible: (column: number) => column !== 1,
+        columns: COLUMNS_ABC,
+        isColumnVisible: (columnId: string) => columnId !== COL_B,
         onChange: () => {},
       });
       mgr.registerContainer(mc);
@@ -680,7 +707,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       mgr.onKeyDown(keyEvent(' ', card0).event);
       mgr.onKeyDown(keyEvent('ArrowRight').event);
 
-      assert.strictEqual(mgr.insertion?.column, 2);
+      assert.strictEqual(mgr.insertion?.columnId, COL_C);
     });
 
     test('Space or Enter in kb-drag commits the drop and fires onChange', function (assert) {
@@ -694,9 +721,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
       assert.strictEqual(mgr.activeDragIndex, null);
       assert.notStrictEqual(changed, undefined);
       assert.strictEqual(
-        changed!.find((p) => p.index === 0)?.column,
-        1,
-        'card 0 should land in column 1',
+        changed!.find((p) => p.index === 0)?.columnId,
+        COL_B,
+        'card 0 should land in col-b',
       );
       assert.strictEqual(mgr.announcement, 'Card dropped.');
 
@@ -758,7 +785,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
       // ArrowDown moves to next card in column
       mgr.onKeyDown(keyEvent('ArrowDown').event);
-      assert.strictEqual(mgr.selectedIndex, 2, 'card2 is next in col 0');
+      assert.strictEqual(mgr.selectedIndex, 2, 'card2 is next in col-a');
       assert.strictEqual(lastSelected, 2);
 
       // ArrowUp at top of column keeps selection unchanged
@@ -773,7 +800,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
         keyEvent('ArrowRight');
       mgr.onKeyDown(rightEvent);
       assert.true(rightPrev(), 'ArrowRight prevents default');
-      assert.strictEqual(mgr.selectedIndex, 1, 'card1 is in col 1');
+      assert.strictEqual(mgr.selectedIndex, 1, 'card1 is in col-b');
       assert.strictEqual(lastSelected, 1);
 
       // ArrowLeft moves back
@@ -786,14 +813,15 @@ module('Unit | kanban-drag-manager', function (hooks) {
 
     test('idle keyboard navigation skips hidden columns', function (assert) {
       mp = [
-        { index: 0, column: 0, sortOrder: 1 },
-        { index: 1, column: 1, sortOrder: 1 },
-        { index: 2, column: 2, sortOrder: 1 },
+        { index: 0, columnId: COL_A, sortOrder: 1 },
+        { index: 1, columnId: COL_B, sortOrder: 1 },
+        { index: 2, columnId: COL_C, sortOrder: 1 },
       ];
       const mgr = new KanbanDragManager({
         placements: mp,
         columnCount: 3,
-        isColumnVisible: (column: number) => column !== 1,
+        columns: COLUMNS_ABC,
+        isColumnVisible: (columnId: string) => columnId !== COL_B,
         onChange: () => {},
       });
       mgr.registerContainer(mc);
@@ -811,6 +839,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
     let manager = new KanbanDragManager({
       placements,
       columnCount: 2,
+      columns: COLUMNS_AB,
       isColumnVisible: () => true,
       onChange: () => {
         changed = true;
@@ -862,8 +891,8 @@ module('Unit | kanban-drag-manager', function (hooks) {
   test('dropping outside the board commits the last visible insertion target', async function (assert) {
     let changedPlacements: KanbanPlacement[] | undefined;
     const expected = [
-      { index: 0, column: 1, sortOrder: 2 },
-      { index: 1, column: 1, sortOrder: 1 },
+      { index: 0, columnId: COL_B, sortOrder: 2 },
+      { index: 1, columnId: COL_B, sortOrder: 1 },
     ];
 
     function makeManager() {
@@ -871,6 +900,7 @@ module('Unit | kanban-drag-manager', function (hooks) {
       const mgr = new KanbanDragManager({
         placements,
         columnCount: 2,
+        columns: COLUMNS_AB,
         isColumnVisible: () => true,
         onChange: (next: KanbanPlacement[]) => {
           changedPlacements = next;
