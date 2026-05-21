@@ -623,8 +623,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       new MenuItem({
         label: 'Copy Card URL',
         action: () =>
-          this.cardIdentifier &&
-          copyCardURLToClipboard(this.cardIdentifier),
+          this.cardIdentifier && copyCardURLToClipboard(this.cardIdentifier),
         icon: IconLink,
         disabled: !this.cardIdentifier,
       }),
