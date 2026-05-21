@@ -48,6 +48,20 @@ import { buildCreatePrerenderAuth } from './prerender/auth';
 import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
 import { serializeFatalReason } from './lib/serialize-fatal-reason';
 
+// Belt-and-suspenders wrapper around serializeFatalReason for the
+// fatal-exit paths below. The helper already swallows its own throws,
+// but a regression in it (or in any future refactor) would re-enter
+// uncaughtException after `isFatalHandlerRunning` is set and strand
+// the worker. The fatal path cannot tolerate a throw, so wrap once
+// more here.
+function safeSerialize(reason: unknown): string {
+  try {
+    return serializeFatalReason(reason);
+  } catch {
+    return '[serializeFatalReason threw]';
+  }
+}
+
 let log = logger('worker');
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
@@ -261,9 +275,16 @@ let autoMigrate = migrateDB || undefined;
     // captured server log shows the child as having silently exited
     // `code=1, signal=null` and we lose the actual stack trace (see
     // CS-11200).
+    //
+    // serializeFatalReason() already swallows its own throws, but the
+    // fatal-exit path is critical enough that we double-wrap each
+    // call: any throw between `isFatalHandlerRunning = true` and
+    // `process.exit(1)` becomes a re-entered uncaughtException, which
+    // sees the flag set and early-returns, stranding the worker with
+    // its reservation still held.
     writeSync(
       2,
-      `[worker] FATAL ${source} pid=${process.pid} workerId=${workerId}: ${serializeFatalReason(reason)}\n`,
+      `[worker] FATAL ${source} pid=${process.pid} workerId=${workerId}: ${safeSerialize(reason)}\n`,
     );
     try {
       Sentry.captureException(reason);
@@ -279,7 +300,7 @@ let autoMigrate = migrateDB || undefined;
       } catch (e) {
         writeSync(
           2,
-          `[worker] FATAL finalize-failed pid=${process.pid} workerId=${workerId}: ${serializeFatalReason(e)}\n`,
+          `[worker] FATAL finalize-failed pid=${process.pid} workerId=${workerId}: ${safeSerialize(e)}\n`,
         );
       } finally {
         process.exit(1);
@@ -303,7 +324,7 @@ let autoMigrate = migrateDB || undefined;
   // `process.exit(1)` can be lost on the libuv-async stderr pipe.
   writeSync(
     2,
-    `[worker] FATAL startup-error pid=${process.pid}: ${serializeFatalReason(e)}\n`,
+    `[worker] FATAL startup-error pid=${process.pid}: ${safeSerialize(e)}\n`,
   );
   process.exit(1);
 });

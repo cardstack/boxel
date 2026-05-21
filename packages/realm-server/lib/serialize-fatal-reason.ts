@@ -20,26 +20,60 @@
 type WithCause = { cause?: unknown };
 
 export function serializeFatalReason(reason: unknown): string {
-  if (!(reason instanceof Error)) {
-    return String(reason);
-  }
-  let parts: string[] = [];
-  parts.push(reason.stack ?? `${reason.name}: ${reason.message}`);
-  let cause: unknown = (reason as WithCause).cause;
-  // Walk the cause chain. Defensive bound prevents a (pathological)
-  // self-referential cause from looping forever.
-  let depth = 0;
-  while (cause !== undefined && depth < 8) {
-    if (cause instanceof Error) {
-      parts.push(
-        `Caused by: ${cause.stack ?? `${cause.name}: ${cause.message}`}`,
-      );
-      cause = (cause as WithCause).cause;
-    } else {
-      parts.push(`Caused by: ${String(cause)}`);
-      cause = undefined;
+  // Defense in depth: anything inside that throws (e.g.
+  // `String(Object.create(null))` synthesizing a `TypeError` because
+  // a prototype-less object has no `toString`/`valueOf`, or a user
+  // type whose `toString` itself throws) would otherwise propagate
+  // out into `fatalExit` after it has already set
+  // `isFatalHandlerRunning = true`, and the resulting re-entered
+  // `uncaughtException` would early-return without finalizing the
+  // reservation or calling `process.exit(1)`. That leaves the worker
+  // alive in a broken state, holding its pg-queue reservation. The
+  // fatal path must never throw, so swallow everything here.
+  try {
+    if (!(reason instanceof Error)) {
+      return safeString(reason);
     }
-    depth += 1;
+    let parts: string[] = [];
+    parts.push(reason.stack ?? `${reason.name}: ${reason.message}`);
+    let cause: unknown = (reason as WithCause).cause;
+    // Walk the cause chain. Defensive bound prevents a (pathological)
+    // self-referential cause from looping forever.
+    let depth = 0;
+    while (cause !== undefined && depth < 8) {
+      if (cause instanceof Error) {
+        parts.push(
+          `Caused by: ${cause.stack ?? `${cause.name}: ${cause.message}`}`,
+        );
+        cause = (cause as WithCause).cause;
+      } else {
+        parts.push(`Caused by: ${safeString(cause)}`);
+        cause = undefined;
+      }
+      depth += 1;
+    }
+    return parts.join('\n');
+  } catch (innerErr) {
+    let innerMsg: string;
+    try {
+      innerMsg =
+        innerErr instanceof Error
+          ? innerErr.message
+          : safeString(innerErr);
+    } catch {
+      innerMsg = 'unknown';
+    }
+    return `[serializeFatalReason failed: ${innerMsg}]`;
   }
-  return parts.join('\n');
+}
+
+// `String(value)` throws on a prototype-less object (no `toString` /
+// `valueOf` to call), and on any value whose own `toString` throws.
+// Wrap the call so callers can rely on getting a string back.
+function safeString(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return '[unstringifiable value]';
+  }
 }

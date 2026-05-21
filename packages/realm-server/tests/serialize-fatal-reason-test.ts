@@ -80,4 +80,70 @@ module(basename(__filename), function () {
       `cause chain capped at 8, saw ${causedByCount}`,
     );
   });
+
+  test('does not throw on a prototype-less rejection value', function (assert) {
+    // `String(Object.create(null))` throws TypeError because the
+    // prototype-less object has neither `toString` nor `valueOf` for
+    // `OrdinaryToPrimitive` to call. Libraries do occasionally
+    // `Promise.reject` such values; the fatal-exit path cannot
+    // tolerate a throw here. Code review caught this on PR #4906.
+    let weird = Object.create(null) as object;
+    let out: string;
+    assert.ok(
+      ((): boolean => {
+        try {
+          out = serializeFatalReason(weird);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+      'serializeFatalReason did not throw',
+    );
+    assert.strictEqual(typeof out!, 'string', 'returned a string fallback');
+  });
+
+  test('does not throw when the value’s own toString throws', function (assert) {
+    let hostile = {
+      toString() {
+        throw new Error('toString blew up');
+      },
+    };
+    let out: string;
+    assert.ok(
+      ((): boolean => {
+        try {
+          out = serializeFatalReason(hostile);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+      'serializeFatalReason did not throw on a hostile toString',
+    );
+    assert.strictEqual(typeof out!, 'string');
+  });
+
+  test('does not throw when an Error’s cause has a hostile toString', function (assert) {
+    let hostileCause = {
+      toString() {
+        throw new Error('cause toString blew up');
+      },
+    };
+    let err = new Error('outer') as Error & { cause?: unknown };
+    err.cause = hostileCause;
+    let out: string;
+    assert.ok(
+      ((): boolean => {
+        try {
+          out = serializeFatalReason(err);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+      'serializeFatalReason did not throw when walking the cause chain',
+    );
+    assert.ok(/outer/.test(out!), 'top-level message still present');
+  });
 });
