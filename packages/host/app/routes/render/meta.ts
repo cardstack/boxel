@@ -11,7 +11,7 @@ import {
   cardIdToURL,
   identifyCard,
   internalKeyFor,
-  maybeRelativeURL,
+  maybeRelativeReference,
   relationshipEntries,
   realmURL,
   snapshotRuntimeDependencies,
@@ -56,8 +56,8 @@ export default class RenderMetaRoute extends Route<Model> {
 
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
-      maybeRelativeURL: (url: string) =>
-        maybeRelativeURL(
+      maybeRelativeReference: (url: string) =>
+        maybeRelativeReference(
           cardIdToURL(url),
           cardIdToURL(instance.id),
           instance[realmURL],

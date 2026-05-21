@@ -35,7 +35,7 @@ import {
   isSingleFileMetaDocument,
   loadCardDef,
   localId,
-  maybeRelativeURL,
+  maybeRelativeReference,
   maybeURL,
   meta,
   primitive,
@@ -70,7 +70,7 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
-  maybeRelativeURL?: (possibleURL: string) => string;
+  maybeRelativeReference?: (possibleURL: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
 
@@ -176,8 +176,8 @@ export function makeRelativeURL(
   maybeURL: string,
   opts?: SerializeOpts,
 ): string {
-  return opts?.maybeRelativeURL && !opts?.useAbsoluteURL
-    ? opts.maybeRelativeURL(maybeURL)
+  return opts?.maybeRelativeReference && !opts?.useAbsoluteURL
+    ? opts.maybeRelativeReference(maybeURL)
     : maybeURL;
 }
 
@@ -223,7 +223,7 @@ export function serializeCard(
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
-      maybeRelativeURL(possibleURL: string) {
+      maybeRelativeReference(possibleURL: string) {
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
         // in their canonical portable form — return as-is
         if (isRegisteredPrefix(possibleURL)) {
@@ -232,7 +232,7 @@ export function serializeCard(
         let url = maybeURL(possibleURL, modelRelativeTo);
         if (!url) {
           throw new Error(
-            `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`,
+            `could not determine url from '${possibleURL}' relative to ${modelRelativeTo}`,
           );
         }
         if (!modelRelativeTo) {
@@ -240,7 +240,7 @@ export function serializeCard(
         }
         const realmURLString = getCardMeta(model, 'realmURL');
         const realmURL = realmURLString ? new URL(realmURLString) : undefined;
-        return maybeRelativeURL(url, modelRelativeTo, realmURL);
+        return maybeRelativeReference(url, modelRelativeTo, realmURL);
       },
     },
   });
@@ -266,7 +266,7 @@ export function serializeCardResource(
 ): LooseCardResource | LooseFileMetaResource {
   let adoptsFrom = identifyCard(
     model.constructor,
-    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+    opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
   );
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
@@ -323,7 +323,7 @@ export function serializeFileDef(
     {
       ...opts,
       ...{
-        maybeRelativeURL(possibleURL: string) {
+        maybeRelativeReference(possibleURL: string) {
           // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
           // in their canonical portable form — return as-is
           if (isRegisteredPrefix(possibleURL)) {
@@ -342,7 +342,7 @@ export function serializeFileDef(
           const realmURL = realmURLString
             ? new URL(realmURLString)
             : undefined;
-          return maybeRelativeURL(url, modelRelativeTo, realmURL);
+          return maybeRelativeReference(url, modelRelativeTo, realmURL);
         },
       },
     },

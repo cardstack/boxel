@@ -3,14 +3,14 @@ import { module, test } from 'qunit';
 import {
   type LooseCardResource,
   type RealmResourceIdentifier,
-  relativeURL,
+  relativeReference,
   visitInstanceURLs,
 } from '@cardstack/runtime-common';
 
 module('Unit | url', function () {
-  module('relativeURL', function () {
+  module('relativeReference', function () {
     test('returns undefined for different origins', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://other.example.com/a'),
         new URL('https://example.com/a'),
         undefined,
@@ -21,7 +21,7 @@ module('Unit | url', function () {
 
     test('returns undefined when realm URL blocks escaping the realm', function (assert) {
       let realm = new URL('https://example.com/realm/');
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/outside/card'),
         new URL('https://example.com/realm/card'),
         realm,
@@ -31,7 +31,7 @@ module('Unit | url', function () {
     });
 
     test('returns absolute path when first path segment differs and relativeTo is nested', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/d/e'),
         new URL('https://example.com/a/b/c'),
         undefined,
@@ -41,7 +41,7 @@ module('Unit | url', function () {
     });
 
     test('creates relative path to upper-level sibling', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/d'),
         new URL('https://example.com/a/b'),
         undefined,
@@ -51,7 +51,7 @@ module('Unit | url', function () {
     });
 
     test('creates sibling-relative path', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b/other'),
         new URL('https://example.com/a/b/file'),
         undefined,
@@ -61,7 +61,7 @@ module('Unit | url', function () {
     });
 
     test('creates parent-relative path', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b/e'),
         new URL('https://example.com/a/b/c/d'),
         undefined,
@@ -71,7 +71,7 @@ module('Unit | url', function () {
     });
 
     test('returns ./file when URL matches relativeTo exactly', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/a/b'),
         new URL('https://example.com/a/b'),
         undefined,
@@ -81,7 +81,7 @@ module('Unit | url', function () {
     });
 
     test('returns ./file when relativeTo is root', function (assert) {
-      let result = relativeURL(
+      let result = relativeReference(
         new URL('https://example.com/b'),
         new URL('https://example.com/'),
         undefined,

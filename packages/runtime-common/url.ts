@@ -21,7 +21,7 @@ export function maybeURL(
   }
 }
 
-export function relativeURL(
+export function relativeReference(
   url: RealmResourceIdentifier | URL,
   relativeTo: RealmResourceIdentifier | URL,
   realmURL: RealmIdentifier | URL | undefined,
@@ -115,12 +115,12 @@ function sharedNamespace(a: string, b: string): string | undefined {
   return undefined;
 }
 
-export function maybeRelativeURL(
+export function maybeRelativeReference(
   url: RealmResourceIdentifier | URL,
   relativeTo: RealmResourceIdentifier | URL,
   realmURL: RealmIdentifier | URL | undefined,
 ): string {
-  let rel = relativeURL(url, relativeTo, realmURL);
+  let rel = relativeReference(url, relativeTo, realmURL);
   if (rel) {
     return rel;
   }
