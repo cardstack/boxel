@@ -675,23 +675,67 @@
         "targets": [
           {
             "datasource": {
-              "type": "loki",
-              "uid": "loki"
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"^-->\" [1m])) or vector(0)",
-            "queryType": "range",
-            "legendFormat": "HTTP req/min",
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "RequestCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "a",
+            "hide": true,
             "refId": "A"
           },
           {
             "datasource": {
-              "type": "loki",
-              "uid": "loki"
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
             },
-            "expr": "60 * sum(rate({service=\"realm-server\"} |~ \"(?i)error|exception|fatal\" [1m])) or vector(0)",
-            "queryType": "range",
-            "legendFormat": "HTTP err/min",
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "b",
+            "hide": true,
             "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "metricEditorMode": 1,
+            "metricQueryType": 0,
+            "expression": "FILL(a, 0) / PERIOD(a) * 60",
+            "label": "HTTP req/min",
+            "region": "default",
+            "id": "f",
+            "refId": "F"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "metricEditorMode": 1,
+            "metricQueryType": 0,
+            "expression": "FILL(b, 0) / PERIOD(b) * 60",
+            "label": "HTTP err/min",
+            "region": "default",
+            "id": "g",
+            "refId": "G"
           },
           {
             "datasource": {
