@@ -155,7 +155,7 @@ async function processAttributes({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeReference?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
   definitionLookup: DefinitionLookup;
 }): Promise<Record<string, any>> {
@@ -459,7 +459,7 @@ function processMetaFields({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeReference?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
 }): CardFields {
   const result: CardFields = {};
@@ -499,7 +499,7 @@ function processMetaField({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeReference?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
 }): Partial<Meta> {
   const result = { ...field };

@@ -31,7 +31,7 @@ export function serialize(
   opts?: SerializeOpts & {
     relativeTo?: URL;
     trimExecutableExtension?: true;
-    maybeRelativeReference?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ): ResolvedCodeRef | {} {
@@ -75,7 +75,7 @@ function codeRefAdjustments(
   relativeTo?: URL,
   opts?: SerializeOpts & {
     trimExecutableExtension?: true;
-    maybeRelativeReference?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ) {
