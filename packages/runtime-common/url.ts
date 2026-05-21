@@ -26,8 +26,7 @@ export function relativeReference(
   relativeTo: RealmResourceIdentifier | URL,
   realm: RealmIdentifier | URL | undefined,
 ): string | undefined {
-  let referenceStr =
-    reference instanceof URL ? reference.href : reference;
+  let referenceStr = reference instanceof URL ? reference.href : reference;
   let relativeToStr = relativeTo instanceof URL ? relativeTo.href : relativeTo;
 
   // Path math is meaningful only past a shared namespace prefix — URL origin
