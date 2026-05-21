@@ -89,10 +89,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/base
-      - name: Lint Catalog Realm
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/catalog-realm
       - name: Lint Experiments Realm
         if: ${{ !cancelled() }}
         run: pnpm run lint

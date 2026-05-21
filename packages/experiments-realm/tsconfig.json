@@ -27,9 +27,6 @@
       ],
       "@cardstack/host/tests/*": [
         "../host/tests/*"
-      ],
-      "@cardstack/catalog/*": [
-        "../catalog-realm/*"
       ]
     },
     "types": [

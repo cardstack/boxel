@@ -1780,58 +1780,6 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@babel/core@7.29.0)
 
-  packages/catalog-realm:
-    dependencies:
-      ember-modify-based-class-resource:
-        specifier: 'catalog:'
-        version: 1.1.2(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.7(@glimmer/component@2.1.1)(@glint/template@1.7.7))
-    devDependencies:
-      '@cardstack/boxel-icons':
-        specifier: workspace:*
-        version: link:../boxel-icons
-      '@cardstack/boxel-ui':
-        specifier: workspace:*
-        version: link:../boxel-ui/addon
-      '@cardstack/local-types':
-        specifier: workspace:*
-        version: link:../local-types
-      '@cardstack/runtime-common':
-        specifier: workspace:*
-        version: link:../runtime-common
-      '@ember/test-helpers':
-        specifier: 'catalog:'
-        version: 5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7)
-      '@types/lodash':
-        specifier: 'catalog:'
-        version: 4.17.24
-      '@types/qunit':
-        specifier: 'catalog:'
-        version: 2.19.14
-      '@types/uuid':
-        specifier: 'catalog:'
-        version: 9.0.8
-      '@universal-ember/test-support':
-        specifier: 'catalog:'
-        version: 0.5.1(@babel/core@7.29.0)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.25.0)
-      chess.js:
-        specifier: 'catalog:'
-        version: 1.0.0-beta.8
-      concurrently:
-        specifier: 'catalog:'
-        version: 8.2.2
-      ember-concurrency:
-        specifier: 'catalog:'
-        version: 5.2.0(@babel/core@7.29.0)(@glint/template@1.7.7)
-      ember-modifier:
-        specifier: ^4.1.0
-        version: 4.3.0(@babel/core@7.29.0)
-      ember-template-lint:
-        specifier: 'catalog:'
-        version: 7.9.3
-      tracked-built-ins:
-        specifier: ^4.1.2
-        version: 4.1.2(@babel/core@7.29.0)
-
   packages/eslint-plugin-boxel:
     dependencies:
       ember-eslint-parser:
@@ -18459,19 +18407,13 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18488,10 +18430,7 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18517,20 +18456,14 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18538,10 +18471,7 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
-      - bufferutil
-      - supports-color
       - typescript
-      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
