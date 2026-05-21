@@ -113,8 +113,23 @@ export function ensureQueryFieldSearchResource(
   let seedSearchURL = fieldState?.seedSearchURL;
   let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
 
+  // Inside a prerender the parent doc's `relationships.{field}.data` is
+  // the authoritative cardinality for this field — the indexer just
+  // wrote it. A live re-query would fire a `_federated-search`
+  // round-trip per field per loaded card to re-validate what the
+  // parent doc already serialized. With N query-backed `linksToMany`
+  // fields fanning out across M loaded cards that cascade is O(N*M)
+  // extra fetches. It is also an internal-inconsistency vector: if
+  // the live re-query returns a different set than the parent doc's
+  // serialized relationships, the rendered HTML iterates a different
+  // set than the parent doc describes. `isLive: false` in prerender
+  // keeps the SearchResource resolved from the seed and exits; the
+  // SPA path is unchanged.
+  let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
+  let isLive = !inPrerender;
+
   log.info(
-    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
   searchResource = store.getSearchResource(
     instance,
@@ -124,7 +139,7 @@ export function ensureQueryFieldSearchResource(
       return realm ? [realm] : undefined;
     },
     {
-      isLive: true,
+      isLive,
       dependencyTracking: trackingContext,
       seed: seedRecords
         ? {
