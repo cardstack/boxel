@@ -11,12 +11,14 @@ import {
   cardIdToURL,
   identifyCard,
   internalKeyFor,
+  logger,
   maybeRelativeURL,
   relationshipEntries,
   realmURL,
   snapshotRuntimeDependencies,
   type SingleCardDocument,
   type PrerenderMeta,
+  type PrerenderMetaDiagnostics,
   type RenderError,
 } from '@cardstack/runtime-common';
 
@@ -29,6 +31,8 @@ import { friendlyCardType } from '../../utils/render-error';
 import type { Model as ParentModel } from '../render';
 
 export type Model = PrerenderMeta | RenderError | undefined;
+
+const computePerfLog = logger('host:computed-perf');
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
@@ -54,6 +58,14 @@ export default class RenderMetaRoute extends Route<Model> {
       renderModel?.capturedDeps ??
       snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps;
 
+    // Open a synchronous compute-memo pass that spans both
+    // serializeCard and searchDoc. Computed fields invoked through the
+    // descriptor or through peekAtField hit the per-instance memo
+    // instead of re-running `computeVia` — one compute per distinct
+    // (instance, fieldName) for the whole traversal. The pass MUST
+    // close before any await so it doesn't leak across reactive cycles.
+    api.beginComputePass();
+    let serializeStart = performance.now();
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
       maybeRelativeURL: (url: string) =>
@@ -63,6 +75,7 @@ export default class RenderMetaRoute extends Route<Model> {
           instance[realmURL],
         ),
     }) as SingleCardDocument;
+    let serializeMs = performance.now() - serializeStart;
     for (let { relationship } of relationshipEntries(
       serialized.data.relationships,
     )) {
@@ -74,11 +87,24 @@ export default class RenderMetaRoute extends Route<Model> {
 
     let types = getTypes(Klass);
     let displayNames = getDisplayNames(Klass);
+    let searchDocStart = performance.now();
     let searchDoc = api.searchDoc(instance);
+    let searchDocMs = performance.now() - searchDocStart;
+    let passSnapshot = api.endComputePass();
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
     searchDoc._cardType = friendlyCardType(Klass);
+
+    let diagnostics: PrerenderMetaDiagnostics = {
+      computedCalls: passSnapshot.calls,
+      computedCacheHits: passSnapshot.cacheHits,
+      serializeMs: Math.round(serializeMs * 100) / 100,
+      searchDocMs: Math.round(searchDocMs * 100) / 100,
+    };
+    computePerfLog.debug(
+      `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls} cacheHits=${diagnostics.computedCacheHits} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
+    );
 
     return {
       serialized,
@@ -86,6 +112,7 @@ export default class RenderMetaRoute extends Route<Model> {
       types: types.map((t) => internalKeyFor(t, undefined)),
       searchDoc,
       deps,
+      diagnostics,
     };
   }
 }

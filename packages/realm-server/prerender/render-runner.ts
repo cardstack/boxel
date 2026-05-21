@@ -1082,7 +1082,6 @@ export class RenderRunner {
           types: null,
         };
         let meta: PrerenderMeta = emptyMeta;
-        let metaForTypes: PrerenderMeta = emptyMeta;
         let headHTML: string | null = null;
         let atomHTML: string | null = null;
         let iconHTML: string | null = null;
@@ -1128,27 +1127,31 @@ export class RenderRunner {
           }
         }
 
+        // Capture render.meta once before the ancestor renders so we have
+        // `meta.types` to drive fitted/embedded. The host route's
+        // serializeCard + searchDoc traversal is the most expensive part
+        // of the per-card prerender; running it twice (once for types and
+        // again for the final payload) is duplicate work because nothing
+        // about the instance changes between the two calls — the parent
+        // route freezes `model.capturedDeps` at ready-promise resolution
+        // and the fitted/embedded ancestor renders that run in between
+        // don't mutate the card model. Capture once and reuse.
         if (!cardShortCircuit) {
-          let metaForTypesResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (types)',
+          let metaResult = await runTimedStep<PrerenderMeta>(
+            'visit card render.meta',
             () => renderMeta(page, captureOptions),
           );
-          if (metaForTypesResult !== undefined) {
-            metaForTypes = metaForTypesResult;
+          if (metaResult !== undefined) {
+            meta = metaResult;
           }
         }
 
-        if (!cardShortCircuit && metaForTypes.types) {
+        if (!cardShortCircuit && meta.types) {
           const ancestorSteps = [
             {
               name: 'visit card fitted render',
               cb: () =>
-                renderAncestors(
-                  page,
-                  'fitted',
-                  metaForTypes.types!,
-                  captureOptions,
-                ),
+                renderAncestors(page, 'fitted', meta.types!, captureOptions),
               assign: (v: Record<string, string>) => {
                 fittedHTML = v;
               },
@@ -1156,12 +1159,7 @@ export class RenderRunner {
             {
               name: 'visit card embedded render',
               cb: () =>
-                renderAncestors(
-                  page,
-                  'embedded',
-                  metaForTypes.types!,
-                  captureOptions,
-                ),
+                renderAncestors(page, 'embedded', meta.types!, captureOptions),
               assign: (v: Record<string, string>) => {
                 embeddedHTML = v;
               },
@@ -1174,16 +1172,6 @@ export class RenderRunner {
               step.cb,
             );
             if (v !== undefined) step.assign(v);
-          }
-        }
-
-        if (!cardShortCircuit) {
-          let finalMetaResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (final)',
-            () => renderMeta(page, captureOptions),
-          );
-          if (finalMetaResult !== undefined) {
-            meta = finalMetaResult;
           }
         }
 
