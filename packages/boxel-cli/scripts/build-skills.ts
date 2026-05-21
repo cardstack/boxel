@@ -1,15 +1,19 @@
 /**
- * Generate plugin/skills/<skill>/SKILL.md (and references/) for the
- * boxel-skills-derived plugin skills. Run via `pnpm build:skills` from
+ * Generate plugin/skills/<skill>/SKILL.md (and references/) for every
+ * boxel-skills-derived plugin skill. Run via `pnpm build:skills` from
  * `packages/boxel-cli/`.
  *
  * Source: cardstack/boxel-skills at a pinned tag (BOXEL_SKILLS_VERSION).
  * Override the source location with BOXEL_SKILLS_REPO=/path/to/checkout for
  * local development against an unreleased boxel-skills branch.
  *
- * CI runs this and `git diff --exit-code -- plugin/skills` to fail PRs whose
- * generated content drifted from the upstream pin (see
- * .github/workflows/ci-lint.yaml).
+ * Emission policy: every SkillSet aggregator + every SkillPlusMarkdown leaf
+ * that is NOT a child of any aggregator. Aggregator children stay inside
+ * `plugin/skills/<aggregator>/references/`. No allowlist — adding a card
+ * upstream automatically packages it on the next `pnpm build:skills`.
+ *
+ * The on-`main` workflow `.github/workflows/boxel-cli-publish.yml` runs this
+ * and commits the regenerated `plugin/skills/` diff back to main.
  */
 import { execSync } from 'child_process';
 import {
@@ -28,37 +32,47 @@ const BOXEL_SKILLS_VERSION = 'v0.0.22';
 const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 
 const PLUGIN_DIR = resolve(__dirname, '..', 'plugin');
+const PLUGIN_README_PATH = resolve(PLUGIN_DIR, 'README.md');
 const CACHE_DIR = resolve(__dirname, '..', '.boxel-skills-cache');
 
-/**
- * Skills from boxel-skills to emit as plugin skills. Anything outside this
- * list is reported as "available but not enabled" so we know what's there.
- */
-const ALLOWLIST = ['boxel-development', 'boxel-design'];
+const README_BEGIN_MARKER =
+  '<!-- BEGIN AUTO-GENERATED: boxel-skills (run `pnpm build:skills` to update) -->';
+const README_END_MARKER = '<!-- END AUTO-GENERATED: boxel-skills -->';
 
 /**
  * Per-skill overrides for the lean SKILL.md frontmatter `description`. The
  * source's cardInfo.summary is often too generic for Claude Code's
- * auto-activation; these descriptions are tuned for skill discovery.
+ * auto-activation; these descriptions are tuned for skill discovery. New
+ * boxel-skills cards fall through to upstream cardInfo.summary — only add an
+ * override here if a specific skill's auto-activation proves too noisy/quiet.
  */
-const DESCRIPTION_OVERRIDES: Record<string, string> = {
+export const DESCRIPTION_OVERRIDES: Record<string, string> = {
   'boxel-development':
     'Authoring Boxel cards. Use when creating or editing .gts card definitions, .json card instances, or answering questions about CardDef / FieldDef / templates / Boxel patterns. Covers the full .gts authoring surface — imports, fields, formats (isolated/embedded/fitted/atom/edit), styling, and common pitfalls.',
   'boxel-design':
     'Boxel UI design discovery. Use when designing or redesigning a Boxel app, choosing a visual direction, or pushing past default look-and-feel before generating code.',
 };
 
-interface SkillCard {
+export interface SkillCard {
   id: string;
   json: any;
   /** Adopted card type, e.g. "SkillSet" or "SkillPlusMarkdown". */
   kind: string;
 }
 
-interface RelatedSkill {
+export interface RelatedSkill {
   id: string;
   inclusionMode: 'full' | 'link-only';
   summary: string;
+}
+
+export interface EmissionPlan {
+  /** Cards to emit as top-level plugin skills, in stable order. */
+  emit: SkillCard[];
+  /** Card IDs that are children of some emitted SkillSet aggregator. */
+  aggregatorChildren: Set<string>;
+  /** Cards skipped because their `kind` is not understood. */
+  unsupported: SkillCard[];
 }
 
 function resolveSourceRoot(): string {
@@ -110,17 +124,31 @@ function loadSkillCards(sourceRoot: string): Map<string, SkillCard> {
   return cards;
 }
 
-function getCardName(card: SkillCard): string {
+export function getCardName(card: SkillCard): string {
   const a = card.json?.data?.attributes ?? {};
   return a?.cardInfo?.name ?? a?.cardTitle ?? card.id;
 }
 
-function getCardSummary(card: SkillCard): string {
+export function getCardSummary(card: SkillCard): string {
   const a = card.json?.data?.attributes ?? {};
   return a?.cardInfo?.summary ?? a?.cardDescription ?? '';
 }
 
-function getRelatedSkills(card: SkillCard): RelatedSkill[] {
+/**
+ * The frontmatter `description` written into each emitted SKILL.md, and the
+ * same text used in the auto-generated README table column. Mirrors the
+ * fallback chain in `emitAggregator` / `emitLeaf`.
+ */
+export function getSkillDescription(card: SkillCard): string {
+  const override = DESCRIPTION_OVERRIDES[card.id];
+  if (override) return override;
+  const summary = getCardSummary(card);
+  if (summary) return summary;
+  const name = getCardName(card);
+  return card.kind === 'SkillSet' ? `${name} skill from boxel-skills.` : name;
+}
+
+export function getRelatedSkills(card: SkillCard): RelatedSkill[] {
   const attrs = card.json?.data?.attributes;
   const rels = card.json?.data?.relationships;
   if (!Array.isArray(attrs?.relatedSkills) || !rels) return [];
@@ -198,10 +226,7 @@ async function emitAggregator(
   }
 
   const cardName = getCardName(card);
-  const description =
-    DESCRIPTION_OVERRIDES[name] ||
-    getCardSummary(card) ||
-    `${cardName} skill from boxel-skills.`;
+  const description = getSkillDescription(card);
   const attrs = card.json?.data?.attributes ?? {};
   const intro =
     typeof attrs.frontMatter === 'string' ? attrs.frontMatter.trim() : '';
@@ -268,73 +293,136 @@ async function emitLeaf(sourceRoot: string, card: SkillCard): Promise<void> {
   const skillDir = resolve(PLUGIN_DIR, 'skills', name);
   mkdirSync(skillDir, { recursive: true });
 
-  const cardName = getCardName(card);
-  const description =
-    DESCRIPTION_OVERRIDES[name] || getCardSummary(card) || cardName;
+  const description = getSkillDescription(card);
   const body = getLeafBody(sourceRoot, name).trimEnd() + '\n';
   const content = `${frontmatter(name, description)}\n${body}`;
   await writeFormattedMarkdown(resolve(skillDir, 'SKILL.md'), content);
   console.log(`wrote plugin/skills/${name}/SKILL.md (single-file leaf)`);
 }
 
-async function main(): Promise<void> {
-  const sourceRoot = resolveSourceRoot();
-  const cards = loadSkillCards(sourceRoot);
-
+/**
+ * Decide which cards to emit as top-level plugin skills.
+ *
+ * - Every SkillSet aggregator is emitted (its children get bundled inside
+ *   `references/` by `emitAggregator`).
+ * - Every SkillPlusMarkdown leaf is emitted UNLESS it's already a child of
+ *   some aggregator — those leaves are reachable via the aggregator's
+ *   references and don't need a duplicate top-level skill.
+ * - Cards with any other `kind` are recorded as `unsupported` so the caller
+ *   can warn without exploding the build.
+ */
+export function computeEmissionPlan(
+  cards: Map<string, SkillCard>,
+): EmissionPlan {
   const aggregatorChildren = new Set<string>();
-  for (const id of ALLOWLIST) {
-    const card = cards.get(id);
-    if (card?.kind === 'SkillSet') {
-      for (const r of getRelatedSkills(card)) aggregatorChildren.add(r.id);
+  for (const card of cards.values()) {
+    if (card.kind !== 'SkillSet') continue;
+    for (const r of getRelatedSkills(card)) aggregatorChildren.add(r.id);
+  }
+
+  const emit: SkillCard[] = [];
+  const unsupported: SkillCard[] = [];
+  for (const card of cards.values()) {
+    if (card.kind === 'SkillSet') {
+      emit.push(card);
+    } else if (card.kind === 'SkillPlusMarkdown') {
+      if (!aggregatorChildren.has(card.id)) emit.push(card);
+    } else {
+      unsupported.push(card);
     }
   }
 
-  for (const id of ALLOWLIST) {
-    const card = cards.get(id);
-    if (!card) {
-      throw new Error(
-        `ALLOWLIST entry "${id}" not found in source. Available skill IDs: ` +
-          [...cards.keys()].sort().join(', '),
-      );
-    }
+  emit.sort((a, b) => a.id.localeCompare(b.id));
+  unsupported.sort((a, b) => a.id.localeCompare(b.id));
+  return { emit, aggregatorChildren, unsupported };
+}
+
+/**
+ * Rewrite the auto-generated table block in `plugin/README.md` so it lists
+ * every skill in the current emission plan. The block is fenced by HTML
+ * marker comments — if they're missing, throw clearly rather than silently
+ * un-wiring the auto-gen.
+ */
+export async function updatePluginReadme(plan: EmissionPlan): Promise<void> {
+  const readme = readFileSync(PLUGIN_README_PATH, 'utf8');
+  const beginIdx = readme.indexOf(README_BEGIN_MARKER);
+  const endIdx = readme.indexOf(README_END_MARKER);
+  if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) {
+    throw new Error(
+      `plugin/README.md is missing the auto-gen markers ` +
+        `"${README_BEGIN_MARKER}" and "${README_END_MARKER}". ` +
+        `Restore them around the boxel-skills table so build:skills can update it.`,
+    );
+  }
+
+  const tagUrl = `https://github.com/cardstack/boxel-skills/tree/${BOXEL_SKILLS_VERSION}`;
+  const lines: string[] = [];
+  lines.push(README_BEGIN_MARKER);
+  lines.push('');
+  lines.push(
+    `_Generated from [\`cardstack/boxel-skills@${BOXEL_SKILLS_VERSION}\`](${tagUrl}) by_ \`pnpm build:skills\`. _Edit upstream, not here._`,
+  );
+  lines.push('');
+  lines.push('| Skill | Use it for |');
+  lines.push('|---|---|');
+  for (const card of plan.emit) {
+    const desc = getSkillDescription(card).replace(/\s+/g, ' ').trim();
+    lines.push(`| \`/boxel-cli:${card.id}\` | ${desc} |`);
+  }
+  lines.push('');
+  lines.push(README_END_MARKER);
+
+  const replacement = lines.join('\n');
+  const before = readme.slice(0, beginIdx);
+  const after = readme.slice(endIdx + README_END_MARKER.length);
+  const next = `${before}${replacement}${after}`;
+  await writeFormattedMarkdown(PLUGIN_README_PATH, next);
+  console.log(
+    `wrote plugin/README.md (boxel-skills table, ${plan.emit.length} rows)`,
+  );
+}
+
+async function main(): Promise<void> {
+  const sourceRoot = resolveSourceRoot();
+  const cards = loadSkillCards(sourceRoot);
+  const plan = computeEmissionPlan(cards);
+
+  for (const card of plan.emit) {
     if (card.kind === 'SkillSet') {
       const related = getRelatedSkills(card);
       if (related.length === 0) {
         throw new Error(
-          `Aggregator "${id}" has no related skills — JSON shape unexpected.`,
+          `Aggregator "${card.id}" has no related skills — JSON shape unexpected.`,
         );
       }
       await emitAggregator(sourceRoot, card, related);
     } else if (card.kind === 'SkillPlusMarkdown') {
       await emitLeaf(sourceRoot, card);
-    } else {
-      throw new Error(
-        `ALLOWLIST entry "${id}" has unsupported adoptsFrom.name: "${card.kind}"`,
-      );
     }
   }
 
-  const enabled = new Set(ALLOWLIST);
-  const skipped = [...cards.values()]
-    .filter((c) => !enabled.has(c.id))
-    .filter((c) => !aggregatorChildren.has(c.id));
-  if (skipped.length > 0) {
+  await updatePluginReadme(plan);
+
+  if (plan.unsupported.length > 0) {
     console.log('');
     console.log(
-      'Available in boxel-skills but not enabled (add to ALLOWLIST to emit):',
+      'Skipped: cards with unsupported adoptsFrom.name (build keeps going):',
     );
-    for (const c of skipped.sort((a, b) => a.id.localeCompare(b.id))) {
+    for (const c of plan.unsupported) {
       console.log(`  - ${c.id} (${c.kind})`);
     }
   }
 
   console.log('');
   console.log(
-    `Done. Emitted ${ALLOWLIST.length} skill(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
+    `Done. Emitted ${plan.emit.length} skill(s) from boxel-skills@${BOXEL_SKILLS_VERSION}.`,
   );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run main only when invoked directly, not when imported from tests.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
