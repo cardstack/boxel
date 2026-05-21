@@ -4951,6 +4951,23 @@ module(basename(__filename), function () {
           const cardB = `${realmURL2}1`;
           const cardC = `${realmURL3}1`;
 
+          // `desiredStandbyCount` caps at 1 once any tab is active, so a
+          // fire-and-forget refill kicked off by the previous acquisition
+          // may not have produced a real standby by the time the next
+          // sequential acquisition runs. With `queue='file'` (the path
+          // every `prerenderCard` takes) the entryList-empty branch in
+          // `#selectEntryForAffinity` skips its `ensureStandbyPool` await
+          // whenever a refill is in flight (`creatingStandbys` already
+          // counts toward `currentStandbyCount`), and the caller falls
+          // through to cross-affinity-steal. That steal repurposes a
+          // donor tab and KEEPS the donor's `pageId` — see the warning
+          // log around `#selectEntryForAffinity`'s reassign path. A
+          // chain of steals (A→B, B→C, C→A) makes `firstA.pageId ===
+          // secondA.pageId` and trips the eviction assertion below.
+          // Awaiting `warmStandbys` between phases blocks until any
+          // in-flight standby creation AND any LRU eviction kicked by
+          // the post-acquire refill have settled, so the next call
+          // commandeers a fresh standby instead of stealing.
           let firstA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
@@ -4958,7 +4975,8 @@ module(basename(__filename), function () {
             url: cardA,
             auth: auth(),
           });
-          assert.false(firstA.pool.reused, 'first A not reused');
+          await prerenderer.warmStandbys();
+          let firstAWaits = firstA.timings.waits;
 
           let firstB = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4967,7 +4985,8 @@ module(basename(__filename), function () {
             url: cardB,
             auth: auth(),
           });
-          assert.false(firstB.pool.reused, 'first B not reused');
+          await prerenderer.warmStandbys();
+          let firstBWaits = firstB.timings.waits;
 
           // Now adding C should evict the LRU (A), since maxPages=2
           let firstC = await prerenderCard(prerenderer, {
@@ -4977,7 +4996,8 @@ module(basename(__filename), function () {
             url: cardC,
             auth: auth(),
           });
-          assert.false(firstC.pool.reused, 'first C not reused');
+          await prerenderer.warmStandbys();
+          let firstCWaits = firstC.timings.waits;
 
           // Returning to A should not reuse because it was evicted
           let secondA = await prerenderCard(prerenderer, {
@@ -4987,11 +5007,48 @@ module(basename(__filename), function () {
             url: cardA,
             auth: auth(),
           });
-          assert.false(secondA.pool.reused, 'A was evicted, so not reused');
+          let secondAWaits = secondA.timings.waits;
+          // Snapshot the live pool state at the assertion site so that
+          // if the flake recurs the YAML failure block names the donor
+          // affinity, the in-flight standby count, and per-call wait
+          // shape (`tabStartupMs=0` signals a steal; non-zero signals
+          // the standby path). Without this the only hint a reviewer
+          // gets is two identical UUIDs and no provenance.
+          let queueSnapshot = prerenderer.getQueueDepthSnapshot();
+          let diagnostics =
+            `firstA.pageId=${firstA.pool.pageId} ` +
+            `firstB.pageId=${firstB.pool.pageId} ` +
+            `firstC.pageId=${firstC.pool.pageId} ` +
+            `secondA.pageId=${secondA.pool.pageId} ` +
+            `firstA.reused=${firstA.pool.reused} ` +
+            `firstB.reused=${firstB.pool.reused} ` +
+            `firstC.reused=${firstC.pool.reused} ` +
+            `secondA.reused=${secondA.pool.reused} ` +
+            `firstA.waits=${JSON.stringify(firstAWaits)} ` +
+            `firstB.waits=${JSON.stringify(firstBWaits)} ` +
+            `firstC.waits=${JSON.stringify(firstCWaits)} ` +
+            `secondA.waits=${JSON.stringify(secondAWaits)} ` +
+            `queueSnapshot=${JSON.stringify(queueSnapshot)}`;
+          assert.false(
+            firstA.pool.reused,
+            `first A not reused — ${diagnostics}`,
+          );
+          assert.false(
+            firstB.pool.reused,
+            `first B not reused — ${diagnostics}`,
+          );
+          assert.false(
+            firstC.pool.reused,
+            `first C not reused — ${diagnostics}`,
+          );
+          assert.false(
+            secondA.pool.reused,
+            `A was evicted, so not reused — ${diagnostics}`,
+          );
           assert.notStrictEqual(
             firstA.pool.pageId,
             secondA.pool.pageId,
-            'A got a new page after eviction',
+            `A got a new page after eviction — ${diagnostics}`,
           );
         });
 
