@@ -7,6 +7,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action, set } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import FieldContainer from '../field-container/index.gts';
 import IconButton from '../icon-button/index.gts';
@@ -17,64 +18,68 @@ interface Signature {
   Args: {
     columns: KanbanColumnConfig[];
     onClose?: () => void;
-    onColumnsChange?: (columns: KanbanColumnConfig[]) => void;
   };
   Element: HTMLElement;
 }
 
 export class KanbanColumnConfigSidebar extends Component<Signature> {
-  private emitReorderedColumns(columns: KanbanColumnConfig[]): void {
-    let normalized = columns.map((column, index) => ({
-      ...column,
-      sortOrder: index,
-    }));
-    this.args.onColumnsChange?.(normalized);
+  @tracked private mutationRevision = 0;
+
+  get columns(): KanbanColumnConfig[] {
+    this.mutationRevision;
+    return this.args.columns;
+  }
+
+  private touch(): void {
+    this.mutationRevision++;
+  }
+
+  private normalizeSortOrders(): void {
+    this.columns.forEach((column, index) => {
+      set(column, 'sortOrder', index);
+    });
+  }
+
+  private reorderColumns(fromIndex: number, toIndex: number): void {
+    let [column] = this.columns.splice(fromIndex, 1);
+    if (!column) {
+      return;
+    }
+    this.columns.splice(toIndex, 0, column);
+    this.normalizeSortOrders();
+    this.touch();
   }
 
   @action moveUp(index: number): void {
     if (index === 0) return;
-
-    let reordered = [...this.args.columns];
-    [reordered[index - 1], reordered[index]] = [
-      reordered[index]!,
-      reordered[index - 1]!,
-    ];
-
-    this.emitReorderedColumns(reordered);
+    this.reorderColumns(index, index - 1);
   }
 
   @action moveDown(index: number): void {
-    if (index >= this.args.columns.length - 1) return;
-
-    let reordered = [...this.args.columns];
-    [reordered[index], reordered[index + 1]] = [
-      reordered[index + 1]!,
-      reordered[index]!,
-    ];
-
-    this.emitReorderedColumns(reordered);
+    if (index >= this.columns.length - 1) return;
+    this.reorderColumns(index, index + 1);
   }
 
   @action onColorChange(column: KanbanColumnConfig, event: Event): void {
     set(column, 'color', (event.target as HTMLInputElement).value);
-    this.args.onColumnsChange?.(this.args.columns);
+    this.touch();
   }
 
   @action onLabelInput(column: KanbanColumnConfig, val: string): void {
     set(column, 'label', val);
-    this.args.onColumnsChange?.(this.args.columns);
+    this.touch();
   }
 
   @action onWipInput(column: KanbanColumnConfig, val: string): void {
     let raw = parseInt(val, 10);
     let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
     set(column, 'wipLimit', wipLimit);
-    this.args.onColumnsChange?.(this.args.columns);
+    this.touch();
   }
 
   @action toggleVisible(column: KanbanColumnConfig): void {
-    set(column, 'collapsed', !this.isVisible(column));
-    this.args.onColumnsChange?.(this.args.columns);
+    set(column, 'collapsed', this.isVisible(column));
+    this.touch();
   }
 
   isFirst = (
@@ -89,7 +94,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
     index: number,
   ): boolean => {
     let order = colOrder ?? index;
-    return order >= this.args.columns.length - 1;
+    return order >= this.columns.length - 1;
   };
   isVisible = (column: KanbanColumnConfig): boolean => !column?.collapsed;
 
@@ -109,7 +114,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       </header>
 
       <ul class='col-list'>
-        {{#each @columns key='key' as |column i|}}
+        {{#each this.columns key='key' as |column i|}}
           <li class='col-row' data-test-col-config-row={{column.key}}>
             <div class='col-row-order'>
               <IconButton

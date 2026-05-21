@@ -93,19 +93,10 @@ module(
     });
 
     test('reorder buttons: disabled at boundaries; move-down and move-up swap correctly', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
       assert
@@ -132,30 +123,23 @@ module(
         '[data-test-col-config-row="backlog"] [aria-label="Move column down"]',
       );
       assert.strictEqual(
-        result![0]!.key,
+        columns[0]!.key,
         'in-progress',
-        'move-down: in-progress is now first in sorted result',
+        'in-progress is now first',
       );
-      assert.strictEqual(result![0]!.sortOrder, 0, 'in-progress sortOrder = 0');
-      assert.strictEqual(result![1]!.key, 'backlog', 'backlog is second');
-      assert.strictEqual(result![1]!.sortOrder, 1, 'backlog sortOrder = 1');
-      assert.strictEqual(result![2]!.key, 'done', 'done unchanged');
-      assert.strictEqual(result![2]!.sortOrder, 2, 'done sortOrder = 2');
+      assert.strictEqual(columns[0]!.sortOrder, 0, 'in-progress sortOrder = 0');
+      assert.strictEqual(columns[1]!.key, 'backlog', 'backlog is second');
+      assert.strictEqual(columns[1]!.sortOrder, 1, 'backlog sortOrder = 1');
+      assert.strictEqual(columns[2]!.key, 'done', 'done unchanged');
+      assert.strictEqual(columns[2]!.sortOrder, 2, 'done sortOrder = 2');
 
       // Move up on in-progress (currently sortOrder 0 after swap) — should be
       // disabled since it's now first. Verify with a fresh set of columns.
       let columns2 = makeColumns();
-      let result2: KanbanColumnConfig[] | undefined;
-      const onChange2 = (cols: KanbanColumnConfig[]) => {
-        result2 = cols;
-      };
 
       await render(
         <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns2}}
-            @onColumnsChange={{onChange2}}
-          />
+          <KanbanColumnConfigSidebar @columns={{columns2}} />
         </template>,
       );
 
@@ -163,123 +147,84 @@ module(
         '[data-test-col-config-row="in-progress"] [aria-label="Move column up"]',
       );
       assert.strictEqual(
-        result2![0]!.key,
+        columns2[0]!.key,
         'in-progress',
-        'move-up on in-progress: in-progress is now first in sorted result',
+        'move-up on in-progress: in-progress is now first',
       );
       assert.strictEqual(
-        result2![0]!.sortOrder,
+        columns2[0]!.sortOrder,
         0,
         'in-progress sortOrder = 0',
       );
-      assert.strictEqual(result2![1]!.key, 'backlog');
-      assert.strictEqual(result2![1]!.sortOrder, 1);
+      assert.strictEqual(columns2[1]!.key, 'backlog');
+      assert.strictEqual(columns2[1]!.sortOrder, 1);
     });
 
-    test('label input fires onColumnsChange with the updated label only', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
+    test('label input mutates only the targeted label', async function (assert) {
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
       await fillIn('[data-test-col-config-label="backlog"]', 'Queue');
 
-      assert.strictEqual(result![0]!.label, 'Queue');
+      assert.strictEqual(columns[0]!.label, 'Queue');
       assert.strictEqual(
-        result![1]!.label,
+        columns[1]!.label,
         'In Progress',
         'other cols unchanged',
       );
     });
 
-    test('WIP input: updates limit; clamps negative values to 0', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
+    test('WIP input mutates limit; clamps negative values to 0', async function (assert) {
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
       await fillIn('[data-test-col-config-wip="in-progress"]', '5');
-      assert.strictEqual(result![1]!.wipLimit, 5, 'valid value accepted');
+      assert.strictEqual(columns[1]!.wipLimit, 5, 'valid value accepted');
 
       await fillIn('[data-test-col-config-wip="backlog"]', '-3');
-      assert.strictEqual(result![0]!.wipLimit, 0, 'negative clamped to 0');
+      assert.strictEqual(columns[0]!.wipLimit, 0, 'negative clamped to 0');
     });
 
     test('visibility toggle flips collapsed in both directions', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
-      await click('[data-test-col-config-visible="backlog"]');
-      assert.true(result![0]!.collapsed, 'visible → hidden');
-      assert.false(result![1]!.collapsed, 'other columns unaffected');
+      await click(
+        '[data-test-col-config-row="backlog"] [aria-label="Hide column"]',
+      );
+      assert.true(columns[0]!.collapsed, 'visible → hidden');
+      assert.false(columns[1]!.collapsed, 'other columns unaffected');
 
       let collapsedFirst = makeColumns().map((c, i) =>
         i === 0 ? { ...c, collapsed: true } : c,
       );
-      let result2: KanbanColumnConfig[] | undefined;
-      const onChange2 = (cols: KanbanColumnConfig[]) => {
-        result2 = cols;
-      };
 
       await render(
         <template>
-          <KanbanColumnConfigSidebar
-            @columns={{collapsedFirst}}
-            @onColumnsChange={{onChange2}}
-          />
+          <KanbanColumnConfigSidebar @columns={{collapsedFirst}} />
         </template>,
       );
 
-      await click('[data-test-col-config-visible="backlog"]');
-      assert.false(result2![0]!.collapsed, 'hidden → visible');
+      await click(
+        '[data-test-col-config-row="backlog"] [aria-label="Show column"]',
+      );
+      assert.false(collapsedFirst[0]!.collapsed, 'hidden → visible');
     });
 
-    test('color change event fires onColumnsChange with the new color', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
+    test('color change mutates the targeted color', async function (assert) {
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
       let input = document.querySelector(
@@ -288,8 +233,8 @@ module(
       input.value = '#ff0000';
       await triggerEvent(input, 'change');
 
-      assert.strictEqual(result![0]!.color, '#ff0000');
-      assert.strictEqual(result![1]!.color, '#d97706', 'other cols unchanged');
+      assert.strictEqual(columns[0]!.color, '#ff0000');
+      assert.strictEqual(columns[1]!.color, '#d97706', 'other cols unchanged');
     });
 
     test('re-renders when the columns arg is updated externally', async function (assert) {
@@ -316,19 +261,10 @@ module(
     });
 
     test('label input accumulates all typed characters without losing focus between keystrokes', async function (assert) {
-      let result: KanbanColumnConfig[] | undefined;
-      const onChange = (cols: KanbanColumnConfig[]) => {
-        result = cols;
-      };
       let columns = makeColumns();
 
       await render(
-        <template>
-          <KanbanColumnConfigSidebar
-            @columns={{columns}}
-            @onColumnsChange={{onChange}}
-          />
-        </template>,
+        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
       );
 
       let input = document.querySelector(
@@ -351,9 +287,9 @@ module(
         'input retains focus after typing all characters',
       );
       assert.strictEqual(
-        result?.[0]?.label,
+        columns[0]?.label,
         'New Label',
-        'full typed string is accumulated in the onChange result',
+        'full typed string is accumulated on the mutated column',
       );
     });
   },
