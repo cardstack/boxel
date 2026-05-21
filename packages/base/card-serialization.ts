@@ -70,7 +70,7 @@ export interface SerializeOpts {
   useAbsoluteURL?: boolean;
   omitFields?: [typeof BaseDef];
   omitQueryFields?: boolean;
-  maybeRelativeReference?: (possibleURL: string) => string;
+  maybeRelativeReference?: (possibleReference: string) => string;
   overrides?: Map<string, typeof BaseDef>;
 }
 
@@ -223,16 +223,16 @@ export function serializeCard(
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
-      maybeRelativeReference(possibleURL: string) {
+      maybeRelativeReference(possibleReference: string) {
         // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
         // in their canonical portable form — return as-is
-        if (isRegisteredPrefix(possibleURL)) {
-          return possibleURL;
+        if (isRegisteredPrefix(possibleReference)) {
+          return possibleReference;
         }
-        let url = maybeURL(possibleURL, modelRelativeTo);
+        let url = maybeURL(possibleReference, modelRelativeTo);
         if (!url) {
           throw new Error(
-            `could not determine url from '${possibleURL}' relative to ${modelRelativeTo}`,
+            `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
           );
         }
         if (!modelRelativeTo) {
@@ -323,16 +323,16 @@ export function serializeFileDef(
     {
       ...opts,
       ...{
-        maybeRelativeReference(possibleURL: string) {
+        maybeRelativeReference(possibleReference: string) {
           // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
           // in their canonical portable form — return as-is
-          if (isRegisteredPrefix(possibleURL)) {
-            return possibleURL;
+          if (isRegisteredPrefix(possibleReference)) {
+            return possibleReference;
           }
-          let url = maybeURL(possibleURL, modelRelativeTo);
+          let url = maybeURL(possibleReference, modelRelativeTo);
           if (!url) {
             throw new Error(
-              `could not determine url from '${possibleURL}' relative to ${modelRelativeTo}`,
+              `could not determine url from '${possibleReference}' relative to ${modelRelativeTo}`,
             );
           }
           if (!modelRelativeTo) {

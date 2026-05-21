@@ -22,36 +22,35 @@ export function maybeURL(
 }
 
 export function relativeReference(
-  url: RealmResourceIdentifier | URL,
+  reference: RealmResourceIdentifier | URL,
   relativeTo: RealmResourceIdentifier | URL,
-  realmURL: RealmIdentifier | URL | undefined,
+  realm: RealmIdentifier | URL | undefined,
 ): string | undefined {
-  let urlStr = url instanceof URL ? url.href : url;
+  let referenceStr =
+    reference instanceof URL ? reference.href : reference;
   let relativeToStr = relativeTo instanceof URL ? relativeTo.href : relativeTo;
 
   // Path math is meaningful only past a shared namespace prefix — URL origin
   // for URL pairs, `@scope/name` for scoped RRI pairs. Cross-form pairs can't
   // be relativized without resolving back to URL space (which we deliberately
   // avoid here so this module doesn't depend on prefixMappings).
-  let namespace = sharedNamespace(urlStr, relativeToStr);
+  let namespace = sharedNamespace(referenceStr, relativeToStr);
   if (namespace === undefined) {
     return undefined;
   }
 
-  if (realmURL) {
+  if (realm) {
     // Branch so each arm resolves to one of RealmPaths' constructor
     // overloads — a union argument doesn't match either overload alone.
     let realmPath =
-      realmURL instanceof URL
-        ? new RealmPaths(realmURL)
-        : new RealmPaths(realmURL);
-    // don't return a relative URL for a resource that escapes our realm
-    if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(url)) {
+      realm instanceof URL ? new RealmPaths(realm) : new RealmPaths(realm);
+    // don't return a relative reference for a resource that escapes our realm
+    if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(reference)) {
       return undefined;
     }
   }
 
-  let ourParts = urlStr.slice(namespace.length).split('/');
+  let ourParts = referenceStr.slice(namespace.length).split('/');
   let theirParts = relativeToStr.slice(namespace.length).split('/');
 
   let lastPart: string | undefined;
@@ -116,17 +115,17 @@ function sharedNamespace(a: string, b: string): string | undefined {
 }
 
 export function maybeRelativeReference(
-  url: RealmResourceIdentifier | URL,
+  reference: RealmResourceIdentifier | URL,
   relativeTo: RealmResourceIdentifier | URL,
-  realmURL: RealmIdentifier | URL | undefined,
+  realm: RealmIdentifier | URL | undefined,
 ): string {
-  let rel = relativeReference(url, relativeTo, realmURL);
+  let rel = relativeReference(reference, relativeTo, realm);
   if (rel) {
     return rel;
   }
   // Preserve the input form on fallback: prefix-form RRIs are already in
   // canonical portable form, so return them as-is; URLs return their href.
-  return url instanceof URL ? url.href : url;
+  return reference instanceof URL ? reference.href : reference;
 }
 
 export function trimJsonExtension(str: string) {
