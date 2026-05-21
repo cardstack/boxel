@@ -376,6 +376,68 @@ module(basename(__filename), function () {
         );
       }
 
+      // Same shape as waitForInflight but polls the join counter — the
+      // dedup tests use it to confirm a concurrent caller actually
+      // joined an in-flight entry before releasing the gate. Without
+      // this signal, an error-path test using a real .gts that throws
+      // fast at babel can settle the first caller (and run its identity-
+      // checked .finally cleanup) before the second caller's HTTP
+      // request reaches #transpileModuleDeduped — at which point the
+      // second caller installs its own pending and the "shared one
+      // transpile" assertion fails non-deterministically on CI under
+      // load. Together with __testOnlyDelayTranspile this gives the
+      // tests an explicit "B has joined" handle.
+      async function waitForJoinCount(
+        expected: number,
+        timeoutMs = 5000,
+      ): Promise<void> {
+        let deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+          if (testRealm.__testOnlyGetTranspileJoinCount() === expected) {
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        throw new Error(
+          `timed out waiting for join count to reach ${expected}; saw ${testRealm.__testOnlyGetTranspileJoinCount()}`,
+        );
+      }
+
+      // Timestamped event log used by the dedup tests to capture the
+      // hook entries, gate releases, counter readings, and HTTP responses
+      // around the concurrent-arrive window. Dumped via assert.pushResult
+      // only on assertion failure, so a CI flake leaves a forensic trail
+      // in the QUnit output instead of just the bare actual/expected
+      // line — future investigations can read CI logs to see WHICH
+      // event the race happened around. Each test fires at most a
+      // handful of events; no bounding needed.
+      function createDiagLog() {
+        let started = Date.now();
+        let events: string[] = [];
+        return {
+          note(label: string, extra: Record<string, unknown> = {}) {
+            let snapshot = {
+              t: Date.now() - started,
+              inflight: testRealm.__testOnlyGetInFlightTranspileCount(),
+              transpileCalls: testRealm.__testOnlyGetTranspileCallCount(),
+              joinCount: testRealm.__testOnlyGetTranspileJoinCount(),
+              ...extra,
+            };
+            events.push(`[${label}] ${JSON.stringify(snapshot)}`);
+          },
+          dump(assert: Assert) {
+            for (let line of events) {
+              assert.pushResult({
+                result: true,
+                actual: line,
+                expected: line,
+                message: line,
+              });
+            }
+          },
+        };
+      }
+
       test('N concurrent same-path readers trigger exactly one transpile call', async function (assert) {
         let modulePath = 'dedup-same-path.gts';
         await testRealm.write(modulePath, transpilerHeavySource);
@@ -636,39 +698,114 @@ module(basename(__filename), function () {
         );
         testRealm.__testOnlyClearCaches();
 
-        let before = testRealm.__testOnlyGetTranspileCallCount();
-        let [resA, resB] = await Promise.all([
-          fireRequest(modulePath),
-          fireRequest(modulePath),
-        ]);
-        let deltaShared = testRealm.__testOnlyGetTranspileCallCount() - before;
+        // Without a gate, transpileJS throws fast on invalid source — A
+        // can settle and its identity-checked .finally can clear the
+        // in-flight slot before B's HTTP request even reaches
+        // #transpileModuleDeduped on a loaded CI runner, at which point
+        // B installs its own pending and the "shared one transpile"
+        // assertion observes deltaShared = 2 (one per request). Park A
+        // at a gate so the in-flight overlap window is held open until
+        // both callers have demonstrably reached the dedup site, then
+        // release to let the rejection propagate to both.
+        let releaseGate: () => void = () => {};
+        let gate = new Promise<void>((r) => {
+          releaseGate = r;
+        });
+        let hookEntries = 0;
+        testRealm.__testOnlyDelayTranspile(() => {
+          hookEntries += 1;
+          return gate;
+        });
 
-        assert.strictEqual(
-          resA.status,
-          406,
-          'first errored request returns a transpile-failed response',
-        );
-        assert.strictEqual(
-          resB.status,
-          406,
-          'concurrent waiter shares the same error response',
-        );
-        assert.strictEqual(
-          deltaShared,
-          1,
-          'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
-        );
+        let diag = createDiagLog();
+        let passed = false;
+        try {
+          let before = testRealm.__testOnlyGetTranspileCallCount();
+          diag.note('start', { before });
 
-        // After both fail, the in-flight slot must release so a fresh
-        // caller re-attempts transpile against current source.
-        let resC = await fireRequest(modulePath);
-        assert.strictEqual(resC.status, 406);
-        let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
-        assert.strictEqual(
-          deltaAfter,
-          2,
-          'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
-        );
+          // Fire A but DON'T await — we need it parked at the gate so
+          // B can race in.
+          let pendingA = fireRequest(modulePath);
+          await waitForInflight(1);
+          diag.note('A-parked-at-gate', { hookEntries });
+
+          // Fire B. B's HTTP request travels through Express +
+          // supertest until it reaches #transpileModuleDeduped, where
+          // it should observe A's pending in #inFlightTranspiles and
+          // take the `existing` branch — bumping joinCount to 1 —
+          // instead of installing its own. Polling joinCount is
+          // deterministic; polling inflight=1 is not (already 1 from
+          // A).
+          let pendingB = fireRequest(modulePath);
+          await waitForJoinCount(1);
+          diag.note('B-joined', { hookEntries });
+
+          // Sanity: only A's hook fired. If hookEntries > 1, the gate
+          // released early (impossible — we hold `releaseGate`) or B
+          // bypassed the dedup. Either is a real bug worth surfacing.
+          assert.strictEqual(
+            hookEntries,
+            1,
+            'only A entered the transpile hook — B joined A’s pending',
+          );
+
+          // Release the gate. A's transpileJS throws on the invalid
+          // source. Both pendingA and pendingB receive the same
+          // rejection through the shared promise.
+          releaseGate();
+          diag.note('gate-released');
+          let [resA, resB] = await Promise.all([pendingA, pendingB]);
+          diag.note('both-responded', {
+            statusA: resA.status,
+            statusB: resB.status,
+          });
+
+          let deltaShared =
+            testRealm.__testOnlyGetTranspileCallCount() - before;
+
+          assert.strictEqual(
+            resA.status,
+            406,
+            'first errored request returns a transpile-failed response',
+          );
+          assert.strictEqual(
+            resB.status,
+            406,
+            'concurrent waiter shares the same error response',
+          );
+          assert.strictEqual(
+            deltaShared,
+            1,
+            'concurrent waiters shared exactly one transpile attempt — the rejection propagates without a second babel pass',
+          );
+
+          // After both fail, the in-flight slot must release so a
+          // fresh caller re-attempts transpile against current source.
+          // Drop the gate hook so C runs unblocked (and so we don't
+          // park forever on a stale gate Promise).
+          testRealm.__testOnlyDelayTranspile(undefined);
+          let resC = await fireRequest(modulePath);
+          diag.note('C-responded', { statusC: resC.status });
+          assert.strictEqual(resC.status, 406);
+          let deltaAfter = testRealm.__testOnlyGetTranspileCallCount() - before;
+          assert.strictEqual(
+            deltaAfter,
+            2,
+            'subsequent caller triggers a fresh transpile attempt — error did not pin the in-flight slot',
+          );
+
+          passed = true;
+        } finally {
+          // Release the gate in case we threw before reaching the
+          // explicit release (e.g. waitForJoinCount timed out). Any
+          // still-parked pending then settles instead of leaking into
+          // the next test as an unhandled rejection.
+          releaseGate();
+          testRealm.__testOnlyDelayTranspile(undefined);
+          if (!passed) {
+            diag.dump(assert);
+          }
+        }
       });
     },
   );
