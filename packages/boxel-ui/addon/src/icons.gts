@@ -66,7 +66,6 @@ import ImagePlaceholder from './icons/image-placeholder.gts';
 import Isolated from './icons/isolated.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
-import Markdown from './icons/markdown.gts';
 import Profile from './icons/profile.gts';
 import PublishSiteIcon from './icons/publish-site-icon.gts';
 import Rows4 from './icons/rows-4.gts';
@@ -147,7 +146,6 @@ export const ALL_ICON_COMPONENTS = [
   Isolated,
   LoadingIndicator,
   Lock,
-  Markdown,
   Profile,
   PublishSiteIcon,
   Rows4,
@@ -230,7 +228,6 @@ export {
   Isolated,
   LoadingIndicator,
   Lock,
-  Markdown,
   Profile,
   PublishSiteIcon,
   Rows4,

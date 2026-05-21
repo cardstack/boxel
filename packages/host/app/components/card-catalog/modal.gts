@@ -344,7 +344,7 @@ export default class CardCatalogModal extends Component<Signature> {
       await this.realmServer.ready;
       // Preload realm info without blocking the modal from opening.
       let prefetchRealmInfo = Promise.all(
-        this.realmServer.availableRealmURLs.map(async (realmURL) => {
+        this.realmServer.availableRealmIdentifiers.map(async (realmURL) => {
           let resource = this.realm.getOrCreateRealmResource(realmURL);
           try {
             await resource.fetchInfo();
@@ -378,7 +378,7 @@ export default class CardCatalogModal extends Component<Signature> {
       if (opts?.preselectedCardTypeQuery) {
         let instances: CardDef[] = await this.store.search(
           opts.preselectedCardTypeQuery!,
-          this.realmServer.availableRealmURLs,
+          this.realmServer.availableRealmIdentifiers,
         );
         if (instances?.[0]?.id) {
           preselectedCardUrl = `${instances[0].id}.json`;
@@ -399,7 +399,7 @@ export default class CardCatalogModal extends Component<Signature> {
         searchKey: '',
         dismissModal: false,
         baseFilter: query.filter,
-        availableRealmUrls: this.realmServer.availableRealmURLs,
+        availableRealmUrls: this.realmServer.availableRealmIdentifiers,
         selectedCards: preselectedCardUrls,
         multiSelect: opts?.multiSelect ?? false,
         hasPreselectedCard: preselectedCardUrls.length > 0,

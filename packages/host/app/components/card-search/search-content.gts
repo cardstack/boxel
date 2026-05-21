@@ -167,7 +167,7 @@ export default class SearchContent extends Component<Signature> {
   private get searchKeyAsURL() {
     return resolveSearchKeyAsURL(
       this.args.searchKey,
-      this.realmServer.availableRealmURLs,
+      this.realmServer.availableRealmIdentifiers,
     );
   }
 
@@ -328,7 +328,7 @@ export default class SearchContent extends Component<Signature> {
     const urls =
       this.args.realmFilter.selectedURLs.length > 0
         ? this.args.realmFilter.selectedURLs
-        : this.realmServer.availableRealmURLs;
+        : this.realmServer.availableRealmIdentifiers;
     return urls ?? [];
   }
 

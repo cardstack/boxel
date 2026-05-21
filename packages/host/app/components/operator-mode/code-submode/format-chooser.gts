@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import MetadataIcon from '@cardstack/boxel-icons/clipboard-data';
+import MarkdownIcon from '@cardstack/boxel-icons/markdown';
 import EditIcon from '@cardstack/boxel-icons/pencil';
 import { modifier } from 'ember-modifier';
 import window from 'ember-window-mock';
@@ -19,7 +20,6 @@ import {
   Fitted as FittedIcon,
   Atom as AtomIcon,
   Head as HeadIcon,
-  Markdown as MarkdownIcon,
   Form as FormIcon,
   type Icon,
 } from '@cardstack/boxel-ui/icons';
@@ -86,7 +86,12 @@ const FormatButton: TemplateOnlyComponent<FormatButtonSignature> = <template>
     {{on 'click' @onClick}}
   >
     {{#if @icon}}
-      <@icon class='pf-icon' width={{ICON_W}} height={{ICON_W}} />
+      {{! md icon is larger because tabler icons have extra padding which shrinks them }}
+      <@icon
+        class='pf-icon'
+        width={{if (eq @format 'markdown') '24' ICON_W}}
+        height={{if (eq @format 'markdown') '24' ICON_W}}
+      />
     {{/if}}
   </Button>
   <style scoped>
@@ -124,15 +129,9 @@ const FormatButton: TemplateOnlyComponent<FormatButtonSignature> = <template>
     }
     .pf-icon {
       flex: 0 0 auto;
-      height: var(--pf-icon-w);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-    }
-    .pf-icon :deep(svg) {
-      height: var(--pf-icon-w);
-      width: auto;
-      display: block;
     }
   </style>
 </template>;
@@ -430,7 +429,11 @@ export default class PillFormatChooser extends Component<Signature> {
         </svg>
         <div class='pill-content'>
           {{#if this.pillTargetIcon}}
-            <this.pillTargetIcon class='pf-icon' width='16' height='16' />
+            <this.pillTargetIcon
+              class='pf-icon'
+              width={{ICON_W}}
+              height={{ICON_W}}
+            />
           {{/if}}
           <span
             class='pf-label'
