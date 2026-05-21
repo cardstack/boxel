@@ -57,9 +57,7 @@ export function serializeFatalReason(reason: unknown): string {
     let innerMsg: string;
     try {
       innerMsg =
-        innerErr instanceof Error
-          ? innerErr.message
-          : safeString(innerErr);
+        innerErr instanceof Error ? innerErr.message : safeString(innerErr);
     } catch {
       innerMsg = 'unknown';
     }

@@ -15,10 +15,7 @@ module(basename(__filename), function () {
   test('preserves the stack trace for an Error', function (assert) {
     let err = new Error('boom');
     let out = serializeFatalReason(err);
-    assert.ok(
-      /Error: boom/.test(out),
-      'message+name appears in output',
-    );
+    assert.ok(/Error: boom/.test(out), 'message+name appears in output');
     assert.ok(
       /serialize-fatal-reason-test/.test(out),
       'stack frames are included',
