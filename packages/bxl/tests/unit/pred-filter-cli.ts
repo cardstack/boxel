@@ -38,28 +38,28 @@ interface FilterCase {
 const cases: FilterCase[] = [
   // --- [* .pred] truthy filter-all ---
   {
-    name: '[*field] truthy filter across line items',
+    name: '[* .field] truthy filter across line items',
     expression: '"Line Item"[* ."Taxable"]."Line Total"',
     expectedValue: [10, 12, 18, 15],
     expectedJq: '[.lineItems[] | select(.taxable).lineTotal]',
   },
   {
-    name: '[*field] piped into add (Excel SUMIF shape)',
+    name: '[* .field] piped into add (Excel SUMIF shape)',
     expression: 'SUM("Line Item"[* ."Taxable"]."Line Total")',
     expectedValue: 55,
   },
   {
-    name: '[*pred] with explicit comparison',
+    name: '[* .pred] with explicit comparison',
     expression: 'SUM("Line Item"[* ."Category" = "Service"]."Line Total")',
     expectedValue: 33,
   },
   {
-    name: '[*pred] composes with numeric comparison',
+    name: '[* .pred] composes with numeric comparison',
     expression: '"Line Item"[* .Quantity > 5].SKU',
     expectedValue: ['COPY-04'],
   },
   {
-    name: 'COUNTA over [*pred] matches object-arity intent',
+    name: 'COUNTA over [* .pred] matches object-arity intent',
     expression: 'COUNTA("Line Item"[* ."Taxable"])',
     expectedValue: 4,
   },
