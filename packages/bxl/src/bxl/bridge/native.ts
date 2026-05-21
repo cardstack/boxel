@@ -611,20 +611,42 @@ function annotateBuiltinFilters(
   node: ExpressionAst | undefined,
   registry: ResolvedBuiltinRegistry,
   localDefs: Set<string>,
-) {
-  if (!node) return;
+): boolean {
+  if (!node) return true;
+
+  const mark = (singleOutput: boolean) => {
+    (node as ExpressionAst & { singleOutput?: boolean }).singleOutput =
+      singleOutput;
+    return singleOutput;
+  };
 
   switch (node.type) {
-    case 'binary':
-      annotateBuiltinFilters(node.left, registry, localDefs);
-      annotateBuiltinFilters(node.right, registry, localDefs);
-      return;
+    case 'binary': {
+      const leftSingle = annotateBuiltinFilters(node.left, registry, localDefs);
+      const rightSingle = annotateBuiltinFilters(node.right, registry, localDefs);
+      return mark(
+        leftSingle &&
+          rightSingle &&
+          [
+            '==',
+            '!=',
+            '<',
+            '>',
+            '<=',
+            '>=',
+            '+',
+            '-',
+            '*',
+            '/',
+            '%',
+          ].includes(node.operator),
+      );
+    }
     case 'def': {
       const nextDefs = new Set(localDefs);
       nextDefs.add(node.name);
       annotateBuiltinFilters(node.body, registry, nextDefs);
-      annotateBuiltinFilters(node.next, registry, nextDefs);
-      return;
+      return mark(annotateBuiltinFilters(node.next, registry, nextDefs));
     }
     case 'filter':
       if (!localDefs.has(node.name)) {
@@ -638,7 +660,7 @@ function annotateBuiltinFilters(
       for (const arg of node.args) {
         annotateBuiltinFilters(arg, registry, localDefs);
       }
-      return;
+      return mark(false);
     case 'if':
       annotateBuiltinFilters(node.cond, registry, localDefs);
       annotateBuiltinFilters(node.then, registry, localDefs);
@@ -647,11 +669,11 @@ function annotateBuiltinFilters(
         annotateBuiltinFilters(branch.then, registry, localDefs);
       }
       annotateBuiltinFilters(node.else, registry, localDefs);
-      return;
+      return mark(false);
     case 'try':
       annotateBuiltinFilters(node.body, registry, localDefs);
       annotateBuiltinFilters(node.catch, registry, localDefs);
-      return;
+      return mark(false);
     case 'reduce':
     case 'foreach':
       annotateBuiltinFilters(node.expr, registry, localDefs);
@@ -660,32 +682,33 @@ function annotateBuiltinFilters(
       if (node.type === 'foreach') {
         annotateBuiltinFilters(node.extract, registry, localDefs);
       }
-      return;
+      return mark(false);
     case 'varDeclaration':
       annotateBuiltinFilters(node.expr, registry, localDefs);
-      annotateBuiltinFilters(node.next, registry, localDefs);
-      return;
+      return mark(false);
     case 'label':
-      annotateBuiltinFilters(node.next, registry, localDefs);
-      return;
+      return mark(annotateBuiltinFilters(node.next, registry, localDefs));
     case 'unary':
-      annotateBuiltinFilters(node.expr, registry, localDefs);
-      return;
+      return mark(annotateBuiltinFilters(node.expr, registry, localDefs));
     case 'index':
-      annotateBuiltinFilters(node.expr, registry, localDefs);
+      const exprSingle = annotateBuiltinFilters(node.expr, registry, localDefs);
       if (typeof node.index !== 'string') {
-        annotateBuiltinFilters(node.index, registry, localDefs);
+        return mark(
+          exprSingle && annotateBuiltinFilters(node.index, registry, localDefs),
+        );
       }
-      return;
+      return mark(exprSingle);
     case 'slice':
       annotateBuiltinFilters(node.expr, registry, localDefs);
       annotateBuiltinFilters(node.from, registry, localDefs);
       annotateBuiltinFilters(node.to, registry, localDefs);
-      return;
+      return mark(false);
     case 'iterator':
+      annotateBuiltinFilters(node.expr, registry, localDefs);
+      return mark(false);
     case 'array':
       annotateBuiltinFilters(node.expr, registry, localDefs);
-      return;
+      return mark(false);
     case 'object':
       for (const entry of node.entries) {
         if (typeof entry.key !== 'string') {
@@ -695,7 +718,7 @@ function annotateBuiltinFilters(
           annotateBuiltinFilters(entry.value, registry, localDefs);
         }
       }
-      return;
+      return mark(false);
     case 'str':
       if (node.interpolated) {
         for (const part of node.parts) {
@@ -703,17 +726,19 @@ function annotateBuiltinFilters(
             annotateBuiltinFilters(part, registry, localDefs);
           }
         }
+        return mark(false);
       }
-      return;
+      return mark(true);
     case 'format':
     case 'identity':
     case 'num':
     case 'bool':
     case 'null':
     case 'var':
+      return mark(true);
     case 'break':
     case 'recursiveDescent':
-      return;
+      return mark(false);
   }
 }
 

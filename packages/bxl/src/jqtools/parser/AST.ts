@@ -6,6 +6,9 @@ export interface ProgAst {
 export type ArgAst = VarArgAst | FilterArgAst;
 
 export type ExpressionAst = BinaryAst | AtomAst;
+export type RuntimeAnnotatedExpressionAst = ExpressionAst & {
+  singleOutput?: boolean;
+};
 
 export type AtomAst =
   | DefAst

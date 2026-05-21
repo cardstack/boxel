@@ -3,9 +3,12 @@ import {
   DestructuringAst,
   ExpressionAst,
   ForeachAst,
+  NormalBinaryOperator,
   ProgAst,
+  RuntimeAnnotatedExpressionAst,
 } from '../parser/AST.js';
 import {
+  applyNormalBinaryOperator,
   evaluateAlternativeOperator,
   evaluateArithmeticUpdateAssignment,
   evaluateBooleanOperator,
@@ -101,6 +104,31 @@ function appendStaticPath(base: Item['path'], path: string[]): Item['path'] {
   return base.length === 0 ? path : [...base, ...path];
 }
 
+function hasSingleOutput(
+  ast: ExpressionAst | undefined,
+): ast is RuntimeAnnotatedExpressionAst {
+  return Boolean((ast as RuntimeAnnotatedExpressionAst | undefined)?.singleOutput);
+}
+
+function isNormalBinaryOperator(op: string): op is NormalBinaryOperator {
+  switch (op) {
+    case '==':
+    case '!=':
+    case '<':
+    case '>':
+    case '<=':
+    case '>=':
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+    case '%':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /**
  * Evaluate with jq's core builtins only. BXL's evaluator entry points
  * (see src/bxl/bridge/) pass a BXL_REGISTRY-resolved registry via
@@ -152,6 +180,76 @@ class Environment {
     return this.getVar(name).value;
   }
 
+  evaluateSingle(ast: RuntimeAnnotatedExpressionAst, item: Item): Item {
+    switch (ast.type) {
+      case 'identity':
+        return item;
+      case 'num':
+      case 'bool':
+      case 'null':
+        return createItem(ast.value);
+      case 'str':
+        if (!ast.interpolated) {
+          return createItem(ast.value);
+        }
+        break;
+      case 'format':
+        return createItem(applyFormat(ast, item.value));
+      case 'var':
+        return createItem(this.getVarValue(ast.name));
+      case 'index':
+        if (ast.staticPath) {
+          return createItem(
+            accessStaticStringPath(item.value, ast.staticPath),
+            appendStaticPath(item.path, ast.staticPath),
+          );
+        }
+        if (hasSingleOutput(ast.expr)) {
+          const target = this.evaluateSingle(ast.expr, item);
+          if (typeof ast.index === 'string') {
+            return createItem(access(target.value, ast.index), [
+              ...target.path,
+              ast.index,
+            ]);
+          }
+          if (hasSingleOutput(ast.index)) {
+            const index = this.evaluateSingle(ast.index, item);
+            return createItem(access(target.value, index.value), [
+              ...target.path,
+              index.value,
+            ]);
+          }
+        }
+        break;
+      case 'unary':
+        if (ast.operator === '-' && hasSingleOutput(ast.expr)) {
+          return createItem(-this.evaluateSingle(ast.expr, item).value);
+        }
+        break;
+      case 'binary':
+        if (
+          isNormalBinaryOperator(ast.operator) &&
+          hasSingleOutput(ast.left) &&
+          hasSingleOutput(ast.right)
+        ) {
+          const right = this.evaluateSingle(ast.right, item);
+          const left = this.evaluateSingle(ast.left, item);
+          return createItem(
+            applyNormalBinaryOperator(ast.operator, left.value, right.value),
+          );
+        }
+        break;
+    }
+
+    throw new Error(`Cannot evaluate ${ast.type} as a single-output expression`);
+  }
+
+  evaluateFilterArg(arg: ExpressionAst, rootItem: Item): Item[] {
+    return hasSingleOutput(arg)
+      ? [this.evaluateSingle(arg, rootItem)]
+      : Array.from(this.evaluate(arg, single(rootItem)));
+  }
+
   *evaluateNativeFilterCall(
     nativeFilter: NativeFilter,
     ast: Extract<ExpressionAst, { type: 'filter' }>,
@@ -175,7 +273,7 @@ class Environment {
     const rootItem = createItem(item.value);
 
     if (arity === 1) {
-      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      const arg0 = this.evaluateFilterArg(ast.args[0], rootItem);
       for (const a0 of arg0) {
         checkRuntimeBudget();
         for (const nativeItem of nativeFilter(item, a0)) {
@@ -187,8 +285,8 @@ class Environment {
     }
 
     if (arity === 2) {
-      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
-      const arg1 = Array.from(this.evaluate(ast.args[1], single(rootItem)));
+      const arg0 = this.evaluateFilterArg(ast.args[0], rootItem);
+      const arg1 = this.evaluateFilterArg(ast.args[1], rootItem);
       for (const a0 of arg0) {
         for (const a1 of arg1) {
           checkRuntimeBudget();
@@ -204,7 +302,7 @@ class Environment {
     const argSets: any[][] = [];
     for (let i = 0; i < arity; i++) {
       const argExprAst = ast.args[i];
-      argSets.push(Array.from(this.evaluate(argExprAst, single(rootItem))));
+      argSets.push(this.evaluateFilterArg(argExprAst, rootItem));
     }
     for (const combination of generateCombinations(argSets)) {
       checkRuntimeBudget();
@@ -232,7 +330,7 @@ class Environment {
     const rootItem = createItem(item.value);
 
     if (arity === 1) {
-      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      const arg0 = this.evaluateFilterArg(ast.args[0], rootItem);
       for (const a0 of arg0) {
         checkRuntimeBudget();
         for (const value of bareFilter(item.value, a0.value)) {
@@ -244,8 +342,8 @@ class Environment {
     }
 
     if (arity === 2) {
-      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
-      const arg1 = Array.from(this.evaluate(ast.args[1], single(rootItem)));
+      const arg0 = this.evaluateFilterArg(ast.args[0], rootItem);
+      const arg1 = this.evaluateFilterArg(ast.args[1], rootItem);
       for (const a0 of arg0) {
         for (const a1 of arg1) {
           checkRuntimeBudget();
@@ -261,7 +359,7 @@ class Environment {
     const argSets: Item[][] = [];
     for (let i = 0; i < arity; i++) {
       const argExprAst = ast.args[i];
-      argSets.push(Array.from(this.evaluate(argExprAst, single(rootItem))));
+      argSets.push(this.evaluateFilterArg(argExprAst, rootItem));
     }
     for (const combination of generateCombinations(argSets)) {
       checkRuntimeBudget();
@@ -337,6 +435,21 @@ class Environment {
       case 'binary':
         if (ast.type === 'binary' && ast.operator === '|') {
           yield* this.evaluate(ast.right, this.evaluate(ast.left, input));
+          break;
+        }
+        if (
+          isNormalBinaryOperator(ast.operator) &&
+          hasSingleOutput(ast.left) &&
+          hasSingleOutput(ast.right)
+        ) {
+          for (const item of input) {
+            checkRuntimeBudget();
+            const right = this.evaluateSingle(ast.right, item);
+            const left = this.evaluateSingle(ast.left, item);
+            yield createItem(
+              applyNormalBinaryOperator(ast.operator, left.value, right.value),
+            );
+          }
           break;
         }
         for (const item of input) {
