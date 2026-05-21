@@ -2358,20 +2358,27 @@ module('Acceptance | code submode tests', function (_hooks) {
       } catch (err) {
         let monacoContent = getMonacoContent();
         let sourceProbe: string;
+        let sourceOk: boolean;
         try {
           let network = getService('network');
           let res = await network.authedFetch(
             `${testRealmURL}Person/fadhlan.json`,
             { headers: { Accept: 'application/vnd.card+source' } },
           );
-          sourceProbe = await res.text();
+          let body = await res.text();
+          sourceOk = res.ok;
+          sourceProbe = sourceOk
+            ? body
+            : `<source-probe non-ok: ${res.status} ${res.statusText} body=${JSON.stringify(body)}>`;
         } catch (e: any) {
+          sourceOk = false;
           sourceProbe = `<source-probe error: ${e?.message ?? e}>`;
         }
         console.warn(
           '[monaco-live-updates flake-probe] waitUntil timed out. ' +
             `monaco includes "FadhlanXXX"=${monacoContent.includes('FadhlanXXX')}; ` +
-            `source on disk includes "FadhlanXXX"=${sourceProbe.includes('FadhlanXXX')}. ` +
+            `source fetch ok=${sourceOk}; ` +
+            `source on disk includes "FadhlanXXX"=${sourceOk && sourceProbe.includes('FadhlanXXX')}. ` +
             `monaco snapshot: ${JSON.stringify(monacoContent)}. ` +
             `source snapshot: ${JSON.stringify(sourceProbe)}.`,
         );
