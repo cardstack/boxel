@@ -436,4 +436,98 @@ test.describe('Host mode', () => {
     await page.goto(routedURL);
     await expect(page.locator('[data-test-white-paper]')).toBeVisible();
   });
+
+  test('routing rule for `/` resolves when realm root is visited without a trailing slash', async ({
+    page,
+  }) => {
+    // The realm publishes at e.g. `https://published.localhost:4205/<user>/<realm>/`
+    // (with trailing slash). When a visitor types the URL without the
+    // trailing slash, the server-rendered HTML is correct (the SSR
+    // path-in-realm computation handles the missing slash), but the
+    // Ember SPA's catch-all `/*path` strips the trailing slash from
+    // the URL on the client side. Without canonicalization the
+    // injected map key `/<user>/<realm>/` for the `/` rule wouldn't
+    // match the client's `params.path === '<user>/<realm>'`, and
+    // hydration would replace the SSR'd card with the bare-shell
+    // fallback. This test pins the canonicalized comparator.
+    await login(page, username, password);
+    await page.goto(realmURL);
+    await page.locator('[data-test-stack-item-content]').first().waitFor();
+
+    await postCardSource(
+      page,
+      realmURL,
+      'realm.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: `Routed Realm ${randomUUID()}` },
+            hostRoutingRules: [{ path: '/' }],
+          },
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './white-paper' },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/realm-config',
+              name: 'RealmConfig',
+            },
+          },
+        },
+      }),
+    );
+
+    await page.evaluate(
+      async ({ realmURL, publishedRealmURL }) => {
+        let sessions = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        );
+        let token = sessions[realmURL];
+        if (!token) {
+          throw new Error(`No session token found for ${realmURL}`);
+        }
+        let response = await fetch('https://localhost:4205/_publish-realm', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({
+            sourceRealmURL: realmURL,
+            publishedRealmURL,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+      },
+      { realmURL, publishedRealmURL },
+    );
+
+    await logout(page);
+
+    // Wait until the SSR HTML at the canonical (trailing-slash) URL
+    // contains the routed card's marker, then navigate to the
+    // NO-TRAILING-SLASH variant and assert the marker stays visible
+    // through hydration. The no-slash navigation is what the
+    // canonicalization fix targets.
+    await waitUntil(async () => {
+      let response = await page.request.get(publishedRealmURL, {
+        headers: { Accept: 'text/html' },
+      });
+      if (!response.ok()) {
+        return false;
+      }
+      let text = await response.text();
+      return text.includes('data-test-white-paper');
+    });
+
+    let noSlashURL = publishedRealmURL.replace(/\/$/, '');
+    await page.goto(noSlashURL);
+    await expect(page.locator('[data-test-white-paper]')).toBeVisible();
+  });
 });
