@@ -6,14 +6,21 @@ import {
 } from '../../lib/profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 import { FG_RED, DIM, RESET } from '../../lib/colors';
 import { cliLog } from '../../lib/cli-log';
 
 export interface ReadResult {
   ok: boolean;
   status?: number;
-  /** Raw text content of the file. */
+  /** Raw text content of the file. Populated for non-binary paths. */
   content?: string;
+  /**
+   * Raw bytes. Populated when the requested path is a binary filename
+   * (PNG, PDF, font, etc.) — see `isBinaryFilename`. Mutually exclusive
+   * with `content`.
+   */
+  bytes?: Uint8Array;
   error?: string;
 }
 
@@ -27,8 +34,10 @@ interface ReadCliOptions {
 }
 
 /**
- * Read a file from a realm. Always returns the raw text content.
- * Callers should parse the content themselves if needed (e.g. JSON).
+ * Read a file from a realm. Returns raw text in `content` for text files;
+ * returns raw bytes in `bytes` for binary files (PNG / PDF / font / etc.,
+ * per `isBinaryFilename`). Callers should parse the content themselves
+ * if needed (e.g. JSON).
  *
  * Uses the per-realm JWT via `ProfileManager.authedRealmFetch`.
  */
@@ -70,6 +79,11 @@ export async function read(
     };
   }
 
+  if (isBinaryFilename(path)) {
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    return { ok: true, status: response.status, bytes };
+  }
+
   let text = await response.text();
   return { ok: true, status: response.status, content: text };
 }
@@ -96,9 +110,30 @@ export function registerReadCommand(parent: Command): void {
       }
 
       if (opts.json) {
-        cliLog.output(JSON.stringify(result, null, 2));
+        let serializable: Record<string, unknown> = {
+          ok: result.ok,
+          status: result.status,
+          error: result.error,
+        };
+        if (result.content !== undefined) {
+          serializable.content = result.content;
+        }
+        if (result.bytes !== undefined) {
+          // Buffer.from(typedArray) shares memory, then toString('base64')
+          // copies into a base64 string — fine for the JSON output path.
+          serializable.bytesBase64 = Buffer.from(
+            result.bytes.buffer,
+            result.bytes.byteOffset,
+            result.bytes.byteLength,
+          ).toString('base64');
+        }
+        cliLog.output(JSON.stringify(serializable, null, 2));
       } else if (result.ok) {
-        cliLog.output(result.content ?? '');
+        if (result.bytes !== undefined) {
+          process.stdout.write(result.bytes);
+        } else {
+          cliLog.output(result.content ?? '');
+        }
       } else {
         console.error(
           `${DIM}Status:${RESET} ${result.status ?? '(no status)'}`,
