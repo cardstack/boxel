@@ -24,7 +24,11 @@ import {
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  BaseDef,
+  CardDef,
+  ComputePassSnapshot,
+} from 'https://cardstack.com/base/card-api';
 
 import { friendlyCardType } from '../../utils/render-error';
 
@@ -64,46 +68,76 @@ export default class RenderMetaRoute extends Route<Model> {
     // instead of re-running `computeVia` — one compute per distinct
     // (instance, fieldName) for the whole traversal. The pass MUST
     // close before any await so it doesn't leak across reactive cycles.
-    api.beginComputePass();
-    let serializeStart = performance.now();
-    let serialized = api.serializeCard(instance, {
-      includeComputeds: true,
-      maybeRelativeURL: (url: string) =>
-        maybeRelativeURL(
-          cardIdToURL(url),
-          cardIdToURL(instance.id),
-          instance[realmURL],
-        ),
-    }) as SingleCardDocument;
-    let serializeMs = performance.now() - serializeStart;
-    for (let { relationship } of relationshipEntries(
-      serialized.data.relationships,
-    )) {
-      // we want to emulate the file serialization here
-      delete relationship.data;
+    //
+    // Guarded by typeof checks: during a cold dev boot the host can briefly
+    // load a base/card-api build that predates these exports (vite is still
+    // bundling, or a stale realm-transpile is in flight). In that window we
+    // skip the pass — `getter` falls through its `passComputeMemo === null`
+    // fast path and the render still produces a correct serialized + search
+    // doc, just without the per-row diagnostics fields.
+    //
+    // Pass close is in a `finally` so a throw inside serializeCard /
+    // searchDoc still closes the pass — otherwise the module-global
+    // memo in field-support.ts stays set and later off-pass `getter`
+    // calls would read stale memoized values across reactive cycles.
+    let passOpen = typeof api.beginComputePass === 'function';
+    if (passOpen) {
+      api.beginComputePass();
+    }
+    let serialized: SingleCardDocument;
+    let serializeMs: number;
+    let searchDoc: Record<string, any>;
+    let searchDocMs: number;
+    let passSnapshot: ComputePassSnapshot | undefined;
+    try {
+      let serializeStart = performance.now();
+      serialized = api.serializeCard(instance, {
+        includeComputeds: true,
+        maybeRelativeURL: (url: string) =>
+          maybeRelativeURL(
+            cardIdToURL(url),
+            cardIdToURL(instance.id),
+            instance[realmURL],
+          ),
+      }) as SingleCardDocument;
+      serializeMs = performance.now() - serializeStart;
+      for (let { relationship } of relationshipEntries(
+        serialized.data.relationships,
+      )) {
+        // we want to emulate the file serialization here
+        delete relationship.data;
+      }
+
+      let searchDocStart = performance.now();
+      searchDoc = api.searchDoc(instance);
+      searchDocMs = performance.now() - searchDocStart;
+    } finally {
+      if (passOpen && typeof api.endComputePass === 'function') {
+        passSnapshot = api.endComputePass();
+      }
     }
 
     let Klass = getClass(instance);
 
     let types = getTypes(Klass);
     let displayNames = getDisplayNames(Klass);
-    let searchDocStart = performance.now();
-    let searchDoc = api.searchDoc(instance);
-    let searchDocMs = performance.now() - searchDocStart;
-    let passSnapshot = api.endComputePass();
     // Add a "pseudo field" to the search doc for the card type. We use the
     // "_" prefix to make a decent attempt to not pollute the userland
     // namespace for cards
     searchDoc._cardType = friendlyCardType(Klass);
 
     let diagnostics: PrerenderMetaDiagnostics = {
-      computedCalls: passSnapshot.calls,
-      computedCacheHits: passSnapshot.cacheHits,
+      ...(passSnapshot
+        ? {
+            computedCalls: passSnapshot.calls,
+            computedCacheHits: passSnapshot.cacheHits,
+          }
+        : {}),
       serializeMs: Math.round(serializeMs * 100) / 100,
       searchDocMs: Math.round(searchDocMs * 100) / 100,
     };
     computePerfLog.debug(
-      `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls} cacheHits=${diagnostics.computedCacheHits} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
+      `render.meta computed counts cardId=${instance.id} calls=${diagnostics.computedCalls ?? 'n/a'} cacheHits=${diagnostics.computedCacheHits ?? 'n/a'} serializeMs=${diagnostics.serializeMs} searchDocMs=${diagnostics.searchDocMs}`,
     );
 
     return {
