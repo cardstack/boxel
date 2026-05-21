@@ -33,26 +33,39 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout boxel monorepo for boxel-cli source
+    - name: Locate boxel monorepo source
+      id: boxel-src
       shell: bash
       env:
         BOXEL_REPO: ${{ github.action_repository }}
         BOXEL_REF: ${{ github.action_ref }}
+        CURRENT_REPO: ${{ github.repository }}
+      # In-repo short-circuit: see sibling publish-preview-realm action
+      # for the rationale. External consumers (boxel-catalog, -home,
+      # -skills) still go through the full clone + install path.
       run: |
-        SRC="${RUNNER_TEMP}/boxel-src"
-        rm -rf "$SRC"
-        git clone --depth 1 "https://github.com/${BOXEL_REPO}.git" "$SRC"
-        git -C "$SRC" fetch --depth 1 origin "$BOXEL_REF"
-        git -C "$SRC" checkout FETCH_HEAD
-        echo "BOXEL_SRC=$SRC" >> "$GITHUB_ENV"
+        if [ "$BOXEL_REPO" = "$CURRENT_REPO" ]; then
+          echo "BOXEL_SRC=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          echo "in_repo=true" >> "$GITHUB_OUTPUT"
+        else
+          SRC="${RUNNER_TEMP}/boxel-src"
+          rm -rf "$SRC"
+          git clone --depth 1 "https://github.com/${BOXEL_REPO}.git" "$SRC"
+          git -C "$SRC" fetch --depth 1 origin "$BOXEL_REF"
+          git -C "$SRC" checkout FETCH_HEAD
+          echo "BOXEL_SRC=$SRC" >> "$GITHUB_ENV"
+          echo "in_repo=false" >> "$GITHUB_OUTPUT"
+        fi
 
     - name: Install mise (node + pnpm)
+      if: steps.boxel-src.outputs.in_repo != 'true'
       uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
       with:
         install: true
         working_directory: ${{ env.BOXEL_SRC }}
 
     - name: Cache pnpm store
+      if: steps.boxel-src.outputs.in_repo != 'true'
       uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ~/.local/share/pnpm/store
@@ -61,6 +74,7 @@ runs:
           ${{ runner.os }}-boxel-pnpm-
 
     - name: Install workspace dependencies
+      if: steps.boxel-src.outputs.in_repo != 'true'
       shell: bash
       working-directory: ${{ env.BOXEL_SRC }}
       run: pnpm install --frozen-lockfile --filter @cardstack/boxel-cli...
