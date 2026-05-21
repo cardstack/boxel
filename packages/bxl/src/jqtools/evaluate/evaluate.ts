@@ -39,7 +39,12 @@ import { generateCombinations } from './generateCombinations.js';
 import { JqEvaluateError } from '../errors.js';
 import { applyFormat } from './applyFormat.js';
 import { Parser } from '../parser/Parser.js';
-import { isNativeFilter, NativeFilter } from './filters/lib/nativeFilter.js';
+import {
+  getBareNativeFilter,
+  isNativeFilter,
+  NativeFilter,
+  type BareNativeFilter,
+} from './filters/lib/nativeFilter.js';
 import {
   cannotSliceError,
   notDefinedError,
@@ -75,6 +80,25 @@ class BreakError extends JqEvaluateError {
   constructor(public readonly value: string) {
     super(`Label ${value} is not defined`);
   }
+}
+
+function accessStaticStringPath(value: unknown, path: string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (current === null) {
+      continue;
+    }
+    if (typeof current === 'object' && !Array.isArray(current)) {
+      current = (current as Record<string, unknown>)[key] ?? null;
+      continue;
+    }
+    current = access(current, key);
+  }
+  return current;
+}
+
+function appendStaticPath(base: Item['path'], path: string[]): Item['path'] {
+  return base.length === 0 ? path : [...base, ...path];
 }
 
 /**
@@ -126,6 +150,129 @@ class Environment {
 
   getVarValue(name: string) {
     return this.getVar(name).value;
+  }
+
+  *evaluateNativeFilterCall(
+    nativeFilter: NativeFilter,
+    ast: Extract<ExpressionAst, { type: 'filter' }>,
+    arity: number,
+    item: Item,
+  ): ItemIterator {
+    const bareFilter = getBareNativeFilter(nativeFilter);
+    if (bareFilter) {
+      yield* this.evaluateBareNativeFilterCall(bareFilter, ast, arity, item);
+      return;
+    }
+
+    if (arity === 0) {
+      for (const nativeItem of nativeFilter(item)) {
+        checkRuntimeBudget();
+        yield nativeItem;
+      }
+      return;
+    }
+
+    const rootItem = createItem(item.value);
+
+    if (arity === 1) {
+      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      for (const a0 of arg0) {
+        checkRuntimeBudget();
+        for (const nativeItem of nativeFilter(item, a0)) {
+          checkRuntimeBudget();
+          yield nativeItem;
+        }
+      }
+      return;
+    }
+
+    if (arity === 2) {
+      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      const arg1 = Array.from(this.evaluate(ast.args[1], single(rootItem)));
+      for (const a0 of arg0) {
+        for (const a1 of arg1) {
+          checkRuntimeBudget();
+          for (const nativeItem of nativeFilter(item, a0, a1)) {
+            checkRuntimeBudget();
+            yield nativeItem;
+          }
+        }
+      }
+      return;
+    }
+
+    const argSets: any[][] = [];
+    for (let i = 0; i < arity; i++) {
+      const argExprAst = ast.args[i];
+      argSets.push(Array.from(this.evaluate(argExprAst, single(rootItem))));
+    }
+    for (const combination of generateCombinations(argSets)) {
+      checkRuntimeBudget();
+      for (const nativeItem of nativeFilter(item, ...combination)) {
+        checkRuntimeBudget();
+        yield nativeItem;
+      }
+    }
+  }
+
+  *evaluateBareNativeFilterCall(
+    bareFilter: BareNativeFilter,
+    ast: Extract<ExpressionAst, { type: 'filter' }>,
+    arity: number,
+    item: Item,
+  ): ItemIterator {
+    if (arity === 0) {
+      for (const value of bareFilter(item.value)) {
+        checkRuntimeBudget();
+        yield createItem(value);
+      }
+      return;
+    }
+
+    const rootItem = createItem(item.value);
+
+    if (arity === 1) {
+      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      for (const a0 of arg0) {
+        checkRuntimeBudget();
+        for (const value of bareFilter(item.value, a0.value)) {
+          checkRuntimeBudget();
+          yield createItem(value);
+        }
+      }
+      return;
+    }
+
+    if (arity === 2) {
+      const arg0 = Array.from(this.evaluate(ast.args[0], single(rootItem)));
+      const arg1 = Array.from(this.evaluate(ast.args[1], single(rootItem)));
+      for (const a0 of arg0) {
+        for (const a1 of arg1) {
+          checkRuntimeBudget();
+          for (const value of bareFilter(item.value, a0.value, a1.value)) {
+            checkRuntimeBudget();
+            yield createItem(value);
+          }
+        }
+      }
+      return;
+    }
+
+    const argSets: Item[][] = [];
+    for (let i = 0; i < arity; i++) {
+      const argExprAst = ast.args[i];
+      argSets.push(Array.from(this.evaluate(argExprAst, single(rootItem))));
+    }
+    for (const combination of generateCombinations(argSets)) {
+      checkRuntimeBudget();
+      for (const value of bareFilter(
+        item.value,
+        ...combination.map((arg) => arg.value),
+      )) {
+        checkRuntimeBudget();
+        yield createItem(value);
+      }
+    }
   }
 
   evaluateConditions(ast: ExpressionAst, input: ItemIterator) {
@@ -293,41 +440,18 @@ class Environment {
           const resolvedNative = ast.resolvedNative as NativeFilter | undefined;
 
           if (resolvedNative) {
-            const argSets: any[][] = [];
-            const rootItem = createItem(item.value);
-            for (let i = 0; i < arity; i++) {
-              const argExprAst = ast.args[i];
-              argSets.push(
-                Array.from(this.evaluate(argExprAst, single(rootItem)))
-              );
-            }
-            for (const combination of generateCombinations(argSets)) {
-              checkRuntimeBudget();
-              for (const nativeItem of resolvedNative(item, ...combination)) {
-                checkRuntimeBudget();
-                yield nativeItem;
-              }
-            }
+            yield* this.evaluateNativeFilterCall(
+              resolvedNative,
+              ast,
+              arity,
+              item,
+            );
           } else {
             const def: Var<DefAst | NativeFilter> = ast.resolvedJq
               ? { scope: null, value: ast.resolvedJq }
               : this.getVar(ast.name);
             if (isNativeFilter(def.value)) {
-              const argSets: any[][] = [];
-              const rootItem = createItem(item.value);
-              for (let i = 0; i < arity; i++) {
-                const argExprAst = ast.args[i];
-                argSets.push(
-                  Array.from(this.evaluate(argExprAst, single(rootItem)))
-                );
-              }
-              for (const combination of generateCombinations(argSets)) {
-                checkRuntimeBudget();
-                for (const nativeItem of def.value(item, ...combination)) {
-                  checkRuntimeBudget();
-                  yield nativeItem;
-                }
-              }
+              yield* this.evaluateNativeFilterCall(def.value, ast, arity, item);
               continue;
             }
             const argSets: ([ExpressionAst] | any[])[] = [];
@@ -504,6 +628,16 @@ class Environment {
 
         throw notImplementedError(`${type}:${operator}`);
       case 'index':
+        if (ast.staticPath) {
+          for (const item of input) {
+            checkRuntimeBudget();
+            yield createItem(
+              accessStaticStringPath(item.value, ast.staticPath),
+              appendStaticPath(item.path, ast.staticPath),
+            );
+          }
+          break;
+        }
         for (const item of input) {
           checkRuntimeBudget();
           for (const val of this.evaluate(ast.expr, single(item))) {
@@ -563,6 +697,34 @@ class Environment {
         }
         break;
       case 'iterator':
+        if (ast.expr.type === 'index' && ast.expr.staticPath) {
+          for (const item of input) {
+            checkRuntimeBudget();
+            const value = accessStaticStringPath(item.value, ast.expr.staticPath);
+            const basePath = appendStaticPath(item.path, ast.expr.staticPath);
+            switch (typeOf(value)) {
+              case 'array':
+                for (let i = 0; i < (value as unknown[]).length; i++) {
+                  checkRuntimeBudget();
+                  yield createItem((value as unknown[])[i], [...basePath, i]);
+                }
+                break;
+              case 'object':
+                for (const [key, entryValue] of Object.entries(
+                  value as Record<string, unknown>,
+                )) {
+                  checkRuntimeBudget();
+                  yield createItem(entryValue, [...basePath, key]);
+                }
+                break;
+              case 'null':
+                break;
+              default:
+                throw cannotIterateError(value);
+            }
+          }
+          break;
+        }
         for (const item of input) {
           checkRuntimeBudget();
           for (const val of this.evaluate(ast.expr, single(item))) {

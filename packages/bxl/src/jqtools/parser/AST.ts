@@ -204,6 +204,7 @@ export interface IndexAst {
   type: 'index';
   expr: ExpressionAst;
   index: string | ExpressionAst;
+  staticPath?: string[];
 }
 
 export interface SliceAst {

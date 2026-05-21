@@ -103,6 +103,22 @@ export class Parser {
 
   constructor(private input: Tokenizer) {}
 
+  private static staticIndexPath(
+    expr: ExpressionAst,
+    index: string | ExpressionAst,
+  ): string[] | undefined {
+    if (typeof index !== 'string') {
+      return undefined;
+    }
+    if (expr.type === 'identity') {
+      return [index];
+    }
+    if (expr.type === 'index' && expr.staticPath) {
+      return [...expr.staticPath, index];
+    }
+    return undefined;
+  }
+
   parse() {
     return this.parseTopLevel();
   }
@@ -526,7 +542,12 @@ export class Parser {
           const to = this.isPunc(']') ? undefined : this.parseExpression();
           out = { type: 'slice', expr, from, to };
         } else {
-          out = { type: 'index', expr, index: from! };
+          out = {
+            type: 'index',
+            expr,
+            index: from!,
+            staticPath: Parser.staticIndexPath(expr, from!),
+          };
         }
       }
       this.skipPunc(']');
@@ -546,6 +567,7 @@ export class Parser {
         expr,
         index: this.isStr() ? this.parseStr() : this.skipIdent().value,
       };
+      index.staticPath = Parser.staticIndexPath(expr, index.index);
       return this.atomMaybe(() => index);
     }
     return expr;
