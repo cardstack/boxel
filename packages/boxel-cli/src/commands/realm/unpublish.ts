@@ -70,7 +70,10 @@ export async function unpublishRealm(
     // it inline so opaque "fetch failed" lines don't reach the operator
     // without context.
     let msg = err instanceof Error ? err.message : String(err);
-    if (err instanceof Error && err.cause) {
+    // `err.cause != null` rather than a truthy check so we don't drop
+    // falsy-but-defined causes (`''`, `0`, `false`, `NaN`). `!= null`
+    // matches both `null` and `undefined`.
+    if (err instanceof Error && err.cause != null) {
       let cause = err.cause;
       let causeMsg = cause instanceof Error ? cause.message : String(cause);
       msg = `${msg} (caused by: ${causeMsg})`;

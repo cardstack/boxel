@@ -224,7 +224,11 @@ async function safeReadResponseText(response: Response): Promise<string> {
 // reach the operator without context.
 function describeFetchError(error: unknown): string {
   let msg = error instanceof Error ? error.message : String(error);
-  if (error instanceof Error && error.cause) {
+  // `error.cause != null` rather than a truthy check so we don't
+  // silently drop falsy-but-defined causes (`''`, `0`, `false`,
+  // `NaN`). `!= null` matches both `null` and `undefined` — i.e., the
+  // absence markers — and lets every explicit value through.
+  if (error instanceof Error && error.cause != null) {
     let cause = error.cause;
     let causeMsg = cause instanceof Error ? cause.message : String(cause);
     return `${msg} (caused by: ${causeMsg})`;
@@ -294,7 +298,9 @@ export function registerPublishCommand(realm: Command): void {
           // Node's fetch surfaces the actual transport error (ECONNRESET,
           // TLS failure, undici socket error, etc.) on `error.cause`. Print
           // it so opaque "fetch failed" messages don't strand the caller.
-          if (err instanceof Error && err.cause) {
+          // `!= null` rather than a truthy check so we don't drop
+          // falsy-but-defined causes (`''`, `0`, `false`, `NaN`).
+          if (err instanceof Error && err.cause != null) {
             console.error(`${FG_RED}Caused by:${RESET}`, err.cause);
           }
           process.exit(1);
