@@ -29,18 +29,6 @@ on:
           e.g. `https://app.boxel.ai/boxel-homepage/`.
         type: string
         required: true
-      staging-matrix-username:
-        description: |
-          Matrix username (without @ prefix or :domain suffix) the
-          workflow authenticates as for staging syncs. Caller passes
-          either a `vars.*` or `secrets.*` value depending on how the
-          consumer repo stores it.
-        type: string
-        required: true
-      production-matrix-username:
-        description: Matrix username for production syncs.
-        type: string
-        required: true
       staging-matrix-url:
         type: string
         default: https://matrix-staging.stack.cards
@@ -80,6 +68,16 @@ on:
         type: string
         default: latest
     secrets:
+      staging-matrix-username:
+        description: |
+          Matrix username (without @ prefix or :domain suffix) the
+          workflow authenticates as for staging syncs. Declared as a
+          secret so callers can source it from either `vars.*` or
+          `secrets.*` — `with:` blocks disallow the `secrets` context.
+        required: true
+      production-matrix-username:
+        description: Matrix username for production syncs.
+        required: true
       staging-matrix-password:
         required: true
       production-matrix-password:
@@ -106,7 +104,7 @@ jobs:
         id: dry_run
         env:
           MATRIX_URL: ${{ inputs.staging-matrix-url }}
-          MATRIX_USERNAME: ${{ inputs.staging-matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
           MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
         run: |
@@ -150,7 +148,7 @@ jobs:
         id: sync_staging
         env:
           MATRIX_URL: ${{ inputs.staging-matrix-url }}
-          MATRIX_USERNAME: ${{ inputs.staging-matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
           MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
         run: |
@@ -191,7 +189,7 @@ jobs:
         id: sync_production
         env:
           MATRIX_URL: ${{ inputs.production-matrix-url }}
-          MATRIX_USERNAME: ${{ inputs.production-matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.production-matrix-username }}
           MATRIX_PASSWORD: ${{ secrets.production-matrix-password }}
           WORKSPACE_URL: ${{ inputs.production-workspace-url }}
         run: |

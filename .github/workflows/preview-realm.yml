@@ -22,10 +22,6 @@ on:
       matrix-url:
         type: string
         required: true
-      matrix-username:
-        description: Matrix username without the @ prefix or :domain suffix.
-        type: string
-        required: true
       published-realm-base:
         description: |
           Base URL the realm will be published at, without realm-name
@@ -55,6 +51,13 @@ on:
         type: string
         default: latest
     secrets:
+      matrix-username:
+        description: |
+          Matrix username (without @ prefix or :domain suffix).
+          Declared as a secret so callers can source it from either
+          `vars.*` or `secrets.*` — `with:` blocks disallow the
+          `secrets` context.
+        required: true
       matrix-password:
         required: true
 
@@ -78,7 +81,7 @@ jobs:
       - name: Configure boxel profile
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
-          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.matrix-username }}
           MATRIX_PASSWORD: ${{ secrets.matrix-password }}
           REALM_SERVER: ${{ inputs.realm-server-url }}
         run: |
@@ -125,7 +128,7 @@ jobs:
       - name: Push content to preview realm
         env:
           REALM_SERVER: ${{ inputs.realm-server-url }}
-          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.matrix-username }}
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
         run: |
           SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
@@ -135,7 +138,7 @@ jobs:
       - name: Publish preview realm
         env:
           REALM_SERVER: ${{ inputs.realm-server-url }}
-          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.matrix-username }}
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
           PUBLISHED_BASE: ${{ inputs.published-realm-base }}
         run: |
@@ -200,7 +203,7 @@ jobs:
       - name: Configure boxel profile
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
-          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_USERNAME: ${{ secrets.matrix-username }}
           MATRIX_PASSWORD: ${{ secrets.matrix-password }}
           REALM_SERVER: ${{ inputs.realm-server-url }}
         run: |
