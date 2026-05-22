@@ -276,7 +276,15 @@ export function isUrlLike(moduleIdentifier: string): boolean {
 // This is to handle a very mysterious situation in our CI environment where
 // fetches for base realm artifacts seem to vanish and we see "TypeError:
 // Fetch failed" exceptions.
-const maxAttempts = 5;
+//
+// Why 10 attempts: with the triangular backoff below (attempt * backOffMs),
+// 10 retries widens the total backoff window from ~1.5s to ~5.5s. CI has been
+// observed losing localhost:4201/base/* fetches for multi-second stretches
+// (TCP/process scheduling glitches), so the prior 5-attempt cap was tight
+// enough that a single transient stall would surface as a test timeout.
+// Gated on `__environment === 'test'` via shouldRetryFetch, so production
+// behaviour is unaffected.
+const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
@@ -306,6 +314,15 @@ async function withRetries(
       return await fetchFn();
     } catch (err: any) {
       if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
+        if (shouldRetryFetch(url) && attempt > maxAttempts) {
+          // Final-exhaustion log: distinct from the per-attempt warning so
+          // CI output can be grepped for the actual cap being hit.
+          console.error(
+            `Exhausted ${attempt - 1} fetch retries for ${url.href}: ${
+              err?.name ?? 'Error'
+            }: ${err?.message ?? String(err)}`,
+          );
+        }
         throw err;
       }
       console.error(
