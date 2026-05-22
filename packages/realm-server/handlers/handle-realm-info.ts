@@ -4,26 +4,31 @@ import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { setContextResponse } from '../middleware';
 import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
 import { getPublicReadableRealms } from '../utils/realm-readability';
 
 const log = logger('realm-server');
 
 export default function handleRealmInfo({
   dbAdapter,
+  reconciler,
 }: {
   dbAdapter: DBAdapter;
+  reconciler: RealmRegistryReconciler;
 }): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
-    let { realmList, realmByURL } = getMultiRealmAuthorization(ctxt);
-    let publicReadableRealms = await getPublicReadableRealms(
-      dbAdapter,
-      realmList,
-    );
+    let { realmList } = getMultiRealmAuthorization(ctxt);
+    let [publicReadableRealms, realmInstances] = await Promise.all([
+      getPublicReadableRealms(dbAdapter, realmList),
+      resolveRealmsForFederatedRequest(reconciler, realmList),
+    ]);
 
     let data: { id: string; type: 'realm-info'; attributes: RealmInfo }[] = [];
 
-    for (let realmURL of realmList) {
-      let realm = realmByURL.get(realmURL);
+    for (let i = 0; i < realmList.length; i++) {
+      let realmURL = realmList[i];
+      let realm = realmInstances[i];
       if (!realm) {
         continue;
       }

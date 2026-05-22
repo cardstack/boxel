@@ -3,6 +3,7 @@ import {
   delay,
   logger,
   type PrerenderMeta,
+  type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
 } from '@cardstack/runtime-common';
@@ -194,6 +195,63 @@ export async function renderMeta(
       page,
       `render.meta returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render meta response' },
+    );
+  }
+}
+
+// Lightweight first pass: the runner only needs the ancestor type chain
+// to drive fitted/embedded format renders. Hitting /meta for that
+// pulled in a full serializeCard + searchDoc walk we then threw away;
+// /types returns just the type list. The full render.meta still runs
+// after the format renders, where its searchDoc legitimately depends
+// on the linksTo / linksToMany fields those renders marked as "used".
+export async function renderTypes(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<PrerenderTypes | RenderError> {
+  log.debug(`renderTypes start url=${page.url()}`);
+  await transitionTo(page, 'render.types');
+  await waitForRoutePathSuffix(page, '/types', opts);
+  await waitForPrerenderSettle(page);
+  log.debug(`renderTypes capture url=${page.url()}`);
+  let result = await captureResult(page, 'textContent', opts);
+  log.debug(
+    `renderTypes captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
+  );
+  if (result.status === 'error' || result.status === 'unusable') {
+    return renderCaptureToError(page, result, 'render.types');
+  }
+  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
+  if (
+    opts?.expectedNonce &&
+    result.nonce &&
+    result.nonce !== opts.expectedNonce
+  ) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
+  try {
+    return JSON.parse(result.value) as PrerenderTypes;
+  } catch {
+    await page.evaluate(() => {
+      let el = document.querySelector('[data-prerender]') as HTMLElement;
+      console.log(
+        `capturing HTML for unknown types result\n${el.outerHTML.trim()}`,
+      );
+    });
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types returned a non-JSON response: ${result.value}`,
+      { title: 'Invalid render types response' },
     );
   }
 }

@@ -49,7 +49,17 @@ spawn_cleanup_guardian $$
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we
 # start the host manually and use wait-on to gate readiness.
-pnpm --filter @cardstack/host start &
+#
+# `exec node …` instead of `pnpm --filter @cardstack/host start` so that
+# Node is bash's direct child. pnpm has a known behavior where, on
+# receiving SIGTERM (via the pgroup-kill on Ctrl-C), it prints
+# `[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL]` and `Command failed with signal
+# "SIGTERM"` even when its own child script exited cleanly with code 0.
+# Bypassing pnpm here avoids that spurious error during shutdown; the
+# `start` script's only content is `node scripts/vite-serve.js`, which
+# already runs `ensure-boxel-ui` inline (see that file's header), so
+# nothing about pnpm's script-runner is actually needed.
+(cd "$REPO_ROOT/packages/host" && exec node scripts/vite-serve.js) &
 HOST_PID=$!
 record_dev_pid host "$HOST_PID"
 # Fast shutdown helper: SIGTERM every recorded pgroup and return. The slow

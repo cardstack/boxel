@@ -17,7 +17,7 @@ import { resolveCardReference } from './card-reference-resolver';
 import { isMeta, type CardFields, type Meta } from './resource-types';
 import type { DefinitionLookup } from './definition-lookup';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
-import { maybeRelativeURL as makeRelativeURL } from './url';
+import { maybeRelativeReference as makeRelativeReference } from './url';
 
 export default async function serialize({
   doc,
@@ -42,8 +42,12 @@ export default async function serialize({
     ...codeRefOpts,
     allowRelative: true as true,
     ...(realmURL && {
-      maybeRelativeURL: (url: string) =>
-        makeRelativeURL(new URL(url, relativeTo), relativeTo, realmURL),
+      maybeRelativeReference: (reference: string) =>
+        makeRelativeReference(
+          new URL(reference, relativeTo),
+          relativeTo,
+          realmURL,
+        ),
     }),
   };
 
@@ -151,7 +155,7 @@ async function processAttributes({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeURL?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
   definitionLookup: DefinitionLookup;
 }): Promise<Record<string, any>> {
@@ -300,7 +304,7 @@ async function processRelationships({
         let selfLink = processedValue.links.self;
         if (realmURL && selfLink) {
           try {
-            selfLink = makeRelativeURL(
+            selfLink = makeRelativeReference(
               new URL(resolveCardReference(selfLink, relativeTo)),
               relativeTo,
               realmURL,
@@ -455,7 +459,7 @@ function processMetaFields({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeURL?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
 }): CardFields {
   const result: CardFields = {};
@@ -495,7 +499,7 @@ function processMetaField({
     relativeTo: URL;
     trimExecutableExtension: true;
     allowRelative?: true;
-    maybeRelativeURL?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
   };
 }): Partial<Meta> {
   const result = { ...field };

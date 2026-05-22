@@ -9,8 +9,6 @@ The **Cardstack Catalog** is the official catalog realm — the source of truth 
 - **Deployment Pipeline**: Changes flow from local development → boxel-catalog repo → staging → production
 - **URL**: Served at `/catalog/` in every environment (localhost, staging, production)
 
-For the legacy monorepo catalog (served at `/legacy-catalog/`), see [packages/catalog-realm](../catalog-realm/).
-
 ## Setup
 
 ### Prerequisites

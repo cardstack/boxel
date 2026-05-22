@@ -31,7 +31,7 @@ export function serialize(
   opts?: SerializeOpts & {
     relativeTo?: URL;
     trimExecutableExtension?: true;
-    maybeRelativeURL?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ): ResolvedCodeRef | {} {
@@ -75,7 +75,7 @@ function codeRefAdjustments(
   relativeTo?: URL,
   opts?: SerializeOpts & {
     trimExecutableExtension?: true;
-    maybeRelativeURL?: (url: string) => string;
+    maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ) {
@@ -94,8 +94,8 @@ function codeRefAdjustments(
         if (opts?.trimExecutableExtension) {
           module = trimExecutableExtension(rri(module));
         }
-        if (opts?.allowRelative && opts?.maybeRelativeURL) {
-          module = opts.maybeRelativeURL(module);
+        if (opts?.allowRelative && opts?.maybeRelativeReference) {
+          module = opts.maybeRelativeReference(module);
         }
         return { module };
       }
@@ -109,8 +109,8 @@ function codeRefAdjustments(
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(rri(module));
     }
-    if (opts?.allowRelative && opts?.maybeRelativeURL) {
-      module = opts.maybeRelativeURL(module);
+    if (opts?.allowRelative && opts?.maybeRelativeReference) {
+      module = opts.maybeRelativeReference(module);
     }
     return { module };
   }

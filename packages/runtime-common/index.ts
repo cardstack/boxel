@@ -44,6 +44,28 @@ export type PatchData = {
   };
 };
 
+// Per-render computed-field counters captured by the host's render.meta
+// route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
+// onto `response.meta.diagnostics` and the indexer can persist them onto
+// `boxel_index.timing_diagnostics`. All fields optional — older host
+// builds that predate the counters omit the block entirely.
+export interface PrerenderMetaDiagnostics {
+  // Number of `computeVia` invocations that ran during the
+  // serializeCard + searchDoc traversal for this card. After the
+  // pass-scoped memo lands this is one call per distinct computed read
+  // per card-instance touched in the pass.
+  computedCalls?: number;
+  // Number of times the pass memo short-circuited a repeated read of
+  // the same computed in the same traversal. `computedCalls +
+  // computedCacheHits` is the total computed-read pressure of the
+  // pass; the ratio tells you how much duplicate work the memo elided.
+  computedCacheHits?: number;
+  // Wall-clock of the host-side serializeCard call.
+  serializeMs?: number;
+  // Wall-clock of the host-side searchDoc call.
+  searchDocMs?: number;
+}
+
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
@@ -51,6 +73,24 @@ export interface PrerenderMeta {
   searchDoc: Record<string, any> | null;
   displayNames: string[] | null;
   deps: string[] | null;
+  types: string[] | null;
+  // Optional host-side timing block. The Prerenderer lifts this onto
+  // `response.meta.diagnostics` so it persists to
+  // `boxel_index.timing_diagnostics` for SQL-side perf triage.
+  diagnostics?: PrerenderMetaDiagnostics;
+}
+
+// Lightweight payload produced by the host app's render.types route. The
+// runner needs the ancestor type list before the fitted/embedded format
+// renders run, but those renders are what mark linksTo / linksToMany
+// fields as "used"; running a full render.meta (with serializeCard +
+// searchDoc) for that early type lookup paid the cost of one extra
+// per-card traversal. /types returns just the type chain so the
+// runner can drive ancestor renders without that extra walk; a single
+// render.meta then runs after the fitted/embedded passes have populated
+// the per-instance data bucket and the search doc picks up the linked
+// fields the embedded template touched.
+export interface PrerenderTypes {
   types: string[] | null;
 }
 
@@ -204,6 +244,13 @@ export interface RenderTimeoutDiagnostics {
       priority?: number;
     }>;
   };
+  // Host-emitted computed-field counters lifted out of
+  // PrerenderMeta.diagnostics so they ride alongside the existing
+  // server-observed timings in `boxel_index.timing_diagnostics`.
+  computedCalls?: number;
+  computedCacheHits?: number;
+  serializeMs?: number;
+  searchDocMs?: number;
 }
 
 export interface RenderError extends ErrorEntry {

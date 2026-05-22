@@ -4,6 +4,16 @@
 
 export PATH="./node_modules/.bin:$PATH"
 
+# Match dev-common.sh: pin the published-realm domain to the 3-label
+# `*.boxel-dev.localhost` form that the dev cert covers, so browsers
+# accept TLS for published-realm subdomains. Skip in env-mode where
+# Traefik-routed URLs apply. See lib/dev-common.sh for the why; this
+# script doesn't source it, so the export lives inline here.
+if [ -z "${BOXEL_ENVIRONMENT:-}" ]; then
+  export PUBLISHED_REALM_BOXEL_SPACE_DOMAIN="${PUBLISHED_REALM_BOXEL_SPACE_DOMAIN:-boxel-dev.localhost:4201}"
+  export PUBLISHED_REALM_BOXEL_SITE_DOMAIN="${PUBLISHED_REALM_BOXEL_SITE_DOMAIN:-boxel-dev.localhost:4201}"
+fi
+
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"

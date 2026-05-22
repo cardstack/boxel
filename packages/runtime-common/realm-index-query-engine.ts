@@ -26,7 +26,7 @@ import {
   type ResolvedCodeRef,
   internalKeyFor,
   visitInstanceURLs,
-  maybeRelativeURL,
+  maybeRelativeReference,
   codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
@@ -1596,7 +1596,7 @@ function relativizeResource(
       return;
     }
     let urlObj = new URL(resolveCardReference(url, resourceURL));
-    setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
+    setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
@@ -1608,7 +1608,7 @@ function relativizeResource(
       resolveCardReference(moduleURL, resourceURL),
     );
     setModuleURL(
-      maybeRelativeURL(
+      maybeRelativeReference(
         absoluteModuleURL,
         primaryURL,
         realmURL,

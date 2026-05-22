@@ -36,7 +36,7 @@ export default class RealmPicker extends Component<Signature> {
   // interprets as a user-initiated filter change (expanding the search sheet).
   @cached
   get selectAllOption(): PickerOption {
-    const urls = this.realmServer.availableRealmURLs;
+    const urls = this.realmServer.availableRealmIdentifiers;
     return {
       id: 'select-all',
       label: `Select All (${urls.length})`,
@@ -60,7 +60,7 @@ export default class RealmPicker extends Component<Signature> {
   }
 
   get realmOptions(): PickerOption[] {
-    const urls = this.realmServer.availableRealmURLs;
+    const urls = this.realmServer.availableRealmIdentifiers;
     const options: PickerOption[] = [this.selectAllOption];
     for (const realmURL of urls) {
       const info = this.realm.info(realmURL);

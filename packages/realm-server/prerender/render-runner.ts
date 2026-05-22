@@ -1,5 +1,6 @@
 import {
   type PrerenderMeta,
+  type PrerenderTypes,
   type RenderError,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -30,6 +31,7 @@ import {
   renderHTML,
   renderIcon,
   renderMeta,
+  renderTypes,
   type RenderCapture,
   type CaptureOptions,
   type ModuleCapture,
@@ -1082,7 +1084,7 @@ export class RenderRunner {
           types: null,
         };
         let meta: PrerenderMeta = emptyMeta;
-        let metaForTypes: PrerenderMeta = emptyMeta;
+        let typesForAncestors: PrerenderTypes = { types: null };
         let headHTML: string | null = null;
         let atomHTML: string | null = null;
         let iconHTML: string | null = null;
@@ -1128,17 +1130,28 @@ export class RenderRunner {
           }
         }
 
+        // First pass is the lightweight /types route — just the type
+        // chain the ancestor renders below need. The full render.meta
+        // (serialized + searchDoc + deps + displayNames) runs once
+        // afterwards, because the fitted/embedded ancestor renders are
+        // what mark linksTo / linksToMany fields as "used"; the final
+        // renderMeta's queryableValue then includes those linked fields
+        // in the search doc. Running render.meta before the ancestor
+        // renders breaks the isUsed-via-non-isolated-render contract
+        // that
+        // `non-isolated formats render linked fields and those links appear in search doc`
+        // covers.
         if (!cardShortCircuit) {
-          let metaForTypesResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (types)',
-            () => renderMeta(page, captureOptions),
+          let typesResult = await runTimedStep<PrerenderTypes>(
+            'visit card render.types',
+            () => renderTypes(page, captureOptions),
           );
-          if (metaForTypesResult !== undefined) {
-            metaForTypes = metaForTypesResult;
+          if (typesResult !== undefined) {
+            typesForAncestors = typesResult;
           }
         }
 
-        if (!cardShortCircuit && metaForTypes.types) {
+        if (!cardShortCircuit && typesForAncestors.types) {
           const ancestorSteps = [
             {
               name: 'visit card fitted render',
@@ -1146,7 +1159,7 @@ export class RenderRunner {
                 renderAncestors(
                   page,
                   'fitted',
-                  metaForTypes.types!,
+                  typesForAncestors.types!,
                   captureOptions,
                 ),
               assign: (v: Record<string, string>) => {
@@ -1159,7 +1172,7 @@ export class RenderRunner {
                 renderAncestors(
                   page,
                   'embedded',
-                  metaForTypes.types!,
+                  typesForAncestors.types!,
                   captureOptions,
                 ),
               assign: (v: Record<string, string>) => {
@@ -1179,7 +1192,7 @@ export class RenderRunner {
 
         if (!cardShortCircuit) {
           let finalMetaResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (final)',
+            'visit card render.meta',
             () => renderMeta(page, captureOptions),
           );
           if (finalMetaResult !== undefined) {

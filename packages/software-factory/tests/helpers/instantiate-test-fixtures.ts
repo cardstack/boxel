@@ -207,29 +207,70 @@ async function seedFilesAndWaitForIndex(
   realmUrl: string,
   files: { path: string; content: string }[],
 ): Promise<void> {
-  let stagingDir = mkdtempSync(join(tmpdir(), 'sf-instantiate-seed-'));
-  try {
-    for (let { path, content } of files) {
-      if (isAbsolute(path) || path.split('/').includes('..')) {
-        throw new Error(
-          `seedFilesAndWaitForIndex path must be a realm-relative path under the staging dir; got ${JSON.stringify(path)}`,
+  for (let { path } of files) {
+    if (isAbsolute(path) || path.split('/').includes('..')) {
+      throw new Error(
+        `seedFilesAndWaitForIndex path must be a realm-relative path under the staging dir; got ${JSON.stringify(path)}`,
+      );
+    }
+  }
+
+  // Retry the sync once on failure. The realm-server's /_atomic
+  // endpoint can return 500 ("Write Error") for transient causes —
+  // for example a concurrent indexing pass or a worker-side
+  // fileSerialization that doesn't recur on retry — and a one-shot
+  // retry with a short backoff lets the helper recover instead of
+  // surfacing the failure as a confusing test flake.
+  //
+  // Each attempt uses a fresh staging dir: `RealmSyncer` writes
+  // `.boxel-sync.json` even when the batch failed, recording hashes
+  // for the staged files. A retry against the same dir would see
+  // those hashes match the (unchanged) local files, classify the
+  // entries as "unchanged locally / deleted remotely" (since the
+  // failed batch never actually wrote them), and with `preferLocal:
+  // true` resolve as a noop — silently skipping the upload while
+  // reporting success. Fresh dir = no stale manifest = honest
+  // re-upload on attempt 2.
+  const maxAttempts = 2;
+  let syncResult: Awaited<ReturnType<typeof client.sync>> | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let stagingDir = mkdtempSync(join(tmpdir(), 'sf-instantiate-seed-'));
+    try {
+      for (let { path, content } of files) {
+        let absolute = join(stagingDir, path);
+        mkdirSync(dirname(absolute), { recursive: true });
+        writeFileSync(absolute, content);
+      }
+      syncResult = await client.sync(realmUrl, stagingDir, {
+        preferLocal: true,
+        waitForIndex: true,
+      });
+    } finally {
+      rmSync(stagingDir, { recursive: true, force: true });
+    }
+    if (!syncResult.hasError) {
+      if (attempt > 1) {
+        console.log(
+          `seedFilesAndWaitForIndex: sync succeeded on attempt ${attempt}/${maxAttempts} for ${realmUrl}`,
         );
       }
-      let absolute = join(stagingDir, path);
-      mkdirSync(dirname(absolute), { recursive: true });
-      writeFileSync(absolute, content);
+      break;
     }
-    let syncResult = await client.sync(realmUrl, stagingDir, {
-      preferLocal: true,
-      waitForIndex: true,
-    });
-    expect(
-      syncResult.hasError,
-      `seed sync to ${realmUrl} reported an error: ${syncResult.error ?? '(no error message)'}`,
-    ).toBe(false);
-  } finally {
-    rmSync(stagingDir, { recursive: true, force: true });
+    console.log(
+      `seedFilesAndWaitForIndex: sync attempt ${attempt}/${maxAttempts} for ${realmUrl} failed: ${
+        syncResult.error ?? '(no error message)'
+      }`,
+    );
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
   }
+  expect(
+    syncResult!.hasError,
+    `seed sync to ${realmUrl} reported an error after ${maxAttempts} attempt(s): ${
+      syncResult!.error ?? '(no error message)'
+    }`,
+  ).toBe(false);
 }
 
 /**

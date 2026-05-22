@@ -23,7 +23,7 @@ export default class GetAvailableRealmIdentifiersCommand extends HostBaseCommand
     let commandModule = await this.loadCommandModule();
     const { GetAvailableRealmIdentifiersResult } = commandModule;
     return new GetAvailableRealmIdentifiersResult({
-      realmIdentifiers: this.realmServer.availableRealmURLs,
+      realmIdentifiers: this.realmServer.availableRealmIdentifiers,
     });
   }
 }

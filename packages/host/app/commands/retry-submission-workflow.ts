@@ -11,9 +11,7 @@ import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
-// Local view: host's tsconfig maps @cardstack/catalog/* to the legacy
-// in-monorepo catalog-realm, which lacks `failedStep`. Drop this once
-// that path points at boxel-catalog (the canonical source).
+// Local view of the boxel-catalog SubmissionWorkflowCard — that repo isn't cloned in boxel CI. (CS-11166)
 interface WorkflowCardView {
   roomId?: string;
   listing?: { id?: string };

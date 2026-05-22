@@ -3,6 +3,8 @@ import { service } from '@ember/service';
 import { isCardInstance, rri, toBranchName } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import type { Listing } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -15,7 +17,6 @@ import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
@@ -37,7 +38,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   requireInputFields = ['realm', 'listingId'];
 
   get submissionsRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/submissions/'),
     );
   }
@@ -165,7 +166,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   }
 
   private get catalogRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/catalog/'),
     );
   }

@@ -142,7 +142,7 @@ export class PrerenderedSearchResource extends Resource<Args> {
     // Normalize realms
     let normalizedRealms = realms
       ? normalizeRealms(realms)
-      : normalizeRealms(this.realmServer.availableRealmURLs);
+      : normalizeRealms(this.realmServer.availableRealmIdentifiers);
 
     this.realmsToSearch = normalizedRealms;
 

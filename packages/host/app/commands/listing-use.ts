@@ -6,6 +6,8 @@ import {
   rri,
 } from '@cardstack/runtime-common';
 
+import type { Listing } from '@cardstack/runtime-common';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -16,8 +18,6 @@ import HostBaseCommand from '../lib/host-base-command';
 import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 import ValidateRealmCommand from './validate-realm';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
