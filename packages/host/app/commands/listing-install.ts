@@ -1,8 +1,3 @@
-import type {
-  ListingPathResolver,
-  ModuleResource,
-  LooseCardResource,
-} from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
   join,
@@ -14,6 +9,12 @@ import {
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
+import type {
+  ListingPathResolver,
+  ModuleResource,
+  LooseCardResource,
+} from '@cardstack/runtime-common';
+import type { Listing } from '@cardstack/runtime-common';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
@@ -28,8 +29,6 @@ import GetCardCommand from './get-card';
 import ReadSourceCommand from './read-source';
 import SerializeCardCommand from './serialize-card';
 import ValidateRealmCommand from './validate-realm';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 const log = logger('catalog:install');
 

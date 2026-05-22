@@ -40,9 +40,6 @@
       "@cardstack/openrouter/*": [
         "../openrouter-realm/*"
       ],
-      "@cardstack/catalog-realm/*": [
-        "../catalog-realm/*"
-      ],
       "@cardstack/boxel-host/commands/*": [
         "../host/app/commands/*"
       ],
