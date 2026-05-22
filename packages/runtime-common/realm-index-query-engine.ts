@@ -1249,6 +1249,31 @@ export class RealmIndexQueryEngine {
           : opts?.linkFields
             ? { ...opts, linkFields: undefined }
             : opts;
+        if (activeOpts?.skipQueryBackedExpansion && resource.relationships) {
+          // Strip `fieldName.N` sub-entries from query-backed fields
+          // before traversal: the host deserializer treats every
+          // per-item entry as a follow-able relationship and expects
+          // its target in `included[]`, so leaving them on the wire
+          // alongside an empty `included[]` produces orphan-link
+          // errors. The umbrella entry (`fieldName`) stays — it
+          // carries `links.search` and `data: [array of IDs]` for the
+          // host's per-URL hydration path.
+          for (let fieldName of Object.keys(resource.relationships)) {
+            let umbrella = resource.relationships[fieldName];
+            if (
+              !umbrella ||
+              Array.isArray(umbrella) ||
+              !umbrella.links?.search
+            ) {
+              continue;
+            }
+            for (let key of Object.keys(resource.relationships)) {
+              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
+                delete resource.relationships[key];
+              }
+            }
+          }
+        }
         let processed = new Set<string>();
 
         for (let entry of relationshipEntries(resource.relationships)) {
