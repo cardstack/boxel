@@ -460,21 +460,12 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
-    // Default 5 min covers cold-start latency on CI; override via
-    // BOXEL_TEST_RUNNER_TIMEOUT_MS for tooling that wants to fail
-    // fast (the manifest-minimization loop sets it to ~30s).
-    let runnerTimeoutMs = Number(
-      process.env.BOXEL_TEST_RUNNER_TIMEOUT_MS ?? 300_000,
-    );
-    if (!Number.isFinite(runnerTimeoutMs) || runnerTimeoutMs <= 0) {
-      runnerTimeoutMs = 300_000;
-    }
     await page.waitForFunction(
       () =>
         (window as unknown as { __qunitResults?: { runEnd: unknown } })
           .__qunitResults?.runEnd !== null,
       null,
-      { timeout: runnerTimeoutMs },
+      { timeout: 300_000 },
     );
 
     let qunitResults = (await page.evaluate(
