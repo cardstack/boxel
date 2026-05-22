@@ -440,33 +440,6 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
       });
     }
 
-    // Manifest capture (BOXEL_TEST_HARNESS_MANIFEST=/path/to/out.json):
-    // record every same-origin request to the test-page server that
-    // maps to a host/dist file. This is what `build-test-harness.ts`
-    // uses to slim `bundled-test-harness/` down to just the chunks
-    // chromium actually loads under a card test. Skip the realm mount
-    // prefixes (/workspace/, /base/, /skills/) and the root request —
-    // those are runtime-served and would be cruft in the manifest.
-    let realmMountPrefixes = new Set(
-      (options.realmMounts ?? []).map((m) => m.prefix),
-    );
-    let manifestPath = process.env.BOXEL_TEST_HARNESS_MANIFEST;
-    let manifestPaths = new Set<string>();
-    if (manifestPath) {
-      page.on('request', (req) => {
-        try {
-          let u = new URL(req.url());
-          if (u.origin !== testPageUrl) return;
-          if (u.pathname === '/') return;
-          let firstSeg = u.pathname.split('/')[1] ?? '';
-          if (realmMountPrefixes.has(firstSeg)) return;
-          manifestPaths.add(u.pathname);
-        } catch {
-          // ignore non-URL refs
-        }
-      });
-    }
-
     // Realm-server auth only applies in remote mode — the local module
     // mounts on this same server don't gate on tokens.
     if (!options.realmMounts) {
@@ -509,14 +482,6 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
         (window as unknown as { __qunitResults: QunitResults }).__qunitResults,
     )) as QunitResults;
 
-    if (manifestPath) {
-      let sorted = [...manifestPaths].sort();
-      let { writeFileSync } = await import('node:fs');
-      writeFileSync(manifestPath, JSON.stringify(sorted, null, 2));
-      process.stderr.write(
-        `[manifest] wrote ${sorted.length} paths to ${manifestPath}\n`,
-      );
-    }
     return { qunitResults, durationMs: Date.now() - start };
   } finally {
     if (browser) {

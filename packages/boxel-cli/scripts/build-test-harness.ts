@@ -4,88 +4,28 @@
  * install can run `boxel test` without the monorepo on disk
  * (CS-11164).
  *
- * What gets shipped:
+ * Copies the dev-mode host build wholesale, dropping only sourcemaps.
+ * Tried a manifest-driven slim cut (~27 MB instead of ~60 MB), but
+ * the manifest needed manual regen whenever the host's chunks
+ * re-hashed, and we don't want correctness to depend on human
+ * upkeep — see `feedback_no_manual_maintenance` in memory. The full
+ * dist is ~60 MB unpacked and ~15 MB on the wire; next to the
+ * 150 MB Playwright chromium install every `boxel test` user
+ * already needs, it's noise.
  *
- * - Only the files chromium actually fetches while running card tests,
- *   as listed in `scripts/test-harness-manifest.json`. The manifest was
- *   captured by running the existing test runner with the env var
- *   `BOXEL_TEST_HARNESS_MANIFEST=<path>` set (which records every
- *   request to the test-page server). Files referenced by the manifest
- *   but missing from `host/dist/` are skipped silently — they're
- *   typically routes that the live-test entry point doesn't navigate
- *   to.
- * - `tests/index.html` is always included via `ALWAYS_INCLUDE`
- *   because the CLI reads it directly off disk to build the QUnit
- *   page; without it `boxel test` errors before the manifest filter
- *   ever matters. Files listed in `ALWAYS_INCLUDE` are *required* —
- *   the build fails (exit 1) if any are missing from `host/dist/`.
- *   That's the early-warning for a production-mode host build, which
- *   strips test entries.
- *
- * What gets stripped:
- *
- * - `*.map` sourcemap files (no value to the headless runner; we
- *   refuse to copy any even if the manifest references one).
- * - Every chunk the manifest doesn't reference: the AI assistant,
- *   code-mode UI, monaco workers, cytoscape, katex, and most of the
- *   commands that card tests don't exercise. This is what gets the
- *   harness from ~60MB (full host dist minus sourcemaps) down to
- *   ~30MB.
- *
- * ## Regenerating the manifest
- *
- * When the host adds a dependency that card tests load at runtime,
- * the manifest goes stale and tests will 404 on the new chunk. To
- * refresh:
- *
- *     # 1. From the monorepo, rebuild the host and the cli:
- *     pnpm --filter @cardstack/host build
- *     pnpm --filter @cardstack/boxel-cli build
- *
- *     # 2. Capture a fresh manifest by running a representative card
- *     #    test with the env var set. Use a workspace that exercises
- *     #    `setupCardTest` + `renderCard` (the helper surface every
- *     #    card test depends on):
- *     BOXEL_TEST_HARNESS_MANIFEST=$PWD/scripts/test-harness-manifest.json \
- *       boxel test path/to/representative-workspace
- *
- *     # 3. Re-run `pnpm build`; the slim bundle now includes any new
- *     #    chunks the manifest captured.
- *
- * Don't add unrelated entries by hand — the manifest is generated, and
- * editing it manually risks drift between what the test runner actually
- * loads and what we ship.
- *
- * Run order: `pnpm --filter @cardstack/host build` first (produces
- * `host/dist/`), then this script copies only the manifest-referenced
- * files. The CI build script chains these together via the boxel-cli
- * `package.json`'s `build` script.
+ * Run order: requires `pnpm --filter @cardstack/host build` to have
+ * produced `packages/host/dist/` first. The CI publish workflow
+ * chains both; see `.github/workflows/boxel-cli-publish.yml`.
  */
 
-import {
-  copyFileSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 
 const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_PACKAGES = resolve(PACKAGE_ROOT, '..');
 
 const HOST_DIST = join(MONOREPO_PACKAGES, 'host', 'dist');
 const OUT_DIR = join(PACKAGE_ROOT, 'bundled-test-harness');
-const MANIFEST_FILE = join(
-  PACKAGE_ROOT,
-  'scripts',
-  'test-harness-manifest.json',
-);
-
-// Files the manifest can't capture but the CLI reads directly. Add
-// here, not to the manifest, when the CLI grows a new direct read.
-const ALWAYS_INCLUDE = ['/tests/index.html'];
 
 function dirSize(dir: string): number {
   let total = 0;
@@ -114,25 +54,15 @@ function dirSize(dir: string): number {
 
 function ensureHostDist(): void {
   try {
-    if (!statSync(HOST_DIST).isDirectory()) {
-      throw new Error('not a directory');
+    if (!statSync(join(HOST_DIST, 'tests', 'index.html')).isFile()) {
+      throw new Error('tests/index.html missing');
     }
   } catch {
     console.error(
-      `Missing host dist at ${HOST_DIST}. Run ` +
-        `\`pnpm --filter @cardstack/host build\` first, then re-run ` +
-        `this script.`,
-    );
-    process.exit(1);
-  }
-}
-
-function loadManifest(): string[] {
-  try {
-    return JSON.parse(readFileSync(MANIFEST_FILE, 'utf8')) as string[];
-  } catch (err) {
-    console.error(
-      `Failed to read ${MANIFEST_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+      `Missing host dev dist at ${HOST_DIST}.\n` +
+        '  - Run `pnpm --filter @cardstack/host build` first (dev mode).\n' +
+        '  - Production mode (`pnpm build:production`) strips test entries; ' +
+        "don't use it as input here.",
     );
     process.exit(1);
   }
@@ -145,78 +75,19 @@ function main(): void {
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(OUT_DIR, { recursive: true });
 
-  let manifest = loadManifest();
-  let entries = new Set<string>([...manifest, ...ALWAYS_INCLUDE]);
-  let alwaysIncludeSet = new Set<string>(ALWAYS_INCLUDE);
-
-  let copied = 0;
-  let skipped: string[] = [];
-  let missingRequired: string[] = [];
-
-  for (let entry of entries) {
-    // Manifest entries are URL paths captured from the test runner.
-    // The CLI's local-mode realm mounts (`/workspace/`, `/base/`,
-    // `/skills/`) and the root request (`/`) are served at runtime,
-    // not from host/dist — skip those.
-    if (
-      entry === '/' ||
-      entry.startsWith('/workspace/') ||
-      entry.startsWith('/base/') ||
-      entry.startsWith('/skills/')
-    ) {
-      continue;
-    }
-    // Sourcemaps add ~half the bundle size and the headless runner
-    // never reads them. Don't ship them even if a stale manifest
-    // captured them somehow.
-    if (entry.endsWith('.map')) {
-      continue;
-    }
-    let rel = entry.replace(/^\//, '');
-    let src = join(HOST_DIST, rel);
-    let dst = join(OUT_DIR, rel);
-    try {
-      let st = statSync(src);
-      if (!st.isFile()) {
-        if (alwaysIncludeSet.has(entry)) missingRequired.push(entry);
-        else skipped.push(entry);
-        continue;
-      }
-    } catch {
-      if (alwaysIncludeSet.has(entry)) missingRequired.push(entry);
-      else skipped.push(entry);
-      continue;
-    }
-    mkdirSync(dirname(dst), { recursive: true });
-    copyFileSync(src, dst);
-    copied++;
-  }
-
-  // Bail loudly if a file in `ALWAYS_INCLUDE` (CLI-direct reads like
-  // `tests/index.html`) isn't on disk — that's almost always a
-  // production-mode host build (which strips test entries) and would
-  // silently ship a broken harness. The manifest-skipped list above
-  // is allowed; those are best-effort chunks the live-test bundle
-  // might or might not reach.
-  if (missingRequired.length > 0) {
-    console.error(
-      `Refusing to publish a bundled-test-harness missing required ` +
-        `files: ${missingRequired.join(', ')}. ` +
-        'Did `pnpm --filter @cardstack/host build` (dev mode) run ' +
-        'before this script? Production builds strip test entries.',
-    );
-    process.exit(1);
-  }
+  // Single recursive copy; the only thing we filter out is sourcemaps
+  // (the headless test runner never reads them, and they roughly
+  // double the size).
+  cpSync(HOST_DIST, OUT_DIR, {
+    recursive: true,
+    filter: (src) => !basename(src).endsWith('.map'),
+  });
 
   let size = dirSize(OUT_DIR);
   console.log(
-    `Bundled-test-harness: ${copied} files, ${(size / 1024 / 1024).toFixed(2)} MB`,
+    `Bundled-test-harness: ${(size / 1024 / 1024).toFixed(2)} MB ` +
+      `(host dist minus sourcemaps)`,
   );
-  if (skipped.length > 0) {
-    console.log(
-      `  ${skipped.length} manifest entries skipped (not present in host/dist).`,
-    );
-  }
 }
 
 main();
