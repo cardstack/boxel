@@ -34,6 +34,14 @@ import { initSharedState } from './shared-state';
 interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
+  // When the parent doc carries `relationships.{field}.data` IDs but
+  // no resolved cards in `included` (the server's
+  // skipQueryBackedExpansion path), captureQueryFieldSeedData stashes
+  // the IDs here. The SearchResource consumes them in prerender mode
+  // to load each card by URL instead of running a live re-query —
+  // turning the cascade of `_federated-search` QUERY calls into a
+  // batch of stable per-card GETs.
+  seedCardURLs?: string[];
   seedRealms?: string[];
   seedErrors?: Array<{
     realm: string;
@@ -147,6 +155,7 @@ export function ensureQueryFieldSearchResource(
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
+            cardURLs: fieldState?.seedCardURLs,
           }
         : undefined,
     },
@@ -346,6 +355,26 @@ export function captureQueryFieldSeedData(
     (Array.isArray(relationship?.data)
       ? relationship.data.length > 0
       : Boolean(relationship?.data));
+  // Capture the relationship's serialized IDs as a fallback the
+  // SearchResource can use when the parent doc didn't include the
+  // resolved cards — the prerender-mode server skip leaves
+  // `relationship.data` populated but `included` empty, so the IDs
+  // here are still authoritative even when seedRecords is empty.
+  if (Array.isArray(relationship?.data)) {
+    fieldState.seedCardURLs = relationship.data
+      .map((entry) => {
+        let id = (entry as { id?: unknown })?.id;
+        return typeof id === 'string' ? id : undefined;
+      })
+      .filter((id): id is string => Boolean(id));
+  } else if (
+    relationship?.data &&
+    typeof (relationship.data as { id?: unknown }).id === 'string'
+  ) {
+    fieldState.seedCardURLs = [(relationship.data as { id: string }).id];
+  } else {
+    fieldState.seedCardURLs = [];
+  }
   // Empty query-backed relationships arriving on search result resources are
   // not guaranteed to be fully resolved (for example nested query fields on
   // each result). In that case we should still run the client-side query

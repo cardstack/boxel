@@ -3,6 +3,7 @@ import { getOwner, setOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import type {
@@ -86,13 +87,17 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
     registerBoxelTransitionTo(this.router, this);
     (globalThis as any).__boxelRenderContext = true;
     registerDestructor(this, () => {
-      (globalThis as any).__boxelRenderContext = undefined;
+      if (isTesting()) {
+        (globalThis as any).__boxelRenderContext = undefined;
+      }
     });
     this.realm.restoreSessionsFromStorage();
   }
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
   }
 
   model(params: { request_id: string; nonce: string }): CommandRunnerModel {

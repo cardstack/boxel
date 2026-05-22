@@ -56,6 +56,13 @@ export default function handleSearch(opts?: {
     }
 
     let cacheOnlyDefinitions = ctxt.get(DURING_PRERENDER_HEADER).length > 0;
+    // Inside a prerender, leave `relationships.{field}.data` populated
+    // for query-backed `linksTo` / `linksToMany` but skip transitive
+    // expansion into `included[]`. The host's prerender-mode getter
+    // resolves the listed IDs from its seed and skips the live
+    // re-query, so the eager closure is a wasted round-trip in this
+    // path. Same gating as `cacheOnlyDefinitions`.
+    let skipQueryBackedExpansion = cacheOnlyDefinitions;
     // The host's `_federated-search` fetch wrapper stamps
     // `x-boxel-job-priority` while rendering inside a prerender tab.
     // Threading it into search opts here lets `CachingDefinitionLookup`
@@ -67,8 +74,13 @@ export default function handleSearch(opts?: {
     let jobPriority = sanitizeJobPriorityHeader(
       ctxt.get(PRERENDER_JOB_PRIORITY_HEADER),
     );
-    let searchOpts: { cacheOnlyDefinitions?: true; priority?: number } = {};
+    let searchOpts: {
+      cacheOnlyDefinitions?: true;
+      skipQueryBackedExpansion?: true;
+      priority?: number;
+    } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
+    if (skipQueryBackedExpansion) searchOpts.skipQueryBackedExpansion = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;

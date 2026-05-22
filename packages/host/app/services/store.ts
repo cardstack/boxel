@@ -131,7 +131,7 @@ const storeLogger = logger('store');
 
 // Companion to `jobIdHeader()` (re-exported from
 // `../lib/prerender-fetch-headers`). Policy is two-state, gated by
-// `__boxelDuringPrerender`, not by the presence of
+// `__boxelRenderContext`, not by the presence of
 // `__boxelJobPriority`:
 //
 // 1. Inside a prerender tab: forward the worker job's priority as-is.
@@ -159,7 +159,7 @@ const storeLogger = logger('store');
 // This helper covers the host SPA only.
 //
 // Both globals are checked with `=== true` / strict-number rather
-// than truthy coercion: `__boxelDuringPrerender` is typed as a
+// than truthy coercion: `__boxelRenderContext` is typed as a
 // boolean and a stray truthy string from a future code path
 // shouldn't silently flip the policy from "user-priority" to
 // "preserve 0."
@@ -188,13 +188,13 @@ export function resolveOutboundJobPriority({
 
 function jobPriorityHeader(): Record<string, string> {
   let g = globalThis as unknown as {
-    __boxelDuringPrerender?: boolean;
+    __boxelRenderContext?: boolean;
     __boxelJobPriority?: number;
   };
   return {
     [X_BOXEL_JOB_PRIORITY_HEADER]: String(
       resolveOutboundJobPriority({
-        duringPrerender: g.__boxelDuringPrerender,
+        duringPrerender: g.__boxelRenderContext,
         jobPriority: g.__boxelJobPriority,
       }),
     ),
@@ -1181,6 +1181,7 @@ export default class StoreService extends Service implements StoreInterface {
           message: string;
           status?: number;
         }>;
+        cardURLs?: string[];
       };
     },
   ): SearchResource<T> {
