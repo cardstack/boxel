@@ -54,6 +54,49 @@ const fieldOverrides = initSharedState(
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
 
+// Pass-scoped computed-field memo. When non-null, `getter` consults a
+// per-instance Map before invoking `computeVia` and stores the result for
+// the duration of the synchronous traversal that opened the pass (see
+// `beginComputePass`). Off-pass reads pay only a single null check on this
+// module local and follow the original path — the JIT branch-predicts the
+// off-pass case in the host-UI hot loop.
+let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
+// Counters snapshotted by the render/meta route to populate
+// `boxel_index.timing_diagnostics`. They are unconditional integer
+// increments inside `getter` — cheap enough to keep on in production, but
+// only meaningful between `beginComputePass`/`endComputePass`.
+let computedCallCount = 0;
+let computedCacheHitCount = 0;
+
+export interface ComputePassSnapshot {
+  calls: number;
+  cacheHits: number;
+}
+
+// Open a synchronous compute-memo pass. Callers MUST pair this with
+// `endComputePass()` and must not await between the two — the WeakMap
+// would otherwise be observable across reactive cycles. Intended for
+// pure traversals like `serializeCard` + `searchDoc` inside one
+// `render.meta` capture.
+export function beginComputePass(): void {
+  passComputeMemo = new WeakMap();
+  computedCallCount = 0;
+  computedCacheHitCount = 0;
+}
+
+// Close the pass and return the per-traversal counter delta. The memo
+// is dropped so subsequent `getter` calls run `computeVia` fresh.
+export function endComputePass(): ComputePassSnapshot {
+  passComputeMemo = null;
+  let snapshot = {
+    calls: computedCallCount,
+    cacheHits: computedCacheHitCount,
+  };
+  computedCallCount = 0;
+  computedCacheHitCount = 0;
+  return snapshot;
+}
+
 export function getter<CardT extends BaseDefConstructor>(
   instance: BaseDef,
   field: Field<CardT>,
@@ -63,10 +106,32 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
+    // Fast path when no pass is open: skip the counter + memo entirely
+    // so production reads pay only one branch on the module-local null
+    // check. JIT branch-predicts this and the original behaviour is
+    // unchanged.
+    if (passComputeMemo === null) {
+      let value = field.computeVia.bind(instance)();
+      if (value === undefined) {
+        value = field.emptyValue(instance);
+      }
+      return value as BaseInstanceType<CardT>;
+    }
+    let perInstance = passComputeMemo.get(instance);
+    if (perInstance && perInstance.has(field.name)) {
+      computedCacheHitCount++;
+      return perInstance.get(field.name);
+    }
+    computedCallCount++;
     let value = field.computeVia.bind(instance)();
     if (value === undefined) {
       value = field.emptyValue(instance);
     }
+    if (!perInstance) {
+      perInstance = new Map();
+      passComputeMemo.set(instance, perInstance);
+    }
+    perInstance.set(field.name, value);
     return value as BaseInstanceType<CardT>;
   } else {
     if (deserialized.has(field.name)) {

@@ -1128,6 +1128,17 @@ export class RenderRunner {
           }
         }
 
+        // Two render.meta calls. The first extracts `meta.types` for
+        // the ancestor renders below; the second captures the final
+        // serialized + searchDoc payload. The two are not duplicate
+        // work: the ancestor renders that run in between cause
+        // fitted/embedded format reads to load + mark linksTo /
+        // linksToMany fields as "used", which the final renderMeta's
+        // queryableValue then includes in the search doc. Collapsing
+        // these into one call breaks the isUsed-via-non-isolated-render
+        // contract that
+        // `non-isolated formats render linked fields and those links appear in search doc`
+        // covers.
         if (!cardShortCircuit) {
           let metaForTypesResult = await runTimedStep<PrerenderMeta>(
             'visit card render.meta (types)',

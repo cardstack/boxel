@@ -222,6 +222,14 @@ export function decorateRenderErrorsWithTimings(
     let sub = r[key];
     if (sub && typeof sub === 'object') {
       lift((sub as { error?: unknown }).error);
+      // Card sub-responses also carry a success-path host diagnostics
+      // block — captured by render.meta and spread onto the card
+      // response as `diagnostics`. Lift the same way as error-path
+      // diagnostics so the computed-field counters reach the indexer's
+      // `boxel_index.timing_diagnostics` column.
+      if (key === 'card') {
+        lift(sub);
+      }
     }
   }
   let { affinitySnapshot, priority, tabReused } = meta;

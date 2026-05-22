@@ -167,6 +167,25 @@ WHERE timing_diagnostics->>'renderElapsedMs' IS NOT NULL
 GROUP BY 1
 ORDER BY p95_ms DESC NULLS LAST
 LIMIT 20;
+
+-- Rows where the render.meta computed-field traversal dominates the
+-- render budget. `computedCalls` + the host-side `searchDocMs` /
+-- `serializeMs` are emitted by the host route per row. Use these to
+-- find aggregate-style cards that are eating their render budget on
+-- compute work rather than data loads or template stalls.
+SELECT
+  url,
+  to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000) AS indexed_at,
+  (timing_diagnostics->>'computedCalls')::int                     AS calls,
+  (timing_diagnostics->>'computedCacheHits')::int                 AS cache_hits,
+  (timing_diagnostics->>'serializeMs')::numeric                   AS serialize_ms,
+  (timing_diagnostics->>'searchDocMs')::numeric                   AS search_doc_ms,
+  (timing_diagnostics->>'renderElapsedMs')::int                   AS render_ms
+FROM boxel_index
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
+  AND timing_diagnostics->>'computedCalls' IS NOT NULL
+ORDER BY (timing_diagnostics->>'computedCalls')::int DESC NULLS LAST
+LIMIT 20;
 ```
 
 ## Mode C — a worker job is stuck or got rejected
@@ -735,7 +754,30 @@ WHERE timing_diagnostics->>'requestId' = '<request-id>';
   ],
   "docsInFlight": 3,             // legacy count, kept for rollback safety
   "capturedDom": "<section data-prerender>…</section>",
-  "blockedTimerSummary": "Timers blocked during prerender: …"
+  "blockedTimerSummary": "Timers blocked during prerender: …",
+  "computedCalls": 187,          // distinct `computeVia` invocations during this row's
+                                 // render.meta traversal (serializeCard + searchDoc combined).
+                                 // Host-emitted; pass-scoped memo elides repeated reads of
+                                 // the same `(instance, fieldName)` so this number reflects
+                                 // distinct compute work, not total field-access pressure.
+                                 // Absent on rows produced by host builds before CS-11208.
+  "computedCacheHits": 374,      // repeated reads of the same `(instance, fieldName)`
+                                 // that hit the pass-scoped memo. `computedCalls +
+                                 // computedCacheHits` is the total computed-read pressure
+                                 // of the render.meta pass; the ratio tells you how much
+                                 // duplicate work the memo elided. A high `cacheHits`
+                                 // count relative to `calls` is normal for cards that
+                                 // serialize + searchDoc the same field (every contains /
+                                 // contains-many / links-to field does this).
+  "serializeMs": 42.1,           // host-side wall-clock of `serializeCard(instance, {
+                                 // includeComputeds: true })` for this card.
+  "searchDocMs": 18.3            // host-side wall-clock of `searchDoc(instance)` for
+                                 // this card. Sum with `serializeMs` to get the host's
+                                 // contribution to `renderElapsedMs`. Pairs with
+                                 // `computedCalls` so you can normalize: a card with
+                                 // `computedCalls=500, searchDocMs=80` is ~6 calls/ms
+                                 // — a sign of a hot compute that may be worth a
+                                 // dependency-aware skip.
 }
 ```
 
@@ -752,6 +794,7 @@ All ms values are server-observed walltime.
 - `recentQueryLoads[*].ms` is the wall time a completed query-field/search load ultimately took. The store keeps a bounded top-N so even queries that resolved just before the timer fired stay visible. Compare with `renderElapsedMs` to see which fraction of the render budget went to query work.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
+- `computedCalls` + `computedCacheHits` together represent total compute pressure on the render.meta pass. The split tells you how much duplicate work the pass-scoped memo absorbed — a 1:0 ratio means every field was read once, a 1:5 ratio means the cards re-read each computed five extra times (typical for cards where many sibling fields share a computed input). `searchDocMs` + `serializeMs` are the host's contribution to `renderElapsedMs`; comparing `computedCalls / (searchDocMs + serializeMs)` across cards finds the slow-per-call computes that are worth profiling.
 
 Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 
@@ -774,6 +817,7 @@ Walk the fields top-down. The _first_ positive signal wins; stop there.
 | `renderStage` = `waiting-stability` with empty in-flight arrays                                                                                                                                                                                       | **Render stall**                                                             | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays                                                                                                                                                               | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `blockedTimerSummary` populated                                                                                                                                                                                                                       | **Supplementary**                                                            | Tells you which timer-driven code is fighting the render. Not a root cause on its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `computedCalls` large (e.g. > 1000) AND `searchDocMs + serializeMs` ≈ `renderElapsedMs`                                                                                                                                                               | **Computed-field hot path**                                                  | The render.meta traversal itself is the bottleneck, not data loads or browser stalls. Look at `computedCalls / (searchDocMs + serializeMs)` — > ~5 calls/ms is fast, < ~1 call/ms means a few slow `computeVia` functions dominate. Inspect the card class for aggregate computeds that scan a `linksToMany` relation on every read (Portfolio-over-Policies style) and consider hoisting the scan into a shared rollup or adding `computeDeps` so the field can be skipped when its inputs don't change. The pass-scoped memo already eliminates duplicate reads in one traversal (visible in `computedCacheHits`); further wins require structural changes to the card.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### Special cases
 
@@ -935,7 +979,7 @@ Slot-by-slot:
   | `realms-staging.stack.cards`            | `https://boxel-host-staging.stack.cards`                |
   | `realms.stack.cards`                    | `https://boxel-host.stack.cards`                        |
   | `realm-server.<slug>.localhost`         | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
-  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                 |
+  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                |
 
   If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
 
