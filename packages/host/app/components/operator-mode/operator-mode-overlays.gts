@@ -44,8 +44,10 @@ import {
 import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 
 import type {
+  BaseDef,
   CardCrudFunctions,
   CardDef,
+  FileDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
 
@@ -109,7 +111,10 @@ export default class OperatorModeOverlays extends Overlays {
                 {{on 'mouseenter' this.cancelHoverClear}}
                 {{on 'mouseleave' this.scheduleHoverClear}}
               >
-                {{#let (this.getCardTypeIcon cardDefOrId) as |TypeIcon|}}
+                {{#let
+                  (this.getCardTypeIcon cardDefOrId renderedCard)
+                  as |TypeIcon|
+                }}
                   {{#if TypeIcon}}
                     <TypeIcon class='adorn-label-icon' />
                   {{/if}}
@@ -462,12 +467,20 @@ export default class OperatorModeOverlays extends Overlays {
     return renderedCard.stackItem.format as Format;
   }
 
-  private peekCardDef(cardDefOrId: CardDefOrId): CardDef | undefined {
+  private peekInstance(
+    cardDefOrId: CardDefOrId,
+    renderedCard?: StackItemRenderedCardForOverlayActions,
+  ): BaseDef | undefined {
     if (typeof cardDefOrId !== 'string') {
-      return cardDefOrId;
+      return cardDefOrId as BaseDef;
     }
-    let instance = this.store.peek<CardDef>(cardDefOrId);
-    return instance && !('error' in instance) ? instance : undefined;
+    let isFile = renderedCard != null && this.isFileMetaTarget(renderedCard);
+    let instance = isFile
+      ? this.store.peek<FileDef>(cardDefOrId, { type: 'file-meta' })
+      : this.store.peek<CardDef>(cardDefOrId);
+    return instance && !('error' in instance)
+      ? (instance as BaseDef)
+      : undefined;
   }
 
   @action
@@ -475,26 +488,32 @@ export default class OperatorModeOverlays extends Overlays {
     cardDefOrId: CardDefOrId,
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): string {
-    let card = this.peekCardDef(cardDefOrId);
-    if (card) {
-      return cardTypeDisplayName(card);
+    let instance = this.peekInstance(cardDefOrId, renderedCard);
+    if (instance) {
+      return cardTypeDisplayName(instance);
     }
-    // Prerendered cards in the cards-grid don't have their CardDef loaded in
+    // Prerendered rows in the cards-grid don't have their instance loaded in
     // the store yet — fall back to the type name embedded on the rendered
     // element by prerendered-card-search.
     let domName = renderedCard.element?.getAttribute(
       'data-card-type-display-name',
     );
-    return domName ?? 'Card';
+    if (domName) {
+      return domName;
+    }
+    return this.isFileMetaTarget(renderedCard) ? 'File' : 'Card';
   }
 
   @action
-  private getCardTypeIcon(cardDefOrId: CardDefOrId) {
-    let card = this.peekCardDef(cardDefOrId);
-    if (!card) {
+  private getCardTypeIcon(
+    cardDefOrId: CardDefOrId,
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ) {
+    let instance = this.peekInstance(cardDefOrId, renderedCard);
+    if (!instance) {
       return undefined;
     }
-    return cardTypeIcon(card);
+    return cardTypeIcon(instance);
   }
 
   @action
@@ -503,10 +522,11 @@ export default class OperatorModeOverlays extends Overlays {
     renderedCard: StackItemRenderedCardForOverlayActions,
   ) {
     const isField = this.isField(renderedCard);
+    const isFile = this.isFileMetaTarget(renderedCard);
     const cardId = this.getCardId(cardDefOrId);
 
-    const viewCardItem: MenuItemOptions = {
-      label: 'View card',
+    const viewItem: MenuItemOptions = {
+      label: isFile ? 'View file' : 'View card',
       action: () => this.openOrSelectCard(cardDefOrId),
       icon: Eye,
     };
@@ -528,19 +548,21 @@ export default class OperatorModeOverlays extends Overlays {
         }
       : undefined;
 
+    const copyUrlItem: MenuItemOptions = {
+      label: isFile ? 'Copy File URL' : 'Copy Card URL',
+      action: () => copyCardURLToClipboard(cardId),
+      icon: IconLink,
+    };
+
     // When cardDefOrId is a string (e.g., prerendered cards in the grid),
     // we can't call [getMenuItems] on it, so construct default menu items
     if (typeof cardDefOrId === 'string') {
       const menuItems: MenuItemOptions[] = [];
-      menuItems.push(viewCardItem);
+      menuItems.push(viewItem);
       if (editItem) {
         menuItems.push(editItem);
       }
-      menuItems.push({
-        label: 'Copy Card URL',
-        action: () => copyCardURLToClipboard(cardId),
-        icon: IconLink,
-      });
+      menuItems.push(copyUrlItem);
       if (!isField && this.realm.canWrite(cardId)) {
         menuItems.push({
           label: 'Delete',
@@ -573,7 +595,7 @@ export default class OperatorModeOverlays extends Overlays {
     if (editItem) {
       leadingItems.push(editItem);
     }
-    leadingItems.push(viewCardItem);
+    leadingItems.push(viewItem);
 
     return toMenuItems([...leadingItems, ...visibleItems]);
   }
