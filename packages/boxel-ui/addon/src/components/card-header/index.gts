@@ -19,10 +19,6 @@ import RealmIcon, { type RealmDisplayInfo } from '../realm-icon/index.gts';
 import Tooltip from '../tooltip/index.gts';
 
 export interface CardHeaderUtilityMenu {
-  // Optional non-interactive header rendered above the menu items inside
-  // the dropdown panel — used by the operator-mode multi-select chip to
-  // echo the selection count ("N Selected") with teal styling.
-  headerText?: string;
   menuItems: (MenuItem | MenuDivider)[];
   triggerText: string;
 }
@@ -163,29 +159,6 @@ export default class CardHeader extends Component<Signature> {
                     </button>
                   </:trigger>
                   <:content as |dd|>
-                    {{#if @utilityMenu.headerText}}
-                      <div
-                        class='utility-menu-header'
-                        data-test-utility-menu-header
-                      >
-                        <svg
-                          class='utility-menu-header-icon'
-                          viewBox='0 0 14 14'
-                          fill='none'
-                          aria-hidden='true'
-                        >
-                          <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
-                          <path
-                            d='M3.5 7.5L5.5 9.5L10.5 4.5'
-                            stroke='var(--boxel-teal)'
-                            stroke-width='1.5'
-                            stroke-linecap='round'
-                            stroke-linejoin='round'
-                          />
-                        </svg>
-                        {{@utilityMenu.headerText}}
-                      </div>
-                    {{/if}}
                     <Menu
                       @items={{@utilityMenu.menuItems}}
                       @closeMenu={{dd.close}}
@@ -488,30 +461,6 @@ export default class CardHeader extends Component<Signature> {
           margin-left: 0;
           vertical-align: middle;
         }
-        .utility-menu-header {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xxs);
-          padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-          margin: calc(-1 * var(--boxel-sp-5xs) + 1px)
-            calc(-1 * var(--boxel-sp-5xs) + 1px) var(--boxel-sp-xxxs);
-          min-height: 32px;
-          box-sizing: border-box;
-          background: var(--boxel-teal);
-          color: var(--boxel-dark);
-          font: 700 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp-xs);
-          border-top-left-radius: var(--boxel-border-radius-sm);
-          border-top-right-radius: var(--boxel-border-radius-sm);
-          cursor: default;
-          user-select: none;
-        }
-        .utility-menu-header-icon {
-          width: 14px;
-          height: 14px;
-          flex-shrink: 0;
-        }
-
         @container card-header (min-width: 30rem) {
           .card-type-display-name {
             padding-inline: 1.875rem;

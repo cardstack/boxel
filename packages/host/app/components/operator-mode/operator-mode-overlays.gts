@@ -284,8 +284,8 @@ export default class OperatorModeOverlays extends Overlays {
       /* Selection indicator — rounded square chip at the bottom-right corner. */
       .adorn-select-button {
         position: absolute;
-        bottom: 2px;
-        right: 4px;
+        bottom: 10px;
+        right: 10px;
         width: 20px;
         height: 20px;
         padding: 3px;

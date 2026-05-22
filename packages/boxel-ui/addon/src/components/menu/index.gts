@@ -79,9 +79,11 @@ export default class Menu extends Component<Signature> {
                   boxel-menu__item--has-icon=(if menuItem.icon true false)
                   boxel-menu__item--checked=menuItem.checked
                   boxel-menu__item--disabled=menuItem.disabled
+                  boxel-menu__item--header=menuItem.header
                 }}
                 data-test-boxel-menu-item
                 data-test-boxel-menu-item-selected={{menuItem.checked}}
+                data-test-boxel-menu-item-header={{menuItem.header}}
               >
                 {{! template-lint-disable require-context-role }}
                 <button
@@ -224,6 +226,23 @@ export default class Menu extends Component<Signature> {
         .boxel-menu__item--disabled.boxel-menu__item:hover {
           background-color: initial;
           opacity: 0.4;
+        }
+
+        /* Header item — inert, teal background. Used as a contextual title
+           inside the menu (e.g. "N Selected" for the operator-mode multi-
+           select chip). */
+        .boxel-menu__item--header,
+        .boxel-menu__item--header.boxel-menu__item:hover {
+          background-color: var(--boxel-teal);
+          color: var(--boxel-dark);
+          cursor: default;
+        }
+        .boxel-menu__item--header .boxel-menu__item__content {
+          pointer-events: none;
+          font-weight: 700;
+        }
+        .boxel-menu__item--header .check-icon {
+          display: none;
         }
 
         .boxel-menu__separator {
