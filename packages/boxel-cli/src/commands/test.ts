@@ -1,7 +1,8 @@
 import type { Command } from 'commander';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
-import { join, normalize, resolve } from 'node:path';
+import { dirname, join, normalize, resolve } from 'node:path';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -17,10 +18,6 @@ import { listFiles } from './file/list';
 import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
-import {
-  describeSource,
-  resolveHostTestHarness,
-} from '../lib/host-test-harness-fetcher';
 
 // `@playwright/test` ships as a runtime dependency (it has to, since
 // `boxel test` drives chromium) but it's marked external in our
@@ -55,13 +52,16 @@ async function loadChromium(): Promise<ChromiumApi> {
  * `runTestsInMemory` path) during CS-11149 so the same engine is
  * reachable from a subscription-billed Claude Code session via Bash.
  *
- * The host test harness is resolved at runtime by
- * `resolveHostTestHarness` (see `../lib/host-test-harness-fetcher.ts`):
- * monorepo dev uses the sibling `packages/host/dist/` directly,
- * published-install users download the pinned harness from a GH
- * release on first `boxel test` and cache it under
- * `~/.cache/boxel-cli/host-test-harness/<version>/`. Override with
- * `--host-dist-dir` or `BOXEL_TEST_HARNESS_DIR`.
+ * The host's compiled `dist/` (test page + bundles + assets) comes
+ * from one of three places, resolved by `resolveHostDistDir` below:
+ *
+ *   1. `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` env override.
+ *   2. `bundled-test-harness/` shipped with the CLI, populated at
+ *      release time by `scripts/build-test-harness.ts` from
+ *      `packages/host/dist/`. This is what makes `boxel test` work
+ *      outside the monorepo on a published install (CS-11164).
+ *   3. Sibling `packages/host/dist/` for in-monorepo dev when
+ *      `bundled-test-harness/` hasn't been built.
  *
  * Unlike the factory's `executeTestRunFromRealm`, this command does
  * NOT create or update a TestRun card — it returns in-memory results
@@ -126,10 +126,6 @@ export interface RunTestsOptions {
   hostAppUrl?: string;
   /** Path to the host app's dist directory; auto-discovered otherwise. */
   hostDistDir?: string;
-  /** Force the harness fetcher to re-download. */
-  refreshHarness?: boolean;
-  /** Sideload a harness tarball from disk instead of downloading. */
-  offlineTarball?: string;
   /** Stream browser console output to stderr for debugging. */
   debug?: boolean;
   profileManager?: ProfileManager;
@@ -194,8 +190,6 @@ export async function runTestsForRealm(
       targetRealm: normalizedRealmUrl,
       hostAppUrl,
       hostDistDir: options?.hostDistDir,
-      refreshHarness: options?.refreshHarness,
-      offlineTarball: options?.offlineTarball,
       debug: options?.debug,
     });
 
@@ -227,10 +221,6 @@ export async function runTestsForRealm(
 export interface RunTestsLocallyOptions {
   workspaceDir: string;
   hostDistDir?: string;
-  /** Force the harness fetcher to re-download. */
-  refreshHarness?: boolean;
-  /** Sideload a harness tarball from disk instead of downloading. */
-  offlineTarball?: string;
   debug?: boolean;
   /** Override the bundled-realms root for tests; defaults to the CLI's vendored copy. */
   bundledRealmsDir?: string;
@@ -269,8 +259,6 @@ export async function runTestsLocally(
       targetRealm: '__local__:workspace',
       hostAppUrl: '__local__:',
       hostDistDir: options.hostDistDir,
-      refreshHarness: options.refreshHarness,
-      offlineTarball: options.offlineTarball,
       debug: options.debug,
       realmMounts: [
         { prefix: 'workspace', root: workspaceDir },
@@ -391,10 +379,6 @@ interface QunitRunnerOptions {
    */
   realmMounts?: RealmMount[];
   hostDistDir?: string;
-  /** Force the fetcher to re-download the pinned harness. */
-  refreshHarness?: boolean;
-  /** Sideload a harness tarball from disk instead of downloading. */
-  offlineTarball?: string;
   debug?: boolean;
 }
 
@@ -407,24 +391,11 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
   let testPageServer: Server | undefined;
 
   try {
-    let resolved = await resolveHostTestHarness({
-      ...(options.hostDistDir ? { hostDistDir: options.hostDistDir } : {}),
-      ...(options.refreshHarness ? { refresh: true } : {}),
-      ...(options.offlineTarball
-        ? { offlineTarball: options.offlineTarball }
-        : {}),
-    });
-    let hostDistDir = resolved.path;
-
-    if (options.debug) {
-      process.stderr.write(
-        `[harness] using ${describeSource(resolved.source)} (${hostDistDir})\n`,
-      );
-    }
+    let hostDistDir = options.hostDistDir ?? resolveHostDistDir();
 
     if (!fileExists(join(hostDistDir, 'tests', 'index.html'))) {
       throw new Error(
-        `Host test harness at ${hostDistDir} is incomplete — missing tests/index.html.`,
+        `Host app dist not found at ${hostDistDir}. Build the host app (e.g., \`pnpm --filter @cardstack/host build\`) or set TEST_HARNESS_HOST_DIST_PACKAGE_DIR.`,
       );
     }
 
@@ -913,7 +884,7 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Local helpers
+// Host dist discovery — inlined from @cardstack/realm-test-harness
 // ---------------------------------------------------------------------------
 
 function fileExists(path: string): boolean {
@@ -922,6 +893,89 @@ function fileExists(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Locate the host's compiled `dist/` that QUnit + the test page run
+ * against. Three sources, tried in this order (CS-11164):
+ *
+ *   1. `TEST_HARNESS_HOST_DIST_PACKAGE_DIR` env override (lets devs
+ *      point at any dist on disk — historically used for testing).
+ *   2. `bundled-test-harness/` shipped alongside the CLI by
+ *      `scripts/build-test-harness.ts` at release time. This is what
+ *      a published `@cardstack/boxel-cli` install has; it makes
+ *      `boxel test` work outside the monorepo.
+ *   3. Sibling `packages/host/dist/` (in-monorepo dev, when
+ *      `bundled-test-harness/` hasn't been built — e.g. running
+ *      `pnpm start` on boxel-cli before any release-mode build).
+ */
+function resolveHostDistDir(): string {
+  if (process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR) {
+    return join(
+      resolve(process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR),
+      'dist',
+    );
+  }
+  let cliRoot = findBoxelCliRoot(__dirname);
+  let bundled = join(cliRoot, 'bundled-test-harness');
+  if (fileExists(join(bundled, 'tests', 'index.html'))) {
+    return bundled;
+  }
+  let monorepoFallback = findHostDistPackageDir();
+  if (monorepoFallback) {
+    return join(monorepoFallback, 'dist');
+  }
+  // Last resort: the sibling `packages/host/dist/` even if its
+  // `tests/index.html` is missing (the caller will surface the
+  // "host dist not found" error with this path in the message).
+  return join(resolve(cliRoot, '..'), 'host', 'dist');
+}
+
+function findHostDistPackageDir(): string | undefined {
+  let packageRoot = findBoxelCliRoot(__dirname);
+  let packagesDir = resolve(packageRoot, '..');
+  let workspaceRoot = resolve(packagesDir, '..');
+  let hostDir = join(packagesDir, 'host');
+
+  let rootRepoCheckoutDir = findRootRepoCheckoutDir(workspaceRoot);
+  let rootRepoHostDir =
+    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
+      ? resolve(rootRepoCheckoutDir, 'packages', 'host')
+      : undefined;
+
+  let candidates = [
+    process.env.TEST_HARNESS_HOST_DIST_PACKAGE_DIR,
+    hostDir,
+    rootRepoHostDir,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => resolve(value));
+
+  let seen = new Set<string>();
+  for (let candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    if (fileExists(join(candidate, 'dist', 'index.html'))) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function findRootRepoCheckoutDir(workspaceRoot: string): string | undefined {
+  let result = spawnSync(
+    'git',
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    },
+  );
+  if (result.status !== 0) return undefined;
+  let commonDir = result.stdout.trim();
+  if (!commonDir.endsWith(`${join('.git')}`)) return undefined;
+  return dirname(commonDir);
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,8 +1066,6 @@ interface TestCliOptions {
   realm?: string;
   hostAppUrl?: string;
   hostDistDir?: string;
-  refreshHarness?: boolean;
-  offlineTarball?: string;
   debug?: boolean;
   json?: boolean;
 }
@@ -1038,39 +1090,25 @@ export function registerTestCommand(program: Command): void {
     )
     .option(
       '--host-dist-dir <path>',
-      'Override the host app dist directory used to build the test page. Bypasses the test-harness fetcher.',
-    )
-    .option(
-      '--refresh-harness',
-      "Force re-download of the pinned host test harness, even if it's cached.",
-    )
-    .option(
-      '--offline-tarball <path>',
-      'Sideload a harness tarball from disk instead of downloading. Useful for offline first-run.',
+      'Override the host app dist directory used to build the test page.',
     )
     .option('--debug', 'Stream browser console output to stderr')
     .option('--json', 'Output structured JSON result')
     .action(async (pathArg: string | undefined, opts: TestCliOptions) => {
       let result: RunTestsResult;
       try {
-        let sharedHarnessOpts = {
-          ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
-          ...(opts.refreshHarness ? { refreshHarness: true } : {}),
-          ...(opts.offlineTarball
-            ? { offlineTarball: opts.offlineTarball }
-            : {}),
-          ...(opts.debug ? { debug: true } : {}),
-        };
         if (opts.realm) {
           result = await runTestsForRealm(opts.realm, {
             ...(opts.hostAppUrl ? { hostAppUrl: opts.hostAppUrl } : {}),
-            ...sharedHarnessOpts,
+            ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
+            ...(opts.debug ? { debug: true } : {}),
           });
         } else {
           let workspaceDir = resolve(pathArg ?? process.cwd());
           result = await runTestsLocally({
             workspaceDir,
-            ...sharedHarnessOpts,
+            ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
+            ...(opts.debug ? { debug: true } : {}),
           });
         }
       } catch (err) {
