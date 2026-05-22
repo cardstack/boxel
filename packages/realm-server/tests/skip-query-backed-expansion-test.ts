@@ -1,10 +1,7 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
 import { rri } from '@cardstack/runtime-common';
-import type {
-  LooseSingleCardDocument,
-  Realm,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument, Realm } from '@cardstack/runtime-common';
 import { setupPermissionedRealmCached } from './helpers';
 
 const testRealm = new URL('http://127.0.0.1:4452/test/');
@@ -99,9 +96,8 @@ module(basename(__filename), function () {
         { loadLinks: true },
       );
       assert.strictEqual(result?.type, 'doc', 'doc returned');
-      if (result?.type !== 'doc') return;
-
-      let includedIds = (result.doc.included ?? []).map((r) => r.id);
+      let doc = result?.type === 'doc' ? result.doc : undefined;
+      let includedIds = (doc?.included ?? []).map((r) => r.id);
       assert.ok(
         includedIds.some((id) => id?.endsWith('/direct-target')),
         'static linksTo target is in included',
@@ -119,9 +115,8 @@ module(basename(__filename), function () {
         { loadLinks: true, skipQueryBackedExpansion: true },
       );
       assert.strictEqual(result?.type, 'doc', 'doc returned');
-      if (result?.type !== 'doc') return;
-
-      let includedIds = (result.doc.included ?? []).map((r) => r.id);
+      let doc = result?.type === 'doc' ? result.doc : undefined;
+      let includedIds = (doc?.included ?? []).map((r) => r.id);
       assert.ok(
         includedIds.some((id) => id?.endsWith('/direct-target')),
         'static linksTo target is still in included',
@@ -132,11 +127,8 @@ module(basename(__filename), function () {
         'no query-backed linksToMany matches expanded into included',
       );
 
-      // relationships.queryLinks.data IS still populated — only the
-      // expansion is suppressed; the IDs the caller needs to fetch
-      // by URL are still on the resource.
       let queryLinks = (
-        result.doc.data.relationships as
+        doc?.data.relationships as
           | Record<string, { data?: Array<{ id: string }> }>
           | undefined
       )?.queryLinks;
