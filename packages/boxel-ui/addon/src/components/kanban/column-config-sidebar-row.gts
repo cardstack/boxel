@@ -16,6 +16,7 @@ import type { KanbanColumnConfig } from './engine.ts';
 interface Signature {
   Args: {
     column: KanbanColumnConfig;
+    disableToggle?: boolean;
     isFirst?: boolean;
     isLast?: boolean;
     onColorChange?: (val: string) => void;
@@ -101,6 +102,7 @@ const KanbanColumnConfigSidebarRow: TemplateOnlyComponent<Signature> =
           @size='extra-small'
           @label={{if @column.collapsed 'Show column' 'Hide column'}}
           @variant='ghost'
+          @disabled={{@disableToggle}}
           data-test-col-config-toggle-visible={{@rowId}}
           {{on 'click' @onToggleCollapsed}}
         />
@@ -152,6 +154,9 @@ const KanbanColumnConfigSidebarRow: TemplateOnlyComponent<Signature> =
           --_kanban-muted-fg,
           var(--muted-foreground, var(--boxel-500))
         );
+      }
+      .col-visible-btn:disabled {
+        opacity: 0.5;
       }
       .col-dot {
         width: 0.625rem;

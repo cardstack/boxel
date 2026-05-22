@@ -108,6 +108,13 @@ export default class KanbanUsage extends Component {
 
   @action handlePlacementsChange(placements: KanbanPlacement[]): void {
     this.placements = placements;
+    if (this.hideEmpty) {
+      this.columns.forEach((col) => {
+        if (cardsInColumn(col.key, placements).length === 0) {
+          col.collapsed = true;
+        }
+      });
+    }
   }
 
   @action handleSelect(index: number | null): void {
@@ -142,10 +149,19 @@ export default class KanbanUsage extends Component {
   }
 
   @action toggleHideEmpty(): void {
-    let next = !this.hideEmpty;
+    this.hideEmpty = !this.hideEmpty;
     this.columns.forEach((col) => {
       if (cardsInColumn(col.key, this.placements).length === 0) {
-        col.collapsed = next;
+        col.collapsed = this.hideEmpty;
+      }
+    });
+  }
+
+  @action onShowEmptyColumns(): void {
+    this.hideEmpty = false;
+    this.columns.forEach((col) => {
+      if (cardsInColumn(col.key, this.placements).length === 0) {
+        col.collapsed = false;
       }
     });
   }
@@ -212,17 +228,14 @@ export default class KanbanUsage extends Component {
     ];
   }
 
-  get columnCardCounts(): number[] {
-    return this.columns?.map(
-      (col) => this.placements?.filter((p) => p.columnId === col.key).length,
-    );
-  }
+  @tracked hideEmpty = false;
 
-  get hideEmpty(): boolean {
-    let emptyCols = this.columns.filter(
-      (_, i) => (this.columnCardCounts[i] ?? 0) === 0,
-    );
-    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+  get columnCardCounts(): Record<string, number> {
+    let counts: Record<string, number> = {};
+    for (let col of this.columns) {
+      counts[col.key] = cardsInColumn(col.key, this.placements).length;
+    }
+    return counts;
   }
 
   <template>
@@ -251,14 +264,6 @@ export default class KanbanUsage extends Component {
       <:example>
         <div class='kanban-usage'>
           <div class='kanban-usage-toolbar'>
-            <label class='kanban-toggle'>
-              <span class='kanban-toggle-label'>Hide empty columns</span>
-              <Switch
-                @label='Hide empty columns'
-                @isEnabled={{this.hideEmpty}}
-                @onChange={{this.toggleHideEmpty}}
-              />
-            </label>
             <ViewSelector
               class='kanban-size-picker'
               @items={{this.sizeViewOptions}}
@@ -299,6 +304,8 @@ export default class KanbanUsage extends Component {
               @cardSize={{this.cardSize}}
               @onAddCard={{this.addCard}}
               @onToggleCollapsed={{this.toggleCollapsed}}
+              @hideEmpty={{this.hideEmpty}}
+              @onShowEmptyColumns={{this.onShowEmptyColumns}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
@@ -320,7 +327,10 @@ export default class KanbanUsage extends Component {
             <div class={{cn 'demo-sidebar-wrap' is-open=this.showSidebar}}>
               <KanbanColumnConfigSidebar
                 @columns={{this.columns}}
+                @cardCounts={{this.columnCardCounts}}
+                @hideEmpty={{this.hideEmpty}}
                 @onClose={{this.toggleSidebar}}
+                @onHideEmptyChange={{this.toggleHideEmpty}}
                 @onToggleCollapsed={{this.toggleCollapsed}}
                 @onLabelChange={{this.onLabelChange}}
                 @onColorChange={{this.onColorChange}}
@@ -354,6 +364,16 @@ export default class KanbanUsage extends Component {
         <Args.Action
           @name='onChange'
           @description='Invoked with updated placements when the internally owned drag manager commits a move.'
+        />
+        <Args.Bool
+          @name='hideEmpty'
+          @description='When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns.'
+          @value={{this.hideEmpty}}
+          @onInput={{fn (mut this.hideEmpty)}}
+        />
+        <Args.Action
+          @name='onShowEmptyColumns'
+          @description='Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again.'
         />
         <Args.Action
           @name='onToggleCollapsed'
@@ -401,7 +421,10 @@ export default class KanbanUsage extends Component {
       <:example>
         <KanbanColumnConfigSidebar
           @columns={{this.columns}}
+          @cardCounts={{this.columnCardCounts}}
+          @hideEmpty={{this.hideEmpty}}
           @onClose={{this.toggleSidebar}}
+          @onHideEmptyChange={{this.toggleHideEmpty}}
           @onToggleCollapsed={{this.toggleCollapsed}}
           @onLabelChange={{this.onLabelChange}}
           @onColorChange={{this.onColorChange}}
@@ -414,6 +437,16 @@ export default class KanbanUsage extends Component {
           @description='Array of KanbanColumnConfig objects to display and edit.'
           @required={{true}}
           @value={{this.columns}}
+        />
+        <Args.Bool
+          @name='hideEmpty'
+          @description='When true, the Hide empty columns switch is toggled on.'
+          @value={{this.hideEmpty}}
+          @onInput={{fn (mut this.hideEmpty)}}
+        />
+        <Args.Action
+          @name='onHideEmptyChange'
+          @description='Invoked when the Hide empty columns switch is toggled. If omitted the switch is hidden.'
         />
         <Args.Action
           @name='onClose'

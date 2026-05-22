@@ -87,22 +87,23 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert.dom('[data-test-hidden-columns]').doesNotExist();
   });
 
-  test('it can hide empty columns and restore them from the hidden tray', async function (assert) {
+  test('when hideEmpty is on, empty column rows in the hidden tray are disabled and not restorable by click', async function (assert) {
     class State {
+      @tracked hideEmpty = false;
       @tracked columns: KanbanColumnConfig[] = [
         {
           key: 'todo',
           label: 'Todo',
           color: null,
           wipLimit: null,
-          collapsed: null,
+          collapsed: false,
         },
         {
           key: 'doing',
           label: 'Doing',
           color: null,
           wipLimit: null,
-          collapsed: null,
+          collapsed: false,
         },
       ];
       @tracked placements: KanbanPlacement[] = [
@@ -115,10 +116,11 @@ module('Integration | Component | kanban-plane', function (hooks) {
         );
       };
 
-      hideEmptyColumns = (): void => {
+      toggleHideEmpty = (): void => {
+        this.hideEmpty = !this.hideEmpty;
         this.columns = this.columns.map((c) => {
           let isEmpty = !this.placements.some((p) => p.columnId === c.key);
-          return isEmpty ? { ...c, collapsed: true } : c;
+          return isEmpty ? { ...c, collapsed: this.hideEmpty } : c;
         });
       };
     }
@@ -127,12 +129,13 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
     await render(
       <template>
-        <button type='button' {{on 'click' state.hideEmptyColumns}}>
-          Hide empty columns
+        <button type='button' {{on 'click' state.toggleHideEmpty}}>
+          Toggle hide empty
         </button>
         <KanbanPlane
           @columns={{state.columns}}
           @placements={{state.placements}}
+          @hideEmpty={{state.hideEmpty}}
           @onToggleCollapsed={{state.onToggleCollapsed}}
         >
           <:card as |placement|>
@@ -146,7 +149,6 @@ module('Integration | Component | kanban-plane', function (hooks) {
     );
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
-    assert.dom('[data-kanban-column="todo"]').exists();
     assert.dom('[data-test-empty-column="todo"]').hasText('No cards');
     assert.dom('[data-test-hidden-columns]').doesNotExist();
 
@@ -155,15 +157,17 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert.dom('[data-kanban-column]').exists({ count: 1 });
     assert.dom('[data-kanban-column="todo"]').doesNotExist();
     assert.dom('[data-test-hidden-column-count]').hasText('1');
-    assert.dom('[data-test-show-hidden-column="todo"]').exists();
     assert.dom('[data-test-hidden-column-row="0"]').includesText('Todo');
     assert.dom('[data-test-hidden-columns]').includesText('0');
+    assert
+      .dom('[data-test-show-hidden-column="todo"]')
+      .isDisabled('empty column row is disabled when hideEmpty is on');
+    assert.dom('[data-kanban-column="todo"]').doesNotExist('column stays hidden');
 
-    await click('[data-test-show-hidden-column="todo"]');
+    await click('button');
 
-    assert.dom('[data-kanban-column="todo"]').exists();
-    assert.dom('[data-test-empty-column="todo"]').hasText('No cards');
     assert.dom('[data-kanban-column]').exists({ count: 2 });
+    assert.dom('[data-kanban-column="todo"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
   });
 });

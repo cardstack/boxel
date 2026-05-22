@@ -173,13 +173,18 @@ export class KanbanPlaneInner extends Component<{
   get hiddenColumns(): Array<{
     cardCount: number;
     config: KanbanColumnConfig;
+    isEmptyLocked: boolean;
   }> {
     return this.columns
       .filter((config) => config.collapsed)
-      .map((config) => ({
-        config,
-        cardCount: this.columnCardCount(config.key),
-      }));
+      .map((config) => {
+        let cardCount = this.columnCardCount(config.key);
+        return {
+          config,
+          cardCount,
+          isEmptyLocked: !!this.args.hideEmpty && cardCount === 0,
+        };
+      });
   }
 
   <template>
@@ -284,6 +289,7 @@ export class KanbanPlaneInner extends Component<{
               <button
                 class='hidden-col-row'
                 type='button'
+                disabled={{hc.isEmptyLocked}}
                 aria-label={{if
                   hc.config.label
                   (concat 'Show ' hc.config.label)
@@ -302,8 +308,10 @@ export class KanbanPlaneInner extends Component<{
                     hc.config.label
                     'Untitled'
                   }}</span>
+                {{#unless hc.isEmptyLocked}}
+                  <Eye class='hidden-col-restore-icon' />
+                {{/unless}}
                 <span class='hidden-col-count'>{{hc.cardCount}}</span>
-                <Eye class='hidden-col-restore-icon' />
               </button>
             {{/each}}
           </div>
@@ -448,7 +456,11 @@ export class KanbanPlaneInner extends Component<{
         transition: background 120ms ease;
       }
 
-      .hidden-col-row:hover {
+      .hidden-col-row:disabled {
+        cursor: default;
+      }
+
+      .hidden-col-row:hover:not(:disabled) {
         background: color-mix(in oklch, var(--_kanban-col-fg) 10%, transparent);
       }
 
@@ -484,7 +496,7 @@ export class KanbanPlaneInner extends Component<{
         color: var(--_kanban-muted-fg);
       }
 
-      .hidden-col-row:hover .hidden-col-restore-icon {
+      .hidden-col-row:hover:not(:disabled) .hidden-col-restore-icon {
         opacity: 1;
       }
     </style>

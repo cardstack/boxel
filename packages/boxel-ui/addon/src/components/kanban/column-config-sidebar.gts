@@ -5,14 +5,19 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import IconButton from '../icon-button/index.gts';
+import Switch from '../switch/index.gts';
 import ColumnConfigRow from './column-config-sidebar-row.gts';
+import FieldContainer from '../field-container/index.gts';
 import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
   Args: {
+    cardCounts?: Record<string, number>;
     columns: KanbanColumnConfig[] | null;
+    hideEmpty?: boolean;
     onClose?: () => void;
     onColorChange?: (column: KanbanColumnConfig | null, val: string) => void;
+    onHideEmptyChange?: () => void;
     onLabelChange?: (column: KanbanColumnConfig | null, val: string) => void;
     onReorder?: () => void;
     onToggleCollapsed?: (column: KanbanColumnConfig | null) => void;
@@ -65,6 +70,18 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
     return index >= this.args.columns.length - 1;
   };
 
+  get columnRows(): Array<{
+    column: KanbanColumnConfig;
+    disableToggle: boolean;
+  }> {
+    return (this.args.columns ?? []).map((column) => ({
+      column,
+      disableToggle:
+        !!this.args.hideEmpty &&
+        (this.args.cardCounts?.[column.key] ?? 1) === 0,
+    }));
+  }
+
   <template>
     <aside class='col-config-sidebar' ...attributes>
       <header class='sidebar-header'>
@@ -80,24 +97,45 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
         {{/if}}
       </header>
 
-      {{#if @columns.length}}
+      {{#if @onHideEmptyChange}}
+        <FieldContainer
+          @tag='label'
+          @label='Hide empty columns'
+          class='hide-empty-row'
+        >
+          <Switch
+            @label='Hide empty columns'
+            @isEnabled={{if @hideEmpty true false}}
+            @onChange={{@onHideEmptyChange}}
+          />
+        </FieldContainer>
+      {{/if}}
+
+      {{#if this.columnRows.length}}
         <ul class='col-list'>
-          {{#each @columns key='key' as |column i|}}
+          {{#each this.columnRows as |row i|}}
             <ColumnConfigRow
-              @rowId={{if column.key column.key i}}
-              @column={{column}}
+              @rowId={{if row.column.key row.column.key i}}
+              @column={{row.column}}
               @isFirst={{this.isFirst i}}
               @isLast={{this.isLast i}}
+              @disableToggle={{row.disableToggle}}
               @onReorder={{fn this.reorder i}}
               @onToggleCollapsed={{if
                 @onToggleCollapsed
-                (fn @onToggleCollapsed column)
+                (fn @onToggleCollapsed row.column)
               }}
-              @onLabelChange={{if @onLabelChange (fn @onLabelChange column)}}
-              @onColorChange={{if @onColorChange (fn @onColorChange column)}}
+              @onLabelChange={{if
+                @onLabelChange
+                (fn @onLabelChange row.column)
+              }}
+              @onColorChange={{if
+                @onColorChange
+                (fn @onColorChange row.column)
+              }}
               @onWipLimitChange={{if
                 @onWipLimitChange
-                (fn @onWipLimitChange column)
+                (fn @onWipLimitChange row.column)
               }}
             />
           {{/each}}
@@ -135,6 +173,18 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
       }
       .sidebar-title {
         font-size: 0.875rem;
+      }
+      .hide-empty-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 1rem;
+        border-bottom: 1px solid var(--boxel-col-config-sidebar-border);
+        font-size: 0.875rem;
+        cursor: pointer;
+      }
+      .hide-empty-row :deep(.label-container) {
+        padding-top: unset;
       }
       .col-list {
         list-style: none;

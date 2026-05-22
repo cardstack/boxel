@@ -19,6 +19,7 @@ export class KanbanPlane extends Component<{
     onChange?: (placements: KanbanPlacement[]) => void;
     onOpen?: (index: number) => void;
     onSelect?: (index: number | null) => void;
+    onShowEmptyColumns?: () => void;
     onToggleCollapsed?: (column: KanbanColumnConfig | null) => void;
     placements: KanbanPlacement[];
   };

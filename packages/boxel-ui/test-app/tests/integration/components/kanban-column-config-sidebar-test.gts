@@ -203,6 +203,32 @@ module(
       assert.strictEqual(columns[0]!.wipLimit, 0, 'negative clamped to 0');
     });
 
+    test('visibility toggle is disabled for empty columns when hideEmpty is on', async function (assert) {
+      let columns = makeColumns();
+      let cardCounts = { backlog: 0, 'in-progress': 2, done: 1 };
+
+      await render(
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{columns}}
+            @cardCounts={{cardCounts}}
+            @hideEmpty={{true}}
+            @onToggleCollapsed={{onToggleCollapsed}}
+          />
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-col-config-toggle-visible="backlog"]')
+        .isDisabled('toggle disabled for empty column when hideEmpty is on');
+      assert
+        .dom('[data-test-col-config-toggle-visible="in-progress"]')
+        .isNotDisabled('toggle enabled for non-empty column');
+      assert
+        .dom('[data-test-col-config-toggle-visible="done"]')
+        .isNotDisabled('toggle enabled for non-empty column');
+    });
+
     test('visibility toggle flips collapsed in both directions', async function (assert) {
       let columns = makeColumns();
 

@@ -1169,10 +1169,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     this.handleColumnsChange([...this.columns]);
   };
 
-  handleReorder = (): void => {
-    this.handleColumnsChange([...this.columns]);
-  };
-
   toggleSidebar = (): void => {
     this.isSidebarOpen = !this.isSidebarOpen;
   };
@@ -1397,7 +1393,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @onLabelChange={{this.handleLabelChange}}
             @onColorChange={{this.handleColorChange}}
             @onWipLimitChange={{this.handleWipLimitChange}}
-            @onReorder={{this.handleReorder}}
+            @onReorder={{this.handleColumnsChange}}
           />
         </div>
       </div>
