@@ -13,14 +13,14 @@ if (typeof (globalThis as any).document !== 'undefined') {
 const log = logger('submission-lint');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CATALOG_REALM_DIR = path.join(REPO_ROOT, 'packages', 'catalog-realm');
+const CATALOG_DIR = path.join(REPO_ROOT, 'packages', 'catalog');
 const HOST_DIR = path.join(REPO_ROOT, 'packages', 'host');
 export const SUBMISSIONS_TEMP_ROOT = path.join(
-  CATALOG_REALM_DIR,
+  CATALOG_DIR,
   '__submissions-temp__',
 );
 const TEMPLATE_LINT_BIN = path.join(
-  CATALOG_REALM_DIR,
+  CATALOG_DIR,
   'node_modules',
   '.bin',
   'ember-template-lint',
@@ -195,7 +195,7 @@ export async function runLintOnSubmissionFiles(
     opts.listingId,
   )}-${crypto.randomUUID()}`;
   let tempDir = path.join(SUBMISSIONS_TEMP_ROOT, runId);
-  let tempRelFromCatalog = path.relative(CATALOG_REALM_DIR, tempDir);
+  let tempRelFromCatalog = path.relative(CATALOG_DIR, tempDir);
   let tempRelFromHost = path.relative(HOST_DIR, tempDir).replace(/\\/g, '/');
 
   let relPaths: string[] = [];
@@ -225,7 +225,7 @@ export async function runLintOnSubmissionFiles(
       TSC_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)),
     );
     if (hasTscFiles) {
-      await writeSubmissionTsconfig(tempDir);
+      await writeSubmissionTsconfig(tempDir, relPaths);
     }
     let tscErrors = hasTscFiles
       ? await runEmberTsc(runId, tempDir, tempRelFromHost)
@@ -305,7 +305,7 @@ async function runTemplateLint(
   let startedAt = Date.now();
   let result;
   try {
-    result = await spawnCapture(TEMPLATE_LINT_BIN, args, CATALOG_REALM_DIR);
+    result = await spawnCapture(TEMPLATE_LINT_BIN, args, CATALOG_DIR);
   } catch (err: any) {
     throw new Error(`[runId=${runId}] template-lint ${err?.message ?? err}`);
   }
@@ -325,7 +325,7 @@ async function runTemplateLint(
       `[runId=${runId}] ember-template-lint exited with unexpected code ${code}: ${stderr.slice(0, 500)}`,
     );
   }
-  return parseTemplateLintOutput(stdout, tempDir, CATALOG_REALM_DIR);
+  return parseTemplateLintOutput(stdout, tempDir, CATALOG_DIR);
 }
 
 async function runEmberTsc(
@@ -361,26 +361,26 @@ async function runEmberTsc(
   return parseTscOutput(combined, tempRelFromHost);
 }
 
-// Mirrors the boxel-catalog CI lint scope
-async function writeSubmissionTsconfig(tempDir: string): Promise<void> {
+// The per-run tsconfig lists the submission files explicitly in `include` so
+// tsc loads them without relying on the extended host tsconfig's include glob
+// to cover wherever the temp dir happens to live. Inherits compilerOptions
+// (paths aliases, lib, etc.) from host via `extends`.
+async function writeSubmissionTsconfig(
+  tempDir: string,
+  relPaths: string[],
+): Promise<void> {
   let toPosix = (p: string): string => p.split(path.sep).join('/');
   let prefixRelative = (p: string): string =>
     p.startsWith('.') ? p : './' + p;
   let extendsPath = prefixRelative(
     toPosix(path.relative(tempDir, path.join(HOST_DIR, 'tsconfig.json'))),
   );
-  let baseDir = toPosix(
-    path.relative(tempDir, path.join(REPO_ROOT, 'packages', 'base')),
-  );
-  let experimentsDir = toPosix(
-    path.relative(
-      tempDir,
-      path.join(REPO_ROOT, 'packages', 'experiments-realm'),
-    ),
-  );
+  let tscIncludes = relPaths
+    .filter((p) => TSC_EXTENSIONS.some((ext) => p.toLowerCase().endsWith(ext)))
+    .map(toPosix);
   let tsconfig = {
     extends: extendsPath,
-    exclude: [`${baseDir}/**/__boxel/**`, `${experimentsDir}/**/*`],
+    include: tscIncludes,
   };
   await fs.writeFile(
     path.join(tempDir, LINT_TSCONFIG_FILENAME),
