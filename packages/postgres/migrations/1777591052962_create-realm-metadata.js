@@ -1,11 +1,9 @@
 // CS-10053 — moves realm-level metadata flags out of the legacy
 // .realm.json sidecar and into a database table. Two flags move in this
 // ticket (showAsCatalog, publishable). The table is intentionally
-// open-ended so future fields (realmUserId, etc.) can land as
-// additional columns without re-doing the schema design. (hostHome /
-// interactHome were initially expected to land here too; CS-10055
-// instead moved hostHome into the RealmConfig card's hostRoutingRules
-// and removed interactHome outright, so neither uses this table.)
+// open-ended so future fields (hostHome / interactHome from CS-10055,
+// realmUserId, etc.) can land as additional columns without re-doing
+// the schema design.
 //
 // Why a new table rather than columns on realm_registry:
 //   - These are mutable per-realm settings, not realm identity.
