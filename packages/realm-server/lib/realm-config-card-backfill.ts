@@ -347,7 +347,8 @@ function augmentExistingCard(
           `a known realm URL; leaving sidecar entry for a future boot`,
       );
     } else {
-      cardModified = addHostHomeRule(card, hostHome, url, sidecarPath) || cardModified;
+      cardModified =
+        addHostHomeRule(card, hostHome, url, sidecarPath) || cardModified;
       migratedKeys.add('hostHome');
     }
   }

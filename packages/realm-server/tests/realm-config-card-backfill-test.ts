@@ -71,8 +71,7 @@ module(basename(__filename), function () {
         name: 'My Realm',
         backgroundURL: 'https://example.com/bg.png',
         iconURL: 'https://example.com/icon.svg',
-        hostHome:
-          'http://localhost:4201/luke/my-realm/SiteConfig/home-card-id',
+        hostHome: 'http://localhost:4201/luke/my-realm/SiteConfig/home-card-id',
       });
 
       await runRealmConfigCardBackfill({
@@ -229,8 +228,7 @@ module(basename(__filename), function () {
     test('drops interactHome from sidecar when card already exists, without touching the card', async function (assert) {
       const realmDir = join(realmsRootPath, 'luke', 'ih-existing-card');
       seedSidecar(realmDir, {
-        interactHome:
-          'http://localhost:4201/luke/ih-existing-card/something',
+        interactHome: 'http://localhost:4201/luke/ih-existing-card/something',
       });
       const existingCard = {
         data: {
@@ -616,8 +614,7 @@ module(basename(__filename), function () {
     test('leaves an unparseable existing card alone (does not overwrite)', async function (assert) {
       const realmDir = join(realmsRootPath, 'luke', 'broken-card');
       seedSidecar(realmDir, {
-        hostHome:
-          'http://localhost:4201/luke/broken-card/SiteConfig/whatever',
+        hostHome: 'http://localhost:4201/luke/broken-card/SiteConfig/whatever',
       });
       writeFileSync(join(realmDir, 'realm.json'), '{ partly written');
 
