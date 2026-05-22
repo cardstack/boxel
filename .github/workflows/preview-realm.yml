@@ -82,7 +82,7 @@ jobs:
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
-          MATRIX_PASSWORD: ${{ secrets.matrix-password }}
+          BOXEL_PASSWORD: ${{ secrets.matrix-password }}
           REALM_SERVER: ${{ inputs.realm-server-url }}
         run: |
           # Domain inference mirrors `boxel profile add`'s URL-based
@@ -95,9 +95,11 @@ jobs:
           else
             DOMAIN="localhost"
           fi
+          # BOXEL_PASSWORD is read from env to avoid leaking the
+          # password via the process arg list — see boxel-cli's own
+          # warning in build-program.ts.
           boxel profile add \
             --user "@${MATRIX_USERNAME}:${DOMAIN}" \
-            --password "${MATRIX_PASSWORD}" \
             --matrix-url "${MATRIX_URL}" \
             --realm-server-url "${REALM_SERVER}"
 
@@ -204,7 +206,7 @@ jobs:
         env:
           MATRIX_URL: ${{ inputs.matrix-url }}
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
-          MATRIX_PASSWORD: ${{ secrets.matrix-password }}
+          BOXEL_PASSWORD: ${{ secrets.matrix-password }}
           REALM_SERVER: ${{ inputs.realm-server-url }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
@@ -214,9 +216,11 @@ jobs:
           else
             DOMAIN="localhost"
           fi
+          # BOXEL_PASSWORD is read from env to avoid leaking the
+          # password via the process arg list — see boxel-cli's own
+          # warning in build-program.ts.
           boxel profile add \
             --user "@${MATRIX_USERNAME}:${DOMAIN}" \
-            --password "${MATRIX_PASSWORD}" \
             --matrix-url "${MATRIX_URL}" \
             --realm-server-url "${REALM_SERVER}"
 

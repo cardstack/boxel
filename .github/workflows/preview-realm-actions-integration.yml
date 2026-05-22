@@ -109,10 +109,10 @@ jobs:
       - name: Configure boxel profile
         env:
           REALM_NAME: preview-realm-test-${{ github.run_id }}
+          BOXEL_PASSWORD: password
         run: |
           boxel profile add \
             --user "@user:localhost" \
-            --password "password" \
             --matrix-url "http://localhost:8008" \
             --realm-server-url "https://localhost:4201/"
           {

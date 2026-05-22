@@ -105,7 +105,7 @@ jobs:
         env:
           MATRIX_URL: ${{ inputs.staging-matrix-url }}
           MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
-          MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
+          BOXEL_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
         run: |
           # Domain inference mirrors `boxel profile add`'s URL-based
@@ -117,9 +117,11 @@ jobs:
           else
             DOMAIN="localhost"
           fi
+          # BOXEL_PASSWORD is read from env to avoid leaking the
+          # password via the process arg list — see boxel-cli's own
+          # warning in build-program.ts.
           boxel profile add \
             --user "@${MATRIX_USERNAME}:${DOMAIN}" \
-            --password "${MATRIX_PASSWORD}" \
             --matrix-url "${MATRIX_URL}"
 
           echo "Running dry-run sync for PR #${{ github.event.number }}"
@@ -149,7 +151,7 @@ jobs:
         env:
           MATRIX_URL: ${{ inputs.staging-matrix-url }}
           MATRIX_USERNAME: ${{ secrets.staging-matrix-username }}
-          MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
+          BOXEL_PASSWORD: ${{ secrets.staging-matrix-password }}
           WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
@@ -159,9 +161,11 @@ jobs:
           else
             DOMAIN="localhost"
           fi
+          # BOXEL_PASSWORD is read from env to avoid leaking the
+          # password via the process arg list — see boxel-cli's own
+          # warning in build-program.ts.
           boxel profile add \
             --user "@${MATRIX_USERNAME}:${DOMAIN}" \
-            --password "${MATRIX_PASSWORD}" \
             --matrix-url "${MATRIX_URL}"
 
           echo "Syncing to staging workspace: ${WORKSPACE_URL}"
@@ -190,7 +194,7 @@ jobs:
         env:
           MATRIX_URL: ${{ inputs.production-matrix-url }}
           MATRIX_USERNAME: ${{ secrets.production-matrix-username }}
-          MATRIX_PASSWORD: ${{ secrets.production-matrix-password }}
+          BOXEL_PASSWORD: ${{ secrets.production-matrix-password }}
           WORKSPACE_URL: ${{ inputs.production-workspace-url }}
         run: |
           if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
@@ -200,9 +204,11 @@ jobs:
           else
             DOMAIN="localhost"
           fi
+          # BOXEL_PASSWORD is read from env to avoid leaking the
+          # password via the process arg list — see boxel-cli's own
+          # warning in build-program.ts.
           boxel profile add \
             --user "@${MATRIX_USERNAME}:${DOMAIN}" \
-            --password "${MATRIX_PASSWORD}" \
             --matrix-url "${MATRIX_URL}"
 
           echo "Syncing to production workspace: ${WORKSPACE_URL}"
