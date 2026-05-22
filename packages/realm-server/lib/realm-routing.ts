@@ -249,6 +249,11 @@ export async function resolveRealmsForFederatedRequest(
   );
   return results.map((result, idx) => {
     if (result.status === 'fulfilled') {
+      if (result.value === undefined) {
+        federatedLog.warn(
+          `lookupOrMount fulfilled without a realm for ${realmList[idx]} during federated request; registry presence was already confirmed by middleware`,
+        );
+      }
       return result.value;
     }
     federatedLog.warn(
