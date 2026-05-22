@@ -1809,7 +1809,7 @@ module(basename(__filename), function () {
         );
       });
 
-      test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      test('card prerender resolves query fallback via per-URL GETs and renders nested relationships', async function (assert) {
         const cardURL = `${realmURL}directory-ops`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
@@ -1824,9 +1824,10 @@ module(basename(__filename), function () {
           });
 
           assert.notOk(result.response.error, 'prerender succeeds');
-          assert.true(
-            delayedSearchPatch.getRequestCount() > 0,
-            'fallback _search requests occurred and were delayed',
+          assert.strictEqual(
+            delayedSearchPatch.getRequestCount(),
+            0,
+            'prerender skipped query-backed fallback _search (per-URL GETs replace it)',
           );
 
           let isolatedHTML = cleanWhiteSpace(
