@@ -29,13 +29,24 @@ const OUT_DIR = join(PACKAGE_ROOT, 'bundled-realms');
 interface RealmSource {
   name: string;
   src: string;
+  /**
+   * If `true`, fail when the source is missing; if `false`, warn and
+   * skip. `packages/skills-realm/contents/` is gitignored and only
+   * populated via `pnpm --filter @cardstack/skills-realm skills:setup`
+   * (which clones the external `cardstack/boxel-skills` repo). CI
+   * runners and minimal monorepo checkouts don't have it; card tests
+   * don't actually load anything from `/skills/` at runtime (it's for
+   * the AI assistant scaffolding), so shipping without it is fine.
+   */
+  required: boolean;
 }
 
 const REALMS: RealmSource[] = [
-  { name: 'base', src: join(MONOREPO_PACKAGES, 'base') },
+  { name: 'base', src: join(MONOREPO_PACKAGES, 'base'), required: true },
   {
     name: 'skills',
     src: join(MONOREPO_PACKAGES, 'skills-realm', 'contents'),
+    required: false,
   },
 ];
 
@@ -77,19 +88,27 @@ function main(): void {
   mkdirSync(OUT_DIR, { recursive: true });
 
   for (let realm of REALMS) {
+    let present = false;
     try {
-      if (!statSync(realm.src).isDirectory()) {
+      present = statSync(realm.src).isDirectory();
+    } catch {
+      // not present
+    }
+    if (!present) {
+      if (realm.required) {
         console.error(
-          `Source for "${realm.name}" is not a directory: ${realm.src}`,
+          `Missing required realm source for "${realm.name}" at ${realm.src}. ` +
+            'Run from inside the monorepo.',
         );
         process.exit(1);
+      } else {
+        console.log(
+          `  skipping "${realm.name}" — source missing at ${realm.src} ` +
+            '(non-required realm; usually packages/skills-realm/contents ' +
+            'not populated)',
+        );
+        continue;
       }
-    } catch {
-      console.error(
-        `Missing realm source for "${realm.name}" at ${realm.src}. ` +
-          'Run from inside the monorepo.',
-      );
-      process.exit(1);
     }
     let dst = join(OUT_DIR, realm.name);
     cpSync(realm.src, dst, {
