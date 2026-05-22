@@ -80,6 +80,20 @@ export interface PrerenderMeta {
   diagnostics?: PrerenderMetaDiagnostics;
 }
 
+// Lightweight payload produced by the host app's render.types route. The
+// runner needs the ancestor type list before the fitted/embedded format
+// renders run, but those renders are what mark linksTo / linksToMany
+// fields as "used"; running a full render.meta (with serializeCard +
+// searchDoc) for that early type lookup paid the cost of one extra
+// per-card traversal. /types returns just the type chain so the
+// runner can drive ancestor renders without that extra walk; a single
+// render.meta then runs after the fitted/embedded passes have populated
+// the per-instance data bucket and the search doc picks up the linked
+// fields the embedded template touched.
+export interface PrerenderTypes {
+  types: string[] | null;
+}
+
 export interface RenderResponse extends PrerenderMeta {
   isolatedHTML: string | null;
   headHTML: string | null;
