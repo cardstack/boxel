@@ -284,8 +284,8 @@ export default class OperatorModeOverlays extends Overlays {
       /* Selection indicator — rounded square chip at the bottom-right corner. */
       .adorn-select-button {
         position: absolute;
-        bottom: 10px;
-        right: 10px;
+        bottom: 4px;
+        right: 4px;
         width: 20px;
         height: 20px;
         padding: 3px;
@@ -331,8 +331,8 @@ export default class OperatorModeOverlays extends Overlays {
           width: 16px;
           height: 16px;
           padding: 2px;
-          bottom: 4px;
-          right: 4px;
+          bottom: 2px;
+          right: 2px;
         }
         .adorn-select-icon {
           width: 12px;
@@ -516,7 +516,7 @@ export default class OperatorModeOverlays extends Overlays {
       renderedCard,
     )
       ? {
-          label: 'Edit',
+          label: 'Edit card',
           action: () =>
             this.openOrSelectCard(
               cardDefOrId,
@@ -532,10 +532,10 @@ export default class OperatorModeOverlays extends Overlays {
     // we can't call [getMenuItems] on it, so construct default menu items
     if (typeof cardDefOrId === 'string') {
       const menuItems: MenuItemOptions[] = [];
+      menuItems.push(viewCardItem);
       if (editItem) {
         menuItems.push(editItem);
       }
-      menuItems.push(viewCardItem);
       menuItems.push({
         label: 'Copy Card URL',
         action: () => copyCardURLToClipboard(cardId),
