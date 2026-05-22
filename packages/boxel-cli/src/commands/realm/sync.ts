@@ -330,7 +330,12 @@ class RealmSyncer extends RealmSyncBase {
         // payload (e.g. "Write Error"), not just the HTTP status
         // line. Distinct titles only — repeated identical titles
         // (the common case for a top-level write failure) would
-        // otherwise produce noisy duplicates.
+        // otherwise produce noisy duplicates. The summary line is
+        // re-echoed by registerSyncCommand at the end of the run
+        // via `Error: ${result.error}`, so we no longer also emit
+        // the standalone status line inline — that would duplicate
+        // it in CLI output. The per-file loop stays because it
+        // carries path-level detail the summary aggregates away.
         let titles = Array.from(
           new Set(result.error.perFile.map((e) => e.title)),
         );
@@ -338,7 +343,6 @@ class RealmSyncer extends RealmSyncBase {
           titles.length > 0
             ? `${result.error.message} (${titles.join('; ')})`
             : result.error.message;
-        console.error(result.error.message);
         for (const entry of result.error.perFile) {
           console.error(`  ${entry.path}: ${entry.title}`);
         }
