@@ -10,6 +10,7 @@ import {
   baseRealm,
   formattedError,
   snapshotRuntimeDependencies,
+  trackRuntimeModuleDependency,
   withRuntimeDependencyTrackingContext,
   type RenderError,
 } from '@cardstack/runtime-common';
@@ -113,9 +114,19 @@ export default class RenderFileExtractRoute extends Route<Model> {
           // uses to invalidate file extracts, but the FileDef class
           // physically lives in `card-api` (`baseFileRef.module`). The
           // extractor only imports `card-api`, so without this line
-          // `file-api` would never enter the tracker. Doing the import
-          // inside the tracking window pins it as a runtime dep.
-          await this.loaderService.loader.import(fileApiURL);
+          // `file-api` never enters the tracker.
+          //
+          // Stamp the dep on the tracker directly rather than relying
+          // on `loader.import(fileApiURL)` to do it. `loader.import`'s
+          // synchronous `trackRuntimeModuleDependency` call sits behind
+          // a moduleShims check, the resolveImport URL rewrite, and the
+          // advanceToState machine — any of which can interpose if the
+          // page's loader was replaced (e.g. after
+          // `BrowserManager.restartBrowser()`), which is exactly the
+          // condition the file-extract test flakes under. Stamping the
+          // tracker directly here is one synchronous call with no
+          // moving parts.
+          trackRuntimeModuleDependency(fileApiURL);
           return extractor.extract();
         },
       );
@@ -128,21 +139,15 @@ export default class RenderFileExtractRoute extends Route<Model> {
       };
     }
     let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
-    let mergedDeps = [...new Set([...(result.deps ?? []), ...deps])];
-    if (!mergedDeps.includes(fileApiURL)) {
-      // The explicit `loader.import(fileApiURL)` above runs inside the
-      // active tracker context, so file-api must always land in the
-      // snapshot. If it doesn't, the tracker session was closed early
-      // or the URL was rewritten; log enough state to diagnose.
-      console.warn(
-        `[file-extract] file-api missing from runtime deps for ${id} after explicit import`,
-        {
-          fileApiURL,
-          extractorDeps: result.deps ?? [],
-          runtimeDeps: deps,
-        },
-      );
-    }
+    // Belt-and-suspenders: if the tracker call above didn't land in
+    // the snapshot for any reason (session ended, URL normalization
+    // mismatch), explicitly stamp `file-api` into the merged deps.
+    // The indexer's invalidation contract requires this URL to be
+    // present for file extracts; missing it produces silent
+    // never-invalidated rows.
+    let mergedDeps = [
+      ...new Set([...(result.deps ?? []), ...deps, fileApiURL]),
+    ];
     return {
       id,
       nonce,
