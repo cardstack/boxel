@@ -200,19 +200,23 @@ async function fetchRemoteFileEventually(
   return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
 }
 
-// Symmetric to fetchRemoteFileEventually for delete-side assertions. Polls
-// `remoteFileExists` until it returns false (the expected post-delete state)
-// or the timeout elapses. Returns `{ isGone: true, retries: 0 }` when the
-// first probe already sees 404; `retries > 0` means the realm needed time
-// after sync returned for the DELETE to become visible to a subsequent GET,
-// which is the post-write race shape (the realm's DELETE handler responds
-// 204 once #adapter.remove returns, but a follow-up GET in the same process
-// has been observed to still return 200 for a few tens of ms; cache-
-// invalidation echoes, the deferred delete-indexing chain that fires after
-// the response, or watcher event reordering are all plausible). `isGone:
-// false` with `finalStatus: 200` means it never went away — the DELETE
-// didn't take effect. The final-state fields let on-miss diagnostics
-// distinguish "DELETE didn't run" from "DELETE ran but visibility lagged".
+// Symmetric to fetchRemoteFileEventually for delete-side assertions. GETs
+// the file's source URL on a 100ms cadence and resolves with `isGone:
+// true` the moment the response status is 404. Any other status (200 or a
+// transient 5xx / 401) keeps the loop running; only 404 is the unambiguous
+// "file is gone" signal. If the timeout elapses without ever seeing a 404,
+// resolves with `isGone: false` and the most recent status/body so callers
+// can dump them as a diagnostic. `retries > 0` after a successful poll
+// means the realm needed time after sync returned for the DELETE to
+// become visible to a subsequent GET — the post-write race shape (the
+// realm's DELETE handler responds 204 once #adapter.remove returns, but a
+// follow-up GET in the same process has been observed to still return 200
+// for a few tens of ms; cache-invalidation echoes, the deferred delete-
+// indexing chain that fires after the response, or watcher event
+// reordering are all plausible). `isGone: false` with `finalStatus: 200`
+// means it never went away — the DELETE didn't take effect. The final-
+// state fields let on-miss diagnostics distinguish "DELETE didn't run"
+// from "DELETE ran but visibility lagged".
 async function remoteFileGoneEventually(
   realmUrl: string,
   relPath: string,
