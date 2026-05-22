@@ -7,6 +7,7 @@ import {
 } from '../../lib/profile-manager';
 import { unpublishRealm } from './unpublish';
 import { FG_CYAN, FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { describeFetchError } from '../../lib/describe-fetch-error';
 
 const DEFAULT_TIMEOUT_MS = 300_000;
 const READINESS_POLL_INTERVAL_MS = 1000;
@@ -193,7 +194,7 @@ async function waitForPublishedRealmReady(
       }
       lastError = `HTTP ${response.status}`;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = describeFetchError(error);
     }
     let remaining = timeoutMs - (Date.now() - startedAt);
     if (remaining <= 0) break;
@@ -276,6 +277,14 @@ export function registerPublishCommand(realm: Command): void {
           console.error(
             `${FG_RED}Error:${RESET} ${err instanceof Error ? err.message : String(err)}`,
           );
+          // Node's fetch surfaces the actual transport error (ECONNRESET,
+          // TLS failure, undici socket error, etc.) on `error.cause`. Print
+          // it so opaque "fetch failed" messages don't strand the caller.
+          // `!= null` rather than a truthy check so we don't drop
+          // falsy-but-defined causes (`''`, `0`, `false`, `NaN`).
+          if (err instanceof Error && err.cause != null) {
+            console.error(`${FG_RED}Caused by:${RESET}`, err.cause);
+          }
           process.exit(1);
         }
       },

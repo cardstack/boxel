@@ -22,7 +22,7 @@ import * as ContentTag from 'content-tag';
 
 import {
   baseRealm,
-  maybeRelativeURL,
+  maybeRelativeReference,
   trimExecutableExtension,
   codeRefWithAbsoluteIdentifier,
   baseCardRef,
@@ -440,7 +440,7 @@ function makeNewField({
 
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
-    relativeFieldModuleRef = maybeRelativeURL(
+    relativeFieldModuleRef = maybeRelativeReference(
       new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
       outgoingRelativeTo,
       outgoingRealmURL,

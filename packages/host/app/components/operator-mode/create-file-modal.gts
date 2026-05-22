@@ -39,7 +39,7 @@ import {
   RealmPaths,
   Deferred,
   SupportedMimeType,
-  maybeRelativeURL,
+  maybeRelativeReference,
   GetCardContextName,
   isCardInstance,
   type getCard,
@@ -844,7 +844,7 @@ export default class CreateFileModal extends Component<Signature> {
       ) as ResolvedCodeRef
     ).module;
     const absoluteModule = new URL(absoluteModuleHref);
-    let moduleURL = maybeRelativeURL(
+    let moduleURL = maybeRelativeReference(
       absoluteModule,
       url,
       new URL(this.selectedRealmURL),

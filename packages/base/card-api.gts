@@ -152,6 +152,8 @@ import {
 } from './card-serialization';
 import {
   assertScalar,
+  beginComputePass,
+  endComputePass,
   entangleWithCardTracking,
   getDataBucket,
   getFieldDescription,
@@ -169,6 +171,7 @@ import {
   relationshipMeta,
   setFieldDescription,
   setRealmContextOnField,
+  type ComputePassSnapshot,
   type NotLoadedValue,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
@@ -189,6 +192,8 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
+  beginComputePass,
+  endComputePass,
   deserialize,
   getCardMeta,
   getDataBucket,
@@ -210,6 +215,7 @@ export {
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
+  type ComputePassSnapshot,
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
@@ -677,7 +683,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             meta.fields[fieldName] = {
               adoptsFrom: identifyCard(
                 override,
-                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
               ),
             };
           }
@@ -989,7 +995,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
               [this.name]: {
                 adoptsFrom: identifyCard(
                   this.card,
-                  opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                  opts?.useAbsoluteURL
+                    ? undefined
+                    : opts?.maybeRelativeReference,
                 ),
               },
             },
@@ -2242,11 +2250,11 @@ export class BaseDef {
       if (stack.includes(value)) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeURL: string) {
+      function makeAbsoluteURL(maybeRelativeReference: string) {
         if (!value[relativeTo]) {
-          return maybeRelativeURL;
+          return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
+        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2276,9 +2284,13 @@ export class BaseDef {
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
+          // Reuse the value we already peeked above instead of re-reading
+          // through the descriptor — for computed fields the descriptor
+          // get path re-invokes `computeVia`, doubling the work for every
+          // contains/contains-many/links-to field in the search doc.
           return [
             fieldName,
-            getQueryableValue(field!, value[fieldName], [value, ...stack]),
+            getQueryableValue(field!, rawValue, [value, ...stack]),
           ];
         }),
       );
@@ -4154,10 +4166,7 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
 // mutated. Field invocations (field !== undefined) go through `fieldComponent`
 // → `Box.field(name)` (already cached on the parent Box), so they bypass
 // this cache.
-const componentByModel = new WeakMap<
-  object,
-  Map<string, BoxComponent>
->();
+const componentByModel = new WeakMap<object, Map<string, BoxComponent>>();
 
 function codeRefCacheKey(codeRef: CodeRef | undefined): string {
   return codeRef ? JSON.stringify(codeRef) : '';

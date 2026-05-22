@@ -228,6 +228,36 @@ export class SearchResource<
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
+      // Non-live callers can treat the seed as authoritative ONLY when
+      // it actually carries content. Two signals say "authoritative":
+      //   - seed.cards.length > 0: the parent serialized resolved
+      //     instances in this document; we have the answer.
+      //   - seed.searchURL is set: query-field capture in
+      //     `query-field-support.ts::captureQueryFieldSeedData` only
+      //     populates `seedSearchURL` when the relationship is fully
+      //     resolved (its `shouldTreatEmptySeedAsUnresolved` branch
+      //     leaves it `null` for empty seeds that need a fallback
+      //     search). A non-null URL means the IDs are known.
+      // An empty seed with no searchURL is the explicit "unresolved,
+      // please run the client-side fallback query" signal — let it
+      // fall through to perform() even in non-live mode.
+      let seedIsAuthoritative =
+        seed.cards.length > 0 || Boolean(seed.searchURL);
+      if (!isLive && seedIsAuthoritative) {
+        // The parent document already serialized the relationship set
+        // we are resolving, so a re-query would only re-derive the
+        // same data and (in prerender) burn a `_federated-search`
+        // round-trip per field per loaded card. Skip the search and
+        // also bypass the query/realm equality check below so a
+        // signature drift between the parent doc's `links.search` and
+        // the recomputed query doesn't sneak a fetch back in.
+        this.#previousRealms = realms;
+        this.#previousQuery = query;
+        this.#previousQueryString = buildQueryParamValue(
+          normalizeQueryForSignature(query),
+        );
+        return;
+      }
     }
 
     if (

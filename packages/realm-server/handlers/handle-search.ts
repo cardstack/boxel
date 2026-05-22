@@ -20,6 +20,8 @@ import {
   getMultiRealmAuthorization,
   getSearchRequestPayload,
 } from '../middleware/multi-realm-authorization';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
 import type { JobScopedSearchCache } from '../job-scoped-search-cache';
 import {
   PRERENDER_JOB_ID_HEADER,
@@ -28,12 +30,13 @@ import {
   sanitizePrerenderJobId,
 } from '../prerender/prerender-constants';
 
-export default function handleSearch(opts?: {
+export default function handleSearch(opts: {
+  reconciler: RealmRegistryReconciler;
   searchCache?: JobScopedSearchCache;
 }): (ctxt: Koa.Context) => Promise<void> {
-  let searchCache = opts?.searchCache;
+  let { reconciler, searchCache } = opts;
   return async function (ctxt: Koa.Context) {
-    let { realmList, realmByURL } = getMultiRealmAuthorization(ctxt);
+    let { realmList } = getMultiRealmAuthorization(ctxt);
 
     let cardsQuery;
     let request = await fetchRequestFromContext(ctxt);
@@ -72,16 +75,19 @@ export default function handleSearch(opts?: {
     if (jobPriority !== null) searchOpts.priority = jobPriority;
     let normalizedSearchOpts =
       Object.keys(searchOpts).length > 0 ? searchOpts : undefined;
-    let runSearch = async () =>
-      JSON.stringify(
-        await searchRealms(
-          realmList.map((realmURL) => realmByURL.get(realmURL)),
-          cardsQuery,
-          normalizedSearchOpts,
-        ),
+    // Lazy-mount inside runSearch so cache hits (304 / cached body)
+    // skip the lazy-mount work entirely.
+    let runSearch = async () => {
+      let realmInstances = await resolveRealmsForFederatedRequest(
+        reconciler,
+        realmList,
+      );
+      return JSON.stringify(
+        await searchRealms(realmInstances, cardsQuery, normalizedSearchOpts),
         null,
         2,
       );
+    };
 
     // Job-scoped cache. Gated on:
     //   (a) `x-boxel-job-id` is present and well-formed (only the

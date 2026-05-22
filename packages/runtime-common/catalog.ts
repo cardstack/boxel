@@ -11,8 +11,14 @@ import type { LocalPath } from './paths';
 import { cardIdToURL, rri } from './card-reference-resolver';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
 
-// @ts-ignore TODO: fix catalog types in runtime-common
-import type { Listing } from '@cardstack/catalog/listing/listing';
+// Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)
+export interface Listing extends CardDef {
+  name?: string;
+  summary?: string;
+  specs: any[];
+  examples: any[];
+  skills: any[];
+}
 
 const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
 

@@ -204,7 +204,7 @@ export async function loadCardDef(
 
 export function identifyCard(
   card: typeof BaseDef | undefined,
-  maybeRelativeURL?: ((possibleURL: string) => string) | null,
+  maybeRelativeReference?: ((possibleReference: string) => string) | null,
   visited = new WeakSet<typeof BaseDef>(),
 ): CodeRef | undefined {
   if (!card) {
@@ -221,10 +221,10 @@ export function identifyCard(
 
   let ref = Loader.identify(card);
   if (ref) {
-    return maybeRelativeURL
+    return maybeRelativeReference
       ? {
           ...ref,
-          module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
+          module: maybeRelativeReference(ref.module) as RealmResourceIdentifier,
         }
       : (ref as ResolvedCodeRef);
   }
@@ -233,7 +233,7 @@ export function identifyCard(
   if (!local) {
     return undefined;
   }
-  let innerRef = identifyCard(local.card, maybeRelativeURL, visited);
+  let innerRef = identifyCard(local.card, maybeRelativeReference, visited);
   if (!innerRef) {
     return undefined;
   }

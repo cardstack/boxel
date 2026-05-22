@@ -53,7 +53,7 @@ module('lint-runner | sanitizeRelativePath', () => {
 module('lint-runner | parseTscOutput', () => {
   // Matches what runtime passes: path.relative(HOST_DIR, tempDir) has NO
   // trailing slash, so the parser must tolerate that shape.
-  let runtimePrefix = '../catalog-realm/__submissions-temp__/x';
+  let runtimePrefix = '../catalog/__submissions-temp__/x';
 
   test('returns empty array for empty output', (assert) => {
     assert.deepEqual(parseTscOutput('', runtimePrefix), []);
@@ -61,9 +61,9 @@ module('lint-runner | parseTscOutput', () => {
 
   test('filters to errors inside submission temp path', (assert) => {
     let output = [
-      '../catalog-realm/__submissions-temp__/x/foo.gts(17,1): error TS6133: unused import',
-      '../catalog-realm/todo.gts(117,47): error TS2345: unrelated existing error',
-      '../catalog-realm/__submissions-temp__/x/sub/bar.gts(3,2): error TS2322: Type mismatch',
+      '../catalog/__submissions-temp__/x/foo.gts(17,1): error TS6133: unused import',
+      '../catalog/contents/todo.gts(117,47): error TS2345: unrelated existing error',
+      '../catalog/__submissions-temp__/x/sub/bar.gts(3,2): error TS2322: Type mismatch',
     ].join('\n');
     let errors = parseTscOutput(output, runtimePrefix);
     assert.strictEqual(errors.length, 2);
@@ -76,7 +76,7 @@ module('lint-runner | parseTscOutput', () => {
     // Regression guard: `split(prefix)[1]` used to leave a leading "/" on
     // the display path when the prefix didn't end with a slash.
     let output =
-      '../catalog-realm/__submissions-temp__/x/foo.gts(1,1): error TS1: msg';
+      '../catalog/__submissions-temp__/x/foo.gts(1,1): error TS1: msg';
     let errors = parseTscOutput(output, runtimePrefix);
     assert.strictEqual(errors.length, 1);
     assert.notOk(errors[0].startsWith('/'), `no leading slash: ${errors[0]}`);
@@ -85,10 +85,10 @@ module('lint-runner | parseTscOutput', () => {
 
   test('also works when prefix is passed with a trailing slash', (assert) => {
     let output =
-      '../catalog-realm/__submissions-temp__/x/foo.gts(1,1): error TS1: msg';
+      '../catalog/__submissions-temp__/x/foo.gts(1,1): error TS1: msg';
     let errors = parseTscOutput(
       output,
-      '../catalog-realm/__submissions-temp__/x/',
+      '../catalog/__submissions-temp__/x/',
     );
     assert.strictEqual(errors.length, 1);
     assert.ok(errors[0].startsWith('foo.gts '), errors[0]);
@@ -96,7 +96,7 @@ module('lint-runner | parseTscOutput', () => {
 
   test('ignores warnings', (assert) => {
     let output =
-      '../catalog-realm/__submissions-temp__/x/foo.gts(1,1): warning TS6133: meh';
+      '../catalog/__submissions-temp__/x/foo.gts(1,1): warning TS6133: meh';
     let errors = parseTscOutput(output, runtimePrefix);
     assert.strictEqual(errors.length, 0);
   });
@@ -105,7 +105,7 @@ module('lint-runner | parseTscOutput', () => {
     let output = [
       'random log line',
       'Compiled',
-      '../catalog-realm/__submissions-temp__/x/a.gts(2,3): error TS1234: msg',
+      '../catalog/__submissions-temp__/x/a.gts(2,3): error TS1234: msg',
     ].join('\n');
     let errors = parseTscOutput(output, runtimePrefix);
     assert.strictEqual(errors.length, 1);
@@ -113,25 +113,25 @@ module('lint-runner | parseTscOutput', () => {
 });
 
 module('lint-runner | parseTemplateLintOutput', () => {
-  // Simulate realistic runtime inputs: linter cwd is catalog-realm; tempDir
-  // is catalog-realm/__submissions-temp__/<runId>/; JSON keys are relative
+  // Simulate realistic runtime inputs: linter cwd is the catalog package;
+  // tempDir is catalog/__submissions-temp__/<runId>/; JSON keys are relative
   // to the linter's cwd, so they include the __submissions-temp__ prefix.
-  let catalogRealm = path.join(os.tmpdir(), 'catalog-realm');
-  let tempDir = path.join(catalogRealm, '__submissions-temp__', 'abc');
+  let catalogDir = path.join(os.tmpdir(), 'catalog');
+  let tempDir = path.join(catalogDir, '__submissions-temp__', 'abc');
 
   test('returns empty array for empty output', (assert) => {
-    assert.deepEqual(parseTemplateLintOutput('', tempDir, catalogRealm), []);
+    assert.deepEqual(parseTemplateLintOutput('', tempDir, catalogDir), []);
   });
 
   test('returns empty array for invalid JSON', (assert) => {
     assert.deepEqual(
-      parseTemplateLintOutput('not json', tempDir, catalogRealm),
+      parseTemplateLintOutput('not json', tempDir, catalogDir),
       [],
     );
   });
 
   test('resolves paths relative to linter cwd, not tempDir (regression)', (assert) => {
-    // ember-template-lint emits keys relative to its cwd (catalog-realm).
+    // ember-template-lint emits keys relative to its cwd (the catalog package).
     // Without the linterCwd arg, we used to double-prefix the tempDir.
     let json = JSON.stringify({
       '__submissions-temp__/abc/foo/bar.hbs': [
@@ -144,7 +144,7 @@ module('lint-runner | parseTemplateLintOutput', () => {
         },
       ],
     });
-    let errors = parseTemplateLintOutput(json, tempDir, catalogRealm);
+    let errors = parseTemplateLintOutput(json, tempDir, catalogDir);
     assert.strictEqual(errors.length, 1);
     assert.ok(errors[0].startsWith('foo/bar.hbs '), errors[0]);
     assert.notOk(
@@ -165,14 +165,14 @@ module('lint-runner | parseTemplateLintOutput', () => {
         },
       ],
     });
-    let errors = parseTemplateLintOutput(json, tempDir, catalogRealm);
+    let errors = parseTemplateLintOutput(json, tempDir, catalogDir);
     assert.strictEqual(errors.length, 0);
   });
 
   test('handles empty messages array', (assert) => {
     let json = JSON.stringify({ '__submissions-temp__/abc/foo.hbs': [] });
     assert.deepEqual(
-      parseTemplateLintOutput(json, tempDir, catalogRealm),
+      parseTemplateLintOutput(json, tempDir, catalogDir),
       [],
     );
   });
@@ -186,7 +186,7 @@ module('lint-runner | parseTemplateLintOutput', () => {
         { rule: 'r2', severity: 2, line: 2, column: 2, message: 'm2' },
       ],
     });
-    let errors = parseTemplateLintOutput(json, tempDir, catalogRealm);
+    let errors = parseTemplateLintOutput(json, tempDir, catalogDir);
     assert.strictEqual(errors.length, 2);
     assert.ok(
       errors.some((e) => e.startsWith('a.hbs ')),
@@ -205,7 +205,7 @@ module('lint-runner | parseTemplateLintOutput', () => {
     let json = JSON.stringify({
       [abs]: [{ rule: 'r', severity: 2, line: 1, column: 1, message: 'm' }],
     });
-    let errors = parseTemplateLintOutput(json, tempDir, catalogRealm);
+    let errors = parseTemplateLintOutput(json, tempDir, catalogDir);
     assert.strictEqual(errors.length, 1);
     assert.ok(errors[0].startsWith('foo.hbs '), errors[0]);
   });

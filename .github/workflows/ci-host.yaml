@@ -10,7 +10,6 @@ on:
       - "packages/base/**"
       - "packages/boxel-icons/**"
       - "packages/boxel-ui/**"
-      - "packages/catalog-realm/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"
@@ -58,7 +57,7 @@ jobs:
           percy_needed=false
           while IFS= read -r file; do
             case "$file" in
-              packages/host/*|packages/boxel-ui/*|packages/boxel-icons/*|packages/base/*|packages/catalog-realm/*|packages/runtime-common/*)
+              packages/host/*|packages/boxel-ui/*|packages/boxel-icons/*|packages/base/*|packages/runtime-common/*)
                 percy_needed=true
                 echo "UI-relevant change detected: $file"
                 break

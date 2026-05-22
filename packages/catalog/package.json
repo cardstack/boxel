@@ -31,7 +31,8 @@
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "qunit": "catalog:",
-    "qunit-dom": "catalog:"
+    "qunit-dom": "catalog:",
+    "tracked-built-ins": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:"

@@ -39,7 +39,6 @@ Run the GTS codemod against card definition sources (including templates):
 1) Pick a root directory that contains `.gts` card definitions.
    - Common choices:
      - `packages/` (host + base + other packages)
-     - `packages/catalog-realm/`
      - `packages/experiments-realm/`
      - Repo root to cover all of the above
 

@@ -19,7 +19,6 @@ traefik/dynamic/*.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/
 packages/host/dist
-packages/catalog-realm/__submissions-temp__/
 packages/observability/templates/env-vars.env
 packages/observability/**/*.local.yaml
 packages/observability/**/*.local.json

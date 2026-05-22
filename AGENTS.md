@@ -63,10 +63,6 @@
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 
-### packages/catalog-realm
-
-- Functionality is tested via host package tests
-
 ### packages/host
 
 - `pnpm start` to start a process that will watch files and automatically rebuild
