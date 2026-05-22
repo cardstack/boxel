@@ -233,3 +233,26 @@ else
     fi
   fi
 fi
+
+# Trust the mkcert root CA in Node clients regardless of env-mode vs
+# standard mode. Both modes serve the same mkcert leaf — standard
+# mode via the realm-server's own h2 dispatcher, env mode via Traefik
+# in front of plain-HTTP services — so any Node-side fetch to
+# `https://host/matrix/realm-server.<...>.localhost` needs the CA
+# trusted to pass `tls.checkServerIdentity`. Without this, env-mode
+# realm-server's startup `getIndexHTML()` smoke-test fetch fails with
+# `TypeError: fetch failed` and `process.exit(-2)` — the visible
+# symptom is realm-server crash-looping and every public URL 502-ing.
+if command -v mkcert >/dev/null 2>&1; then
+  _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+  if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+    # NODE_EXTRA_CA_CERTS accepts a single PEM file path (not a
+    # colon-separated list). If the dev has already pointed it at
+    # something, leave their value in place — they presumably have
+    # mkcert's CA bundled in already, or know what they're doing.
+    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+      export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
+    fi
+  fi
+  unset _BOXEL_MKCERT_CAROOT
+fi

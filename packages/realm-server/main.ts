@@ -315,12 +315,46 @@ const getIndexHTML = async () => {
   return await response.text();
 };
 
+// At boot, the host app may not yet be reachable: vite's first
+// optimizer pass takes several seconds; in env mode Traefik's macOS
+// file-watcher reloads can race the realm-server's first probe; and
+// fresh shells without `mkcert -install` may still be missing trust
+// for a TLS handshake until NODE_EXTRA_CA_CERTS propagates. A single
+// fetch attempt with `process.exit(-2)` on failure turns any of these
+// transient conditions into a crash-loop that takes the whole stack
+// down. Retry with linear backoff for ~30s before giving up.
+const SMOKE_TEST_TIMEOUT_MS = 30_000;
+const SMOKE_TEST_BACKOFF_MS = 2_000;
+const smokeTestHostApp = async () => {
+  let started = Date.now();
+  let lastError: Error | undefined;
+  while (Date.now() - started < SMOKE_TEST_TIMEOUT_MS) {
+    try {
+      await getIndexHTML();
+      return;
+    } catch (e) {
+      lastError = e as Error;
+      let cause = (e as { cause?: { message?: string; code?: string } }).cause;
+      let detail = cause?.code || cause?.message || lastError.message;
+      console.warn(
+        `Host app URL ${distURL} not yet reachable (${detail}); retrying in ${SMOKE_TEST_BACKOFF_MS}ms…`,
+      );
+      await new Promise((r) => setTimeout(r, SMOKE_TEST_BACKOFF_MS));
+    }
+  }
+  throw lastError ?? new Error('host app smoke test timed out');
+};
+
 (async () => {
   try {
-    await getIndexHTML();
+    await smokeTestHostApp();
   } catch (e: any) {
     Sentry.captureException(e);
-    console.error(`Unable to fetch from host app URL ${distURL}: ${e.message}`);
+    let cause = e?.cause as { message?: string; code?: string } | undefined;
+    let detail = cause?.code
+      ? `${cause.code}${cause.message ? `: ${cause.message}` : ''}`
+      : (cause?.message ?? e.message);
+    console.error(`Unable to fetch from host app URL ${distURL}: ${detail}`);
     process.exit(-2);
   }
   let realms: Realm[] = [];
