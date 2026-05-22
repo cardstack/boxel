@@ -17,25 +17,36 @@ const log = logger('realm-server:config-card-backfill');
 // don't serialize on each other.
 export const CONFIG_CARD_BACKFILL_LOCK_ID = 7331013;
 
-// CS-11150 creates a RealmConfig card instance at /realm.json for every
-// realm that doesn't have one yet, populating it from the legacy
-// .realm.json sidecar. After CS-10051, parseRealmInfo prefers the card
-// file but falls back to the sidecar; the fallback can be removed
-// (CS-11131) once this backfill has run in every environment.
+// CS-11150 creates a RealmConfig card at /realm.json for every realm
+// that doesn't have one yet, populating it from the legacy .realm.json
+// sidecar. CS-10055 extends that work: the legacy `hostHome` (a string
+// URL) is also migrated into the card, becoming a `/`-rooted entry in
+// `hostRoutingRules`, and `interactHome` (now obsolete — `index.json`
+// covers the interact-mode home case) is dropped from the sidecar.
 //
-// Skips when /realm.json already exists — the card is the source of
-// truth, and the backfill never overwrites it.
+// Three migration shapes coexist in one pass so existing card +
+// sidecar-only fields don't have to wait for separate boot cycles:
 //
-// Fields owned by the RealmConfig card (see REALM_CONFIG_CARD_PROPERTIES
-// in runtime-common/realm.ts). Anything outside this set stays in the
-// sidecar (today: hostHome / interactHome, until CS-10055 lands).
-const CARD_KEYS_TO_MIGRATE = [
-  'name',
+//   - New card created from a sidecar that has any migratable key.
+//   - Existing card augmented with a `/`-rule when the sidecar has
+//     `hostHome` and the card doesn't already have a `/` rule.
+//   - Sidecar always trimmed of every key the card now owns.
+const CARD_ATTRIBUTE_KEYS = [
   'backgroundURL',
   'iconURL',
-  'hostRoutingRules',
   'includePrerenderedDefaultRealmIndex',
 ] as const;
+
+// `name` is migrated into `cardInfo.name` on the card, not a top-level
+// attribute. Tracked separately so the card-construction step can do
+// the translation.
+const NAME_KEY = 'name';
+
+// Sidecar keys that always get trimmed when present, regardless of
+// whether the card needed any modification. interactHome is dropped
+// outright (no card field) — the field is obsolete now that index.json
+// is the interact-mode home.
+const SIDECAR_KEYS_TO_DROP = ['interactHome'] as const;
 
 // Canonical RealmConfig adopts-from module. patchRealmConfig writes the
 // same absolute URL and rejects anything else on subsequent edits, so
@@ -44,6 +55,26 @@ const CARD_KEYS_TO_MIGRATE = [
 // per-realm copies of that file are not needed.
 const REALM_CONFIG_MODULE = 'https://cardstack.com/base/realm-config';
 const REALM_CONFIG_NAME = 'RealmConfig';
+
+// On-disk shape of a RealmConfig card. `hostRoutingRules` paths live in
+// `attributes` but their `instance` linksTo lives under `relationships`
+// keyed by `hostRoutingRules.<index>.instance`, with a relative `./Type/id`
+// URL inside `links.self`. Matches what patchRealmConfig / the indexer
+// write on this codebase.
+interface CardDoc {
+  data: {
+    type: 'card';
+    attributes?: Record<string, unknown>;
+    relationships?: Record<string, { links: { self: string | null } }>;
+    meta: {
+      adoptsFrom: { module: string; name: string };
+    };
+  };
+}
+
+interface RoutingRule {
+  path?: string;
+}
 
 export interface RealmConfigCardBackfillOpts {
   dbAdapter: DBAdapter;
@@ -90,69 +121,189 @@ async function safeStep<T>(
   }
 }
 
-// Materializes a RealmConfig card at cardPath from the migratable keys
-// in the sidecar. Returns true when a card was actually written.
+// Returns:
+//   true  — the backfill modified at least one of (card file, sidecar
+//           file) for this realm
+//   false — no-op (no sidecar, nothing to migrate, or registry URL
+//           required-but-missing for hostHome)
 //
-// Pre-existing card → leave both files alone (the card is source of
-// truth; trimming the sidecar without reading the card would risk
-// losing a value the card doesn't have).
-// Pre-existing card absent, sidecar has zero migratable keys → no-op
-// (don't write an empty card; a card with no attributes is not
-// equivalent to "no card").
+// `url` is the realm's canonical URL when known. Pass `null` for
+// published realms when realm_registry doesn't have a row yet — the
+// new-card path still works (URL is only used in error logs), but
+// the hostHome → `/`-rule path needs the URL to compute the relative
+// `./Type/id` link and is skipped with a warning.
 function migrateOne(
   sidecarPath: string,
   cardPath: string,
-  url: string,
+  url: string | null,
 ): boolean {
-  if (existsSync(cardPath)) {
-    return false;
-  }
   if (!existsSync(sidecarPath)) {
     return false;
   }
+
+  const sidecar = readSidecar(sidecarPath);
+  if (sidecar === null) {
+    return false;
+  }
+
+  const existingCard = readExistingCard(cardPath);
+  if (existingCard === 'unparseable') {
+    log.warn(`existing realm.json at ${cardPath} is unparseable; skipping`);
+    return false;
+  }
+
+  if (existingCard === null) {
+    return createCardFromSidecar(sidecarPath, cardPath, sidecar, url);
+  }
+  return augmentExistingCard(sidecarPath, cardPath, existingCard, sidecar, url);
+}
+
+function readSidecar(sidecarPath: string): Record<string, unknown> | null {
   let raw: string;
   try {
     raw = readFileSync(sidecarPath, 'utf8');
   } catch (err: unknown) {
     log.warn(`could not read ${sidecarPath}: ${String(err)}`);
-    return false;
+    return null;
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (err: unknown) {
     log.warn(`could not parse ${sidecarPath}: ${String(err)}`);
-    return false;
+    return null;
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return false;
+    return null;
   }
-  const sidecar = parsed as Record<string, unknown>;
+  return parsed as Record<string, unknown>;
+}
 
-  const cardAttrs: Record<string, unknown> = {};
-  const migratedKeys: string[] = [];
-  for (const key of CARD_KEYS_TO_MIGRATE) {
-    if (!(key in sidecar)) {
-      continue;
-    }
-    const value = sidecar[key];
-    if (key === 'name') {
-      // `name` is stored under cardInfo.name on the card, matching what
-      // patchRealmConfig writes (see REALM_CONFIG_CARD_PROPERTIES handling).
-      cardAttrs.cardInfo = { name: value };
+function readExistingCard(cardPath: string): CardDoc | null | 'unparseable' {
+  if (!existsSync(cardPath)) {
+    return null;
+  }
+  let raw: string;
+  try {
+    raw = readFileSync(cardPath, 'utf8');
+  } catch (err: unknown) {
+    log.warn(`could not read ${cardPath}: ${String(err)}`);
+    return 'unparseable';
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err: unknown) {
+    log.warn(`could not parse ${cardPath}: ${String(err)}`);
+    return 'unparseable';
+  }
+  if (
+    parsed === null ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    !('data' in (parsed as object))
+  ) {
+    return 'unparseable';
+  }
+  return parsed as CardDoc;
+}
+
+// Build a fresh RealmConfig card from sidecar values. Returns null if
+// the sidecar has no card-bound keys to migrate (so no empty card is
+// written).
+function createCardFromSidecar(
+  sidecarPath: string,
+  cardPath: string,
+  sidecar: Record<string, unknown>,
+  url: string | null,
+): boolean {
+  const attributes: Record<string, unknown> = {};
+  const relationships: Record<string, { links: { self: string | null } }> = {};
+  const migratedKeys = new Set<string>();
+
+  if (NAME_KEY in sidecar) {
+    attributes.cardInfo = { name: sidecar[NAME_KEY] };
+    migratedKeys.add(NAME_KEY);
+  }
+  for (const key of CARD_ATTRIBUTE_KEYS) {
+    if (!(key in sidecar)) continue;
+    attributes[key] = sidecar[key];
+    migratedKeys.add(key);
+  }
+
+  // hostRoutingRules: rare in sidecars on this codebase (the field
+  // already lives on the card today), but if a sidecar carries it,
+  // split into the canonical {path}-in-attributes / linksTo-in-
+  // relationships shape rather than copying verbatim.
+  const sidecarRules = sidecar.hostRoutingRules;
+  if (Array.isArray(sidecarRules)) {
+    const rulesAttrs: { path?: string }[] = [];
+    sidecarRules.forEach((rule, i) => {
+      if (rule && typeof rule === 'object') {
+        const r = rule as Record<string, unknown>;
+        rulesAttrs.push({ path: r.path as string | undefined });
+        if (typeof r.instance === 'string') {
+          relationships[`hostRoutingRules.${i}.instance`] = {
+            links: { self: toRelativeInstanceLink(r.instance, url) },
+          };
+        }
+      }
+    });
+    attributes.hostRoutingRules = rulesAttrs;
+    migratedKeys.add('hostRoutingRules');
+  }
+
+  // hostHome → /-rooted hostRoutingRules entry. Appended after any
+  // existing rules; if the sidecar already contained a /-rule via
+  // hostRoutingRules, that rule wins and hostHome is dropped silently.
+  const hostHome = sidecar.hostHome;
+  if (typeof hostHome === 'string') {
+    if (url === null) {
+      log.warn(
+        `cannot migrate hostHome at ${sidecarPath} without a known realm URL; ` +
+          `leaving sidecar entry for a future boot`,
+      );
     } else {
-      cardAttrs[key] = value;
+      const existingRules = Array.isArray(attributes.hostRoutingRules)
+        ? (attributes.hostRoutingRules as RoutingRule[])
+        : [];
+      const hasSlashRule = existingRules.some((r) => r.path === '/');
+      if (!hasSlashRule) {
+        const newIndex = existingRules.length;
+        existingRules.push({ path: '/' });
+        attributes.hostRoutingRules = existingRules;
+        relationships[`hostRoutingRules.${newIndex}.instance`] = {
+          links: { self: toRelativeInstanceLink(hostHome, url) },
+        };
+      }
+      migratedKeys.add('hostHome');
     }
-    migratedKeys.push(key);
   }
-  if (migratedKeys.length === 0) {
+
+  for (const key of SIDECAR_KEYS_TO_DROP) {
+    if (key in sidecar) {
+      migratedKeys.add(key);
+    }
+  }
+
+  if (migratedKeys.size === 0) {
     return false;
   }
 
-  const cardDoc = {
+  // If hostRoutingRules ended up empty, omit the attribute so the card
+  // doesn't carry an empty array purely as a backfill artifact.
+  if (
+    Array.isArray(attributes.hostRoutingRules) &&
+    (attributes.hostRoutingRules as unknown[]).length === 0
+  ) {
+    delete attributes.hostRoutingRules;
+  }
+
+  const cardDoc: CardDoc = {
     data: {
       type: 'card',
-      attributes: cardAttrs,
+      attributes,
+      ...(Object.keys(relationships).length > 0 ? { relationships } : {}),
       meta: {
         adoptsFrom: {
           module: REALM_CONFIG_MODULE,
@@ -165,16 +316,134 @@ function migrateOne(
   try {
     writeFileSync(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
   } catch (err: unknown) {
-    log.warn(`could not write ${cardPath} for ${url}: ${String(err)}`);
+    log.warn(`could not write ${cardPath} for ${url ?? '?'}: ${String(err)}`);
     return false;
   }
 
-  // Trim migrated keys from the sidecar. Leave non-migrated keys
-  // (notably hostHome / interactHome) so they can be picked up by a
-  // later migration (CS-10055).
+  trimSidecar(sidecarPath, sidecar, migratedKeys);
+  return true;
+}
+
+// When a realm.json card already exists, the card is the source of
+// truth for everything the card schema owns. The only sidecar value we
+// can safely migrate after the fact is `hostHome` (no equivalent ever
+// existed on the card; adding a `/`-rule is purely additive). Plus we
+// strip `interactHome` if present.
+function augmentExistingCard(
+  sidecarPath: string,
+  cardPath: string,
+  card: CardDoc,
+  sidecar: Record<string, unknown>,
+  url: string | null,
+): boolean {
+  const migratedKeys = new Set<string>();
+  let cardModified = false;
+
+  const hostHome = sidecar.hostHome;
+  if (typeof hostHome === 'string') {
+    if (url === null) {
+      log.warn(
+        `cannot migrate hostHome at ${sidecarPath} into existing card without ` +
+          `a known realm URL; leaving sidecar entry for a future boot`,
+      );
+    } else {
+      cardModified = addHostHomeRule(card, hostHome, url, sidecarPath) || cardModified;
+      migratedKeys.add('hostHome');
+    }
+  }
+  // hostHome present-but-non-string still gets trimmed — it can't be
+  // honored anyway. interactHome always trims (we never migrate it).
+  if ('hostHome' in sidecar) {
+    migratedKeys.add('hostHome');
+  }
+  for (const key of SIDECAR_KEYS_TO_DROP) {
+    if (key in sidecar) {
+      migratedKeys.add(key);
+    }
+  }
+
+  if (cardModified) {
+    try {
+      writeFileSync(cardPath, JSON.stringify(card, null, 2) + '\n');
+    } catch (err: unknown) {
+      log.warn(`could not write ${cardPath} for ${url ?? '?'}: ${String(err)}`);
+      return false;
+    }
+  }
+
+  if (migratedKeys.size === 0 && !cardModified) {
+    return false;
+  }
+
+  if (migratedKeys.size > 0) {
+    trimSidecar(sidecarPath, sidecar, migratedKeys);
+  }
+  return true;
+}
+
+// Returns true if the card document was modified (a new /-rule was
+// added). If a /-rule already exists, no-op + log when the existing
+// rule's target differs from the sidecar's hostHome value.
+function addHostHomeRule(
+  card: CardDoc,
+  hostHome: string,
+  url: string,
+  sidecarPath: string,
+): boolean {
+  card.data.attributes = card.data.attributes ?? {};
+  card.data.relationships = card.data.relationships ?? {};
+
+  const rulesRaw = card.data.attributes.hostRoutingRules;
+  const rules: RoutingRule[] = Array.isArray(rulesRaw)
+    ? (rulesRaw as RoutingRule[])
+    : [];
+
+  const existingSlashIdx = rules.findIndex((r) => r?.path === '/');
+  if (existingSlashIdx >= 0) {
+    const existingLink =
+      card.data.relationships[`hostRoutingRules.${existingSlashIdx}.instance`]
+        ?.links?.self ?? null;
+    const desiredLink = toRelativeInstanceLink(hostHome, url);
+    if (existingLink !== desiredLink) {
+      log.warn(
+        `existing /-rule in ${sidecarPath.replace(/\.realm\.json$/, 'realm.json')} ` +
+          `points at ${existingLink ?? '(null)'}, not at sidecar hostHome ${hostHome}; ` +
+          `keeping the card's value`,
+      );
+    }
+    return false;
+  }
+
+  const newIndex = rules.length;
+  rules.push({ path: '/' });
+  card.data.attributes.hostRoutingRules = rules;
+  card.data.relationships[`hostRoutingRules.${newIndex}.instance`] = {
+    links: { self: toRelativeInstanceLink(hostHome, url) },
+  };
+  return true;
+}
+
+// Convert an absolute card URL (e.g. https://realm.example.com/Foo/abc)
+// to the realm-relative form used inside relationships (./Foo/abc). If
+// the absolute URL doesn't start with the realm URL, fall back to
+// returning the absolute URL — that's still a valid link, just less
+// portable.
+function toRelativeInstanceLink(absoluteUrl: string, realmUrl: string): string {
+  const realm = realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`;
+  if (absoluteUrl.startsWith(realm)) {
+    return `./${absoluteUrl.slice(realm.length)}`;
+  }
+  return absoluteUrl;
+}
+
+function trimSidecar(
+  sidecarPath: string,
+  sidecar: Record<string, unknown>,
+  migratedKeys: Set<string>,
+): void {
   const trimmed: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(sidecar)) {
-    if (!(migratedKeys as readonly string[]).includes(k)) {
+    if (!migratedKeys.has(k)) {
       trimmed[k] = v;
     }
   }
@@ -185,7 +454,6 @@ function migrateOne(
       `could not trim migrated keys from ${sidecarPath}: ${String(err)}`,
     );
   }
-  return true;
 }
 
 async function backfillSourceRealms(
@@ -234,12 +502,15 @@ async function backfillPublishedRealms(
     return 0;
   }
 
-  // Best-effort lookup for log messages only. Under multi-instance
-  // startup wave, a peer process can hold the registry-backfill lock
-  // while this process wins the config-card-backfill lock, so
-  // realm_registry may be empty or sparse here. Don't gate the
-  // migration on registry state — the migration itself only needs the
-  // sidecar/card file paths.
+  // Best-effort lookup. Under multi-instance startup wave, a peer
+  // process can hold the registry-backfill lock while this process
+  // wins the config-card-backfill lock, so realm_registry may be
+  // empty or sparse here. The card-keys-only migration still works
+  // without the URL (only used in error log lines), but the
+  // hostHome → /-rule migration needs the URL to compute the
+  // relative ./Type/id link. We pass null when registry has no row,
+  // and migrateOne logs + leaves the hostHome sidecar entry for a
+  // future boot.
   let byId: Map<string, string>;
   try {
     const rows = (await query(opts.dbAdapter, [
@@ -249,7 +520,7 @@ async function backfillPublishedRealms(
   } catch (err: unknown) {
     log.warn(
       `could not read realm_registry for url lookup; ` +
-        `continuing without URLs in log messages: ${String(err)}`,
+        `continuing without URLs: ${String(err)}`,
     );
     byId = new Map();
   }
@@ -262,10 +533,7 @@ async function backfillPublishedRealms(
     const realmDir = join(publishedRoot, entry.name);
     const sidecarPath = join(realmDir, '.realm.json');
     const cardPath = join(realmDir, 'realm.json');
-    // URL is informational only inside migrateOne (used in error log
-    // lines). Fall back to a disk-derived identifier so a missing
-    // registry row doesn't suppress the migration.
-    const url = byId.get(entry.name) ?? `published-disk:${entry.name}`;
+    const url = byId.get(entry.name) ?? null;
     if (migrateOne(sidecarPath, cardPath, url)) {
       count += 1;
     }
