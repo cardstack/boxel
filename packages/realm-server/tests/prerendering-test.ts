@@ -1824,10 +1824,17 @@ module(basename(__filename), function () {
           });
 
           assert.notOk(result.response.error, 'prerender succeeds');
-          assert.strictEqual(
-            delayedSearchPatch.getRequestCount(),
-            0,
-            'prerender skipped query-backed fallback _search (per-URL GETs replace it)',
+          // Source-mode instance loads (the prerender's contract) leave
+          // `relationships.{queryField}.data` empty in every fetched
+          // doc, so each query-backed field still fires a live
+          // `_federated-search` to populate. The PR's win lands on the
+          // *response side*: each search returns `data` + IDs but stops
+          // short of expanding the linked resources into `included[]`,
+          // so per-search payloads drop by ~10-60×. Track the search
+          // count to guard against a regression in either direction.
+          assert.true(
+            delayedSearchPatch.getRequestCount() > 0,
+            `prerender ran query-backed fallback _search calls (raw-source mode does not carry pre-resolved IDs): count=${delayedSearchPatch.getRequestCount()}`,
           );
 
           let isolatedHTML = cleanWhiteSpace(

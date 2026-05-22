@@ -367,19 +367,30 @@ export function captureQueryFieldSeedData(
     fieldState.seedRecords.length === 0 &&
     (seedComesFromSearch || relationshipHasUnhydratedTargets);
   // Capture the relationship's serialized IDs as a fallback the
-  // SearchResource can use when the parent doc didn't include the
+  // SearchResource consumes when the parent doc didn't include the
   // resolved cards — the prerender-mode server skip leaves
-  // `relationship.data` populated but `included` empty, so the IDs
-  // here are still authoritative even when seedRecords is empty.
-  // The IDs are NOT trustworthy when the seed itself came from a
-  // search-result document with empty records: search results don't
-  // fully resolve nested query fields, so a downstream consumer must
-  // run a fallback query rather than rely on these IDs. The
-  // `relationshipHasUnhydratedTargets` case (relationship.data names
-  // IDs, no records hydrated) is the expected prerender-server-skip
-  // shape and remains authoritative.
+  // `relationship.data` populated but `included` empty, and the host
+  // materializes each listed ID via a per-URL GET instead of running
+  // a live `_federated-search`.
+  //
+  // Only trust the IDs when the umbrella carries `links.search`:
+  // `applyQueryResults` is the only writer of that key, so its
+  // presence is the unambiguous signal that the indexer (not the
+  // user's raw source file) resolved this field. A raw source's
+  // empty `data: []` lacks `links.search` and must NOT be treated as
+  // an authoritative empty seed — the SearchResource needs to fall
+  // through to a live query to populate the field for the first
+  // time.
+  //
+  // The IDs are also NOT trustworthy when the seed itself came from
+  // a search-result document with empty records: search results
+  // don't fully resolve nested query fields, so a downstream
+  // consumer must run a fallback query rather than rely on these
+  // IDs.
+  let relationshipIsIndexerResolved = Boolean(relationship?.links?.search);
   let seedCardURLsUntrustworthy =
-    seedComesFromSearch && fieldState.seedRecords.length === 0;
+    !relationshipIsIndexerResolved ||
+    (seedComesFromSearch && fieldState.seedRecords.length === 0);
   if (seedCardURLsUntrustworthy) {
     fieldState.seedCardURLs = undefined;
   } else if (Array.isArray(relationship?.data)) {
