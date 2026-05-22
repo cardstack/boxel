@@ -219,13 +219,43 @@ async function seedFilesAndWaitForIndex(
       mkdirSync(dirname(absolute), { recursive: true });
       writeFileSync(absolute, content);
     }
-    let syncResult = await client.sync(realmUrl, stagingDir, {
-      preferLocal: true,
-      waitForIndex: true,
-    });
+    // Retry the sync once on failure. The realm-server's /_atomic
+    // endpoint can return 500 ("Write Error") for transient causes
+    // — for example a concurrent indexing pass or a worker-side
+    // fileSerialization that doesn't recur on retry — and a one-shot
+    // retry with a short backoff lets the helper recover instead of
+    // surfacing the failure as a confusing test flake. If the retry
+    // also fails, the diagnostic logs below preserve the first
+    // attempt's error message so the next CI failure has signal.
+    const maxAttempts = 2;
+    let syncResult: Awaited<ReturnType<typeof client.sync>> | undefined;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      syncResult = await client.sync(realmUrl, stagingDir, {
+        preferLocal: true,
+        waitForIndex: true,
+      });
+      if (!syncResult.hasError) {
+        if (attempt > 1) {
+          console.log(
+            `seedFilesAndWaitForIndex: sync succeeded on attempt ${attempt}/${maxAttempts} for ${realmUrl}`,
+          );
+        }
+        break;
+      }
+      console.log(
+        `seedFilesAndWaitForIndex: sync attempt ${attempt}/${maxAttempts} for ${realmUrl} failed: ${
+          syncResult.error ?? '(no error message)'
+        }`,
+      );
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+    }
     expect(
-      syncResult.hasError,
-      `seed sync to ${realmUrl} reported an error: ${syncResult.error ?? '(no error message)'}`,
+      syncResult!.hasError,
+      `seed sync to ${realmUrl} reported an error after ${maxAttempts} attempt(s): ${
+        syncResult!.error ?? '(no error message)'
+      }`,
     ).toBe(false);
   } finally {
     rmSync(stagingDir, { recursive: true, force: true });
