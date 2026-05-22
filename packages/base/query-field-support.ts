@@ -371,11 +371,16 @@ export function captureQueryFieldSeedData(
   // resolved cards — the prerender-mode server skip leaves
   // `relationship.data` populated but `included` empty, so the IDs
   // here are still authoritative even when seedRecords is empty.
-  // Leave undefined when the seed is unresolved (no `relationship.data`
-  // present, or empty data on a search-result document) so
-  // SearchResource falls back to a live query rather than treating it
-  // as authoritative-empty.
-  if (shouldTreatEmptySeedAsUnresolved) {
+  // The IDs are NOT trustworthy when the seed itself came from a
+  // search-result document with empty records: search results don't
+  // fully resolve nested query fields, so a downstream consumer must
+  // run a fallback query rather than rely on these IDs. The
+  // `relationshipHasUnhydratedTargets` case (relationship.data names
+  // IDs, no records hydrated) is the expected prerender-server-skip
+  // shape and remains authoritative.
+  let seedCardURLsUntrustworthy =
+    seedComesFromSearch && fieldState.seedRecords.length === 0;
+  if (seedCardURLsUntrustworthy) {
     fieldState.seedCardURLs = undefined;
   } else if (Array.isArray(relationship?.data)) {
     fieldState.seedCardURLs = relationship.data
