@@ -441,19 +441,26 @@ async function runQunitInBrowser(options: QunitRunnerOptions): Promise<{
     }
 
     // Manifest capture (BOXEL_TEST_HARNESS_MANIFEST=/path/to/out.json):
-    // every same-origin request to the test-page server, recorded as a
-    // sorted unique list of paths. This is what `build-test-harness.ts`
-    // uses to slim `bundled-test-harness/` down from the full host dist
-    // to just the files chromium actually loads under a card test.
+    // record every same-origin request to the test-page server that
+    // maps to a host/dist file. This is what `build-test-harness.ts`
+    // uses to slim `bundled-test-harness/` down to just the chunks
+    // chromium actually loads under a card test. Skip the realm mount
+    // prefixes (/workspace/, /base/, /skills/) and the root request —
+    // those are runtime-served and would be cruft in the manifest.
+    let realmMountPrefixes = new Set(
+      (options.realmMounts ?? []).map((m) => m.prefix),
+    );
     let manifestPath = process.env.BOXEL_TEST_HARNESS_MANIFEST;
     let manifestPaths = new Set<string>();
     if (manifestPath) {
       page.on('request', (req) => {
         try {
           let u = new URL(req.url());
-          if (u.origin === testPageUrl) {
-            manifestPaths.add(u.pathname);
-          }
+          if (u.origin !== testPageUrl) return;
+          if (u.pathname === '/') return;
+          let firstSeg = u.pathname.split('/')[1] ?? '';
+          if (realmMountPrefixes.has(firstSeg)) return;
+          manifestPaths.add(u.pathname);
         } catch {
           // ignore non-URL refs
         }
