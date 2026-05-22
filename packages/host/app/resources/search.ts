@@ -442,7 +442,11 @@ export class SearchResource<
               return await this.runtimeStore.get(url, {
                 dependencyTrackingContext,
               });
-            } catch {
+            } catch (err) {
+              console.warn(
+                `SearchResource: failed to load seed cardURL ${url}`,
+                err,
+              );
               return undefined;
             }
           }),

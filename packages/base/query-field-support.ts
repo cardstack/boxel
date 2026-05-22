@@ -355,12 +355,29 @@ export function captureQueryFieldSeedData(
     (Array.isArray(relationship?.data)
       ? relationship.data.length > 0
       : Boolean(relationship?.data));
+  // Empty query-backed relationships arriving on search result resources are
+  // not guaranteed to be fully resolved (for example nested query fields on
+  // each result). In that case we should still run the client-side query
+  // fallback instead of treating the empty seed as authoritative.
+  //
+  // Likewise, when relationship data advertises one-or-more targets but none
+  // of those targets are hydrated instances in this document, we should not
+  // suppress fallback search based on links.search alone.
+  let shouldTreatEmptySeedAsUnresolved =
+    fieldState.seedRecords.length === 0 &&
+    (seedComesFromSearch || relationshipHasUnhydratedTargets);
   // Capture the relationship's serialized IDs as a fallback the
   // SearchResource can use when the parent doc didn't include the
   // resolved cards — the prerender-mode server skip leaves
   // `relationship.data` populated but `included` empty, so the IDs
   // here are still authoritative even when seedRecords is empty.
-  if (Array.isArray(relationship?.data)) {
+  // Leave undefined when the seed is unresolved (no `relationship.data`
+  // present, or empty data on a search-result document) so
+  // SearchResource falls back to a live query rather than treating it
+  // as authoritative-empty.
+  if (shouldTreatEmptySeedAsUnresolved) {
+    fieldState.seedCardURLs = undefined;
+  } else if (Array.isArray(relationship?.data)) {
     fieldState.seedCardURLs = relationship.data
       .map((entry) => {
         let id = (entry as { id?: unknown })?.id;
@@ -373,19 +390,8 @@ export function captureQueryFieldSeedData(
   ) {
     fieldState.seedCardURLs = [(relationship.data as { id: string }).id];
   } else {
-    fieldState.seedCardURLs = [];
+    fieldState.seedCardURLs = undefined;
   }
-  // Empty query-backed relationships arriving on search result resources are
-  // not guaranteed to be fully resolved (for example nested query fields on
-  // each result). In that case we should still run the client-side query
-  // fallback instead of treating the empty seed as authoritative.
-  //
-  // Likewise, when relationship data advertises one-or-more targets but none
-  // of those targets are hydrated instances in this document, we should not
-  // suppress fallback search based on links.search alone.
-  let shouldTreatEmptySeedAsUnresolved =
-    fieldState.seedRecords.length === 0 &&
-    (seedComesFromSearch || relationshipHasUnhydratedTargets);
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
     : (relationship?.links?.search ?? null);

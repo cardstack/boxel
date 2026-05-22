@@ -15,7 +15,7 @@ import {
 export function duringPrerenderHeaders(): Record<string, string> {
   let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
     .__boxelRenderContext;
-  return flag ? { [DURING_PRERENDER_HEADER]: '1' } : {};
+  return flag === true ? { [DURING_PRERENDER_HEADER]: '1' } : {};
 }
 
 // While rendering inside a prerender tab the render route writes
