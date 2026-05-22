@@ -725,6 +725,15 @@ module(basename(__filename), function () {
           };
           await pollDownTo(4, 'contraction passes through MAX on the way down');
           await pollDownTo(2, 'contraction reaches MIN even from HP tier');
+          // Belt-and-suspenders: MIN is a stable terminal state — once
+          // reached, contraction must stop there. Verifying equality
+          // alongside sequence membership catches a regression where the
+          // pool brushes past MIN but settles elsewhere.
+          assert.strictEqual(
+            pool.currentMaxPages,
+            2,
+            `pool settles at MIN after contraction (observed=[${observed.join(',')}])`,
+          );
         },
       );
     });
