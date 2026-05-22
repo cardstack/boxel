@@ -1293,9 +1293,6 @@ importers:
       ember-freestyle:
         specifier: ^0.20.0
         version: 0.20.0(@babel/core@7.29.0)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2)
-      ember-load-initializers:
-        specifier: ^2.1.2
-        version: 2.1.2(@babel/core@7.29.0)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.0)
@@ -1605,8 +1602,8 @@ importers:
         specifier: ^0.22.0
         version: 0.22.0(@babel/core@7.29.0)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.106.2(postcss@8.5.14))
       ember-load-initializers:
-        specifier: ^2.1.2
-        version: 2.1.2(@babel/core@7.29.0)
+        specifier: ^3.0.0
+        version: 3.0.1(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
       ember-modifier:
         specifier: ^4.1.0
         version: 4.3.0(@babel/core@7.29.0)
@@ -2131,15 +2128,6 @@ importers:
       babel-plugin-ember-template-compilation:
         specifier: ^2.3.0
         version: 2.4.1
-      broccoli-merge-trees:
-        specifier: 'catalog:'
-        version: 4.2.0
-      broccoli-plugin:
-        specifier: 'catalog:'
-        version: 4.0.7
-      broccoli-source:
-        specifier: 'catalog:'
-        version: 3.0.1
       buffer:
         specifier: 'catalog:'
         version: 6.0.3
@@ -4025,11 +4013,6 @@ packages:
   '@babel/plugin-transform-typescript@7.28.6':
     resolution: {integrity: sha512-0YWL2RFxOqEm9Efk5PvreamxPME8OyY0wM5wh5lHjF+VtVhdneCWGzZeSqzOfiobVqQaNCd2z0tQvnI9DaPWPw==}
     engines: {node: '>=6.9.0'}
-    peerDependencies:
-      '@babel/core': ^7.0.0-0
-
-  '@babel/plugin-transform-typescript@7.4.5':
-    resolution: {integrity: sha512-RPB/YeGr4ZrFKNwfuQRlMf2lxoCUaU01MTw39/OFE/RiL8HDjtn68BwEPft1P7JN4akyEmjGWAMNldOV7o9V2g==}
     peerDependencies:
       '@babel/core': ^7.0.0-0
 
@@ -9322,10 +9305,6 @@ packages:
     resolution: {integrity: sha512-nJScjIjwDY96q9eiIBse9npLht/1FNmDRMpoTLJUrgSTzmx7/S6JhlH4BrMELkLCvtPkWoduDNBGiGBdCqf9FA==}
     engines: {node: 8.* || >= 10.*}
 
-  ember-cli-typescript@2.0.2:
-    resolution: {integrity: sha512-7I5azCTxOgRDN8aSSnJZIKSqr+MGnT+jLTUbBYqF8wu6ojs2DUnTePxUcQMcvNh3Q3B1ySv7Q/uZFSjdU9gSjA==}
-    engines: {node: 6.* || 8.* || >= 10.*}
-
   ember-cli-typescript@5.3.0:
     resolution: {integrity: sha512-gFA+ZwmsvvFwo2Jz/B9GMduEn+fPoGb69qWGP0Tp3+Tu5xypDtIKVSZ5086I3Cr19cLXD4HkrOR3YQvdUKzAkQ==}
     engines: {node: '>= 12.*'}
@@ -9454,10 +9433,6 @@ packages:
     peerDependenciesMeta:
       '@ember/test-helpers':
         optional: true
-
-  ember-load-initializers@2.1.2:
-    resolution: {integrity: sha512-CYR+U/wRxLbrfYN3dh+0Tb6mFaxJKfdyz+wNql6cqTrA0BBi9k6J3AaKXj273TqvEpyyXegQFFkZEiuZdYtgJw==}
-    engines: {node: 6.* || 8.* || >= 10.*}
 
   ember-load-initializers@3.0.1:
     resolution: {integrity: sha512-qV3vxJKw5+7TVDdtdLPy8PhVsh58MlK8jwzqh5xeOwJPNP7o0+BlhvwoIlLYTPzGaHdfjEIFCgVSyMRGd74E1g==}
@@ -16251,12 +16226,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/plugin-transform-typescript@7.4.5(@babel/core@7.29.0)':
-    dependencies:
-      '@babel/core': 7.29.0(supports-color@8.1.1)
-      '@babel/helper-plugin-utils': 7.28.6
-      '@babel/plugin-syntax-typescript': 7.28.6(@babel/core@7.29.0)
-
   '@babel/plugin-transform-unicode-escapes@7.27.1(@babel/core@7.29.0)':
     dependencies:
       '@babel/core': 7.29.0(supports-color@8.1.1)
@@ -18407,13 +18376,19 @@ snapshots:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       '@percy/cli-exec': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-build@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-command@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18430,7 +18405,10 @@ snapshots:
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-doctor@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18456,14 +18434,20 @@ snapshots:
       cross-spawn: 7.0.6
       which: 2.0.2
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-snapshot@1.31.13(typescript@5.9.3)':
     dependencies:
       '@percy/cli-command': 1.31.13(typescript@5.9.3)
       yaml: 2.9.0
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli-upload@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -18471,7 +18455,10 @@ snapshots:
       fast-glob: 3.3.3
       image-size: 1.2.1
     transitivePeerDependencies:
+      - bufferutil
+      - supports-color
       - typescript
+      - utf-8-validate
 
   '@percy/cli@1.31.13(typescript@5.9.3)':
     dependencies:
@@ -22784,24 +22771,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli-typescript@2.0.2(@babel/core@7.29.0):
-    dependencies:
-      '@babel/plugin-proposal-class-properties': 7.18.6(@babel/core@7.29.0)
-      '@babel/plugin-transform-typescript': 7.4.5(@babel/core@7.29.0)
-      ansi-to-html: 0.6.15
-      debug: 4.4.3(supports-color@8.1.1)
-      ember-cli-babel-plugin-helpers: 1.1.1
-      execa: 1.0.0
-      fs-extra: 7.0.1
-      resolve: 1.22.12
-      rsvp: 4.8.5
-      semver: 6.3.1
-      stagehand: 1.0.1
-      walk-sync: 1.1.4
-    transitivePeerDependencies:
-      - '@babel/core'
-      - supports-color
-
   ember-cli-typescript@5.3.0:
     dependencies:
       ansi-to-html: 0.6.15
@@ -23334,14 +23303,6 @@ snapshots:
     optionalDependencies:
       '@ember/test-helpers': 5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7)
     transitivePeerDependencies:
-      - supports-color
-
-  ember-load-initializers@2.1.2(@babel/core@7.29.0):
-    dependencies:
-      ember-cli-babel: 7.26.11
-      ember-cli-typescript: 2.0.2(@babel/core@7.29.0)
-    transitivePeerDependencies:
-      - '@babel/core'
       - supports-color
 
   ember-load-initializers@3.0.1(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)):
