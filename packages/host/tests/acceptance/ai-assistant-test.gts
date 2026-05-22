@@ -2998,6 +2998,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     await click('[data-test-skill-menu][data-test-pill-menu-button]');
     await waitFor('[data-test-skill-menu]');
+    try {
+      await waitUntil(
+        () =>
+          document.querySelectorAll(
+            '[data-test-skill-menu] [data-test-attached-card]',
+          )?.length === 1,
+      );
+    } catch (e) {
+      let attached = Array.from(
+        document.querySelectorAll(
+          '[data-test-skill-menu] [data-test-attached-card]',
+        ),
+      ).map((el) => el.getAttribute('data-test-attached-card'));
+      assert.ok(
+        false,
+        `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${envSkillId}].`,
+      );
+      throw e;
+    }
     assert
       .dom('[data-test-skill-menu] [data-test-attached-card]')
       .exists({ count: 1 });
