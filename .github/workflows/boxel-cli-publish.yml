@@ -232,16 +232,13 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          # `pnpm run build` chains `build:test-harness`, which copies the
-          # manifest-listed chunks out of `packages/host/dist/` (see
-          # `packages/boxel-cli/scripts/build-test-harness.ts`). Build the
-          # host's dev bundle first so those chunks exist on disk —
-          # `vite build --mode=development` is the right mode because
-          # production strips the test entry (`tests/index.html`) entirely.
-          # The slim manifest filter then drops everything outside the
-          # card-test runtime, so we only ship ~27MB despite the host
-          # producing 60MB of dist.
-          pnpm --filter @cardstack/host build
+          # Build the dist/ bundle that gets published. The host test
+          # harness is no longer bundled here (CS-11164) — it ships as
+          # its own GH release tarball and `boxel test` downloads it
+          # lazily on first run. See
+          # `packages/boxel-cli/host-test-harness.json` for the pin and
+          # `.github/workflows/host-test-harness-publish.yml` for the
+          # release workflow.
           pnpm run build
           # Use --no-git-checks because the workflow's commit + tag is already
           # pushed; pnpm's pre-publish git-state check would otherwise complain.
@@ -322,15 +319,8 @@ jobs:
           echo "version=$STABLE" >> "$GITHUB_OUTPUT"
 
       - name: Build boxel-cli
+        run: pnpm build
         working-directory: packages/boxel-cli
-        run: |
-          set -euo pipefail
-          # See the unstable job's "Publish to npm" step for the rationale —
-          # `build:test-harness` reads from `packages/host/dist/`, so the
-          # host's dev bundle has to exist before we can build the slim
-          # harness.
-          pnpm --filter @cardstack/host build
-          pnpm build
 
       - name: Generate release notes
         id: notes

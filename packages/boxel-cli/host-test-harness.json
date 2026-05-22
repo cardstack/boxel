@@ -1,0 +1,5 @@
+{
+  "version": "0.0.0-placeholder",
+  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "_comment": "Bumped each time a maintainer triggers the host-test-harness publish workflow. The CLI reads this at runtime to know which GH release to download. See packages/boxel-cli/src/lib/host-test-harness-fetcher.ts and .github/workflows/host-test-harness-publish.yml. In-monorepo dev uses the sibling packages/host/dist/ instead and never reads this file."
+}
