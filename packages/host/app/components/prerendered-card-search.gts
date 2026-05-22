@@ -68,6 +68,11 @@ export class PrerenderedCard implements PrerenderedCardLike {
         // loaded into the store.
         extraAttributes['data-card-type-display-name'] = data.cardType;
       }
+      if (data.iconHtml) {
+        // Expose the prerendered card's type icon (raw SVG markup) so
+        // consumers can render it before the instance is loaded.
+        extraAttributes['data-card-type-icon-html'] = data.iconHtml;
+      }
       this.component = wrapWithModifier(
         htmlComponent(data.html, extraAttributes),
         cardComponentModifier,

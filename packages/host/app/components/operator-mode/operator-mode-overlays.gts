@@ -51,6 +51,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../lib/html-component';
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import { knownFileMetaUrls } from '../prerendered-card-search';
@@ -508,12 +509,22 @@ export default class OperatorModeOverlays extends Overlays {
   private getCardTypeIcon(
     cardDefOrId: CardDefOrId,
     renderedCard: StackItemRenderedCardForOverlayActions,
-  ) {
+  ): unknown {
     let instance = this.peekInstance(cardDefOrId, renderedCard);
-    if (!instance) {
-      return undefined;
+    if (instance) {
+      return cardTypeIcon(instance);
     }
-    return cardTypeIcon(instance);
+    // Prerendered rows expose the type icon as raw SVG markup on the
+    // rendered element — wrap it in an htmlComponent so it can be invoked
+    // like any other Icon. htmlComponent caches by source string, so
+    // repeated lookups for the same icon return the same component.
+    let iconHtml = renderedCard.element?.getAttribute(
+      'data-card-type-icon-html',
+    );
+    if (iconHtml) {
+      return htmlComponent(iconHtml);
+    }
+    return undefined;
   }
 
   @action
