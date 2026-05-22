@@ -39,13 +39,34 @@ const COL_B = 'col-b';
 const COL_C = 'col-c';
 
 const COLUMNS_AB: KanbanColumnConfig[] = [
-  { key: COL_A, label: 'A', color: null, wipLimit: null, collapsed: false },
-  { key: COL_B, label: 'B', color: null, wipLimit: null, collapsed: false },
+  {
+    key: COL_A,
+    label: 'A',
+    color: null,
+    wipLimit: null,
+    collapsed: false,
+    sortOrder: 1,
+  },
+  {
+    key: COL_B,
+    label: 'B',
+    color: null,
+    wipLimit: null,
+    collapsed: false,
+    sortOrder: 2,
+  },
 ];
 
 const COLUMNS_ABC: KanbanColumnConfig[] = [
   ...COLUMNS_AB,
-  { key: COL_C, label: 'C', color: null, wipLimit: null, collapsed: false },
+  {
+    key: COL_C,
+    label: 'C',
+    color: null,
+    wipLimit: null,
+    collapsed: false,
+    sortOrder: 3,
+  },
 ];
 
 // Two cards in col-a (sortOrder 1 & 2), one card in col-b (sortOrder 1).

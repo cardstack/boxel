@@ -1,7 +1,5 @@
 import { get } from '@ember/helper';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
 import {
@@ -36,27 +34,20 @@ import { KanbanBoardPlacement } from './kanban-board-placement';
 
 class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   @tracked isSidebarOpen = false;
-  columns!: TrackedArray<KanbanColumnConfig>;
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
+  get columns(): KanbanColumnConfig[] {
+    return (this.args.model.columns ?? []).map((col) => ({
+      key: col.key,
+      label: col.label,
+      color: col.color,
+      collapsed: col.collapsed ?? false,
+      wipLimit: col.wipLimit ?? null,
+      sortOrder: col.sortOrder,
+    }));
+  }
 
-    let stored = this.args.model.columns ?? [];
-    if (!stored.length) {
-      return;
-    }
-    this.columns = new TrackedArray(
-      stored.map(
-        (col) =>
-          new TrackedObject({
-            key: col.key ?? '',
-            label: col.label ?? null,
-            color: col.color ?? null,
-            collapsed: col.collapsed ?? null,
-            wipLimit: col.wipLimit ?? null,
-          }) as unknown as KanbanColumnConfig,
-      ),
-    );
+  get firstColumn(): KanbanColumnConfig | undefined {
+    return [...this.columns].sort((a, b) => a.sortOrder - b.sortOrder)[0];
   }
 
   get placements(): KanbanPlacement[] {
@@ -65,7 +56,9 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
 
     return raw
       .map((p) => {
-        let col = this.columns.find((c) => c.key === p.columnKey);
+        let col =
+          this.columns.find((c: KanbanColumnConfig) => c.key === p.columnKey) ??
+          this.firstColumn;
         let cardIdx = cards.findIndex((c) => (c as any).id === p.itemId);
         if (!col || !col.key || cardIdx === -1) return null;
         return {
@@ -82,8 +75,9 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   }
 
   get columnCardCounts(): number[] {
-    return this.columns?.map(
-      (col) => this.placements?.filter((p) => p.columnId === col.key).length,
+    return this.columns.map(
+      (col: KanbanColumnConfig) =>
+        this.placements.filter((p) => p.columnId === col.key).length,
     );
   }
 
@@ -99,29 +93,34 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   };
 
   get hideEmpty(): boolean {
-    let emptyCols =
-      this.columns?.filter((_, i) => (this.columnCardCounts[i] ?? 0) === 0) ??
-      [];
-    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+    let emptyCols = this.columns.filter(
+      (_: KanbanColumnConfig, i: number) =>
+        (this.columnCardCounts[i] ?? 0) === 0,
+    );
+    return (
+      emptyCols.length > 0 &&
+      emptyCols.every((col: KanbanColumnConfig) => col.collapsed)
+    );
   }
 
   toggleHideEmptyColumns = (): void => {
     let next = !this.hideEmpty;
-    this.columnCardCounts.forEach((count, i) => {
-      let col = this.columns[i];
-      if (col && count === 0) {
-        col.collapsed = next;
-      }
-    });
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((col: KanbanColumnConfig, i: number) =>
+        (this.columnCardCounts[i] ?? 0) === 0
+          ? { ...col, collapsed: next }
+          : col,
+      ),
+    );
   };
 
   handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
-    if (!col) {
-      return;
-    }
-    col.collapsed = !col.collapsed;
-    this.handleColumnsChange([...this.columns]);
+    if (!col) return;
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
+      ),
+    );
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
@@ -132,20 +131,27 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         color: cfg.color,
         collapsed: cfg.collapsed,
         wipLimit: cfg.wipLimit,
+        sortOrder: cfg.sortOrder,
       }),
     );
   };
 
   handleLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
     if (!col) return;
-    col.label = val;
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, label: val } : c,
+      ),
+    );
   };
 
   handleColorChange = (col: KanbanColumnConfig | null, val: string): void => {
     if (!col) return;
-    col.color = val;
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, color: val } : c,
+      ),
+    );
   };
 
   handleWipLimitChange = (
@@ -154,12 +160,16 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
   ): void => {
     if (!col) return;
     let raw = parseInt(val, 10);
-    col.wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
-    this.handleColumnsChange([...this.columns]);
+    let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, wipLimit } : c,
+      ),
+    );
   };
 
-  handleReorder = (): void => {
-    this.handleColumnsChange([...this.columns]);
+  handleReorder = (newColumns: KanbanColumnConfig[]): void => {
+    this.handleColumnsChange(newColumns);
   };
 
   toggleSidebar = (): void => {

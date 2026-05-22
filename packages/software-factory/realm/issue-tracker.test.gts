@@ -70,6 +70,7 @@ function makeBoard(
     color: string | null;
     wipLimit: number | null;
     collapsed: boolean;
+    sortOrder: number;
   }[],
 ): Record<string, Record<string, unknown>> {
   return {
@@ -584,6 +585,21 @@ export function runTests() {
           'todo',
           'todo moved to second position in saved columns',
         );
+        assert.strictEqual(
+          savedColumns?.[0]?.sortOrder,
+          1,
+          'doing sortOrder updated to 1',
+        );
+        assert.strictEqual(
+          savedColumns?.[1]?.sortOrder,
+          2,
+          'todo sortOrder updated to 2',
+        );
+        assert.strictEqual(
+          savedColumns?.[2]?.sortOrder,
+          3,
+          'done sortOrder unchanged at 3',
+        );
 
         // Reload the board and verify the stored order is respected
         await visitOperatorMode({
@@ -893,6 +909,40 @@ export function runTests() {
             `[data-kanban-column="in_progress"] [data-test-issue-tracker-card="0"]`,
           )
           .containsText('Issue 1');
+      });
+    });
+
+    // ── autoplace fallback ────────────────────────────────────────────────────
+    module('autoplace fallback', function (hooks) {
+      hooks.beforeEach(async function () {
+        await setupAcceptanceTestRealm({
+          realmURL: testRealmURL,
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            ...makeProject(),
+            ...makeIssue(
+              'IT-99',
+              'nonexistent_status',
+              'Issues/issue-unknown.json',
+            ),
+            ...makeBoard(),
+          },
+        });
+      });
+
+      test('a card with an unknown status is placed in the first column', async function (assert) {
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        assert
+          .dom(`[data-kanban-column="backlog"] [data-test-issue-id]`)
+          .hasText(
+            'IT-99',
+            'card with unknown status lands in the first column',
+          );
       });
     });
   });

@@ -1,6 +1,5 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/helper';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
@@ -111,13 +110,14 @@ function getIssueStatusColor(
 function buildColumnsFromStatusOptions(
   options: ReturnType<typeof getProjectIssueStatusOptions>,
 ) {
-  return options.map((option) =>
+  return options.map((option, i) =>
     Object.assign(new KanbanColumnField(), {
       key: option.value,
       label: option.label,
       color: option.color ?? null,
       collapsed: false,
       wipLimit: 0,
+      sortOrder: i + 1,
     }),
   );
 }
@@ -1054,28 +1054,21 @@ export class Project extends CardDef {
 
 class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   @tracked isSidebarOpen = false;
-  columns!: TrackedArray<KanbanColumnConfig>;
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-
+  get columns(): KanbanColumnConfig[] {
     let stored = this.args.model.columns ?? [];
-    let source = stored.length
-      ? stored
-      : buildColumnsFromStatusOptions(
-          getProjectIssueStatusOptions(this.args.model?.project),
-        );
-    this.columns = new TrackedArray(
-      source.map(
-        (col) =>
-          new TrackedObject({
-            key: col.key ?? '',
-            label: col.label ?? null,
-            color: col.color ?? null,
-            collapsed: col.collapsed ?? null,
-            wipLimit: col.wipLimit ?? null,
-          }) as unknown as KanbanColumnConfig,
-      ),
+    if (stored.length) {
+      return stored.map((col) => ({
+        key: col.key,
+        label: col.label,
+        color: col.color,
+        collapsed: col.collapsed ?? false,
+        wipLimit: col.wipLimit ?? null,
+        sortOrder: col.sortOrder,
+      }));
+    }
+    return buildColumnsFromStatusOptions(
+      getProjectIssueStatusOptions(this.args.model?.project),
     );
   }
 
@@ -1086,40 +1079,50 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     );
   }
 
+  get firstColumn(): KanbanColumnConfig | undefined {
+    return [...this.columns].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+  }
+
   get cardCount(): number {
     return this.args.model?.cards?.length ?? 0;
   }
 
   get columnCardCounts(): number[] {
     return this.columns.map(
-      (col) => this.placements.filter((p) => p.columnId === col.key).length,
+      (col: KanbanColumnConfig) =>
+        this.placements.filter((p) => p.columnId === col.key).length,
     );
   }
 
   get hideEmpty(): boolean {
     let emptyCols = this.columns.filter(
-      (_, i) => (this.columnCardCounts[i] ?? 0) === 0,
+      (_: KanbanColumnConfig, i: number) =>
+        (this.columnCardCounts[i] ?? 0) === 0,
     );
-    return emptyCols.length > 0 && emptyCols.every((col) => col.collapsed);
+    return (
+      emptyCols.length > 0 &&
+      emptyCols.every((col: KanbanColumnConfig) => col.collapsed)
+    );
   }
 
   toggleHideEmptyColumns = (): void => {
     let next = !this.hideEmpty;
-    this.columnCardCounts.forEach((count, i) => {
-      let col = this.columns[i];
-      if (col && count === 0) {
-        col.collapsed = next;
-      }
-    });
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((col: KanbanColumnConfig, i: number) =>
+        (this.columnCardCounts[i] ?? 0) === 0
+          ? { ...col, collapsed: next }
+          : col,
+      ),
+    );
   };
 
   handleToggleCollapsed = (col: KanbanColumnConfig | null): void => {
-    if (!col) {
-      return;
-    }
-    col.collapsed = !col.collapsed;
-    this.handleColumnsChange([...this.columns]);
+    if (!col) return;
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
+      ),
+    );
   };
 
   handleColumnsChange = (newColumns: KanbanColumnConfig[]): void => {
@@ -1130,6 +1133,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         color: cfg.color,
         collapsed: cfg.collapsed,
         wipLimit: cfg.wipLimit,
+        sortOrder: cfg.sortOrder,
       }),
     );
 
@@ -1149,14 +1153,20 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
   handleLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
     if (!col) return;
-    col.label = val;
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, label: val } : c,
+      ),
+    );
   };
 
   handleColorChange = (col: KanbanColumnConfig | null, val: string): void => {
     if (!col) return;
-    col.color = val;
-    this.handleColumnsChange([...this.columns]);
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, color: val } : c,
+      ),
+    );
   };
 
   handleWipLimitChange = (
@@ -1165,8 +1175,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
   ): void => {
     if (!col) return;
     let raw = parseInt(val, 10);
-    col.wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
-    this.handleColumnsChange([...this.columns]);
+    let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.handleColumnsChange(
+      this.columns.map((c: KanbanColumnConfig) =>
+        c.key === col.key ? { ...c, wipLimit } : c,
+      ),
+    );
   };
 
   toggleSidebar = (): void => {
@@ -1246,7 +1260,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           let effectiveKey = card?.status ?? p.columnKey;
           let colKey =
             this.columns.find((c) => c.key === effectiveKey)?.key ??
-            this.columns.find((c) => c.key === p.columnKey)?.key;
+            this.columns.find((c) => c.key === p.columnKey)?.key ??
+            this.columns.find((c) => c.key === 'backlog')?.key ??
+            this.firstColumn?.key;
           if (!colKey) return null;
           return {
             columnId: colKey,
@@ -1265,7 +1281,8 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
           let status = (card as any).status ?? 'backlog';
           let colKey =
             this.columns.find((c) => c.key === status)?.key ??
-            this.columns[0]?.key;
+            this.columns.find((c) => c.key === 'backlog')?.key ??
+            this.firstColumn?.key;
           return {
             columnId: colKey ?? '',
             index: idx,
@@ -1277,7 +1294,9 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     return cards.map((card, idx) => {
       let status = (card as any).status ?? 'backlog';
       let colKey =
-        this.columns.find((c) => c.key === status)?.key ?? this.columns[0]?.key;
+        this.columns.find((c) => c.key === status)?.key ??
+        this.columns.find((c) => c.key === 'backlog')?.key ??
+        this.firstColumn?.key;
       return {
         columnId: colKey ?? '',
         index: idx,

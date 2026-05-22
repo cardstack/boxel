@@ -21,6 +21,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: null,
           collapsed: null,
+          sortOrder: 1,
         },
         {
           key: 'doing',
@@ -28,6 +29,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: 1,
           collapsed: null,
+          sortOrder: 2,
         },
       ];
       @tracked placements: KanbanPlacement[] = [
@@ -97,6 +99,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: null,
           collapsed: false,
+          sortOrder: 1,
         },
         {
           key: 'doing',
@@ -104,6 +107,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
           color: null,
           wipLimit: null,
           collapsed: false,
+          sortOrder: 2,
         },
       ];
       @tracked placements: KanbanPlacement[] = [
@@ -162,12 +166,70 @@ module('Integration | Component | kanban-plane', function (hooks) {
     assert
       .dom('[data-test-show-hidden-column="todo"]')
       .isDisabled('empty column row is disabled when hideEmpty is on');
-    assert.dom('[data-kanban-column="todo"]').doesNotExist('column stays hidden');
+    assert
+      .dom('[data-kanban-column="todo"]')
+      .doesNotExist('column stays hidden');
 
     await click('button');
 
     assert.dom('[data-kanban-column]').exists({ count: 2 });
     assert.dom('[data-kanban-column="todo"]').exists();
     assert.dom('[data-test-hidden-columns]').doesNotExist();
+  });
+
+  test('columns are rendered in sortOrder order regardless of array order', async function (assert) {
+    let columns: KanbanColumnConfig[] = [
+      {
+        key: 'c',
+        label: 'C',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 3,
+      },
+      {
+        key: 'a',
+        label: 'A',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 1,
+      },
+      {
+        key: 'b',
+        label: 'B',
+        color: null,
+        wipLimit: null,
+        collapsed: false,
+        sortOrder: 2,
+      },
+    ];
+    let placements: KanbanPlacement[] = [];
+
+    await render(
+      <template>
+        <KanbanPlane @columns={{columns}} @placements={{placements}}>
+          <:card as |placement|><div>Card {{placement.index}}</div></:card>
+          <:ghost as |index|><div>Ghost {{index}}</div></:ghost>
+        </KanbanPlane>
+      </template>,
+    );
+
+    let rendered = document.querySelectorAll('[data-kanban-column]');
+    assert.strictEqual(
+      rendered[0]?.getAttribute('data-kanban-column'),
+      'a',
+      'first column is a (sortOrder 1)',
+    );
+    assert.strictEqual(
+      rendered[1]?.getAttribute('data-kanban-column'),
+      'b',
+      'second column is b (sortOrder 2)',
+    );
+    assert.strictEqual(
+      rendered[2]?.getAttribute('data-kanban-column'),
+      'c',
+      'third column is c (sortOrder 3)',
+    );
   });
 });

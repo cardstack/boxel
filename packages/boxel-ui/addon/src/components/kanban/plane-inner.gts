@@ -50,7 +50,7 @@ export class KanbanPlaneInner extends Component<{
   }
 
   get columns(): KanbanColumnConfig[] {
-    return this.args.columns;
+    return [...this.args.columns].sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
   get cardSize(): FittedFormatId {

@@ -23,6 +23,7 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#64748b',
       wipLimit: 0,
       collapsed: false,
+      sortOrder: 1,
     }) as KanbanColumnConfig,
     new TrackedObject({
       key: 'in-progress',
@@ -30,6 +31,7 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#d97706',
       wipLimit: 2,
       collapsed: false,
+      sortOrder: 2,
     }) as KanbanColumnConfig,
     new TrackedObject({
       key: 'done',
@@ -37,6 +39,7 @@ function makeColumns(): TrackedArray<KanbanColumnConfig> {
       color: '#15803d',
       wipLimit: null,
       collapsed: false,
+      sortOrder: 3,
     }) as KanbanColumnConfig,
   ]);
 }
@@ -115,10 +118,23 @@ module(
     });
 
     test('reorder buttons: disabled at boundaries; move-down and move-up swap correctly', async function (assert) {
-      let columns = makeColumns();
+      class State {
+        @tracked cols = makeColumns();
+      }
+      const state = new State();
+      const onReorder = (newCols: KanbanColumnConfig[]) => {
+        state.cols = new TrackedArray(
+          newCols,
+        ) as TrackedArray<KanbanColumnConfig>;
+      };
 
       await render(
-        <template><KanbanColumnConfigSidebar @columns={{columns}} /></template>,
+        <template>
+          <KanbanColumnConfigSidebar
+            @columns={{state.cols}}
+            @onReorder={{onReorder}}
+          />
+        </template>,
       );
 
       assert
@@ -136,30 +152,50 @@ module(
 
       await click('[data-test-move-col-down-btn="backlog"]');
       assert.strictEqual(
-        columns[0]!.key,
+        state.cols[0]!.key,
         'in-progress',
         'in-progress is now first',
       );
-      assert.strictEqual(columns[1]!.key, 'backlog', 'backlog is second');
-      assert.strictEqual(columns[2]!.key, 'done', 'done unchanged');
-
-      let columns2 = makeColumns();
-
-      await render(
-        <template>
-          <KanbanColumnConfigSidebar @columns={{columns2}} />
-        </template>,
+      assert.strictEqual(state.cols[1]!.key, 'backlog', 'backlog is second');
+      assert.strictEqual(state.cols[2]!.key, 'done', 'done unchanged');
+      assert.strictEqual(
+        state.cols[0]!.sortOrder,
+        1,
+        'in-progress sortOrder updated to 1',
       );
+      assert.strictEqual(
+        state.cols[1]!.sortOrder,
+        2,
+        'backlog sortOrder updated to 2',
+      );
+      assert.strictEqual(
+        state.cols[2]!.sortOrder,
+        3,
+        'done sortOrder unchanged at 3',
+      );
+
+      state.cols = makeColumns();
+      await new Promise((r) => requestAnimationFrame(r));
 
       await click(
         '[data-test-col-config-row="in-progress"] [data-test-move-col-up-btn]',
       );
       assert.strictEqual(
-        columns2[0]!.key,
+        state.cols[0]!.key,
         'in-progress',
         'move-up on in-progress: in-progress is now first',
       );
-      assert.strictEqual(columns2[1]!.key, 'backlog');
+      assert.strictEqual(state.cols[1]!.key, 'backlog');
+      assert.strictEqual(
+        state.cols[0]!.sortOrder,
+        1,
+        'in-progress sortOrder updated to 1',
+      );
+      assert.strictEqual(
+        state.cols[1]!.sortOrder,
+        2,
+        'backlog sortOrder updated to 2',
+      );
     });
 
     test('label input mutates only the targeted label', async function (assert) {

@@ -1,7 +1,6 @@
 import XIcon from '@cardstack/boxel-icons/x';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 import IconButton from '../icon-button/index.gts';
@@ -19,7 +18,7 @@ interface Signature {
     onColorChange?: (column: KanbanColumnConfig | null, val: string) => void;
     onHideEmptyChange?: () => void;
     onLabelChange?: (column: KanbanColumnConfig | null, val: string) => void;
-    onReorder?: () => void;
+    onReorder?: (columns: KanbanColumnConfig[]) => void;
     onToggleCollapsed?: (column: KanbanColumnConfig | null) => void;
     onWipLimitChange?: (column: KanbanColumnConfig | null, val: string) => void;
   };
@@ -27,37 +26,25 @@ interface Signature {
 }
 
 export class KanbanColumnConfigSidebar extends Component<Signature> {
-  private reorderColumns(fromIndex: number, toIndex: number): void {
-    if (!this.args.columns) {
-      return;
-    }
-    let [column] = this.args.columns.splice(fromIndex, 1);
-    if (!column) {
-      return;
-    }
-    this.args.columns.splice(toIndex, 0, column);
-  }
+  buildReordered = (
+    fromIndex: number,
+    toIndex: number,
+  ): KanbanColumnConfig[] => {
+    let cols = [...(this.args.columns ?? [])];
+    let [column] = cols.splice(fromIndex, 1);
+    if (!column) return cols;
+    cols.splice(toIndex, 0, column);
+    return cols.map((col, i) => ({ ...col, sortOrder: i + 1 }));
+  };
 
-  @action moveUp(index: number): void {
-    if (index === 0) return;
-    this.reorderColumns(index, index - 1);
-  }
-
-  @action moveDown(index: number): void {
-    if (!this.args.columns || index >= this.args.columns.length - 1) {
-      return;
-    }
-    this.reorderColumns(index, index + 1);
-  }
-
-  @action reorder(index: number, direction: 'up' | 'down'): void {
-    if (direction === 'up') {
-      this.moveUp(index);
-    } else {
-      this.moveDown(index);
-    }
-    this.args.onReorder?.();
-  }
+  reorder = (index: number, direction: 'up' | 'down'): void => {
+    let cols = this.args.columns;
+    if (!cols) return;
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index >= cols.length - 1) return;
+    let toIndex = direction === 'up' ? index - 1 : index + 1;
+    this.args.onReorder?.(this.buildReordered(index, toIndex));
+  };
 
   isFirst = (index: number): boolean => {
     return index === 0;
@@ -113,7 +100,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
 
       {{#if this.columnRows.length}}
         <ul class='col-list'>
-          {{#each this.columnRows as |row i|}}
+          {{#each this.columnRows key='column.key' as |row i|}}
             <ColumnConfigRow
               @rowId={{if row.column.key row.column.key i}}
               @column={{row.column}}

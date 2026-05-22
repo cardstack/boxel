@@ -37,8 +37,15 @@ function stubRect(
   });
 }
 
-function makeColumnConfig(key: string): KanbanColumnConfig {
-  return { key, label: key, color: null, wipLimit: null, collapsed: false };
+function makeColumnConfig(key: string, sortOrder = 1): KanbanColumnConfig {
+  return {
+    key,
+    label: key,
+    color: null,
+    wipLimit: null,
+    collapsed: false,
+    sortOrder,
+  };
 }
 
 const COL_0 = 'col-0';

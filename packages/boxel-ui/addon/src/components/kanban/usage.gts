@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { type FittedFormatId, cn, fittedFormatById } from '../../helpers.ts';
 import {
@@ -36,6 +35,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#64748b',
     wipLimit: 0,
     collapsed: false,
+    sortOrder: 1,
   },
   {
     key: 'in-progress',
@@ -43,6 +43,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#d97706',
     wipLimit: 2,
     collapsed: false,
+    sortOrder: 2,
   },
   {
     key: 'review',
@@ -50,6 +51,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#0f766e',
     wipLimit: 1,
     collapsed: false,
+    sortOrder: 3,
   },
   {
     key: 'done',
@@ -57,6 +59,7 @@ const INITIAL_COLUMNS: KanbanColumnConfig[] = [
     color: '#15803d',
     wipLimit: null,
     collapsed: false,
+    sortOrder: 4,
   },
 ];
 
@@ -90,16 +93,9 @@ const KANBAN_VIEW_TO_SIZE: Record<string, FittedFormatId> = {
 export default class KanbanUsage extends Component {
   fittedFormats = KANBAN_CARD_SIZE_OPTIONS;
   sizeViewOptions = KANBAN_VIEW_OPTIONS;
-  columns = TrackedArray.from(
-    INITIAL_COLUMNS.map(
-      (c) =>
-        new TrackedObject(
-          c as unknown as Record<PropertyKey, unknown>,
-        ) as unknown as KanbanColumnConfig,
-    ),
-  );
+  @tracked columns: KanbanColumnConfig[] = [...INITIAL_COLUMNS];
   @tracked cards = INITIAL_CARDS;
-  @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, this.columns);
+  @tracked placements = autoPlaceKanban(INITIAL_CARDS.length, INITIAL_COLUMNS);
   @tracked selectedIndex: number | null = null;
   @tracked openedIndex: number | null = null;
   @tracked cardSizeView = 'tile';
@@ -109,11 +105,11 @@ export default class KanbanUsage extends Component {
   @action handlePlacementsChange(placements: KanbanPlacement[]): void {
     this.placements = placements;
     if (this.hideEmpty) {
-      this.columns.forEach((col) => {
-        if (cardsInColumn(col.key, placements).length === 0) {
-          col.collapsed = true;
-        }
-      });
+      this.columns = this.columns.map((col) =>
+        cardsInColumn(col.key, placements).length === 0
+          ? { ...col, collapsed: true }
+          : col,
+      );
     }
   }
 
@@ -149,50 +145,47 @@ export default class KanbanUsage extends Component {
   }
 
   @action toggleHideEmpty(): void {
-    this.hideEmpty = !this.hideEmpty;
-    this.columns.forEach((col) => {
-      if (cardsInColumn(col.key, this.placements).length === 0) {
-        col.collapsed = this.hideEmpty;
-      }
-    });
-  }
-
-  @action onShowEmptyColumns(): void {
-    this.hideEmpty = false;
-    this.columns.forEach((col) => {
-      if (cardsInColumn(col.key, this.placements).length === 0) {
-        col.collapsed = false;
-      }
-    });
+    let next = !this.hideEmpty;
+    this.hideEmpty = next;
+    this.columns = this.columns.map((col) =>
+      cardsInColumn(col.key, this.placements).length === 0
+        ? { ...col, collapsed: next }
+        : col,
+    );
   }
 
   @action toggleCollapsed(col: KanbanColumnConfig | null): void {
-    if (!col) {
-      return;
-    }
-    col['collapsed'] = !col.collapsed;
+    if (!col) return;
+    this.columns = this.columns.map((c) =>
+      c.key === col.key ? { ...c, collapsed: !c.collapsed } : c,
+    );
   }
 
   @action onLabelChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) {
-      return;
-    }
-    col['label'] = val;
+    if (!col) return;
+    this.columns = this.columns.map((c) =>
+      c.key === col.key ? { ...c, label: val } : c,
+    );
   }
 
   @action onColorChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) {
-      return;
-    }
-    col['color'] = val;
+    if (!col) return;
+    this.columns = this.columns.map((c) =>
+      c.key === col.key ? { ...c, color: val } : c,
+    );
   }
 
   @action onWipLimitChange(col: KanbanColumnConfig | null, val: string): void {
-    if (!col) {
-      return;
-    }
+    if (!col) return;
     let raw = parseInt(val, 10);
-    col['wipLimit'] = isNaN(raw) || raw < 0 ? 0 : raw;
+    let wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.columns = this.columns.map((c) =>
+      c.key === col.key ? { ...c, wipLimit } : c,
+    );
+  }
+
+  @action onReorder(newColumns: KanbanColumnConfig[]): void {
+    this.columns = newColumns;
   }
 
   @action toggleSidebar(): void {
@@ -201,7 +194,9 @@ export default class KanbanUsage extends Component {
 
   @action addCard(columnKey: string | null): void {
     let nextIndex = this.cards.length;
-    let column = this.columns.find((column) => column.key === columnKey);
+    let column = this.columns.find(
+      (c: KanbanColumnConfig) => c.key === columnKey,
+    );
     let resolvedColumnKey = column?.key ?? this.columns[0]?.key;
     if (!resolvedColumnKey) {
       console.error(`Kanban column for key '${columnKey}' could not be found.`);
@@ -305,7 +300,6 @@ export default class KanbanUsage extends Component {
               @onAddCard={{this.addCard}}
               @onToggleCollapsed={{this.toggleCollapsed}}
               @hideEmpty={{this.hideEmpty}}
-              @onShowEmptyColumns={{this.onShowEmptyColumns}}
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
@@ -335,6 +329,7 @@ export default class KanbanUsage extends Component {
                 @onLabelChange={{this.onLabelChange}}
                 @onColorChange={{this.onColorChange}}
                 @onWipLimitChange={{this.onWipLimitChange}}
+                @onReorder={{this.onReorder}}
               />
             </div>
           </div>
@@ -372,10 +367,6 @@ export default class KanbanUsage extends Component {
           @onInput={{fn (mut this.hideEmpty)}}
         />
         <Args.Action
-          @name='onShowEmptyColumns'
-          @description='Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again.'
-        />
-        <Args.Action
           @name='onToggleCollapsed'
           @description='Invoked with the KanbanColumnConfig object when a column is collapsed via its header button or restored from the Hidden Columns tray. The caller is responsible for toggling the collapsed state on that column.'
         />
@@ -411,11 +402,12 @@ export default class KanbanUsage extends Component {
           toggle individual column visibility.
         </p>
         <p>
-          It mutates column objects directly via tracked properties, so the
-          caller only needs to supply a tracked columns array. Reordering is
-          applied internally; supply
-          <code>@onReorder</code>
-          to be notified after each move so you can persist the new order.
+          All changes flow back to the caller via action callbacks — the
+          component never mutates its arguments. Reordering builds a new sorted
+          array and delivers it via
+          <code>@onReorder</code>; label, color, WIP limit, and visibility
+          changes are delivered via their respective callbacks with the target
+          column and new value.
         </p>
       </:description>
       <:example>
@@ -429,6 +421,7 @@ export default class KanbanUsage extends Component {
           @onLabelChange={{this.onLabelChange}}
           @onColorChange={{this.onColorChange}}
           @onWipLimitChange={{this.onWipLimitChange}}
+          @onReorder={{this.onReorder}}
         />
       </:example>
       <:api as |Args|>
@@ -470,7 +463,7 @@ export default class KanbanUsage extends Component {
         />
         <Args.Action
           @name='onReorder'
-          @description='Optional callback invoked (with no arguments) after a column is moved up or down, so callers can persist the updated column order.'
+          @description='Optional callback invoked with the full reordered KanbanColumnConfig[] after a column is moved up or down. The caller is responsible for applying the new order to its own state.'
         />
       </:api>
     </FreestyleUsage>
