@@ -1776,6 +1776,9 @@ importers:
       qunit-dom:
         specifier: 'catalog:'
         version: 3.5.1
+      tracked-built-ins:
+        specifier: ^4.1.2
+        version: 4.1.2(@babel/core@7.29.0)
 
   packages/catalog-realm:
     dependencies:
