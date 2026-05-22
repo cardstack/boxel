@@ -9,7 +9,14 @@ import type {
   QueueRunner,
   Realm,
 } from '@cardstack/runtime-common';
-import { baseCardRef, rri } from '@cardstack/runtime-common';
+import {
+  asExpressions,
+  baseCardRef,
+  insert,
+  insertPermissions,
+  query,
+  rri,
+} from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { PgAdapter } from '@cardstack/postgres';
 import { stringify } from 'qs';
@@ -609,6 +616,111 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .send({ realms: [testRealm.url], invalid: 'query structure' });
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
+    });
+
+    test('QUERY /_federated-search returns 404 when a realm URL is not in the registry', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let query: Query = {
+        filter: {
+          on: baseCardRef,
+          eq: { cardTitle: 'Shared Card' },
+        },
+      };
+      let unknownURL = 'http://127.0.0.1:4444/never-heard-of/';
+
+      let response = await request
+        .post('/_federated-search')
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url, unknownURL] });
+
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      assert.ok(
+        response.body.errors?.[0]?.includes('Realms not found'),
+        'response uses the "Realms not found" framing',
+      );
+      assert.ok(
+        response.body.errors?.[0]?.includes(unknownURL),
+        'response names the unknown URL',
+      );
+    });
+
+    // Regression test for CS-11238. Under Phase 3 lazy-mount semantics
+    // source realms live in realm_registry but only get pushed into
+    // realms[] on first per-realm request. The middleware used to 404
+    // federated requests for any URL not in realms[]; the fix
+    // confirms registry presence and lets the handler lazy-mount on
+    // demand. Inserting a registry row + permissions for a URL that
+    // is NOT in realms[] models exactly that pre-first-hit state.
+    //
+    // We deliberately stop short of asserting the lazy-mount succeeds
+    // end-to-end — the handler's lazy-mount may or may not produce a
+    // usable Realm in this test fixture, and that's the handler's
+    // concern. What this test pins down is the middleware contract:
+    // a known-to-the-registry URL must not be rejected as "Realms not
+    // found", and a non-readable / unknown URL is still rejected
+    // upstream of the handler.
+    test('QUERY /_federated-search does not 404 a registry-only (not-yet-mounted) realm (CS-11238)', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+      let registryOnlyURL = 'http://127.0.0.1:4444/registry-only/';
+
+      // Seed: registry row + read permissions for ownerUserId. The
+      // disk_id points at a directory the lazy-mount won't actually
+      // be able to read — irrelevant here because we're asserting the
+      // middleware's pre-handler verdict.
+      let { nameExpressions, valueExpressions } = asExpressions({
+        url: registryOnlyURL,
+        kind: 'source',
+        disk_id: 'registry-only-ghost',
+        owner_username: 'mango',
+        source_url: null,
+        last_published_at: null,
+        pinned: false,
+      });
+      await query(
+        dbAdapter,
+        insert('realm_registry', nameExpressions, valueExpressions),
+      );
+      await insertPermissions(dbAdapter, new URL(registryOnlyURL), {
+        [ownerUserId]: ['read'],
+      });
+
+      let cardsQuery: Query = {
+        filter: {
+          on: baseCardRef,
+          eq: { cardTitle: 'Shared Card' },
+        },
+      };
+
+      let response = await request
+        .post('/_federated-search')
+        .set('Accept', 'application/vnd.card+json')
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...cardsQuery, realms: [testRealm.url, registryOnlyURL] });
+
+      assert.notStrictEqual(
+        response.status,
+        404,
+        'registry-only realm is not rejected as "not found"',
+      );
+      let errorMessage: string =
+        (response.body && Array.isArray(response.body.errors)
+          ? response.body.errors.join(' ')
+          : '') || '';
+      assert.notOk(
+        errorMessage.includes('Realms not found'),
+        'response body does not carry the "Realms not found" error',
+      );
     });
 
     test('QUERY /_federated-search returns 400 when realms param is missing', async function (assert) {

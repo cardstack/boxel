@@ -185,22 +185,28 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch({ searchCache }),
+    handleSearch({ reconciler: args.reconciler, searchCache }),
   );
   router.all(
     '/_federated-info',
     multiRealmAuthorization(args),
-    handleRealmInfo({ dbAdapter: args.dbAdapter }),
+    handleRealmInfo({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
   );
   router.all(
     '/_federated-types',
     multiRealmAuthorization(args),
-    handleFederatedTypes({ dbAdapter: args.dbAdapter }),
+    handleFederatedTypes({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
   );
   router.all(
     '/_federated-search-prerendered',
     multiRealmAuthorization(args),
-    handleSearchPrerendered({ searchCache }),
+    handleSearchPrerendered({ reconciler: args.reconciler, searchCache }),
   );
   router.post(
     '/_prerender-card',

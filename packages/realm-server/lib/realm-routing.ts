@@ -5,6 +5,7 @@ import {
   executableExtensions,
   fetchRealmPermissions,
   hasExtension,
+  logger,
   param,
   query,
   RealmPaths,
@@ -14,6 +15,8 @@ import {
   indexURLCandidates,
 } from './index-url-utils';
 import type { RealmRegistryReconciler } from './realm-registry-reconciler';
+
+const federatedLog = logger('realm-server:federated');
 
 export type RealmRoutingDeps = {
   realms: Realm[];
@@ -227,6 +230,39 @@ export async function hasPublicPermissions(
   );
 
   return permissions['*']?.includes('read') ?? false;
+}
+
+// Resolve realms for a federated request (CS-11238). The
+// multiRealmAuthorization middleware has already confirmed every URL
+// is a registry row, but Phase 3 may not have mounted them yet — the
+// handler is responsible for lazy-mounting on demand. Each lookup is
+// independent (Promise.allSettled): a per-realm mount failure logs
+// + drops to undefined, matching searchRealms / handle-realm-info's
+// existing "skip missing realm, return partial results" semantics so
+// one broken realm does not 5xx the whole federated request.
+export async function resolveRealmsForFederatedRequest(
+  reconciler: RealmRegistryReconciler,
+  realmList: string[],
+): Promise<Array<Realm | undefined>> {
+  let results = await Promise.allSettled(
+    realmList.map((url) => reconciler.lookupOrMount(url)),
+  );
+  return results.map((result, idx) => {
+    if (result.status === 'fulfilled') {
+      if (result.value === undefined) {
+        federatedLog.warn(
+          `lookupOrMount fulfilled without a realm for ${realmList[idx]} during federated request; registry presence was already confirmed by middleware`,
+        );
+      }
+      return result.value;
+    }
+    federatedLog.warn(
+      `failed to lazy-mount realm ${realmList[idx]} for federated request: ${String(
+        result.reason,
+      )}`,
+    );
+    return undefined;
+  });
 }
 
 // Build candidate realm URLs from a request URL by trimming the
