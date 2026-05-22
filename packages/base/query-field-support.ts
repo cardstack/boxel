@@ -373,24 +373,22 @@ export function captureQueryFieldSeedData(
   // materializes each listed ID via a per-URL GET instead of running
   // a live `_federated-search`.
   //
-  // Only trust the IDs when the umbrella carries `links.search`:
+  // Trust the IDs whenever the umbrella carries `links.search`:
   // `applyQueryResults` is the only writer of that key, so its
   // presence is the unambiguous signal that the indexer (not the
-  // user's raw source file) resolved this field. A raw source's
-  // empty `data: []` lacks `links.search` and must NOT be treated as
-  // an authoritative empty seed — the SearchResource needs to fall
-  // through to a live query to populate the field for the first
-  // time.
+  // user's raw source file) resolved this field. The IDs in
+  // `relationship.data` are resource pointers the indexer wrote
+  // alongside `links.search`, so they're authoritative regardless
+  // of whether the document also inlined the resolved instances in
+  // `included[]` — query-backed fields on `_federated-search`
+  // responses intentionally skip that inline in prerender mode.
   //
-  // The IDs are also NOT trustworthy when the seed itself came from
-  // a search-result document with empty records: search results
-  // don't fully resolve nested query fields, so a downstream
-  // consumer must run a fallback query rather than rely on these
-  // IDs.
+  // A raw source's empty `data: []` lacks `links.search` and must
+  // NOT be treated as an authoritative empty seed — the
+  // SearchResource needs to fall through to a live query to
+  // populate the field for the first time.
   let relationshipIsIndexerResolved = Boolean(relationship?.links?.search);
-  let seedCardURLsUntrustworthy =
-    !relationshipIsIndexerResolved ||
-    (seedComesFromSearch && fieldState.seedRecords.length === 0);
+  let seedCardURLsUntrustworthy = !relationshipIsIndexerResolved;
   if (seedCardURLsUntrustworthy) {
     fieldState.seedCardURLs = undefined;
   } else if (Array.isArray(relationship?.data)) {
