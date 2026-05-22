@@ -7,6 +7,7 @@ import { isTesting } from '@embroider/macros';
 
 import {
   baseFileRef,
+  baseRealm,
   formattedError,
   snapshotRuntimeDependencies,
   withRuntimeDependencyTrackingContext,
@@ -97,6 +98,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
       contentSize,
       buildError: this.#buildError.bind(this),
     });
+    let fileApiURL = `${baseRealm.url}file-api`;
     let result: FileDefExtractResult;
     try {
       result = await withRuntimeDependencyTrackingContext(
@@ -106,7 +108,16 @@ export default class RenderFileExtractRoute extends Route<Model> {
           consumer: id,
           consumerKind: 'file',
         },
-        async () => await extractor.extract(),
+        async () => {
+          // `${baseRealm.url}file-api` is the public URL the indexer
+          // uses to invalidate file extracts, but the FileDef class
+          // physically lives in `card-api` (`baseFileRef.module`). The
+          // extractor only imports `card-api`, so without this line
+          // `file-api` would never enter the tracker. Doing the import
+          // inside the tracking window pins it as a runtime dep.
+          await this.loaderService.loader.import(fileApiURL);
+          return extractor.extract();
+        },
       );
     } catch (error) {
       result = {
@@ -118,6 +129,20 @@ export default class RenderFileExtractRoute extends Route<Model> {
     }
     let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
     let mergedDeps = [...new Set([...(result.deps ?? []), ...deps])];
+    if (!mergedDeps.includes(fileApiURL)) {
+      // The explicit `loader.import(fileApiURL)` above runs inside the
+      // active tracker context, so file-api must always land in the
+      // snapshot. If it doesn't, the tracker session was closed early
+      // or the URL was rewritten; log enough state to diagnose.
+      console.warn(
+        `[file-extract] file-api missing from runtime deps for ${id} after explicit import`,
+        {
+          fileApiURL,
+          extractorDeps: result.deps ?? [],
+          runtimeDeps: deps,
+        },
+      );
+    }
     return {
       id,
       nonce,
