@@ -506,26 +506,56 @@ export default class OperatorModeOverlays extends Overlays {
     cardDefOrId: CardDefOrId,
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): string {
-    // Prefer the indexer-populated DOM attribute over the in-memory
-    // instance. FileDef subclasses currently round-trip through
-    // createFileDef which always returns a generic FileDef base instance
-    // (constructor.displayName === 'File'), losing the specific class —
-    // but the realm server's indexer records the proper subclass display
-    // name in `display_names`, which prerendered-card-search stamps onto
-    // the rendered wrapper. So the DOM attribute is the more accurate
-    // source for file rows and matches the in-store CardDef result for
-    // card rows.
+    let isFile = this.isFileMetaTarget(renderedCard);
     let domName = renderedCard.element?.getAttribute(
       'data-card-type-display-name',
     );
-    if (domName) {
-      return domName;
-    }
     let instance = this.peekInstance(cardDefOrId, renderedCard);
-    if (instance) {
-      return cardTypeDisplayName(instance);
+    let instanceName = instance ? cardTypeDisplayName(instance) : undefined;
+
+    // Prefer a specific class name from either source. The realm-server
+    // indexer's getDisplayNames walks the prototype chain and stops at the
+    // base FileDef / CardDef — so display_names is empty for bare FileDef /
+    // CardDef rows and `cardType` lands as undefined; the in-memory
+    // instance returns 'File' / 'Card' for the same case. Both are
+    // uninformative; skip them when picking the label.
+    let specific = [domName, instanceName].find(
+      (name): name is string =>
+        typeof name === 'string' && name !== 'File' && name !== 'Card',
+    );
+    if (specific) {
+      return specific;
     }
-    return this.isFileMetaTarget(renderedCard) ? 'File' : 'Card';
+
+    // No specific subclass info available. For file rows, derive a hint
+    // from the URL extension so the user can still tell file types apart
+    // (e.g. 'MD', 'GTS', 'PNG') rather than every file row reading 'FILE'.
+    if (isFile) {
+      let extName = this.deriveFileTypeFromExtension(cardDefOrId);
+      if (extName) {
+        return extName;
+      }
+    }
+
+    return domName ?? instanceName ?? (isFile ? 'File' : 'Card');
+  }
+
+  private deriveFileTypeFromExtension(
+    cardDefOrId: CardDefOrId,
+  ): string | undefined {
+    let cardId = this.getCardId(cardDefOrId);
+    if (!cardId) return undefined;
+    let pathWithoutQuery = cardId.split('?')[0].split('#')[0];
+    let lastDot = pathWithoutQuery.lastIndexOf('.');
+    let lastSlash = pathWithoutQuery.lastIndexOf('/');
+    if (lastDot <= lastSlash || lastDot === pathWithoutQuery.length - 1) {
+      return undefined;
+    }
+    let ext = pathWithoutQuery.slice(lastDot + 1);
+    if (!/^[A-Za-z0-9]+$/.test(ext)) {
+      return undefined;
+    }
+    return ext.toUpperCase();
   }
 
   @action
