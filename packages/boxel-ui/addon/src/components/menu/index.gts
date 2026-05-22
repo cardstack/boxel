@@ -237,6 +237,14 @@ export default class Menu extends Component<Signature> {
           color: var(--boxel-dark);
           cursor: default;
         }
+        .boxel-menu__item--header:first-child {
+          border-top-left-radius: inherit;
+          border-top-right-radius: inherit;
+        }
+        .boxel-menu__item--header:last-child {
+          border-bottom-left-radius: inherit;
+          border-bottom-right-radius: inherit;
+        }
         .boxel-menu__item--header .boxel-menu__item__content {
           pointer-events: none;
           font-weight: 700;
