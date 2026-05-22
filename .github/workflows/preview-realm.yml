@@ -1,0 +1,246 @@
+name: PR preview realm (reusable)
+
+# Reusable workflow that consumer repos (currently boxel-home; any repo
+# wanting per-PR previews) call to create/update/delete a published
+# realm tied to a pull request. Two jobs:
+#   deploy  - on pull_request open/synchronize/reopened
+#   cleanup - on pull_request closed
+#
+# Caller passes the per-repo realm-server, matrix, and published-realm
+# coordinates; this workflow handles boxel-cli profile setup, create-
+# if-absent + push + publish, and the sticky PR comment lifecycle.
+
+on:
+  workflow_call:
+    inputs:
+      realm-server-url:
+        description: |
+          Realm-server URL (trailing slash optional). The source realm
+          will live at `${realm-server-url}/${matrix-username}/${realm-endpoint-prefix}${pr-number}/`.
+        type: string
+        required: true
+      matrix-url:
+        type: string
+        required: true
+      matrix-username:
+        description: Matrix username without the @ prefix or :domain suffix.
+        type: string
+        required: true
+      published-realm-base:
+        description: |
+          Base URL the realm will be published at, without realm-name
+          segment. E.g. `https://${user}.staging.boxel.dev`. Must satisfy
+          the realm-server's `domainsForPublishedRealms` allow-list.
+        type: string
+        required: true
+      realm-endpoint-prefix:
+        description: |
+          Prefix combined with the PR number to form the per-PR realm
+          name, e.g. `boxel-home-pr-`. Lowercase letters/digits/hyphens.
+        type: string
+        required: true
+      display-name-prefix:
+        description: |
+          Human-readable label prefix shown in the realm picker. The
+          full display name will be `${display-name-prefix} #${pr-number} Preview`.
+        type: string
+        default: PR
+      sticky-header:
+        description: |
+          Header used by marocchino/sticky-pull-request-comment to
+          dedupe the sticky comment across runs.
+        type: string
+        default: boxel-preview-realm
+      boxel-cli-version:
+        type: string
+        default: latest
+    secrets:
+      matrix-password:
+        required: true
+
+jobs:
+  deploy:
+    if: github.event.action != 'closed'
+    name: Deploy preview realm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
+
+      - name: Configure boxel profile
+        env:
+          MATRIX_URL: ${{ inputs.matrix-url }}
+          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_PASSWORD: ${{ secrets.matrix-password }}
+          REALM_SERVER: ${{ inputs.realm-server-url }}
+        run: |
+          # Domain inference mirrors `boxel profile add`'s URL-based
+          # default. Passing `--realm-server-url` keeps the profile
+          # pointed at the caller-supplied realm-server explicitly.
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            DOMAIN="boxel.ai"
+          elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+            DOMAIN="stack.cards"
+          else
+            DOMAIN="localhost"
+          fi
+          boxel profile add \
+            --user "@${MATRIX_USERNAME}:${DOMAIN}" \
+            --password "${MATRIX_PASSWORD}" \
+            --matrix-url "${MATRIX_URL}" \
+            --realm-server-url "${REALM_SERVER}"
+
+      - name: Create preview realm
+        env:
+          REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
+          DISPLAY_NAME: "${{ inputs.display-name-prefix }} #${{ github.event.pull_request.number }} Preview"
+        run: |
+          # `boxel realm create` exits non-zero when the realm already
+          # exists. PR re-pushes are common and harmless - tolerate the
+          # conflict and let the push step update content.
+          echo "Creating realm: ${REALM_ENDPOINT}"
+          set +e
+          OUTPUT=$(boxel realm create "$REALM_ENDPOINT" "$DISPLAY_NAME" 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT"
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Realm created"
+          elif echo "$OUTPUT" | grep -qi "already exists\|409\|conflict"; then
+            echo "Realm already exists, continuing"
+          else
+            echo "Failed to create realm (exit code $EXIT_CODE)"
+            exit 1
+          fi
+
+      - name: Push content to preview realm
+        env:
+          REALM_SERVER: ${{ inputs.realm-server-url }}
+          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
+        run: |
+          SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
+          echo "Pushing content to ${SOURCE_REALM_URL}"
+          boxel realm push . "${SOURCE_REALM_URL}" --delete
+
+      - name: Publish preview realm
+        env:
+          REALM_SERVER: ${{ inputs.realm-server-url }}
+          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
+          PUBLISHED_BASE: ${{ inputs.published-realm-base }}
+        run: |
+          # `boxel realm publish` defaults to retrying on 400/409 by
+          # auto-unpublishing the previous publication first, so PR
+          # re-pushes get a clean re-publish without manual conflict
+          # handling.
+          SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
+          PUBLISHED_REALM_URL="${PUBLISHED_BASE%/}/${REALM_ENDPOINT}/"
+          echo "Publishing ${SOURCE_REALM_URL} to ${PUBLISHED_REALM_URL}"
+          boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}"
+
+      - name: Compute comment fields
+        if: ${{ !cancelled() }}
+        id: stamp
+        run: |
+          {
+            echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')"
+            echo "short_sha=${GITHUB_SHA::7}"
+            echo "published_url=${{ inputs.published-realm-base }}/${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}/"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR with preview URL
+        if: success()
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Preview Realm
+
+            Your preview realm is live: **${{ steps.stamp.outputs.published_url }}**
+
+            _Updated at ${{ steps.stamp.outputs.now }} UTC for commit `${{ steps.stamp.outputs.short_sha }}`_
+
+      - name: Report failure on PR
+        if: failure()
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Preview Realm - Deploy Failed
+
+            Failed to deploy preview realm for commit `${{ steps.stamp.outputs.short_sha }}`.
+
+            [View workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            _${{ steps.stamp.outputs.now }} UTC_
+
+  cleanup:
+    if: github.event.action == 'closed'
+    name: Cleanup preview realm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
+
+      - name: Configure boxel profile
+        env:
+          MATRIX_URL: ${{ inputs.matrix-url }}
+          MATRIX_USERNAME: ${{ inputs.matrix-username }}
+          MATRIX_PASSWORD: ${{ secrets.matrix-password }}
+          REALM_SERVER: ${{ inputs.realm-server-url }}
+        run: |
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            DOMAIN="boxel.ai"
+          elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+            DOMAIN="stack.cards"
+          else
+            DOMAIN="localhost"
+          fi
+          boxel profile add \
+            --user "@${MATRIX_USERNAME}:${DOMAIN}" \
+            --password "${MATRIX_PASSWORD}" \
+            --matrix-url "${MATRIX_URL}" \
+            --realm-server-url "${REALM_SERVER}"
+
+      - name: Unpublish preview realm
+        env:
+          PUBLISHED_BASE: ${{ inputs.published-realm-base }}
+          REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
+        run: |
+          # `--tolerate-missing` exits 0 when the realm is already gone,
+          # so PRs that were closed without ever having been published
+          # (or that got cleaned up by an earlier run) don't fail the
+          # cleanup job.
+          PUBLISHED_REALM_URL="${PUBLISHED_BASE%/}/${REALM_ENDPOINT}/"
+          echo "Unpublishing ${PUBLISHED_REALM_URL}"
+          boxel realm unpublish "${PUBLISHED_REALM_URL}" --tolerate-missing
+
+      - name: Cleanup timestamp
+        id: stamp
+        run: echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Update PR comment
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Preview Realm - Cleaned Up
+
+            The preview realm for this PR has been unpublished.
+
+            _Cleaned up at ${{ steps.stamp.outputs.now }} UTC_

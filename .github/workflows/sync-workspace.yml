@@ -1,0 +1,416 @@
+name: Sync to Boxel workspace (reusable)
+
+# Reusable workflow that consumer repos (boxel-home, boxel-skills,
+# boxel-catalog) call to sync their content to a Boxel workspace. The
+# caller's `on:` block decides which events fire; this workflow maps
+# events to actions:
+#   pull_request (open/sync, not closed) -> dry-run against staging
+#   push (any branch)                    -> push to staging
+#   release (published)                  -> push to production
+#
+# Hosting this in the monorepo (rather than cardstack/gh-actions) means
+# changes to the realm-server's _publish/_unpublish-realm contract or
+# boxel-cli's realm push/publish commands surface here at PR time via
+# the preview-realm-actions-integration demo workflow, before the next
+# consumer sync starts failing in staging.
+
+on:
+  workflow_call:
+    inputs:
+      staging-workspace-url:
+        description: |
+          URL of the staging workspace to push to (with trailing slash),
+          e.g. `https://realms-staging.stack.cards/boxel-homepage/`.
+        type: string
+        required: true
+      production-workspace-url:
+        description: |
+          URL of the production workspace to push to on release,
+          e.g. `https://app.boxel.ai/boxel-homepage/`.
+        type: string
+        required: true
+      staging-matrix-username:
+        description: |
+          Matrix username (without @ prefix or :domain suffix) the
+          workflow authenticates as for staging syncs. Caller passes
+          either a `vars.*` or `secrets.*` value depending on how the
+          consumer repo stores it.
+        type: string
+        required: true
+      production-matrix-username:
+        description: Matrix username for production syncs.
+        type: string
+        required: true
+      staging-matrix-url:
+        type: string
+        default: https://matrix-staging.stack.cards
+      production-matrix-url:
+        type: string
+        default: https://matrix.boxel.ai
+      enable-pr-dry-run:
+        description: |
+          When true (default), pull_request events run a dry-run push
+          against staging and post a sticky comment. Disable for repos
+          that don't want PR-level signal.
+        type: boolean
+        default: true
+      enable-release-sync:
+        description: |
+          When true (default), release events push to production. Set
+          to false for repos that don't ship via tags.
+        type: boolean
+        default: true
+      report-method:
+        description: |
+          How to report sync results: `comment` posts sticky PR comments
+          (with commit-comment fallback when no PR is associated), or
+          `artifact` uploads markdown reports. Default: comment.
+        type: string
+        default: comment
+      sticky-header:
+        description: |
+          Header used by marocchino/sticky-pull-request-comment to
+          dedupe the sticky comment across runs.
+        type: string
+        default: workspace-sync
+      boxel-cli-version:
+        description: |
+          Version spec for `npm install -g @cardstack/boxel-cli`.
+          Default `latest` follows the most recent published version.
+        type: string
+        default: latest
+    secrets:
+      staging-matrix-password:
+        required: true
+      production-matrix-password:
+        required: true
+
+jobs:
+  sync:
+    name: Sync to Boxel Workspace
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+
+      - name: Install Boxel CLI
+        run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
+
+      - name: Dry-run sync for PR
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.enable-pr-dry-run
+        id: dry_run
+        env:
+          MATRIX_URL: ${{ inputs.staging-matrix-url }}
+          MATRIX_USERNAME: ${{ inputs.staging-matrix-username }}
+          MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
+          WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
+        run: |
+          # Domain inference mirrors `boxel profile add`'s URL-based
+          # default so the resulting profile points at staging.
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            DOMAIN="boxel.ai"
+          elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+            DOMAIN="stack.cards"
+          else
+            DOMAIN="localhost"
+          fi
+          boxel profile add \
+            --user "@${MATRIX_USERNAME}:${DOMAIN}" \
+            --password "${MATRIX_PASSWORD}" \
+            --matrix-url "${MATRIX_URL}"
+
+          echo "Running dry-run sync for PR #${{ github.event.number }}"
+          echo "Target workspace: ${WORKSPACE_URL}"
+          echo ""
+
+          set +e
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete --dry-run 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+
+          {
+            echo "SYNC_OUTPUT<<BOXEL_EOF"
+            echo "$OUTPUT"
+            echo "BOXEL_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ $STATUS -ne 0 ]; then
+            echo "boxel realm push failed with exit code $STATUS"
+            exit $STATUS
+          fi
+
+      - name: Sync to staging workspace
+        if: github.event_name == 'push'
+        id: sync_staging
+        env:
+          MATRIX_URL: ${{ inputs.staging-matrix-url }}
+          MATRIX_USERNAME: ${{ inputs.staging-matrix-username }}
+          MATRIX_PASSWORD: ${{ secrets.staging-matrix-password }}
+          WORKSPACE_URL: ${{ inputs.staging-workspace-url }}
+        run: |
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            DOMAIN="boxel.ai"
+          elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+            DOMAIN="stack.cards"
+          else
+            DOMAIN="localhost"
+          fi
+          boxel profile add \
+            --user "@${MATRIX_USERNAME}:${DOMAIN}" \
+            --password "${MATRIX_PASSWORD}" \
+            --matrix-url "${MATRIX_URL}"
+
+          echo "Syncing to staging workspace: ${WORKSPACE_URL}"
+          echo ""
+
+          set +e
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+
+          {
+            echo "SYNC_OUTPUT<<BOXEL_EOF"
+            echo "$OUTPUT"
+            echo "BOXEL_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ $STATUS -ne 0 ]; then
+            echo "boxel realm push failed with exit code $STATUS"
+            exit $STATUS
+          fi
+
+      - name: Sync to production workspace
+        if: github.event_name == 'release' && inputs.enable-release-sync
+        id: sync_production
+        env:
+          MATRIX_URL: ${{ inputs.production-matrix-url }}
+          MATRIX_USERNAME: ${{ inputs.production-matrix-username }}
+          MATRIX_PASSWORD: ${{ secrets.production-matrix-password }}
+          WORKSPACE_URL: ${{ inputs.production-workspace-url }}
+        run: |
+          if echo "$MATRIX_URL" | grep -q "boxel.ai"; then
+            DOMAIN="boxel.ai"
+          elif echo "$MATRIX_URL" | grep -q "stack.cards"; then
+            DOMAIN="stack.cards"
+          else
+            DOMAIN="localhost"
+          fi
+          boxel profile add \
+            --user "@${MATRIX_USERNAME}:${DOMAIN}" \
+            --password "${MATRIX_PASSWORD}" \
+            --matrix-url "${MATRIX_URL}"
+
+          echo "Syncing to production workspace: ${WORKSPACE_URL}"
+          echo "Tag: ${{ github.ref_name }}"
+          echo ""
+
+          set +e
+          OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+
+          {
+            echo "SYNC_OUTPUT<<BOXEL_EOF"
+            echo "$OUTPUT"
+            echo "BOXEL_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ $STATUS -ne 0 ]; then
+            echo "boxel realm push failed with exit code $STATUS"
+            exit $STATUS
+          fi
+
+      - name: Compute report fields
+        if: ${{ !cancelled() }}
+        id: report
+        run: |
+          {
+            echo "now=$(date -u '+%Y-%m-%d %H:%M:%S')"
+            echo "short_sha=${GITHUB_SHA::7}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Find merged PR for push event
+        if: success() && inputs.report-method == 'comment' && github.event_name == 'push'
+        id: merged_pr
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            });
+            const merged = prs.find(p => p.merged_at);
+            return merged ? String(merged.number) : '';
+          result-encoding: string
+
+      - name: Sticky comment - dry-run success
+        if: success() && inputs.report-method == 'comment' && github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.enable-pr-dry-run
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Workspace Sync Dry-Run Complete
+
+            Dry-run completed successfully - no changes were made
+            **Target workspace:** ${{ inputs.staging-workspace-url }}
+            **PR:** #${{ github.event.number }}
+            Changes will be synced when this PR is merged to main
+
+            <details>
+            <summary>Dry-Run Results</summary>
+
+            ```
+            ${{ steps.dry_run.outputs.SYNC_OUTPUT }}
+            ```
+            </details>
+
+      - name: Sticky comment - staging success on PR
+        if: success() && inputs.report-method == 'comment' && github.event_name == 'push' && steps.merged_pr.outputs.result != ''
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          number: ${{ steps.merged_pr.outputs.result }}
+          message: |
+            ## Staging Workspace Sync Successful
+
+            Successfully synced changes to staging workspace
+            **Workspace:** ${{ inputs.staging-workspace-url }}
+            **Commit:** [`${{ steps.report.outputs.short_sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            **Synced at:** ${{ steps.report.outputs.now }} UTC
+
+            ### Sync Details
+            ```
+            ${{ steps.sync_staging.outputs.SYNC_OUTPUT }}
+            ```
+
+      - name: Commit comment - staging success without PR
+        if: success() && inputs.report-method == 'comment' && github.event_name == 'push' && steps.merged_pr.outputs.result == ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const syncOutput = `${{ steps.sync_staging.outputs.SYNC_OUTPUT }}`;
+            const body = `## Staging Workspace Sync Successful\n\nSuccessfully synced changes to staging workspace\n**Workspace:** ${{ inputs.staging-workspace-url }}\n**Commit:** [\`${context.sha.substring(0, 7)}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n**Synced at:** ${{ steps.report.outputs.now }} UTC\n\n### Sync Details\n\`\`\`\n${syncOutput}\n\`\`\``;
+
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });
+
+      - name: Commit comment - production success
+        if: success() && inputs.report-method == 'comment' && github.event_name == 'release' && inputs.enable-release-sync
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const syncOutput = `${{ steps.sync_production.outputs.SYNC_OUTPUT }}`;
+            const body = `## Production Workspace Sync Successful\n\nSuccessfully synced release to production workspace\n**Workspace:** ${{ inputs.production-workspace-url }}\n**Tag:** ${{ github.ref_name }}\n**Commit:** [\`${context.sha.substring(0, 7)}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n**Synced at:** ${{ steps.report.outputs.now }} UTC\n\n### Sync Details\n\`\`\`\n${syncOutput}\n\`\`\``;
+
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });
+
+      - name: Compose failure summary
+        if: failure() && inputs.report-method == 'comment'
+        id: fail
+        run: |
+          {
+            echo "short_sha=${GITHUB_SHA::7}"
+            if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+              echo "environment=production"
+              echo "workspace=${{ inputs.production-workspace-url }}"
+            else
+              echo "environment=staging"
+              echo "workspace=${{ inputs.staging-workspace-url }}"
+            fi
+            STAGING_OUT='${{ steps.sync_staging.outputs.SYNC_OUTPUT }}'
+            PROD_OUT='${{ steps.sync_production.outputs.SYNC_OUTPUT }}'
+            DRY_OUT='${{ steps.dry_run.outputs.SYNC_OUTPUT }}'
+            OUT="${STAGING_OUT:-${PROD_OUT:-${DRY_OUT:-No output captured}}}"
+            echo "output<<BOXEL_EOF"
+            echo "$OUT"
+            echo "BOXEL_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Sticky comment - failure on PR
+        if: failure() && inputs.report-method == 'comment' && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: ${{ inputs.sticky-header }}
+          message: |
+            ## Staging Workspace Sync Failed
+
+            Failed to sync changes to staging workspace
+            **Workspace:** ${{ steps.fail.outputs.workspace }}
+            **Commit:** [`${{ steps.fail.outputs.short_sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+
+            ### Error Output
+            ```
+            ${{ steps.fail.outputs.output }}
+            ```
+
+      - name: Commit comment - failure on push/release
+        if: failure() && inputs.report-method == 'comment' && github.event_name != 'pull_request'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const syncOutput = `${{ steps.fail.outputs.output }}`;
+            const environment = '${{ steps.fail.outputs.environment }}';
+            const workspace = '${{ steps.fail.outputs.workspace }}';
+            const title = environment.charAt(0).toUpperCase() + environment.slice(1);
+            const body = `## ${title} Workspace Sync Failed\n\nFailed to sync changes to ${environment} workspace\n**Workspace:** ${workspace}\n**Commit:** [\`${context.sha.substring(0, 7)}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${context.sha})\n\n### Error Output\n\`\`\`\n${syncOutput}\n\`\`\``;
+
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+              body: body
+            });
+
+      - name: Write artifact report
+        if: always() && inputs.report-method == 'artifact'
+        env:
+          STAGING_OUT: ${{ steps.sync_staging.outputs.SYNC_OUTPUT }}
+          PROD_OUT: ${{ steps.sync_production.outputs.SYNC_OUTPUT }}
+          DRY_OUT: ${{ steps.dry_run.outputs.SYNC_OUTPUT }}
+        run: |
+          mkdir -p artifacts
+          OUTPUT="${STAGING_OUT:-${PROD_OUT:-${DRY_OUT:-No output captured}}}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            ENV_NAME="production"
+            WORKSPACE="${{ inputs.production-workspace-url }}"
+          else
+            ENV_NAME="staging"
+            WORKSPACE="${{ inputs.staging-workspace-url }}"
+          fi
+          cat > artifacts/sync-report.md <<EOF
+          ## ${ENV_NAME^} Workspace Sync — ${{ job.status }}
+
+          **Workspace:** ${WORKSPACE}
+          **Commit:** ${GITHUB_SHA:0:7}
+          **Synced at:** ${{ steps.report.outputs.now }} UTC
+
+          ### Output
+          \`\`\`
+          ${OUTPUT}
+          \`\`\`
+          EOF
+
+      - name: Upload artifact report
+        if: always() && inputs.report-method == 'artifact'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sync-report
+          path: artifacts/sync-report.md
