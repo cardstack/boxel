@@ -60,6 +60,7 @@ import {
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
+  waitForNewRoomSkillsLoaded,
 } from '../helpers';
 
 import {
@@ -1019,6 +1020,13 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     roomId = getRoomIds().pop()!;
+    // The new room's default skills (env skill, which carries show-card) are
+    // loaded asynchronously by the room resource's processRoomTask. If we
+    // dispatch the bot message before loadSkills finishes, message-builder
+    // can't match show-card_566f to a known codeRef and the command resolves
+    // as invalid ("No command for the name X was found") instead of being
+    // auto-applied.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1048,9 +1056,45 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    try {
+      await waitFor(
+        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+      );
+    } catch (err) {
+      let applyButtons = findAll('[data-test-command-apply]').map((el) => ({
+        idx: el
+          .closest('[data-test-message-idx]')
+          ?.getAttribute('data-test-message-idx'),
+        state: el.getAttribute('data-test-command-apply'),
+      }));
+      let applyStates = findAll('[data-test-apply-state]').map((el) =>
+        el.getAttribute('data-test-apply-state'),
+      );
+      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
+        (el) => el.textContent?.trim() ?? '',
+      );
+      let roomData = getService('matrix-service').getRoomData(roomId);
+      let roomResource = getService('matrix-service').roomResources.get(roomId);
+      console.error(
+        '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
+        JSON.stringify(
+          {
+            roomId,
+            renderedApplyButtonStates: applyButtons,
+            renderedApplyStates: applyStates,
+            warnings,
+            enabledSkillCards:
+              roomData?.skillsConfig?.enabledSkillCards?.map(
+                (f) => f.sourceUrl,
+              ) ?? null,
+            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+      throw err;
+    }
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
@@ -1108,6 +1152,10 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     roomId = getRoomIds().pop()!;
+    // Same skill-load race as the sister "agentId matches" test — wait for
+    // default skills to be available so show-card_566f resolves to a known
+    // codeRef before the simulated bot message arrives.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1464,6 +1512,11 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     let roomId = getRoomIds().pop()!;
+    // The JSON-schema validation failure we're asserting only runs once
+    // message-builder has resolved show-card_566f to its codeRef via the
+    // room's loaded skills. Without this wait we sometimes hit the upstream
+    // "No command for the name X was found" branch instead.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1493,11 +1546,40 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor(
       '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
     );
+    // The CI flake mode for this test is that the warning reads "No command
+    // for the name X was found" (skill not yet loaded) instead of the
+    // expected JSON-schema validation message. Log enough state to
+    // distinguish the skill-load race from a genuine validation regression
+    // before the qunit-dom assertion records the failure.
+    let expectedValidationText =
+      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'';
+    let warningText =
+      document
+        .querySelector('[data-test-boxel-alert="warning"]')
+        ?.textContent?.trim() ?? '';
+    if (!warningText.includes(expectedValidationText)) {
+      let roomData = getService('matrix-service').getRoomData(roomId);
+      let roomResource = getService('matrix-service').roomResources.get(roomId);
+      console.error(
+        '[commands-test/json-schema-validation] warning text mismatch. Diagnostic:',
+        JSON.stringify(
+          {
+            roomId,
+            warningText,
+            enabledSkillCards:
+              roomData?.skillsConfig?.enabledSkillCards?.map(
+                (f) => f.sourceUrl,
+              ) ?? null,
+            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+    }
     assert
       .dom('[data-test-boxel-alert="warning"]')
-      .containsText(
-        'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
-      );
+      .containsText(expectedValidationText);
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
