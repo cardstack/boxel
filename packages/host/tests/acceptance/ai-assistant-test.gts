@@ -3005,7 +3005,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
             '[data-test-skill-menu] [data-test-attached-card]',
           )?.length === 1,
       );
-    } catch (e) {
+    } catch {
       let attached = Array.from(
         document.querySelectorAll(
           '[data-test-skill-menu] [data-test-attached-card]',
@@ -3015,7 +3015,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         false,
         `Default skill never rendered on the new session's skill menu. Attached cards seen: ${JSON.stringify(attached)}; expected exactly [${envSkillId}].`,
       );
-      throw e;
+      return;
     }
     assert
       .dom('[data-test-skill-menu] [data-test-attached-card]')
