@@ -32,7 +32,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  cardIdToURL,
   specRef,
   chooseCard,
   baseRealm,
@@ -946,7 +945,7 @@ export class ${className} extends ${exportName} {
 
     let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = spec?.id ? cardIdToURL(spec.id) : undefined;
+    let relativeTo = spec?.id;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation

@@ -854,10 +854,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (patch.meta) {
       doc.data.meta = merge(doc.data.meta, patch.meta);
     }
-    let linkedCards = await this.loadPatchedInstances(
-      patch,
-      instance.id ? cardIdToURL(instance.id) : undefined,
-    );
+    let linkedCards = await this.loadPatchedInstances(patch, instance.id);
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
         let parts = field.split('.');
@@ -1362,7 +1359,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async createFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo?: URL | undefined,
+    relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     let api = await this.cardService.getAPI();
@@ -1667,7 +1664,7 @@ export default class StoreService extends Service implements StoreInterface {
   protected async createFileMetaFromSerialized(
     resource: LooseLinkableResource<FileMetaResource>,
     doc: LooseSingleResourceDocument<FileMetaResource>,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<FileDef> {
     let api = await this.cardService.getAPI();
@@ -1700,7 +1697,7 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        cardIdToURL(resource.id),
+        resource.id,
         dependencyTrackingContext,
       ) as Promise<T>;
     }
@@ -1715,7 +1712,7 @@ export default class StoreService extends Service implements StoreInterface {
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
-      relativeTo: cardIdToURL(resource.id),
+      relativeTo: resource.id,
       dependencyTrackingContext,
     }) as Promise<T>;
   }
@@ -1752,7 +1749,7 @@ export default class StoreService extends Service implements StoreInterface {
     opts,
   }: {
     idOrDoc: string | LooseSingleCardDocument;
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     realm?: string; // used for new cards
     opts?: {
       noCache?: boolean;
@@ -1859,8 +1856,14 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(json, null, 2)}`,
           );
         }
-        if (!json.data.id) {
-          // card source format is not serialized with the ID, so we add that back in.
+        if (!json.data.id || !isResolvableInstanceId(json.data.id)) {
+          // Normalize the instance id to the canonical URL form when the
+          // server-returned doc is missing one, or when it carries a bare
+          // local id that doesn't resolve to a realm location (e.g. a
+          // system card with a hardcoded literal `data.id`). Without this,
+          // the bare id would be assigned to `instance.id` and later
+          // collide with the canonical URL form during re-deserialization
+          // (card-api.gts's "cannot change the id" guard).
           json.data.id = url as RealmResourceIdentifier;
         }
         if (!json.data.meta?.realmURL) {
@@ -1880,7 +1883,7 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = await this.createFromSerialized(
         doc.data,
         doc,
-        cardIdToURL(doc.data.id!), // instances from the server will have id's
+        doc.data.id!, // normalized above to a URL/RRI by isResolvableInstanceId
         opts?.dependencyTrackingContext,
       );
       // in case the url is an alias for the id (like index card without the
@@ -1972,7 +1975,7 @@ export default class StoreService extends Service implements StoreInterface {
       let fileInstance = await api.createFromSerialized(
         fileMetaDoc.data,
         fileMetaDoc,
-        fileMetaDoc.data.id ? cardIdToURL(fileMetaDoc.data.id) : new URL(url),
+        fileMetaDoc.data.id ?? new URL(url),
         {
           store: this.store,
           dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -2378,7 +2381,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async loadPatchedInstances(
     patchData: PatchData,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
   ): Promise<{
     [fieldName: string]: CardDef | CardDef[];
   }> {
@@ -2412,7 +2415,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async loadRelationshipInstance(
     rel: Relationship,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
   ) {
     if (!rel.links?.self) {
       return;
@@ -2469,6 +2472,22 @@ function needsServerStateMerge(
   return (
     instance.id !== serverState.data.id ||
     !isEqual(instance[meta]?.realmInfo, serverState.data.meta.realmInfo)
+  );
+}
+
+// A doc's `data.id` can usually be resolved against either a registered
+// prefix (e.g. `@cardstack/base/foo`) or a URL form. Bare local ids that
+// match neither (e.g. a system card with a hardcoded literal `id` field)
+// can't be assigned to `instance.id` without later colliding with the
+// canonical URL form when the same doc is re-deserialized. Callers that
+// receive an id over the wire should pass it through this gate; if it
+// returns false the caller substitutes the canonical URL form before
+// deserialization.
+function isResolvableInstanceId(id: string): boolean {
+  return (
+    isRegisteredPrefix(id) ||
+    id.startsWith('http://') ||
+    id.startsWith('https://')
   );
 }
 

@@ -145,7 +145,7 @@ export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
         }
@@ -377,7 +377,7 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: this.args.model.id,
           });
           cardDefObj.value = cardDef;
         }
@@ -720,7 +720,7 @@ class Fitted extends Component<typeof Spec> {
         if (this.args.model.ref && this.args.model.id) {
           let card = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: this.args.model.id,
           });
           icon.value = card.icon;
         }

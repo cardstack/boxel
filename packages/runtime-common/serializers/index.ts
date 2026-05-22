@@ -11,7 +11,7 @@ import * as ImageSizeSerializer from './image-size';
 import * as PhoneSerializer from './phone';
 import * as StringToContentSerializer from './string-to-content';
 
-import type { CardDocument } from '../index';
+import type { CardDocument, RealmResourceIdentifier } from '../index';
 import type {
   JSONAPISingleResourceDocument,
   SerializeOpts,
@@ -46,7 +46,7 @@ interface Serializer {
   ): any;
   deserialize<T extends BaseDefConstructor>(
     data: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     doc?: CardDocument,
     store?: CardStore,
     opts?: DeserializeOpts,

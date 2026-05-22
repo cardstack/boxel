@@ -12,6 +12,7 @@ import {
   resolveCardReference,
   cardIdToURL,
   rri,
+  type RealmResourceIdentifier,
 } from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
@@ -50,7 +51,7 @@ export function serialize(
 export async function deserialize<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
-  _relativeTo: URL | undefined,
+  _relativeTo: RealmResourceIdentifier | URL | undefined,
 ): Promise<BaseInstanceType<T>> {
   return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
 }
@@ -62,7 +63,7 @@ export function formatQuery(codeRef: ResolvedCodeRef | {}): string | undefined {
 export async function deserializeAbsolute<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
 ): Promise<BaseInstanceType<T>> {
   return {
     ...codeRef,
@@ -72,7 +73,7 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 
 function codeRefAdjustments(
   codeRef: any,
-  relativeTo?: URL,
+  relativeTo?: RealmResourceIdentifier | URL,
   opts?: SerializeOpts & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
