@@ -325,7 +325,19 @@ class RealmSyncer extends RealmSyncBase {
       this.pushedFiles.push(...result.succeeded);
       if (result.error) {
         this.hasError = true;
-        this.uploadFatalMessage = result.error.message;
+        // Fold the per-file titles into the surfaced message so
+        // SyncResult.error carries the server's JSON:API error
+        // payload (e.g. "Write Error"), not just the HTTP status
+        // line. Distinct titles only — repeated identical titles
+        // (the common case for a top-level write failure) would
+        // otherwise produce noisy duplicates.
+        let titles = Array.from(
+          new Set(result.error.perFile.map((e) => e.title)),
+        );
+        this.uploadFatalMessage =
+          titles.length > 0
+            ? `${result.error.message} (${titles.join('; ')})`
+            : result.error.message;
         console.error(result.error.message);
         for (const entry of result.error.perFile) {
           console.error(`  ${entry.path}: ${entry.title}`);
