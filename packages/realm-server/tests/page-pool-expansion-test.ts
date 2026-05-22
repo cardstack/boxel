@@ -698,24 +698,33 @@ module(basename(__filename), function () {
           }
           assert.strictEqual(pool.currentMaxPages, 6, 'expanded to HP_MAX');
 
-          // Contraction should walk us back to MIN regardless of tier.
-          // Poll instead of sleeping a fixed duration: each tick is
-          // bounded to one tab per cooldown window, but event-loop
-          // scheduling under CI load can stretch the wall time.
-          let pollUntil = async (target: number, label: string) => {
+          // Contraction shrinks by one cap-unit per cooldown window, so
+          // the pool must transit through each tier boundary on its way
+          // down from HP_MAX=6 to MIN=2. Sampling `currentMaxPages` at a
+          // fixed cadence can miss transient values when scheduler jitter
+          // lets two shrinks fall inside one sleep; instead, sample at a
+          // tight interval and record every distinct cap value into a
+          // sequence, then assert that each tier boundary appears in it.
+          // The recorded sequence is included in the failure message so
+          // any future regression shows the actual trajectory.
+          let observed: number[] = [pool.currentMaxPages];
+          let pollDownTo = async (target: number, label: string) => {
             let deadlineMs = Date.now() + 5000;
             while (pool.currentMaxPages > target && Date.now() < deadlineMs) {
-              await new Promise((r) => setTimeout(r, 20));
+              await new Promise((r) => setTimeout(r, 1));
+              let current = pool.currentMaxPages;
+              if (current !== observed[observed.length - 1]) {
+                observed.push(current);
+              }
             }
-            assert.strictEqual(pool.currentMaxPages, target, label);
+            let deadlineHit = Date.now() >= deadlineMs;
+            assert.ok(
+              observed.includes(target),
+              `${label} (observed=[${observed.join(',')}], deadline=${deadlineHit ? 'hit' : 'not hit'})`,
+            );
           };
-          // Intermediate stop: contraction must walk through the
-          // burst-tier ceiling on its way down. From HP_MAX=6 the
-          // pool has to pass through MAX=4 before reaching MIN=2;
-          // verifying that step explicitly catches a regression
-          // where contraction would skip past tier boundaries.
-          await pollUntil(4, 'contraction passes through MAX on the way down');
-          await pollUntil(2, 'contraction reaches MIN even from HP tier');
+          await pollDownTo(4, 'contraction passes through MAX on the way down');
+          await pollDownTo(2, 'contraction reaches MIN even from HP tier');
         },
       );
     });
