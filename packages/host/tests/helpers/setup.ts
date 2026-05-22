@@ -133,7 +133,10 @@ function setupFetchDebugging(hooks: NestedHooks) {
     }
     originalFetch = undefined;
     wrappedFetch = undefined;
-    inFlightFetches.clear();
+    // Don't clear inFlightFetches here: QUnit.testDone runs AFTER
+    // afterEach, so clearing here would empty the snapshot exactly when
+    // the timeout-diagnostics callback needs it. beforeEach already
+    // resets the buffer at the start of the next test.
   });
 }
 
