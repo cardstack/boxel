@@ -70,7 +70,6 @@ function makeBoard(
     color: string | null;
     wipLimit: number | null;
     collapsed: boolean;
-    sortOrder: number;
   }[],
 ): Record<string, Record<string, unknown>> {
   return {
@@ -151,7 +150,7 @@ export function runTests() {
           .dom('[data-kanban-column]')
           .exists({ count: 5 }, 'all 5 status columns visible before toggle');
 
-        await click('[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
 
         assert
           .dom('[data-kanban-column]')
@@ -184,13 +183,13 @@ export function runTests() {
         assert.dom(`[data-kanban-column="backlog"]`).exists();
 
         await click(`[data-test-column-collapse-button="backlog"]`);
-        await waitFor('[aria-label="Show Backlog"]');
+        await waitFor('[data-test-show-hidden-column="backlog"]');
 
         assert
           .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist('backlog column is hidden after collapsing');
         assert
-          .dom('[aria-label="Show Backlog"]')
+          .dom('[data-test-show-hidden-column="backlog"]')
           .exists('hidden tray contains the collapsed backlog column');
 
         let savedBoardDoc = await savedBoardDocPromise;
@@ -220,7 +219,7 @@ export function runTests() {
 
         await click('[data-test-configure-columns-btn]');
         await click('[data-test-col-config-toggle-visible="backlog"]');
-        await waitFor('[aria-label="Show Backlog"]');
+        await waitFor('[data-test-show-hidden-column="backlog"]');
 
         assert
           .dom(`[data-kanban-column="backlog"]`)
@@ -268,14 +267,14 @@ export function runTests() {
 
         await click('[data-test-configure-columns-btn]');
         await click('[data-test-col-config-toggle-visible="blocked"]');
-        await waitFor('[aria-label="Show Blocked"]');
+        await waitFor('[data-test-show-hidden-column="blocked"]');
 
         assert
           .dom(`[data-kanban-column="blocked"]`)
           .doesNotExist('blocked is hidden after sidebar toggle');
 
-        await click('.column-visibility-toggle input[role="switch"]');
-        await click('.column-visibility-toggle input[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
+        await click('[data-test-hide-empty-switch]');
 
         assert
           .dom(`[data-kanban-column="blocked"]`)
@@ -284,7 +283,7 @@ export function runTests() {
           );
       });
 
-      test<TestContextWithSave>('turning hide-empty off saves hideEmptyColumns as false', async function (assert) {
+      test<TestContextWithSave>('turning hide-empty off uncollapses the previously-hidden empty columns', async function (assert) {
         let boardSaves: any[] = [];
         this.onSave((url, doc) => {
           if (url.href === boardId) {
@@ -298,19 +297,19 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         // Turn on hide-empty — blocked and review (empty) disappear
-        await click('.column-visibility-toggle input[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
         await waitFor('[data-test-hidden-columns]');
 
         assert
-          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .dom('[data-test-hide-empty-switch][data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'on');
 
         // Turn hide-empty back off
-        await click('.column-visibility-toggle input[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
         await settled();
 
         assert
-          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .dom('[data-test-hide-empty-switch][data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'off', 'switch is off');
         assert
           .dom('[data-kanban-column]')
@@ -320,9 +319,20 @@ export function runTests() {
           .doesNotExist('hidden tray gone');
 
         let lastSave = boardSaves[boardSaves.length - 1];
+        let savedColumns = lastSave?.data.attributes.columns;
+        let blockedColumn = savedColumns?.find(
+          (c: { key: string }) => c.key === 'blocked',
+        );
+        let reviewColumn = savedColumns?.find(
+          (c: { key: string }) => c.key === 'review',
+        );
         assert.false(
-          lastSave?.data.attributes.hideEmptyColumns,
-          'hideEmptyColumns persisted as false after turning off the filter',
+          blockedColumn?.collapsed,
+          'blocked column is no longer collapsed after turning off hide-empty',
+        );
+        assert.false(
+          reviewColumn?.collapsed,
+          'review column is no longer collapsed after turning off hide-empty',
         );
       });
 
@@ -335,7 +345,7 @@ export function runTests() {
         assert.dom('[data-kanban-column]').exists({ count: 5 });
 
         await click(`[data-test-column-collapse-button="backlog"]`);
-        await waitFor('[aria-label="Show Backlog"]');
+        await waitFor('[data-test-show-hidden-column="backlog"]');
 
         assert
           .dom('[data-kanban-column]')
@@ -357,7 +367,7 @@ export function runTests() {
 
         // Hide backlog from the column header
         await click(`[data-test-column-collapse-button="backlog"]`);
-        await waitFor('[aria-label="Show Backlog"]');
+        await waitFor('[data-test-show-hidden-column="backlog"]');
         assert
           .dom(`[data-kanban-column="backlog"]`)
           .doesNotExist('backlog hidden via column header');
@@ -372,13 +382,13 @@ export function runTests() {
 
         // Hide in-progress from the sidebar toggle
         await click('[data-test-col-config-toggle-visible="in_progress"]');
-        await waitFor('[aria-label="Show In Progress"]');
+        await waitFor('[data-test-show-hidden-column="in_progress"]');
         assert
           .dom(`[data-kanban-column="in_progress"]`)
           .doesNotExist('in-progress hidden via sidebar toggle');
 
         // Reveal in-progress from the hidden-columns tray in the header
-        await click('[aria-label="Show In Progress"]');
+        await click('[data-test-show-hidden-column="in_progress"]');
         await waitFor(`[data-kanban-column="in_progress"]`);
         assert
           .dom(`[data-kanban-column="in_progress"]`)
@@ -393,11 +403,11 @@ export function runTests() {
         await waitFor('[data-test-issue-id]');
 
         // Turn on hide-empty — blocked (col 2) and review (col 3) are empty
-        await click('.column-visibility-toggle input[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
         await waitFor('[data-test-hidden-columns]');
 
         assert
-          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .dom('[data-test-hide-empty-switch][data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'on', 'switch is on');
         assert
           .dom('[data-kanban-column]')
@@ -413,22 +423,22 @@ export function runTests() {
         // Also collapse in-progress from the sidebar
         await click('[data-test-configure-columns-btn]');
         await click('[data-test-col-config-toggle-visible="in_progress"]');
-        await waitFor('[aria-label="Show In Progress"]');
+        await waitFor('[data-test-show-hidden-column="in_progress"]');
         assert
           .dom('[data-test-hidden-column-count]')
           .hasText('4', '4 columns hidden total');
 
         // Switch must still appear ON
         assert
-          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .dom('[data-test-hide-empty-switch][data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'on', 'switch still on');
 
         // Turn off hide-empty — reveals only the empty-hidden columns
-        await click('.column-visibility-toggle input[role="switch"]');
+        await click('[data-test-hide-empty-switch]');
         await settled();
 
         assert
-          .dom('.column-visibility-toggle [data-test-switch-checked]')
+          .dom('[data-test-hide-empty-switch][data-test-switch-checked]')
           .hasAttribute('data-test-switch-checked', 'off', 'switch now off');
         assert
           .dom(`[data-kanban-column="blocked"]`)
@@ -513,7 +523,7 @@ export function runTests() {
           '[data-test-col-config-color="todo"]',
         ) as HTMLInputElement;
         colorInput.value = '#ff0000';
-        await triggerEvent(colorInput, 'change');
+        await triggerEvent(colorInput, 'input');
         await settled();
 
         let afterColorDoc = savedBoardDocs[savedBoardDocs.length - 1];
@@ -547,7 +557,7 @@ export function runTests() {
           'project issueStatusOption color synced and persisted',
         );
       });
-      test<TestContextWithSave>('reordering a column in the sidebar persists the new sortOrder and is respected on reload', async function (assert) {
+      test<TestContextWithSave>('reordering a column in the sidebar persists the new order and is respected on reload', async function (assert) {
         let savedBoardDocs: any[] = [];
         this.onSave((url, doc) => {
           if (url.href === boardId) savedBoardDocs.push(doc);
@@ -559,9 +569,7 @@ export function runTests() {
         await waitFor('[data-kanban-column]');
 
         await click('[data-test-configure-columns-btn]');
-        await click(
-          '[data-test-col-config-row="todo"] [aria-label="Move column down"]',
-        );
+        await click('[data-test-move-col-down-btn="todo"]');
         await settled();
 
         let savedDoc = savedBoardDocs[savedBoardDocs.length - 1];
@@ -575,16 +583,6 @@ export function runTests() {
           savedColumns?.[1]?.key,
           'todo',
           'todo moved to second position in saved columns',
-        );
-        assert.strictEqual(
-          savedColumns?.[0]?.sortOrder,
-          0,
-          'doing sortOrder is 0',
-        );
-        assert.strictEqual(
-          savedColumns?.[1]?.sortOrder,
-          1,
-          'todo sortOrder is 1',
         );
 
         // Reload the board and verify the stored order is respected
@@ -703,10 +701,10 @@ export function runTests() {
           .dom('[data-kanban-column]')
           .exists({ count: 3 }, 'exactly 3 custom columns rendered');
         assert
-          .dom('[data-kanban-column-index="0"] [data-test-issue-id]')
+          .dom('[data-kanban-column="todo"] [data-test-issue-id]')
           .hasText('IT-1', 'IT-1 in first custom column (todo)');
         assert
-          .dom('[data-kanban-column-index="2"] [data-test-issue-id]')
+          .dom('[data-kanban-column="done"] [data-test-issue-id]')
           .hasText('IT-2', 'IT-2 in last custom column (done)');
       });
     });
@@ -773,7 +771,7 @@ export function runTests() {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             ...makeProject(),
-            ...makeIssue('IT-1', 'backlog', 'Issues/issue-backlog.json'),
+            ...makeIssue('IT-1', 'backlog', 'Issues/issue-backlog-1.json'),
             ...makeIssue('IT-2', 'backlog', 'Issues/issue-backlog-2.json'),
             ...makeBoard(),
           },
@@ -783,7 +781,7 @@ export function runTests() {
       test<TestContextWithSave>('moving a card to another column updates its status', async function (assert) {
         let savedIssueDocs: any[] = [];
         this.onSave((url, doc) => {
-          if (url.href === `${testRealmURL}Issues/issue-backlog`) {
+          if (url.href === `${testRealmURL}Issues/issue-backlog-1`) {
             savedIssueDocs.push(doc);
           }
         });

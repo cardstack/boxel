@@ -45,18 +45,14 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
     if (!stored.length) {
       return;
     }
-    let source = [...stored].sort(
-      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
-    );
     this.columns = new TrackedArray(
-      source.map(
+      stored.map(
         (col) =>
           new TrackedObject({
             key: col.key ?? '',
             label: col.label ?? null,
             color: col.color ?? null,
             collapsed: col.collapsed ?? null,
-            sortOrder: col.sortOrder ?? null,
             wipLimit: col.wipLimit ?? null,
           }) as unknown as KanbanColumnConfig,
       ),
@@ -135,10 +131,35 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         label: cfg.label,
         color: cfg.color,
         collapsed: cfg.collapsed,
-        sortOrder: cfg.sortOrder,
         wipLimit: cfg.wipLimit,
       }),
     );
+  };
+
+  handleLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
+    if (!col) return;
+    col.label = val;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleColorChange = (col: KanbanColumnConfig | null, val: string): void => {
+    if (!col) return;
+    col.color = val;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleWipLimitChange = (
+    col: KanbanColumnConfig | null,
+    val: string,
+  ): void => {
+    if (!col) return;
+    let raw = parseInt(val, 10);
+    col.wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleReorder = (): void => {
+    this.handleColumnsChange([...this.columns]);
   };
 
   toggleSidebar = (): void => {
@@ -215,7 +236,6 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
             @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
-            @hideEmpty={{this.hideEmpty}}
             @onChange={{this.handleChange}}
             @onOpen={{this.openCard}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
@@ -246,7 +266,12 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
-            @onColumnsChange={{this.handleColumnsChange}}
+            @onClose={{this.toggleSidebar}}
+            @onToggleCollapsed={{this.handleToggleCollapsed}}
+            @onLabelChange={{this.handleLabelChange}}
+            @onColorChange={{this.handleColorChange}}
+            @onWipLimitChange={{this.handleWipLimitChange}}
+            @onReorder={{this.handleReorder}}
           />
         </div>
       </div>

@@ -14,6 +14,7 @@ interface Signature {
     onClose?: () => void;
     onColorChange?: (column: KanbanColumnConfig | null, val: string) => void;
     onLabelChange?: (column: KanbanColumnConfig | null, val: string) => void;
+    onReorder?: () => void;
     onToggleCollapsed?: (column: KanbanColumnConfig | null) => void;
     onWipLimitChange?: (column: KanbanColumnConfig | null, val: string) => void;
   };
@@ -50,6 +51,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
     } else {
       this.moveDown(index);
     }
+    this.args.onReorder?.();
   }
 
   isFirst = (index: number): boolean => {

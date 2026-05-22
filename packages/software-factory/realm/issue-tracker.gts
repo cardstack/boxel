@@ -111,13 +111,12 @@ function getIssueStatusColor(
 function buildColumnsFromStatusOptions(
   options: ReturnType<typeof getProjectIssueStatusOptions>,
 ) {
-  return options.map((option, index) =>
+  return options.map((option) =>
     Object.assign(new KanbanColumnField(), {
       key: option.value,
       label: option.label,
       color: option.color ?? null,
       collapsed: false,
-      sortOrder: index,
       wipLimit: 0,
     }),
   );
@@ -1062,7 +1061,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
 
     let stored = this.args.model.columns ?? [];
     let source = stored.length
-      ? [...stored].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+      ? stored
       : buildColumnsFromStatusOptions(
           getProjectIssueStatusOptions(this.args.model?.project),
         );
@@ -1074,7 +1073,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             label: col.label ?? null,
             color: col.color ?? null,
             collapsed: col.collapsed ?? null,
-            sortOrder: col.sortOrder ?? null,
             wipLimit: col.wipLimit ?? null,
           }) as unknown as KanbanColumnConfig,
       ),
@@ -1131,7 +1129,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         label: cfg.label,
         color: cfg.color,
         collapsed: cfg.collapsed,
-        sortOrder: cfg.sortOrder,
         wipLimit: cfg.wipLimit,
       }),
     );
@@ -1148,6 +1145,32 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         });
       });
     }
+  };
+
+  handleLabelChange = (col: KanbanColumnConfig | null, val: string): void => {
+    if (!col) return;
+    col.label = val;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleColorChange = (col: KanbanColumnConfig | null, val: string): void => {
+    if (!col) return;
+    col.color = val;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleWipLimitChange = (
+    col: KanbanColumnConfig | null,
+    val: string,
+  ): void => {
+    if (!col) return;
+    let raw = parseInt(val, 10);
+    col.wipLimit = isNaN(raw) || raw < 0 ? 0 : raw;
+    this.handleColumnsChange([...this.columns]);
+  };
+
+  handleReorder = (): void => {
+    this.handleColumnsChange([...this.columns]);
   };
 
   toggleSidebar = (): void => {
@@ -1301,6 +1324,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
               @isEnabled={{this.hideEmpty}}
               @onChange={{this.toggleHideEmptyColumns}}
               @label='Hide empty columns'
+              data-test-hide-empty-switch
             />
           </div>
           <Tooltip @placement='bottom'>
@@ -1334,7 +1358,6 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
-            @hideEmpty={{this.hideEmpty}}
             @onChange={{this.handleChange}}
             @onOpen={{this.openCard}}
             @onAddCard={{this.addCardTask.perform}}
@@ -1369,7 +1392,12 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
-            @onColumnsChange={{this.handleColumnsChange}}
+            @onClose={{this.toggleSidebar}}
+            @onToggleCollapsed={{this.handleToggleCollapsed}}
+            @onLabelChange={{this.handleLabelChange}}
+            @onColorChange={{this.handleColorChange}}
+            @onWipLimitChange={{this.handleWipLimitChange}}
+            @onReorder={{this.handleReorder}}
           />
         </div>
       </div>

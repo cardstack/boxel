@@ -392,9 +392,10 @@ export default class KanbanUsage extends Component {
         </p>
         <p>
           It mutates column objects directly via tracked properties, so the
-          caller only needs to supply a tracked columns array. Column reordering
-          via the up/down controls is handled internally — no callback is
-          required.
+          caller only needs to supply a tracked columns array. Reordering is
+          applied internally; supply
+          <code>@onReorder</code>
+          to be notified after each move so you can persist the new order.
         </p>
       </:description>
       <:example>
@@ -433,6 +434,10 @@ export default class KanbanUsage extends Component {
         <Args.Action
           @name='onWipLimitChange'
           @description='Optional callback invoked with the column and new value string when the WIP limit input changes.'
+        />
+        <Args.Action
+          @name='onReorder'
+          @description='Optional callback invoked (with no arguments) after a column is moved up or down, so callers can persist the updated column order.'
         />
       </:api>
     </FreestyleUsage>
