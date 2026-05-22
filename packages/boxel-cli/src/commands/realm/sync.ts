@@ -51,6 +51,11 @@ class RealmSyncer extends RealmSyncBase {
   remoteDeletedFiles: string[] = [];
   localDeletedFiles: string[] = [];
   skippedConflicts: string[] = [];
+  // Top-level message from a failed /_atomic batch (e.g. "Atomic upload
+  // failed: 500 Internal Server Error"). Surfaced in `SyncResult.error`
+  // so callers don't have to scrape stderr to learn why the batch
+  // failed.
+  uploadFatalMessage?: string;
 
   constructor(
     private syncOptions: BiSyncOptions,
@@ -320,6 +325,7 @@ class RealmSyncer extends RealmSyncBase {
       this.pushedFiles.push(...result.succeeded);
       if (result.error) {
         this.hasError = true;
+        this.uploadFatalMessage = result.error.message;
         console.error(result.error.message);
         for (const entry of result.error.perFile) {
           console.error(`  ${entry.path}: ${entry.title}`);
@@ -679,7 +685,11 @@ function buildSyncErrorMessage(syncer: RealmSyncer): string {
     `${syncer.skippedConflicts.length} conflicts skipped`,
   ].join(', ');
 
-  return `Sync completed with errors. ${summary}.`;
+  let base = `Sync completed with errors. ${summary}.`;
+  if (syncer.uploadFatalMessage) {
+    return `${base} ${syncer.uploadFatalMessage}`;
+  }
+  return base;
 }
 function emptyResult(partial: Pick<SyncResult, 'error'>): SyncResult {
   return {
