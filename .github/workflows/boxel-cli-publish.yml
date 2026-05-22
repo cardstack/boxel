@@ -232,15 +232,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          # `pnpm run build` chains `build:test-harness`, which copies the
-          # manifest-listed chunks out of `packages/host/dist/` (see
-          # `packages/boxel-cli/scripts/build-test-harness.ts`). Build the
-          # host's dev bundle first so those chunks exist on disk —
-          # `vite build --mode=development` is the right mode because
-          # production strips the test entry (`tests/index.html`) entirely.
-          # The slim manifest filter then drops everything outside the
-          # card-test runtime, so we only ship ~27MB despite the host
-          # producing 60MB of dist.
+          # `pnpm run build` chains `build:test-harness`, which copies
+          # `packages/host/dist/` into `packages/boxel-cli/bundled-test-harness/`
+          # (see `packages/boxel-cli/scripts/build-test-harness.ts`).
+          # Build the host's dev bundle first so that dist exists on
+          # disk — `vite build --mode=development` is the right mode
+          # because production strips the test entry (`tests/index.html`)
+          # entirely. Only sourcemaps are dropped; the resulting harness
+          # is ~60MB unpacked / ~15MB compressed.
           pnpm --filter @cardstack/host build
           pnpm run build
           # Use --no-git-checks because the workflow's commit + tag is already
