@@ -19,11 +19,12 @@ import { readdirSync } from 'node:fs';
 import { sep } from 'node:path';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
-// `@playwright/test` is a devDependency and external in our esbuild
-// config, so it's not present in a published-from-npm install. Anything
-// loaded at the top of this module would crash `boxel --help` for end
-// users who never run `boxel test`. Resolved lazily inside the runner
-// instead.
+// `@playwright/test` ships as a runtime dependency (it has to, since
+// `boxel test` drives chromium) but it's marked external in our
+// esbuild config — it bundles native binaries that esbuild can't
+// inline. Lazy-importing it here keeps `boxel --help` and the other
+// commands fast for users who never run `boxel test`, and keeps the
+// top-level import graph free of the playwright dependency surface.
 type ChromiumApi = (typeof import('@playwright/test'))['chromium'];
 
 async function loadChromium(): Promise<ChromiumApi> {
@@ -1092,7 +1093,7 @@ export function registerTestCommand(program: Command): void {
   program
     .command('test')
     .description(
-      'Run every `*.test.gts` file in a workspace directory in a headless Chromium driven against the host app. Defaults to type-checking and serving cards from the local workspace (cwd or [path]); pass `--realm <url>` to test cards already on a remote realm instead.',
+      'Run every `*.test.gts` file in a workspace directory in a headless Chromium driven against the host app. Defaults to serving cards from the local workspace (cwd or [path]) via an in-process transpiling server; pass `--realm <url>` to test cards already on a remote realm instead.',
     )
     .argument(
       '[path]',

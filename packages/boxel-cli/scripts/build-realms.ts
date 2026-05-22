@@ -3,8 +3,8 @@
  * `packages/skills-realm/contents/` so a published `@cardstack/boxel-cli`
  * install can run `boxel test` without a realm-server on PATH (CS-11164).
  *
- * The CLI's in-process local module server (see
- * `src/lib/local-module-server.ts`) mounts these directories at `/base/`
+ * The CLI's in-process test-page server (see `startTestPageServer`
+ * in `src/commands/test.ts`) mounts these directories at `/base/`
  * and `/skills/` and transpiles `.gts` / `.ts` on demand. Cards that
  * import `https://cardstack.com/base/card-api` resolve through the
  * host bundle's URL-mapping to that mount point, so the realm-server

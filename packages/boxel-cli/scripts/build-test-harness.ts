@@ -14,14 +14,18 @@
  *   but missing from `host/dist/` are skipped silently — they're
  *   typically routes that the live-test entry point doesn't navigate
  *   to.
- * - `tests/index.html` is always included even if the manifest is
- *   stale, because the CLI reads it directly off disk to build the
- *   QUnit page; without it `boxel test` errors before the manifest
- *   filter ever matters.
+ * - `tests/index.html` is always included via `ALWAYS_INCLUDE`
+ *   because the CLI reads it directly off disk to build the QUnit
+ *   page; without it `boxel test` errors before the manifest filter
+ *   ever matters. Files listed in `ALWAYS_INCLUDE` are *required* —
+ *   the build fails (exit 1) if any are missing from `host/dist/`.
+ *   That's the early-warning for a production-mode host build, which
+ *   strips test entries.
  *
  * What gets stripped:
  *
- * - `*.map` sourcemap files (no value to the headless runner).
+ * - `*.map` sourcemap files (no value to the headless runner; we
+ *   refuse to copy any even if the manifest references one).
  * - Every chunk the manifest doesn't reference: the AI assistant,
  *   code-mode UI, monaco workers, cytoscape, katex, and most of the
  *   commands that card tests don't exercise. This is what gets the
@@ -143,9 +147,11 @@ function main(): void {
 
   let manifest = loadManifest();
   let entries = new Set<string>([...manifest, ...ALWAYS_INCLUDE]);
+  let alwaysIncludeSet = new Set<string>(ALWAYS_INCLUDE);
 
   let copied = 0;
   let skipped: string[] = [];
+  let missingRequired: string[] = [];
 
   for (let entry of entries) {
     // Manifest entries are URL paths captured from the test runner.
@@ -160,22 +166,46 @@ function main(): void {
     ) {
       continue;
     }
+    // Sourcemaps add ~half the bundle size and the headless runner
+    // never reads them. Don't ship them even if a stale manifest
+    // captured them somehow.
+    if (entry.endsWith('.map')) {
+      continue;
+    }
     let rel = entry.replace(/^\//, '');
     let src = join(HOST_DIST, rel);
     let dst = join(OUT_DIR, rel);
     try {
       let st = statSync(src);
       if (!st.isFile()) {
-        skipped.push(entry);
+        if (alwaysIncludeSet.has(entry)) missingRequired.push(entry);
+        else skipped.push(entry);
         continue;
       }
     } catch {
-      skipped.push(entry);
+      if (alwaysIncludeSet.has(entry)) missingRequired.push(entry);
+      else skipped.push(entry);
       continue;
     }
     mkdirSync(dirname(dst), { recursive: true });
     copyFileSync(src, dst);
     copied++;
+  }
+
+  // Bail loudly if a file in `ALWAYS_INCLUDE` (CLI-direct reads like
+  // `tests/index.html`) isn't on disk — that's almost always a
+  // production-mode host build (which strips test entries) and would
+  // silently ship a broken harness. The manifest-skipped list above
+  // is allowed; those are best-effort chunks the live-test bundle
+  // might or might not reach.
+  if (missingRequired.length > 0) {
+    console.error(
+      `Refusing to publish a bundled-test-harness missing required ` +
+        `files: ${missingRequired.join(', ')}. ` +
+        'Did `pnpm --filter @cardstack/host build` (dev mode) run ' +
+        'before this script? Production builds strip test entries.',
+    );
+    process.exit(1);
   }
 
   let size = dirSize(OUT_DIR);
