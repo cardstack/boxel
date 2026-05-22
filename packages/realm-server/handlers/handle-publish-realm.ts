@@ -137,17 +137,55 @@ async function maybeApplyPublishedRealmOverride(
   };
 }
 
-function rewriteHostHomeForPublishedRealm(
-  hostHome: string | undefined | null | unknown,
+// Walk the realm.json card's `hostRoutingRules.<i>.instance`
+// relationship links and rewrite any that still point at the source
+// realm so they resolve to the published realm. Relative links (./Type/id)
+// are stable across copySync and need no rewrite — only absolute URLs
+// matter here, which is the legacy case (a hand-edited card, or a
+// card written before the backfill knew the realm's canonical URL).
+//
+// Mutates the card document in place. Returns true if any link was
+// rewritten.
+function rewriteHostRoutingRulesForPublishedRealm(
+  card: unknown,
   sourceRealmURL: string,
   publishedRealmURL: string,
-): string | undefined {
-  if (typeof hostHome !== 'string') {
-    return undefined;
+): boolean {
+  if (
+    typeof card !== 'object' ||
+    card === null ||
+    !('data' in card) ||
+    typeof (card as { data?: unknown }).data !== 'object' ||
+    (card as { data: unknown }).data === null
+  ) {
+    return false;
   }
-  return hostHome.startsWith(sourceRealmURL)
-    ? `${publishedRealmURL}${hostHome.slice(sourceRealmURL.length)}`
-    : undefined;
+  const data = (card as { data: { relationships?: unknown } }).data;
+  const relationships = data.relationships;
+  if (typeof relationships !== 'object' || relationships === null) {
+    return false;
+  }
+  const relMap = relationships as Record<
+    string,
+    { links?: { self?: unknown } } | undefined
+  >;
+  let modified = false;
+  for (const key of Object.keys(relMap)) {
+    if (!/^hostRoutingRules\.\d+\.instance$/.test(key)) {
+      continue;
+    }
+    const entry = relMap[key];
+    const link = entry?.links?.self;
+    if (typeof link !== 'string') {
+      continue;
+    }
+    if (link.startsWith(sourceRealmURL)) {
+      (entry as { links: { self: string } }).links.self =
+        `${publishedRealmURL}${link.slice(sourceRealmURL.length)}`;
+      modified = true;
+    }
+  }
+  return modified;
 }
 
 // If the published realm's index card is the default CardsGrid, write
@@ -490,27 +528,26 @@ export default function handlePublishRealm({
             `) ON CONFLICT (url) DO UPDATE SET publishable = false, updated_at = now()`,
           ]);
 
-          // hostHome rewrite still goes via the sidecar — CS-10055 will
-          // move it to the card. Read what was copied over (may be
-          // missing if the source realm has no sidecar), rewrite if
-          // necessary, write back only when something changed.
-          let publishedRealmConfigPath = join(
-            publishedRealmPath,
-            '.realm.json',
-          );
-          let newlyPublishedRealmConfig: Record<string, unknown> = existsSync(
-            publishedRealmConfigPath,
-          )
-            ? readJsonSync(publishedRealmConfigPath)
-            : {};
-          let rewrittenHostHome = rewriteHostHomeForPublishedRealm(
-            newlyPublishedRealmConfig.hostHome,
-            sourceRealmURL,
-            publishedRealmURL,
-          );
-          if (rewrittenHostHome) {
-            newlyPublishedRealmConfig.hostHome = rewrittenHostHome;
-            writeJsonSync(publishedRealmConfigPath, newlyPublishedRealmConfig);
+          // CS-10055: hostHome migrated to a /-rooted hostRoutingRules
+          // entry on the realm.json card. Walk the card's relationship
+          // links and rewrite any that still point at the source realm
+          // (legacy absolute-URL cases — relative links survive copySync
+          // unchanged and need no rewrite). Skip cleanly when the source
+          // had no card to copy.
+          let publishedRealmCardPath = join(publishedRealmPath, 'realm.json');
+          if (existsSync(publishedRealmCardPath)) {
+            const publishedCard = readJsonSync(publishedRealmCardPath);
+            if (
+              rewriteHostRoutingRulesForPublishedRealm(
+                publishedCard,
+                sourceRealmURL,
+                publishedRealmURL,
+              )
+            ) {
+              writeJsonSync(publishedRealmCardPath, publishedCard, {
+                spaces: 2,
+              });
+            }
           }
 
           // For published realms whose homepage is the default
