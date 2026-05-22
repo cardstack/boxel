@@ -143,7 +143,8 @@ module('Integration | overlay-menu-items', function (hooks) {
         'card-with-custom-menu.gts': { CardWithCustomMenu },
         'parent-card.gts': { ParentCard },
         'parent-with-file.gts': { ParentWithFile },
-        'notes.md': '# Hello\n\nMarkdown content for the FileDef overlay test.',
+        'ParentWithFile/notes.md':
+          '# Hello\n\nMarkdown content for the FileDef overlay test.',
         'index.json': {
           data: {
             type: 'card',

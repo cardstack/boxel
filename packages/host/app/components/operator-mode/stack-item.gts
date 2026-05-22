@@ -95,7 +95,7 @@ import type StoreService from '../../services/store';
 // Inert "N Selected" header icon for the multi-select utility menu —
 // dark filled circle with a teal check, matching the per-card selection chip.
 const SelectionCheckmarkIcon: TemplateOnlyComponent<{
-  Element: SVGElement;
+  Element: SVGSVGElement;
 }> = <template>
   <svg
     viewBox='0 0 14 14'

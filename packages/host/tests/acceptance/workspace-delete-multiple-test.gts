@@ -104,10 +104,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
     await triggerEvent(cardSelector, 'mouseenter');
     await waitFor(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await triggerEvent(cardSelector, 'mouseleave');
   }

@@ -354,6 +354,12 @@ export default class OperatorModeOverlays extends Overlays {
   > = new Map();
   private openDropdownCount = 0;
 
+  protected override get hoverClearDelayMs(): number {
+    // The type-label tab floats a few pixels above the card; the cursor
+    // needs to bridge that gap without the chrome dismissing itself.
+    return 100;
+  }
+
   protected override shouldDelayHoverClear(): boolean {
     return this.openDropdownCount > 0;
   }
@@ -479,9 +485,20 @@ export default class OperatorModeOverlays extends Overlays {
     let instance = isFile
       ? this.store.peek<FileDef>(cardDefOrId, { type: 'file-meta' })
       : this.store.peek<CardDef>(cardDefOrId);
-    return instance && !('error' in instance)
-      ? (instance as BaseDef)
-      : undefined;
+    if (!instance || 'error' in instance) {
+      return undefined;
+    }
+    // Defensive: errored or partial reads may return shapes that don't
+    // implement the BaseDef interface (e.g. error envelopes). Only return
+    // instances whose constructor exposes getDisplayName, since that's what
+    // cardTypeDisplayName / cardTypeIcon rely on.
+    let ctor = (instance as { constructor?: unknown }).constructor as
+      | { getDisplayName?: unknown }
+      | undefined;
+    if (typeof ctor?.getDisplayName !== 'function') {
+      return undefined;
+    }
+    return instance as unknown as BaseDef;
   }
 
   @action
@@ -489,18 +506,24 @@ export default class OperatorModeOverlays extends Overlays {
     cardDefOrId: CardDefOrId,
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): string {
-    let instance = this.peekInstance(cardDefOrId, renderedCard);
-    if (instance) {
-      return cardTypeDisplayName(instance);
-    }
-    // Prerendered rows in the cards-grid don't have their instance loaded in
-    // the store yet — fall back to the type name embedded on the rendered
-    // element by prerendered-card-search.
+    // Prefer the indexer-populated DOM attribute over the in-memory
+    // instance. FileDef subclasses currently round-trip through
+    // createFileDef which always returns a generic FileDef base instance
+    // (constructor.displayName === 'File'), losing the specific class —
+    // but the realm server's indexer records the proper subclass display
+    // name in `display_names`, which prerendered-card-search stamps onto
+    // the rendered wrapper. So the DOM attribute is the more accurate
+    // source for file rows and matches the in-store CardDef result for
+    // card rows.
     let domName = renderedCard.element?.getAttribute(
       'data-card-type-display-name',
     );
     if (domName) {
       return domName;
+    }
+    let instance = this.peekInstance(cardDefOrId, renderedCard);
+    if (instance) {
+      return cardTypeDisplayName(instance);
     }
     return this.isFileMetaTarget(renderedCard) ? 'File' : 'Card';
   }
@@ -510,19 +533,20 @@ export default class OperatorModeOverlays extends Overlays {
     cardDefOrId: CardDefOrId,
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): unknown {
-    let instance = this.peekInstance(cardDefOrId, renderedCard);
-    if (instance) {
-      return cardTypeIcon(instance);
-    }
-    // Prerendered rows expose the type icon as raw SVG markup on the
-    // rendered element — wrap it in an htmlComponent so it can be invoked
-    // like any other Icon. htmlComponent caches by source string, so
-    // repeated lookups for the same icon return the same component.
+    // Same precedence as getCardTypeName — the realm server stamps the
+    // proper subclass icon HTML on the rendered wrapper, which the
+    // in-memory FileDef base class can't supply.
     let iconHtml = renderedCard.element?.getAttribute(
       'data-card-type-icon-html',
     );
     if (iconHtml) {
+      // htmlComponent caches by source string, so repeat lookups for the
+      // same icon return the same component.
       return htmlComponent(iconHtml);
+    }
+    let instance = this.peekInstance(cardDefOrId, renderedCard);
+    if (instance) {
+      return cardTypeIcon(instance);
     }
     return undefined;
   }
@@ -547,7 +571,7 @@ export default class OperatorModeOverlays extends Overlays {
       renderedCard,
     )
       ? {
-          label: 'Edit card',
+          label: 'Edit',
           action: () =>
             this.openOrSelectCard(
               cardDefOrId,

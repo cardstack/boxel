@@ -114,7 +114,14 @@ export default class Overlays extends Component<OverlaySignature> {
   // edge). We defer the hover clear so the cursor can bridge that gap; any
   // mouseenter on the chrome cancels the pending clear.
   private hoverClearTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly HOVER_CLEAR_DELAY_MS = 100;
+
+  // Subclasses opt into a hover-bridge delay by overriding this getter.
+  // The base Overlays has no floating chrome, so the default is immediate
+  // (0ms) — preserving existing immediate-clear behaviour for consumers
+  // like spec-preview and playground-panel.
+  protected get hoverClearDelayMs(): number {
+    return 0;
+  }
 
   protected offset = {
     name: 'offset',
@@ -251,7 +258,7 @@ export default class Overlays extends Component<OverlaySignature> {
         return;
       }
       this.setCurrentlyHoveredCard(null);
-    }, Overlays.HOVER_CLEAR_DELAY_MS);
+    }, this.hoverClearDelayMs);
   }
 
   @action
