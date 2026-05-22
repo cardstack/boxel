@@ -41,6 +41,59 @@ const recentFailedFetches: string[] = [];
 const RECENT_FAILED_FETCHES_LIMIT = 20;
 let currentTestEpoch = 0;
 
+// Lazily install a single global QUnit.testDone callback that fires the
+// existing diagnostic dump when a failed test ran longer than 60s. Silent
+// QUnit timeouts (e.g. a waitFor that never resolves) don't surface through
+// `unhandledrejection` or `onUncaughtException`, so without this hook a
+// timeout shows only accumulated `[test-fetch]` lines with no in-flight /
+// recent-failed snapshot at the moment QUnit gave up. QUnit's logging
+// callbacks have no deregistration API, hence the install-once pattern; the
+// callback reads the live module-level fetch state, which is reset each
+// beforeEach, so it is consistent with the per-test fetch lifecycle.
+let timeoutDiagnosticsInstalled = false;
+function installTimeoutDiagnosticsOnce() {
+  if (timeoutDiagnosticsInstalled) return;
+  let qunitGlobal = getQUnitWithCallbacks();
+  if (!qunitGlobal || typeof qunitGlobal.testDone !== 'function') return;
+  qunitGlobal.testDone((details: QUnitTestDoneDetails) => {
+    if (
+      details &&
+      typeof details.failed === 'number' &&
+      details.failed > 0 &&
+      typeof details.runtime === 'number' &&
+      details.runtime > 60_000
+    ) {
+      logRejectionDiagnostics(
+        '[test-timeout]',
+        `failed test "${details.module ?? '<unknown module>'} > ${
+          details.name ?? '<unknown test>'
+        }" ran for ${details.runtime}ms`,
+      );
+    }
+  });
+  timeoutDiagnosticsInstalled = true;
+}
+
+interface QUnitTestDoneDetails {
+  name?: string;
+  module?: string;
+  failed?: number;
+  passed?: number;
+  total?: number;
+  runtime?: number;
+}
+
+function getQUnitWithCallbacks():
+  | { testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void }
+  | undefined {
+  let q = (globalThis as { QUnit?: unknown }).QUnit;
+  return q && typeof q === 'object'
+    ? (q as {
+        testDone?: (cb: (details: QUnitTestDoneDetails) => void) => void;
+      })
+    : undefined;
+}
+
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
   let wrappedFetch: typeof globalThis.fetch | undefined;
@@ -49,6 +102,7 @@ function setupFetchDebugging(hooks: NestedHooks) {
     inFlightFetches.clear();
     recentFailedFetches.length = 0;
     currentTestEpoch++;
+    installTimeoutDiagnosticsOnce();
     if (!globalThis.fetch) {
       return;
     }
@@ -79,7 +133,10 @@ function setupFetchDebugging(hooks: NestedHooks) {
     }
     originalFetch = undefined;
     wrappedFetch = undefined;
-    inFlightFetches.clear();
+    // Don't clear inFlightFetches here: QUnit.testDone runs AFTER
+    // afterEach, so clearing here would empty the snapshot exactly when
+    // the timeout-diagnostics callback needs it. beforeEach already
+    // resets the buffer at the start of the next test.
   });
 }
 
