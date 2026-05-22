@@ -203,8 +203,6 @@ export const testRealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
-  interactHome: null,
-  hostHome: null,
   visibility: 'public',
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,

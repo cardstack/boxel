@@ -591,11 +591,6 @@ function applyRealmConfigOverrides(
     showAsCatalog:
       (realmConfig.showAsCatalog as boolean | null | undefined) ??
       info.showAsCatalog,
-    interactHome:
-      (realmConfig.interactHome as string | null | undefined) ??
-      info.interactHome,
-    hostHome:
-      (realmConfig.hostHome as string | null | undefined) ?? info.hostHome,
     realmUserId:
       (realmConfig.realmUserId as string | null | undefined) ??
       info.realmUserId,

@@ -193,8 +193,6 @@ export type RealmInfo = {
   backgroundURL: string | null;
   iconURL: string | null;
   showAsCatalog: boolean | null;
-  interactHome: string | null;
-  hostHome: string | null;
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
@@ -233,9 +231,12 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. Anything not
-// in this set is still written to the legacy .realm.json sidecar until
-// CS-10055 moves hostHome / interactHome off-file.
+// Fields owned by the RealmConfig card instance at /realm.json. Anything
+// not in this set falls through to the legacy `.realm.json` sidecar
+// catch-all (which is itself on the way out — see CS-11131). hostHome
+// is no longer here: CS-10055 unified it into hostRoutingRules under
+// `path: "/"`, so a hostHome PATCH is just an attempted write to an
+// unrecognized key.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -6273,8 +6274,6 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
-      interactHome: null,
-      hostHome: null,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
@@ -6292,9 +6291,6 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.interactHome =
-          realmConfigJson.interactHome ?? realmInfo.interactHome;
-        realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
         realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),

@@ -425,10 +425,17 @@ function addHostHomeRule(
 
 // Convert an absolute card URL (e.g. https://realm.example.com/Foo/abc)
 // to the realm-relative form used inside relationships (./Foo/abc). If
-// the absolute URL doesn't start with the realm URL, fall back to
-// returning the absolute URL — that's still a valid link, just less
+// the absolute URL doesn't start with the realm URL, or the realm URL
+// is unknown (e.g. published realm with no registry row yet), fall
+// back to returning the absolute URL — still a valid link, just less
 // portable.
-function toRelativeInstanceLink(absoluteUrl: string, realmUrl: string): string {
+function toRelativeInstanceLink(
+  absoluteUrl: string,
+  realmUrl: string | null,
+): string {
+  if (realmUrl === null) {
+    return absoluteUrl;
+  }
   const realm = realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`;
   if (absoluteUrl.startsWith(realm)) {
     return `./${absoluteUrl.slice(realm.length)}`;
