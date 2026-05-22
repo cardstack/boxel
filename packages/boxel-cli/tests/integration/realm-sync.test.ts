@@ -235,10 +235,16 @@ async function remoteFileGoneEventually(
       headers: { Accept: 'application/vnd.card+source' },
     });
     finalStatus = response.status;
-    if (!response.ok) {
-      // Drain the body so the connection can be reused; it's empty on 404
-      // but Response objects must be consumed.
-      finalBody = await response.text().catch(() => '');
+    // Drain the body so the connection can be reused.
+    finalBody = await response.text().catch(() => '');
+    // Only 404 is the unambiguous "file is gone" signal. Treating every
+    // non-OK status as success would silently green-light the assertion on
+    // a transient 5xx or an auth glitch and mask a real sync failure
+    // (e.g. the DELETE never landed). For any non-404 / non-200 status we
+    // keep polling — if the realm is consistently 5xx-ing we'll time out
+    // and the diagnostic dump records the final status so the failure
+    // mode is attributable.
+    if (response.status === 404) {
       return {
         isGone: true,
         elapsedMs: Date.now() - start,
@@ -247,7 +253,6 @@ async function remoteFileGoneEventually(
         finalBody,
       };
     }
-    finalBody = await response.text().catch(() => '');
     await sleep(100);
   }
   return {
