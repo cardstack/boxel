@@ -12,6 +12,7 @@ import {
   StringField,
   type BaseDefComponent,
 } from 'https://cardstack.com/base/card-api';
+import BooleanField from 'https://cardstack.com/base/boolean';
 
 import {
   ContextButton,
@@ -90,21 +91,24 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
         sortOrder: p.sortOrder,
       }),
     );
+    if (this.hideEmpty) {
+      this.handleColumnsChange(
+        this.columns.map((col) =>
+          newPlacements.filter((p) => p.columnId === col.key).length === 0
+            ? { ...col, collapsed: true }
+            : col,
+        ),
+      );
+    }
   };
 
   get hideEmpty(): boolean {
-    let emptyCols = this.columns.filter(
-      (_: KanbanColumnConfig, i: number) =>
-        (this.columnCardCounts[i] ?? 0) === 0,
-    );
-    return (
-      emptyCols.length > 0 &&
-      emptyCols.every((col: KanbanColumnConfig) => col.collapsed)
-    );
+    return this.args.model.hideEmptyColumns ?? false;
   }
 
   toggleHideEmptyColumns = (): void => {
     let next = !this.hideEmpty;
+    this.args.model.hideEmptyColumns = next;
     this.handleColumnsChange(
       this.columns.map((col: KanbanColumnConfig, i: number) =>
         (this.columnCardCounts[i] ?? 0) === 0
@@ -246,6 +250,7 @@ class KanbanBoardIsolated extends Component<typeof KanbanBoard> {
             @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
+            @hideEmpty={{this.hideEmpty}}
             @onChange={{this.handleChange}}
             @onOpen={{this.openCard}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
@@ -401,6 +406,7 @@ export class KanbanBoard extends CardDef {
   @field cards = linksToMany(CardDef);
   @field columns = containsMany(KanbanColumnField);
   @field placements = containsMany(KanbanBoardPlacement);
+  @field hideEmptyColumns = contains(BooleanField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {

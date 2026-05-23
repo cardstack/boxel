@@ -284,6 +284,47 @@ export function runTests() {
           );
       });
 
+      test('sidebar visibility toggle is disabled for empty columns when hide-empty is on', async function (assert) {
+        // backlog, in_progress, done have 1 card each; blocked and review are empty
+        await visitOperatorMode({
+          stacks: [[{ id: boardId, format: 'isolated' }]],
+        });
+        await waitFor('[data-test-issue-id]');
+
+        await click('[data-test-configure-columns-btn]');
+
+        assert
+          .dom('[data-test-col-config-toggle-visible="blocked"]')
+          .isNotDisabled('blocked toggle enabled while hide-empty is off');
+        assert
+          .dom('[data-test-col-config-toggle-visible="review"]')
+          .isNotDisabled('review toggle enabled while hide-empty is off');
+        assert
+          .dom('[data-test-col-config-toggle-visible="backlog"]')
+          .isNotDisabled(
+            'non-empty backlog toggle enabled while hide-empty is off',
+          );
+
+        await click('[data-test-hide-empty-switch]');
+        await waitFor('[data-test-hidden-columns]');
+
+        assert
+          .dom('[data-test-col-config-toggle-visible="blocked"]')
+          .isDisabled(
+            'blocked toggle disabled when hide-empty is on and column is empty',
+          );
+        assert
+          .dom('[data-test-col-config-toggle-visible="review"]')
+          .isDisabled(
+            'review toggle disabled when hide-empty is on and column is empty',
+          );
+        assert
+          .dom('[data-test-col-config-toggle-visible="backlog"]')
+          .isNotDisabled(
+            'non-empty backlog toggle stays enabled when hide-empty is on',
+          );
+      });
+
       test<TestContextWithSave>('turning hide-empty off uncollapses the previously-hidden empty columns', async function (assert) {
         let boardSaves: any[] = [];
         this.onSave((url, doc) => {

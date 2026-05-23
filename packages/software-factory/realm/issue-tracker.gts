@@ -109,17 +109,15 @@ function getIssueStatusColor(
 
 function buildColumnsFromStatusOptions(
   options: ReturnType<typeof getProjectIssueStatusOptions>,
-) {
-  return options.map((option, i) =>
-    Object.assign(new KanbanColumnField(), {
-      key: option.value,
-      label: option.label,
-      color: option.color ?? null,
-      collapsed: false,
-      wipLimit: 0,
-      sortOrder: i + 1,
-    }),
-  );
+): KanbanColumnConfig[] {
+  return options.map((option, i) => ({
+    key: option.value,
+    label: option.label,
+    color: option.color ?? null,
+    collapsed: false,
+    wipLimit: 0,
+    sortOrder: i + 1,
+  }));
 }
 
 class IssueIsolated extends Component<typeof Issue> {
@@ -1094,19 +1092,25 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
     );
   }
 
-  get hideEmpty(): boolean {
-    let emptyCols = this.columns.filter(
-      (_: KanbanColumnConfig, i: number) =>
-        (this.columnCardCounts[i] ?? 0) === 0,
-    );
-    return (
-      emptyCols.length > 0 &&
-      emptyCols.every((col: KanbanColumnConfig) => col.collapsed)
-    );
+  get columnCardCountsByKey(): Record<string, number> {
+    let result: Record<string, number> = {};
+    this.columns.forEach((col, i) => {
+      result[col.key] = this.columnCardCounts[i] ?? 0;
+    });
+    return result;
   }
+
+  get hideEmpty(): boolean {
+    return this.args.model.hideEmptyColumns ?? false;
+  }
+
+  toggleHideEmpty = (): void => {
+    return this.toggleHideEmptyColumns();
+  };
 
   toggleHideEmptyColumns = (): void => {
     let next = !this.hideEmpty;
+    this.args.model.hideEmptyColumns = next;
     this.handleColumnsChange(
       this.columns.map((col: KanbanColumnConfig, i: number) =>
         (this.columnCardCounts[i] ?? 0) === 0
@@ -1245,6 +1249,15 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         sortOrder: p.sortOrder,
       });
     });
+    if (this.hideEmpty) {
+      this.handleColumnsChange(
+        this.columns.map((col: KanbanColumnConfig) =>
+          newPlacements.filter((p) => p.columnId === col.key).length === 0
+            ? { ...col, collapsed: true }
+            : col,
+        ),
+      );
+    }
   };
 
   get placements(): KanbanPlacement[] {
@@ -1373,6 +1386,7 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
             @boardLabel={{@model.cardTitle}}
             @columns={{this.columns}}
             @placements={{this.placements}}
+            @hideEmpty={{this.hideEmpty}}
             @onChange={{this.handleChange}}
             @onOpen={{this.openCard}}
             @onAddCard={{this.addCardTask.perform}}
@@ -1407,12 +1421,14 @@ class IssueTrackerIsolated extends Component<typeof IssueTracker> {
         >
           <KanbanColumnConfigSidebar
             @columns={{this.columns}}
+            @cardCounts={{this.columnCardCountsByKey}}
             @onClose={{this.toggleSidebar}}
             @onToggleCollapsed={{this.handleToggleCollapsed}}
             @onLabelChange={{this.handleLabelChange}}
             @onColorChange={{this.handleColorChange}}
             @onWipLimitChange={{this.handleWipLimitChange}}
             @onReorder={{this.handleColumnsChange}}
+            @hideEmpty={{this.hideEmpty}}
           />
         </div>
       </div>

@@ -3,10 +3,10 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
+import FieldContainer from '../field-container/index.gts';
 import IconButton from '../icon-button/index.gts';
 import Switch from '../switch/index.gts';
 import ColumnConfigRow from './column-config-sidebar-row.gts';
-import FieldContainer from '../field-container/index.gts';
 import type { KanbanColumnConfig } from './engine.ts';
 
 interface Signature {
@@ -94,6 +94,7 @@ export class KanbanColumnConfigSidebar extends Component<Signature> {
             @label='Hide empty columns'
             @isEnabled={{if @hideEmpty true false}}
             @onChange={{@onHideEmptyChange}}
+            data-test-sidebar-hide-empty-switch
           />
         </FieldContainer>
       {{/if}}
