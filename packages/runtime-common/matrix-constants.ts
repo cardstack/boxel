@@ -77,12 +77,21 @@ export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 // Realm-independent fallback model surface. Used when SystemCard /
 // SystemCard.modelConfigurations is unavailable so we never ship undefined
 // capability fields on the wire (silent-tools-off bug — see CS-11249).
-// Refresh procedure: docs/openrouter-fallback-refresh.md
+//
+// Refresh: re-derive from `https://openrouter.ai/api/v1/models` when the
+// curated set changes. Derivation rules mirror
+// `packages/host/app/commands/sync-openrouter-models.ts:67-141`:
+//   toolsSupported    = supported_parameters.includes('tools')
+//   supportsReasoning = supported_parameters.includes('reasoning')
+//   inputModalities   = architecture.input_modalities (verbatim)
+// `reasoningEffort` is the default applied when neither caller nor SystemCard
+// has chosen one; tune per model as product policy evolves.
 export interface FallbackModelConfig {
   modelId: string;
   displayName: string;
   toolsSupported: boolean;
   supportsReasoning: boolean;
+  reasoningEffort?: string;
   inputModalities: string[];
 }
 
@@ -92,6 +101,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'Anthropic: Claude Sonnet 4.6',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
@@ -99,6 +109,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'Anthropic: Claude Opus 4.7',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
@@ -106,6 +117,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'Google: Gemini 3 Flash Preview',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file', 'audio', 'video'],
   },
   {
@@ -113,6 +125,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'Google: Gemini 3.1 Pro Preview',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['audio', 'file', 'image', 'text', 'video'],
   },
   {
@@ -120,6 +133,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'OpenAI: GPT-5.4',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
@@ -127,6 +141,7 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     displayName: 'OpenAI: GPT-5.5',
     toolsSupported: true,
     supportsReasoning: true,
+    reasoningEffort: 'medium',
     inputModalities: ['file', 'image', 'text'],
   },
 ] as const;

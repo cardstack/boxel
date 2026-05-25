@@ -1758,15 +1758,17 @@ export default class MatrixService extends Service {
 
     // Fill any still-undefined capability fields from the realm-independent
     // fallback so we never ship `toolsSupported: undefined` for one of the
-    // curated models. `??` preserves an explicit `false` from the caller.
-    // `reasoningEffort` is a user-choice runtime param — not filled.
+    // curated models. `??` preserves an explicit `false`/value from the caller
+    // and from SystemCard; the fallback only fires when nothing upstream set
+    // the field.
     let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
 
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
       toolsSupported:
         resolvedConfig?.toolsSupported ?? fallback?.toolsSupported,
-      reasoningEffort: resolvedConfig?.reasoningEffort,
+      reasoningEffort:
+        resolvedConfig?.reasoningEffort ?? fallback?.reasoningEffort,
       inputModalities:
         resolvedConfig?.inputModalities ?? fallback?.inputModalities,
     });

@@ -73,6 +73,13 @@ const tests: SharedTests<unknown> = Object.freeze({
           `${label}: inputModalities contains a non-string ${m}`,
         );
       }
+      if (row.reasoningEffort !== undefined) {
+        let validEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
+        assert.ok(
+          validEfforts.includes(row.reasoningEffort),
+          `${label}: reasoningEffort '${row.reasoningEffort}' is not one of ${validEfforts.join(', ')}`,
+        );
+      }
     }
   },
 
@@ -82,6 +89,7 @@ const tests: SharedTests<unknown> = Object.freeze({
       'displayName',
       'toolsSupported',
       'supportsReasoning',
+      'reasoningEffort',
       'inputModalities',
     ]);
     for (let row of DEFAULT_FALLBACK_MODELS) {

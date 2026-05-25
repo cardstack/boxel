@@ -146,7 +146,7 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
       {
         model: CURATED_MODEL_ID,
         toolsSupported: CURATED_ROW.toolsSupported,
-        reasoningEffort: undefined,
+        reasoningEffort: CURATED_ROW.reasoningEffort,
         inputModalities: CURATED_ROW.inputModalities,
       },
       'curated model caps filled from DEFAULT_FALLBACK_MODELS',
@@ -171,6 +171,11 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
       'no caps for non-curated model',
     );
     assert.strictEqual(
+      state?.content?.reasoningEffort,
+      undefined,
+      'no reasoningEffort for non-curated model',
+    );
+    assert.strictEqual(
       state?.content?.inputModalities,
       undefined,
       'no inputModalities for non-curated model',
@@ -190,11 +195,17 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
       state?.content?.toolsSupported,
       'explicit false is preserved on the wire',
     );
-    // inputModalities not provided by caller → falls back to the constant
+    // inputModalities + reasoningEffort not provided by caller → fall back to
+    // the constant.
     assert.deepEqual(
       state?.content?.inputModalities,
       CURATED_ROW.inputModalities,
       'partial config: missing inputModalities filled from constant',
+    );
+    assert.strictEqual(
+      state?.content?.reasoningEffort,
+      CURATED_ROW.reasoningEffort,
+      'partial config: missing reasoningEffort filled from constant',
     );
   });
 
