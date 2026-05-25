@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { and, eq } from '@cardstack/boxel-ui/helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import type { SerializedError } from '@cardstack/runtime-common';
 
 export type BrokenLinkState = 'error' | 'not-found';
@@ -17,6 +17,22 @@ interface NormalizedAdditionalError {
   status?: number;
   title?: string;
   stack?: string;
+}
+
+// Only http(s) URLs are safe to drop into an <a href> — `javascript:` and
+// `data:` URLs in an anchor execute on click. The brokenUrl flows from
+// trusted card-serialization data, but a corrupted realm could still ship
+// a non-http reference; we fall back to plain text in that case.
+function isSafeHttpUrl(url: string): boolean {
+  if (typeof url !== 'string' || url.length === 0) {
+    return false;
+  }
+  try {
+    let parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export default class BrokenLinkTemplate extends GlimmerComponent<{
@@ -55,6 +71,14 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
     return this.args.errorDoc?.stack ?? '';
   }
 
+  private get isErrorState(): boolean {
+    return this.args.state === 'error';
+  }
+
+  private get urlIsSafe(): boolean {
+    return isSafeHttpUrl(this.args.brokenUrl);
+  }
+
   private get additionalErrors(): NormalizedAdditionalError[] {
     let raw = this.args.errorDoc?.additionalErrors;
     if (!Array.isArray(raw)) {
@@ -87,7 +111,6 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
   <template>
     <div
       class='broken-link-template {{@format}} {{@state}}'
-      role='alert'
       data-test-broken-link-template={{@format}}
       data-test-broken-link-state={{@state}}
     >
@@ -106,15 +129,20 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
             {{this.headline}}
           </span>
         </div>
-        <a
-          class='url'
-          href={{@brokenUrl}}
-          target='_blank'
-          rel='noopener noreferrer'
-          data-test-broken-link-url
-        >
-          {{@brokenUrl}}
-        </a>
+        {{#if this.urlIsSafe}}
+          <a
+            class='url'
+            href={{@brokenUrl}}
+            target='_blank'
+            rel='noopener noreferrer'
+            data-test-broken-link-url
+          >
+            {{@brokenUrl}}
+          </a>
+        {{else}}
+          {{! Unsafe protocol — render as text so a click cannot execute. }}
+          <span class='url' data-test-broken-link-url>{{@brokenUrl}}</span>
+        {{/if}}
         {{#if this.statusLabel}}
           <div class='status' data-test-broken-link-status>
             {{this.statusLabel}}
@@ -125,10 +153,12 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
               URL is already rendered prominently above, so suppress it.
               Show the message only when state == 'error', where it carries
               the actual error reason. }}
-          {{#if (and (eq @state 'error') this.errorMessage)}}
-            <div class='message' data-test-broken-link-message>
-              {{this.errorMessage}}
-            </div>
+          {{#if this.isErrorState}}
+            {{#if this.errorMessage}}
+              <div class='message' data-test-broken-link-message>
+                {{this.errorMessage}}
+              </div>
+            {{/if}}
           {{/if}}
         {{/unless}}
         {{#if (eq @format 'isolated')}}
@@ -138,33 +168,29 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
               data-test-broken-link-stack
             >{{this.errorStack}}</pre>
           {{/if}}
-          {{#if this.additionalErrors.length}}
-            <details class='additional-errors'>
-              <summary data-test-broken-link-additional-errors-toggle>
-                {{this.additionalErrors.length}}
-                additional error{{if
-                  (eq this.additionalErrors.length 1)
-                  ''
-                  's'
-                }}
-              </summary>
-              <ul>
-                {{#each this.additionalErrors as |err i|}}
-                  <li data-test-broken-link-additional-error={{i}}>
-                    {{#if err.status}}
-                      <span class='additional-status'>{{err.status}}</span>
-                    {{/if}}
-                    <span class='additional-message'>{{err.message}}</span>
-                    {{#if err.stack}}
-                      <pre
-                        class='additional-stack'
-                      >{{err.stack}}</pre>
-                    {{/if}}
-                  </li>
-                {{/each}}
-              </ul>
-            </details>
-          {{/if}}
+          {{#let this.additionalErrors as |additionalErrors|}}
+            {{#if additionalErrors.length}}
+              <details class='additional-errors'>
+                <summary data-test-broken-link-additional-errors-toggle>
+                  {{additionalErrors.length}}
+                  additional error{{if (eq additionalErrors.length 1) '' 's'}}
+                </summary>
+                <ul>
+                  {{#each additionalErrors as |err i|}}
+                    <li data-test-broken-link-additional-error={{i}}>
+                      {{#if err.status}}
+                        <span class='additional-status'>{{err.status}}</span>
+                      {{/if}}
+                      <span class='additional-message'>{{err.message}}</span>
+                      {{#if err.stack}}
+                        <pre class='additional-stack'>{{err.stack}}</pre>
+                      {{/if}}
+                    </li>
+                  {{/each}}
+                </ul>
+              </details>
+            {{/if}}
+          {{/let}}
         {{/if}}
       {{/if}}
     </div>
