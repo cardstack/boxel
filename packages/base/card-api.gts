@@ -1228,9 +1228,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       ? FileMetaResourceType
       : CardResourceType;
     // All non-present sentinels (NotLoaded, LinkError, LinkNotFound) serialize
-    // to the same wire shape: just `links.self: <reference>`. The error/not-found
-    // state is never persisted — on deserialize the bucket gets a NotLoadedValue
-    // and a fresh fetch reproduces the live state.
+    // to the same JSON:API relationship shape — `links.self: <reference>` plus
+    // `data: { type, id: <reference> }` — with no errorDoc and no per-state
+    // discriminator. The error/not-found state is never persisted; on
+    // deserialize the bucket gets a NotLoadedValue and a fresh fetch
+    // reproduces the live state.
     if (isNonPresentLink(value)) {
       return {
         relationships: {
@@ -1750,8 +1752,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       // Per-element non-present sentinels (NotLoaded, LinkError, LinkNotFound)
-      // all share the NotLoaded wire shape — see LinksTo.serialize for the
-      // round-trip rationale.
+      // all share the same JSON:API relationship shape — `links.self` plus
+      // `data: { type, id }`. See LinksTo.serialize for the round-trip
+      // rationale.
       if (isNonPresentLink(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
