@@ -163,6 +163,7 @@ import {
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
+  isNonPresentLink,
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
@@ -1226,7 +1227,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNotLoadedValue(value)) {
+    // All non-present sentinels (NotLoaded, LinkError, LinkNotFound) serialize
+    // to the same wire shape: just `links.self: <reference>`. The error/not-found
+    // state is never persisted — on deserialize the bucket gets a NotLoadedValue
+    // and a fresh fetch reproduces the live state.
+    if (isNonPresentLink(value)) {
       return {
         relationships: {
           [this.name]: {
@@ -1744,7 +1749,10 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNotLoadedValue(value)) {
+      // Per-element non-present sentinels (NotLoaded, LinkError, LinkNotFound)
+      // all share the NotLoaded wire shape — see LinksTo.serialize for the
+      // round-trip rationale.
+      if (isNonPresentLink(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: makeRelativeURL(value.reference, opts),

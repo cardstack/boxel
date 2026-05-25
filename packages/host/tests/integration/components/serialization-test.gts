@@ -45,6 +45,7 @@ import {
 } from '../../helpers';
 
 import {
+  cardAPI,
   setupBaseRealm,
   contains,
   CardDef,
@@ -3202,6 +3203,346 @@ module('Integration | serialization', function (hooks) {
       '2020-10-30',
       'the computed value is correct',
     );
+  });
+
+  module('linksTo sentinel serialization round-trip', function () {
+    // Link-error and link-not-found sentinels in the data bucket must never
+    // leak onto the wire: they serialize as the same `links.self: <ref>`
+    // shape as NotLoadedValue, and deserialize plants NotLoadedValue so the
+    // live error state is reproduced via a fresh fetch on next access.
+
+    function plantBucketEntry(instance: any, fieldName: string, value: any) {
+      let bucket = cardAPI.getDataBucket(instance);
+      bucket.set(fieldName, value);
+    }
+
+    function makeLinkErrorSentinel(reference: string) {
+      return {
+        type: 'link-error' as const,
+        reference,
+        errorDoc: {
+          status: 500,
+          message: 'upstream failed',
+          additionalErrors: null,
+        },
+      };
+    }
+
+    function makeLinkNotFoundSentinel(reference: string) {
+      return {
+        type: 'link-not-found' as const,
+        reference,
+        errorDoc: {
+          status: 404,
+          message: 'not found',
+          additionalErrors: null,
+        },
+      };
+    }
+
+    async function setupPersonRealm() {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'test-cards.gts': { Pet, Person } },
+      });
+      return { Pet, Person };
+    }
+
+    function petLinkedDoc(): LooseSingleCardDocument {
+      return {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            pet: {
+              links: { self: `${testRealmURL}Pet/mango` },
+              data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('test-cards'), name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: testRRI('Pet/mango'),
+            type: 'card',
+            attributes: { name: 'Mango' },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' },
+            },
+          },
+        ],
+      };
+    }
+
+    test('LinkErrorValue serializes as the NotLoaded wire shape and round-trips to NotLoadedValue', async function (assert) {
+      let { Person } = await setupPersonRealm();
+      let hassan = await createFromSerialized<typeof Person>(
+        petLinkedDoc().data,
+        petLinkedDoc(),
+        undefined,
+      );
+
+      plantBucketEntry(
+        hassan,
+        'pet',
+        makeLinkErrorSentinel(`${testRealmURL}Pet/mango`),
+      );
+
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(
+        serialized.data.relationships?.pet,
+        {
+          links: { self: `${testRealmURL}Pet/mango` },
+          data: { type: 'card', id: `${testRealmURL}Pet/mango` },
+        },
+        'wire format identical to NotLoaded — no errorDoc, no discriminator',
+      );
+      let brokenId = testRRI('Pet/mango');
+      assert.notOk(
+        (serialized.included ?? []).some(
+          (r: any) => 'id' in r && r.id === brokenId,
+        ),
+        'broken target is not included — error state never leaks',
+      );
+
+      let reloaded = await createFromSerialized<typeof Person>(
+        serialized.data as LooseCardResource,
+        serialized,
+        undefined,
+      );
+      let bucketValue = cardAPI.peekAtField(reloaded, 'pet');
+      assert.deepEqual(
+        bucketValue,
+        { type: 'not-loaded', reference: `${testRealmURL}Pet/mango` },
+        'reload plants NotLoadedValue — lazy fetch reproduces live state',
+      );
+    });
+
+    test('LinkNotFoundValue serializes as the NotLoaded wire shape and round-trips to NotLoadedValue', async function (assert) {
+      let { Person } = await setupPersonRealm();
+      let hassan = await createFromSerialized<typeof Person>(
+        petLinkedDoc().data,
+        petLinkedDoc(),
+        undefined,
+      );
+
+      plantBucketEntry(
+        hassan,
+        'pet',
+        makeLinkNotFoundSentinel(`${testRealmURL}Pet/mango`),
+      );
+
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(
+        serialized.data.relationships?.pet,
+        {
+          links: { self: `${testRealmURL}Pet/mango` },
+          data: { type: 'card', id: `${testRealmURL}Pet/mango` },
+        },
+        'wire format identical to NotLoaded — no errorDoc, no discriminator',
+      );
+
+      let reloaded = await createFromSerialized<typeof Person>(
+        serialized.data as LooseCardResource,
+        serialized,
+        undefined,
+      );
+      let bucketValue = cardAPI.peekAtField(reloaded, 'pet');
+      assert.deepEqual(
+        bucketValue,
+        { type: 'not-loaded', reference: `${testRealmURL}Pet/mango` },
+        'reload plants NotLoadedValue — lazy fetch reproduces live state',
+      );
+    });
+
+    test('linksToMany broken slot round-trips per-element to NotLoadedValue', async function (assert) {
+      let { Person } = await setupPersonRealm();
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Hassan' },
+          relationships: {
+            'pets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+              data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
+            },
+            'pets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+              data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('test-cards'), name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: testRRI('Pet/mango'),
+            type: 'card',
+            attributes: { name: 'Mango' },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' },
+            },
+          },
+          {
+            id: testRRI('Pet/vanGogh'),
+            type: 'card',
+            attributes: { name: 'Van Gogh' },
+            meta: {
+              adoptsFrom: { module: testRRI('test-cards'), name: 'Pet' },
+            },
+          },
+        ],
+      };
+      let hassan = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined,
+      );
+
+      // Plant a link-error sentinel in slot 1, leaving slot 0 intact.
+      let petsArray = cardAPI.peekAtField(hassan, 'pets') as any[];
+      assert.ok(Array.isArray(petsArray), 'pets is an array');
+      petsArray[1] = makeLinkErrorSentinel(`${testRealmURL}Pet/vanGogh`);
+
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+      assert.deepEqual(
+        serialized.data.relationships?.['pets.1'],
+        {
+          links: { self: `${testRealmURL}Pet/vanGogh` },
+          data: { type: 'card', id: `${testRealmURL}Pet/vanGogh` },
+        },
+        'broken-slot wire shape identical to NotLoaded element',
+      );
+
+      let brokenSlotId = testRRI('Pet/vanGogh');
+      let reloaded = await createFromSerialized<typeof Person>(
+        serialized.data as LooseCardResource,
+        // strip the broken target from included so reload encounters not-loaded
+        {
+          ...serialized,
+          included: (serialized.included ?? []).filter(
+            (r: any) => !('id' in r) || r.id !== brokenSlotId,
+          ),
+        } as any,
+        undefined,
+      );
+      let reloadedPets = cardAPI.peekAtField(reloaded, 'pets') as any[];
+      assert.deepEqual(
+        reloadedPets[1],
+        { type: 'not-loaded', reference: `${testRealmURL}Pet/vanGogh` },
+        'broken slot reloads as NotLoadedValue, not a link-error sentinel',
+      );
+    });
+
+    test('nested linksTo inside contains round-trips at the nested level', async function (assert) {
+      class Publisher extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Author extends FieldDef {
+        @field name = contains(StringField);
+        @field publisher = linksTo(Publisher);
+      }
+      class Article extends CardDef {
+        @field title = contains(StringField);
+        @field author = contains(Author);
+      }
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: { 'test-cards.gts': { Publisher, Author, Article } },
+      });
+
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { title: 'On Sentinels', author: { name: 'Hassan' } },
+          relationships: {
+            'author.publisher': {
+              links: { self: `${testRealmURL}Publisher/cardstack` },
+              data: {
+                id: `${testRealmURL}Publisher/cardstack`,
+                type: 'card',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: testRRI('test-cards'), name: 'Article' },
+            fields: {
+              author: {
+                adoptsFrom: { module: testRRI('test-cards'), name: 'Author' },
+              },
+            },
+          },
+        },
+        included: [
+          {
+            id: testRRI('Publisher/cardstack'),
+            type: 'card',
+            attributes: { name: 'Cardstack' },
+            meta: {
+              adoptsFrom: {
+                module: testRRI('test-cards'),
+                name: 'Publisher',
+              },
+            },
+          },
+        ],
+      };
+      let article = await createFromSerialized<typeof Article>(
+        doc.data,
+        doc,
+        undefined,
+      );
+
+      // Plant a link-error sentinel at the nested linksTo inside the contained
+      // Author field.
+      let authorInstance = cardAPI.peekAtField(article, 'author');
+      plantBucketEntry(
+        authorInstance,
+        'publisher',
+        makeLinkErrorSentinel(`${testRealmURL}Publisher/cardstack`),
+      );
+
+      let serialized = serializeCard(article, {
+        includeUnrenderedFields: true,
+      });
+      assert.deepEqual(
+        serialized.data.relationships?.['author.publisher'],
+        {
+          links: { self: `${testRealmURL}Publisher/cardstack` },
+          data: { type: 'card', id: `${testRealmURL}Publisher/cardstack` },
+        },
+        'nested wire format identical to NotLoaded — no errorDoc through Contains',
+      );
+
+      // Reload without included Publisher so the deserialize path plants
+      // NotLoadedValue on the nested bucket.
+      let reloaded = await createFromSerialized<typeof Article>(
+        serialized.data as LooseCardResource,
+        { ...serialized, included: [] } as any,
+        undefined,
+      );
+      let reloadedAuthor = cardAPI.peekAtField(reloaded, 'author');
+      let nestedBucketValue = cardAPI.peekAtField(reloadedAuthor, 'publisher');
+      assert.deepEqual(
+        nestedBucketValue,
+        {
+          type: 'not-loaded',
+          reference: `${testRealmURL}Publisher/cardstack`,
+        },
+        'nested linksTo reloads as NotLoadedValue through Contains',
+      );
+    });
   });
 
   module('computed linksTo', function () {
