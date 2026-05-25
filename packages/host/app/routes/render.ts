@@ -595,10 +595,15 @@ export default class RenderRoute extends Route<Model> {
       fieldSupport = await this.loaderService.loader.import<
         typeof FieldSupport
       >(`${baseRealm.url}field-support`);
-    } catch (_e) {
-      // During a cold dev boot the field-support module may briefly be
-      // unavailable; fall through and skip the scan rather than error out
-      // the render.
+    } catch (e) {
+      // Surface unexpected failures so a syntax error or missing export
+      // in field-support does not silently disable detection. Skip the
+      // scan rather than fail the render — the scan is a safety net,
+      // not the rendering contract.
+      console.warn(
+        'render-route: failed to load field-support for broken-link scan',
+        e,
+      );
       return undefined;
     }
     let findings = fieldSupport.scanForBrokenLinks(instance);

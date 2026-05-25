@@ -721,7 +721,15 @@ export default class CardPrerender extends Component {
       fieldSupport = await this.loaderService.loader.import<
         typeof FieldSupport
       >(`${baseRealm.url}field-support`);
-    } catch (_e) {
+    } catch (e) {
+      // Surface unexpected failures so a syntax error or missing export
+      // in field-support does not silently disable detection. Skip the
+      // scan rather than fail the render — the scan is a safety net,
+      // not the rendering contract.
+      console.warn(
+        'card-prerender: failed to load field-support for broken-link scan',
+        e,
+      );
       return undefined;
     }
     let findings = fieldSupport.scanForBrokenLinks(instance);
@@ -740,14 +748,23 @@ export default class CardPrerender extends Component {
       ...(primary.additionalErrors ?? []),
       ...findings.slice(1).map((f) => f.sentinel.errorDoc),
     ];
-    return JSON.stringify({
+    // Run the payload through the same normalize + withCardType
+    // enrichment that the legacy `boxel-render-error` listener uses, so
+    // downstream consumers (catch block parses `cardError`, indexer reads
+    // `searchData._cardType`) see the identical shape regardless of
+    // whether the failure arrived via event or sentinel scan.
+    let context = this.#currentContext ?? this.#contextFromDom();
+    let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
+    let raw: RenderError = {
       type: 'instance-error',
       error: {
         ...primary,
         deps: [...deps],
         additionalErrors: additionalErrors.length ? additionalErrors : null,
       },
-    });
+    };
+    let normalized = normalizeRenderError(raw, { cardId: context?.cardId });
+    return JSON.stringify(withCardType(normalized, cardType));
   }
 
   #handleRenderErrorEvent = (
