@@ -501,7 +501,16 @@ export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
     }
     let value: unknown;
     if (field.computeVia) {
-      value = peekAtField(instance, fieldName);
+      // A user-defined computeVia is free to throw — that contract is
+      // theirs, not the scan's. The scan is a passive safety net, so
+      // swallow the exception and move on to the next field rather than
+      // dragging an unrelated computed-field error into the render
+      // pipeline through a new code path.
+      try {
+        value = peekAtField(instance, fieldName);
+      } catch (_e) {
+        continue;
+      }
     } else {
       if (!bucket.has(fieldName)) {
         continue;

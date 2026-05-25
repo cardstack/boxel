@@ -40,7 +40,6 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FieldSupport from 'https://cardstack.com/base/field-support';
 
 import {
   windowErrorHandler,
@@ -589,50 +588,6 @@ export default class RenderRoute extends Route<Model> {
     );
   }
 
-  async #brokenLinkPayload(instance: CardDef): Promise<string | undefined> {
-    let fieldSupport;
-    try {
-      fieldSupport = await this.loaderService.loader.import<
-        typeof FieldSupport
-      >(`${baseRealm.url}field-support`);
-    } catch (e) {
-      // Surface unexpected failures so a syntax error or missing export
-      // in field-support does not silently disable detection. Skip the
-      // scan rather than fail the render — the scan is a safety net,
-      // not the rendering contract.
-      console.warn(
-        'render-route: failed to load field-support for broken-link scan',
-        e,
-      );
-      return undefined;
-    }
-    let findings = fieldSupport.scanForBrokenLinks(instance);
-    if (findings.length === 0) {
-      return undefined;
-    }
-    let primary = findings[0].sentinel.errorDoc;
-    let deps = new Set<string>();
-    for (let finding of findings) {
-      deps.add(finding.sentinel.reference);
-    }
-    for (let dep of primary.deps ?? []) {
-      deps.add(dep);
-    }
-    let additionalErrors = [
-      ...(primary.additionalErrors ?? []),
-      ...findings.slice(1).map((f) => f.sentinel.errorDoc),
-    ];
-    let payload = {
-      type: 'instance-error' as const,
-      error: {
-        ...primary,
-        deps: [...deps],
-        additionalErrors: additionalErrors.length ? additionalErrors : null,
-      },
-    };
-    return JSON.stringify(payload);
-  }
-
   #touchFieldSafely(container: any, fieldName: string): unknown {
     try {
       // accessing the field triggers lazy loading for links
@@ -829,19 +784,6 @@ export default class RenderRoute extends Route<Model> {
     renderReadyLogger.debug(
       `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
     );
-    // Walk the rendered instance's linksTo/linksToMany fields for
-    // LinkError/LinkNotFound sentinels and surface any finding as a
-    // structured render error. This complements (and post-T7 replaces)
-    // the legacy `boxel-render-error` CustomEvent path: by reading the
-    // sentinel off the deserialized bucket directly we no longer rely on
-    // an event firing during render to flag the failure.
-    if (model.instance) {
-      let brokenLinkPayload = await this.#brokenLinkPayload(model.instance);
-      if (brokenLinkPayload) {
-        this.#processRenderError(brokenLinkPayload);
-        return;
-      }
-    }
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
