@@ -458,6 +458,29 @@ export function isNonPresentLink(val: any): val is LinkSentinel {
   return isNotLoadedValue(val) || isLinkError(val) || isLinkNotFound(val);
 }
 
+// A "phantom" is the stand-in value the linksTo / linksToMany getters
+// hand back when the link cannot produce a real card — i.e. for the
+// `not-loaded`, `link-error`, `link-not-found`, and `not-set` states.
+// The phantom replaces what those states surface as today (raw `null` or
+// a thrown TypeError when a computed traverses through the broken link)
+// with a safe placeholder so user code at the field-access boundary does
+// not blow up: `card.brokenLink.name` evaluates to `undefined` without
+// throwing.
+//
+// Concretely the phantom is a callable Proxy: every external property
+// read resolves to `undefined`, `apply` returns `undefined`,
+// `getPrototypeOf` is `null`, and `Symbol.toPrimitive` is `null`. It
+// carries its `(instance, fieldName, sentinel)` triple under a hidden
+// Symbol so the Relationship API can introspect *why* the link is broken
+// without that state leaking through the public `get` surface.
+//
+// The phantom is an object, not literal `undefined`. So
+// `card.brokenLink === undefined`, `card.brokenLink == null`, and
+// `!card.brokenLink` are all `false` — none of these can be made true on
+// a Proxy in standard ECMAScript (only `document.all`'s `[[IsHTMLDDA]]`
+// slot has that behaviour). Detection uses `isPhantom` or the
+// Relationship API, not falsiness.
+
 const PHANTOM_BRAND = Symbol('cardstack:phantom-brand');
 const PHANTOM_STATE = Symbol('cardstack:phantom-state');
 
