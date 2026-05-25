@@ -229,6 +229,20 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       .broken-link-template.embedded {
         container-type: inline-size;
         width: 100%;
+        padding: var(--boxel-sp-xs);
+        font: 500 var(--boxel-font-xs);
+        gap: 2px;
+      }
+      .broken-link-template.embedded .message {
+        /* Clamp long error messages so the placeholder fits even when the
+           parent embedded slot is height-constrained (e.g. a 110px tall row
+           inside a tight flex container). The full message remains in the
+           DOM for screen readers / AI consumers. */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-clamp: 2;
+        overflow: hidden;
       }
       .broken-link-template.isolated {
         width: 100%;
