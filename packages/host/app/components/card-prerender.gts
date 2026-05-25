@@ -54,6 +54,7 @@ import {
   type CardRenderContext,
   deriveCardTypeFromDoc,
   withCardType,
+  coerceRenderError,
   normalizeRenderError,
 } from '../utils/render-error';
 import {
@@ -80,6 +81,7 @@ export default class CardPrerender extends Component {
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
+  #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
   #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -104,7 +106,12 @@ export default class CardPrerender extends Component {
       runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
+    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
     registerDestructor(this, () => {
+      window.removeEventListener(
+        'boxel-render-error',
+        this.#handleRenderErrorEvent,
+      );
       this.localIndexer.teardown(this.#prerendererDelegate);
       this.#cardTypeTracker.clear();
       this.#moduleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -624,6 +631,7 @@ export default class CardPrerender extends Component {
         return REALM_INDEX_BOILERPLATE_HTML;
       }
       let component = routeInfo.attributes.Component;
+      this.#renderErrorPayload = undefined;
       let captureMode: 'innerHTML' | 'outerHTML' | 'textContent';
       if (format === 'markdown') {
         // Mirror realm-server puppeteer capture: markdown renders into a
@@ -642,6 +650,9 @@ export default class CardPrerender extends Component {
         format,
         this.waitForLinkedData,
       );
+      if (this.#renderErrorPayload) {
+        throw new Error(this.#renderErrorPayload);
+      }
 
       if (typeof captured !== 'string') {
         return null;
@@ -756,6 +767,39 @@ export default class CardPrerender extends Component {
     return JSON.stringify(withCardType(normalized, cardType));
   }
 
+  #handleRenderErrorEvent = (
+    event: Event & { detail?: { reason?: unknown }; reason?: unknown },
+  ) => {
+    let reason =
+      'reason' in event ? (event as any).reason : event.detail?.reason;
+    if (!reason) {
+      return;
+    }
+    let context = this.#currentContext ?? this.#contextFromDom();
+    let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
+    let renderErrorPayload = coerceRenderError(reason);
+    if (renderErrorPayload) {
+      let normalized = normalizeRenderError(renderErrorPayload, {
+        cardId: context?.cardId,
+      });
+      this.#renderErrorPayload = JSON.stringify(
+        withCardType(normalized, cardType),
+      );
+      return;
+    }
+    if (reason instanceof Error) {
+      this.#renderErrorPayload = reason.message;
+    } else if (typeof reason === 'string') {
+      this.#renderErrorPayload = reason;
+    } else {
+      try {
+        this.#renderErrorPayload = JSON.stringify(reason);
+      } catch (_err) {
+        this.#renderErrorPayload = String(reason);
+      }
+    }
+  };
+
   #contextFromDom(): CardRenderContext | undefined {
     if (typeof document === 'undefined') {
       return undefined;
@@ -799,12 +843,16 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
+      this.#renderErrorPayload = undefined;
       let captured = await this.renderService.renderCardComponent(
         component,
         'outerHTML',
         'isolated',
         this.waitForLinkedData,
       );
+      if (this.#renderErrorPayload) {
+        throw new Error(this.#renderErrorPayload);
+      }
       if (typeof captured !== 'string') {
         return null;
       }

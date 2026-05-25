@@ -3445,6 +3445,17 @@ function lazilyLoadLink(
         notifyCardTracking(instance);
         notifySubscribers(instance, field.name, sentinel);
       }
+      // Transitional: the host's render pipeline still listens for this
+      // CustomEvent to flag the failure inside `renderHTML` synchronously,
+      // matching the throw timing the broken-link tolerance project
+      // relied on. The sentinel write above is the durable representation
+      // — the dispatch comes out in a follow-up once every consumer of
+      // the event has migrated to the bucket scan.
+      let payload = JSON.stringify({ type: 'error', error: errorDoc });
+      const event = new CustomEvent('boxel-render-error', {
+        detail: { reason: payload },
+      });
+      globalThis.dispatchEvent(event);
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);
