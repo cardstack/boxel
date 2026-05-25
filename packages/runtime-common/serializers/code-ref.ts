@@ -30,18 +30,20 @@ export function serialize(
   doc: any,
   _visited?: Set<string>,
   opts?: SerializeOpts & {
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ): ResolvedCodeRef | {} {
-  let baseURL =
-    opts?.relativeTo instanceof URL
-      ? opts.relativeTo
-      : doc?.data?.id && typeof doc.data.id === 'string'
-        ? cardIdToURL(doc.data.id)
-        : undefined;
+  let baseURL: URL | undefined;
+  if (opts?.relativeTo instanceof URL) {
+    baseURL = opts.relativeTo;
+  } else if (typeof opts?.relativeTo === 'string') {
+    baseURL = cardIdToURL(opts.relativeTo);
+  } else if (doc?.data?.id && typeof doc.data.id === 'string') {
+    baseURL = cardIdToURL(doc.data.id);
+  }
   return {
     ...codeRef,
     ...codeRefAdjustments(codeRef, baseURL, opts),
