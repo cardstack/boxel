@@ -425,8 +425,18 @@ function hasSentinelShape(
 }
 
 function hasErrorDoc(val: any): val is { errorDoc: SerializedError } {
+  if (!val || typeof val !== 'object' || !('errorDoc' in val)) {
+    return false;
+  }
+  let { errorDoc } = val;
+  if (!errorDoc || typeof errorDoc !== 'object') {
+    return false;
+  }
   return (
-    !!val && typeof val === 'object' && 'errorDoc' in val && !!val.errorDoc
+    typeof errorDoc.message === 'string' &&
+    typeof errorDoc.status === 'number' &&
+    (errorDoc.additionalErrors === null ||
+      Array.isArray(errorDoc.additionalErrors))
   );
 }
 

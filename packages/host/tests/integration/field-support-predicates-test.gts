@@ -101,7 +101,7 @@ module(
       );
     });
 
-    test('isLinkError matches link-error sentinel with errorDoc only', function (assert) {
+    test('isLinkError matches link-error sentinel with a well-formed errorDoc only', function (assert) {
       assert.true(isLinkError(makeLinkError()), 'matches link-error sentinel');
       assert.false(
         isLinkError(makeNotLoaded()),
@@ -115,12 +115,40 @@ module(
         isLinkError({ type: 'link-error', reference: ref }),
         'rejects link-error sentinel without errorDoc',
       );
+      assert.false(
+        isLinkError({ type: 'link-error', reference: ref, errorDoc: 'oops' }),
+        'rejects non-object errorDoc',
+      );
+      assert.false(
+        isLinkError({
+          type: 'link-error',
+          reference: ref,
+          errorDoc: { status: 500 },
+        }),
+        'rejects errorDoc missing message',
+      );
+      assert.false(
+        isLinkError({
+          type: 'link-error',
+          reference: ref,
+          errorDoc: { message: 'boom', status: '500', additionalErrors: null },
+        }),
+        'rejects errorDoc with non-number status',
+      );
+      assert.false(
+        isLinkError({
+          type: 'link-error',
+          reference: ref,
+          errorDoc: { message: 'boom', status: 500, additionalErrors: 'no' },
+        }),
+        'rejects errorDoc with non-array additionalErrors',
+      );
       assert.false(isLinkError(null), 'rejects null');
       assert.false(isLinkError(undefined), 'rejects undefined');
       assert.false(isLinkError({}), 'rejects empty objects');
     });
 
-    test('isLinkNotFound matches link-not-found sentinel with errorDoc only', function (assert) {
+    test('isLinkNotFound matches link-not-found sentinel with a well-formed errorDoc only', function (assert) {
       assert.true(
         isLinkNotFound(makeLinkNotFound()),
         'matches link-not-found sentinel',
@@ -136,6 +164,22 @@ module(
       assert.false(
         isLinkNotFound({ type: 'link-not-found', reference: ref }),
         'rejects link-not-found sentinel without errorDoc',
+      );
+      assert.false(
+        isLinkNotFound({
+          type: 'link-not-found',
+          reference: ref,
+          errorDoc: 'oops',
+        }),
+        'rejects non-object errorDoc',
+      );
+      assert.false(
+        isLinkNotFound({
+          type: 'link-not-found',
+          reference: ref,
+          errorDoc: { status: 404, additionalErrors: null },
+        }),
+        'rejects errorDoc missing message',
       );
       assert.false(isLinkNotFound(null), 'rejects null');
       assert.false(isLinkNotFound(undefined), 'rejects undefined');
