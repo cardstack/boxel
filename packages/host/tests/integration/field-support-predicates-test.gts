@@ -367,7 +367,14 @@ module(
       assert.strictEqual(findings[0].sentinel.type, 'link-error');
     });
 
-    test('scanForBrokenLinks finds a sentinel returned by a computed linksTo', function (assert) {
+    test('scanForBrokenLinks skips computed linksTo fields', function (assert) {
+      // The scan is deliberately side-effect-free and does not invoke
+      // any field's computeVia (the getter writes to the bucket and
+      // entangles tracking; both are unsafe if the scan ever runs in a
+      // reactive context near a live field component). Computed
+      // relationships are therefore out of scope; any LinkError /
+      // LinkNotFound surfacing through a computed must be detected by
+      // the declared field it derives from.
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -381,30 +388,11 @@ module(
         });
       }
       let alice = new Person({ firstName: 'Alice' });
-      let findings = scanForBrokenLinks(alice);
-      assert.strictEqual(findings.length, 1, 'computed linksTo is scanned');
-      assert.strictEqual(findings[0].fieldName, 'favoritePet');
-      assert.strictEqual(findings[0].sentinel.type, 'link-error');
-    });
-
-    test('scanForBrokenLinks finds sentinels returned inside a computed linksToMany array', function (assert) {
-      class Pet extends CardDef {
-        @field name = contains(StringField);
-      }
-      let brokenSentinel = makeLinkNotFound();
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field pets = linksToMany(Pet, {
-          computeVia: function (this: Person) {
-            return [brokenSentinel as unknown as Pet];
-          },
-        });
-      }
-      let alice = new Person({ firstName: 'Alice' });
-      let findings = scanForBrokenLinks(alice);
-      assert.strictEqual(findings.length, 1, 'computed linksToMany is scanned');
-      assert.strictEqual(findings[0].fieldName, 'pets');
-      assert.strictEqual(findings[0].sentinel.type, 'link-not-found');
+      assert.deepEqual(
+        scanForBrokenLinks(alice),
+        [],
+        'computed linksTo is intentionally not scanned',
+      );
     });
 
     test('scanForBrokenLinks aggregates findings across multiple linksTo fields', function (assert) {

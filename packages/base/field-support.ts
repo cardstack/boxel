@@ -473,50 +473,42 @@ export interface BrokenLinkFinding {
   sentinel: LinkErrorValue | LinkNotFoundValue;
 }
 
-// Walks the top-level linksTo/linksToMany fields of `instance` and returns
-// every LinkError/LinkNotFound sentinel currently sitting in the data
-// bucket. NotLoaded sentinels are deliberately ignored — they represent
-// in-flight fetches, not terminal failures, and reading them does not
-// constitute a render error. Callers are expected to invoke this only
-// after the store has settled (e.g. after `await store.loaded()`), so any
-// remaining sentinel reliably reflects a completed fetch outcome.
+// Walks the declared top-level linksTo/linksToMany fields of `instance`
+// and returns every LinkError/LinkNotFound sentinel currently sitting in
+// the data bucket. NotLoaded sentinels are deliberately ignored — they
+// represent in-flight fetches, not terminal failures, and reading them
+// does not constitute a render error. Callers are expected to invoke
+// this only after the store has settled (e.g. after `await
+// store.loaded()`), so any remaining sentinel reliably reflects a
+// completed fetch outcome.
 //
-// Computed relationship fields (`computeVia`) are included so a computed
-// linksToMany that derives from a broken upstream link still surfaces
-// here. They go through `peekAtField` because their value lives in the
-// computeVia return, not the data bucket. For declared (non-computed)
-// fields we read the bucket directly — routing through the getter would
-// write the empty-value into the bucket as a side effect and pollute
-// `getUsedFields` for any subsequent caller.
+// This is intentionally side-effect-free: we read from the data bucket
+// directly rather than going through `peekAtField`/`getter`. That means
+// (a) untouched linksTo fields stay untouched (the getter would write
+// the empty-value back into the bucket and pollute `getUsedFields`),
+// and (b) the scan never invokes user-defined `computeVia` and so
+// cannot mutate tracked state or destabilize live field components if
+// the scan is ever called from a reactive context. Computed
+// relationship fields are therefore excluded — a follow-up can revisit
+// once we have a side-effect-safe way to inspect a computed value.
 export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
   let findings: BrokenLinkFinding[] = [];
   let bucket = getDataBucket(instance);
-  let fields = getFields(instance, { includeComputeds: true });
+  let fields = getFields(instance);
   for (let [fieldName, field] of Object.entries(fields)) {
     if (!field) {
+      continue;
+    }
+    if (field.computeVia) {
       continue;
     }
     if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
       continue;
     }
-    let value: unknown;
-    if (field.computeVia) {
-      // A user-defined computeVia is free to throw — that contract is
-      // theirs, not the scan's. The scan is a passive safety net, so
-      // swallow the exception and move on to the next field rather than
-      // dragging an unrelated computed-field error into the render
-      // pipeline through a new code path.
-      try {
-        value = peekAtField(instance, fieldName);
-      } catch (_e) {
-        continue;
-      }
-    } else {
-      if (!bucket.has(fieldName)) {
-        continue;
-      }
-      value = bucket.get(fieldName);
+    if (!bucket.has(fieldName)) {
+      continue;
     }
+    let value = bucket.get(fieldName);
     if (isLinkError(value) || isLinkNotFound(value)) {
       findings.push({ fieldName, sentinel: value });
       continue;

@@ -40,6 +40,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as FieldSupport from 'https://cardstack.com/base/field-support';
 
 import {
   windowErrorHandler,
@@ -108,6 +109,7 @@ export default class RenderRoute extends Route<Model> {
   private renderBaseParams: [string, string, string] | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
+  #fieldSupport: typeof FieldSupport | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #modelStates = new Map<Model, ModelState>();
   #pendingReadyModels = new Set<Model>();
@@ -190,6 +192,10 @@ export default class RenderRoute extends Route<Model> {
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
+    // Drop the cached field-support reference so each fresh route
+    // activation re-resolves it through the current loader — important
+    // in tests where the loader is rebuilt between runs.
+    this.#fieldSupport = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.#modelStates.clear();
@@ -222,6 +228,24 @@ export default class RenderRoute extends Route<Model> {
       await this.store.ensureSetupComplete();
       this.#restoreRenderTimers = enableRenderTimerStub();
       this.#releaseTimerBlock = beginTimerBlock();
+    }
+    // Resolve field-support eagerly so the post-render broken-link scan
+    // in #settleModelAfterRender can run synchronously. Awaiting the
+    // import in settle adds a microtask between waiting for stability
+    // and fulfilling readyDeferred, which shifts the meta route's
+    // observed instance state and breaks tests that capture serialized
+    // output without first triggering a template render.
+    if (!this.#fieldSupport) {
+      try {
+        this.#fieldSupport = await this.loaderService.loader.import<
+          typeof FieldSupport
+        >(`${baseRealm.url}field-support`);
+      } catch (e) {
+        console.warn(
+          'render-route: failed to pre-load field-support for broken-link scan',
+          e,
+        );
+      }
     }
   }
 
@@ -588,6 +612,36 @@ export default class RenderRoute extends Route<Model> {
     );
   }
 
+  #brokenLinkPayload(instance: CardDef): string | undefined {
+    if (!this.#fieldSupport) {
+      return undefined;
+    }
+    let findings = this.#fieldSupport.scanForBrokenLinks(instance);
+    if (findings.length === 0) {
+      return undefined;
+    }
+    let primary = findings[0].sentinel.errorDoc;
+    let deps = new Set<string>();
+    for (let finding of findings) {
+      deps.add(finding.sentinel.reference);
+    }
+    for (let dep of primary.deps ?? []) {
+      deps.add(dep);
+    }
+    let additionalErrors = [
+      ...(primary.additionalErrors ?? []),
+      ...findings.slice(1).map((f) => f.sentinel.errorDoc),
+    ];
+    return JSON.stringify({
+      type: 'instance-error',
+      error: {
+        ...primary,
+        deps: [...deps],
+        additionalErrors: additionalErrors.length ? additionalErrors : null,
+      },
+    });
+  }
+
   #touchFieldSafely(container: any, fieldName: string): unknown {
     try {
       // accessing the field triggers lazy loading for links
@@ -784,6 +838,22 @@ export default class RenderRoute extends Route<Model> {
     renderReadyLogger.debug(
       `settleModelAfterRender store.loaded resolved cardId=${model.cardId}`,
     );
+    // Walk the rendered instance's declared linksTo/linksToMany fields
+    // for LinkError/LinkNotFound sentinels and route any finding through
+    // `#processRenderError` so the prerender server picks the failure up
+    // via the `data-prerender-error` DOM marker — the same way the
+    // legacy `boxel-render-error` listener (still attached above) does.
+    // We use the pre-resolved field-support reference so this stays
+    // synchronous: adding an `await` between stability and readyDeferred
+    // fulfillment shifts microtask timing and changes what the meta
+    // route observes when serializing the instance.
+    if (model.instance && this.#fieldSupport) {
+      let brokenLinkPayload = this.#brokenLinkPayload(model.instance);
+      if (brokenLinkPayload) {
+        this.#processRenderError(brokenLinkPayload);
+        return;
+      }
+    }
     modelState.state.set('status', 'ready');
     modelState.isReady = true;
     modelState.readyDeferred.fulfill();
