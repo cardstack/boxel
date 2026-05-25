@@ -458,6 +458,132 @@ export function isNonPresentLink(val: any): val is LinkSentinel {
   return isNotLoadedValue(val) || isLinkError(val) || isLinkNotFound(val);
 }
 
+const PHANTOM_BRAND = Symbol('cardstack:phantom-brand');
+const PHANTOM_STATE = Symbol('cardstack:phantom-state');
+
+// Type-level brand declared independently from the runtime Symbols so the
+// public interface stays exportable without leaking the module-private
+// symbols. The runtime check that backs `isPhantom` consults the runtime
+// `PHANTOM_BRAND` Symbol; the declared brand below is purely for type
+// narrowing.
+declare const phantomBrand: unique symbol;
+
+export interface PhantomValue {
+  readonly [phantomBrand]: true;
+}
+
+interface PhantomInternalState {
+  instance: BaseDef;
+  fieldName: string;
+  sentinel: LinkSentinel | null;
+}
+
+// Cache key for the not-set state (no sentinel). Sentinel objects are used as
+// keys directly so a fresh sentinel for the same logical state still mints a
+// fresh phantom — identity tracks the sentinel object, not its `type` string.
+const NOT_SET_KEY: object = Object.freeze({});
+
+type PhantomFieldCache = Map<string, Map<unknown, PhantomValue>>;
+
+const phantomCache = initSharedState(
+  'phantomCache',
+  () => new WeakMap<BaseDef, PhantomFieldCache>(),
+);
+
+export function getPhantom(
+  instance: BaseDef,
+  fieldName: string,
+  sentinel: LinkSentinel | null,
+): PhantomValue {
+  let byInstance = phantomCache.get(instance);
+  if (!byInstance) {
+    byInstance = new Map();
+    phantomCache.set(instance, byInstance);
+  }
+  let byField = byInstance.get(fieldName);
+  if (!byField) {
+    byField = new Map();
+    byInstance.set(fieldName, byField);
+  }
+  let cacheKey: unknown = sentinel ?? NOT_SET_KEY;
+  let cached = byField.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  let phantom = createPhantom({ instance, fieldName, sentinel });
+  byField.set(cacheKey, phantom);
+  return phantom;
+}
+
+function createPhantom(state: PhantomInternalState): PhantomValue {
+  // Arrow target keeps the proxy callable without dragging a non-configurable
+  // `prototype` own property (which would prevent the `has` trap from hiding
+  // it). `length` and `name` on arrows are configurable, so the `has` trap can
+  // report them absent without violating proxy invariants.
+  let target: object = () => {};
+  let toPrimitive = () => null;
+  let proxy = new Proxy(target, {
+    get(_t, prop) {
+      if (prop === PHANTOM_BRAND) {
+        return true;
+      }
+      if (prop === PHANTOM_STATE) {
+        return state;
+      }
+      if (prop === Symbol.toPrimitive) {
+        return toPrimitive;
+      }
+      return undefined;
+    },
+    apply() {
+      return undefined;
+    },
+    has(_t, prop) {
+      return prop === PHANTOM_BRAND;
+    },
+    set() {
+      return true;
+    },
+    deleteProperty() {
+      return true;
+    },
+    getPrototypeOf() {
+      return null;
+    },
+  });
+  return proxy as PhantomValue;
+}
+
+export function isPhantom(v: unknown): v is PhantomValue {
+  if (v == null) {
+    return false;
+  }
+  if (typeof v !== 'object' && typeof v !== 'function') {
+    return false;
+  }
+  try {
+    return (v as { [PHANTOM_BRAND]?: unknown })[PHANTOM_BRAND] === true;
+  } catch {
+    return false;
+  }
+}
+
+// Internal accessor for introspecting the phantom's
+// `(instance, fieldName, sentinel)` triple without leaking it through the
+// public `get` surface — every external property read still resolves to
+// `undefined`. The public Relationship API consumes this to disambiguate
+// non-Present states.
+export function readPhantomState(
+  phantom: PhantomValue,
+): PhantomInternalState | undefined {
+  if (!isPhantom(phantom)) {
+    return undefined;
+  }
+  return (phantom as unknown as { [PHANTOM_STATE]: PhantomInternalState })[
+    PHANTOM_STATE
+  ];
+}
+
 export function peekAtField(instance: BaseDef, fieldName: string): any {
   let field = getField(instance, fieldName);
   if (!field) {
