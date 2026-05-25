@@ -1864,7 +1864,7 @@ export default class StoreService extends Service implements StoreInterface {
           // the bare id would be assigned to `instance.id` and later
           // collide with the canonical URL form during re-deserialization
           // (card-api.gts's "cannot change the id" guard).
-          json.data.id = url as RealmResourceIdentifier;
+          json.data.id = rri(url);
         }
         if (!json.data.meta?.realmURL) {
           // Source-mode loads in render context don't include realm metadata.
