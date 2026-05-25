@@ -481,14 +481,17 @@ export interface BrokenLinkFinding {
 // after the store has settled (e.g. after `await store.loaded()`), so any
 // remaining sentinel reliably reflects a completed fetch outcome.
 //
-// We read from `getDataBucket` directly rather than `peekAtField` so that
-// linksTo fields that were never touched stay untouched — going through
-// the getter would write the empty-value into the bucket as a side effect
-// and pollute `getUsedFields` for any subsequent caller.
+// Computed relationship fields (`computeVia`) are included so a computed
+// linksToMany that derives from a broken upstream link still surfaces
+// here. They go through `peekAtField` because their value lives in the
+// computeVia return, not the data bucket. For declared (non-computed)
+// fields we read the bucket directly — routing through the getter would
+// write the empty-value into the bucket as a side effect and pollute
+// `getUsedFields` for any subsequent caller.
 export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
   let findings: BrokenLinkFinding[] = [];
   let bucket = getDataBucket(instance);
-  let fields = getFields(instance);
+  let fields = getFields(instance, { includeComputeds: true });
   for (let [fieldName, field] of Object.entries(fields)) {
     if (!field) {
       continue;
@@ -496,10 +499,15 @@ export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
     if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
       continue;
     }
-    if (!bucket.has(fieldName)) {
-      continue;
+    let value: unknown;
+    if (field.computeVia) {
+      value = peekAtField(instance, fieldName);
+    } else {
+      if (!bucket.has(fieldName)) {
+        continue;
+      }
+      value = bucket.get(fieldName);
     }
-    let value = bucket.get(fieldName);
     if (isLinkError(value) || isLinkNotFound(value)) {
       findings.push({ fieldName, sentinel: value });
       continue;

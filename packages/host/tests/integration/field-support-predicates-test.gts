@@ -367,6 +367,46 @@ module(
       assert.strictEqual(findings[0].sentinel.type, 'link-error');
     });
 
+    test('scanForBrokenLinks finds a sentinel returned by a computed linksTo', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      let brokenSentinel = makeLinkError();
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field favoritePet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return brokenSentinel as unknown as Pet;
+          },
+        });
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 1, 'computed linksTo is scanned');
+      assert.strictEqual(findings[0].fieldName, 'favoritePet');
+      assert.strictEqual(findings[0].sentinel.type, 'link-error');
+    });
+
+    test('scanForBrokenLinks finds sentinels returned inside a computed linksToMany array', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      let brokenSentinel = makeLinkNotFound();
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet, {
+          computeVia: function (this: Person) {
+            return [brokenSentinel as unknown as Pet];
+          },
+        });
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 1, 'computed linksToMany is scanned');
+      assert.strictEqual(findings[0].fieldName, 'pets');
+      assert.strictEqual(findings[0].sentinel.type, 'link-not-found');
+    });
+
     test('scanForBrokenLinks aggregates findings across multiple linksTo fields', function (assert) {
       class Pet extends CardDef {
         @field name = contains(StringField);
