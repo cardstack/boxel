@@ -4,6 +4,7 @@ import {
   isCardInstance,
   isFieldInstance,
   primitive,
+  type SerializedError,
 } from '@cardstack/runtime-common';
 import type {
   BaseDef,
@@ -28,6 +29,20 @@ export interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
 }
+
+export interface LinkErrorValue {
+  type: 'link-error';
+  reference: string;
+  errorDoc: SerializedError;
+}
+
+export interface LinkNotFoundValue {
+  type: 'link-not-found';
+  reference: string;
+  errorDoc: SerializedError;
+}
+
+export type LinkSentinel = NotLoadedValue | LinkErrorValue | LinkNotFoundValue;
 
 export const realmContext = Symbol.for('cardstack-realm-context');
 
@@ -396,7 +411,9 @@ export function isCompoundField(card: any) {
   );
 }
 
-export function isNotLoadedValue(val: any): val is NotLoadedValue {
+function hasSentinelShape(
+  val: any,
+): val is { type: string; reference: string } {
   if (!val || typeof val !== 'object') {
     return false;
   }
@@ -404,10 +421,31 @@ export function isNotLoadedValue(val: any): val is NotLoadedValue {
     return false;
   }
   let { type, reference } = val;
-  if (typeof type !== 'string' || typeof reference !== 'string') {
-    return false;
-  }
-  return type === 'not-loaded';
+  return typeof type === 'string' && typeof reference === 'string';
+}
+
+function hasErrorDoc(val: any): val is { errorDoc: SerializedError } {
+  return (
+    !!val && typeof val === 'object' && 'errorDoc' in val && !!val.errorDoc
+  );
+}
+
+export function isNotLoadedValue(val: any): val is NotLoadedValue {
+  return hasSentinelShape(val) && val.type === 'not-loaded';
+}
+
+export function isLinkError(val: any): val is LinkErrorValue {
+  return hasSentinelShape(val) && val.type === 'link-error' && hasErrorDoc(val);
+}
+
+export function isLinkNotFound(val: any): val is LinkNotFoundValue {
+  return (
+    hasSentinelShape(val) && val.type === 'link-not-found' && hasErrorDoc(val)
+  );
+}
+
+export function isNonPresentLink(val: any): val is LinkSentinel {
+  return isNotLoadedValue(val) || isLinkError(val) || isLinkNotFound(val);
 }
 
 export function peekAtField(instance: BaseDef, fieldName: string): any {
