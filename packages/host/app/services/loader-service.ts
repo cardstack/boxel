@@ -128,6 +128,7 @@ export default class LoaderService extends Service {
         new Promise<void>((resolve) =>
           scheduleNativeTimeout(() => resolve(), ms),
         ),
+      virtualNetwork: this.network.virtualNetwork,
     });
     return loader;
   }

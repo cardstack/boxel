@@ -9,10 +9,7 @@ import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
-import {
-  unresolveCardReference,
-  resolveCardReference,
-} from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 type FetchingModule = {
   state: 'fetching';
@@ -207,6 +204,7 @@ export class Loader {
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
+  private virtualNetwork: VirtualNetwork | undefined;
   // When the host runs inside a prerender, `setTimeout` is suppressed by
   // the render-timer-stub so the default sleep used by
   // `fetchWithTransientRetry` would never resolve and a transient 5xx on
@@ -218,17 +216,22 @@ export class Loader {
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string) => string,
-    options?: { retrySleep?: (ms: number) => Promise<void> },
+    options?: {
+      retrySleep?: (ms: number) => Promise<void>;
+      virtualNetwork?: VirtualNetwork;
+    },
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
+    this.virtualNetwork = options?.virtualNetwork;
   }
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
+      virtualNetwork: loader.virtualNetwork,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -310,12 +313,12 @@ export class Loader {
     // Normalize to resolved URL href so that prefix-form identifiers
     // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
     // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = new URL(
-      resolveCardReference(moduleIdentifier, undefined),
-    ).href;
-    let resolvedInitial = new URL(
-      resolveCardReference(initialIdentifier, undefined),
-    ).href;
+    let resolvedHref = this.virtualNetwork
+      ? this.virtualNetwork.toURL(moduleIdentifier).href
+      : new URL(moduleIdentifier).href;
+    let resolvedInitial = this.virtualNetwork
+      ? this.virtualNetwork.toURL(initialIdentifier).href
+      : new URL(initialIdentifier).href;
 
     if (consumed.includes(resolvedHref)) {
       return [];
@@ -757,9 +760,10 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = unresolveCardReference(
-      trimModuleIdentifier(moduleIdentifier),
-    );
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    let moduleId = this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(trimmed)
+      : trimmed;
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
