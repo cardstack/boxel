@@ -105,10 +105,20 @@ kill_from_pidfile() {
 # matters when the trap is denied a chance to fire.
 #
 # Implementation notes:
-#   - `setsid` puts the guardian in its own session so it doesn't get
-#     SIGHUP'd when dev-all's session dies.
+#   - `setsid` (Linux) puts the guardian in its own session so it
+#     doesn't get SIGHUP'd when dev-all's session dies. macOS / BSD
+#     userland doesn't ship setsid; `nohup` is the POSIX-standard
+#     equivalent for this purpose — it makes the child ignore SIGHUP
+#     so the guardian survives the same terminal-collapse path the
+#     setsid version protects against. We don't actually need a new
+#     session; we only need SIGHUP immunity.
 #   - stdin/stdout/stderr are redirected away from the terminal so the
-#     guardian can survive after the user's shell exits.
+#     guardian can survive after the user's shell exits. The outer
+#     `</dev/null >/dev/null 2>&1` on the nohup branch suppresses
+#     nohup's "appending output to nohup.out" warning that fires
+#     before the inner script gets a chance to redirect; the inner
+#     `exec >>'$_scg_log' 2>&1` then routes the guardian's actual
+#     output to the log file.
 #   - Output goes to a log file so the user can audit what fired.
 #   - The guardian exits as soon as it has run cleanup once; if cleanup
 #     already ran via the trap (which deleted the pidfile), the guardian's
@@ -120,7 +130,7 @@ spawn_cleanup_guardian() {
   _scg_parent_pid="$1"
   _scg_log="${BOXEL_DEV_ALL_GUARDIAN_LOG:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log}"
   _scg_lib="$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
-  setsid sh -c "
+  _scg_script="
     exec </dev/null >>'$_scg_log' 2>&1
     echo \"[guardian \$(date +%H:%M:%S)] watching dev-all pid $_scg_parent_pid (pidfile $PIDFILE)\"
     while kill -0 $_scg_parent_pid 2>/dev/null; do
@@ -131,7 +141,12 @@ spawn_cleanup_guardian() {
     kill_from_pidfile
     sweep_orphaned_services
     echo \"[guardian \$(date +%H:%M:%S)] All dev-stack processes stopped (via guardian).\"
-  " &
+  "
+  if command -v setsid >/dev/null 2>&1; then
+    setsid sh -c "$_scg_script" &
+  else
+    nohup sh -c "$_scg_script" </dev/null >/dev/null 2>&1 &
+  fi
   disown 2>/dev/null || true
 }
 
