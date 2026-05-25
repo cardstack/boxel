@@ -5,6 +5,8 @@ import { logger } from '@cardstack/runtime-common';
 import type { AddressInfo, Server } from 'net';
 import yaml from 'yaml';
 
+import { sanitizeSlug } from '../../../scripts/env-slug.js';
+
 const log = logger('dev-service-registry');
 
 const DOMAIN = 'localhost';
@@ -47,20 +49,6 @@ export function getEnvironmentSlug(): string {
   }
 }
 
-function sanitizeSlug(raw: string): string {
-  // Cap at 63 chars (DNS label limit) so the slug works as a hostname
-  // label in `<service>.<slug>.localhost`. Chrome silently routes
-  // hostnames with over-63-char labels to the search engine instead of
-  // resolving them. `^-|-$` runs after the slice so a truncate that
-  // lands on a hyphen doesn't leave the slug ending in one.
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .slice(0, 63)
-    .replace(/^-|-$/g, '');
-}
 
 export function serviceHostname(serviceName: string, env?: string): string {
   let slug = env ?? getEnvironmentSlug();
