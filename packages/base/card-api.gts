@@ -437,6 +437,11 @@ export type GetSearchResourceFuncOpts = {
       message: string;
       status?: number;
     }>;
+    // IDs the parent doc named in `relationships.{field}.data`. Used
+    // by the SearchResource when `cards` is empty and the parent
+    // skipped query-backed expansion — the resource loads each ID by
+    // URL instead of running a live re-query.
+    cardURLs?: string[];
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (

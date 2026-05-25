@@ -5,15 +5,17 @@ import {
 } from '@cardstack/runtime-common';
 
 // Set by the prerender server's `evaluateOnNewDocument` before the
-// SPA boots — `__boxelDuringPrerender = true`. Read here so the
+// SPA boots, and also by the host's prerender-shaped routes
+// (render.ts / module.ts / file-extract.ts / command-runner.ts) when
+// they activate — `__boxelRenderContext = true`. Read here so the
 // realm-server fetch wrappers can attach the marker header on
 // search calls only, narrowly scoping the signal to the endpoints
 // that need it. See realm.ts:DURING_PRERENDER_HEADER for the full
 // chain.
 export function duringPrerenderHeaders(): Record<string, string> {
-  let flag = (globalThis as unknown as { __boxelDuringPrerender?: boolean })
-    .__boxelDuringPrerender;
-  return flag ? { [DURING_PRERENDER_HEADER]: '1' } : {};
+  let flag = (globalThis as unknown as { __boxelRenderContext?: boolean })
+    .__boxelRenderContext;
+  return flag === true ? { [DURING_PRERENDER_HEADER]: '1' } : {};
 }
 
 // While rendering inside a prerender tab the render route writes

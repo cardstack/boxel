@@ -216,7 +216,7 @@ const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 // Marker header the host SPA attaches to outbound _federated-search /
 // _search calls when it's running inside a prerender tab. The prerender
 // server uses puppeteer's `evaluateOnNewDocument` to inject a window
-// global (`__boxelDuringPrerender = true`) into every Chrome tab before
+// global (`__boxelRenderContext = true`) into every Chrome tab before
 // the host loads; the host's realm-server fetch wrapper then reads that
 // flag and adds this header on its own outbound search requests only —
 // narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
@@ -4260,6 +4260,7 @@ export class Realm {
       new URL(newURL),
       {
         loadLinks: true,
+        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -4419,7 +4420,10 @@ export class Realm {
       if (included.length === 0 && isEqual(primaryResource, original)) {
         let entry = await this.#realmIndexQueryEngine.cardDocument(
           new URL(instanceURL),
-          { loadLinks: true },
+          {
+            loadLinks: true,
+            skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          },
         );
         if (entry && entry.type !== 'error') {
           let existingDoc = merge({}, entry.doc, {
@@ -4531,6 +4535,7 @@ export class Realm {
         new URL(instanceURL),
         {
           loadLinks: true,
+          skipQueryBackedExpansion: isDuringPrerenderRequest(request),
         },
       );
       let doc: SingleCardDocument;
@@ -4784,6 +4789,7 @@ export class Realm {
       // realm info.
       let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
         loadLinks: true,
+        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
       });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
@@ -5090,12 +5096,18 @@ export class Realm {
 
   public async search(
     query: Query,
-    opts?: { cacheOnlyDefinitions?: boolean },
+    opts?: {
+      cacheOnlyDefinitions?: boolean;
+      skipQueryBackedExpansion?: boolean;
+    },
   ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
       ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
+      ...(opts?.skipQueryBackedExpansion
+        ? { skipQueryBackedExpansion: true }
+        : {}),
     });
   }
 
@@ -5146,8 +5158,17 @@ export class Realm {
 
     try {
       assertQuery(cardsQuery);
+      let duringPrerender = isDuringPrerenderRequest(request);
       let doc = await this.search(cardsQuery, {
-        cacheOnlyDefinitions: isDuringPrerenderRequest(request),
+        cacheOnlyDefinitions: duringPrerender,
+        // Inside a prerender, leave `relationships.{field}.data`
+        // populated for query-backed `linksTo` / `linksToMany` but
+        // skip transitive expansion into `included[]`. The host
+        // resolves the listed IDs via per-URL fetches against the
+        // store (which has the same prerender skip applied on
+        // instance-GET); the eager closure is a wasted round-trip in
+        // the prerender path.
+        skipQueryBackedExpansion: duringPrerender,
       });
       return createResponse({
         body: JSON.stringify(doc, null, 2),

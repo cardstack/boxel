@@ -55,7 +55,7 @@ export {
 // Stamped on the host's outbound _federated-search / _search calls
 // when the host SPA detects it's running inside a prerender tab. The
 // prerender server signals "you are in a prerender" by injecting
-// `globalThis.__boxelDuringPrerender = true` via evaluateOnNewDocument
+// `globalThis.__boxelRenderContext = true` via evaluateOnNewDocument
 // before the host SPA boots. The host's realm-server fetch wrapper
 // reads that flag and attaches this header to the request; the
 // search handlers read it inbound and pass `cacheOnlyDefinitions:true`

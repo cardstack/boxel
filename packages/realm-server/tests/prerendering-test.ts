@@ -1809,7 +1809,7 @@ module(basename(__filename), function () {
         );
       });
 
-      test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      test('card prerender resolves query fallback via per-URL GETs and renders nested relationships', async function (assert) {
         const cardURL = `${realmURL}directory-ops`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
@@ -1824,9 +1824,17 @@ module(basename(__filename), function () {
           });
 
           assert.notOk(result.response.error, 'prerender succeeds');
+          // Source-mode instance loads (the prerender's contract) leave
+          // `relationships.{queryField}.data` empty in every fetched
+          // doc, so each query-backed field still fires a live
+          // `_federated-search` to populate. The PR's win lands on the
+          // *response side*: each search returns `data` + IDs but stops
+          // short of expanding the linked resources into `included[]`,
+          // so per-search payloads drop by ~10-60×. Track the search
+          // count to guard against a regression in either direction.
           assert.true(
             delayedSearchPatch.getRequestCount() > 0,
-            'fallback _search requests occurred and were delayed',
+            `prerender ran query-backed fallback _search calls (raw-source mode does not carry pre-resolved IDs): count=${delayedSearchPatch.getRequestCount()}`,
           );
 
           let isolatedHTML = cleanWhiteSpace(

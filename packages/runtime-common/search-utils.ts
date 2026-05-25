@@ -319,7 +319,10 @@ export function combinePrerenderedSearchResults(
 type SearchableRealm = {
   search: (
     query: Query,
-    opts?: { cacheOnlyDefinitions?: boolean },
+    opts?: {
+      cacheOnlyDefinitions?: boolean;
+      skipQueryBackedExpansion?: boolean;
+    },
   ) => Promise<LinkableCollectionDocument>;
   url?: string;
 };
@@ -327,7 +330,10 @@ type SearchableRealm = {
 export async function searchRealms(
   realms: Array<SearchableRealm | null | undefined>,
   query: Query,
-  opts?: { cacheOnlyDefinitions?: boolean },
+  opts?: {
+    cacheOnlyDefinitions?: boolean;
+    skipQueryBackedExpansion?: boolean;
+  },
 ): Promise<LinkableCollectionDocument> {
   let realmEntries = realms
     .filter((realm): realm is SearchableRealm => Boolean(realm))
