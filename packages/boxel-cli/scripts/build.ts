@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
-import { mkdirSync, chmodSync } from 'fs';
+import { mkdirSync, chmodSync, copyFileSync } from 'fs';
 import { builtinModules } from 'module';
+import { join } from 'path';
 
 // Node.js built-in modules (bare and node:-prefixed) that should remain external
 const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
@@ -15,9 +16,9 @@ const commonConfig = {
     // Playwright (drives `boxel test`) and its native-module transitive
     // deps (fsevents on macOS, etc.) can't be bundled by esbuild — they
     // contain `.node` files and runtime `require.resolve` calls. boxel-cli
-    // keeps them as runtime requires; they're picked up from node_modules
-    // when `boxel test` actually runs. Monorepo-only by consequence —
-    // matches `boxel test`'s existing monorepo-only constraint.
+    // keeps them as runtime `require`s and ships `@playwright/test` as a
+    // runtime dependency, so node resolves them from node_modules when
+    // `boxel test` runs on a published install.
     '@playwright/test',
     'playwright',
     'playwright-core',
@@ -55,6 +56,24 @@ async function buildCLI() {
     // Make CLI file executable
     console.log('Making CLI file executable...');
     chmodSync('dist/index.js', 0o755);
+
+    // content-tag (pulled in via runtime-common's transpile pipeline)
+    // loads its wasm with `readFileSync(`${__dirname}/content_tag_bg.wasm`)`
+    // from `pkg/node/`. After esbuild bundles content-tag into
+    // `dist/index.js`, `__dirname` becomes the boxel-cli dist/ dir,
+    // so the wasm has to live next to index.js — otherwise `boxel test`
+    // hits ENOENT on the first transpile.
+    let wasmSrc = join(
+      __dirname,
+      '..',
+      'node_modules',
+      'content-tag',
+      'pkg',
+      'node',
+      'content_tag_bg.wasm',
+    );
+    copyFileSync(wasmSrc, 'dist/content_tag_bg.wasm');
+    console.log('Copied content_tag_bg.wasm into dist/');
 
     console.log('Build complete!');
 

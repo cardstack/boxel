@@ -29,10 +29,16 @@ The user has done the following outside Claude Code:
 - A running realm server reachable at the URL they intend to use. For
   local work that is `mise run dev-all` in the boxel monorepo; for
   staging/prod they have credentials in their profile.
-- `boxel test` needs a few extra bits available (monorepo-only, until
-  the built-in QUnit harness ships per CS-11164):
-  - The host app's `dist/` is built: `pnpm --filter @cardstack/host build`.
-  - Playwright's headless Chromium is installed: `npx playwright install chromium`. One-time per machine.
+- `boxel test` runs entirely locally as of CS-11164 — no realm-server
+  needed for tests. The CLI ships its own QUnit harness
+  (`bundled-test-harness/`) and base-realm source (`bundled-realms/`)
+  and starts an in-process transpiling module server that serves cards
+  from the local workspace dir + bundled base realm. The agent loop is
+  `write → boxel test`, no push step in between. One-time setup:
+  `npx playwright install chromium` to fetch the headless browser
+  binary; Playwright ships as a runtime dependency. Use
+  `boxel test --realm <url>` to opt back into the older flow that
+  tests cards already on a remote realm.
 - `boxel parse` is self-contained from the published CLI as of
   CS-11165 — no monorepo needed. From inside the workspace dir,
   just run `boxel parse` (no flags) to type-check local files
@@ -131,7 +137,7 @@ session.
 | Parse / type-check      | `boxel parse [path]` from inside the workspace dir — defaults to type-checking **local files before push**. Add `--realm <url>` only when you want to check files already on the realm. glint + JSON validation. |
 | Evaluate module         | `boxel run-command @cardstack/boxel-host/commands/evaluate-module/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","realmIdentifier":"<abs-url>"}'`                                                |
 | Instantiate card        | `boxel run-command @cardstack/boxel-host/commands/instantiate-card/default --realm <url> --input '{"moduleIdentifier":"<abs-url>","cardName":"...","realmIdentifier":"<abs-url>","instanceData":"<json>"}'`      |
-| Run QUnit tests         | `boxel test --realm <url>` (monorepo-only — drives headless Chromium)                                                                                                                                            |
+| Run QUnit tests         | `boxel test` from inside the workspace dir (drives headless Chromium; CLI starts a local module server, no realm-server needed). `--realm <url>` opts into testing a remote realm instead.                       |
 | Read transpiled output  | `boxel read-transpiled <path> --realm <url>` (for debugging eval/instantiate errors)                                                                                                                             |
 | Write files             | native `Write` / `Edit`                                                                                                                                                                                          |
 | Read / search workspace | native `Read` / `Glob` / `Grep`                                                                                                                                                                                  |

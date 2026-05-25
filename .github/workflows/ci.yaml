@@ -860,7 +860,7 @@ jobs:
 
   boxel-cli-build:
     name: Boxel CLI Build
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -869,6 +869,20 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      # `pnpm build` in boxel-cli runs `build:test-harness`, which reads
+      # from `packages/host/dist/`. Restore that from the shared
+      # test-web-assets artifact so we don't have to rebuild the host
+      # here (CS-11164).
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Build boxel-cli
         run: pnpm build
         working-directory: packages/boxel-cli
