@@ -482,14 +482,19 @@ export interface BrokenLinkFinding {
 // store.loaded()`), so any remaining sentinel reliably reflects a
 // completed fetch outcome.
 //
-// Computed relationship fields are skipped: a computeVia returns the
-// field's value, and for linksTo / linksToMany that value has to be a
-// live CardDef instance (or null). The Error / NotFound sentinels are
-// only ever planted into the data bucket by `lazilyLoadLink`'s failure
-// path on a declared field, never produced by a computeVia — there is
-// no way to materialize a CardDef for a card that does not exist. The
-// declared field a computed derives from is itself in scope, so any
-// real broken-link state surfaces there.
+// Computed relationship fields are skipped: the only producer of
+// LinkError / LinkNotFound sentinels is `lazilyLoadLink`'s failure
+// path in card-api.gts, and it only writes into the data bucket of
+// the **declared** field that failed to load — never into a computed
+// field (computed fields do not use the bucket; their value is the
+// return of `computeVia`). User computeVia code typically derives its
+// value from another field on the same instance (e.g. `return
+// this.declaredLink`), and the LinksTo getter for a NotLoaded
+// declared field returns `undefined` rather than handing the sentinel
+// back to user code, so a sentinel does not naturally flow through
+// the computed pipeline either. The declared field a computed derives
+// from is in scope here and is the only place a real broken-link
+// sentinel can live.
 //
 // We also read from the data bucket directly rather than going through
 // `peekAtField` / the getter: routing through the getter would write
