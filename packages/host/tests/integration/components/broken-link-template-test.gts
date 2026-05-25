@@ -5,8 +5,12 @@ import { module, test } from 'qunit';
 
 import type { SerializedError } from '@cardstack/runtime-common';
 
-// @ts-ignore — Glint cannot follow the realm URL alias to the .gts source
-import BrokenLinkTemplate from 'https://cardstack.com/base/default-templates/broken-link-template';
+// Relative import (not the `https://cardstack.com/base/…` realm URL): test
+// runner files are part of the host bundle, not loaded by the realm-loader,
+// so they need a real file-system path the bundler can resolve at build time.
+// @ts-ignore — bundler resolves this; TS lookup runs through the tsconfig
+// path map and the relative path is from .gts source.
+import BrokenLinkTemplate from '../../../../base/default-templates/broken-link-template';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
