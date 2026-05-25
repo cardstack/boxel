@@ -468,6 +468,53 @@ export function peekAtField(instance: BaseDef, fieldName: string): any {
   return getter(instance, field);
 }
 
+export interface BrokenLinkFinding {
+  fieldName: string;
+  sentinel: LinkErrorValue | LinkNotFoundValue;
+}
+
+// Walks the top-level linksTo/linksToMany fields of `instance` and returns
+// every LinkError/LinkNotFound sentinel currently sitting in the data
+// bucket. NotLoaded sentinels are deliberately ignored — they represent
+// in-flight fetches, not terminal failures, and reading them does not
+// constitute a render error. Callers are expected to invoke this only
+// after the store has settled (e.g. after `await store.loaded()`), so any
+// remaining sentinel reliably reflects a completed fetch outcome.
+//
+// We read from `getDataBucket` directly rather than `peekAtField` so that
+// linksTo fields that were never touched stay untouched — going through
+// the getter would write the empty-value into the bucket as a side effect
+// and pollute `getUsedFields` for any subsequent caller.
+export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
+  let findings: BrokenLinkFinding[] = [];
+  let bucket = getDataBucket(instance);
+  let fields = getFields(instance);
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field) {
+      continue;
+    }
+    if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
+      continue;
+    }
+    if (!bucket.has(fieldName)) {
+      continue;
+    }
+    let value = bucket.get(fieldName);
+    if (isLinkError(value) || isLinkNotFound(value)) {
+      findings.push({ fieldName, sentinel: value });
+      continue;
+    }
+    if (field.fieldType === 'linksToMany' && Array.isArray(value)) {
+      for (let item of value) {
+        if (isLinkError(item) || isLinkNotFound(item)) {
+          findings.push({ fieldName, sentinel: item });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
 interface NotLoadedRelationship {
   type: 'not-loaded';

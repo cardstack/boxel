@@ -14,6 +14,7 @@ import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
+  baseRealm,
   CardError,
   SupportedMimeType,
   type CardErrorsJSONAPI,
@@ -35,6 +36,9 @@ import {
 } from '@cardstack/runtime-common';
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type * as FieldSupport from 'https://cardstack.com/base/field-support';
 
 import {
   buildModuleModel,
@@ -359,6 +363,16 @@ export default class CardPrerender extends Component {
             0,
             initialRenderOptions,
           );
+          // Walk the rendered instance for LinkError/LinkNotFound
+          // sentinels and throw the structured failure payload — the
+          // catch block parses it into `cardError` the same way the
+          // legacy `boxel-render-error` CustomEvent path did. Reading
+          // the sentinel off the data bucket means we no longer need an
+          // event to fire during render to flag the failure.
+          let brokenLinkPayload = await this.#brokenLinkPayload();
+          if (brokenLinkPayload) {
+            throw new Error(brokenLinkPayload);
+          }
           meta = await this.renderMeta.perform(url, subsequentRenderOptions);
           headHTML = await this.renderHTML.perform(
             url,
@@ -692,6 +706,48 @@ export default class CardPrerender extends Component {
     } catch (_error) {
       // ignore
     }
+  }
+
+  async #brokenLinkPayload(): Promise<string | undefined> {
+    let renderModel = (globalThis as any).__renderModel as
+      | { instance?: CardDef }
+      | undefined;
+    let instance = renderModel?.instance;
+    if (!instance) {
+      return undefined;
+    }
+    let fieldSupport;
+    try {
+      fieldSupport = await this.loaderService.loader.import<
+        typeof FieldSupport
+      >(`${baseRealm.url}field-support`);
+    } catch (_e) {
+      return undefined;
+    }
+    let findings = fieldSupport.scanForBrokenLinks(instance);
+    if (findings.length === 0) {
+      return undefined;
+    }
+    let primary = findings[0].sentinel.errorDoc;
+    let deps = new Set<string>();
+    for (let finding of findings) {
+      deps.add(finding.sentinel.reference);
+    }
+    for (let dep of primary.deps ?? []) {
+      deps.add(dep);
+    }
+    let additionalErrors = [
+      ...(primary.additionalErrors ?? []),
+      ...findings.slice(1).map((f) => f.sentinel.errorDoc),
+    ];
+    return JSON.stringify({
+      type: 'instance-error',
+      error: {
+        ...primary,
+        deps: [...deps],
+        additionalErrors: additionalErrors.length ? additionalErrors : null,
+      },
+    });
   }
 
   #handleRenderErrorEvent = (

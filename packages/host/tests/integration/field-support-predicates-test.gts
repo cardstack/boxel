@@ -7,7 +7,15 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
 
 import { setupCardLogs, setupLocalIndexing } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
+import {
+  setupBaseRealm,
+  CardDef,
+  StringField,
+  field,
+  contains,
+  linksTo,
+  linksToMany,
+} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -16,6 +24,8 @@ let isNotLoadedValue: (typeof FieldSupportModule)['isNotLoadedValue'];
 let isLinkError: (typeof FieldSupportModule)['isLinkError'];
 let isLinkNotFound: (typeof FieldSupportModule)['isLinkNotFound'];
 let isNonPresentLink: (typeof FieldSupportModule)['isNonPresentLink'];
+let scanForBrokenLinks: (typeof FieldSupportModule)['scanForBrokenLinks'];
+let getDataBucket: (typeof FieldSupportModule)['getDataBucket'];
 
 const ref = 'https://example.test/cards/pet-1';
 
@@ -68,6 +78,8 @@ module(
       isLinkError = fieldSupport.isLinkError;
       isLinkNotFound = fieldSupport.isLinkNotFound;
       isNonPresentLink = fieldSupport.isNonPresentLink;
+      scanForBrokenLinks = fieldSupport.scanForBrokenLinks;
+      getDataBucket = fieldSupport.getDataBucket;
     });
 
     test('isNotLoadedValue only matches the not-loaded sentinel', function (assert) {
@@ -248,6 +260,134 @@ module(
       } else {
         assert.ok(false, 'isNonPresentLink did not narrow as expected');
       }
+    });
+
+    test('scanForBrokenLinks finds nothing on a card with no sentinels', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      assert.deepEqual(scanForBrokenLinks(alice), []);
+    });
+
+    test('scanForBrokenLinks finds a singular linksTo link-error sentinel', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkError());
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 1, 'one finding emitted');
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].sentinel.type, 'link-error');
+      assert.strictEqual(findings[0].sentinel.reference, ref);
+    });
+
+    test('scanForBrokenLinks finds a singular linksTo link-not-found sentinel', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkNotFound());
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 1);
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].sentinel.type, 'link-not-found');
+    });
+
+    test('scanForBrokenLinks ignores not-loaded sentinels', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeNotLoaded());
+      assert.deepEqual(
+        scanForBrokenLinks(alice),
+        [],
+        'not-loaded is a transient state, not a render failure',
+      );
+    });
+
+    test('scanForBrokenLinks finds a broken element inside a linksToMany array', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      let healthyPet = new Pet({ name: 'Mango' });
+      getDataBucket(alice).set('pets', [
+        healthyPet,
+        makeLinkError(),
+        makeLinkNotFound(),
+      ]);
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 2);
+      assert.strictEqual(findings[0].fieldName, 'pets');
+      assert.strictEqual(findings[0].sentinel.type, 'link-error');
+      assert.strictEqual(findings[1].fieldName, 'pets');
+      assert.strictEqual(findings[1].sentinel.type, 'link-not-found');
+    });
+
+    test('scanForBrokenLinks finds a sentinel-shaped linksToMany whole-field value', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      // Computed linksToMany that consumes a not-yet-resolved link can
+      // surface a single sentinel as the whole field value (see
+      // relationshipMeta's plural branch). Verify the scan handles that
+      // shape as well.
+      getDataBucket(alice).set('pets', makeLinkError());
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 1);
+      assert.strictEqual(findings[0].fieldName, 'pets');
+      assert.strictEqual(findings[0].sentinel.type, 'link-error');
+    });
+
+    test('scanForBrokenLinks aggregates findings across multiple linksTo fields', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field rival = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkError());
+      getDataBucket(alice).set('rival', makeLinkNotFound());
+      let findings = scanForBrokenLinks(alice);
+      assert.strictEqual(findings.length, 2);
+      let byField = Object.fromEntries(
+        findings.map((f) => [f.fieldName, f.sentinel.type]),
+      );
+      assert.deepEqual(byField, {
+        pet: 'link-error',
+        rival: 'link-not-found',
+      });
     });
   },
 );
