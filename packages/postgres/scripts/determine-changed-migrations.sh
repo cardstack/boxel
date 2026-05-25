@@ -53,13 +53,13 @@ printf '%s\n' "$SORTED"
   echo "EOF"
 } >> "$GITHUB_OUTPUT"
 
-# CS-11246: always roll back the full chain when any migration file
-# changes, not just down to the earliest-changed migration. The narrower
-# window left cross-migration interaction bugs latent — a non-idempotent
-# DOWN in migration X only fails when a PR happens to edit a migration
-# older than X, which could be months between triggers. Full rollback
-# costs a few extra seconds per CI run but exercises every DOWN/UP
-# cycle on every migration-touching PR.
+# Always roll back the full chain when any migration file changes, not
+# just down to the earliest-changed migration. The narrower window left
+# cross-migration interaction bugs latent — a non-idempotent DOWN in
+# migration X only fails when a PR happens to edit a migration older
+# than X, which could be months between triggers. Full rollback costs a
+# few extra seconds per CI run but exercises every DOWN/UP cycle on
+# every migration-touching PR.
 # Match node-pg-migrate's own discovery: only timestamp-prefixed files
 # count as migrations (excludes .eslintrc.js, README, etc.).
 TOTAL="$(find packages/postgres/migrations -maxdepth 1 -type f \( -name '[0-9]*.js' -o -name '[0-9]*.ts' \) | wc -l | tr -d ' ')"

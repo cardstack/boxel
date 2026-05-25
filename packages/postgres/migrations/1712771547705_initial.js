@@ -143,12 +143,10 @@ exports.up = (pgm) => {
   `);
 };
 
-// CS-11246: explicit down so the Postgres Migration Test can roll back
-// the full chain on any PR that touches a migration file. node-pg-migrate
-// can't auto-infer a reversal for the `ALTER TABLE … SET UNLOGGED` calls
-// above, so an inferred down would crash mid-rollback. Order is the
-// reverse of the up — types are dropped after the tables that reference
-// them.
+// Explicit down because node-pg-migrate can't auto-infer a reversal for
+// the `ALTER TABLE … SET UNLOGGED` calls above; an inferred down would
+// crash mid-rollback. Order is the reverse of the up — types are dropped
+// after the tables that reference them.
 exports.down = (pgm) => {
   pgm.sql('DROP FUNCTION IF EXISTS jsonb_tree(jsonb, text)');
   pgm.dropTable('queues');

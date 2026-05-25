@@ -25,11 +25,10 @@ exports.up = (pgm) => {
   });
 };
 
-// CS-11246: drop the table so the Postgres Migration Test can roll back
-// the full chain and reapply without colliding on a leftover relation.
 // 1779100257123_drop-published-realms drops this table on UP and
 // re-creates it on DOWN, so during a full rollback the table is restored
-// by that migration's DOWN and must be removed again here.
+// by that migration's DOWN and must be removed again here. Without this,
+// the reapply UP collides on the leftover relation.
 exports.down = (pgm) => {
   pgm.dropTable('published_realms');
 };

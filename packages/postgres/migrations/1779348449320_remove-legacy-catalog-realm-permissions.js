@@ -39,19 +39,19 @@ exports.up = (pgm) => {
 // incomplete. If the realm is brought back, the next boot of realm-server
 // with the realm on disk re-registers it automatically.
 //
-// CS-11246: each INSERT is guarded by NOT EXISTS against both http- and
-// https-forms of the (realm_url, username) pair. Background: an earlier
-// migration (1779100257124_canonical-url-http-to-https) rewrites localhost
-// URLs in place from http→https on UP. On dev that runs before this
-// migration, so by the time this UP fires the legacy-catalog rows are
-// already in https form and its http-targeted DELETE matches nothing — the
-// rows persist into the rollback. Then this DOWN inserts the http row, and
-// 1779100257124's DOWN rewrites the leftover https row back to http, which
-// collides with the just-inserted http row on realm_user_permissions_pkey.
-// Guarding the INSERT keeps the chain idempotent regardless of which form
-// is sitting in the table. Staging/production never hit the underlying
-// trigger (their canonicals are always https) but use the same guard for
-// uniformity.
+// Each INSERT is guarded by NOT EXISTS against both http- and https-forms
+// of the (realm_url, username) pair. Background: 1779100257124_canonical-
+// url-http-to-https rewrites localhost URLs in place from http→https on
+// UP. On dev that runs before this migration, so by the time this UP
+// fires the legacy-catalog rows are already in https form and its
+// http-targeted DELETE matches nothing — the rows persist into the
+// rollback. Then this DOWN inserts the http row, and 1779100257124's
+// DOWN rewrites the leftover https row back to http, which collides with
+// the just-inserted http row on realm_user_permissions_pkey. Guarding
+// the INSERT keeps the chain idempotent regardless of which form is
+// sitting in the table. Staging/production never hit the underlying
+// trigger (their canonicals are always https) but use the same guard
+// for uniformity.
 function guardedRestore(realmUrl, username, write, realmOwner) {
   let httpsUrl = realmUrl.replace(/^http:/, 'https:');
   let httpUrl = realmUrl.replace(/^https:/, 'http:');
