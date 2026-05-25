@@ -694,8 +694,7 @@ module(basename(__filename), function () {
       // Subsequent realms in the same backfill walk should still run.
       const brokenDir = join(realmsRootPath, 'luke', 'broken-data');
       seedSidecar(brokenDir, {
-        hostHome:
-          'http://localhost:4201/luke/broken-data/SiteConfig/x',
+        hostHome: 'http://localhost:4201/luke/broken-data/SiteConfig/x',
       });
       writeFileSync(
         join(brokenDir, 'realm.json'),
@@ -705,8 +704,7 @@ module(basename(__filename), function () {
       const goodDir = join(realmsRootPath, 'luke', 'good-after-broken');
       seedSidecar(goodDir, {
         name: 'Good After Broken',
-        hostHome:
-          'http://localhost:4201/luke/good-after-broken/SiteConfig/g',
+        hostHome: 'http://localhost:4201/luke/good-after-broken/SiteConfig/g',
       });
 
       await runRealmConfigCardBackfill({
@@ -724,8 +722,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         readSidecar(brokenDir),
         {
-          hostHome:
-            'http://localhost:4201/luke/broken-data/SiteConfig/x',
+          hostHome: 'http://localhost:4201/luke/broken-data/SiteConfig/x',
         },
         'sidecar untouched when card is structurally unsafe to modify',
       );
