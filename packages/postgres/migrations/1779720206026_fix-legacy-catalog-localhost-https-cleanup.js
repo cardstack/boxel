@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 exports.shorthands = undefined;
 
 // Removes the local-dev legacy-catalog rows that an earlier cleanup missed.
