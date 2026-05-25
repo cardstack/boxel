@@ -56,6 +56,13 @@ export function codeRef(
 
 const prefixMappings = new Map<string, string>();
 
+/**
+ * @deprecated Use {@link VirtualNetwork.addRealmMapping} instead. This
+ * module-level registration is bridged by `VN.addRealmMapping` for the
+ * existing call sites; new code should not call this directly. Slated
+ * for removal once all callers of the deprecated resolver functions
+ * below have been migrated (see CS-10752).
+ */
 export function registerCardReferencePrefix(
   prefix: string,
   targetURL: string,
@@ -63,10 +70,19 @@ export function registerCardReferencePrefix(
   prefixMappings.set(prefix, targetURL);
 }
 
+/**
+ * @deprecated Companion to {@link registerCardReferencePrefix}; see its
+ * deprecation note. Used today only by the test suite's `afterEach`
+ * cleanup, which will move to per-test VNs.
+ */
 export function unregisterCardReferencePrefix(prefix: string): void {
   prefixMappings.delete(prefix);
 }
 
+/**
+ * @deprecated Use {@link VirtualNetwork.isRegisteredPrefix} instead.
+ * Reads from the soon-to-be-removed module-level `prefixMappings`.
+ */
 export function isRegisteredPrefix(reference: string): boolean {
   for (let [prefix] of prefixMappings) {
     if (reference.startsWith(prefix)) {
@@ -85,6 +101,12 @@ function isUrlLikeReference(ref: string): boolean {
   );
 }
 
+/**
+ * @deprecated Use {@link VirtualNetwork.resolveRRI} for RRI-aware
+ * resolution, or {@link VirtualNetwork.toURL} when a URL object is
+ * actually required. The behavior here — eagerly converting prefix-form
+ * references to URL form — is exactly what we're moving away from.
+ */
 export function resolveCardReference(
   reference: string,
   relativeTo: URL | string | undefined,
@@ -123,9 +145,13 @@ export function resolveCardReference(
   return new URL(reference, relativeTo).href;
 }
 
-// Reverse of resolveCardReference: converts a resolved URL back to
-// its registered prefix form if one matches.
-// e.g. "http://localhost:4201/catalog/foo" → "@cardstack/catalog/foo"
+/**
+ * @deprecated Use {@link VirtualNetwork.unresolveURL} instead.
+ *
+ * Reverse of `resolveCardReference`: converts a resolved URL back to its
+ * registered prefix form if one matches.
+ * e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+ */
 export function unresolveCardReference(resolvedURL: string): string {
   for (let [prefix, target] of prefixMappings) {
     if (resolvedURL.startsWith(target)) {
@@ -135,9 +161,15 @@ export function unresolveCardReference(resolvedURL: string): string {
   return resolvedURL;
 }
 
-// Converts a card instance ID (which may be a registered prefix like
-// @cardstack/catalog/foo or a regular URL) to a URL object by resolving
-// the prefix to a real URL when needed.
+/**
+ * @deprecated Use {@link VirtualNetwork.toURL} for the URL-object form,
+ * or {@link VirtualNetwork.fetch} for the network-access use case (which
+ * accepts RRI strings directly).
+ *
+ * Converts a card instance ID (which may be a registered prefix like
+ * `@cardstack/catalog/foo` or a regular URL) to a URL object by resolving
+ * the prefix to a real URL when needed.
+ */
 export function cardIdToURL(id: string): URL {
   return new URL(resolveCardReference(id, undefined));
 }
@@ -147,6 +179,10 @@ export function cardIdToURL(id: string): URL {
 // ---------------------------------------------------------------------------
 
 /**
+ * @deprecated Use {@link VirtualNetwork.resolveRRI} instead. This
+ * module-level form reads from the soon-to-be-removed global
+ * `prefixMappings` registry.
+ *
  * Resolve a reference to an absolute `RealmResourceIdentifier`.
  *
  * Resolution rules:

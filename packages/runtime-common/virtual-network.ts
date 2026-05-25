@@ -3,6 +3,7 @@ import { baseRealm } from './index';
 import {
   registerCardReferencePrefix,
   type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
@@ -95,6 +96,146 @@ export class VirtualNetwork {
 
   knownRealms(): RealmIdentifier[] {
     return [...this.realmMappings.keys()] as RealmIdentifier[];
+  }
+
+  /**
+   * Whether `reference` starts with one of this VN's registered realm
+   * prefixes (e.g. `@cardstack/base/foo` against a registered
+   * `@cardstack/base/` mapping).
+   *
+   * Replacement for the deprecated module-level `isRegisteredPrefix()`
+   * (which reads from the soon-to-be-removed global `prefixMappings`).
+   */
+  isRegisteredPrefix(reference: string): boolean {
+    for (let [prefix] of this.realmMappings) {
+      if (reference.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Convert a resolved URL back to its registered prefix form when one
+   * matches, e.g. `http://localhost:4201/catalog/foo` → `@cardstack/catalog/foo`.
+   * URLs that don't match any registered prefix are returned as-is.
+   *
+   * Replacement for the deprecated `unresolveCardReference()`.
+   */
+  unresolveURL(url: string): RealmResourceIdentifier {
+    for (let [prefix, target] of this.realmMappings) {
+      if (url.startsWith(target)) {
+        return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
+      }
+    }
+    return url as RealmResourceIdentifier;
+  }
+
+  /**
+   * Convert an RRI to a URL object. If the RRI is in prefix form, resolves
+   * via the registered realm mappings; if it's already a URL form, parses
+   * directly. Throws if the prefix is unregistered and the value isn't a
+   * parseable URL — that's intentional: bare local identifiers can't be
+   * resolved to a realm location.
+   *
+   * Replacement for the deprecated `cardIdToURL()`.
+   */
+  toURL(rri: string): URL {
+    let resolved = this.resolveRRIToURL(rri);
+    if (resolved !== undefined) {
+      return new URL(resolved);
+    }
+    return new URL(rri);
+  }
+
+  /**
+   * Resolve a reference to an absolute `RealmResourceIdentifier`.
+   *
+   * Resolution rules:
+   * - Absolute URL or registered prefix → return as-is
+   * - Relative (`./`, `../`, bare name) → resolve against `relativeTo`
+   * - `$REALM/` → resolve against the realm root of `relativeTo`
+   * - `/` or `~/` prefixed → throw (not valid RRI forms)
+   *
+   * Replacement for the deprecated module-level `resolveRRI()`.
+   */
+  resolveRRI(
+    reference: string,
+    relativeTo?: RealmResourceIdentifier,
+  ): RealmResourceIdentifier {
+    // Absolute URL — already resolved
+    if (reference.startsWith('http://') || reference.startsWith('https://')) {
+      return reference as RealmResourceIdentifier;
+    }
+
+    // Starts with a registered prefix — already resolved
+    if (this.isRegisteredPrefix(reference)) {
+      return reference as RealmResourceIdentifier;
+    }
+
+    // "/" and "~/" are not valid RRI reference forms
+    if (reference.startsWith('/') || reference.startsWith('~/')) {
+      throw new Error(
+        `Invalid RRI reference "${reference}" — "/" and "~/" prefixes are not supported`,
+      );
+    }
+
+    if (!relativeTo) {
+      throw new Error(`Cannot resolve "${reference}" without a relativeTo`);
+    }
+
+    let isUrlRelativeTo =
+      relativeTo.startsWith('http://') || relativeTo.startsWith('https://');
+
+    // $REALM/ — resolve against the realm root
+    if (reference.startsWith('$REALM/')) {
+      let path = reference.slice('$REALM/'.length);
+      if (isUrlRelativeTo) {
+        for (let [, target] of this.realmMappings) {
+          if (relativeTo.startsWith(target)) {
+            return new URL(path, target).href as RealmResourceIdentifier;
+          }
+        }
+        throw new Error(
+          `Cannot resolve "$REALM/" — no realm root found for "${relativeTo}"`,
+        );
+      }
+      for (let [prefix] of this.realmMappings) {
+        if (relativeTo.startsWith(prefix)) {
+          return (
+            prefix.endsWith('/') ? prefix + path : prefix + '/' + path
+          ) as RealmResourceIdentifier;
+        }
+      }
+      throw new Error(
+        `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+      );
+    }
+
+    // relativeTo is a URL — standard URL resolution
+    if (isUrlRelativeTo) {
+      return new URL(reference, relativeTo).href as RealmResourceIdentifier;
+    }
+
+    // relativeTo starts with a registered prefix — resolve in prefix space
+    // by round-tripping through URL space: prefix→URL, resolve, URL→prefix
+    for (let [prefix, target] of this.realmMappings) {
+      if (relativeTo.startsWith(prefix)) {
+        let baseURL = new URL(relativeTo.slice(prefix.length), target);
+        let resolved = new URL(reference, baseURL);
+        // Convert back to scoped form if the resolved URL matches a mapping
+        for (let [p, t] of this.realmMappings) {
+          if (resolved.href.startsWith(t)) {
+            return (p + resolved.href.slice(t.length)) as RealmResourceIdentifier;
+          }
+        }
+        return resolved.href as RealmResourceIdentifier;
+      }
+    }
+
+    throw new Error(
+      `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+    );
   }
 
   private nativeFetch: typeof globalThis.fetch;
