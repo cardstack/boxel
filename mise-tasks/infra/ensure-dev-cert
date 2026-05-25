@@ -35,6 +35,30 @@ set -euo pipefail
 CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
 CERT_FILE="$CERT_DIR/localhost.pem"
 KEY_FILE="$CERT_DIR/localhost-key.pem"
+# Persists the set of env-mode slugs (BOXEL_ENVIRONMENT values) that any
+# worktree on this machine has used, so the leaf cert can carry a
+# `*.<slug>.localhost` SAN for each. RFC 6125 wildcards only cover one
+# DNS label, so `*.localhost` does NOT match `host.<slug>.localhost`;
+# we have to pre-declare the slug's wildcard explicitly.
+SLUGS_FILE="$CERT_DIR/known-env-slugs.txt"
+
+# Source the shared slug-computation helper. Resolved relative to this
+# script's location: mise-tasks/infra/ensure-dev-cert → scripts/env-slug.sh.
+_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$_REPO_ROOT/scripts/env-slug.sh"
+unset _REPO_ROOT
+
+CURRENT_SLUG="$(resolve_env_slug 2>/dev/null || true)"
+
+# Stamp the current slug into the persistent slug list so subsequent
+# regenerations keep covering it. Done up-front (before the idempotent
+# skip check) so adding a fresh worktree triggers exactly one regen.
+mkdir -p "$CERT_DIR"
+touch "$SLUGS_FILE"
+if [ -n "$CURRENT_SLUG" ] && ! grep -qxF "$CURRENT_SLUG" "$SLUGS_FILE"; then
+  echo "$CURRENT_SLUG" >> "$SLUGS_FILE"
+  echo "[ensure-dev-cert] Recorded new env-mode slug '$CURRENT_SLUG' in $SLUGS_FILE"
+fi
 
 # mkcert is required even on the idempotent-skip path: env-vars.sh needs
 # `mkcert -CAROOT` to populate `NODE_EXTRA_CA_CERTS` so Node clients
@@ -158,17 +182,29 @@ echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
 
 # Idempotent skip when the leaf cert already exists, isn't within 7
 # days of expiry, AND covers the subdomains the dev + matrix-harness
-# publish-realm flows use.
+# publish-realm flows + env-mode services use.
 #
-# SAN layout note: published-realm tenant subdomains use a 3-label
-# wildcard (`*.boxel-dev.localhost`). RFC 6125 §7.2 — which Node's
-# tls.checkServerIdentity and every mainstream browser enforce —
-# refuses 2-label wildcards (e.g. `*.localhost`), so a single-label
-# `.localhost` SAN cannot wildcard-cover dev tenant subdomains. The
-# second label `boxel-dev` exists purely as the RFC-required filler
-# and reads as obviously-local-only in browser tabs. Source realms
-# in the dev stack (`user.localhost`) are covered as an explicit
-# SAN entry, no wildcard needed.
+# SAN layout note: published-realm tenant subdomains in standard dev
+# mode use a 3-label wildcard (`*.boxel-dev.localhost`). RFC 6125 §7.2
+# — which Node's tls.checkServerIdentity and every mainstream browser
+# enforce — refuses 2-label wildcards (e.g. `*.localhost`), so a
+# single-label `.localhost` SAN cannot wildcard-cover dev tenant
+# subdomains. The second label `boxel-dev` exists purely as the
+# RFC-required filler and reads as obviously-local-only in browser
+# tabs. Source realms in the dev stack (`user.localhost`) are covered
+# as an explicit SAN entry, no wildcard needed.
+#
+# Env mode (BOXEL_ENVIRONMENT set, see lib/env-vars.sh) layers two
+# additional SANs per recorded slug:
+#   * `*.<slug>.localhost`              — env-mode services routed by
+#                                         Traefik (host.<slug>.localhost,
+#                                          matrix.<slug>.localhost, etc.)
+#   * `*.realm-server.<slug>.localhost` — published realms living one
+#                                         label deeper, under the
+#                                         realm-server hostname
+# Slugs persist in $SLUGS_FILE (stamped above) so the cert keeps
+# covering older worktrees too — see $SLUGS_FILE stamping for why
+# we accumulate rather than overwrite.
 #
 # Older certs were issued for `localhost 127.0.0.1 ::1` only, or with
 # the no-longer-effective `*.localhost`; the SAN check below forces a
@@ -184,11 +220,31 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     cert_has_san() {
       printf '%s\n' "$CERT_TEXT" | grep -q -- "$1"
     }
-    if cert_has_san 'DNS:localhost' \
+    needs_regen=
+    if ! { cert_has_san 'DNS:localhost' \
       && cert_has_san 'DNS:user\.localhost' \
       && cert_has_san 'DNS:\*\.boxel-dev\.localhost' \
       && cert_has_san 'DNS:published\.realm' \
-      && cert_has_san 'IP Address:127\.0\.0\.1'; then
+      && cert_has_san 'IP Address:127\.0\.0\.1'; }; then
+      needs_regen=1
+    fi
+    if [ -z "$needs_regen" ]; then
+      while IFS= read -r slug; do
+        [ -z "$slug" ] && continue
+        # Each env-mode slug needs both a service wildcard and the
+        # deeper publish-realm wildcard. RFC 6125 wildcards only
+        # match one label, so we can't fold these into a single SAN.
+        if ! cert_has_san "DNS:\\*\\.${slug}\\.localhost"; then
+          needs_regen=1
+          break
+        fi
+        if ! cert_has_san "DNS:\\*\\.realm-server\\.${slug}\\.localhost"; then
+          needs_regen=1
+          break
+        fi
+      done < "$SLUGS_FILE"
+    fi
+    if [ -z "$needs_regen" ]; then
       exit 0
     fi
     echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing one or more required SANs; regenerating."
@@ -197,10 +253,29 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
   fi
 fi
 
-mkdir -p "$CERT_DIR"
-
 echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
+# Build SAN list:
+#   * `localhost` / `127.0.0.1` / `::1` — base loopback names
+#   * `user.localhost`                  — standard-mode source realm
+#   * `*.boxel-dev.localhost`           — standard-mode published-realm
+#                                         tenants (3-label wildcard so
+#                                         RFC 6125 §7.2 accepts it; see
+#                                         comment block above)
+#   * `published.realm`                 — matrix-harness host-resolver
+#                                         custom domain
+#   * Per env-mode slug in $SLUGS_FILE:
+#     - `*.<slug>.localhost`              env-mode services
+#     - `*.realm-server.<slug>.localhost` env-mode published realms
+# The leaf is shared across worktrees, so we accumulate slugs rather
+# than overwriting them — see $SLUGS_FILE stamping above.
+SANS=(localhost user.localhost 127.0.0.1 ::1 "*.boxel-dev.localhost" published.realm)
+while IFS= read -r slug; do
+  [ -z "$slug" ] && continue
+  SANS+=("*.$slug.localhost")
+  SANS+=("*.realm-server.$slug.localhost")
+done < "$SLUGS_FILE"
+
 mkcert \
   -cert-file "$CERT_FILE" \
   -key-file "$KEY_FILE" \
-  localhost user.localhost 127.0.0.1 ::1 "*.boxel-dev.localhost" published.realm
+  "${SANS[@]}"

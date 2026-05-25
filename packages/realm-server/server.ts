@@ -97,6 +97,15 @@ export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
 ): { server: RealmHttpServer; proto: 'http' | 'https/h2' } {
+  // Env mode (Traefik in front): force plain HTTP regardless of
+  // whether the TLS env vars are set. They may have leaked in from a
+  // parent shell that ran env-vars.sh in standard mode before
+  // BOXEL_ENVIRONMENT was exported, which would otherwise make us
+  // terminate TLS while Traefik plain-HTTP-proxies to us — every
+  // request then fails with "HTTP/0.9 when not allowed" → 502.
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
   let certFile = process.env[TLS_CERT_FILE_ENV];
   let keyFile = process.env[TLS_KEY_FILE_ENV];
   if (!certFile || !keyFile) {
