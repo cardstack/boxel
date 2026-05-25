@@ -1,0 +1,154 @@
+name: Preview-realm integration
+
+# End-to-end exercise of the boxel-cli commands the reusable workflows
+# wrap (`boxel realm create/push/publish/unpublish`) against a freshly
+# booted local matrix + realm-server stack. The reusable workflows
+# (.github/workflows/{sync-workspace,preview-realm}.yml) are thin shells
+# around these same CLI invocations, so contract drift between the CLI
+# and the server's _publish-realm / _unpublish-realm handlers surfaces
+# here at PR time before the next consumer sync fails in staging.
+#
+# Path-gated so only PRs touching the CLI + server contract or the
+# reusable workflow surface pay the ~25-minute cost.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sync-workspace.yml
+      - .github/workflows/preview-realm.yml
+      - .github/workflows/preview-realm-actions-integration.yml
+      - packages/boxel-cli/src/commands/realm/publish.ts
+      - packages/boxel-cli/src/commands/realm/unpublish.ts
+      - packages/boxel-cli/src/commands/realm/push.ts
+      - packages/realm-server/handlers/handle-publish-realm.ts
+      - packages/realm-server/handlers/handle-unpublish-realm.ts
+      - packages/runtime-common/tasks/copy.ts
+  pull_request:
+    paths:
+      - .github/workflows/sync-workspace.yml
+      - .github/workflows/preview-realm.yml
+      - .github/workflows/preview-realm-actions-integration.yml
+      - packages/boxel-cli/src/commands/realm/publish.ts
+      - packages/boxel-cli/src/commands/realm/unpublish.ts
+      - packages/boxel-cli/src/commands/realm/push.ts
+      - packages/realm-server/handlers/handle-publish-realm.ts
+      - packages/realm-server/handlers/handle-unpublish-realm.ts
+      - packages/runtime-common/tasks/copy.ts
+
+concurrency:
+  group: preview-realm-integration-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test-web-assets:
+    name: Build test web assets
+    uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: preview-realm-integration
+
+  integration:
+    name: Run preview-realm CLI commands against local stack
+    needs: [test-web-assets]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
+      - name: Download test web assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+
+      - name: Start PostgreSQL
+        # register-all (below) writes EXTRA_USERS to the boxel users
+        # table, so postgres must be up before the matrix-side
+        # registration runs.
+        run: pnpm start:pg
+        working-directory: packages/realm-server
+      - name: Start Matrix
+        run: pnpm start:matrix
+        working-directory: packages/realm-server
+      - name: Wait for PostgreSQL to accept connections
+        run: timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/5435) >/dev/null 2>&1; do sleep 1; done'
+      - name: Run database migrations
+        # register-all calls ensureUserRecord which writes to the boxel
+        # users table. The boxel database (and that table) are created
+        # by the realm-server's migrations on first boot. Run them up
+        # front so the registration step has a target schema to write
+        # against.
+        run: pnpm migrate
+        working-directory: packages/realm-server
+      - name: Register matrix users (all)
+        run: pnpm register-all
+        working-directory: packages/matrix
+      - name: Start dev stack (base realm + prerenderer)
+        run: |
+          mise run test-services:matrix | tee -a /tmp/server.log &
+          # Realm-server and vite host both speak HTTPS+HTTP/2 only; `-k`
+          # tolerates the mkcert leaf cert from infra:ensure-dev-cert.
+          timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
+
+      - name: Build boxel-cli
+        # The integration test exercises the CLI built from the PR's
+        # source, NOT a published npm version. Symlink into /usr/local/bin
+        # so `boxel ...` invocations resolve to the local build.
+        shell: bash
+        run: |
+          pnpm --filter @cardstack/boxel-cli build
+          sudo ln -sf "$PWD/packages/boxel-cli/bin/boxel.js" /usr/local/bin/boxel
+          boxel --version
+
+      - name: Configure boxel profile
+        env:
+          REALM_NAME: preview-realm-test-${{ github.run_id }}
+          BOXEL_PASSWORD: password
+        run: |
+          boxel profile add \
+            --user "@user:localhost" \
+            --matrix-url "http://localhost:8008" \
+            --realm-server-url "https://localhost:4201/"
+          {
+            echo "REALM_NAME=${REALM_NAME}"
+            echo "PUBLISHED_URL=https://${REALM_NAME}.boxel-dev.localhost:4201/"
+            echo "SOURCE_URL=https://localhost:4201/user/${REALM_NAME}/"
+          } >> "$GITHUB_ENV"
+
+      - name: Build a small fixture to push
+        shell: bash
+        run: |
+          mkdir -p /tmp/preview-realm-fixture
+          cat > /tmp/preview-realm-fixture/README.md <<'EOF'
+          # Preview-realm integration test fixture
+          Pushed by the integration workflow to exercise the CLI
+          commands the reusable workflows wrap.
+          EOF
+
+      - name: boxel realm create
+        run: boxel realm create "$REALM_NAME" "Preview-realm integration test"
+
+      - name: boxel realm push
+        run: boxel realm push /tmp/preview-realm-fixture "$SOURCE_URL" --delete
+
+      - name: boxel realm publish + readiness
+        run: boxel realm publish "$SOURCE_URL" "$PUBLISHED_URL" --timeout 120000
+
+      - name: boxel realm push (re-push to source realm)
+        # Mirrors the sync-workspace.yml reusable workflow's `boxel realm
+        # push --delete` invocation against an already-populated realm.
+        run: boxel realm push /tmp/preview-realm-fixture "$SOURCE_URL" --delete
+
+      - name: boxel realm unpublish
+        if: always()
+        run: boxel realm unpublish "$PUBLISHED_URL" --tolerate-missing
+
+      - name: Print server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log
