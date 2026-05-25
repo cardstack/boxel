@@ -243,16 +243,21 @@ function createCardFromSidecar(
   // hostRoutingRules: rare in sidecars on this codebase (the field
   // already lives on the card today), but if a sidecar carries it,
   // split into the canonical {path}-in-attributes / linksTo-in-
-  // relationships shape rather than copying verbatim.
+  // relationships shape rather than copying verbatim. Index the
+  // relationship key against the *output* array position, not the
+  // sidecar's original index — invalid entries get filtered out and
+  // would otherwise leave a relationship pointing past the end of
+  // the migrated attributes array.
   const sidecarRules = sidecar.hostRoutingRules;
   if (Array.isArray(sidecarRules)) {
     const rulesAttrs: { path?: string }[] = [];
-    sidecarRules.forEach((rule, i) => {
+    sidecarRules.forEach((rule) => {
       if (rule && typeof rule === 'object') {
         const r = rule as Record<string, unknown>;
+        const outIndex = rulesAttrs.length;
         rulesAttrs.push({ path: r.path as string | undefined });
         if (typeof r.instance === 'string') {
-          relationships[`hostRoutingRules.${i}.instance`] = {
+          relationships[`hostRoutingRules.${outIndex}.instance`] = {
             links: { self: toRelativeInstanceLink(r.instance, url) },
           };
         }

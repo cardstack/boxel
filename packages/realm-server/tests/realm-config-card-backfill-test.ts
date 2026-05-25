@@ -640,6 +640,52 @@ module(basename(__filename), function () {
       );
     });
 
+    test('skips invalid entries in sidecar hostRoutingRules without misaligning relationship keys', async function (assert) {
+      // Pre-fix: relationship keys used the original sidecar array index
+      // while attributes.hostRoutingRules used a push-only output index,
+      // so a null entry before a valid one would orphan the link
+      // (attribute at [0], relationship at "hostRoutingRules.1.instance").
+      const realmDir = join(realmsRootPath, 'luke', 'sparse-rules');
+      seedSidecar(realmDir, {
+        name: 'Sparse',
+        hostRoutingRules: [
+          null,
+          {
+            path: '/',
+            instance: 'http://localhost:4201/luke/sparse-rules/Home/h',
+          },
+        ],
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      const card = readCard(realmDir) as {
+        data: {
+          attributes: { hostRoutingRules?: { path?: string }[] };
+          relationships?: Record<string, { links: { self: string | null } }>;
+        };
+      };
+      assert.deepEqual(
+        card.data.attributes.hostRoutingRules,
+        [{ path: '/' }],
+        'invalid entry filtered out, valid /-rule landed at index 0',
+      );
+      assert.deepEqual(
+        card.data.relationships?.['hostRoutingRules.0.instance'],
+        { links: { self: './Home/h' } },
+        'relationship indexed to match the post-filter attribute position',
+      );
+      assert.notOk(
+        card.data.relationships?.['hostRoutingRules.1.instance'],
+        'no orphaned relationship at the original (unfiltered) index',
+      );
+    });
+
     test('treats a card whose `data` is not a plain object as unparseable', async function (assert) {
       // Parses cleanly as JSON, has a `data` key, but `data` is a string.
       // augmentExistingCard would mutate `card.data.attributes` and throw
