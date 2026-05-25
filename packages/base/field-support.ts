@@ -481,8 +481,23 @@ export function isNonPresentLink(val: any): val is LinkSentinel {
 // slot has that behaviour). Detection uses `isPhantom` or the
 // Relationship API, not falsiness.
 
-const PHANTOM_BRAND = Symbol('cardstack:phantom-brand');
-const PHANTOM_STATE = Symbol('cardstack:phantom-state');
+// The Symbols are themselves shared state. `phantomCache` lives in
+// `initSharedState` (global across cooperating loaders), so a phantom minted
+// by one loader's copy of this module is reachable from another loader's
+// copy via the same cache. If each loader created its own `Symbol(...)`,
+// the two loaders would disagree on the brand and `isPhantom` /
+// `readPhantomState` would report false negatives across the boundary.
+// Stashing the Symbols in the shared bucket guarantees that every loader
+// copy ends up with the same Symbol identity, while keeping the Symbols
+// unreachable through the global Symbol registry (unlike `Symbol.for`).
+const PHANTOM_BRAND = initSharedState(
+  'phantomBrand',
+  () => Symbol('cardstack:phantom-brand'),
+);
+const PHANTOM_STATE = initSharedState(
+  'phantomState',
+  () => Symbol('cardstack:phantom-state'),
+);
 
 // Type-level brand declared independently from the runtime Symbols so the
 // public interface stays exportable without leaking the module-private
@@ -496,9 +511,9 @@ export interface PhantomValue {
 }
 
 interface PhantomInternalState {
-  instance: BaseDef;
-  fieldName: string;
-  sentinel: LinkSentinel | null;
+  readonly instance: BaseDef;
+  readonly fieldName: string;
+  readonly sentinel: LinkSentinel | null;
 }
 
 // Per-field cache: one slot for the not-set state and a WeakMap keyed by
@@ -547,6 +562,12 @@ export function getPhantom(
 }
 
 function createPhantom(state: PhantomInternalState): PhantomValue {
+  // Freeze the introspection record so `readPhantomState` consumers cannot
+  // mutate the phantom's `(instance, fieldName, sentinel)` triple in place.
+  // The proxy returns this exact object from `get(PHANTOM_STATE)`, so an
+  // unfrozen copy would let a single hostile caller corrupt every future
+  // read of the same phantom.
+  Object.freeze(state);
   // Arrow target keeps the proxy callable without dragging a non-configurable
   // `prototype` own property — that would force `has` to report `prototype`
   // present and break the "every external key is absent" contract. `length`

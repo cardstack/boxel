@@ -216,6 +216,31 @@ module('Integration | field-support | phantom value', function (hooks) {
     assert.strictEqual(readPhantomState(makeNotLoaded() as any), undefined);
   });
 
+  test('readPhantomState returns a frozen record that cannot be mutated', function (assert) {
+    let instance = stubInstance();
+    let sentinel = makeLinkError();
+    let phantom = getPhantom(instance, 'pet', sentinel);
+    let state = readPhantomState(phantom)!;
+    assert.true(Object.isFrozen(state), 'state object is frozen');
+    assert.throws(
+      () => {
+        (state as any).fieldName = 'hacked';
+      },
+      TypeError,
+      'assigning fieldName throws in strict mode',
+    );
+    assert.throws(
+      () => {
+        (state as any).sentinel = null;
+      },
+      TypeError,
+      'assigning sentinel throws in strict mode',
+    );
+    let again = readPhantomState(phantom)!;
+    assert.strictEqual(again.fieldName, 'pet', 'fieldName unchanged');
+    assert.strictEqual(again.sentinel, sentinel, 'sentinel unchanged');
+  });
+
   test('the hidden state symbol is not enumerable on the phantom surface', function (assert) {
     let phantom = getPhantom(stubInstance(), 'pet', makeNotLoaded());
     assert.deepEqual(
