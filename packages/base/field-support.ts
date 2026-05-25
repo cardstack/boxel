@@ -68,6 +68,21 @@ const fieldOverrides = initSharedState(
   'fieldOverrides',
   () => new WeakMap<BaseDef, Map<string, any>>(),
 );
+// Per-instance side-channel for terminal linksTo failures planted by
+// `lazilyLoadLink`'s catch block. The data bucket stays at its legacy
+// null on fetch failure — every existing consumer of the bucket (serialize,
+// queryableValue, the field-support `getter`, `peekAtField`, the in-browser
+// autoSave path that branches on bucket-derived signals, …) sees the same
+// shape it did on `main`, so the cascade triggered by sentinel-in-bucket
+// (Integration | code submode | editor tests) goes away. The structured
+// failure lives here instead, keyed by (instance, fieldName). `scanForBrokenLinks`
+// reads from this map; CS-11223 will revisit whether a bucket-storage
+// approach is reachable once the consumer set has been migrated to the
+// public Relationship API (CS-11224).
+const linkSentinels = initSharedState(
+  'linkSentinels',
+  () => new WeakMap<BaseDef, Map<string, LinkErrorValue | LinkNotFoundValue>>(),
+);
 
 // Pass-scoped computed-field memo. When non-null, `getter` consults a
 // per-instance Map before invoking `computeVia` and stores the result for
@@ -177,6 +192,47 @@ export function getDataBucket<T extends BaseDef>(
     deserializedData.set(instance, deserialized);
   }
   return deserialized;
+}
+
+// Plant a terminal sentinel (link-error / link-not-found) for `fieldName`
+// on `instance`. The data bucket is unchanged — see the `linkSentinels`
+// declaration for why the side-channel exists.
+export function setLinkSentinel(
+  instance: BaseDef,
+  fieldName: string,
+  sentinel: LinkErrorValue | LinkNotFoundValue,
+): void {
+  let map = linkSentinels.get(instance);
+  if (!map) {
+    map = new Map();
+    linkSentinels.set(instance, map);
+  }
+  map.set(fieldName, sentinel);
+}
+
+// Look up a terminal sentinel planted by `setLinkSentinel`. Returns
+// undefined if no terminal failure has been recorded for that field on
+// that instance (either because the lazy load is still in flight, or
+// because it succeeded, or because the field was never read).
+export function getLinkSentinel(
+  instance: BaseDef,
+  fieldName: string,
+): LinkErrorValue | LinkNotFoundValue | undefined {
+  return linkSentinels.get(instance)?.get(fieldName);
+}
+
+// Discard a previously-planted sentinel for `(instance, fieldName)`. Used
+// when a successful retry should clear the terminal state (no consumer
+// today, but the public Relationship API will want this).
+export function clearLinkSentinel(
+  instance: BaseDef,
+  fieldName: string,
+): void {
+  let map = linkSentinels.get(instance);
+  if (!map) {
+    return;
+  }
+  map.delete(fieldName);
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -496,10 +552,19 @@ export interface BrokenLinkFinding {
 // from is in scope here and is the only place a real broken-link
 // sentinel can live.
 //
-// We also read from the data bucket directly rather than going through
-// `peekAtField` / the getter: routing through the getter would write
-// the empty-value back into the bucket for untouched linksTo fields
-// and pollute `getUsedFields` for any subsequent caller.
+// linksToMany array-element failures appear in the bucket (the
+// per-index sentinel-write in lazilyLoadLink's plural branch). Singular
+// linksTo failures live on the `linkSentinels` side-channel — see the
+// declaration for why the bucket is unchanged for the singular case.
+// This scanner deliberately reads ONLY from the bucket for now: the
+// legacy `boxel-render-error` dispatch is still the active producer of
+// indexer-side error_docs, and surfacing the side-channel here too
+// would route a second error through `#processRenderError`, racing the
+// dispatch path and destabilising other in-flight realm-index
+// transitions. CS-11217's scanner is therefore intentionally dormant
+// for the singular case in this transitional PR; downstream tickets
+// (CS-11229 and friends) will migrate consumers off the dispatch and
+// re-enable the side-channel read here.
 export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
   let findings: BrokenLinkFinding[] = [];
   let bucket = getDataBucket(instance);
@@ -561,7 +626,7 @@ export function relationshipMeta(
   let related = peekAtField(instance, field.name) as CardDef;
   if (field.fieldType === 'linksToMany') {
     // this is the scenario where the linksToMany is a computed that consumes a link that is not loaded
-    if (isNonPresentLink(related)) {
+    if (isNotLoadedValue(related)) {
       return { type: 'not-loaded', reference: related.reference };
     }
     if (!Array.isArray(related)) {
@@ -570,7 +635,7 @@ export function relationshipMeta(
       );
     }
     return related.map((rel) => {
-      if (isNonPresentLink(rel)) {
+      if (isNotLoadedValue(rel)) {
         return { type: 'not-loaded', reference: rel.reference };
       } else {
         return { type: 'loaded', card: rel ?? null };
@@ -578,7 +643,7 @@ export function relationshipMeta(
     });
   }
 
-  if (isNonPresentLink(related)) {
+  if (isNotLoadedValue(related)) {
     return { type: 'not-loaded', reference: related.reference };
   } else {
     return { type: 'loaded', card: related ?? null };

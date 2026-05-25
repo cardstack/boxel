@@ -172,6 +172,7 @@ import {
   realmContext,
   relationshipMeta,
   setFieldDescription,
+  setLinkSentinel,
   setRealmContextOnField,
   type ComputePassSnapshot,
   type LinkErrorValue,
@@ -1199,17 +1200,10 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       return value;
     }
 
-    let maybeSentinel = deserialized.get(this.name);
-    if (isNotLoadedValue(maybeSentinel)) {
-      lazilyLoadLink(instance, this, maybeSentinel.reference);
+    let maybeNotLoaded = deserialized.get(this.name);
+    if (isNotLoadedValue(maybeNotLoaded)) {
+      lazilyLoadLink(instance, this, maybeNotLoaded.reference);
       return undefined;
-    }
-    if (isLinkError(maybeSentinel) || isLinkNotFound(maybeSentinel)) {
-      // Terminal sentinels — the fetch already resolved into a structured
-      // failure. Returning null here matches the public contract that a
-      // broken linksTo reads as empty, and we deliberately do not call
-      // lazilyLoadLink so a permanently-broken link does not spin.
-      return null as unknown as BaseInstanceType<CardT>;
     }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
@@ -1225,21 +1219,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (instance == null) {
       return null;
     }
-    if (isLinkError(instance) || isLinkNotFound(instance)) {
-      // Terminal sentinels surface in searchDoc the same way the legacy
-      // null bucket value did — as an absent field. `CS-11223` will revisit
-      // serialization round-trip; for now, broken links are searchDoc-invisible.
-      return null;
-    }
     return this.card[queryableValue](instance, stack);
   }
 
   serialize(
-    value:
-      | InstanceType<CardT>
-      | NotLoadedValue
-      | LinkErrorValue
-      | LinkNotFoundValue,
+    value: InstanceType<CardT> | NotLoadedValue,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts,
@@ -1255,22 +1239,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
               self: makeRelativeURL(value.reference, opts),
             },
             data: { type: relationshipType, id: value.reference },
-          },
-        },
-      };
-    }
-    if (isLinkError(value) || isLinkNotFound(value)) {
-      // Terminal Error/NotFound sentinels serialize to a null link —
-      // matching the legacy bucket-was-null behaviour. The structured
-      // errorDoc is in-memory diagnostic state, not part of the saved
-      // card document. Preserving the broken reference in the persisted
-      // relationship is what `CS-11223` (serialization round-trip) is
-      // about; until then, save drops the reference and reload reads as
-      // an empty link.
-      return {
-        relationships: {
-          [this.name]: {
-            links: { self: null },
           },
         },
       };
@@ -2337,12 +2305,6 @@ export class BaseDef {
               );
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
-          }
-          if (isLinkError(rawValue) || isLinkNotFound(rawValue)) {
-            // Terminal sentinels emit `null` in searchDoc — matching the
-            // legacy null-bucket behaviour. `CS-11223` will revisit when
-            // broken-link references should round-trip.
-            return [fieldName, null];
           }
           // Reuse the value we already peeked above instead of re-reading
           // through the descriptor — for computed fields the descriptor
@@ -3460,15 +3422,22 @@ function lazilyLoadLink(
           }
         }
       } else {
-        // Write the sentinel directly into the data bucket — going through
-        // the setter would route through field.validate and the linksTo
-        // assertions, which only accept BaseDef instances. NotLoadedValue
-        // sentinels are planted via the same direct-bucket-write pattern in
-        // LinksTo.deserialize. The reactive notification pair below is what
-        // setField does after a bucket write.
-        getDataBucket(instance).set(field.name, sentinel);
-        notifyCardTracking(instance);
-        notifySubscribers(instance, field.name, sentinel);
+        // Two writes, intentionally: the legacy null-write through the
+        // setter preserves every bucket-driven path (serialize, queryable,
+        // the field-support `getter`, peekAtField, the autoSave
+        // notification chain) byte-for-byte, while `setLinkSentinel`
+        // plants the structured failure on a per-instance side-channel
+        // that `scanForBrokenLinks` consumes. The split keeps the bucket
+        // state identical to `main`'s shape — the alternative (sentinel
+        // in the bucket) tripped the host-tests cascade because an
+        // autoSave fired off the broken card's notify-subscribers chain
+        // raced the realm's error_doc publish, and `drainAutoSaveQueue`
+        // saw a CardDef instead of an error_doc and re-serialized the
+        // in-memory card over the user's Monaco text. CS-11223 will
+        // revisit whether bucket-storage becomes reachable once the
+        // consumer set has been migrated.
+        (instance as any)[field.name] = null;
+        setLinkSentinel(instance, field.name, sentinel);
       }
       // Transitional: the host's render pipeline still listens for this
       // CustomEvent to flag the failure inside `renderHTML` synchronously,
