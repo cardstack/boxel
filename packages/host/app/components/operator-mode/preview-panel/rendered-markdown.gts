@@ -27,13 +27,15 @@ import {
   cardTypeName,
   extractCardReferenceUrls,
   isCardErrorJSONAPI,
-  resolveCardReference,
+  rri,
   trimJsonExtension,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -59,9 +61,15 @@ type RenderSlot =
   | (ResolvedSlot & { card: CardDef })
   | (UnresolvedSlot & { card?: undefined });
 
-function resolveUrl(raw: string, baseUrl: string | undefined): string {
+function resolveUrl(
+  raw: string,
+  baseUrl: string | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl));
+    return trimJsonExtension(
+      virtualNetwork.resolveRRI(raw, baseUrl ? rri(baseUrl) : undefined),
+    );
   } catch {
     return trimJsonExtension(raw);
   }
@@ -99,6 +107,7 @@ const DEFAULT_CARD_CONTEXT: Partial<CardContext> = {
 };
 
 export default class RenderedMarkdown extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
   @consume(CardContextName) declare private dynamicCardContext: CardContext;
 
@@ -188,7 +197,11 @@ export default class RenderedMarkdown extends Component<Signature> {
         )) {
           let rawUrl = el.dataset.boxelBfmInlineRef;
           if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
+          let resolved = resolveUrl(
+            rawUrl,
+            baseUrl,
+            this.network.virtualNetwork,
+          );
           let card = cardsByUrl.get(resolved);
           if (card) {
             resolvedEls.add(el);
@@ -203,7 +216,11 @@ export default class RenderedMarkdown extends Component<Signature> {
         )) {
           let rawUrl = el.dataset.boxelBfmBlockRef;
           if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
+          let resolved = resolveUrl(
+            rawUrl,
+            baseUrl,
+            this.network.virtualNetwork,
+          );
           let card = cardsByUrl.get(resolved);
           if (card) {
             let bfmFormat = el.dataset.boxelBfmFormat;

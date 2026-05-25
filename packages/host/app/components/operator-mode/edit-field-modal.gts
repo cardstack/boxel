@@ -26,7 +26,6 @@ import {
   loadCardDef,
   identifyCard,
   specRef,
-  resolveCardReference,
   rri,
   type CodeRef,
   type RealmResourceIdentifier,
@@ -44,6 +43,7 @@ import {
   type FieldOfType,
 } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -75,6 +75,7 @@ export default class EditFieldModal extends Component<Signature> {
 
   @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private store: StoreService;
@@ -196,8 +197,9 @@ export default class EditFieldModal extends Component<Signature> {
 
         // This transforms relative module paths, such as "../person", to absolute ones -
         // we need that absolute path to load realm info
-        this.fieldModuleURL = rri(
-          resolveCardReference(spec.ref.module, spec.id),
+        this.fieldModuleURL = this.network.virtualNetwork.resolveRRI(
+          spec.ref.module,
+          spec.id,
         );
       }
     }

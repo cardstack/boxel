@@ -44,7 +44,6 @@ import {
   localId,
   meta,
   hasExtension,
-  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
@@ -73,6 +72,7 @@ import {
 import type CommandService from '@cardstack/host/services/command-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import { DEFAULT_MODULE_INSPECTOR_VIEW } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { ModuleInspectorView } from '@cardstack/host/services/operator-mode-state-service';
@@ -133,6 +133,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service declare private commandService: CommandService;
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private realm: RealmService;
@@ -324,8 +325,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     let moduleRef = adoptsFrom.module.endsWith('.gts')
       ? adoptsFrom.module
       : `${adoptsFrom.module}.gts`;
-    let moduleURLWithExtension = new URL(
-      resolveCardReference(moduleRef, this.args.currentOpenFile.url),
+    let moduleURLWithExtension = this.network.virtualNetwork.toURL(
+      this.network.virtualNetwork.resolveRRI(
+        moduleRef,
+        rri(this.args.currentOpenFile.url),
+      ),
     );
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: moduleURLWithExtension.href,
