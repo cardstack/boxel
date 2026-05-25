@@ -482,15 +482,19 @@ export interface BrokenLinkFinding {
 // store.loaded()`), so any remaining sentinel reliably reflects a
 // completed fetch outcome.
 //
-// This is intentionally side-effect-free: we read from the data bucket
-// directly rather than going through `peekAtField`/`getter`. That means
-// (a) untouched linksTo fields stay untouched (the getter would write
-// the empty-value back into the bucket and pollute `getUsedFields`),
-// and (b) the scan never invokes user-defined `computeVia` and so
-// cannot mutate tracked state or destabilize live field components if
-// the scan is ever called from a reactive context. Computed
-// relationship fields are therefore excluded — a follow-up can revisit
-// once we have a side-effect-safe way to inspect a computed value.
+// Computed relationship fields are skipped: a computeVia returns the
+// field's value, and for linksTo / linksToMany that value has to be a
+// live CardDef instance (or null). The Error / NotFound sentinels are
+// only ever planted into the data bucket by `lazilyLoadLink`'s failure
+// path on a declared field, never produced by a computeVia — there is
+// no way to materialize a CardDef for a card that does not exist. The
+// declared field a computed derives from is itself in scope, so any
+// real broken-link state surfaces there.
+//
+// We also read from the data bucket directly rather than going through
+// `peekAtField` / the getter: routing through the getter would write
+// the empty-value back into the bucket for untouched linksTo fields
+// and pollute `getUsedFields` for any subsequent caller.
 export function scanForBrokenLinks(instance: BaseDef): BrokenLinkFinding[] {
   let findings: BrokenLinkFinding[] = [];
   let bucket = getDataBucket(instance);

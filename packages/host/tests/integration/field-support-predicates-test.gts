@@ -368,13 +368,12 @@ module(
     });
 
     test('scanForBrokenLinks skips computed linksTo fields', function (assert) {
-      // The scan is deliberately side-effect-free and does not invoke
-      // any field's computeVia (the getter writes to the bucket and
-      // entangles tracking; both are unsafe if the scan ever runs in a
-      // reactive context near a live field component). Computed
-      // relationships are therefore out of scope; any LinkError /
-      // LinkNotFound surfacing through a computed must be detected by
-      // the declared field it derives from.
+      // A computeVia returns the field's value, and for linksTo the
+      // value has to be a live CardDef instance — Error/NotFound
+      // sentinels are only ever planted by lazilyLoadLink's failure
+      // path on a declared field, never produced by a computed. The
+      // synthetic-sentinel return below is contrived to confirm the
+      // scan does not attempt to inspect computeds at all.
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
