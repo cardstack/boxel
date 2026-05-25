@@ -165,7 +165,6 @@ import {
   isCardOrField,
   isLinkError,
   isLinkNotFound,
-  isNonPresentLink,
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
@@ -1226,8 +1225,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (instance == null) {
       return null;
     }
-    if (isNonPresentLink(instance)) {
-      return { id: instance.reference };
+    if (isLinkError(instance) || isLinkNotFound(instance)) {
+      // Terminal sentinels surface in searchDoc the same way the legacy
+      // null bucket value did — as an absent field. `CS-11223` will revisit
+      // serialization round-trip; for now, broken links are searchDoc-invisible.
+      return null;
     }
     return this.card[queryableValue](instance, stack);
   }
@@ -1245,14 +1247,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNonPresentLink(value)) {
-      // Terminal Error/NotFound sentinels serialize the same way a
-      // NotLoadedValue does — the persisted relationship keeps the
-      // reference so a reload deserializes back to NotLoaded and the lazy
-      // loader gets a fresh chance to resolve it (or re-plant the
-      // sentinel if the underlying failure is still present). The
-      // structured errorDoc is in-memory diagnostic state, not part of
-      // the saved card document.
+    if (isNotLoadedValue(value)) {
       return {
         relationships: {
           [this.name]: {
@@ -1260,6 +1255,22 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
               self: makeRelativeURL(value.reference, opts),
             },
             data: { type: relationshipType, id: value.reference },
+          },
+        },
+      };
+    }
+    if (isLinkError(value) || isLinkNotFound(value)) {
+      // Terminal Error/NotFound sentinels serialize to a null link —
+      // matching the legacy bucket-was-null behaviour. The structured
+      // errorDoc is in-memory diagnostic state, not part of the saved
+      // card document. Preserving the broken reference in the persisted
+      // relationship is what `CS-11223` (serialization round-trip) is
+      // about; until then, save drops the reference and reload reads as
+      // an empty link.
+      return {
+        relationships: {
+          [this.name]: {
+            links: { self: null },
           },
         },
       };
@@ -1711,8 +1722,10 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
-        if (isNonPresentLink(instance)) {
-          return { id: instance.reference };
+        if (isLinkError(instance) || isLinkNotFound(instance)) {
+          // Terminal sentinels are searchDoc-invisible (matches legacy null
+          // bucket behaviour). Round-trip handling is CS-11223.
+          return null;
         }
         return this.card[queryableValue](instance, stack);
       })
@@ -1770,16 +1783,22 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNonPresentLink(value)) {
-        // Terminal Error/NotFound sentinels (planted by lazilyLoadLink on
-        // fetch failure) serialize the same way NotLoadedValue does: keep
-        // the reference so reload deserializes back to NotLoaded and the
-        // lazy loader retries. The structured errorDoc is in-memory only.
+      if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: makeRelativeURL(value.reference, opts),
           },
           data: { type: relationshipType, id: value.reference },
+        };
+        return;
+      }
+      if (isLinkError(value) || isLinkNotFound(value)) {
+        // Terminal sentinels in a linksToMany array serialize as a null
+        // slot — same behaviour the legacy `null` bucket write produced.
+        // Round-trip preservation of broken-link references is CS-11223.
+        relationships[`${this.name}\.${i}`] = {
+          links: { self: null },
+          data: null,
         };
         return;
       }
@@ -2309,7 +2328,7 @@ export class BaseDef {
                 }) ?? null,
             ];
           }
-          if (isNonPresentLink(rawValue)) {
+          if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveCardReference(
@@ -2318,6 +2337,12 @@ export class BaseDef {
               );
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
+          }
+          if (isLinkError(rawValue) || isLinkNotFound(rawValue)) {
+            // Terminal sentinels emit `null` in searchDoc — matching the
+            // legacy null-bucket behaviour. `CS-11223` will revisit when
+            // broken-link references should round-trip.
+            return [fieldName, null];
           }
           // Reuse the value we already peeked above instead of re-reading
           // through the descriptor — for computed fields the descriptor
