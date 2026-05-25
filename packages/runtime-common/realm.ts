@@ -1,6 +1,5 @@
 import { Deferred } from './deferred';
 import {
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -775,6 +774,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so a /_config PATCH (or any other path that nulls
@@ -798,6 +798,10 @@ export class Realm {
 
   get realmServerURL(): string {
     return this.#realmServerURL;
+  }
+
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
   }
 
   constructor(
@@ -841,6 +845,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
+    this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
@@ -4484,10 +4489,7 @@ export class Realm {
           });
           visitModuleDeps(resource, (moduleURL, setModuleURL) => {
             setModuleURL(
-              resolveCardReference(
-                moduleURL,
-                instanceURL,
-              ) as RealmResourceIdentifier,
+              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
             );
           });
         }
@@ -4630,7 +4632,7 @@ export class Realm {
     // say "not foreign" and the guard would silently fail to fire.
     let resolved: string;
     try {
-      resolved = resolveCardReference(dep, undefined);
+      resolved = this.#virtualNetwork.toURL(dep).href;
     } catch {
       // Bare specifier with no matching prefix mapping. `loadLinks`
       // can't fetch it, so it's not a request-time mutation source —
