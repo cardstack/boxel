@@ -9,7 +9,10 @@ const fs = require('fs');
 
 function getEnvSlug() {
   // Prefer ENV_SLUG from mise's env-vars.sh (canonical: scripts/env-slug.sh);
-  // fall back to computing it for non-mise contexts.
+  // fall back to computing it for non-mise contexts. Cap at 63 chars
+  // (DNS label limit) so the slug works as a hostname label in
+  // `<service>.<slug>.localhost` — Chrome silently routes hostnames
+  // with over-63-char labels to the search engine.
   if (process.env.ENV_SLUG) return process.env.ENV_SLUG;
   const raw = process.env.BOXEL_ENVIRONMENT || '';
   return raw
@@ -17,6 +20,7 @@ function getEnvSlug() {
     .replace(/\//g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-')
+    .slice(0, 63)
     .replace(/^-|-$/g, '');
 }
 
