@@ -498,6 +498,18 @@ export default class CardPrerender extends Component {
               0,
               initialRenderOptions,
             );
+            // Same sentinel scan + throw the cardRender pass runs after its
+            // isolated render. Without this, a lazy-load failure on a
+            // linksTo field inside a FileDef would plant a sentinel without
+            // ever being promoted to `response.fileRender.error` — the
+            // legacy `boxel-render-error` listener used to catch this case
+            // from any pass via a window-level event, and the catch block
+            // below transforms the thrown payload into a `file-error` the
+            // same way cardRender transforms it into `instance-error`.
+            let brokenLinkPayload = await this.#brokenLinkPayload();
+            if (brokenLinkPayload) {
+              throw new Error(brokenLinkPayload);
+            }
             headHTML = await this.renderHTML.perform(
               url,
               'head',
