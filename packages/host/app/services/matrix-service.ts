@@ -58,6 +58,7 @@ import {
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
+  DEFAULT_FALLBACK_MODELS,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_STOP_GENERATING_EVENT_TYPE,
   SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -1755,11 +1756,19 @@ export default class MatrixService extends Service {
       }
     }
 
+    // Fill any still-undefined capability fields from the realm-independent
+    // fallback so we never ship `toolsSupported: undefined` for one of the
+    // curated models. `??` preserves an explicit `false` from the caller.
+    // `reasoningEffort` is a user-choice runtime param — not filled.
+    let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
+
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
-      toolsSupported: resolvedConfig?.toolsSupported,
+      toolsSupported:
+        resolvedConfig?.toolsSupported ?? fallback?.toolsSupported,
       reasoningEffort: resolvedConfig?.reasoningEffort,
-      inputModalities: resolvedConfig?.inputModalities,
+      inputModalities:
+        resolvedConfig?.inputModalities ?? fallback?.inputModalities,
     });
   }
 
