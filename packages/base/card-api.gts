@@ -1690,6 +1690,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
+        if (isNotLoadedValue(instance)) {
+          return { id: instance.reference };
+        }
         if (isLinkError(instance) || isLinkNotFound(instance)) {
           // Terminal sentinels are searchDoc-invisible (matches legacy null
           // bucket behaviour). Round-trip handling is CS-11223.
