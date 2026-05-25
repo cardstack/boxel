@@ -12,8 +12,14 @@ import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import CalendarIcon from '@cardstack/boxel-icons/calendar';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
+import { eq, formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { formatDateRangeForMarkdown } from './markdown-helpers';
+import { BusinessDays } from './components/business-days';
+
+interface DateRangeFieldConfiguration {
+  presentation?: 'standard' | 'businessDays';
+}
 
 const Format = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
@@ -131,57 +137,116 @@ export default class DateRangeField extends FieldDef {
 
   static edit = Edit;
   static atom = class Atom extends Component<typeof this> {
-    get hasNoDateInfo() {
-      return !this.args.model.start && !this.args.model.end;
-    }
+    get displayValue() {
+      const start = this.args.model?.start;
+      const end = this.args.model?.end;
 
-    get formatted() {
-      return getFormattedDate(this.args.model as DateRange);
-    }
+      if (!start && !end) return 'No date range set';
 
-    get dateIcon() {
-      return this.args.model.constructor?.icon;
+      try {
+        const formatDate = (dateValue: string | Date) => {
+          const date =
+            typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+          return formatDateTime(date, {
+            preset: 'short',
+            fallback: String(dateValue),
+          });
+        };
+
+        if (!start) return `Until ${formatDate(end!)}`;
+        if (!end) return `From ${formatDate(start)}`;
+
+        return `${formatDate(start)} - ${formatDate(end)}`;
+      } catch {
+        return `${start} - ${end}`;
+      }
     }
 
     <template>
-      <time class='date-info'>
-        {{#if this.dateIcon}}
-          <this.dateIcon class='icon' />
-        {{/if}}
-        <div class={{cn 'text' no-date-info=this.hasNoDateInfo}}>
-          {{this.formatted}}
-        </div>
-      </time>
+      <span class='date-range-atom' data-test-date-range-atom>
+        <CalendarStatsIcon class='range-icon' />
+        <span class='range-value'>{{this.displayValue}}</span>
+      </span>
+
       <style scoped>
-        .date-info {
-          --date-icon-size: 14px;
+        .date-range-atom {
           display: inline-flex;
           align-items: center;
-          font-size: calc(var(--date-icon-size) * 0.9);
-          gap: var(--boxel-sp-xxs);
-          white-space: nowrap;
-          -webkit-line-clamp: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
+          gap: 0.375rem;
+          padding: 0.25rem 0.5rem;
+          background: var(--primary, #3b82f6);
+          color: var(--primary-foreground, #ffffff);
+          border-radius: var(--radius, 0.375rem);
+          font-size: 0.8125rem;
           font-weight: 500;
         }
-        .icon {
-          width: var(--date-icon-size);
-          height: var(--date-icon-size);
+
+        .range-icon {
+          width: 0.875rem;
+          height: 0.875rem;
+          flex-shrink: 0;
         }
-        .text {
-          color: var(--boxel-600);
-        }
-        .text.no-date-info {
-          color: var(--boxel-600);
+
+        .range-value {
+          white-space: nowrap;
         }
       </style>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
+    get config(): DateRangeFieldConfiguration | undefined {
+      return this.args.configuration as DateRangeFieldConfiguration | undefined;
+    }
+
+    get presentationMode() {
+      return this.config?.presentation ?? 'standard';
+    }
+
+    get displayValue() {
+      const start = this.args.model?.start;
+      const end = this.args.model?.end;
+
+      if (!start && !end) return 'No date range set';
+
+      try {
+        const format = (value: Date) =>
+          formatDateTime(value, {
+            preset: 'long',
+            fallback: 'Invalid date',
+          });
+
+        if (!start) return `Until ${format(end!)}`;
+        if (!end) return `From ${format(start)}`;
+
+        return `${format(start)} → ${format(end)}`;
+      } catch {
+        return 'Invalid date range';
+      }
+    }
+
     <template>
-      <@fields.start /> - <@fields.end />
+      {{#if (eq this.presentationMode 'businessDays')}}
+        <BusinessDays @model={{@model}} @config={{this.config}} />
+      {{else}}
+        <div class='date-range-embedded' data-test-date-range-embedded>
+          <span class='range-value'>{{this.displayValue}}</span>
+        </div>
+      {{/if}}
+
+      <style scoped>
+        .date-range-embedded {
+          display: flex;
+          align-items: center;
+          padding: 0.5rem;
+          font-size: 0.875rem;
+          color: var(--foreground, #1a1a1a);
+        }
+
+        .range-value {
+          font-weight: 500;
+        }
+      </style>
     </template>
   };
 

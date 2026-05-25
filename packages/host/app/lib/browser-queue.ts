@@ -92,7 +92,14 @@ export class BrowserQueue implements QueuePublisher, QueueRunner {
           priority: job.priority,
           args: job.args,
         }));
-      let decision = coalesce({ incoming, candidates });
+      // BrowserQueue runs jobs synchronously after a debounced drain, so
+      // there are no "in-flight" jobs from the publisher's perspective —
+      // every queued workItem is still pending until drainJobs picks it up.
+      let decision = coalesce({
+        incoming,
+        candidates,
+        inFlightCandidates: [],
+      });
 
       if (decision.type === 'insert') {
         let jobSpec = decision.job ?? incoming;

@@ -9,6 +9,7 @@ import {
 
 import { getService } from '@universal-ember/test-support';
 import { getPageTitle } from 'ember-page-title/test-support';
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
@@ -130,6 +131,111 @@ module('Acceptance | host mode tests', function (hooks) {
         </template>
       };
     }
+    class Whitepaper extends CardDef {
+      static displayName = 'Boxel Whitepaper';
+      static prefersWideFormat = true;
+
+      @field cardTitle = contains(StringField, {
+        computeVia: function () {
+          return 'Boxel Whitepaper';
+        },
+      });
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <article class='whitepaper' data-test-whitepaper>
+            <header class='wp-header'>
+              <h1>Boxel Whitepaper</h1>
+              <p class='wp-subtitle'>A System for Composable Software in the Age
+                of Abundant Code</p>
+              <p class='wp-byline'>By Chris Tse, Cardstack Foundation — January
+                2026</p>
+            </header>
+            <section>
+              <h2>Executive Summary</h2>
+              <p>We are witnessing the most significant shift in software
+                development since the invention of high-level programming
+                languages. Large language models (LLMs) can now generate
+                functional code in seconds. Yet the infrastructure surrounding
+                that code—the databases, the deployment pipelines, the security
+                models, the economic relationships—remains trapped in paradigms
+                from the 1990s.</p>
+              <p>The result is a peculiar kind of friction. You can ask Claude
+                to write you a React component in thirty seconds, but deploying
+                that component to production still requires navigating a maze of
+                Git repositories, CI/CD pipelines, environment variables, SSL
+                certificates, and cloud provider dashboards. The intelligence
+                has arrived, but the architecture hasn't caught up.</p>
+              <p>Boxel is what comes next: a complete environment where
+                AI-generated software can be created, run, evolved, and
+                monetized without ever leaving a coherent system. Not another
+                tool to add to your stack—a replacement for the stack itself.</p>
+            </section>
+            <section>
+              <h2>1. The Fragmentation Problem</h2>
+              <p>Open your browser tabs right now. If you're building anything
+                with AI, you probably have ChatGPT or Claude open for ideation
+                and code generation. Cursor or Windsurf for editing that code in
+                context. V0 or Lovable for generating UI components. GitHub for
+                version control. Vercel or Netlify for deployment. Notion or
+                Confluence for documentation. Figma for design. Slack or Discord
+                for communication.</p>
+              <p>Each of these tools is excellent at what it does. Each
+                represents millions of dollars in engineering investment and
+                years of refinement. And each is a silo.</p>
+              <p>The workflow: describe an idea to ChatGPT, copy the code into
+                Cursor, commit to GitHub, deploy to Vercel, document in Notion,
+                share in Slack. At each boundary, you lose context. The AI that
+                helped you write the code doesn't know how you deployed it. The
+                documentation system doesn't understand the code it describes.</p>
+              <p>The irony is acute. We have AI systems capable of understanding
+                complex software in its entirety—but we force them to operate
+                through disconnected interfaces, each with its own
+                authentication, its own data model, its own limitations. We have
+                given AI the ability to think holistically while constraining it
+                to act in fragments.</p>
+            </section>
+          </article>
+
+          <style scoped>
+            .whitepaper {
+              max-width: 50rem;
+              margin: 0 auto;
+              padding: 2rem;
+              font-family: Georgia, serif;
+              line-height: 1.7;
+            }
+            .wp-header {
+              border-bottom: 2px solid var(--boxel-purple, #6638d0);
+              margin-bottom: 2rem;
+              padding-bottom: 1rem;
+            }
+            h1 {
+              font-size: 2rem;
+              margin: 0 0 0.5rem;
+            }
+            h2 {
+              font-size: 1.3rem;
+              margin: 2rem 0 0.75rem;
+            }
+            p {
+              margin: 0 0 1rem;
+            }
+            .wp-subtitle {
+              font-style: italic;
+              font-size: 1.1rem;
+              margin: 0 0 0.25rem;
+            }
+            .wp-byline {
+              color: #666;
+              font-size: 0.9rem;
+              margin: 0;
+            }
+          </style>
+        </template>
+      };
+    }
+
     await setupAcceptanceTestRealm({
       realmURL: testHostModeRealmURL,
       mockMatrixUtils,
@@ -139,7 +245,20 @@ module('Acceptance | host mode tests', function (hooks) {
       contents: {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'pet.gts': { Pet },
+        'whitepaper.gts': { Whitepaper },
         'view-card-demo.gts': viewCardDemoCardSource,
+        'Whitepaper/index.json': {
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}whitepaper`,
+                name: 'Whitepaper',
+              },
+            },
+          },
+        },
         'Pet/mango.json': {
           data: {
             attributes: {
@@ -241,7 +360,6 @@ module('Acceptance | host mode tests', function (hooks) {
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          publishable: true,
         },
       },
     });
@@ -523,6 +641,53 @@ module('Acceptance | host mode tests', function (hooks) {
 
     // Stack shouldn't exist when there are no stacked cards
     assert.dom('[data-test-host-mode-stack]').doesNotExist();
+  });
+
+  test('scroll position is restored on card container after hydration', async function (assert) {
+    // Inject boundary markers and a fake prerendered card container between
+    // them, simulating the prerendered HTML served before JS loads. The
+    // container has a fixed height so its content overflows and scrollTop can
+    // be set non-zero.
+    let start = document.createElement('div');
+    start.id = 'boxel-isolated-start';
+    let end = document.createElement('div');
+    end.id = 'boxel-isolated-end';
+    let fakeContainer = document.createElement('div');
+    fakeContainer.style.cssText = 'height: 200px; overflow-y: auto;';
+    fakeContainer.innerHTML = '<div style="height: 2000px;"></div>';
+    document.body.appendChild(start);
+    document.body.appendChild(fakeContainer);
+    document.body.appendChild(end);
+    // Must set scrollTop after the element is in the DOM
+    fakeContainer.scrollTop = 150;
+
+    // Constrain the Ember-rendered card container so it can also hold a scroll
+    // offset (overflow-y: auto is already set; we just need a bounded height)
+    let testStyle = document.createElement('style');
+    testStyle.setAttribute('data-test-scroll-override', '');
+    testStyle.textContent =
+      '[data-test-host-mode-card-loaded] { height: 400px !important; max-height: 400px !important; }';
+    document.head.appendChild(testStyle);
+
+    try {
+      await visit('/test/Whitepaper/index.json');
+      await waitFor('[data-test-whitepaper]');
+
+      assert.dom('[data-host-mode-card-scroll-container]').exists();
+      let cardContainer = document.querySelector(
+        '[data-host-mode-card-scroll-container]',
+      ) as HTMLElement;
+      assert.strictEqual(
+        cardContainer.scrollTop,
+        150,
+        'scroll position from prerendered container is restored on the hydrated card scroll host',
+      );
+    } finally {
+      document.querySelector('[data-test-scroll-override]')?.remove();
+      start.remove();
+      end.remove();
+      fakeContainer.remove();
+    }
   });
 
   module('with a custom subdomain', function (hooks) {

@@ -44,7 +44,7 @@ export async function loadRealmTests(application) {
   }
 
   const realmURL =
-    urlParams.get('realmURL') ?? 'http://localhost:4201/catalog/';
+    urlParams.get('realmURL') ?? 'http://localhost:4201/software-factory/';
 
   const [
     helpers,
@@ -96,16 +96,12 @@ export async function loadRealmTests(application) {
 
   const testModules = await discoverTestModules(realmURL);
 
+  // Under ESM, `QUnit` is a frozen namespace — we can't monkey-patch
+  // `QUnit.module`. Instead, snapshot `QUnit.config.modules` before/after each
+  // runTests() call and diff to identify newly registered module names.
   const capturedModules = new Set();
-  const originalModule = QUnit.module;
-  qunitAny.module = function (...args) {
-    const [name] = args;
-    if (typeof name === 'string') {
-      capturedModules.add(name);
-    }
-    // @ts-expect-error QUnit.module has multiple call signatures
-    return originalModule.apply(this, args);
-  };
+  const moduleList = () =>
+    Array.isArray(qunitAny.config?.modules) ? qunitAny.config.modules : [];
 
   try {
     for (const moduleURL of testModules) {
@@ -123,14 +119,20 @@ export async function loadRealmTests(application) {
             assert.ok(false, `Failed to import ${moduleURL}: ${message}`);
           });
         });
+        capturedModules.add(failureModuleName);
         continue;
       }
       if (typeof mod.runTests === 'function') {
+        const before = new Set(moduleList().map((m) => m.name));
         mod.runTests();
+        for (const m of moduleList()) {
+          if (!before.has(m.name)) {
+            capturedModules.add(m.name);
+          }
+        }
       }
     }
   } finally {
-    qunitAny.module = originalModule;
     await loaderInstance.destroy();
   }
 

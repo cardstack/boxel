@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import { cardIdToURL } from '@cardstack/runtime-common';
-
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -22,14 +20,14 @@ export default class FetchCardJsonCommand extends HostBaseCommand<
     return FetchCardJsonInput;
   }
 
-  requireInputFields = ['url'];
+  requireInputFields = ['cardIdentifier'];
 
   protected async run(
     input: BaseCommandModule.FetchCardJsonInput,
   ): Promise<BaseCommandModule.FetchCardJsonResult> {
     let commandModule = await this.loadCommandModule();
     const { FetchCardJsonResult } = commandModule;
-    const doc = await this.cardService.fetchJSON(cardIdToURL(input.url));
+    const doc = await this.cardService.fetchJSON(input.cardIdentifier);
     return new FetchCardJsonResult({ document: doc });
   }
 }

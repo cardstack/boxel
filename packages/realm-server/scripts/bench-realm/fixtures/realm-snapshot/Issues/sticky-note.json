@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "issueId": "SN-1",
+      "summary": "Implement Sticky Note card",
+      "issueType": "feature",
+      "status": "done",
+      "priority": "high",
+      "acceptanceCriteria": "- [ ] `sticky-note.gts` defines a `StickyNote` card extending `CardDef` with title, body, color, x, y, rotation, author, createdAt fields\n- [ ] Color defaults to `yellow`; x and y default to `0`\n- [ ] `isolated`, `embedded`, and `fitted` templates are implemented and render the body text\n- [ ] Color is reflected in template output (background tint matching the chosen color)\n- [ ] `sticky-note.test.gts` wraps all tests inside a `module('sticky-note', …)` block\n- [ ] Tests cover default values, round-trip serialization, and template rendering for all three templates\n- [ ] `Spec/sticky-note.json` exists, adopts the base Spec card, and links at least 3 example instances\n- [ ] At least 3 example instances exist under `StickyNote/` with different colors\n- [ ] All files lint clean and tests pass",
+      "order": 1,
+      "createdAt": "2026-05-06T00:00:00Z",
+      "updatedAt": "2026-05-06T20:16:24.761Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "Issue"
+      }
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Projects/sticky-note"
+        }
+      },
+      "relatedKnowledge.0": {
+        "links": {
+          "self": "../Knowledge%20Articles/sticky-note-brief-context"
+        }
+      },
+      "relatedKnowledge.1": {
+        "links": {
+          "self": "../Knowledge%20Articles/sticky-note-agent-onboarding"
+        }
+      },
+      "relatedKnowledge.2": {
+        "links": {
+          "self": "../Knowledge%20Articles/sticky-note-visual-design"
+        }
+      }
+    }
+  }
+}

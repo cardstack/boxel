@@ -1,0 +1,52 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Issue",
+        "module": "/software-factory/issue-tracker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "order": null,
+      "status": "in_progress",
+      "issueId": "HRB-4",
+      "summary": "Write copy for new About page",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "comments": [],
+      "priority": "low",
+      "createdAt": null,
+      "issueType": "task",
+      "updatedAt": null,
+      "description": null,
+      "acceptanceCriteria": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/bc838c6e-6a12-4331-94ff-c7c3e7e96d0b"
+        }
+      },
+      "blockedBy": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

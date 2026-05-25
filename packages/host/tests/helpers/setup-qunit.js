@@ -8,6 +8,23 @@ import { setup } from 'qunit-dom';
 import { useTestWaiters } from '@cardstack/runtime-common';
 
 export function setupQUnit() {
+  // ResizeObserver fires this when a callback causes a layout change that
+  // would trigger another notification in the same frame. The browser
+  // defers the second notification safely; the error itself is benign but
+  // QUnit picks it up via window.onerror and reports it as a global failure.
+  // We wrap window.onerror (rather than addEventListener) because window.onerror
+  // fires first; returning true suppresses the error before QUnit sees it.
+  const _originalOnError = window.onerror;
+  window.onerror = (message, ...args) => {
+    if (
+      message ===
+      'ResizeObserver loop completed with undelivered notifications.'
+    ) {
+      return true;
+    }
+    return _originalOnError ? _originalOnError(message, ...args) : false;
+  };
+
   QUnit.dump.maxDepth = 20;
   useTestWaiters(TestWaiters);
   setup(QUnit.assert);

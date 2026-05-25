@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -24,7 +26,7 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
     return CopyFileToRealmInput;
   }
 
-  requireInputFields = ['sourceFileUrl', 'targetRealm'];
+  requireInputFields = ['sourceFileIdentifier', 'targetRealm'];
 
   protected async run(
     input: BaseCommandModule.CopyFileToRealmInput,
@@ -39,7 +41,7 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let sourceUrl = new URL(input.sourceFileUrl);
+    let sourceUrl = new URL(input.sourceFileIdentifier);
     let filename = decodeURIComponent(
       sourceUrl.pathname.split('/').pop() ?? sourceUrl.pathname,
     );
@@ -62,17 +64,19 @@ export default class CopyFileToRealmCommand extends HostBaseCommand<
     let result = await this.cardService.copySource(sourceUrl, destinationUrl);
     if (!result.ok) {
       throw new Error(
-        `Failed to copy file from ${input.sourceFileUrl} to ${destinationUrl.href}`,
+        `Failed to copy file from ${input.sourceFileIdentifier} to ${destinationUrl.href}`,
       );
     }
 
     let commandModule = await this.loadCommandModule();
     const { CopyFileToRealmResult } = commandModule;
-    return new CopyFileToRealmResult({ newFileUrl: destinationUrl.href });
+    return new CopyFileToRealmResult({
+      newFileIdentifier: destinationUrl.href,
+    });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     return getSourceResult.status !== 404;
   }
 }

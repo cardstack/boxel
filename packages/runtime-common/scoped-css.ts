@@ -1,5 +1,30 @@
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 import jsEscapeString from 'js-string-escape';
+
+// Pure request helpers. Re-implemented locally so that importing `scoped-css`
+// from the browser does not drag in `glimmer-scoped-css`'s CJS entry (which
+// transitively requires `postcss` → `source-map-js`). The glimmer-scoped-css
+// package emits URLs ending in `.glimmer-scoped.css` with the encoded CSS
+// baked into the filename; decoding is just a base64-ish round-trip.
+const SCOPED_CSS_PATTERN = /^(.*)\.([^.]*)\.glimmer-scoped.css$/;
+
+export function isScopedCSSRequest(request: string): boolean {
+  return request.endsWith('.glimmer-scoped.css');
+}
+
+export function decodeScopedCSSRequest(request: string): {
+  fromFile: string;
+  css: string;
+} {
+  let m = SCOPED_CSS_PATTERN.exec(request);
+  if (!m) {
+    throw new Error(`not a scoped CSS request: ${request}`);
+  }
+  let binString = atob(decodeURIComponent(m[2]));
+  let css = new TextDecoder().decode(
+    Uint8Array.from(binString, (c) => c.codePointAt(0)!),
+  );
+  return { fromFile: m[1], css };
+}
 
 const SCOPED_CSS_ATTR = 'data-boxel-scoped-css';
 const SCOPED_CSS_REGISTRY_KEY = '__boxelScopedCSSRegistry';

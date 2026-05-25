@@ -1,6 +1,7 @@
 export const CurrentRoomIdPersistenceKey = 'aiPanelCurrentRoomId';
 export const NewSessionIdPersistenceKey = 'aiPanelNewSessionId';
 export const AiAssistantPanelWidth = 'ai-assistant-panel-width';
+export const AiAssistantOpen = 'boxel-ai-assistant-open';
 export const CodeModePanelWidths = 'code-mode-panel-widths';
 export const CodeModePanelHeights = 'code-mode-panel-heights';
 export const ModuleInspectorSelections = 'code-mode-panel-selections';

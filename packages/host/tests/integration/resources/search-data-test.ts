@@ -31,8 +31,8 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDocFiles } from '../../helpers';
 
 class StubRealmService extends RealmService {
-  realmOfURL(_url: URL) {
-    return new URL(testRealmURL);
+  realmOf(_input: URL | string) {
+    return testRealmURL;
   }
 }
 
@@ -131,6 +131,11 @@ module(`Integration | search data resource`, function (hooks) {
     ({ realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
+        // PersonField is the type of `Book.author`; expose it in its
+        // own shim so lookupDefinition can resolve nested paths like
+        // `author.firstName` when traversing the new top-level-only
+        // Definition.fields shape.
+        'person-field.gts': { PersonField },
         'book.gts': { Book },
         ...sampleCards,
         'files/hello.txt': 'Hello world',

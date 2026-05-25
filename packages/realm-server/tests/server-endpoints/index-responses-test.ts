@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { join, basename } from 'path';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import { dirSync, type DirResult } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,
@@ -1178,6 +1178,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      // Asserts on `data-test-home-card` rendered HTML, which only
+      // exists in home.gts of the `realistic` fixture.
+      fixture: 'realistic',
       realmURL,
       permissions: {
         '*': ['read'],
@@ -1312,9 +1315,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let firstEtag = firstResponse.headers['etag'];
       assert.ok(firstEtag, 'first response has ETag');
 
-      // Simulate a republish by updating last_published_at
+      // Simulate a republish by updating last_published_at on the
+      // realm_registry row (the source of truth for reads).
+      let newLastPublishedAt = Date.now() + 1000;
       await dbAdapter.execute(
-        `UPDATE published_realms SET last_published_at = '${Date.now() + 1000}' WHERE published_realm_url = '${realmURL.href}'`,
+        `UPDATE realm_registry SET last_published_at = ${newLastPublishedAt}, updated_at = now() WHERE url = '${realmURL.href}' AND kind = 'published'`,
       );
 
       let secondResponse = await request
@@ -1401,7 +1406,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               }),
             );
 
-          if (createResponse.status !== 201) {
+          if (createResponse.status !== 202) {
             throw new Error(
               `/_create-realm failed with status ${createResponse.status}: ` +
                 (createResponse.text ||
@@ -1505,7 +1510,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 publishedRealmURL: publishedRealmURLString,
               }),
             );
-          if (publishResponse.status !== 201) {
+          if (publishResponse.status !== 202) {
             throw new Error(
               `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
             );

@@ -10,7 +10,7 @@ import {
 import BooleanField from './boolean';
 import StringField from './string';
 import enumField from './enum';
-import { getMenuItems } from '@cardstack/runtime-common';
+import { getMenuItems, rri } from '@cardstack/runtime-common';
 import { type GetMenuItemParams } from './menu-items';
 import { type MenuItemOptions, MenuItem } from '@cardstack/boxel-ui/helpers';
 import SetUserSystemCardCommand from '@cardstack/boxel-host/commands/set-user-system-card';
@@ -156,7 +156,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
           .filter((realmMeta: RealmMetaField) => realmMeta.canWrite)
           .map((realmMeta: RealmMetaField) => ({
             name: realmMeta.info.name,
-            url: realmMeta.url,
+            url: realmMeta.realmIdentifier,
             iconURL: realmMeta.info.iconURL ?? undefined,
           }));
       }
@@ -214,7 +214,7 @@ class SystemCardIsolated extends Component<typeof SystemCard> {
 
   navigateToActive = async () => {
     if (this.activeSystemCardId && this.args.viewCard) {
-      await this.args.viewCard(new URL(this.activeSystemCardId), 'isolated');
+      await this.args.viewCard(rri(this.activeSystemCardId), 'isolated');
     }
   };
 

@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Observability has its own lint workflow (observability-diff.yml's
+    # `lint` job) that runs the full lint script — including the prettier
+    # YAML check. Skipping ci-lint on observability-only PRs avoids ~5 min
+    # of unrelated lint work; coverage on observability changes lives in
+    # the dedicated workflow. Deny-list rather than allow-list so adding
+    # a new package automatically gets linted (the inverse failure mode —
+    # silently skipping lint for a new package — is worse).
+    paths-ignore:
+      - "packages/observability/**"
 
 permissions:
   checks: write
@@ -60,6 +69,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/realm-server
+      - name: Lint Realm Test Harness
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/realm-test-harness
       - name: Lint Runtime Common
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -76,10 +89,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/base
-      - name: Lint Catalog Realm
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/catalog-realm
       - name: Lint Experiments Realm
         if: ${{ !cancelled() }}
         run: pnpm run lint
@@ -104,10 +113,6 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bot-runner
-      - name: Lint Workspace Sync CLI
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/workspace-sync-cli
       - name: Lint Boxel CLI
         if: ${{ !cancelled() }}
         run: pnpm run lint

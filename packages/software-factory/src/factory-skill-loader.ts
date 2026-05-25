@@ -9,14 +9,34 @@ import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
 
 const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
-const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
+/**
+ * The SDK orchestrator and the new interactive Claude Code path each get
+ * their own copies of `software-factory-bootstrap` / `software-factory-operations`.
+ * The orchestrator loads from `.agents/skills-orchestrator/`; its skills still describe
+ * the factory-MCP-tool surface (`signal_done`, `get_card_schema`, `run_lint`, …)
+ * that the orchestrator's `ToolUseFactoryAgent` actually provides. Interactive
+ * Claude Code reads from `.agents/skills/` via the `.claude/skills` symlink;
+ * those skills describe the `boxel` CLI surface and the agent-owned status
+ * lifecycle. The two diverged during CS-11149 and need to stay separated
+ * until the orchestrator is retired.
+ */
+const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills-orchestrator');
 
 /**
  * Additional skill search directories, checked in order when a skill is not
- * found in the primary directory. The monorepo root `.agents/skills/` hosts
- * shared skills like `ember-best-practices` that live outside the package.
+ * found in the primary directory.
+ *
+ * - `packages/boxel-cli/plugin/skills/` hosts the boxel-cli Claude Code
+ *   plugin skills (`boxel-api`, `boxel-command`, etc.) — boxel-cli owns the
+ *   entire Boxel API surface, so its skills describe the platform. Same
+ *   directory the plugin distributes to end users.
+ * - The monorepo root `.agents/skills/` hosts shared domain skills
+ *   (`boxel-development`, `boxel-file-structure`, `ember-best-practices`).
  */
-const DEFAULT_FALLBACK_DIRS = [join(MONOREPO_ROOT, '.agents', 'skills')];
+const DEFAULT_FALLBACK_DIRS = [
+  join(MONOREPO_ROOT, 'packages', 'boxel-cli', 'plugin', 'skills'),
+  join(MONOREPO_ROOT, '.agents', 'skills'),
+];
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
@@ -29,14 +49,10 @@ const SKILL_PRIORITY: readonly string[] = [
   'software-factory-bootstrap',
   'boxel-development',
   'boxel-file-structure',
+  'boxel-api',
+  'boxel-command',
   'ember-best-practices',
   'software-factory-operations',
-  'boxel-sync',
-  'boxel-track',
-  'boxel-watch',
-  'boxel-restore',
-  'boxel-repair',
-  'boxel-setup',
 ];
 
 // ---------------------------------------------------------------------------
@@ -64,22 +80,8 @@ const FACTORY_WORKFLOW_KEYWORDS = [
 ];
 
 /**
- * CLI skills that depend on boxel CLI commands. Excluded from the factory
- * agent's tool registry — these skills reference commands the agent
- * cannot invoke. They remain valid for human Claude Code sessions.
- */
-const CLI_ONLY_SKILLS: readonly string[] = [
-  'boxel-sync',
-  'boxel-track',
-  'boxel-watch',
-  'boxel-restore',
-  'boxel-repair',
-  'boxel-setup',
-];
-
-/**
  * Reference files in `boxel-development/references/` and the keywords that
- * trigger their inclusion. When a ticket doesn't match any keyword, only the
+ * trigger their inclusion. When an issue doesn't match any keyword, only the
  * "always load" references from SKILL.md are included.
  */
 const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
@@ -98,7 +100,6 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-command-development.md': ['command', 'action', 'invoke'],
   'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
   'dev-qunit-testing.md': ['test', 'qunit', 'test.gts', 'verify'],
-  'dev-realm-search.md': ['search', 'query', 'filter', 'find', 'realm'],
   'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
 };
 
@@ -107,7 +108,6 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'dev-core-concept.md',
   'dev-technical-rules.md',
   'dev-quick-reference.md',
-  'dev-realm-search.md',
   'dev-qunit-testing.md',
   'dev-spec-usage.md',
 ];
@@ -143,9 +143,9 @@ export class DefaultSkillResolver implements SkillResolver {
    * 1. boxel-development + boxel-file-structure — always loaded
    * 2. ember-best-practices — when issue involves .gts component code
    * 3. software-factory-operations — for factory delivery workflow issues
-   * 4. KnowledgeArticle tags can specify additional skills
-   *
-   * CLI skills are excluded (see `CLI_ONLY_SKILLS`).
+   * 4. boxel-api + boxel-command — always loaded so the agent has the realm
+   *    search query syntax and host-command failure modes inline.
+   * 5. KnowledgeArticle tags can specify additional skills.
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);
@@ -156,7 +156,12 @@ export class DefaultSkillResolver implements SkillResolver {
       return ['software-factory-bootstrap', 'boxel-file-structure'];
     }
 
-    let skills: string[] = ['boxel-development', 'boxel-file-structure'];
+    let skills: string[] = [
+      'boxel-development',
+      'boxel-file-structure',
+      'boxel-api',
+      'boxel-command',
+    ];
 
     if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
       skills.push('ember-best-practices');
@@ -175,9 +180,7 @@ export class DefaultSkillResolver implements SkillResolver {
       }
     }
 
-    // Filter out CLI-only skills that reference boxel CLI commands the
-    // factory agent cannot invoke (tool registry excludes boxel-cli tools).
-    return skills.filter((s) => !CLI_ONLY_SKILLS.includes(s));
+    return skills;
   }
 }
 

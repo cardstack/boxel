@@ -4,6 +4,7 @@ import {
   type LooseSingleCardDocument,
   isCardError,
   type RenderError,
+  rri,
   trimExecutableExtension,
 } from '@cardstack/runtime-common';
 import {
@@ -388,11 +389,11 @@ export function stripSelfDeps(
       return undefined;
     }
     try {
-      return trimExecutableExtension(new URL(value)).href;
+      return trimExecutableExtension(rri(value));
     } catch (_e) {
       if (moduleURL) {
         try {
-          return trimExecutableExtension(new URL(value, moduleURL)).href;
+          return trimExecutableExtension(rri(new URL(value, moduleURL).href));
         } catch (_e2) {
           return value;
         }

@@ -4,11 +4,13 @@ import { logger } from '@cardstack/runtime-common';
 import { fetchRequestFromContext, fullRequestURL } from '../middleware';
 import { format } from 'date-fns';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderServerProxyTimeoutMs,
+  sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
@@ -19,7 +21,25 @@ import type { AffinityType } from '@cardstack/runtime-common';
 // Consumed by warm-vacancy-first routing (CS-10758): `idle: true` means
 // every tab for this affinity has an empty render queue; `tabCount`
 // tracks the affinity's claimed tabs.
-export type AffinityVacancy = { idle: boolean; tabCount: number };
+//
+// `maxPendingPriority` is the priority of the highest-priority queued
+// waiter for this affinity (across both the per-tab queues and the
+// per-affinity file-admission semaphore). Two distinct absent cases,
+// both safe to treat as "no priority bar to clear":
+//   - undefined / omitted: the server reported no queued waiters, OR
+//     the server is older and predates this field.
+//   - `0`: there are queued waiters but the highest is priority 0
+//     (background work) — an incoming priority-10 request will jump
+//     ahead of them.
+// Used by `scoreCandidate` to route an incoming high-priority request
+// away from servers whose existing queued work would otherwise
+// leapfrog it. When absent, routing falls back to the warmth-only
+// vacancy logic.
+export type AffinityVacancy = {
+  idle: boolean;
+  tabCount: number;
+  maxPendingPriority?: number;
+};
 
 type ServerInfo = {
   url: string;
@@ -85,7 +105,7 @@ export function buildPrerenderManagerApp(options?: {
   chooseServerForAffinity: (
     affinityType: AffinityType,
     affinityValue: string,
-    options?: { exclude?: Iterable<string> },
+    options?: { exclude?: Iterable<string>; priority?: number },
   ) => string | null;
 } {
   const app = new Koa<Koa.DefaultState, Koa.Context>();
@@ -441,10 +461,28 @@ export function buildPrerenderManagerApp(options?: {
             Number.isInteger((value as AffinityVacancy).tabCount) &&
             (value as AffinityVacancy).tabCount >= 0
           ) {
-            parsed[key] = {
+            let entry: AffinityVacancy = {
               idle: (value as AffinityVacancy).idle,
               tabCount: (value as AffinityVacancy).tabCount,
             };
+            // Surface the highest queued priority so routing can avoid
+            // servers whose existing waiters would leapfrog the
+            // incoming request. Tolerate older heartbeats by leaving
+            // the field unset when missing or malformed —
+            // scoreCandidate falls back to the warmth-only logic.
+            // Only accept non-negative safe integers: priority buckets
+            // are integer-keyed (`pendingByPriority()`), and floats /
+            // negatives / Numbers larger than 2^53 would all produce
+            // misleading routing comparisons.
+            let mpp = (value as AffinityVacancy).maxPendingPriority;
+            if (
+              typeof mpp === 'number' &&
+              Number.isSafeInteger(mpp) &&
+              mpp >= 0
+            ) {
+              entry.maxPendingPriority = mpp;
+            }
+            parsed[key] = entry;
           }
         }
         affinityVacancy = parsed;
@@ -588,6 +626,13 @@ export function buildPrerenderManagerApp(options?: {
     info: ServerInfo;
     bucket: 0 | 1 | 2;
     assignedPref: 0 | 1;
+    // 0 when the incoming priority strictly beats this server's queued
+    // waiters for the affinity (i.e. our request would jump to the
+    // head of the queue), 1 otherwise. Tie-break ahead of `load` and
+    // `age`, behind `bucket` and `assignedPref`. Always 0 when the
+    // server has no pending entries, so the priority signal never
+    // demotes a strictly-idle server.
+    priorityPref: 0 | 1;
     load: number;
     age: number;
   };
@@ -597,6 +642,7 @@ export function buildPrerenderManagerApp(options?: {
     info: ServerInfo,
     affinityKey: string,
     assignedSet: Set<string>,
+    incomingPriority: number,
   ): Candidate | undefined {
     let vacancy = info.affinityVacancy.get(affinityKey);
     let warm = !!vacancy && vacancy.tabCount >= 1;
@@ -617,11 +663,22 @@ export function buildPrerenderManagerApp(options?: {
     } else {
       return undefined; // cold + busy
     }
+    // Priority preference: prefer servers where our request would not
+    // sit behind higher- or equal-priority queued work. `mpp` undefined
+    // means no waiters → preferred. Strictly greater incoming priority
+    // beats whatever's queued (we'd land at the head). Otherwise we'd
+    // queue behind existing work, so deprioritise. Older servers that
+    // don't report `maxPendingPriority` map to undefined → treated as
+    // preferred, matching the warmth-only routing fallback.
+    let mpp = vacancy?.maxPendingPriority;
+    let priorityPref: 0 | 1 =
+      mpp === undefined || incomingPriority > mpp ? 0 : 1;
     return {
       url,
       info,
       bucket,
       assignedPref: assignedSet.has(url) ? 0 : 1,
+      priorityPref,
       load: info.activeAffinities.size,
       age: info.lastAssignedAt,
     };
@@ -631,13 +688,20 @@ export function buildPrerenderManagerApp(options?: {
     affinityKey: string,
     excludeSet: Set<string>,
     assigned: readonly string[],
+    incomingPriority: number,
   ): string | undefined {
     let assignedSet = new Set(assigned);
     let best: Candidate | undefined;
     for (let [url, info] of registry.servers) {
       if (excludeSet.has(url)) continue;
       if (!isServerUsable(info)) continue;
-      let candidate = scoreCandidate(url, info, affinityKey, assignedSet);
+      let candidate = scoreCandidate(
+        url,
+        info,
+        affinityKey,
+        assignedSet,
+        incomingPriority,
+      );
       if (!candidate) continue;
       if (!best || isBetter(candidate, best)) {
         best = candidate;
@@ -650,6 +714,21 @@ export function buildPrerenderManagerApp(options?: {
     if (a.bucket !== b.bucket) return a.bucket < b.bucket;
     if (a.assignedPref !== b.assignedPref)
       return a.assignedPref < b.assignedPref;
+    // Priority preference is a soft tie-break ranked AFTER the bucket
+    // and stickiness comparisons above. The invariant order (warm+idle
+    // > cold+idle > warm+busy, defined in scoreCandidate) is preserved
+    // because `bucket` is checked first — a `cold+idle` candidate
+    // always beats a `warm+busy` one regardless of `priorityPref`,
+    // even when the warm+busy server has a queue full of low-priority
+    // work the incoming request would jump ahead of. Where priority
+    // preference does kick in: among multiple candidates in the SAME
+    // bucket (e.g. several warm+busy servers all serving the affinity),
+    // it routes a priority-10 request to the one whose queued work is
+    // all lower priority, so the incoming request lands at the head of
+    // that server's queue instead of behind same-priority work
+    // somewhere else.
+    if (a.priorityPref !== b.priorityPref)
+      return a.priorityPref < b.priorityPref;
     if (a.load !== b.load) return a.load < b.load;
     return a.age < b.age;
   }
@@ -658,11 +737,15 @@ export function buildPrerenderManagerApp(options?: {
   function chooseServerForAffinity(
     affinityType: AffinityType,
     affinityValue: string,
-    options?: { exclude?: Iterable<string> },
+    options?: { exclude?: Iterable<string>; priority?: number },
   ): string | null {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     cleanupAssignments();
     let exclude = new Set(options?.exclude ? [...options.exclude] : []);
+    let incomingPriority =
+      typeof options?.priority === 'number' && Number.isFinite(options.priority)
+        ? options.priority
+        : 0;
     let assigned = (registry.affinities.get(affinityKey) || []).filter(
       (url) => !exclude.has(url),
     );
@@ -672,7 +755,12 @@ export function buildPrerenderManagerApp(options?: {
     // even at multiplex=1. The multiplex cap is enforced by trimming the
     // assigned list after the pick, which may quietly shift assignment to
     // the better-scoring server.
-    let candidate = pickByVacancy(affinityKey, exclude, assigned);
+    let candidate = pickByVacancy(
+      affinityKey,
+      exclude,
+      assigned,
+      incomingPriority,
+    );
     if (candidate) {
       let list = [...assigned];
       if (!list.includes(candidate)) list.push(candidate);
@@ -819,6 +907,13 @@ export function buildPrerenderManagerApp(options?: {
       sanitizePrerenderRequestId(ctxt.get(PRERENDER_REQUEST_ID_HEADER)) ??
       randomUUID();
     ctxt.set(PRERENDER_REQUEST_ID_HEADER, requestId);
+    // Optional indexing-job correlator threaded from the worker. When
+    // present, gets stamped onto every proxying/proxied log line as
+    // `[job: J.R]` and forwarded upstream so the prerender-server can
+    // do the same — letting `|= "[job: J.R]"` filters return all four
+    // services' lines for an indexing job.
+    let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+    let jobTag = jobId ? ` [job: ${jobId}]` : '';
     let proxyStart = now();
     // Propagate client-disconnect into the upstream fetch so the
     // prerender server can cancel whatever it was doing and free
@@ -893,6 +988,20 @@ export function buildPrerenderManagerApp(options?: {
         attrs.affinityValue.length > 0
           ? attrs.affinityValue
           : undefined;
+      // Priority comes from the worker job (stamped onto the request
+      // attributes by the wire-format threading). Pass through to
+      // scoreCandidate so a high-priority request prefers servers
+      // without higher-priority pending work. Defaults to 0 (system
+      // priority) when absent for back-compat with older callers /
+      // direct curl. Only accept non-negative safe integers — priority
+      // buckets are integer-keyed, and floats / negatives / values
+      // beyond 2^53 would produce misleading routing comparisons.
+      let incomingPriority =
+        typeof attrs.priority === 'number' &&
+        Number.isSafeInteger(attrs.priority) &&
+        attrs.priority >= 0
+          ? attrs.priority
+          : 0;
       if (!affinityType) {
         ctxt.status = 400;
         ctxt.body = {
@@ -940,6 +1049,7 @@ export function buildPrerenderManagerApp(options?: {
         if (clientAborted) return;
         let target = chooseServerForAffinity(affinityType, affinityValue, {
           exclude: attempts,
+          priority: incomingPriority,
         });
         if (!target) {
           log.debug(
@@ -959,7 +1069,7 @@ export function buildPrerenderManagerApp(options?: {
         let logTarget = attrs.url ?? attrs.command ?? '<unknown>';
         let queueMs = now() - proxyStart;
         log.info(
-          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}`,
+          `proxying ${label} prerender request for ${logTarget} to ${targetURL} requestId=${requestId} affinity=${affinityKey} attempt=${attempts.size} queueMs=${queueMs}${jobTag}`,
         );
         let abortedDueToDrain = false;
         const ac = new AbortController();
@@ -993,6 +1103,7 @@ export function buildPrerenderManagerApp(options?: {
             'Content-Type': 'application/vnd.api+json',
             Accept: ctxt.get('Accept') || 'application/vnd.api+json',
             [PRERENDER_REQUEST_ID_HEADER]: requestId,
+            ...(jobId ? { [PRERENDER_JOB_ID_HEADER]: jobId } : {}),
           },
           body: raw,
           signal: ac.signal,
@@ -1103,7 +1214,7 @@ export function buildPrerenderManagerApp(options?: {
         ctxt.body = buf;
         let proxyMs = now() - proxyStart;
         log.info(
-          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}`,
+          `proxied ${label} requestId=${requestId} affinity=${affinityKey} target=${target} status=${res.status} proxyMs=${proxyMs}${jobTag}`,
         );
         return;
       }
@@ -1128,6 +1239,9 @@ export function buildPrerenderManagerApp(options?: {
   );
   router.post('/run-command', (ctxt) =>
     proxyPrerenderRequest(ctxt, 'run-command', 'command'),
+  );
+  router.post('/prerender-screenshot', (ctxt) =>
+    proxyPrerenderRequest(ctxt, 'prerender-screenshot', 'screenshot'),
   );
 
   // Broadcast a release-batch to every server currently assigned to the
@@ -1243,15 +1357,17 @@ export function buildPrerenderManagerApp(options?: {
     process.env.PRERENDER_MANAGER_VERBOSE_LOGS === 'true';
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+      let jobTag = jobId ? ` [job: ${jobId}]` : '';
       if (verboseManagerLogs) {
         log.info(
-          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
+          `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}${jobTag}`,
         );
       }
       ctxt.res.on('finish', () => {
         if (verboseManagerLogs) {
           log.info(
-            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+            `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
           );
           log.debug(JSON.stringify(ctxt.req.headers));
         }

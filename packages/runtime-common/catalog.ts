@@ -8,11 +8,17 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
-import { cardIdToURL } from './card-reference-resolver';
+import { cardIdToURL, rri } from './card-reference-resolver';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
 
-// @ts-ignore TODO: fix catalog types in runtime-common
-import type { Listing } from '@cardstack/catalog/listing/listing';
+// Local mirror of the boxel-catalog Listing shape — that repo isn't cloned in boxel CI. (CS-11166)
+export interface Listing extends CardDef {
+  name?: string;
+  summary?: string;
+  specs: any[];
+  examples: any[];
+  skills: any[];
+}
 
 const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
 
@@ -121,7 +127,8 @@ export class ListingPathResolver {
 
   local(href: string): LocalPath {
     let url = new URL(href, this.sourceRealmPath.url);
-    if (this.sourceRealmPath.inRealm(url)) {
+    let id = rri(url.href);
+    if (this.sourceRealmPath.inRealm(id)) {
       return this.sourceRealmPath.local(url);
     }
     // Try known foreign realm paths (longest URL first to handle nested realms)
@@ -129,7 +136,7 @@ export class ListingPathResolver {
       (a, b) => b.url.length - a.url.length,
     );
     for (let foreignPath of sorted) {
-      if (foreignPath.inRealm(url)) {
+      if (foreignPath.inRealm(id)) {
         return foreignPath.local(url);
       }
     }
@@ -194,7 +201,7 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(cardIdToURL(codeRef.module))) {
+  if (baseRealmPath.inRealm(codeRef.module)) {
     return codeRef;
   } else {
     let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
@@ -219,7 +226,7 @@ export function planModuleInstall(
     };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (baseRealmPath.inRealm(sourceCodeRef.module)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -241,10 +248,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(cardIdToURL(instance.id).href);
-    if (baseRealmPath.inRealm(cardIdToURL(instance.id))) {
+    if (baseRealmPath.inRealm(rri(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (!baseRealmPath.inRealm(sourceCodeRef.module)) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

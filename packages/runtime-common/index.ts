@@ -14,6 +14,7 @@ import {
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
+  rri,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
 
@@ -43,6 +44,28 @@ export type PatchData = {
   };
 };
 
+// Per-render computed-field counters captured by the host's render.meta
+// route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
+// onto `response.meta.diagnostics` and the indexer can persist them onto
+// `boxel_index.timing_diagnostics`. All fields optional — older host
+// builds that predate the counters omit the block entirely.
+export interface PrerenderMetaDiagnostics {
+  // Number of `computeVia` invocations that ran during the
+  // serializeCard + searchDoc traversal for this card. After the
+  // pass-scoped memo lands this is one call per distinct computed read
+  // per card-instance touched in the pass.
+  computedCalls?: number;
+  // Number of times the pass memo short-circuited a repeated read of
+  // the same computed in the same traversal. `computedCalls +
+  // computedCacheHits` is the total computed-read pressure of the
+  // pass; the ratio tells you how much duplicate work the memo elided.
+  computedCacheHits?: number;
+  // Wall-clock of the host-side serializeCard call.
+  serializeMs?: number;
+  // Wall-clock of the host-side searchDoc call.
+  searchDocMs?: number;
+}
+
 // Shared type produced by the host app when visiting the render.meta route and
 // consumed by the server.
 export interface PrerenderMeta {
@@ -50,6 +73,24 @@ export interface PrerenderMeta {
   searchDoc: Record<string, any> | null;
   displayNames: string[] | null;
   deps: string[] | null;
+  types: string[] | null;
+  // Optional host-side timing block. The Prerenderer lifts this onto
+  // `response.meta.diagnostics` so it persists to
+  // `boxel_index.timing_diagnostics` for SQL-side perf triage.
+  diagnostics?: PrerenderMetaDiagnostics;
+}
+
+// Lightweight payload produced by the host app's render.types route. The
+// runner needs the ancestor type list before the fitted/embedded format
+// renders run, but those renders are what mark linksTo / linksToMany
+// fields as "used"; running a full render.meta (with serializeCard +
+// searchDoc) for that early type lookup paid the cost of one extra
+// per-card traversal. /types returns just the type chain so the
+// runner can drive ancestor renders without that extra walk; a single
+// render.meta then runs after the fitted/embedded passes have populated
+// the per-instance data bucket and the search doc picks up the linked
+// fields the embedded template touched.
+export interface PrerenderTypes {
   types: string[] | null;
 }
 
@@ -81,6 +122,19 @@ export interface RenderTimeoutDiagnostics {
   // through manager and prerender-server. Paste into a log search to
   // join all three stacks for this call.
   requestId?: string;
+  // Worker-job priority of the request that produced this render.
+  // Plumbed from the producer side via `Job.priority`. `0` is the
+  // system-initiated default; `10` is user-initiated. Read in post-
+  // mortems and in `prerender-queue-snapshot` triage to tell whether a
+  // stalled render was background or user-priority work.
+  priority?: number;
+  // Whether this render landed on a tab that was already bound to its
+  // affinity. `true` = warm tab, fast launch + cached BrowserContext
+  // fetches. `false` = a freshly spawned or commandeered tab — pays
+  // the cold-start cost. Triage signal: a slow render with
+  // `tabReused=false` is a cold-start tax (look at `tabStartupMs`);
+  // with `tabReused=true` it's a real render-side stall.
+  tabReused?: boolean;
   // Total wall time spent in `PagePool.getPage` before render work
   // began. The three `waits` sub-fields below each cover a specific
   // await; `launchMs` is measured around the full method and so is
@@ -179,8 +233,24 @@ export interface RenderTimeoutDiagnostics {
       queue?: PrerenderQueue;
       state: 'queued' | 'running';
       ageMs: number;
+      // Worker-job priority of the call that produced this entry.
+      // Surfaced so post-mortems can see what priorities were competing
+      // — e.g. a priority-10 file render stuck behind a priority-0
+      // module call sticks out cleanly. Optional in the schema even
+      // though fresh producers always emit a value: the same shape is
+      // deserialized from `boxel_index.timing_diagnostics`, where rows
+      // persisted before priority threading landed will lack the
+      // field. Consumers should treat absent as `0`.
+      priority?: number;
     }>;
   };
+  // Host-emitted computed-field counters lifted out of
+  // PrerenderMeta.diagnostics so they ride alongside the existing
+  // server-observed timings in `boxel_index.timing_diagnostics`.
+  computedCalls?: number;
+  computedCacheHits?: number;
+  serializeMs?: number;
+  searchDocMs?: number;
 }
 
 export interface RenderError extends ErrorEntry {
@@ -202,6 +272,10 @@ export interface FileExtractResponse {
   searchDoc: Record<string, any> | null;
   resource?: FileMetaResource | null;
   types?: string[] | null;
+  // Display names walked from the resolved FileDef subclass up its prototype
+  // chain (e.g. `['Markdown', 'File']`). Persisted as `boxel_index.display_names`
+  // so CardsGrid's "All Files" sidebar can label each subtype.
+  displayNames?: string[] | null;
   deps: string[];
   error?: RenderError;
   mismatch?: true;
@@ -290,6 +364,26 @@ export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
   indexedAt?: number;
 }
 
+// Flatten a prerender `response.meta` block into the shape persisted to
+// `*.timing_diagnostics` columns. Keeps the rich host-side payload (from
+// `meta.diagnostics`) at the top level and promotes the HTTP `requestId`
+// alongside it for jsonb-path querying. Returns `undefined` when there's
+// nothing to persist. Used by both the indexer (boxel_index rows) and the
+// definition-lookup module-cache writer (modules rows).
+export function flattenPrerenderMeta(
+  meta: PrerenderResponseMeta | undefined,
+): TimingDiagnostics | undefined {
+  if (!meta) return undefined;
+  let diagnostics = meta.diagnostics ?? {};
+  let hasRequestId = meta.requestId != null;
+  let hasAny = Object.keys(diagnostics).length > 0 || hasRequestId;
+  if (!hasAny) return undefined;
+  return {
+    ...diagnostics,
+    ...(hasRequestId ? { requestId: meta.requestId } : {}),
+  };
+}
+
 export type AffinityType = 'realm' | 'user';
 
 // Routing dimension orthogonal to `AffinityType`. Inside one
@@ -314,6 +408,13 @@ export type ModulePrerenderArgs = {
   url: string;
   auth: string;
   renderOptions?: RenderRouteOptions;
+  // Worker-job priority threaded through from the producer side.
+  // Higher priority requests dequeue ahead of lower-priority pending
+  // work on the prerender server (per-tab queues + per-affinity file-
+  // admission semaphore + global render semaphore). No preemption: an
+  // in-flight low-priority render runs to completion. Defaults to 0
+  // when absent (system-priority).
+  priority?: number;
 };
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
@@ -346,6 +447,17 @@ export type PrerenderVisitArgs = {
   // protecting the indexer's warm loader from being wiped by incidental
   // callers.
   batchId?: string;
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
+  priority?: number;
+  // `<jobId>.<reservationId>` of the indexing job that triggered this
+  // visit. Threaded through to manager + prerender-server as
+  // `x-boxel-job-id` so all three services tag their logs with
+  // `[job: J.R]` — same substring already emitted by worker code,
+  // making `{service=~"realm-server|worker|prerender|prerender-manager"}
+  // |= "[job: J.R]"` a single reliable filter for "everything that
+  // happened during this indexing job."
+  jobId?: string;
 };
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
@@ -381,6 +493,9 @@ export type RunCommandArgs = {
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
+  priority?: number;
 };
 
 export type RunCommandResponse = {
@@ -395,6 +510,26 @@ export type RunCommandResponse = {
   meta?: PrerenderResponseMeta;
 };
 
+export type ScreenshotPrerenderArgs = {
+  realm: string;
+  url: string;
+  auth: string;
+  format: 'isolated' | 'embedded';
+  // Worker-job priority threaded through from the producer side. See
+  // ModulePrerenderArgs for the contract.
+  priority?: number;
+};
+
+export type ScreenshotPrerenderResponse = {
+  status: 'ready' | 'error' | 'unusable';
+  base64?: string;
+  width?: number;
+  height?: number;
+  contentType?: 'image/png';
+  error?: string | null;
+  meta?: PrerenderResponseMeta;
+};
+
 export interface Prerenderer {
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
   prerenderVisit(args: PrerenderVisitArgs): Promise<RenderVisitResponse>;
@@ -404,6 +539,15 @@ export interface Prerenderer {
   // before invoking since not every Prerenderer implementation participates
   // in ownership tracking (e.g. test stubs, remote variants on older servers).
   releaseBatch?(args: ReleaseBatchArgs): Promise<void>;
+  // Optional: capture a settled card render to a PNG. Optional so test
+  // stubs and older Prerenderer implementations are not forced to
+  // implement it; the screenshot-card worker task
+  // (`runtime-common/tasks/screenshot-card.ts`) probes for this method at
+  // runtime and surfaces a useful error if the configured prerenderer
+  // doesn't support it.
+  prerenderScreenshot?(
+    args: ScreenshotPrerenderArgs,
+  ): Promise<ScreenshotPrerenderResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -422,6 +566,7 @@ export {
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
   clampSerializedError,
+  coerceErrorMessage,
   ERROR_DOC_MAX_BYTES,
   ERROR_DOC_MAX_ADDITIONAL_ERRORS,
 } from './error';
@@ -516,6 +661,7 @@ export * from './html-utils';
 export * from './utils';
 export * from './authorization-middleware';
 export * from './resource-types';
+export * from './prerender-headers';
 export * from './query';
 export * from './search-utils';
 export * from './prerendered-html-format';
@@ -526,7 +672,7 @@ export * from './dependency-tracker';
 export * from './github-submissions';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
-export { makeLogDefinitions, logger } from './log';
+export { makeLogDefinitions, logger, reapplyLogLevels } from './log';
 export { Loader };
 export {
   fetchWithTransientRetry,
@@ -551,6 +697,19 @@ export * from './pr-manifest';
 export * from './file-def-code-ref';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
+// Extensions covered by the realm-wide pre-warm sweep that primes the
+// modules cache before the visit loop. This is an optimization, not a
+// correctness gate: a `.ts` / `.js` file CAN host a `CardDef`
+// (e.g. command-input cards), and if pre-warm misses one the on-demand
+// `lookupDefinition` cache read-through fires a `prerenderModule` for
+// it during the visit. The PagePool's tab-materialization for
+// module/command callers makes that on-demand path safe (the sub-
+// prerender gets its own tab instead of queueing behind the render
+// that triggered it). Restricting the sweep to `.gts` / `.gjs` — where
+// cards live almost exclusively in practice — avoids paying the
+// prerender cost on every index for a file type that rarely contains
+// card definitions.
+export const cardExtensions = ['.gts', '.gjs'];
 export { createResponse } from './create-response';
 
 export * from './db-queries/db-types';
@@ -651,7 +810,7 @@ export function isMatrixCardError(
 
 export type CreateNewCard = (
   ref: CodeRef,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
   opts?: {
     isLinkedCard?: boolean;
     doc?: LooseSingleCardDocument;
@@ -662,7 +821,7 @@ export type CreateNewCard = (
 interface CardChooserOpts {
   offerToCreate?: {
     ref: CodeRef;
-    relativeTo: URL | undefined;
+    relativeTo: RealmResourceIdentifier | URL | undefined;
     realmURL: URL | undefined;
   };
   createNewCard?: CreateNewCard;
@@ -794,7 +953,7 @@ export type getSearchData = (
 export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
-  relativeTo?: URL | undefined;
+  relativeTo?: RealmResourceIdentifier | URL | undefined;
 }
 
 export interface AddOptions extends CreateOptions {
@@ -860,7 +1019,7 @@ export type CardCatalogQuery = Query & {
 export interface CardCreator {
   create(
     ref: CodeRef,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
@@ -913,22 +1072,36 @@ export function hasExecutableExtension(path: string): boolean {
   return false;
 }
 
-export function trimExecutableExtension(url: URL): URL {
-  for (let extension of executableExtensions) {
-    if (url.href.endsWith(extension)) {
-      return new URL(url.href.replace(new RegExp(`\\${extension}$`), ''));
+export function hasCardExtension(path: string): boolean {
+  for (let extension of cardExtensions) {
+    if (path.endsWith(extension)) {
+      return true;
     }
   }
-  return url;
+  return false;
+}
+
+export function trimExecutableExtension(
+  input: RealmResourceIdentifier,
+): RealmResourceIdentifier {
+  for (let extension of executableExtensions) {
+    if (input.endsWith(extension)) {
+      return input.replace(
+        new RegExp(`\\${extension}$`),
+        '',
+      ) as RealmResourceIdentifier;
+    }
+  }
+  return input;
 }
 
 export function internalKeyFor(
   ref: CodeRef,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   if (!('type' in ref)) {
     let resolved = resolveCardReference(ref.module, relativeTo);
-    let module = trimExecutableExtension(new URL(resolved)).href;
+    let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
     module = unresolveCardReference(module);

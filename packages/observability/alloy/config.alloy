@@ -37,6 +37,17 @@ discovery.relabel "containers" {
 		target_label  = "service"
 	}
 
+	// Local docker-compose names the synapse container `boxel-synapse`,
+	// but staging/prod ECS uses task family `synapse`. Rewrite so dashboards
+	// that filter on `service="synapse"` work identically in both places.
+	// Run AFTER the slash-strip rule above and overwrite its `service` value.
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/boxel-synapse"
+		target_label  = "service"
+		replacement   = "synapse"
+	}
+
 	// Optional realm label — only set when the container exposes
 	// `boxel.realm`. Without the (.+) match, the rule would always set the
 	// label (to an empty string), so queries like `realm!=""` would behave
@@ -61,6 +72,27 @@ loki.source.docker "containers" {
 	forward_to = [loki.process.filter_old.receiver]
 }
 
+// Local-dev native processes (realm-server, worker, prerender,
+// prerender-manager) run on the host via mise tasks, not in Docker, so the
+// Docker discovery above can't see them. The mise dev tasks tee their
+// stdout+stderr through packages/observability/scripts/dev-log-tee.sh into
+// BOXEL_LOG_DIR (default /tmp/boxel-logs/<service>.log on the host), and
+// docker-compose.yml bind-mounts that directory into this container at
+// /var/log/boxel-host/. Map keys other than __path__ become Loki labels.
+local.file_match "host_processes" {
+	path_targets = [
+		{__path__ = "/var/log/boxel-host/realm-server.log", service = "realm-server", env = "local"},
+		{__path__ = "/var/log/boxel-host/worker.log", service = "worker", env = "local"},
+		{__path__ = "/var/log/boxel-host/prerender.log", service = "prerender", env = "local"},
+		{__path__ = "/var/log/boxel-host/prerender-manager.log", service = "prerender-manager", env = "local"},
+	]
+}
+
+loki.source.file "host_processes" {
+	targets    = local.file_match.host_processes.targets
+	forward_to = [loki.process.filter_old.receiver]
+}
+
 // Long-running containers (e.g. a `boxel-pg` that's been up for a year)
 // hand Alloy their entire log history when it first attaches. Loki rejects
 // anything outside its small ordering window, generating a 400-storm. Drop
@@ -78,5 +110,12 @@ loki.process "filter_old" {
 loki.write "local" {
 	endpoint {
 		url = "http://loki:3100/loki/api/v1/push"
+		// Default batch_wait is 1s, but indexing jobs frequently emit
+		// only 3 progress lines (started / file-visited / finished)
+		// for incremental updates, which doesn't always trip Alloy's
+		// flush trigger in time. Tighter batch_wait keeps low-volume
+		// flushes responsive — at the cost of slightly more HTTP
+		// traffic to Loki, which is fine for local dev.
+		batch_wait = "500ms"
 	}
 }

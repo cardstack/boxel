@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
@@ -195,7 +196,7 @@ export default class CardService extends Service {
     return serialized;
   }
 
-  async getSource(url: URL) {
+  async getSource(url: RealmResourceIdentifier | URL) {
     let response = await this.network.authedFetch(url, {
       headers: {
         Accept: 'application/vnd.card+source',

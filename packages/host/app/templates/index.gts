@@ -1,6 +1,7 @@
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
+
 import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
@@ -40,6 +41,8 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import type {
   CardContext,
@@ -121,7 +124,7 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
@@ -213,11 +216,40 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     if (!start || !end) {
       return;
     }
+
+    // Before hydration the page scrolls at window level; after hydration the
+    // card container becomes the scroll host. Capture both so we cover
+    // whichever is non-zero.
+    let scrollTop = 0;
+    let prerenderedContainer = start.nextElementSibling;
+    if (
+      prerenderedContainer instanceof HTMLElement &&
+      prerenderedContainer !== end
+    ) {
+      scrollTop = Math.max(scrollTop, prerenderedContainer.scrollTop);
+    }
+    scrollTop = Math.max(scrollTop, window.scrollY);
+
     let node = start.nextSibling;
     while (node && node !== end) {
       let next = node.nextSibling;
       node.parentNode?.removeChild(node);
       node = next;
+    }
+
+    // Stash the captured offset in a meta element so HostModeCard can pick it
+    // up and apply it once the card content has rendered and the container is
+    // scrollable.
+    if (scrollTop > 0) {
+      let meta = document.head.querySelector(
+        'meta[name="boxel-restore-scroll"]',
+      );
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'boxel-restore-scroll');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', String(scrollTop));
     }
   });
 

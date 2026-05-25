@@ -36,14 +36,14 @@ export default class InstantiateCardCommand extends HostBaseCommand<
     return commandModule.InstantiateCardInput;
   }
 
-  requireInputFields = ['moduleUrl', 'cardName', 'realmUrl'];
+  requireInputFields = ['moduleIdentifier', 'cardName', 'realmIdentifier'];
 
   protected async run(
     input: BaseCommandModule.InstantiateCardInput,
   ): Promise<BaseCommandModule.InstantiateCardResult> {
-    let moduleUrl = input.moduleUrl;
+    let moduleUrl = input.moduleIdentifier;
     let cardName = input.cardName;
-    let realmUrl = input.realmUrl;
+    let realmUrl = input.realmIdentifier;
 
     if (!moduleUrl) {
       throw new Error('moduleUrl is required');

@@ -1,4 +1,5 @@
 import {
+  cardIdToURL,
   extractCardReferenceUrls,
   fieldSerializer,
   relativeTo,
@@ -53,7 +54,12 @@ export class RichMarkdownField extends FieldDef {
       if (!this.content) {
         return [];
       }
-      let baseUrl = this[relativeTo]?.href ?? '';
+      let rel = this[relativeTo];
+      let baseUrl = rel
+        ? typeof rel === 'string'
+          ? cardIdToURL(rel).href
+          : rel.href
+        : '';
       return extractCardReferenceUrls(this.content, baseUrl);
     },
   });
@@ -73,7 +79,11 @@ export class RichMarkdownField extends FieldDef {
       return this.args.model?.content ?? null;
     }
     get baseUrl(): string | null {
-      return this.args.model?.[relativeTo]?.href ?? null;
+      let rel = this.args.model?.[relativeTo];
+      if (!rel) {
+        return null;
+      }
+      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -89,7 +99,11 @@ export class RichMarkdownField extends FieldDef {
       return this.args.model?.content ?? null;
     }
     get baseUrl(): string | null {
-      return this.args.model?.[relativeTo]?.href ?? null;
+      let rel = this.args.model?.[relativeTo];
+      if (!rel) {
+        return null;
+      }
+      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -121,7 +135,11 @@ export class RichMarkdownField extends FieldDef {
       this.args.model.content = markdown;
     };
     get baseUrl(): string | null {
-      return this.args.model?.[relativeTo]?.href ?? null;
+      let rel = this.args.model?.[relativeTo];
+      if (!rel) {
+        return null;
+      }
+      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
     }
     get linkedCards(): CardDef[] | null {
       try {

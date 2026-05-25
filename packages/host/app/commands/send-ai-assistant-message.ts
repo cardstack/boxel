@@ -77,8 +77,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     }
 
     let files: FileDef[] | undefined;
-    if (input.attachedFileURLs) {
-      files = input.attachedFileURLs.map((url: string) =>
+    if (input.attachedFileIdentifiers) {
+      files = input.attachedFileIdentifiers.map((url: string) =>
         this.matrixService.fileAPI.createFileDef({
           sourceUrl: url,
           name: url.split('/').pop(),
@@ -99,7 +99,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       new Set(attachedOpenCards.map((c) => c.id)),
     );
 
-    context.realmUrl = input.realmUrl;
+    context.realmUrl = input.realmIdentifier;
     context.requireToolCall = requireToolCall;
     context.tools = tools;
     context.functions = [];

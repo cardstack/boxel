@@ -4,8 +4,8 @@
  * Writes a single "bootstrap" issue to the local factory workspace that
  * the agent picks up as its first task once the orchestrator syncs the
  * workspace into the target realm. The agent reads the brief, creates
- * Project, KnowledgeArticle, and implementation Issue cards, then marks
- * the seed issue as done.
+ * Project, IssueTracker, KnowledgeArticle, and implementation Issue
+ * cards, then marks the seed issue as done.
  */
 
 import type { FactoryBrief } from './factory-brief';
@@ -17,8 +17,8 @@ import { readCard, writeCard } from './workspace-fs';
  * Infer the darkfactory module URL from a target realm URL.
  * Uses the realm's origin to construct the URL.
  */
-export function inferDarkfactoryModuleUrl(targetRealmUrl: string): string {
-  let parsed = new URL(targetRealmUrl);
+export function inferDarkfactoryModuleUrl(targetRealm: string): string {
+  let parsed = new URL(targetRealm);
   return new URL('software-factory/darkfactory', parsed.origin + '/').href;
 }
 
@@ -117,30 +117,35 @@ function buildSeedIssueDocument(
     ``,
     `**URL:** ${brief.sourceUrl}`,
     `**Title:** ${brief.title}`,
+    `**Summary:** ${brief.contentSummary}`,
     ``,
-    brief.contentSummary,
+    `### Full content`,
+    ``,
+    brief.content,
     ``,
     `## Instructions`,
     ``,
-    `Read the brief and create the following project artifacts:`,
+    `Read the brief above and create the following project artifacts in the workspace:`,
     ``,
-    `1. **Project card** — in \`Projects/\` with fields populated from the brief`,
-    `2. **Knowledge Articles** — in \`Knowledge Articles/\`, at least Brief Context + Agent Onboarding, plus more as the brief warrants`,
-    `3. **Implementation Issues** — one per entry-point card, each covering:`,
+    `1. **Project card** — \`Projects/<slug>.json\` with fields populated from the brief`,
+    `2. **Issue Tracker Board** — \`Boards/<slug>.json\`, linked both ways with the Project card`,
+    `3. **Knowledge Articles** — \`Knowledge Articles/<slug>-brief-context.json\` and \`Knowledge Articles/<slug>-agent-onboarding.json\`, plus more as the brief warrants`,
+    `4. **Implementation Issues** — one per entry-point card at \`Issues/<slug>-<card-name-slug>.json\`, each covering:`,
     `   - Card definition (.gts) and any interior/support cards`,
     `   - QUnit tests (.test.gts) for entry-point and support cards`,
-    `   - Catalog Spec (Spec/<card>.json) with example instances`,
+    `   - Catalog Spec (\`Spec/<card>.json\`) with example instances`,
     ``,
     `Each implementation issue must have:`,
     `- \`project\` relationship pointing to the Project card`,
     `- \`relatedKnowledge\` relationships pointing to the Knowledge Article cards`,
     `- \`blockedBy\` relationships to any prior issues it depends on`,
     ``,
-    `When all artifacts are created, mark this issue as done via \`update_issue\`.`,
+    `Use the **\`Write\`** tool to create each \`.json\` file. When every artifact is on disk, call **\`signal_done\`** — the orchestrator marks this bootstrap issue done.`,
   ].join('\n');
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
+    '- [ ] IssueTracker card created and linked to the Project card',
     '- [ ] Knowledge Article for brief context created',
     '- [ ] Knowledge Article for agent onboarding created',
     '- [ ] Additional knowledge articles if the brief warrants them',

@@ -13,6 +13,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "allowJs": true,
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
@@ -22,5 +23,5 @@
     "types": ["@cardstack/local-types", "node"]
   },
   "include": ["./**/*"],
-  "exclude": ["node_modules", "dist", "tests/helpers/integration.ts", "tests/helpers/setup-realm-server.ts", "tests/integration"]
+  "exclude": ["node_modules", "dist", "bundled-types", "bundled-test-harness", "bundled-realms", "tests/helpers/integration.ts", "tests/helpers/setup-realm-server.ts", "tests/integration"]
 }

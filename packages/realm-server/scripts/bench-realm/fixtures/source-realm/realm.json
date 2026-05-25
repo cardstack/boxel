@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "Software Factory" },
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/background-for-catalog-82x.jpg",
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-f.png"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

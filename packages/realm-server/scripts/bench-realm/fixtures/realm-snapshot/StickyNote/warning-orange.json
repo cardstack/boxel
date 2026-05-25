@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Watch error rate",
+      "body": "Error rate ticked up after Tuesday's deploy. Keep an eye until weekly review.",
+      "color": "orange",
+      "x": 320,
+      "y": 320,
+      "rotation": -1,
+      "author": "Jordan",
+      "createdAt": "2026-04-30T11:20:00.000Z",
+      "cardInfo": {
+        "name": "Watch error rate"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

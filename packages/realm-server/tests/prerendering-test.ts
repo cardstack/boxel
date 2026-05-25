@@ -28,9 +28,11 @@ import {
   rri,
   baseRealm,
   baseRRI,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import {
   installDelayedRuntimeRealmSearchPatch,
+  installFlakyDepFetchPatch,
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
   installThrottledRAFPatch,
@@ -77,6 +79,33 @@ interface StubPagePoolOptions {
   // tests that predate the admission feature. Admission-control
   // tests opt in by passing `false`.
   disableFileAdmission?: boolean;
+}
+
+const PAGE_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+  'PRERENDER_HIGH_PRIORITY_THRESHOLD',
+  'PRERENDER_POOL_IDLE_CONTRACTION_MS',
+] as const;
+
+function withEnvUnset<T>(keys: readonly string[], fn: () => T): T {
+  let previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (let key of keys) {
+      delete process.env[key];
+    }
+    return fn();
+  } finally {
+    for (let [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 function makeStubPagePool(opts: StubPagePoolOptions) {
@@ -173,16 +202,27 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
       return;
     },
   };
-  let pool = new PagePool({
-    maxPages: opts.maxPages,
-    serverURL: 'http://localhost',
-    browserManager: browserManager as any,
-    boxelHostURL: 'http://localhost:4200',
-    standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
-    renderSemaphore: opts.renderSemaphore,
-    disableStandbyRefill: opts.disableStandbyRefill,
-    disableFileAdmission: opts.disableFileAdmission ?? true,
-  });
+  // These stub tests exercise PagePool behavior via explicit
+  // `options.maxPages` and per-test env setup. Shield construction from
+  // repo-wide dev defaults in `mise-tasks/lib/env-vars.sh`, which now
+  // exports `PRERENDER_PAGE_POOL_MIN/MAX=4` and would otherwise override
+  // the caller's `maxPages`. Keep other env knobs available so tests that
+  // intentionally set them (for example `PRERENDER_SHARED_CONTEXT_CAP`)
+  // still exercise the requested behavior.
+  let pool = withEnvUnset(
+    PAGE_POOL_CAPACITY_OVERRIDE_ENV_KEYS,
+    () =>
+      new PagePool({
+        maxPages: opts.maxPages,
+        serverURL: 'http://localhost',
+        browserManager: browserManager as any,
+        boxelHostURL: 'http://localhost:4200',
+        standbyTimeoutMs: opts.standbyTimeoutMs ?? 500,
+        renderSemaphore: opts.renderSemaphore,
+        disableStandbyRefill: opts.disableStandbyRefill,
+        disableFileAdmission: opts.disableFileAdmission ?? true,
+      }),
+  );
   return { pool, contextsCreated, contextsClosed };
 }
 
@@ -380,7 +420,7 @@ module(basename(__filename), function () {
         second.pool.pageId,
         'same page reused',
       );
-      let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+      let key = `${trimExecutableExtension(rri(moduleURL))}/Person`;
       let entry = second.response.definitions[key];
       assert.ok(entry, 'updated module definition entry present');
       assert.strictEqual(
@@ -480,6 +520,120 @@ module(basename(__filename), function () {
         result.pool.timedOut,
         'pool should not mark this as a prerender timeout',
       );
+    });
+
+    test('transient 502 on dep fetch retries instead of timing out', async function (assert) {
+      // While prerendering, the host's render-timer-stub suppresses
+      // window.setTimeout. The loader's transient-5xx retry uses setTimeout-
+      // based backoff, so a single 502 on a dep fetch used to hang the
+      // entire render at `await sleep(delayMs)` for the full 90 s render
+      // timeout. The fix routes the loader's retry sleep through
+      // scheduleNativeTimeout (see loader-service.ts), bypassing the stub.
+      // This test simulates a transient 502 on the card's module fetch and
+      // asserts the prerender recovers within the retry budget rather than
+      // timing out.
+      let modulePath = 'flaky-target.gts';
+      let moduleURL = `${realmURL}${modulePath}`;
+      let cardPath = 'flaky-1.json';
+      let cardURL = `${realmURL}flaky-1`;
+
+      await realmAdapter.write(
+        modulePath,
+        `
+          import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+          export class FlakyTarget extends CardDef {
+            static displayName = 'FlakyTarget';
+            @field name = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template><span data-test-name>{{@model.name}}</span></template>
+            }
+          }
+        `,
+      );
+      await realmAdapter.write(
+        cardPath,
+        JSON.stringify(
+          {
+            data: {
+              attributes: { name: 'Recovered' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./flaky-target'),
+                  name: 'FlakyTarget',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      );
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+
+      // Strip executable extensions from both sides so the matcher fires
+      // for every fetch shape the loader may issue: `flaky-target.gts`
+      // (the source URL), `flaky-target` (extensionless — what the card's
+      // adoptsFrom.module resolves to via rri), or the canonicalized form
+      // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
+      // would miss the actual fetch and the test would silently pass
+      // without exercising the retry path.
+      let stripExecExt = (u: string) => {
+        for (let ext of executableExtensions) {
+          if (u.endsWith(ext)) {
+            return u.slice(0, -ext.length);
+          }
+        }
+        return u;
+      };
+      let targetTrimmed = stripExecExt(moduleURL);
+      let flakyPatch = installFlakyDepFetchPatch({
+        matcher: (url) => stripExecExt(url) === targetTrimmed,
+        failuresBeforeSuccess: 1,
+      });
+      try {
+        let started = Date.now();
+        // clearCache forces the host's loader to drop its cached fetch +
+        // module entries before the render, so the dep fetch the patch
+        // is targeting actually goes to the network rather than coming
+        // from the in-process loader cache populated by fullIndex above.
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+          renderOptions: { clearCache: true },
+        });
+        let elapsedMs = Date.now() - started;
+
+        assert.strictEqual(
+          flakyPatch.failuresInjected(),
+          1,
+          'patch injected exactly one transient 502 for the dep fetch',
+        );
+        assert.notOk(
+          result.response.error,
+          `render recovered from transient 502 (error: ${JSON.stringify(
+            result.response.error?.error ?? null,
+          )})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'render did not hit the 90s prerender timeout',
+        );
+        assert.true(
+          elapsedMs < 30_000,
+          `render completes within retry budget; observed ${elapsedMs}ms (90s would mean retry sleep is hung)`,
+        );
+        assert.strictEqual(
+          result.response.serialized?.data.attributes?.name,
+          'Recovered',
+          'card data rendered correctly after retry',
+        );
+      } finally {
+        await flakyPatch.restore();
+      }
     });
   });
 
@@ -739,6 +893,32 @@ module(basename(__filename), function () {
                     adoptsFrom: {
                       module: rri('./throws'),
                       name: 'Throws',
+                    },
+                  },
+                },
+              },
+              // Module evaluates a top-level throw, mirroring the
+              // wrong-subpath import class of bug (CS-11024). The route's
+              // model() rejects when the loader imports the module, the
+              // route's `error` action fires with the active transition,
+              // and #processRenderError lifts data-prerender-status='error'
+              // — historically before render.error's <pre> had been
+              // populated, so the prerender server captured an empty
+              // payload and synthesized "invalid error payload" instead of
+              // surfacing the real underlying throw.
+              'eval-throw.gts': `
+              import { CardDef } from 'https://cardstack.com/base/card-api';
+              throw new Error('module-eval-throw');
+              export class EvalThrow extends CardDef {
+                static displayName = 'Eval Throw';
+              }
+            `,
+              'eval-throw.json': {
+                data: {
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./eval-throw'),
+                      name: 'EvalThrow',
                     },
                   },
                 },
@@ -1054,7 +1234,7 @@ module(basename(__filename), function () {
           'ready',
           'module marked ready',
         );
-        let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+        let key = `${trimExecutableExtension(rri(moduleURL))}/Person`;
         let entry = result.response.definitions[key];
         assert.ok(entry, 'definition captured');
         assert.strictEqual(
@@ -1420,10 +1600,16 @@ module(basename(__filename), function () {
           'desync surfaces as 500',
         );
         assert.ok(
-          result.response.error?.error.message?.includes(
-            '[data-prerender-status]',
-          ),
-          `desync message names the DOM signal that never updated, got: ${result.response.error?.error.message}`,
+          result.response.error?.error.message
+            ?.toLowerCase()
+            .includes('ember rendering error'),
+          `desync message names the failure class (Ember rendering error), got: ${result.response.error?.error.message}`,
+        );
+        assert.ok(
+          result.response.error?.error.message
+            ?.toLowerCase()
+            .includes('additional errors'),
+          `desync message points users at the Additional Errors section, got: ${result.response.error?.error.message}`,
         );
         // Desync IS the signal that the runloop stopped advancing this
         // card's render — Glimmer's binding never landed. The page is
@@ -1513,24 +1699,13 @@ module(basename(__filename), function () {
                 if (!injected) {
                   injected = true;
                   await originalEvaluate(() => {
-                    let entries =
-                      (window as any).requirejs?.entries ??
-                      (window as any).require?.entries ??
-                      (window as any)._eak_seen;
-                    let renderModuleName =
-                      entries &&
-                      Object.keys(entries).find((name) =>
-                        name.endsWith('/routes/render'),
-                      );
-                    if (!renderModuleName) {
-                      throw new Error(
-                        'render route module not found for injection',
-                      );
-                    }
-                    let renderRouteModule = (window as any).require(
-                      renderModuleName,
-                    );
-                    let RenderRouteClass = renderRouteModule?.default;
+                    // Vite builds the host as pure ESM with no AMD registry;
+                    // reach the render route class via the Ember
+                    // ApplicationInstance exposed by the
+                    // export-application-global instance-initializer.
+                    let appInstance = (window as any)['@cardstack/host'];
+                    let RenderRouteClass =
+                      appInstance?.factoryFor?.('route:render')?.class;
                     if (!RenderRouteClass?.prototype) {
                       throw new Error(
                         'render route class not found for injection',
@@ -1600,7 +1775,41 @@ module(basename(__filename), function () {
         }
       });
 
-      test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      // CS-11024: a card whose module throws synchronously during
+      // evaluation drives the route-error path. data-prerender-status='error'
+      // used to be lifted before the render.error template populated the
+      // <pre data-prerender-error>, letting the prerender server capture an
+      // empty payload and synthesize "invalid error payload". The fix
+      // defers the status flip to afterRender so the captured error is the
+      // actual underlying throw.
+      test('card prerender surfaces module-evaluation throw via the error route', async function (assert) {
+        let cardURL = `${realmURL}eval-throw.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(result.response.error, 'prerender reports error');
+        let message = result.response.error?.error.message ?? '';
+        assert.true(
+          message.includes('module-eval-throw'),
+          `error surfaces actual underlying throw, got: ${message}`,
+        );
+        assert.false(
+          /returned an invalid error payload/.test(message),
+          `error is not the synthesized "invalid error payload" fallback (got: ${message})`,
+        );
+        assert.false(
+          result.pool.timedOut,
+          'module-evaluation throw is not treated as timeout',
+        );
+      });
+
+      test('card prerender resolves query fallback via per-URL GETs and renders nested relationships', async function (assert) {
         const cardURL = `${realmURL}directory-ops`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
@@ -1615,9 +1824,17 @@ module(basename(__filename), function () {
           });
 
           assert.notOk(result.response.error, 'prerender succeeds');
+          // Source-mode instance loads (the prerender's contract) leave
+          // `relationships.{queryField}.data` empty in every fetched
+          // doc, so each query-backed field still fires a live
+          // `_federated-search` to populate. The PR's win lands on the
+          // *response side*: each search returns `data` + IDs but stops
+          // short of expanding the linked resources into `included[]`,
+          // so per-search payloads drop by ~10-60×. Track the search
+          // count to guard against a regression in either direction.
           assert.true(
             delayedSearchPatch.getRequestCount() > 0,
-            'fallback _search requests occurred and were delayed',
+            `prerender ran query-backed fallback _search calls (raw-source mode does not carry pre-resolved IDs): count=${delayedSearchPatch.getRequestCount()}`,
           );
 
           let isolatedHTML = cleanWhiteSpace(
@@ -3285,6 +3502,16 @@ module(basename(__filename), function () {
             affinityValue: realmURL3,
           }),
         ]);
+        // `disposeAffinity` only KICKS standby refill — it doesn't await
+        // it. If the next test claims a tab before that kick produces a
+        // standby AND `#ensureStandbyPool`'s awaited retry also can't
+        // produce one, `#selectEntryForAffinity` falls through to the
+        // cross-affinity-steal escape hatch and reassigns an idle tab
+        // from another realm — keeping the donor's `pageId`. The
+        // "distinct pages per realm" test then sees `r1.pool.pageId ===
+        // r2.pool.pageId` and fails. Waiting here makes the next
+        // affinity-pooling test deterministic on the standby path.
+        await prerenderer.warmStandbys();
       };
 
       hooks.before(async function () {
@@ -4704,10 +4931,24 @@ module(basename(__filename), function () {
             url: testCardURL2,
             auth: auth(),
           });
+          // When this fails it's almost always the cross-affinity-steal
+          // fallback in `#selectEntryForAffinity` — `pageId` is equal
+          // because realm2's `getPage` repurposed realm1's idle tab
+          // when `#ensureStandbyPool` couldn't conjure a standby. Dump
+          // both call's `tabStartupMs` / `tabQueueMs` (a steal returns
+          // `tabStartupMs=0`, the standby path is non-zero) and the
+          // live queue snapshot so the CI log shows where the standby
+          // pool was when the race fired.
+          let queueSnapshot = prerenderer.getQueueDepthSnapshot();
           assert.notStrictEqual(
             r1.pool.pageId,
             r2.pool.pageId,
-            'distinct pages per realm',
+            `distinct pages per realm — ` +
+              `r1.pageId=${r1.pool.pageId} ` +
+              `r2.pageId=${r2.pool.pageId} ` +
+              `r1.waits=${JSON.stringify(r1.timings.waits)} ` +
+              `r2.waits=${JSON.stringify(r2.timings.waits)} ` +
+              `queueSnapshot=${JSON.stringify(queueSnapshot)}`,
           );
           assert.false(r1.pool.reused, 'first realm first call not reused');
           assert.false(r2.pool.reused, 'second realm first call not reused');
@@ -4718,6 +4959,23 @@ module(basename(__filename), function () {
           const cardB = `${realmURL2}1`;
           const cardC = `${realmURL3}1`;
 
+          // `desiredStandbyCount` caps at 1 once any tab is active, so a
+          // fire-and-forget refill kicked off by the previous acquisition
+          // may not have produced a real standby by the time the next
+          // sequential acquisition runs. With `queue='file'` (the path
+          // every `prerenderCard` takes) the entryList-empty branch in
+          // `#selectEntryForAffinity` skips its `ensureStandbyPool` await
+          // whenever a refill is in flight (`creatingStandbys` already
+          // counts toward `currentStandbyCount`), and the caller falls
+          // through to cross-affinity-steal. That steal repurposes a
+          // donor tab and KEEPS the donor's `pageId` — see the warning
+          // log around `#selectEntryForAffinity`'s reassign path. A
+          // chain of steals (A→B, B→C, C→A) makes `firstA.pageId ===
+          // secondA.pageId` and trips the eviction assertion below.
+          // Awaiting `warmStandbys` between phases blocks until any
+          // in-flight standby creation AND any LRU eviction kicked by
+          // the post-acquire refill have settled, so the next call
+          // commandeers a fresh standby instead of stealing.
           let firstA = await prerenderCard(prerenderer, {
             affinityType: 'realm',
             affinityValue: realmURL1,
@@ -4725,7 +4983,8 @@ module(basename(__filename), function () {
             url: cardA,
             auth: auth(),
           });
-          assert.false(firstA.pool.reused, 'first A not reused');
+          await prerenderer.warmStandbys();
+          let firstAWaits = firstA.timings.waits;
 
           let firstB = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4734,7 +4993,8 @@ module(basename(__filename), function () {
             url: cardB,
             auth: auth(),
           });
-          assert.false(firstB.pool.reused, 'first B not reused');
+          await prerenderer.warmStandbys();
+          let firstBWaits = firstB.timings.waits;
 
           // Now adding C should evict the LRU (A), since maxPages=2
           let firstC = await prerenderCard(prerenderer, {
@@ -4744,7 +5004,8 @@ module(basename(__filename), function () {
             url: cardC,
             auth: auth(),
           });
-          assert.false(firstC.pool.reused, 'first C not reused');
+          await prerenderer.warmStandbys();
+          let firstCWaits = firstC.timings.waits;
 
           // Returning to A should not reuse because it was evicted
           let secondA = await prerenderCard(prerenderer, {
@@ -4754,11 +5015,48 @@ module(basename(__filename), function () {
             url: cardA,
             auth: auth(),
           });
-          assert.false(secondA.pool.reused, 'A was evicted, so not reused');
+          let secondAWaits = secondA.timings.waits;
+          // Snapshot the live pool state at the assertion site so that
+          // if the flake recurs the YAML failure block names the donor
+          // affinity, the in-flight standby count, and per-call wait
+          // shape (`tabStartupMs=0` signals a steal; non-zero signals
+          // the standby path). Without this the only hint a reviewer
+          // gets is two identical UUIDs and no provenance.
+          let queueSnapshot = prerenderer.getQueueDepthSnapshot();
+          let diagnostics =
+            `firstA.pageId=${firstA.pool.pageId} ` +
+            `firstB.pageId=${firstB.pool.pageId} ` +
+            `firstC.pageId=${firstC.pool.pageId} ` +
+            `secondA.pageId=${secondA.pool.pageId} ` +
+            `firstA.reused=${firstA.pool.reused} ` +
+            `firstB.reused=${firstB.pool.reused} ` +
+            `firstC.reused=${firstC.pool.reused} ` +
+            `secondA.reused=${secondA.pool.reused} ` +
+            `firstA.waits=${JSON.stringify(firstAWaits)} ` +
+            `firstB.waits=${JSON.stringify(firstBWaits)} ` +
+            `firstC.waits=${JSON.stringify(firstCWaits)} ` +
+            `secondA.waits=${JSON.stringify(secondAWaits)} ` +
+            `queueSnapshot=${JSON.stringify(queueSnapshot)}`;
+          assert.false(
+            firstA.pool.reused,
+            `first A not reused — ${diagnostics}`,
+          );
+          assert.false(
+            firstB.pool.reused,
+            `first B not reused — ${diagnostics}`,
+          );
+          assert.false(
+            firstC.pool.reused,
+            `first C not reused — ${diagnostics}`,
+          );
+          assert.false(
+            secondA.pool.reused,
+            `A was evicted, so not reused — ${diagnostics}`,
+          );
           assert.notStrictEqual(
             firstA.pool.pageId,
             secondA.pool.pageId,
-            'A got a new page after eviction',
+            `A got a new page after eviction — ${diagnostics}`,
           );
         });
 
@@ -4955,10 +5253,24 @@ module(basename(__filename), function () {
             await pool.warmStandbys();
 
             let first = await pool.getPage('realm-a', 'file');
+            // Semantic check: the first call did not queue, so the
+            // file-admission semaphore has no pending waiters. We use
+            // the queue-depth snapshot rather than asserting against
+            // first.waits.admissionMs — the latter is wall-clock and
+            // can register as 1–2ms on slow CI from microtask
+            // round-trip alone, even when the semaphore had a slot
+            // immediately available. The intent of the test is "didn't
+            // queue", which `admission.pending` answers directly.
+            let snapAfterFirst = pool
+              .getQueueDepthSnapshot()
+              .affinities.find((a) => a.affinityKey === 'realm-a');
+            let pendingAfterFirst = snapAfterFirst
+              ? snapAfterFirst.admission.pending
+              : 0;
             assert.strictEqual(
-              first.waits.admissionMs,
+              pendingAfterFirst,
               0,
-              'first file call does not wait for admission (slot available)',
+              'first file call did not queue (no admission waiters)',
             );
 
             // Second file call blocks on the admission semaphore (cap=1
@@ -4966,6 +5278,23 @@ module(basename(__filename), function () {
             // second's admissionMs should reflect that hold.
             let holdMs = 20;
             let secondPromise = pool.getPage('realm-a', 'file');
+            // Yield once so the second call's `acquire` lands in the
+            // queue, then verify it's actually queued. Microtask flush
+            // is enough — `acquire` queues synchronously after the
+            // initial `await throwIfAborted` boundary.
+            await new Promise((r) => setImmediate(r));
+            let snapWhileQueued = pool
+              .getQueueDepthSnapshot()
+              .affinities.find((a) => a.affinityKey === 'realm-a');
+            let pendingWhileQueued = snapWhileQueued
+              ? snapWhileQueued.admission.pending
+              : 0;
+            assert.strictEqual(
+              pendingWhileQueued,
+              1,
+              'second file call is queued behind admission',
+            );
+
             setTimeout(() => first.release(), holdMs);
             let second = await secondPromise;
             assert.ok(

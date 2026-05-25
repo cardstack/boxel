@@ -65,7 +65,7 @@ export class ContextBuilder {
    * Assemble a complete AgentContext for one iteration of the execution loop.
    *
    * Steps:
-   * 1. Resolve skill names from ticket + project context
+   * 1. Resolve skill names from issue + project context
    * 2. Load all resolved skills from disk
    * 3. Apply skill budget if configured
    * 4. Return AgentContext (tools are provided separately as FactoryTool[])
@@ -74,11 +74,13 @@ export class ContextBuilder {
     project: ProjectData;
     issue: IssueData;
     knowledge: KnowledgeArticleData[];
-    targetRealmUrl: string;
+    targetRealm: string;
+    darkfactoryModuleUrl?: string;
     /** @deprecated Use validationResults/validationContext via buildForIssue() instead. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
-    let { project, issue, knowledge, targetRealmUrl } = params;
+    let { project, issue, knowledge, targetRealm, darkfactoryModuleUrl } =
+      params;
 
     // Step 1: Resolve which skills are needed for this issue
     let skillNames = this.skillResolver.resolve(issue, project);
@@ -98,7 +100,8 @@ export class ContextBuilder {
       issue,
       knowledge,
       skills,
-      targetRealmUrl,
+      targetRealm,
+      ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
     // @deprecated — Phase 1 test results. Use buildForIssue() with validationContext instead.
@@ -122,7 +125,8 @@ export class ContextBuilder {
    */
   async buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
+    darkfactoryModuleUrl?: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context string from Validator.formatForContext(). */
     validationContext?: string;
@@ -134,7 +138,7 @@ export class ContextBuilder {
       );
     }
 
-    let { issue, targetRealmUrl } = params;
+    let { issue, targetRealm, darkfactoryModuleUrl } = params;
 
     // Step 1: Traverse issue relationships
     let [project, knowledge] = await Promise.all([
@@ -171,7 +175,8 @@ export class ContextBuilder {
       issue,
       knowledge,
       skills,
-      targetRealmUrl,
+      targetRealm,
+      ...(darkfactoryModuleUrl ? { darkfactoryModuleUrl } : {}),
     };
 
     if (params.validationResults) {

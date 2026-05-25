@@ -1,9 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, basename } from 'path';
-import type { Server } from 'http';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync } from 'fs-extra';
+import { basename } from 'path';
+import type { RealmHttpServer as Server } from '../../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -28,7 +26,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
     let originalLowCreditThreshold: string | undefined;
 
@@ -37,20 +34,16 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dbAdapter: PgAdapter;
-      dir: DirResult;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dbAdapter = args.dbAdapter;
-      dir = args.dir;
     }
 
     hooks.beforeEach(async function () {
       originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
       process.env.LOW_CREDIT_THRESHOLD = '2000';
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
     });
 
     hooks.afterEach(async function () {
@@ -64,6 +57,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -450,7 +444,6 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
     let originalLowCreditThreshold: string | undefined;
 
@@ -459,20 +452,16 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
       dbAdapter: PgAdapter;
-      dir: DirResult;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
       dbAdapter = args.dbAdapter;
-      dir = args.dir;
     }
 
     hooks.beforeEach(async function () {
       originalLowCreditThreshold = process.env.LOW_CREDIT_THRESHOLD;
       process.env.LOW_CREDIT_THRESHOLD = '2000';
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
     });
 
     hooks.afterEach(async function () {
@@ -486,6 +475,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],

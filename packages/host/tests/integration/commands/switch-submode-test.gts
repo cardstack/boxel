@@ -174,7 +174,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       commandService.commandContext,
     );
     let fileUrl = `${testRealmURL}existing-file.gts`;
-    let newFileUrl = `${testRealmURL}existing-file-1.gts`;
+    let newFileIdentifier = `${testRealmURL}existing-file-1.gts`;
 
     await cardService.saveSource(
       new URL(fileUrl),
@@ -189,13 +189,15 @@ module('Integration | commands | switch-submode', function (hooks) {
     });
 
     assert.ok(result, 'returns a result card with the new filename');
-    assert.strictEqual(result?.codePath, newFileUrl);
+    assert.strictEqual(result?.codePath, newFileIdentifier);
     assert.strictEqual(
       operatorModeStateService.state?.codePath?.href,
-      newFileUrl,
+      newFileIdentifier,
     );
 
-    let { status, content } = await cardService.getSource(new URL(newFileUrl));
+    let { status, content } = await cardService.getSource(
+      new URL(newFileIdentifier),
+    );
     assert.strictEqual(status, 200);
     assert.strictEqual(content, '');
   });

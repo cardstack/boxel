@@ -8,15 +8,13 @@ import type {
   QueuePublisher,
 } from '@cardstack/runtime-common';
 import {
-  asExpressions,
   fullReindex,
-  insert,
   insertPermissions,
   logger,
-  query,
   uuidv4,
 } from '@cardstack/runtime-common';
 
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { setupDB } from './helpers';
 
 module(basename(__filename), function (hooks) {
@@ -60,17 +58,13 @@ module(basename(__filename), function (hooks) {
     publishedRealmURL: string;
     ownerUsername: string;
   }) {
-    let { nameExpressions, valueExpressions } = asExpressions({
-      id: uuidv4(),
-      owner_username: ownerUsername,
-      source_realm_url: sourceRealmURL,
-      published_realm_url: publishedRealmURL,
-      last_published_at: Date.now().toString(),
+    await upsertPublishedRealmInRegistry(dbAdapter, {
+      publishedRealmURL,
+      publishedRealmId: uuidv4(),
+      ownerUsername,
+      sourceRealmURL,
+      lastPublishedAt: Date.now(),
     });
-    await query(
-      dbAdapter,
-      insert('published_realms', nameExpressions, valueExpressions),
-    );
   }
 
   test('enqueues jobs for source and published realms using the source owner', async function (assert) {
@@ -93,7 +87,11 @@ module(basename(__filename), function (hooks) {
       realmUrls: [sourceRealmURL, publishedRealmURL],
     });
 
-    type JobArgs = { realmURL: string; realmUsername: string };
+    type JobArgs = {
+      realmURL: string;
+      realmUsername: string;
+      clearLastModified: boolean;
+    };
     type JobRow = {
       job_type: string;
       concurrency_group: string | null;
@@ -122,6 +120,12 @@ module(basename(__filename), function (hooks) {
       {
         realmURL: sourceRealmURL,
         realmUsername: 'owner',
+        // full-reindex enqueues with clearLastModified: true so every
+        // file re-renders even when its mtime is unchanged. Surfaced in
+        // args so the from-scratch coalesce can refuse to attach a
+        // clearing publish to an already-running same-realm
+        // from-scratch.
+        clearLastModified: true,
       },
       'source job args are correct',
     );
@@ -143,6 +147,7 @@ module(basename(__filename), function (hooks) {
       {
         realmURL: publishedRealmURL,
         realmUsername: 'owner',
+        clearLastModified: true,
       },
       'published job args use the source owner',
     );

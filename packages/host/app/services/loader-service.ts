@@ -22,6 +22,7 @@ import { clearKnownFileMetaUrls } from '@cardstack/host/components/prerendered-c
 import config from '@cardstack/host/config/environment';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
+import { scheduleNativeTimeout } from '../utils/render-timer-stub';
 
 import type NetworkService from './network';
 import type RealmService from './realm';
@@ -118,7 +119,16 @@ export default class LoaderService extends Service {
     middlewareStack.push(authorizationMiddleware(this.realm));
     middlewareStack.push(authErrorEventMiddleware());
     let fetch = fetcher(this.network.fetch, middlewareStack);
-    let loader = new Loader(fetch, this.network.resolveImport);
+    let loader = new Loader(fetch, this.network.resolveImport, {
+      // Route the loader's transient-5xx retry backoff sleep through
+      // scheduleNativeTimeout so it bypasses the render-timer-stub during
+      // prerender. Outside prerender this falls back to the native
+      // setTimeout, so behavior is unchanged in the host runtime.
+      retrySleep: (ms) =>
+        new Promise<void>((resolve) =>
+          scheduleNativeTimeout(() => resolve(), ms),
+        ),
+    });
     return loader;
   }
 

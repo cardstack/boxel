@@ -6,10 +6,14 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
-import { setupPermissionedRealmCached, testPort } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  testPort,
+  type RealmFixtureName,
+} from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
 export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
@@ -27,7 +31,20 @@ export type ServerEndpointsTestContext = {
   virtualNetwork: VirtualNetwork;
 };
 
-export function setupServerEndpointsTest(hooks: NestedHooks) {
+type ServerEndpointsTestOptions = {
+  // CS-10009: pick the realm fixture that backs this test's testRealm.
+  // Default is 'blank' — most server-level endpoint tests
+  // (bot-commands, webhooks, realm lifecycle, etc.) don't read card
+  // content out of the testRealm and want the lightest possible
+  // template build. Tests that DO read the kitchen sink (e.g.
+  // screenshot-card referencing Person/fadhlan) pass `'realistic'`.
+  fixture?: RealmFixtureName;
+};
+
+export function setupServerEndpointsTest(
+  hooks: NestedHooks,
+  options: ServerEndpointsTestOptions = {},
+) {
   let context = {} as ServerEndpointsTestContext;
 
   function onRealmSetup(args: {
@@ -57,6 +74,7 @@ export function setupServerEndpointsTest(hooks: NestedHooks) {
   }
 
   setupPermissionedRealmCached(hooks, {
+    fixture: options.fixture ?? 'blank',
     realmURL: testRealmURL,
     permissions: {
       '*': ['read', 'write'],

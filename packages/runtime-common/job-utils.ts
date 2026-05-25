@@ -1,11 +1,13 @@
 import type { DBAdapter } from './db';
 import {
+  dbAdapterQuerier,
   dbExpression,
   param,
   query,
   separatedByCommas,
   type Expression,
   type PgPrimitive,
+  type Querier,
 } from './expression';
 
 export const userInitiatedJobCancellationResult = Object.freeze({
@@ -17,8 +19,10 @@ export async function forceCancelJobById(
   dbAdapter: DBAdapter,
   jobId: string,
   result: PgPrimitive = userInitiatedJobCancellationResult,
+  querier?: Querier,
 ): Promise<void> {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     `UPDATE jobs SET`,
     ...separatedByCommas([
       [`result =`, param(result)],
@@ -34,7 +38,7 @@ export async function forceCancelJobById(
     param(jobId),
   ] as Expression);
 
-  await query(dbAdapter, [
+  await q([
     `UPDATE job_reservations SET`,
     dbExpression({
       pg: `completed_at = NOW()`,
@@ -46,7 +50,7 @@ export async function forceCancelJobById(
   ] as Expression);
 
   if (dbAdapter.kind === 'pg') {
-    await query(dbAdapter, [`NOTIFY jobs_finished`] as Expression);
+    await q([`NOTIFY jobs_finished`] as Expression);
   }
 }
 
@@ -65,8 +69,10 @@ export async function findJobIdForReservationId(
 export async function findRunningJobIdsForConcurrencyGroup(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
+  querier?: Querier,
 ): Promise<string[]> {
-  let rows = (await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  let rows = (await q([
     `SELECT DISTINCT j.id FROM jobs j`,
     `INNER JOIN job_reservations jr ON jr.job_id = j.id`,
     `WHERE j.concurrency_group =`,
@@ -86,13 +92,20 @@ export async function findRunningJobIdsForConcurrencyGroup(
 export async function cancelRunningJobsInConcurrencyGroup(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
+  querier?: Querier,
 ): Promise<string[]> {
   let runningJobIds = await findRunningJobIdsForConcurrencyGroup(
     dbAdapter,
     concurrencyGroup,
+    querier,
   );
   for (let jobId of runningJobIds) {
-    await forceCancelJobById(dbAdapter, jobId);
+    await forceCancelJobById(
+      dbAdapter,
+      jobId,
+      userInitiatedJobCancellationResult,
+      querier,
+    );
   }
   return runningJobIds;
 }

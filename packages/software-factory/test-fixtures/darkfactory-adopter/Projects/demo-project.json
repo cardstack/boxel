@@ -19,7 +19,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://sf.boxel.test/darkfactory",
+        "module": "https://test-harness.test/software-factory/darkfactory",
         "name": "Project"
       }
     }

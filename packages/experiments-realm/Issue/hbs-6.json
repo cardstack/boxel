@@ -1,0 +1,57 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Issue",
+        "module": "/software-factory/issue-tracker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "order": null,
+      "status": "done",
+      "issueId": "HBR-6",
+      "summary": "Launch v1 to production",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "comments": [],
+      "priority": "critical",
+      "createdAt": null,
+      "issueType": null,
+      "updatedAt": null,
+      "description": null,
+      "acceptanceCriteria": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/bc838c6e-6a12-4331-94ff-c7c3e7e96d0b"
+        }
+      },
+      "blockedBy": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "relatedKnowledge": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

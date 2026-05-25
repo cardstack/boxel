@@ -3,7 +3,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { readSupportContext } from '../../src/runtime-metadata';
+import { readSupportContext } from '@cardstack/realm-test-harness';
 
 type BrowserAuth = {
   access_token: string;
@@ -40,25 +40,23 @@ function getSupportRealmServerURL(): string | undefined {
 }
 
 const defaultMatrixUrl = ensureTrailingSlash(
-  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_URL ??
+  process.env.TEST_HARNESS_BROWSER_MATRIX_URL ??
     getSupportMatrixURL() ??
     'http://localhost:8008/',
 );
 const defaultUsername =
-  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_USERNAME ??
+  process.env.TEST_HARNESS_BROWSER_MATRIX_USERNAME ??
   'software-factory-browser';
 const defaultSeed =
-  process.env.SOFTWARE_FACTORY_BROWSER_SECRET_SEED ?? "shhh! it's a secret";
+  process.env.TEST_HARNESS_BROWSER_SECRET_SEED ?? "shhh! it's a secret";
 
 function getBrowserProfile(): BoxelProfile {
-  let username = (
-    process.env.SOFTWARE_FACTORY_BROWSER_USERNAME ?? defaultUsername
-  )
+  let username = (process.env.TEST_HARNESS_BROWSER_USERNAME ?? defaultUsername)
     .replace(/^@/, '')
     .replace(/:.*$/, '');
 
   let password =
-    process.env.SOFTWARE_FACTORY_BROWSER_PASSWORD ??
+    process.env.TEST_HARNESS_BROWSER_PASSWORD ??
     createHash('sha256').update(username).update(defaultSeed).digest('hex');
 
   return {

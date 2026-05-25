@@ -1,14 +1,37 @@
 #!/bin/sh
-#MISE description="Wait for prerender manager to be ready"
+#MISE description="Wait for prerender manager to have at least one ready worker"
+
+# The manager's `/` endpoint returns 200 the instant its HTTP server is
+# listening, before any worker has registered. A worker, in turn, only
+# registers after passing wait-for-host-standby and getting its puppeteer
+# server up — which on a cold vite optimizer can take minutes. Any realm
+# server or worker that starts indexing in that window will hit "No servers"
+# from the manager.
+#
+# So we gate on the manager's JSON health signal `data.attributes.ready`,
+# which is true iff `registry.servers.size > 0` (see
+# packages/realm-server/prerender/manager-app.ts). We match the substring
+# `"ready":true` against `JSON.stringify` output — the manager has no other
+# `ready` key so this is unambiguous, and using grep keeps us free of a jq
+# dependency.
 
 URL="${1:-${PRERENDER_MGR_URL}}"
 TRIMMED_URL="${URL%/}/"
 TIMEOUT_SECONDS=1500
 START_TIME=$(date +%s)
 
-echo "Waiting for prerender manager at ${TRIMMED_URL}"
+echo "Waiting for prerender manager at ${TRIMMED_URL} to register a worker"
 
-while ! curl -sf "$TRIMMED_URL" >/dev/null 2>&1; do
+while true; do
+  # --connect-timeout/--max-time bound any single curl invocation so a
+  # half-open TCP connection to the manager can't park the loop forever
+  # past TIMEOUT_SECONDS.
+  BODY=$(curl -sf --connect-timeout 5 --max-time 10 "$TRIMMED_URL" 2>/dev/null || true)
+  case "$BODY" in
+    *'"ready":true'*)
+      break
+      ;;
+  esac
   CURRENT_TIME=$(date +%s)
   ELAPSED=$((CURRENT_TIME - START_TIME))
   if [ "$ELAPSED" -ge "$TIMEOUT_SECONDS" ]; then
@@ -18,4 +41,4 @@ while ! curl -sf "$TRIMMED_URL" >/dev/null 2>&1; do
   sleep 1
 done
 
-echo "Prerender manager is ready"
+echo "Prerender manager has a registered worker"

@@ -9,8 +9,6 @@ The **Cardstack Catalog** is the official catalog realm — the source of truth 
 - **Deployment Pipeline**: Changes flow from local development → boxel-catalog repo → staging → production
 - **URL**: Served at `/catalog/` in every environment (localhost, staging, production)
 
-For the legacy monorepo catalog (served at `/legacy-catalog/`), see [packages/catalog-realm](../catalog-realm/).
-
 ## Setup
 
 ### Prerequisites
@@ -67,6 +65,34 @@ This workflow is ideal for rapid iteration and testing of catalog content:
 4. **Deploy to staging** happens automatically when the PR is merged
 
 5. **Tag the commit** to release to production
+
+## Linting
+
+This package includes automated linting checks for JavaScript, TypeScript, and Glimmer templates:
+
+- **ESLint**: Validates `.ts` and `.gts` files
+- **ember-template-lint**: Validates `.hbs` files
+- **ember-tsc**: TypeScript type checking
+
+### Running Linting
+
+```bash
+# Check for linting issues
+pnpm lint
+
+# Auto-fix linting issues
+pnpm lint:fix
+```
+
+Individual linting commands:
+
+```bash
+pnpm lint:js      # ESLint check
+pnpm lint:hbs     # Template lint check
+pnpm lint:types   # TypeScript type check
+```
+
+These commands run locally in this monorepo's `packages/catalog` package. If you submit a pull request to the [boxel-catalog](https://github.com/cardstack/boxel-catalog) repository, any linting run in CI is controlled by that repository's own workflow configuration.
 
 ## Deployment Pipeline
 

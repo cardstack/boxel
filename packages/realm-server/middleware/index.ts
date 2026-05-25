@@ -1,4 +1,5 @@
-import proxy from 'koa-proxies';
+import http from 'http';
+import https from 'https';
 import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   logger as getLogger,
@@ -13,8 +14,28 @@ import {
   AuthenticationErrorMessages,
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
+import {
+  PRERENDER_JOB_ID_HEADER,
+  sanitizePrerenderJobId,
+} from '../prerender/prerender-constants';
 
 const REQUEST_BODY_STATE = 'requestBody';
+
+// HTTP/2 forbids connection-specific (hop-by-hop) headers (RFC 9113
+// §8.2.2). Sending any of them on an h2 response makes Node's http2
+// compat layer either strip them silently or — worse — drop the stream
+// mid-flight. We also strip them from the upstream-asset response in
+// `proxyAsset` for the same reason: even when the host-dist upstream
+// is plain HTTP/1.1, we re-emit its response through the realm-server's
+// (potentially h2) response and the forbidden list applies there too.
+const H2_FORBIDDEN_RESPONSE_HEADERS = new Set([
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'upgrade',
+  'proxy-connection',
+  'http2-settings',
+]);
 
 interface ProxyOptions {
   requestHeaders?: Record<string, string>;
@@ -27,25 +48,74 @@ export function proxyAsset(
   opts?: ProxyOptions,
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
-  return proxy(from, {
-    target: assetsURL.href.replace(/$\//, ''),
-    changeOrigin: true,
-    rewrite: () => {
-      return `/${filename}`;
-    },
-    events: {
-      proxyReq: (proxyReq) => {
-        for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
-          proxyReq.setHeader(key, value);
-        }
+  let upstreamPath = `${assetsURL.pathname.replace(/\/$/, '')}/${filename}`;
+  let client = assetsURL.protocol === 'https:' ? https : http;
+  // Direct upstream proxy. Replaces the previous koa-proxies + http-proxy
+  // stack which forwarded `req.headers` verbatim into Node's
+  // `http.ClientRequest`; under HTTP/2 that included pseudo-headers
+  // (`:method`, `:path`, …) and tripped `ERR_INVALID_HTTP_TOKEN`. By
+  // building the upstream request ourselves we choose exactly which
+  // headers to forward, so the h2 / h1 callers share one code path.
+  //
+  // GET-only — `upstreamReq.end()` fires without a body. Add request-
+  // body piping if you need to reuse this for POST/PUT/PATCH; the only
+  // current caller is the host-dist asset hand-off (`/auth-service-worker.js`).
+  return async (ctxt, next) => {
+    if (ctxt.path !== from) {
+      return next();
+    }
+
+    let forwardedHeaders: Record<string, string> = {};
+    for (let [name, value] of Object.entries(ctxt.req.headers)) {
+      if (name.startsWith(':')) continue;
+      // Node's http.ClientRequest rejects connection-specific hop-by-hop
+      // headers when targeting an HTTP/1.1 upstream.
+      if (name === 'host') continue;
+      if (typeof value === 'string') {
+        forwardedHeaders[name] = value;
+      } else if (Array.isArray(value)) {
+        forwardedHeaders[name] = value.join(', ');
+      }
+    }
+    for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
+      forwardedHeaders[key] = value;
+    }
+
+    let upstreamRes = await new Promise<http.IncomingMessage>(
+      (resolve, reject) => {
+        let upstreamReq = client.request(
+          {
+            method: ctxt.method,
+            hostname: assetsURL.hostname,
+            // `assetsURL.port` is the empty string for default-port URLs;
+            // fall through to the protocol default.
+            port: assetsURL.port || (client === https ? 443 : 80),
+            path: upstreamPath,
+            headers: forwardedHeaders,
+          },
+          resolve,
+        );
+        upstreamReq.on('error', reject);
+        upstreamReq.end();
       },
-      proxyRes: (_proxyRes, _req, res) => {
-        for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
-          res.setHeader(key, value);
-        }
-      },
-    },
-  });
+    );
+
+    ctxt.status = upstreamRes.statusCode ?? 502;
+    for (let [name, value] of Object.entries(upstreamRes.headers)) {
+      if (value == null) continue;
+      // Strip hop-by-hop headers (Node manages them per-connection) plus
+      // anything else the h2 response layer will reject. `host` is
+      // irrelevant on the response side.
+      if (H2_FORBIDDEN_RESPONSE_HEADERS.has(name.toLowerCase())) {
+        continue;
+      }
+      ctxt.set(name, Array.isArray(value) ? value.map(String) : String(value));
+    }
+    for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
+      ctxt.set(key, value);
+    }
+    ctxt.body = upstreamRes;
+  };
 }
 
 // Add middleware to handle method override for QUERY
@@ -80,18 +150,24 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
+  // Stamp `[job: J.R]` onto the request log lines when the upstream
+  // caller (typically the worker indexing pipeline) supplied an
+  // `x-boxel-job-id` header. Lets a single substring filter pull
+  // realm-server lines for an indexing job alongside worker lines.
+  let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+  let jobTag = jobId ? ` [job: ${jobId}]` : '';
 
   logger.info(
     `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${
       fullRequestURL(ctxt).href
-    }`,
+    }${jobTag}`,
   );
 
   ctxt.res.on('finish', () => {
     logger.info(
       `--> ${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}`,
+      }: ${ctxt.status}${jobTag}`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
@@ -117,11 +193,30 @@ function isLoopbackAddress(address: string | undefined): boolean {
 }
 
 export function fullRequestURL(ctxt: Koa.Context): URL {
+  // Three protocol signals, checked in order:
+  //   1. `x-forwarded-proto: https` — set by a TLS-terminating proxy in front
+  //      of us (ALB, Traefik, etc.). Trust it ahead of the socket check because
+  //      the proxy may have negotiated TLS even when our socket is plain HTTP.
+  //   2. The TLS socket flag — set when we terminate TLS ourselves (the local
+  //      dev HTTPS/h2 listener). `tls.TLSSocket#encrypted` is true here; plain
+  //      http.IncomingMessage sockets do not have the property.
+  //   3. Default to http.
+  let socket = ctxt.req.socket as { encrypted?: boolean } | undefined;
   let protocol =
-    ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  let computedURL = new URL(
-    `${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`,
-  );
+    ctxt.req.headers['x-forwarded-proto'] === 'https' || socket?.encrypted
+      ? 'https'
+      : 'http';
+  // HTTP/2 carries the authority in the `:authority` pseudo-header rather
+  // than the legacy `Host` header. Node's http2 compat layer normally
+  // populates `headers.host` from `:authority`, but only when the value
+  // is set; falling back to `:authority` makes URL construction robust to
+  // h2 clients (and proxies) that may omit `host`.
+  let h2Headers = ctxt.req.headers as Record<string, string | undefined>;
+  let host =
+    typeof h2Headers.host === 'string' && h2Headers.host
+      ? h2Headers.host
+      : (h2Headers[':authority'] ?? '');
+  let computedURL = new URL(`${protocol}://${host}${ctxt.req.url}`);
   let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
   if (
     process.env.BOXEL_TRUST_FORWARDED_URL === 'true' &&
@@ -163,9 +258,24 @@ export async function fetchRequestFromContext(
   }
 
   let url = fullRequestURL(ctxt).href;
+  // HTTP/2's compat layer presents pseudo-headers (`:method`, `:scheme`,
+  // `:path`, `:authority`) alongside the regular headers. WHATWG `Headers`
+  // rejects names starting with `:` as invalid, so the raw `ctxt.req.headers`
+  // object cannot be passed to `new Request()` on h2 requests. Strip the
+  // pseudo-headers — the URL and method are already extracted above, and
+  // `:authority` is folded back into `host` by `fullRequestURL`.
+  let headers: Record<string, string> = {};
+  for (let [name, value] of Object.entries(ctxt.req.headers)) {
+    if (name.startsWith(':')) continue;
+    if (typeof value === 'string') {
+      headers[name] = value;
+    } else if (Array.isArray(value)) {
+      headers[name] = value.join(', ');
+    }
+  }
   return new Request(url, {
     method: ctxt.method,
-    headers: ctxt.req.headers as { [name: string]: string },
+    headers,
     ...(reqBody !== undefined ? { body: reqBody as BodyInit } : {}),
   });
 }
@@ -209,10 +319,22 @@ export function grafanaAuthorization(
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
-    if (!authorization || authorization !== grafanaSecret) {
+    if (!authorization) {
       await sendResponseForUnauthorizedRequest(
         ctxt,
         AuthenticationErrorMessages.MissingAuthHeader,
+      );
+      return;
+    }
+    // RFC 6750: scheme name is case-insensitive and any 1+ whitespace
+    // separator is allowed. Match only the first whitespace run so a
+    // secret that itself contains whitespace stays intact in the
+    // captured token (a greedy /\s+/ split would false-reject those).
+    let bearerMatch = authorization.trim().match(/^bearer\s+(.+)$/i);
+    if (!bearerMatch || bearerMatch[1] !== grafanaSecret) {
+      await sendResponseForUnauthorizedRequest(
+        ctxt,
+        AuthenticationErrorMessages.TokenInvalid,
       );
       return;
     }
@@ -293,6 +415,7 @@ export async function setContextResponse(
   ctxt.status = status;
   ctxt.message = statusText;
   for (let [header, value] of headers.entries()) {
+    if (H2_FORBIDDEN_RESPONSE_HEADERS.has(header.toLowerCase())) continue;
     ctxt.set(header, value);
   }
   if (!headers.get('content-type')) {

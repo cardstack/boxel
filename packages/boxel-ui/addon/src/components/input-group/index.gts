@@ -35,6 +35,7 @@ export interface Signature {
     id?: string;
     inputmode?: string;
     invalidIcon?: Icon;
+    name?: string;
     onBlur?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
@@ -111,6 +112,7 @@ export default class InputGroup extends Component<Signature> {
           {{else}}
             <InputControl
               id={{this.elementId}}
+              name={{@name}}
               type={{@type}}
               @placeholder={{@placeholder}}
               @disabled={{@disabled}}

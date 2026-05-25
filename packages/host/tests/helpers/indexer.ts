@@ -20,6 +20,7 @@ import {
   trimExecutableExtension,
   query,
   coerceTypes,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -147,11 +148,13 @@ export async function setupIndex(
     indexRows: workingRows,
     now,
     client,
+    columnSourceTable: 'boxel_index_working',
   });
   let productionIndexedCardsExpressions = await indexedCardsExpressions({
     indexRows: productionRows,
     now,
     client,
+    columnSourceTable: 'boxel_index',
   });
   let versionExpressions = versionRows.map((r) => asExpressions(r));
 
@@ -218,10 +221,17 @@ async function indexedCardsExpressions({
   indexRows,
   now,
   client,
+  columnSourceTable,
 }: {
   indexRows: TestIndexRow[];
   now: number;
   client: DBAdapter;
+  // Which table's column list to drive the dataObject projection. The
+  // default `boxel_index` is missing columns that exist only on
+  // `boxel_index_working` (e.g. `job_id`); when the caller is building
+  // expressions for a working-table insert, those columns must be
+  // preserved.
+  columnSourceTable?: 'boxel_index' | 'boxel_index_working';
 }) {
   return await Promise.all(
     indexRows.map(async (r) => {
@@ -251,7 +261,7 @@ async function indexedCardsExpressions({
             ? `${row.url}.json`
             : row.url
           : row.url;
-      row.file_alias = trimExecutableExtension(new URL(row.url)).href.replace(
+      row.file_alias = trimExecutableExtension(rri(row.url)).replace(
         /\.json$/,
         '',
       );
@@ -262,7 +272,9 @@ async function indexedCardsExpressions({
         ...defaultIndexEntry,
         ...row,
       };
-      let columnNames = await client.getColumnNames('boxel_index');
+      let columnNames = await client.getColumnNames(
+        columnSourceTable ?? 'boxel_index',
+      );
 
       // Make sure all table columns are present in the data object, even if their value is undefined. This is to assure
       // that the order of the columns in the insert statement is consistent for all types of resources

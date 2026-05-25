@@ -34,6 +34,15 @@ test.beforeEach(async () => {
   }) => {
     await page.goto(appURL);
 
+    await expect(page.locator('[data-test-username-field]')).toHaveAttribute(
+      'name',
+      'username',
+    );
+    await expect(page.locator('[data-test-password-field]')).toHaveAttribute(
+      'name',
+      'password',
+    );
+
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
     await page.locator('[data-test-username-field]').fill(username);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();

@@ -8,6 +8,7 @@ import {
   insertUser,
   runTestRealmServer,
   createVirtualNetwork,
+  fixtureDir,
   matrixURL,
   closeServer,
 } from './helpers';
@@ -16,7 +17,7 @@ import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import { realmSecretSeed } from './helpers';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 
@@ -41,7 +42,7 @@ module(basename(__filename), function () {
         dbAdapter = _dbAdapter;
         let testRealmDir = join(dir.name, 'realm_server_5', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
 
         testRealmServer = (
           await runTestRealmServer({

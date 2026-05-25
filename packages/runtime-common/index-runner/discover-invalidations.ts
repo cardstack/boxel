@@ -20,6 +20,16 @@ interface DiscoverInvalidationsOptions {
   perfDebug(message: string): void;
 }
 
+export interface DiscoverInvalidationsResult {
+  urls: string[];
+  // Filesystem mtimes at the moment we discovered invalidations.
+  // Returned alongside the URL list so the from-scratch caller can
+  // compare against `Batch.resumedRows` and decide whether a row
+  // already written by a previous attempt is still authoritative —
+  // without paying for a second `reader.mtimes()` round-trip.
+  filesystemMtimes: { [url: string]: number };
+}
+
 export async function discoverInvalidations({
   url,
   indexMtimes,
@@ -30,7 +40,7 @@ export async function discoverInvalidations({
   jobInfo,
   logDebug,
   perfDebug,
-}: DiscoverInvalidationsOptions): Promise<string[]> {
+}: DiscoverInvalidationsOptions): Promise<DiscoverInvalidationsResult> {
   logDebug(
     `${jobIdentity(jobInfo)} discovering invalidations in dir ${url.href}`,
   );
@@ -77,12 +87,24 @@ export async function discoverInvalidations({
       skipList.push(mtimeUrl);
     }
   }
-  // Check for deleted files - files that exist in index but not on filesystem
-  let indexedUrls = [...indexMtimes.keys()];
-  let deletedUrls = indexedUrls.filter(
-    (indexedUrl) => !filesystemMtimes[indexedUrl],
+  // Files present in the production index OR in this job's prior
+  // attempt's working rows, but absent from disk — they need
+  // tombstones. Covering `batch.resumedRows` is what makes the resume
+  // safe: without it, a URL the previous attempt processed and that
+  // has since been deleted would slip past tombstoning (the
+  // resume-guard in `Batch.tombstoneEntries` would protect the row)
+  // and `applyBatchUpdates` would promote a stale row, resurrecting
+  // the deleted file. Forgetting the resumed entry first lets the
+  // tombstone overwrite it.
+  let candidateForDeletion = new Set<string>([
+    ...indexMtimes.keys(),
+    ...batch.resumedRows.keys(),
+  ]);
+  let deletedUrls = [...candidateForDeletion].filter(
+    (u) => !filesystemMtimes[u],
   );
   if (deletedUrls.length > 0) {
+    batch.forgetResumedRows(deletedUrls);
     perfDebug(
       `${jobIdentity(jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
     );
@@ -94,10 +116,13 @@ export async function discoverInvalidations({
     // deleted files that are only discoverable from the index.
     if (deletedUrls.length > 0) {
       await batch.invalidate(deletedUrls.map((u) => new URL(u)));
-      return [...new Set([...invalidationList, ...batch.invalidations])];
+      return {
+        urls: [...new Set([...invalidationList, ...batch.invalidations])],
+        filesystemMtimes,
+      };
     }
 
-    return invalidationList;
+    return { urls: invalidationList, filesystemMtimes };
   }
 
   let invalidationStart = Date.now();
@@ -105,5 +130,5 @@ export async function discoverInvalidations({
   perfDebug(
     `${jobIdentity(jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
   );
-  return batch.invalidations;
+  return { urls: batch.invalidations, filesystemMtimes };
 }

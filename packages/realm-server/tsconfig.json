@@ -32,5 +32,10 @@
     "types": ["@cardstack/local-types"]
   },
   "include": ["../base/**/*", "./**/*"],
-  "exclude": ["../base/**/__boxel/**", "./realms/**", "./tests/fixtures/**"]
+  "exclude": [
+    "../base/**/__boxel/**",
+    "./realms/**",
+    "./tests/fixtures/**",
+    "./scripts/bench-realm/fixtures/**"
+  ]
 }

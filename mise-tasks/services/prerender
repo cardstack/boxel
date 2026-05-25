@@ -1,18 +1,68 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start prerender server for development"
 #MISE depends=["infra:ensure-traefik"]
 #MISE dir="packages/realm-server"
 
+# Propagate the prerender server's exit status through the trailing
+# `| dev-log-tee.sh` pipeline so mise sees crashes instead of the tee stage's
+# clean EOF. `set -o pipefail` is a bashism — Ubuntu CI's /bin/sh is dash and
+# rejects it as "Illegal option", so this script must run under bash.
+set -o pipefail
+
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
 if [ -n "$ENV_MODE" ]; then
   DEFAULT_HOST_URL="${HOST_URL}"
 else
-  DEFAULT_HOST_URL="${HOST_URL:-http://localhost:4200}"
+  DEFAULT_HOST_URL="${HOST_URL:-https://localhost:4200}"
 fi
+
+# Dev mode only: gate startup on the host's `/_standby` route being
+# browser-loadable. Without this gate, the prerender service launches
+# while vite is still cold-bundling the host's ~1000-package dep graph,
+# puppeteer's first `/_standby` navigation times out, the page pool's
+# retry budget is exhausted before vite is ready, and the prerender is
+# left unable to render any card — every indexing job then fails with
+# "No standby page available," and recovering requires manually
+# restarting the service. The hosted environment doesn't have this
+# problem because it serves a pre-built bundle with no optimizer phase,
+# so the gate is skipped under ENV_MODE.
+#
+# A curl-based readiness probe can't substitute for this: vite serves
+# the `/_standby` HTML and most module URLs while the optimizer is
+# still working, so HTTP 200 is not a real readiness signal. The
+# puppeteer probe in scripts/wait-for-host-standby.ts exercises the same
+# navigation the prerender will take, so it succeeds the instant the
+# host is actually browser-ready.
+if [ -z "$ENV_MODE" ]; then
+  HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
+    ts-node --transpileOnly ./scripts/wait-for-host-standby.ts || exit $?
+fi
+
+# In local HTTPS dev (vite on https://localhost:4200 with HTTP/2),
+# the prerender's puppeteer chrome triggers vite's first cold-start of
+# ~1000 packages over h2. Even when wait-for-host-standby has already
+# warmed vite once, the new chrome instance re-downloads everything
+# and the initial `_standby` load can exceed the 30s default. Give it
+# headroom by default; production / hosted runners can override.
+case "${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" in
+  https://*) : "${PRERENDER_STANDBY_TIMEOUT_MS:=120000}" ;;
+esac
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
+  PRERENDER_STANDBY_TIMEOUT_MS="${PRERENDER_STANDBY_TIMEOUT_MS:-}" \
   ts-node \
   --transpileOnly prerender/prerender-server \
   --port="${PRERENDER_PORT}" \
-  --count="${PRERENDER_COUNT:-1}"
+  --count="${PRERENDER_COUNT:-1}" \
+  2>&1 | "$LOG_TEE" prerender

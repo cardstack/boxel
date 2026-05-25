@@ -11,7 +11,7 @@
       "url": "https://www.pixar.com/finding-nemo",
       "color": "#ff6d1f",
       "email": "nemo@email.com",
-      "realm": "http://localhost:4201/experiments/",
+      "realm": "https://localhost:4201/experiments/",
       "address": {
         "city": "Sydney",
         "state": "NSW",

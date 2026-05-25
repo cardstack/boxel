@@ -69,8 +69,8 @@ export default class PopulateWithSampleDataCommand extends HostBaseCommand<
       roomId: this.matrixService.currentRoomId,
       prompt: this.prompt,
       attachedCards: [card],
-      attachedFileURLs: this.getAttachedFileURLs(card),
-      realmUrl: card[realmURL]?.href,
+      attachedFileIdentifiers: this.getAttachedFileURLs(card),
+      realmIdentifier: card[realmURL]?.href,
     });
   }
 }

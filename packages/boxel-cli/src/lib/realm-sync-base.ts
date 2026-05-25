@@ -3,12 +3,15 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 import pLimit from 'p-limit';
+import { isBinaryFilename } from '@cardstack/runtime-common/infer-content-type';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
 
 // Files that must never be pushed, deleted, or overwritten on the server via CLI.
 export const PROTECTED_FILES = new Set(['.realm.json']);
+const DELETE_TIMEOUT_MS = 10_000;
+const DELETE_TIMEOUT_PROBE_MS = 3_000;
 
 export function isProtectedFile(relativePath: string): boolean {
   const normalizedPath = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -40,16 +43,53 @@ function decodeAtomicResultId(id: string): string {
   }
 }
 
+// Builds a structured upload error: the message embeds the response
+// status + statusText + a snippet of the response body (the realm
+// returns useful detail there — size limits, missing scopes, etc.),
+// and a `status` property is attached so the batch helper can route
+// the failure without re-parsing the message.
+async function throwUploadError(
+  response: Response,
+  relativePath: string,
+): Promise<never> {
+  const bodyText = await response.text().catch(() => '');
+  const message = `Failed to upload ${relativePath}: ${response.status} ${response.statusText}${
+    bodyText ? ` — ${bodyText.slice(0, 200)}` : ''
+  }`;
+  const err = new Error(message) as Error & {
+    status?: number;
+    body?: string;
+  };
+  err.status = response.status;
+  err.body = bodyText;
+  throw err;
+}
+
+// Shared shape for per-file upload errors that need to bubble back to
+// callers (push.ts / sync.ts) so they can format hints and decide which
+// successes to persist alongside the failures.
+type UploadFailure = { path: string; status: number; title: string };
+
 export const SupportedMimeType = {
   CardSource: 'application/vnd.card+source',
   DirectoryListing: 'application/vnd.api+json',
   Mtimes: 'application/vnd.api+json',
+  OctetStream: 'application/octet-stream',
 } as const;
 
 export interface SyncOptions {
   realmUrl: string;
   localDir: string;
   dryRun?: boolean;
+  /**
+   * Append `?waitForIndex=true` to the `_atomic` POST so the realm-server
+   * returns only after the indexer has processed the batch. The
+   * `_atomic` handler hardcoded `waitForIndex: false` after CS-11003
+   * PR 2 (deferred `+source` POST), so callers that read indexed state
+   * (search / list) immediately after a sync race the indexer. Off by
+   * default.
+   */
+  waitForIndex?: boolean;
 }
 
 const REMOTE_CONCURRENCY = 10;
@@ -114,11 +154,13 @@ export abstract class RealmSyncBase {
     try {
       const url = this.buildDirectoryUrl(dir);
 
-      const response = await this.authenticator.authedRealmFetch(url, {
-        headers: {
-          Accept: 'application/vnd.api+json',
-        },
-      });
+      const response = await this.remoteLimit(() =>
+        this.authenticator.authedRealmFetch(url, {
+          headers: {
+            Accept: 'application/vnd.api+json',
+          },
+        }),
+      );
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -156,10 +198,10 @@ export abstract class RealmSyncBase {
               }
               return [] as Array<[string, boolean]>;
             } else {
-              return this.remoteLimit(async () => {
+              return (async () => {
                 const subdirFiles = await this.getRemoteFileList(entryPath);
                 return Array.from(subdirFiles.entries());
-              });
+              })();
             }
           }),
         );
@@ -383,6 +425,12 @@ export abstract class RealmSyncBase {
       return;
     }
 
+    if (isBinaryFilename(relativePath)) {
+      await this.uploadBinaryFile(relativePath, localPath);
+      console.log(`  Uploaded: ${relativePath}`);
+      return;
+    }
+
     const content = await fs.readFile(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
@@ -396,12 +444,37 @@ export abstract class RealmSyncBase {
     });
 
     if (!response.ok) {
-      throw new Error(
-        `Failed to upload: ${response.status} ${response.statusText}`,
-      );
+      await throwUploadError(response, relativePath);
     }
 
     console.log(`  Uploaded: ${relativePath}`);
+  }
+
+  // Uploads a single binary file (PNG, PDF, font, etc.) per the host
+  // pattern: a per-file POST with Content-Type: application/octet-stream
+  // and the raw bytes as the body. The realm-server routes octet-stream
+  // POSTs to upsertBinaryFile, which writes the bytes verbatim without
+  // any string conversion. Used by both uploadFile (single-shot) and
+  // uploadFilesAtomic (mixed-batch fallback for the binary entries it
+  // splits out of the atomic JSON payload).
+  protected async uploadBinaryFile(
+    relativePath: string,
+    localPath: string,
+  ): Promise<void> {
+    const bytes = await fs.readFile(localPath);
+    const url = this.buildFileUrl(relativePath);
+
+    const response = await this.authenticator.authedRealmFetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': SupportedMimeType.OctetStream,
+      },
+      body: bytes,
+    });
+
+    if (!response.ok) {
+      await throwUploadError(response, relativePath);
+    }
   }
 
   // Batched upload via the realm's /_atomic endpoint. Returns the set of
@@ -417,7 +490,7 @@ export abstract class RealmSyncBase {
     succeeded: string[];
     error?: {
       status: number;
-      perFile: Array<{ path: string; status: number; title: string }>;
+      perFile: UploadFailure[];
       message: string;
     };
   }> {
@@ -436,8 +509,137 @@ export abstract class RealmSyncBase {
       return { succeeded: [] };
     }
 
+    // The /_atomic endpoint embeds each file's content inside a JSON
+    // `attributes.content` string, which can't carry raw binary bytes.
+    // Match the host pattern: keep /_atomic for text files only, and
+    // for each binary file fall back to a per-file octet-stream POST
+    // (the same wire format `uploadBinaryFile` uses for a single binary).
+    // The two batches run concurrently — neither helper rejects, so the
+    // outer Promise.all just joins their structured results.
+    const textEntries: Array<[string, string]> = [];
+    const binaryEntries: Array<[string, string]> = [];
+    for (const entry of entries) {
+      if (isBinaryFilename(entry[0])) {
+        binaryEntries.push(entry);
+      } else {
+        textEntries.push(entry);
+      }
+    }
+
+    const [binaryOutcome, textOutcome] = await Promise.all([
+      this.uploadBinaryBatch(binaryEntries),
+      this.uploadTextAtomic(textEntries, addPaths),
+    ]);
+
+    const succeeded = [...textOutcome.succeeded, ...binaryOutcome.succeeded];
+
+    if (textOutcome.fatal) {
+      return {
+        succeeded,
+        error: {
+          status: textOutcome.fatal.status,
+          perFile: [...textOutcome.failed, ...binaryOutcome.failed],
+          message: textOutcome.fatal.message,
+        },
+      };
+    }
+
+    if (binaryOutcome.failed.length > 0) {
+      return {
+        succeeded,
+        error: {
+          status: binaryOutcome.failed[0].status,
+          perFile: binaryOutcome.failed,
+          message: `Binary upload failed for ${binaryOutcome.failed.length} file(s)`,
+        },
+      };
+    }
+
+    return { succeeded };
+  }
+
+  // Fan out the per-file octet-stream POSTs for the binary slice of an
+  // atomic batch. Each upload is wrapped in try/catch so a single failure
+  // is folded into the result instead of rejecting the fan-out;
+  // Promise.allSettled is used at the boundary as defense-in-depth so a
+  // future change that drops the inner catch still surfaces a structured
+  // failure rather than silently aborting other in-flight uploads.
+  private async uploadBinaryBatch(
+    binaryEntries: Array<[string, string]>,
+  ): Promise<{ succeeded: string[]; failed: UploadFailure[] }> {
+    if (binaryEntries.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
+    const settled = await Promise.allSettled(
+      binaryEntries.map(([relativePath, localPath]) =>
+        this.remoteLimit(async () => {
+          try {
+            await this.uploadBinaryFile(relativePath, localPath);
+            console.log(`  Uploaded: ${relativePath}`);
+            return { relativePath, ok: true as const };
+          } catch (err) {
+            const errWithStatus = err as { status?: number };
+            const status =
+              typeof errWithStatus?.status === 'number'
+                ? errWithStatus.status
+                : 500;
+            const title = err instanceof Error ? err.message : String(err);
+            return {
+              relativePath,
+              ok: false as const,
+              status,
+              title,
+            };
+          }
+        }),
+      ),
+    );
+
+    const succeeded: string[] = [];
+    const failed: UploadFailure[] = [];
+    for (let i = 0; i < settled.length; i++) {
+      const outcome = settled[i];
+      if (outcome.status === 'fulfilled') {
+        if (outcome.value.ok) {
+          succeeded.push(outcome.value.relativePath);
+        } else {
+          failed.push({
+            path: outcome.value.relativePath,
+            status: outcome.value.status,
+            title: outcome.value.title,
+          });
+        }
+      } else {
+        failed.push({
+          path: binaryEntries[i][0],
+          status: 500,
+          title: String(outcome.reason),
+        });
+      }
+    }
+
+    return { succeeded, failed };
+  }
+
+  // POST the text slice of a mixed batch to /_atomic and decode the
+  // result. `fatal` is set when the server rejected the whole batch
+  // (non-201) — callers map that to a top-level error message; `failed`
+  // carries the per-operation errors the server returned alongside.
+  private async uploadTextAtomic(
+    textEntries: Array<[string, string]>,
+    addPaths: Set<string>,
+  ): Promise<{
+    succeeded: string[];
+    failed: UploadFailure[];
+    fatal?: { status: number; message: string };
+  }> {
+    if (textEntries.length === 0) {
+      return { succeeded: [], failed: [] };
+    }
+
     const operations = await Promise.all(
-      entries.map(async ([relativePath, localPath]) => {
+      textEntries.map(async ([relativePath, localPath]) => {
         const content = await fs.readFile(localPath, 'utf8');
         return {
           op: addPaths.has(relativePath)
@@ -453,7 +655,9 @@ export abstract class RealmSyncBase {
       }),
     );
 
-    const url = `${this.normalizedRealmUrl}_atomic`;
+    const url = this.options.waitForIndex
+      ? `${this.normalizedRealmUrl}_atomic?waitForIndex=true`
+      : `${this.normalizedRealmUrl}_atomic`;
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
       headers: {
@@ -463,27 +667,28 @@ export abstract class RealmSyncBase {
       body: JSON.stringify({ 'atomic:operations': operations }),
     });
 
+    const hrefToRelative = new Map(
+      textEntries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+    );
+
     if (response.status === 201) {
       const body = (await response.json()) as {
         'atomic:results'?: Array<{ data?: { id?: string } }>;
       };
-      const hrefToRelative = new Map(
-        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
-      );
       // The realm normalizes hrefs: a path with a space goes out as
       // `Knowledge Articles/...` but comes back URL-encoded as
       // `Knowledge%20Articles/...`. Decode the response id before the
       // map lookup so we resolve back to the original relative path
       // instead of falling through to the raw encoded URL.
-      const succeeded = (body['atomic:results'] ?? [])
+      const atomicSucceeded = (body['atomic:results'] ?? [])
         .map((r) => r.data?.id)
         .filter((id): id is string => typeof id === 'string')
         .map((id) => decodeAtomicResultId(id))
         .map((id) => hrefToRelative.get(id) ?? id);
-      for (const rel of succeeded) {
+      for (const rel of atomicSucceeded) {
         console.log(`  Uploaded: ${rel}`);
       }
-      return { succeeded };
+      return { succeeded: atomicSucceeded, failed: [] };
     }
 
     let errorBody: {
@@ -495,15 +700,12 @@ export abstract class RealmSyncBase {
       // ignore JSON parse failures — fall through to the generic message
     }
 
-    const perFile = (errorBody.errors ?? []).map((e) => {
+    const failed: UploadFailure[] = (errorBody.errors ?? []).map((e) => {
       const detail = e.detail ?? '';
       const match = detail.match(/Resource (\S+) /);
       const href = match ? decodeAtomicResultId(match[1]) : '';
-      const relMap = new Map(
-        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
-      );
       return {
-        path: relMap.get(href) ?? href,
+        path: hrefToRelative.get(href) ?? href,
         status: e.status ?? response.status,
         title: e.title ?? 'Error',
       };
@@ -511,9 +713,9 @@ export abstract class RealmSyncBase {
 
     return {
       succeeded: [],
-      error: {
+      failed,
+      fatal: {
         status: response.status,
-        perFile,
         message: `Atomic upload failed: ${response.status} ${response.statusText}`,
       },
     };
@@ -544,12 +746,16 @@ export abstract class RealmSyncBase {
       );
     }
 
-    const content = await response.text();
-
     const localDir = path.dirname(localPath);
     await fs.mkdir(localDir, { recursive: true });
 
-    await fs.writeFile(localPath, content, 'utf8');
+    if (isBinaryFilename(relativePath)) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.writeFile(localPath, buffer);
+    } else {
+      const content = await response.text();
+      await fs.writeFile(localPath, content, 'utf8');
+    }
     console.log(`  Downloaded: ${relativePath}`);
   }
 
@@ -567,13 +773,45 @@ export abstract class RealmSyncBase {
     }
 
     const url = this.buildFileUrl(relativePath);
+    const startedAt = Date.now();
 
-    const response = await this.authenticator.authedRealmFetch(url, {
-      method: 'DELETE',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
+    let response: Response;
+    try {
+      response = await this.authenticator.authedRealmFetch(url, {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+        signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
+      });
+    } catch (error) {
+      let elapsedMs = Date.now() - startedAt;
+      console.error(
+        `  Delete request failed after ${elapsedMs}ms: ${relativePath}`,
+      );
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      ) {
+        let deleteApplied = await this.verifyDeleteApplied(relativePath);
+        if (deleteApplied === true) {
+          console.warn(
+            `  Delete response timed out after ${DELETE_TIMEOUT_MS}ms, but ${relativePath} is already gone on the realm; continuing`,
+          );
+          return;
+        }
+        throw new Error(
+          `Timed out deleting ${relativePath} after ${DELETE_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+
+    let elapsedMs = Date.now() - startedAt;
+    console.log(
+      `  Delete response for ${relativePath}: ${response.status} ${response.statusText} (${elapsedMs}ms)`,
+    );
 
     if (!response.ok && response.status !== 404) {
       throw new Error(
@@ -582,6 +820,30 @@ export abstract class RealmSyncBase {
     }
 
     console.log(`  Deleted: ${relativePath}`);
+  }
+
+  private async verifyDeleteApplied(
+    relativePath: string,
+  ): Promise<boolean | 'unknown'> {
+    const url = this.buildFileUrl(relativePath);
+    try {
+      const response = await this.authenticator.authedRealmFetch(url, {
+        headers: {
+          Accept: SupportedMimeType.CardSource,
+        },
+        signal: AbortSignal.timeout(DELETE_TIMEOUT_PROBE_MS),
+      });
+      console.warn(
+        `  Delete-timeout probe for ${relativePath}: ${response.status} ${response.statusText}`,
+      );
+      return response.status === 404 ? true : false;
+    } catch (probeError) {
+      console.warn(
+        `  Delete-timeout probe failed for ${relativePath}:`,
+        probeError,
+      );
+      return 'unknown';
+    }
   }
 
   protected async deleteLocalFile(localPath: string): Promise<void> {

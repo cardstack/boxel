@@ -1,0 +1,71 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "IssueTracker",
+        "module": "/software-factory/issue-tracker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "boardKey": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "boardTitle": null,
+      "placements": [
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-1",
+          "columnKey": "backlog",
+          "sortOrder": 0
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-2",
+          "columnKey": "in_progress",
+          "sortOrder": 1
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-3",
+          "columnKey": "blocked",
+          "sortOrder": 1
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-4",
+          "columnKey": "blocked",
+          "sortOrder": 2
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbr-5",
+          "columnKey": "review",
+          "sortOrder": 4
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Issue/hbs-6",
+          "columnKey": "done",
+          "sortOrder": 5
+        }
+      ],
+      "hideEmptyColumns": false
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/bc838c6e-6a12-4331-94ff-c7c3e7e96d0b"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

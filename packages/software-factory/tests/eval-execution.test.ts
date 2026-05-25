@@ -35,7 +35,7 @@ function stubClientAlwaysThrows(): BoxelCLIClient {
 module('discoverEvaluableFiles', function () {
   test('excludes .test.* and .spec.* test-runner files', async function (assert) {
     let files = await discoverEvaluableFiles({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       client: stubClient([
         'hello.gts',
         'hello.test.gts',
@@ -54,7 +54,7 @@ module('discoverEvaluableFiles', function () {
 
   test('excludes .d.ts ambient declaration files', async function (assert) {
     let files = await discoverEvaluableFiles({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       client: stubClient([
         'app.ts',
         'globals.d.ts',
@@ -68,7 +68,7 @@ module('discoverEvaluableFiles', function () {
 
   test('dedupes same-basename files by extension precedence (.gts > .gjs > .ts > .js)', async function (assert) {
     let files = await discoverEvaluableFiles({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       client: stubClient([
         'foo.js',
         'foo.ts',
@@ -88,7 +88,7 @@ module('discoverEvaluableFiles', function () {
 
   test('ignores non-ESM filenames entirely', async function (assert) {
     let files = await discoverEvaluableFiles({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       client: stubClient([
         'Cards/my-card.json',
         'index.json',
@@ -109,7 +109,7 @@ module('discoverEvaluableFiles', function () {
 module('runEvaluateInMemory path validation', function () {
   test('rejects absolute "/..." paths without calling the realm', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: '/escape.gts',
@@ -123,7 +123,7 @@ module('runEvaluateInMemory path validation', function () {
 
   test('rejects ".." traversal segments without calling the realm', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: '../other-realm/foo.gts',
@@ -134,7 +134,7 @@ module('runEvaluateInMemory path validation', function () {
 
   test('rejects ".." segments nested inside the path', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: 'Cards/../../escape.gts',
@@ -145,7 +145,7 @@ module('runEvaluateInMemory path validation', function () {
 
   test('rejects absolute URLs with a scheme', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: 'https://malicious.test/foo.gts',
@@ -159,7 +159,7 @@ module('runEvaluateInMemory path validation', function () {
 
   test('rejects .d.ts ambient declaration paths', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: 'types/globals.d.ts',
@@ -170,7 +170,7 @@ module('runEvaluateInMemory path validation', function () {
 
   test('rejects .spec.ts paths (test-runner source files)', async function (assert) {
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'https://example.test/realm/',
+      targetRealm: 'https://example.test/realm/',
       realmServerUrl: 'https://example.test/',
       client: stubClientAlwaysThrows(),
       path: 'login.spec.ts',

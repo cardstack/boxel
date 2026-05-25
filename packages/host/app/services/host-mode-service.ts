@@ -19,6 +19,16 @@ function ensureSingleTitle(headHTML: string): string {
     ? headHTML
     : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
 }
+
+// Normalize trailing-slash variance for routing-map matching. `/realm/`
+// and `/realm` are the same destination from the user's perspective,
+// but the injected map keys and Ember's `params.path` disagree on
+// the trailing slash. Stripping it on both sides makes the comparator
+// robust. Preserve the root `/` since stripping it would empty the path.
+function canonicalizeRoutingPath(path: string): string {
+  if (path === '/') return '/';
+  return path.replace(/\/+$/, '');
+}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -98,14 +108,52 @@ export default class HostModeService extends Service {
   }
 
   get originIsNotMatrixTests() {
+    // Realm-server speaks https locally now (see infra:ensure-dev-cert);
+    // test-realms and the matrix-test realm share the same cert and
+    // bind their respective ports.
     return (
       this.hostModeOrigin !== 'http://localhost:4202' &&
-      this.hostModeOrigin !== 'http://localhost:4205'
+      this.hostModeOrigin !== 'https://localhost:4202' &&
+      this.hostModeOrigin !== 'http://localhost:4205' &&
+      this.hostModeOrigin !== 'https://localhost:4205'
     );
   }
 
   get realmURL() {
     return this.operatorModeStateService.realmURL;
+  }
+
+  // CS-10055: routing rules from the realm config card. The realm-server
+  // merges this into the @cardstack/host/config/environment meta tag
+  // per-request when the request hits a realm whose config card has
+  // hostRoutingRules — so the first-render decision in the index route
+  // is synchronous and the field is part of the typed config surface
+  // rather than a window global.
+  get hostRoutingMap(): { path: string; id: string }[] {
+    let map = (config as { hostRoutingMap?: unknown }).hostRoutingMap;
+    return Array.isArray(map) ? (map as { path: string; id: string }[]) : [];
+  }
+
+  // Returns the target card id if `path` matches a routing rule, else null.
+  // `path` is the URL pathname on the host (what Ember's `/*path` catch-all
+  // route delivers — e.g. `<user>/<realm>/whitepaper` for a request to
+  // `https://host/<user>/<realm>/whitepaper`); a leading slash is added if
+  // absent so the index path is matchable as either '' or '/'. The
+  // server prefixes each rule's `path` with the realm's mount pathname
+  // before injecting the map, so the two sides line up as direct equality
+  // — except for the trailing-slash variance at the realm root. A `/`
+  // rule's injected key is the realm's mount pathname WITH trailing
+  // slash (e.g. `/progressive-cheetah/`), but Ember's catch-all strips
+  // it (`params.path === 'progressive-cheetah'` for either visit form).
+  // Canonicalize both sides by stripping trailing slashes (except the
+  // root `/` itself) before comparing so `/realm` ↔ `/realm/` resolve.
+  resolveRoutedPath(path: string): string | null {
+    let normalized = path.startsWith('/') ? path : `/${path}`;
+    let canonical = canonicalizeRoutingPath(normalized);
+    let rule = this.hostRoutingMap.find(
+      (r) => canonicalizeRoutingPath(r.path) === canonical,
+    );
+    return rule ? rule.id : null;
   }
 
   get currentCardId() {
@@ -238,7 +286,7 @@ export default class HostModeService extends Service {
   ): Promise<string | null | undefined> {
     let card = new URL(cardURL);
     let realmRoot =
-      this.realm.realmOfURL(card)?.href ??
+      this.realm.realmOf(card) ??
       new URL(
         card.pathname.replace(/[^/]+$/, ''),
         `${card.protocol}//${card.host}`,

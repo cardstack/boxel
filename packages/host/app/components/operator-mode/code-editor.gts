@@ -28,7 +28,7 @@ import {
   isSingleCardDocument,
   isCardInstance,
   meta as metaSymbol,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   type SingleCardDocument,
   type PatchData,
 } from '@cardstack/runtime-common';
@@ -377,14 +377,14 @@ export default class CodeEditor extends Component<Signature> {
     if (!adoptsFrom) {
       return false;
     }
-    adoptsFrom = codeRefWithAbsoluteURL(
+    adoptsFrom = codeRefWithAbsoluteIdentifier(
       adoptsFrom,
       new URL(this.args.file.url),
     );
     if (
       !isEqual(
         adoptsFrom,
-        codeRefWithAbsoluteURL(
+        codeRefWithAbsoluteIdentifier(
           json.data.meta.adoptsFrom,
           new URL(this.args.file.url),
         ),

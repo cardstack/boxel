@@ -75,12 +75,15 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
 
       // Read attached file contents
       let attachedFilesContent = '';
-      if (input.attachedFileURLs && input.attachedFileURLs.length > 0) {
+      if (
+        input.attachedFileIdentifiers &&
+        input.attachedFileIdentifiers.length > 0
+      ) {
         const readTextFileCommand = new ReadTextFileCommand(
           this.commandService.commandContext,
         );
 
-        const attachedFilePromises = input.attachedFileURLs.map(
+        const attachedFilePromises = input.attachedFileIdentifiers.map(
           async (fileUrl) => {
             try {
               const fileContents = await readTextFileCommand.execute({
@@ -156,7 +159,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         systemPromptLength: systemPrompt.length,
         userPromptLength: userContent.length,
         fileContentIncluded: !!fileContent,
-        attachedFilesCount: input.attachedFileURLs?.length || 0,
+        attachedFilesCount: input.attachedFileIdentifiers?.length || 0,
         skillCards: loadedSkillCards.map((c) => c.id),
       });
 

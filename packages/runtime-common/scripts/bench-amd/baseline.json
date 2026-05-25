@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "generated": "2026-04-30",
+  "iterations": 100,
+  "warmup": 10,
+  "tolerance": 1.25,
+  "noise_floor_ms": 1.5,
+  "candidate": "production",
+  "fixtures": {
+    "card-api.js": { "median_ms": 10.04 },
+    "enum.js": { "median_ms": 0.65 },
+    "skill-set.js": { "median_ms": 1.85 },
+    "spec.js": { "median_ms": 2.14 }
+  }
+}

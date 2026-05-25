@@ -8,6 +8,7 @@ import ArrowLeft from './icons/arrow-left.gts';
 import ArrowRight from './icons/arrow-right.gts';
 import ArrowTopLeft from './icons/arrow-top-left.gts';
 import ArrowUp from './icons/arrow-up.gts';
+import Atom from './icons/atom.gts';
 import BoxelIcon from './icons/boxel-icon.gts';
 import BoxelIconWithText from './icons/boxel-icon-with-text.gts';
 import Card from './icons/card.gts';
@@ -23,6 +24,7 @@ import Download from './icons/download.gts';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
+import Embedded from './icons/embedded.gts';
 import Exclamation from './icons/exclamation.gts';
 import ExclamationCircle from './icons/exclamation-circle.gts';
 import Eye from './icons/eye.gts';
@@ -30,10 +32,13 @@ import FailureBordered from './icons/failure-bordered.gts';
 import Field from './icons/field.gts';
 import File from './icons/file.gts';
 import FileAlert from './icons/file-alert.gts';
+import Fitted from './icons/fitted.gts';
 import Folder from './icons/folder.gts';
+import Form from './icons/form.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
+import Head from './icons/head.gts';
 import HighlightIcon from './icons/highlight-icon.gts';
 import IconCircle from './icons/icon-circle.gts';
 import IconCircleSelected from './icons/icon-circle-selected.gts';
@@ -58,6 +63,7 @@ import IconTrash from './icons/icon-trash.gts';
 import IconTurnDownRight from './icons/icon-turn-down-right.gts';
 import IconX from './icons/icon-x.gts';
 import ImagePlaceholder from './icons/image-placeholder.gts';
+import Isolated from './icons/isolated.gts';
 import LoadingIndicator from './icons/loading-indicator.gts';
 import Lock from './icons/lock.gts';
 import Profile from './icons/profile.gts';
@@ -82,6 +88,7 @@ export const ALL_ICON_COMPONENTS = [
   ArrowRight,
   ArrowTopLeft,
   ArrowUp,
+  Atom,
   BoxelIcon,
   BoxelIconWithText,
   Card,
@@ -97,6 +104,7 @@ export const ALL_ICON_COMPONENTS = [
   DropdownArrowDown,
   DropdownArrowFilled,
   DropdownArrowUp,
+  Embedded,
   Exclamation,
   ExclamationCircle,
   Eye,
@@ -104,10 +112,13 @@ export const ALL_ICON_COMPONENTS = [
   Field,
   File,
   FileAlert,
+  Fitted,
   Folder,
+  Form,
   FourLines,
   Grid3x3,
   Group,
+  Head,
   HighlightIcon,
   IconCircle,
   IconCircleSelected,
@@ -132,6 +143,7 @@ export const ALL_ICON_COMPONENTS = [
   IconTurnDownRight,
   IconX,
   ImagePlaceholder,
+  Isolated,
   LoadingIndicator,
   Lock,
   Profile,
@@ -158,6 +170,7 @@ export {
   ArrowRight,
   ArrowTopLeft,
   ArrowUp,
+  Atom,
   BoxelIcon,
   BoxelIconWithText,
   Card,
@@ -173,6 +186,7 @@ export {
   DropdownArrowDown,
   DropdownArrowFilled,
   DropdownArrowUp,
+  Embedded,
   Exclamation,
   ExclamationCircle,
   Eye,
@@ -180,10 +194,13 @@ export {
   Field,
   File,
   FileAlert,
+  Fitted,
   Folder,
+  Form,
   FourLines,
   Grid3x3,
   Group,
+  Head,
   HighlightIcon,
   IconCircle,
   IconCircleSelected,
@@ -208,6 +225,7 @@ export {
   IconTurnDownRight,
   IconX,
   ImagePlaceholder,
+  Isolated,
   LoadingIndicator,
   Lock,
   Profile,

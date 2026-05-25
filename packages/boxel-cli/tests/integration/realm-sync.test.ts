@@ -101,6 +101,22 @@ async function remoteFileExists(
   return response.ok;
 }
 
+// Fetch the realm's `_mtimes` payload as a raw string for diagnostic dumps.
+// Returns the body (or the error message) — never throws — so on-failure
+// instrumentation can include "what does the realm think exists right now?"
+// without risking a secondary failure in the catch path.
+async function fetchRemoteMtimesRaw(realmUrl: string): Promise<string> {
+  try {
+    let base = realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`;
+    let response = await profileManager.authedRealmFetch(`${base}_mtimes`, {
+      headers: { Accept: 'application/vnd.api+json' },
+    });
+    return await response.text();
+  } catch (err) {
+    return `<fetch error: ${err instanceof Error ? err.message : String(err)}>`;
+  }
+}
+
 async function writeRemoteFile(
   realmUrl: string,
   relPath: string,
@@ -155,6 +171,101 @@ async function establishBaseline(
   }
   await pushCommand(localDir, realmUrl, { profileManager });
   await sleep(1100);
+}
+
+// Read a remote source file, retrying for up to `timeoutMs` if the body
+// doesn't yet contain `expectedSubstring`. Returns the final body either way
+// — callers assert on it. `retries` is the number of additional fetches
+// performed beyond the first attempt (0 = matched on first read), so
+// `retries > 0` is the unambiguous signal that the post-sync read had to
+// wait for the realm to settle. `elapsedMs` is for context only; it tracks
+// network + sleep, so it is non-zero even on a first-shot success.
+async function fetchRemoteFileEventually(
+  realmUrl: string,
+  relPath: string,
+  expectedSubstring: string,
+  timeoutMs = 2000,
+): Promise<{ body: string; elapsedMs: number; retries: number }> {
+  const start = Date.now();
+  let attempts = 0;
+  let body = '';
+  while (Date.now() - start < timeoutMs) {
+    attempts++;
+    body = await fetchRemoteFile(realmUrl, relPath);
+    if (body.includes(expectedSubstring)) {
+      return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
+    }
+    await sleep(100);
+  }
+  return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
+}
+
+// Symmetric to fetchRemoteFileEventually for delete-side assertions. GETs
+// the file's source URL on a 100ms cadence and resolves with `isGone:
+// true` the moment the response status is 404. Any other status (200 or a
+// transient 5xx / 401) keeps the loop running; only 404 is the unambiguous
+// "file is gone" signal. If the timeout elapses without ever seeing a 404,
+// resolves with `isGone: false` and the most recent status/body so callers
+// can dump them as a diagnostic. `retries > 0` after a successful poll
+// means the realm needed time after sync returned for the DELETE to
+// become visible to a subsequent GET — the post-write race shape (the
+// realm's DELETE handler responds 204 once #adapter.remove returns, but a
+// follow-up GET in the same process has been observed to still return 200
+// for a few tens of ms; cache-invalidation echoes, the deferred delete-
+// indexing chain that fires after the response, or watcher event
+// reordering are all plausible). `isGone: false` with `finalStatus: 200`
+// means it never went away — the DELETE didn't take effect. The final-
+// state fields let on-miss diagnostics distinguish "DELETE didn't run"
+// from "DELETE ran but visibility lagged".
+async function remoteFileGoneEventually(
+  realmUrl: string,
+  relPath: string,
+  timeoutMs = 2000,
+): Promise<{
+  isGone: boolean;
+  elapsedMs: number;
+  retries: number;
+  finalStatus: number;
+  finalBody: string;
+}> {
+  const start = Date.now();
+  let attempts = 0;
+  let url = buildFileUrl(realmUrl, relPath);
+  let finalStatus = 0;
+  let finalBody = '';
+  while (Date.now() - start < timeoutMs) {
+    attempts++;
+    let response = await profileManager.authedRealmFetch(url, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    finalStatus = response.status;
+    // Drain the body so the connection can be reused.
+    finalBody = await response.text().catch(() => '');
+    // Only 404 is the unambiguous "file is gone" signal. Treating every
+    // non-OK status as success would silently green-light the assertion on
+    // a transient 5xx or an auth glitch and mask a real sync failure
+    // (e.g. the DELETE never landed). For any non-404 / non-200 status we
+    // keep polling — if the realm is consistently 5xx-ing we'll time out
+    // and the diagnostic dump records the final status so the failure
+    // mode is attributable.
+    if (response.status === 404) {
+      return {
+        isGone: true,
+        elapsedMs: Date.now() - start,
+        retries: attempts - 1,
+        finalStatus,
+        finalBody,
+      };
+    }
+    await sleep(100);
+  }
+  return {
+    isGone: false,
+    elapsedMs: Date.now() - start,
+    retries: attempts - 1,
+    finalStatus,
+    finalBody,
+  };
 }
 
 beforeAll(async () => {
@@ -254,16 +365,45 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    // Pre-sync snapshot — captures whether each side actually has the
+    // content we just wrote. If a future failure shows mismatched state
+    // here, the bug is upstream of sync (writeLocalFile / writeRemoteFile
+    // didn't land), not in conflict resolution.
+    const preLocal = readLocalFile(localDir, 'conflict.gts');
+    const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
     await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
 
-    // Local version should win
-    expect(await fetchRemoteFile(realmUrl, 'conflict.gts')).toContain(
+    // Poll-retry to distinguish "sync didn't push" from "push landed but a
+    // brief visibility race made the GET read stale bytes". `retries > 0`
+    // on a passing assertion points at the latter; a miss with retries
+    // exhausted means the bytes never settled within the timeout.
+    const {
+      body: remoteAfter,
+      elapsedMs,
+      retries,
+    } = await fetchRemoteFileEventually(
+      realmUrl,
+      'conflict.gts',
       'v = "local"',
     );
-    expect(readLocalFile(localDir, 'conflict.gts')).toContain('v = "local"');
+    const localAfter = readLocalFile(localDir, 'conflict.gts');
+
+    if (!remoteAfter.includes('v = "local"')) {
+      console.error(
+        `[conflict-prefer-local diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `localAfter=${JSON.stringify(localAfter)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `retries=${retries} elapsedMs=${elapsedMs} realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(remoteAfter).toContain('v = "local"');
+    expect(localAfter).toContain('v = "local"');
   });
 
   it('resolves conflict with --prefer-remote: remote version wins', async () => {
@@ -282,13 +422,33 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    const preLocal = readLocalFile(localDir, 'conflict.gts');
+    const preRemote = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
     await sync(localDir, realmUrl, {
       preferRemote: true,
       profileManager,
     });
 
-    // Remote version should win
-    expect(readLocalFile(localDir, 'conflict.gts')).toContain('v = "remote"');
+    // For prefer-remote the local file is overwritten by the pulled
+    // remote bytes. The local-side read is a direct fs read with no
+    // visibility race, so no retry helper is needed — but the diagnostic
+    // dump on miss mirrors the prefer-local test so a regression on
+    // either side surfaces the same shape of evidence.
+    const localAfter = readLocalFile(localDir, 'conflict.gts');
+    const remoteAfter = await fetchRemoteFile(realmUrl, 'conflict.gts');
+
+    if (!localAfter.includes('v = "remote"')) {
+      console.error(
+        `[conflict-prefer-remote diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `localAfter=${JSON.stringify(localAfter)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(localAfter).toContain('v = "remote"');
   });
 
   it('deletes remote file when local is deleted with --prefer-local', async () => {
@@ -502,17 +662,43 @@ describe('realm sync (integration)', () => {
       'dvc.gts': 'export const dvc = 1;\n',
     });
 
-    // Delete locally, modify remotely
+    // Delete locally, modify remotely. Snapshot the local + remote state
+    // before sync so the diagnostic dump on a future failure proves whether
+    // the conflict setup actually landed (rather than guessing whether
+    // `fs.unlinkSync` / `writeRemoteFile` were the failure point).
     fs.unlinkSync(path.join(localDir, 'dvc.gts'));
     await writeRemoteFile(realmUrl, 'dvc.gts', 'export const dvc = 2;\n');
+    let preSyncLocalExists = localFileExists(localDir, 'dvc.gts');
+    let preSyncRemote = await fetchRemoteFile(realmUrl, 'dvc.gts');
 
     await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
 
-    // Local delete wins - remote should be gone
-    expect(await remoteFileExists(realmUrl, 'dvc.gts')).toBe(false);
+    // Local delete wins - remote should be gone. Poll up to 2s rather than
+    // a single immediate read: the realm's DELETE handler is observed in
+    // CI to return 204 ~50ms before a follow-up GET stops returning 200
+    // (deferred delete-indexing chain still settling, watcher echoes, or
+    // an in-process cache-invalidation race are all plausible — see the
+    // PR description). `retries > 0` after a successful poll proves the
+    // delete eventually became visible (a brief post-write visibility
+    // race that the sync caller doesn't need to care about); a timeout
+    // dumps every relevant state snapshot so the next CI failure has
+    // enough signal to attribute root cause without re-running.
+    let result = await remoteFileGoneEventually(realmUrl, 'dvc.gts');
+    if (!result.isGone) {
+      let postCheckMtimes = await fetchRemoteMtimesRaw(realmUrl);
+      console.error(
+        `[delete-vs-change diagnostic] dvc.gts still present ${result.elapsedMs}ms after sync (${result.retries} retries, final status ${result.finalStatus}); ` +
+          `preSyncLocalExists=${preSyncLocalExists}, ` +
+          `preSyncRemoteBody=${JSON.stringify(preSyncRemote)}, ` +
+          `postCheckRemoteBody=${JSON.stringify(result.finalBody)}, ` +
+          `postCheckMtimesIncludesDvc=${postCheckMtimes.includes('dvc.gts')}, ` +
+          `realmUrl=${realmUrl}`,
+      );
+    }
+    expect(result.isGone).toBe(true);
   });
 
   it('change-vs-delete conflict with --prefer-remote deletes local', async () => {

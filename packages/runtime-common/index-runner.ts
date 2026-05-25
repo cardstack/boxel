@@ -8,6 +8,7 @@ import { Memoize } from 'typescript-memoize';
 
 import {
   logger,
+  hasCardExtension,
   hasExecutableExtension,
   SupportedMimeType,
   jobIdentity,
@@ -34,8 +35,13 @@ import type { CacheScope, DefinitionLookup } from './definition-lookup';
 import { resolveCardReference } from './card-reference-resolver';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
+import { canonicalURL } from './index-runner/dependency-url';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
-import { discoverInvalidations } from './index-runner/discover-invalidations';
+import { isScopedCSSRequest } from './scoped-css';
+import {
+  discoverInvalidations,
+  type DiscoverInvalidationsResult,
+} from './index-runner/discover-invalidations';
 import { visitFileForIndexingFused } from './index-runner/visit-file';
 import { performCardIndexing } from './index-runner/card-indexer';
 import { performFileIndexing } from './index-runner/file-indexer';
@@ -48,6 +54,8 @@ export class IndexRunner {
   #log = logger('index-runner');
   #fetch: typeof globalThis.fetch;
   #perfLog = logger('index-perf');
+  // [readiness-diag] — opt-in CI flake diagnostics. Remove with call site.
+  #readinessDiag = logger('readiness-diag');
   #realmPaths: RealmPaths;
   #ignoreData: Record<string, string>;
   #prerenderer: Prerenderer;
@@ -62,6 +70,11 @@ export class IndexRunner {
   #realmOwnerUserId: string;
   #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
+  // Worker-job priority threaded from `pg-queue` → `tasks/indexer.ts`
+  // → here. Forwarded into every prerenderer call site so the
+  // prerender server can route by priority. Defaults to `0` for tests
+  // / non-job callers that don't carry job context.
+  #jobPriority: number;
   #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
@@ -91,6 +104,7 @@ export class IndexRunner {
     definitionLookup,
     ignoreData = {},
     jobInfo,
+    jobPriority,
     reportStatus,
     onProgress,
     prerenderer,
@@ -108,6 +122,11 @@ export class IndexRunner {
     fetch: typeof globalThis.fetch;
     realmOwnerUserId: string;
     jobInfo?: JobInfo;
+    // Optional override of `jobInfo.priority`. When both are present,
+    // `jobPriority` wins — this is the path the worker handler takes
+    // so non-`JobInfo` callers (tests) can still set priority
+    // explicitly.
+    jobPriority?: number;
     reportStatus?(
       jobInfo: JobInfo | undefined,
       status: 'start' | 'finish',
@@ -119,7 +138,8 @@ export class IndexRunner {
     this.#reader = reader;
     this.#realmURL = realmURL;
     this.#ignoreData = ignoreData;
-    this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
+    this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
+    this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;
     this.#onProgress = onProgress;
@@ -130,13 +150,13 @@ export class IndexRunner {
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
-      readModuleCacheEntries: async (moduleIds) => {
+      readDefinitionCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
           return {};
         }
         let { resolvedRealmURL, cacheScope, authUserId } =
           await this.getModuleCacheContext();
-        return await this.#definitionLookup.getModuleCacheEntries({
+        return await this.#definitionLookup.getCachedDefinitionsBatch({
           moduleUrls: moduleIds,
           cacheScope,
           authUserId,
@@ -145,6 +165,8 @@ export class IndexRunner {
       },
       getDependencyRows: async (urls) =>
         await this.batch.getDependencyRows(urls),
+      getOrderingDependencyRows: async (urls) =>
+        await this.batch.getOrderingDependencyRows(urls),
       getInvalidations: () => this.#batch?.invalidations ?? [],
     });
   }
@@ -169,19 +191,34 @@ export class IndexRunner {
       `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
     );
     let invalidateStart = Date.now();
-    invalidations = (
-      await current.discoverInvalidations(current.realmURL, mtimes)
-    ).map((href) => new URL(href));
+    let discoverResult = await current.discoverInvalidations(
+      current.realmURL,
+      mtimes,
+    );
+    invalidations = discoverResult.urls.map((href) => new URL(href));
     current.#perfLog.debug(
       `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
     );
 
     let visitStart = Date.now();
-    invalidations = sortInvalidations(invalidations);
+    invalidations = sortInvalidations(invalidations, current.realmURL);
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
         invalidations,
       );
+    // Pre-warm the modules cache. Combines per-row deps (which catch
+    // most modules used during a from-scratch pass) with the realm-
+    // wide `.gts` / `.gjs` sweep (which catches sibling card modules
+    // referenced by string in templates — the typical
+    // `<Search @query={{filter: {type: {module: '.../cohort.gts', name: 'Cohort'}}}}>`
+    // pattern). The filesystem-mtimes walk was already paid by
+    // discoverInvalidations above; we just filter and reuse it.
+    let allRealmCardModules = Object.keys(
+      discoverResult.filesystemMtimes,
+    ).filter(hasCardExtension);
+    await current.preWarmModulesTable(invalidations, allRealmCardModules);
+    let resumedRows = current.batch.resumedRows;
+    let resumedSkipped = 0;
     current.#onProgress?.({
       type: 'indexing-started',
       realmURL: current.realmURL.href,
@@ -192,7 +229,41 @@ export class IndexRunner {
     });
     try {
       let filesCompleted = 0;
+      // [readiness-diag] — visit-loop heartbeat. Today the only
+      // markers between `completed invalidations in Xms` and
+      // `completed index visit in Yms` are per-file onProgress events
+      // (callback-routed, not in the worker log). A stuck visit looks
+      // like a 10-minute log gap. Emit a progress line every 25 files
+      // so the realm-server/worker artifact pinpoints WHERE the loop
+      // parked. Opt-in via the `readiness-diag` logger. Remove with
+      // the other [readiness-diag] blocks once root cause is found.
+      const VISIT_PROGRESS_INTERVAL = 25;
       for (let invalidation of invalidations) {
+        // Resume guard. If a previous attempt of this same job already
+        // wrote URL_X to the working table AND the EFS mtime hasn't
+        // changed since, skip the visit — the existing working row is
+        // still authoritative and `applyBatchUpdates` will promote it
+        // (the constructor pre-seeded it into `#invalidations`). If
+        // mtime DID change, fall through to a normal visit so the
+        // upsert in `updateEntry` overwrites the resumed row with
+        // current content.
+        let resumedMtime = resumedRows.get(invalidation.href);
+        if (resumedMtime !== undefined) {
+          let currentMtime = discoverResult.filesystemMtimes[invalidation.href];
+          if (currentMtime !== undefined && currentMtime === resumedMtime) {
+            resumedSkipped++;
+            filesCompleted++;
+            current.#onProgress?.({
+              type: 'file-visited',
+              realmURL: current.realmURL.href,
+              jobId: current.#jobInfo.jobId,
+              url: invalidation.href,
+              filesCompleted,
+              totalFiles: invalidations.length,
+            });
+            continue;
+          }
+        }
         await current.tryToVisit(invalidation);
         filesCompleted++;
         current.#onProgress?.({
@@ -203,6 +274,19 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+        if (
+          filesCompleted % VISIT_PROGRESS_INTERVAL === 0 ||
+          filesCompleted === invalidations.length
+        ) {
+          current.#readinessDiag.debug(
+            `${jobIdentity(current.#jobInfo)} visit progress ${filesCompleted}/${invalidations.length} for realm ${current.realmURL.href} (elapsedMs=${Date.now() - visitStart}, last=${invalidation.href})`,
+          );
+        }
+      }
+      if (resumedSkipped > 0) {
+        current.#perfLog.debug(
+          `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
+        );
       }
       current.#perfLog.debug(
         `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
@@ -283,6 +367,7 @@ export class IndexRunner {
     await current.batch.invalidate(urls);
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
+      current.realmURL,
     );
     invalidations =
       await current.#dependencyResolver.orderInvalidationsByDependencies(
@@ -299,8 +384,18 @@ export class IndexRunner {
       }
       current.#scheduleClearCacheForNextRender();
     }
+    // Pre-warm: combine per-row deps with a realm-wide `.gts`/`.gjs`
+    // sweep. Incremental skips `discoverInvalidations` so the
+    // filesystem-mtimes walk hasn't happened yet — call it here.
+    // Typical realm sizes make this < 200 ms; one call per job.
+    let incrementalMtimes = await current.#reader.mtimes();
+    let allRealmCardModules =
+      Object.keys(incrementalMtimes).filter(hasCardExtension);
+    await current.preWarmModulesTable(invalidations, allRealmCardModules);
 
     let hrefs = urls.map((u) => u.href);
+    let resumedRows = current.batch.resumedRows;
+    let resumedSkipped = 0;
     current.#onProgress?.({
       type: 'indexing-started',
       realmURL: current.realmURL.href,
@@ -317,6 +412,12 @@ export class IndexRunner {
           hrefs.includes(invalidation.href)
         ) {
           // file is deleted, there is nothing to visit
+        } else if (resumedRows.has(invalidation.href)) {
+          // Previous attempt of this job already produced a working
+          // row for this URL. `args.changes` is the deterministic seed
+          // for incremental jobs; if the file changed again, that's a
+          // different changeset enqueued as a separate job. Skip.
+          resumedSkipped++;
         } else {
           await current.tryToVisit(invalidation);
         }
@@ -329,6 +430,11 @@ export class IndexRunner {
           filesCompleted,
           totalFiles: invalidations.length,
         });
+      }
+      if (resumedSkipped > 0) {
+        current.#perfLog.debug(
+          `${jobIdentity(current.#jobInfo)} skipped ${resumedSkipped} URLs already processed by prior attempt`,
+        );
       }
 
       let { totalIndexEntries } = await current.batch.done();
@@ -378,6 +484,7 @@ export class IndexRunner {
         reader: this.#reader,
         batch: this.batch,
         jobInfo: this.#jobInfo,
+        jobPriority: this.#jobPriority,
         auth: this.#auth,
         batchId: this.#batchId,
         prerenderer: this.#prerenderer,
@@ -463,6 +570,169 @@ export class IndexRunner {
     return this.#moduleCacheContext;
   }
 
+  // Populate the `modules` table for every module the upcoming visit
+  // loop is likely to need, before the file-visit phase fires.
+  //
+  // Why: a file render that fires a `_federated-search` calling
+  // `populateQueryFields` → `lookupDefinition` for a definition not
+  // in the modules cache triggers a nested prerender. That nested
+  // prerender enters the same affinity-scoped tab queue the original
+  // render is occupying, deadlocking the pool (PR #4777 papered over
+  // this with `cacheOnlyDefinitions:true`). Pre-warming the modules
+  // table before the visit loop fires means `lookupDefinition` hits
+  // a populated row instead of spawning a sub-prerender.
+  //
+  // Signal sources, in priority order:
+  //   1. Existing `boxel_index.deps` — the runtime-captured dep list
+  //      from the URL's prior successful render. Strongest signal.
+  //   2. `adoptsFrom.module` read from disk — used for novel `.json`
+  //      URLs without a prior `deps` row.
+  //   3. The URL itself — used for novel executable files; the file
+  //      IS a module, pre-warm it directly.
+  //
+  // Cache hits are O(1) DB reads inside DefinitionLookup. Cache
+  // misses go through the read-through path
+  // (loadDefinitionCacheEntryUncached → getModuleDefinitionsViaPrerenderer
+  // → persistDefinitionCacheEntry), the same flow `lookupDefinition`
+  // uses; DefinitionLookup owns the in-flight dedup and the cross-
+  // process coalescer, so two callers asking for the same URL share
+  // one prerender.
+  //
+  // Phase 1: serial. Validates that pre-warm as a concept clears the
+  // deadlock without concurrency-driven variability. Phase 2 will
+  // bound-parallelize this loop.
+  //
+  // Failures here are warned but do not fail the batch — a mid-render
+  // sub-prerender will still fire on demand if pre-warm misses a
+  // module.
+  private async preWarmModulesTable(
+    invalidations: URL[],
+    allRealmCardModules: string[] = [],
+  ): Promise<void> {
+    if (invalidations.length === 0 && allRealmCardModules.length === 0) {
+      return;
+    }
+    let preWarmStart = Date.now();
+
+    // Base layer: every `.gts` / `.gjs` file in the realm, regardless of
+    // whether it appears in this batch's invalidation set. Catches sibling
+    // card modules referenced by *string* in templates (e.g.
+    // `<Search @query={{filter: {type: {module: '.../cohort.gts', ...}}}}>`)
+    // — those don't appear in any instance's runtime `deps`. Without
+    // this layer the search fires a same-affinity `prerenderModule`
+    // mid-card-render at lookup time, which is the wait-shape the
+    // PagePool's tab-materialization for module/command callers is
+    // meant to relieve.
+    //
+    // `.gts` / `.gjs` only is an optimization, not a correctness gate:
+    // `.ts` / `.js` files CAN host `CardDef` (e.g. command-input
+    // cards). If pre-warm misses such a module, the on-demand
+    // `lookupDefinition` read-through during the visit fires a
+    // `prerenderModule` for it — safe because the PagePool now
+    // materializes a tab for the sub-prerender instead of queueing it
+    // behind the render that triggered the lookup. Restricting the
+    // sweep to the extensions where cards live almost exclusively
+    // avoids paying the prerender cost on every reindex for files that
+    // rarely define a card (typical realms have many helper `.ts`
+    // files alongside their cards).
+    let toWarm = new Set<string>(allRealmCardModules);
+
+    let hrefs = invalidations.map((u) => u.href);
+    let existingRows = await this.batch.getDependencyRows(hrefs);
+    let bestByUrl = new Map<string, { url: string; deps: string[] | null }>();
+    for (let row of existingRows) {
+      // Prefer rows that actually carry deps so the lookup below
+      // returns the strongest signal available for each URL.
+      let existing = bestByUrl.get(row.url);
+      if (!existing || (!existing.deps?.length && row.deps?.length)) {
+        bestByUrl.set(row.url, { url: row.url, deps: row.deps ?? null });
+      }
+    }
+
+    let novelJsonUrls: URL[] = [];
+    for (let url of invalidations) {
+      // Module files in the invalidation set are deps that instances
+      // in the same batch will consume — pre-warm them directly. This
+      // covers from-scratch and atomic-update batches where most rows
+      // have no prior `deps` data yet. Unlike the realm-wide layer
+      // above, this includes `.ts` / `.js` helpers — only the ones the
+      // batch is actually touching, so cost is bounded by invalidation
+      // size rather than realm size.
+      if (hasExecutableExtension(url.href)) {
+        toWarm.add(url.href);
+      }
+      let row = bestByUrl.get(url.href);
+      if (row?.deps?.length) {
+        for (let dep of row.deps) {
+          let resolved = canonicalURL(dep, url.href);
+          // `.json` marks an instance dep and `.glimmer-scoped.css`
+          // marks an inline-styles artifact; everything else in the
+          // deps array is a module URL (stored extensionless after
+          // normalizeModuleURL / normalizeDependency).
+          if (!resolved.endsWith('.json') && !isScopedCSSRequest(resolved)) {
+            toWarm.add(resolved);
+          }
+        }
+      } else if (url.href.endsWith('.json')) {
+        novelJsonUrls.push(url);
+      }
+    }
+    for (let url of novelJsonUrls) {
+      let adoptsFromModule = await this.#readAdoptsFromModuleFromDisk(url);
+      // adoptsFrom.module is always a module reference. The most common
+      // form is relative + extensionless (e.g. `"../author"`), which
+      // canonicalizes to an extensionless URL; gating on
+      // hasExecutableExtension would drop those entirely and leave
+      // pre-warm missing exactly the module it is supposed to prime.
+      if (adoptsFromModule) {
+        toWarm.add(adoptsFromModule);
+      }
+    }
+
+    if (toWarm.size === 0) {
+      return;
+    }
+
+    let failed = 0;
+    for (let moduleUrl of toWarm) {
+      try {
+        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+          priority: this.#jobPriority,
+        });
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed > 0) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} ${failed} of ${toWarm.size} module pre-warm lookups failed; the visit phase will retry on-demand if needed`,
+      );
+    }
+
+    this.#perfLog.debug(
+      `${jobIdentity(this.#jobInfo)} pre-warm complete in ${Date.now() - preWarmStart} ms (candidates=${toWarm.size} failed=${failed})`,
+    );
+  }
+
+  async #readAdoptsFromModuleFromDisk(url: URL): Promise<string | undefined> {
+    try {
+      let fileRef = await this.#reader.readFile(url);
+      if (!fileRef?.content) {
+        return undefined;
+      }
+      let doc = JSON.parse(fileRef.content) as {
+        data?: { meta?: { adoptsFrom?: { module?: unknown } } };
+      };
+      let module = doc?.data?.meta?.adoptsFrom?.module;
+      if (typeof module !== 'string') {
+        return undefined;
+      }
+      return canonicalURL(module, url.href);
+    } catch {
+      return undefined;
+    }
+  }
+
   #scheduleClearCacheForNextRender() {
     this.#shouldClearCacheForNextRender = true;
   }
@@ -487,7 +757,7 @@ export class IndexRunner {
   private async discoverInvalidations(
     url: URL,
     indexMtimes: LastModifiedTimes,
-  ): Promise<string[]> {
+  ): Promise<DiscoverInvalidationsResult> {
     return await discoverInvalidations({
       url,
       indexMtimes,
@@ -649,11 +919,29 @@ function assertURLEndsWithJSON(url: URL): URL {
   return url;
 }
 
-function sortInvalidations(urls: URL[]): URL[] {
-  // sort invalidations so that .json files are visited after their non-.json counterparts,
-  // which allows us to have the file entry in place before we visit the card JSON and need to render it.
-  // among URLs that both do or both don't end with .json, sort lexically by href for consistency.
+function sortInvalidations(urls: URL[], realmURL: URL): URL[] {
+  // Visit order priority:
+  //   1. The realm's RealmConfig card at <realmURL>realm.json — write its
+  //      working-index row first so any /_info query that lands AFTER the
+  //      pass commits (`batch.done()` swaps boxel_index_working into
+  //      boxel_index) sees the RealmConfig overlay and resolves the realm's
+  //      display name. parseRealmInfo's overlay path queries the live
+  //      `boxel_index` table without `useWorkInProgressIndex`, so it cannot
+  //      see realm.json mid-pass; this ordering only guarantees a correct
+  //      answer at and after the pass-end commit (and on subsequent
+  //      passes). Host-side prerender caching of stale realmInfo (see
+  //      RealmResource.fetchInfo's `dropTask` short-circuit) is a separate
+  //      concern not addressed here.
+  //   2. Non-.json files (modules, source) — file entries must exist before
+  //      the cards that depend on them are rendered.
+  //   3. Other .json files, sorted lexically for determinism.
+  let realmConfigHref = new RealmPaths(realmURL).fileURL('realm.json').href;
   return urls.sort((a, b) => {
+    let aRealmConfig = a.href === realmConfigHref;
+    let bRealmConfig = b.href === realmConfigHref;
+    if (aRealmConfig !== bRealmConfig) {
+      return aRealmConfig ? -1 : 1;
+    }
     let aJson = a.href.endsWith('.json');
     let bJson = b.href.endsWith('.json');
     if (aJson === bJson) {

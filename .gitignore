@@ -11,11 +11,20 @@ schema_tmp.sql
 test-results/.last-run.json
 .claude/settings.local.json
 .claude/*.lock
+.claude/worktrees/
 traefik/dynamic/*.yml
+# Static TLS cert config is committed; runtime-generated per-env routing
+# files (e.g. `<slug>-host.yml`, `<slug>-realm-server.yml`) stay ignored.
+!traefik/dynamic/tls.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/
 packages/host/dist
-packages/catalog-realm/__submissions-temp__/
 packages/observability/templates/env-vars.env
 packages/observability/**/*.local.yaml
 packages/observability/**/*.local.json
+# dev-all/dev pidfile (see mise-tasks/lib/dev-common.sh). Default location
+# is /tmp/boxel-dev-all.pids and won't land in-tree, but the file is
+# overridable via BOXEL_DEV_ALL_PIDFILE — gitignore protects against
+# someone pointing it at the repo.
+boxel-dev-all.pids
+/boxel-dev-all.pids

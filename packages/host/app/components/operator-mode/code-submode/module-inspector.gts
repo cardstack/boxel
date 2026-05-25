@@ -82,6 +82,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
@@ -350,13 +351,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private viewCardInCodeSubmode: ViewCardFn = async (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
 
     const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
-    await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
+    await this.operatorModeStateService.updateCodePath(rri(fileUrl));
   };
 
   @action private setActivePanel(item: ModuleInspectorView) {
@@ -410,7 +411,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       this.selectedDeclarationAsCodeRef,
       undefined,
     );
-    const cardId = id.replace(/\.json$/, '');
+    const cardId = rri(id.replace(/\.json$/, ''));
 
     const selections = window.localStorage.getItem(PlaygroundSelections);
     let existingFormat: Format = isField ? 'embedded' : 'isolated';
@@ -464,7 +465,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
-      () => this.realmServer.availableRealmURLs,
+      () => this.realmServer.availableRealmIdentifiers,
       { isLive: true, doWhileRefreshing: this.doWhileRefreshing },
     ) as ReturnType<getCards<Spec>>;
   };

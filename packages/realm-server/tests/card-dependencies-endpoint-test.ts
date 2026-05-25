@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 
 import type { Realm } from '@cardstack/runtime-common';
@@ -30,6 +30,7 @@ module(basename(__filename), function () {
     module('card dependencies GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             '*': ['read'],
           },
@@ -100,6 +101,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],

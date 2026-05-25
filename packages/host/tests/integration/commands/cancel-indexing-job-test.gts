@@ -80,7 +80,7 @@ module('Integration | commands | cancel-indexing-job', function (hooks) {
     let realmURL = new URL('test/', realmServer.url).href;
 
     let result = await command.execute({
-      realmUrl: realmURL,
+      realmIdentifier: realmURL,
     });
 
     assert.strictEqual(result, undefined, 'command has no result card');

@@ -1,5 +1,4 @@
-import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
-import { transformAsync } from '@babel/core';
+import { transpileAmd } from './amd-transpile';
 import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { executableExtensions, logger } from './index';
@@ -208,18 +207,29 @@ export class Loader {
 
   private fetchImplementation: Fetch;
   private resolveImport: (moduleIdentifier: string) => string;
+  // When the host runs inside a prerender, `setTimeout` is suppressed by
+  // the render-timer-stub so the default sleep used by
+  // `fetchWithTransientRetry` would never resolve and a transient 5xx on
+  // a dep fetch would hang the render until the prerender timeout. The
+  // host injects a sleep that goes through the native (unblocked)
+  // setTimeout so the retry actually fires.
+  private retrySleep: ((ms: number) => Promise<void>) | undefined;
 
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string) => string,
+    options?: { retrySleep?: (ms: number) => Promise<void> },
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
+    this.retrySleep = options?.retrySleep;
   }
 
   static cloneLoader(loader: Loader): Loader {
-    let clone = new Loader(loader.fetchImplementation, loader.resolveImport);
+    let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
+      retrySleep: loader.retrySleep,
+    });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
@@ -828,20 +838,10 @@ export class Loader {
       return;
     }
 
-    let src: string | null | undefined = loaded.source;
+    let src: string;
 
     try {
-      const transformed = await transformAsync(src, {
-        plugins: [
-          [
-            TransformModulesAmdPlugin,
-            { noInterop: true, moduleId: moduleIdentifier },
-          ],
-        ],
-        sourceMaps: 'inline',
-        filename: moduleIdentifier,
-      });
-      src = transformed?.code;
+      src = transpileAmd(loaded.source, { moduleId: moduleIdentifier });
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -852,18 +852,21 @@ export class Loader {
       throw exception;
     }
 
-    if (!src) {
-      throw new Error(`bug: should never get here`);
-    }
+    type DefineFunc = ((
+      mid: string,
+      depList: string[],
+      impl: Function,
+    ) => void) & {
+      dependencyList: UnregisteredDep[];
+      implementation: Function;
+    };
 
-    let dependencyList: UnregisteredDep[];
-    let implementation: Function;
-
-    // this local is here for the evals to see
-    // @ts-ignore
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let define = (_mid: string, depList: string[], impl: Function) => {
-      dependencyList = depList.map((depId) => {
+    // this local is here for the evals to see. We're sticking the
+    // dependencyList and implementation onto the function itself because that's
+    // a convenient way to ensure that build tools like Rollup don't optimize it
+    // away. Rollup violates the JS spec by removing a local that's visible to `eval`.
+    let define = ((_mid: string, depList: string[], impl: Function) => {
+      define.dependencyList = depList.map((depId) => {
         if (depId === 'exports') {
           return { type: 'exports' };
         } else if (depId === '__import_meta__') {
@@ -878,11 +881,16 @@ export class Loader {
           };
         }
       });
-      implementation = impl;
-    };
+      define.implementation = impl;
+    }) as DefineFunc;
 
     try {
-      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
+      // Append `sourceURL` so stack traces from inside the eval-ed AMD
+      // module name the original module URL instead of `<anonymous>`.
+      // Strip any CR/LF from the identifier so a maliciously-crafted
+      // module URL can't terminate the comment and inject extra source
+      // text into the eval-ed program.
+      eval(src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''));
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -895,8 +903,8 @@ export class Loader {
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
-      dependencyList: dependencyList!,
-      implementation: implementation!,
+      dependencyList: define.dependencyList,
+      implementation: define.implementation,
     };
 
     this.setModule(moduleIdentifier, registeredModule);
@@ -1013,6 +1021,7 @@ export class Loader {
       // catch as thrown exceptions. The catch here is defensive for any
       // other unexpected throw from the fetch helper itself.
       response = await fetchWithTransientRetry(() => this._fetch(moduleURL), {
+        sleep: this.retrySleep,
         onRetry: ({ attempt, maxAttempts, status, delayMs }) => {
           this.log.debug(
             `retrying module fetch for ${moduleURL.href} after status ${status} (attempt ${attempt} of ${maxAttempts}, waiting ${delayMs}ms)`,

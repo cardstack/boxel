@@ -1,6 +1,3 @@
-import { spawn } from 'node:child_process';
-import { resolve } from 'node:path';
-
 import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
@@ -12,39 +9,6 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 
-/**
- * Tools that perform HTTP-direct card I/O. The executor rejects these
- * when they target the factory's target realm — target-realm I/O must
- * go through the workspace (via `write_file` / `read_file`) so local
- * state stays in sync with the realm between iterations.
- */
-const TARGET_REALM_BYPASS_TOOLS = new Set([
-  'realm-read',
-  'realm-write',
-  'realm-delete',
-]);
-
-/**
- * Map from script tool name to the script file that implements it.
- * Paths are relative to `packages/software-factory/scripts/`.
- */
-const SCRIPT_FILE_MAP: Record<string, string> = {
-  'search-realm': 'boxel-search.ts',
-  'run-realm-tests': 'run-realm-tests.ts',
-};
-
-/**
- * Map from boxel-cli tool name to the `npx boxel` subcommand.
- */
-const BOXEL_CLI_COMMAND_MAP: Record<string, string> = {
-  'boxel-sync': 'sync',
-  'boxel-push': 'push',
-  'boxel-pull': 'pull',
-  'boxel-status': 'status',
-  'boxel-create': 'create',
-  'boxel-history': 'history',
-};
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -53,28 +17,24 @@ export interface ToolExecutorConfig {
   /** Absolute path to the software-factory package root. */
   packageRoot: string;
   /** Target realm URL — tools may only target this realm. */
-  targetRealmUrl: string;
+  targetRealm: string;
   /** Additional scratch realm URL prefixes that are allowed. */
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
-  sourceRealmUrl?: string;
+  sourceRealm?: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
   client: BoxelCLIClient;
   /** Per-invocation timeout in ms (default: 60 000). */
   timeoutMs?: number;
   /** Optional log function for auditability. */
   log?: (entry: ToolExecutionLogEntry) => void;
-  /**
-   * When true, boxel-cli invocations skip the `--quiet` flag so their
-   * normal info/log output surfaces in the factory's tool output. Wired
-   * to the factory's own `--debug` flag (see `factory-issue-loop-wiring`).
-   */
+  /** Reserved for future use. */
   debug?: boolean;
 }
 
 export interface ToolExecutionLogEntry {
   tool: string;
-  category: 'script' | 'boxel-cli' | 'realm-api';
+  category: 'realm-api';
   args: Record<string, unknown>;
   exitCode: number;
   durationMs: number;
@@ -127,8 +87,9 @@ export class ToolExecutor {
    * The executor:
    * 1. Validates the tool name against the registry
    * 2. Validates arguments against the manifest
-   * 3. Enforces safety constraints (no source realm targeting)
-   * 4. Dispatches to the appropriate sub-executor
+   * 3. Enforces safety constraints (no source realm targeting,
+   *    realm-server-url must match an allowed origin)
+   * 4. Dispatches to the realm-api sub-executor
    * 5. Captures output as a ToolResult
    */
   async execute(
@@ -144,7 +105,6 @@ export class ToolExecutor {
       throw new ToolNotFoundError(toolName);
     }
 
-    // Validate required args
     let argErrors = this.registry.validateArgs(toolName, toolArgs);
     if (argErrors.length > 0) {
       throw new Error(
@@ -152,26 +112,13 @@ export class ToolExecutor {
       );
     }
 
-    // Safety: reject source realm targeting
     this.enforceRealmSafety(toolName, toolArgs);
 
     let start = Date.now();
     let result: ToolResult;
 
     try {
-      switch (manifest.category) {
-        case 'script':
-          result = await this.executeScript(toolName, toolArgs);
-          break;
-        case 'boxel-cli':
-          result = await this.executeBoxelCli(toolName, toolArgs);
-          break;
-        case 'realm-api':
-          result = await this.executeRealmApi(toolName, toolArgs);
-          break;
-        default:
-          throw new Error(`Unknown tool category: ${manifest.category}`);
-      }
+      result = await this.executeRealmApi(toolName, toolArgs);
     } catch (error) {
       let durationMs = Date.now() - start;
       let errorMessage = error instanceof Error ? error.message : String(error);
@@ -185,7 +132,6 @@ export class ToolExecutor {
         error: errorMessage,
       });
 
-      // Re-throw safety and timeout errors as-is
       if (
         error instanceof ToolSafetyError ||
         error instanceof ToolTimeoutError ||
@@ -221,18 +167,12 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
-    // Source realm protection (when configured)
-    let sourceUrl = this.config.sourceRealmUrl;
+    // Source realm protection (when configured).
+    let sourceUrl = this.config.sourceRealm;
     if (sourceUrl) {
       let normalizedSource = ensureTrailingSlash(sourceUrl);
 
-      let realmArgNames = [
-        'realm',
-        'realm-url',
-        'realm-server-url',
-        'local-dir',
-        'path',
-      ];
+      let realmArgNames = ['realm', 'realm-url', 'realm-server-url'];
 
       for (let argName of realmArgNames) {
         let value = toolArgs[argName];
@@ -247,67 +187,17 @@ export class ToolExecutor {
       }
     }
 
-    // Allowed-target validation for all URL args across all tool categories.
-    // Prevents SSRF and token exfiltration via the propagated Authorization header.
-    let urlArgNames = ['realm', 'realm-url'];
-    for (let argName of urlArgNames) {
-      let value = toolArgs[argName];
-      if (typeof value === 'string' && looksLikeUrl(value)) {
-        this.validateRealmTarget(toolName, value);
-      }
-    }
-
-    // realm-server-url must match one of the allowed realm origins
+    // realm-server-url must match one of the allowed realm origins.
     let serverUrl = toolArgs['realm-server-url'];
     if (typeof serverUrl === 'string' && looksLikeUrl(serverUrl)) {
       this.validateRealmServerTarget(toolName, serverUrl);
-    }
-
-    // Extra validation for destructive operations
-    this.validateDestructiveOps(toolName, toolArgs);
-  }
-
-  private validateRealmTarget(toolName: string, realmUrl: string): void {
-    let normalized = ensureTrailingSlash(realmUrl);
-    let target = ensureTrailingSlash(this.config.targetRealmUrl);
-
-    // The HTTP-direct card I/O tools (realm-read / realm-write / realm-delete)
-    // must NOT target the factory's target realm — those edits would bypass
-    // the local workspace and diverge from the sync flow. The agent uses
-    // write_file / read_file (workspace-backed) for target-realm I/O and
-    // keeps these HTTP-direct tools for scratch / non-target realms.
-    if (TARGET_REALM_BYPASS_TOOLS.has(toolName) && normalized === target) {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" cannot target the target realm (${realmUrl}). ` +
-          `Use write_file / read_file instead — they operate on the local ` +
-          `workspace and sync to the realm between iterations. This tool is ` +
-          `reserved for scratch / non-target realms.`,
-      );
-    }
-
-    // Exact realm matches (with trailing slash normalization). For the
-    // target-bypass tools the target is explicitly excluded from the
-    // exact-allowed set — the rejection above fires first for target hits.
-    let exactAllowed = TARGET_REALM_BYPASS_TOOLS.has(toolName) ? [] : [target];
-
-    // Prefix matches (no trailing slash — these are URL path prefixes)
-    let prefixAllowed = this.config.allowedRealmPrefixes ?? [];
-
-    let isAllowed =
-      exactAllowed.some((exact) => normalized === exact) ||
-      prefixAllowed.some((prefix) => normalized.startsWith(prefix));
-
-    if (!isAllowed) {
-      throw new ToolSafetyError(
-        `Tool "${toolName}" targets realm "${realmUrl}" which is not in the allowed list. ` +
-          `Allowed: ${[...exactAllowed, ...prefixAllowed].join(', ')}`,
-      );
     }
   }
 
   /**
    * Validate that a realm-server-url arg points to a server that hosts
-   * one of the allowed realms (origin match against target/test/prefixes).
+   * one of the allowed realms (origin match against target / scratch
+   * realm prefixes).
    */
   private validateRealmServerTarget(toolName: string, serverUrl: string): void {
     let normalizedServer: string;
@@ -321,7 +211,7 @@ export class ToolExecutor {
 
     let allowedOrigins = new Set<string>();
     try {
-      allowedOrigins.add(new URL(this.config.targetRealmUrl).origin);
+      allowedOrigins.add(new URL(this.config.targetRealm).origin);
     } catch {
       // skip invalid
     }
@@ -341,71 +231,9 @@ export class ToolExecutor {
     }
   }
 
-  private validateDestructiveOps(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): void {
-    // Extra validation for destructive realm operations
-    if (toolName === 'realm-delete') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string') {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    // boxel-push with --delete
-    if (toolName === 'boxel-push' && toolArgs['delete']) {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string' && looksLikeUrl(realmUrl)) {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    // realm-create is allowed but logged — the orchestrator trusts the agent
-    // chose it deliberately within the allowed realm set.
-  }
-
   // -------------------------------------------------------------------------
-  // Sub-executors
+  // Sub-executor
   // -------------------------------------------------------------------------
-
-  private async executeScript(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    let scriptFile = SCRIPT_FILE_MAP[toolName];
-    if (!scriptFile) {
-      throw new Error(`No script file mapped for tool "${toolName}"`);
-    }
-
-    let scriptPath = resolve(this.config.packageRoot, 'scripts', scriptFile);
-
-    let cliArgs = buildCliArgs(toolArgs);
-
-    return this.spawnProcess(
-      toolName,
-      'npx',
-      ['ts-node', '--transpileOnly', scriptPath, ...cliArgs],
-      'json',
-    );
-  }
-
-  private async executeBoxelCli(
-    toolName: string,
-    toolArgs: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    let subcommand = BOXEL_CLI_COMMAND_MAP[toolName];
-    if (!subcommand) {
-      throw new Error(`No boxel-cli command mapped for tool "${toolName}"`);
-    }
-
-    let cliArgs = buildBoxelCliArgs(toolName, subcommand, toolArgs);
-    let invocation = composeBoxelCliInvocation(cliArgs, {
-      debug: this.config.debug,
-    });
-
-    return this.spawnProcess(toolName, 'npx', invocation, 'text');
-  }
 
   private async executeRealmApi(
     toolName: string,
@@ -451,66 +279,6 @@ export class ToolExecutor {
     let ok: boolean;
 
     switch (toolName) {
-      case 'realm-read': {
-        let result = await client.read(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? JSON.parse(result.content!) : { error: result.error };
-        break;
-      }
-
-      case 'realm-write': {
-        let result = await client.write(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-          String(toolArgs['content']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
-      case 'realm-delete': {
-        let result = await client.delete(
-          String(toolArgs['realm-url']),
-          String(toolArgs['path']),
-        );
-        ok = result.ok;
-        output = ok ? result : { error: result.error };
-        break;
-      }
-
-      case 'realm-search': {
-        let rawQuery = toolArgs['query'];
-        if (typeof rawQuery !== 'string') {
-          ok = false;
-          output = {
-            error:
-              "Invalid 'query' argument for realm-search: expected a JSON string.",
-          };
-          break;
-        }
-        let query: Record<string, unknown>;
-        try {
-          query = JSON.parse(rawQuery);
-        } catch {
-          ok = false;
-          output = {
-            error:
-              "Invalid JSON for 'query' in realm-search: expected valid JSON.",
-          };
-          break;
-        }
-        let result = await client.search(String(toolArgs['realm-url']), query);
-        ok = result.ok;
-        output = result.ok
-          ? { data: result.data }
-          : { error: result.error, status: result.status };
-        break;
-      }
-
       case 'realm-create': {
         let displayName = String(toolArgs['name']);
         let realmName = String(toolArgs['endpoint']);
@@ -557,236 +325,12 @@ export class ToolExecutor {
   }
 
   // -------------------------------------------------------------------------
-  // Process spawning
-  // -------------------------------------------------------------------------
-
-  private spawnProcess(
-    toolName: string,
-    command: string,
-    args: string[],
-    outputFormat: 'json' | 'text',
-  ): Promise<ToolResult> {
-    return new Promise((resolvePromise, reject) => {
-      let start = Date.now();
-      let stdout = '';
-      let stderr = '';
-
-      let child = spawn(command, args, {
-        cwd: this.config.packageRoot,
-        env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      let timer = setTimeout(() => {
-        child.kill('SIGTERM');
-        // Give the process a moment to clean up, then force kill
-        setTimeout(() => {
-          if (!child.killed) {
-            child.kill('SIGKILL');
-          }
-        }, 5000);
-        reject(new ToolTimeoutError(toolName, this.timeoutMs));
-      }, this.timeoutMs);
-
-      child.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
-      });
-
-      child.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
-      });
-
-      child.on('error', (error: Error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-
-      child.on('close', (code: number | null) => {
-        clearTimeout(timer);
-        let durationMs = Date.now() - start;
-        let exitCode = code ?? 1;
-
-        let output: unknown;
-        if (outputFormat === 'json') {
-          try {
-            output = JSON.parse(stdout.trim());
-          } catch {
-            output = {
-              raw: stdout.trim(),
-              ...(stderr.trim() ? { stderr: stderr.trim() } : {}),
-            };
-          }
-        } else {
-          output = stdout.trim();
-          if (stderr.trim() && exitCode !== 0) {
-            output = `${stdout.trim()}\n\nSTDERR:\n${stderr.trim()}`;
-          }
-        }
-
-        resolvePromise({
-          tool: toolName,
-          exitCode,
-          output,
-          durationMs,
-        });
-      });
-    });
-  }
-
-  // -------------------------------------------------------------------------
   // Logging
   // -------------------------------------------------------------------------
 
   private logExecution(entry: ToolExecutionLogEntry): void {
     this.config.log?.(entry);
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers: CLI arg building
-// ---------------------------------------------------------------------------
-
-/**
- * Compose the full `npx boxel ...` argument vector for an `executeBoxelCli`
- * call. Prepends `--quiet` to silence boxel-cli's chatty per-step progress
- * logs ("Starting sync …", "Downloaded: …", "Checkpoint created: …") so they
- * don't surface in the factory's tool output or CI logs. Errors, warnings,
- * and the command's actual result payload still come through — see
- * `packages/boxel-cli/src/lib/cli-log.ts`.
- *
- * When `debug` is true (factory itself is running with `--debug`), `--quiet`
- * is omitted so the full boxel-cli logs surface for debugging.
- */
-export function composeBoxelCliInvocation(
-  cliArgs: string[],
-  options: { debug?: boolean } = {},
-): string[] {
-  if (options.debug) {
-    return ['boxel', ...cliArgs];
-  }
-  return ['boxel', '--quiet', ...cliArgs];
-}
-
-function buildCliArgs(toolArgs: Record<string, unknown>): string[] {
-  let args: string[] = [];
-
-  for (let [key, value] of Object.entries(toolArgs)) {
-    if (value === undefined || value === null) {
-      continue;
-    }
-
-    if (typeof value === 'boolean') {
-      if (value) {
-        args.push(`--${key}`);
-      }
-    } else if (Array.isArray(value)) {
-      for (let item of value) {
-        args.push(`--${key}`, String(item));
-      }
-    } else {
-      args.push(`--${key}`, String(value));
-    }
-  }
-
-  return args;
-}
-
-function buildBoxelCliArgs(
-  _toolName: string,
-  subcommand: string,
-  toolArgs: Record<string, unknown>,
-): string[] {
-  let args: string[] = [subcommand];
-
-  // Certain tools use positional args rather than flags
-  switch (subcommand) {
-    case 'sync': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (typeof toolArgs['prefer'] === 'string') {
-        args.push(`--prefer-${toolArgs['prefer']}`);
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'push': {
-      let localDir = toolArgs['local-dir'];
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof localDir === 'string') {
-        args.push(localDir);
-      }
-      if (typeof realmUrl === 'string') {
-        args.push(realmUrl);
-      }
-      if (toolArgs['delete']) {
-        args.push('--delete');
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'pull': {
-      let realmUrl = toolArgs['realm-url'];
-      let localDir = toolArgs['local-dir'];
-      if (typeof realmUrl === 'string') {
-        args.push(realmUrl);
-      }
-      if (typeof localDir === 'string') {
-        args.push(localDir);
-      }
-      if (toolArgs['delete']) {
-        args.push('--delete');
-      }
-      if (toolArgs['dry-run']) {
-        args.push('--dry-run');
-      }
-      break;
-    }
-    case 'status': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (toolArgs['all']) {
-        args.push('--all');
-      }
-      if (toolArgs['pull']) {
-        args.push('--pull');
-      }
-      break;
-    }
-    case 'create': {
-      let endpoint = toolArgs['endpoint'];
-      let name = toolArgs['name'];
-      if (typeof endpoint === 'string') {
-        args.push(endpoint);
-      }
-      if (typeof name === 'string') {
-        args.push(name);
-      }
-      break;
-    }
-    case 'history': {
-      let path = toolArgs['path'];
-      if (typeof path === 'string') {
-        args.push(path);
-      }
-      if (typeof toolArgs['message'] === 'string') {
-        args.push('-m', toolArgs['message']);
-      }
-      break;
-    }
-    default:
-      // Fall through to generic flag building
-      args.push(...buildCliArgs(toolArgs));
-  }
-
-  return args;
 }
 
 // ---------------------------------------------------------------------------

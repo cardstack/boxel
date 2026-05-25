@@ -503,8 +503,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
       .doesNotExist('grid cards do not show other grid cards');
+    await click('[data-test-open-ai-assistant]');
     await click('[data-test-close-ai-assistant]');
-    assert.dom('[data-test-ask-ai-input]').exists();
 
     await percySnapshot(assert);
 
@@ -662,6 +662,23 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom('[data-test-error-details]')
       .includesText(`Person/missing-link.json not found`);
+  });
+
+  test('error card header more-options menu includes Copy Card URL', async function (assert) {
+    await visit('/test/Person/error');
+
+    await waitFor(
+      `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
+    );
+    await click(
+      `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-more-options-button]`,
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+      .exists('Copy Card URL is available even when the card is an error doc');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete Card"]')
+      .exists('Delete Card remains available on the error card menu');
   });
 
   test('can visit a card via canonical URL from second realm', async function (assert) {
@@ -1510,7 +1527,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ]);
       setPlaygroundSelections({
         [`${testRealmURL}Pet/mango.json`]: {
-          cardId: `${testRealmURL}Pet/mango.json`,
+          cardId: rri(`${testRealmURL}Pet/mango.json`),
           format: 'edit',
         },
       });

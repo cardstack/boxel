@@ -63,10 +63,6 @@
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 
-### packages/catalog-realm
-
-- Functionality is tested via host package tests
-
 ### packages/host
 
 - `pnpm start` to start a process that will watch files and automatically rebuild
@@ -76,6 +72,12 @@
 - To run a subset of the tests:
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
+- **Always capture test output to a file.** A host test run can produce hundreds of KB of output (browser logs, indexer warnings, per-test diagnostics). If you only pipe through `tail`/`grep`, you lose everything else and have to re-run — which is slow and the bug may not reproduce. Redirect the full run to a file, then grep that file for failures, browser logs around a specific test, etc.
+  ```
+  pnpm exec ember test --path dist --filter "Foo" 2>&1 | tee /tmp/host-test-foo.log
+  grep -E "^(not )?ok |^# " /tmp/host-test-foo.log   # summary + per-test status
+  grep -B2 -A40 "not ok 27" /tmp/host-test-foo.log   # detail for a specific failure
+  ```
 - run `pnpm lint` in this directory to lint changes made to this package
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 - the host tests report this error:
@@ -94,10 +96,10 @@
 
 #### Iterating on host tests with the Chrome MCP server
 
-- Start the host app so qunit test runner is available at `http://localhost:4200/tests` (usual `pnpm start` + dependencies).
+- Start the host app so qunit test runner is available at `https://localhost:4200/tests` (usual `pnpm start` + dependencies).
 - Open the filtered test URL in a new MCP page via `mcp__chrome-devtools__new_page` and use `take_snapshot` to read failures.
-- Filtered URL structure: `http://localhost:4200/tests?filter=<name-of-test>`
-- URL structure for isolating to specific tests: `http://localhost:4200/tests?moduleId=<module-id>&testId=<test-id>&testId=...` (visible on the “Rerun” links for failing tests).
+- Filtered URL structure: `https://localhost:4200/tests?filter=<name-of-test>`
+- URL structure for isolating to specific tests: `https://localhost:4200/tests?moduleId=<module-id>&testId=<test-id>&testId=...` (visible on the “Rerun” links for failing tests).
 - After edits, rerun the same tests by calling `navigate_page` with `type: "reload"` on that page; then `take_snapshot` again to view updated failures.
 - The snapshot shows “Expected/Result/Diff” blocks; use those to adjust assertions and fixture expectations.
 - Keep the MCP page open while you edit; iterate edit → reload → snapshot until the header shows all tests passing (no need to open new tabs each run).
@@ -128,6 +130,15 @@
   `TEST_MODULE=card-endpoints-test.ts pnpm test-module`
 - Run a list of modules:
   `TEST_MODULES=card-endpoints-test.ts|another-module-test.ts pnpm test`
+- Run only specific test *files* (skip parsing the other ~100):
+  `TEST_FILES=sanitize-head-html-test pnpm test`
+  `TEST_FILES=realm-endpoints/invalidate-urls-test,server-endpoints/queue-status-test pnpm test`
+  Comma-separated paths relative to `tests/`, with or without `./` prefix or `.ts` suffix.
+  Use this — not `TEST_MODULES` — when measuring one file's wall time / peak RSS in isolation:
+  `TEST_MODULES` filters which modules *run*, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
+- Measure per-file wall time + peak RSS (median across N runs):
+  `./scripts/measure-test-file.sh sanitize-head-html-test [runs]`
+  Wraps `TEST_FILES` + `/usr/bin/time -l` with a clean per-file signal. Re-preps test-pg between runs. Used for before/after PR baselines on CS-10009 fixture migrations.
 - Focusing on single test or module:
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
@@ -151,6 +162,21 @@
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+### boxel-cli commit prefixes
+
+PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
+
+| Prefix | Bump level (per touched surface) |
+|---|---|
+| `feat!:` / `fix!:` / body `BREAKING CHANGE:` | major |
+| `feat:` | minor |
+| `fix:` / `perf:` / `refactor:` | patch |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+
+Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected — this only applies when the PR's diff touches `packages/boxel-cli/**`.
+
+**Edge case:** bumping `BOXEL_SKILLS_VERSION` in `packages/boxel-cli/scripts/build-skills.ts` regenerates plugin skill content. Use `fix(skills):` (routine refresh) or `feat(skills):` (additive content), never `chore:` — a `chore:` prefix means no `plugin.json` bump, and the marketplace cache won't refresh for users. See `packages/boxel-cli/plugin/README.md` for full surface-scoping rules.
 
 ## Production-safe selectors
 

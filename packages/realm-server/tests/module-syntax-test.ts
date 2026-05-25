@@ -357,7 +357,7 @@ module(basename(__filename), function () {
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
         incomingRelativeTo: undefined,
-        outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+        outgoingRelativeTo: new URL('https://localhost:4202/node-test/pet'), // outgoing card
         outgoingRealmURL: undefined,
       });
 
@@ -395,7 +395,7 @@ module(basename(__filename), function () {
         fieldType: 'contains',
         fieldDefinitionType: 'field',
         incomingRelativeTo: undefined,
-        outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
+        outgoingRelativeTo: new URL('https://localhost:4202/node-test/pet'), // outgoing card
         outgoingRealmURL: undefined,
       });
 
@@ -435,9 +435,9 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(`http://localhost:4202/node-test/spec/1`), // hypothethical spec that lives at this id
-        outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
-        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that the spec lives in
+        incomingRelativeTo: rri(`https://localhost:4202/node-test/spec/1`), // hypothethical spec that lives at this id
+        outgoingRelativeTo: new URL('https://localhost:4202/node-test/pet'), // outgoing card
+        outgoingRealmURL: new URL('https://localhost:4202/node-test/'), // the realm that the spec lives in
       });
 
       assert.codeEqual(
@@ -477,15 +477,15 @@ module(basename(__filename), function () {
         },
         fieldType: 'linksTo',
         fieldDefinitionType: 'card',
-        incomingRelativeTo: new URL(`http://localhost:4202/test/spec/1`), // hypothethical spec that lives at this id
-        outgoingRelativeTo: new URL('http://localhost:4202/node-test/pet'), // outgoing card
-        outgoingRealmURL: new URL('http://localhost:4202/node-test/'), // the realm that thel spec lives in
+        incomingRelativeTo: rri(`https://localhost:4202/test/spec/1`), // hypothethical spec that lives at this id
+        outgoingRelativeTo: new URL('https://localhost:4202/node-test/pet'), // outgoing card
+        outgoingRealmURL: new URL('https://localhost:4202/node-test/'), // the realm that thel spec lives in
       });
 
       assert.codeEqual(
         mod.code(),
         `
-        import { Person as PersonCard } from "http://localhost:4202/test/person";
+        import { Person as PersonCard } from "https://localhost:4202/test/person";
         import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
         export class Pet extends CardDef {

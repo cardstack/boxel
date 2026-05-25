@@ -4,17 +4,18 @@ import {
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
 import { setContextResponse } from '../middleware';
+import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls';
 import type { CreateRoutesArgs } from '../routes';
 
 export default function handleFullReindex({
+  dbAdapter,
   queue,
   definitionLookup,
-  realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let realmUrls = realms.map((r) => r.url);
+    let realmUrls = await getFullReindexRealmUrls(dbAdapter);
 
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
 
     await queue.publish<void>({
       jobType: `full-reindex`,

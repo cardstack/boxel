@@ -4,8 +4,11 @@ import '../setup-logger';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startFactorySupportServices } from '../harness';
-import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata';
+import {
+  sharedRuntimeDir,
+  startFactorySupportServices,
+  writeSupportMetadata,
+} from '@cardstack/realm-test-harness';
 import { logger } from '../logger';
 
 let log = logger('serve-support');

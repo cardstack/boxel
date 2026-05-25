@@ -1,3 +1,8 @@
+import {
+  isRegisteredPrefix,
+  resolveCardReference,
+} from './card-reference-resolver';
+
 export type FetcherMiddlewareHandler = (
   req: Request,
   next: (onwardReq: Request) => Promise<Response>,
@@ -20,6 +25,15 @@ export function fetcher(
         }
         return await simulateNetworkBehaviors(onwardReq, response, instance);
       };
+    }
+
+    // Resolve scoped identifiers (e.g. `@cardstack/catalog/...`) before
+    // `new Request(...)` would resolve them against `document.baseURI`
+    // and produce a literal `https://<origin>/@cardstack/catalog/...` URL.
+    // Mirrors VirtualNetwork.fetch — but every authedFetch caller funnels
+    // through fetcher first, so the resolution has to happen here too.
+    if (typeof urlOrRequest === 'string' && isRegisteredPrefix(urlOrRequest)) {
+      urlOrRequest = resolveCardReference(urlOrRequest, undefined);
     }
 
     let request =

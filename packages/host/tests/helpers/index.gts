@@ -56,6 +56,7 @@ import {
   teardown as teardownIsolatedRender,
 } from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
+import type QueueService from '@cardstack/host/services/queue';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
@@ -101,7 +102,7 @@ export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';
 export * from './indexer';
 
-export const testModuleRealm = ri('http://localhost:4202/test/');
+export const testModuleRealm = ri('https://localhost:4202/test/');
 
 /**
  * Build a `RealmResourceIdentifier` for a module in `testModuleRealm`.
@@ -948,6 +949,13 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     let store = getService('store');
     await store.flushSaves();
     await store.loaded();
+    // Drain any indexing kicked off async by waitForIndex:false writes
+    // (e.g. +source POSTs). Without this drain, async indexing from the
+    // current test can settle into the next test and produce ghost state
+    // / flaky reads from the index.
+    for (let entry of getTestRealmRegistry().values()) {
+      await entry.realm.incrementalIndexing();
+    }
     let context = this as RenderingContextWithPrerender;
     if (context.__cardPrerenderElement) {
       teardownIsolatedRender(
@@ -1254,7 +1262,7 @@ async function setupTestRealm({
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
-  let { queue } = getService('queue');
+  let { queue } = getService('queue') as QueueService;
 
   realmURL = realmURL ?? testRealmURL;
 
@@ -1359,8 +1367,8 @@ async function setupTestRealm({
   }
 
   let realmServer = getService('realm-server');
-  if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    await realmServer.setAvailableRealmURLs([realmURL]);
+  if (!realmServer.availableRealmIdentifiers.includes(ri(realmURL))) {
+    await realmServer.setAvailableRealmIdentifiers([ri(realmURL)]);
   }
 
   return { realm, adapter };
@@ -1481,7 +1489,7 @@ async function persistDocumentToTestRealm(
   let url = new URL(id);
   let registry = getTestRealmRegistry();
   let matching = [...registry.values()].find(({ realm }) =>
-    realm.paths.inRealm(url),
+    realm.paths.inRealm(rri(url.href)),
   );
   if (!matching) {
     return;
@@ -2031,26 +2039,138 @@ export async function addSkillToAiAssistant(
     skillCardIdsToActivate: [skillCardId],
   });
 
+  // Allow the matrix-service's debounced room-state drain (~100ms) and the
+  // mock client's setTimeout(0) listener fan-out to flush before we poll, so
+  // waitUntil sees a consistent snapshot rather than racing the runloop.
+  await settled();
+
   let matrixService = getService('matrix-service') as {
     getRoomData(roomId: string): {
       skillsConfig: {
         enabledSkillCards?: Array<{ sourceUrl?: string }>;
+        disabledSkillCards?: Array<{ sourceUrl?: string }>;
+        commandDefinitions?: Array<{ sourceUrl?: string }>;
       };
     } | null;
   };
 
-  await waitUntil(
-    () =>
-      Boolean(
-        matrixService
-          .getRoomData(resolvedRoomId)
-          ?.skillsConfig.enabledSkillCards?.some(
-            (fileDef) => fileDef.sourceUrl === skillCardId,
-          ),
-      ),
-    {
-      timeout: 5000,
-      timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
-    },
-  );
+  try {
+    await waitUntil(
+      () =>
+        Boolean(
+          matrixService
+            .getRoomData(resolvedRoomId)
+            ?.skillsConfig.enabledSkillCards?.some(
+              (fileDef) => fileDef.sourceUrl === skillCardId,
+            ),
+        ),
+      {
+        timeout: 5000,
+        timeoutMessage: `Timed out waiting for room skill state for "${skillCardId}"`,
+      },
+    );
+  } catch (err) {
+    // Re-throw with a richer message so the failure report attributes the
+    // flake without us writing to console.* (which can interleave across
+    // parallel runs and trip console-error guards in some setups). The
+    // snapshot describes what the matrix-service believed the room contained
+    // at the moment of timeout.
+    let snapshot = matrixService.getRoomData(resolvedRoomId)?.skillsConfig;
+    let diagnostic = {
+      roomId: resolvedRoomId,
+      skillCardId,
+      skillsConfigPresent: Boolean(snapshot),
+      enabledSkillCards:
+        snapshot?.enabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      disabledSkillCards:
+        snapshot?.disabledSkillCards?.map((f) => f.sourceUrl) ?? null,
+      commandDefinitionsCount: snapshot?.commandDefinitions?.length ?? null,
+    };
+    let originalMessage = err instanceof Error ? err.message : String(err);
+    let enriched = new Error(
+      `${originalMessage} | diagnostics: ${JSON.stringify(diagnostic)}`,
+    );
+    // Preserve the original failure for any tooling that walks .cause without
+    // relying on the es2022 Error constructor option (host targets es2020).
+    (enriched as Error & { cause?: unknown }).cause =
+      err instanceof Error ? err : undefined;
+    throw enriched;
+  }
+}
+
+// Waits for a freshly-created AI assistant room to finish loading its
+// default skills, so that simulateRemoteMessage can resolve a command name
+// (e.g. show-card_566f) against the room's skill commands. Without this the
+// room's processRoomTask can still be mid-loadSkills when the simulated
+// timeline event is processed, in which case message-builder finds no
+// matching codeRef and the command is reported as "No command for the name
+// X was found" instead of executing/validating.
+export async function waitForNewRoomSkillsLoaded(roomId: string) {
+  await settled();
+
+  let matrixService = getService('matrix-service') as {
+    getRoomData(roomId: string): {
+      skillsConfig: {
+        enabledSkillCards?: Array<{ sourceUrl?: string }>;
+        disabledSkillCards?: Array<{ sourceUrl?: string }>;
+        commandDefinitions?: Array<{ sourceUrl?: string }>;
+      };
+    } | null;
+    roomResources: Map<
+      string,
+      {
+        skills?: Array<{ cardId: string }>;
+        commands?: Array<unknown>;
+      }
+    >;
+  };
+
+  try {
+    await waitUntil(
+      () => {
+        let roomData = matrixService.getRoomData(roomId);
+        let enabled = roomData?.skillsConfig?.enabledSkillCards ?? [];
+        if (enabled.length === 0) {
+          return false;
+        }
+        let roomResource = matrixService.roomResources.get(roomId);
+        // commands is computed from loaded skill instances in the store, so
+        // a non-empty list proves that loadSkills finished and the skill
+        // card's @field commands is populated — i.e. message-builder will be
+        // able to resolve the request's functionName.
+        return Boolean(
+          roomResource && (roomResource.commands?.length ?? 0) > 0,
+        );
+      },
+      {
+        timeout: 5000,
+        timeoutMessage: `Timed out waiting for new AI room ${roomId} skills/commands to load`,
+      },
+    );
+  } catch (err) {
+    let roomData = matrixService.getRoomData(roomId);
+    let roomResource = matrixService.roomResources.get(roomId);
+    let diagnostic = {
+      roomId,
+      hasRoomData: Boolean(roomData),
+      hasRoomResource: Boolean(roomResource),
+      enabledSkillCards:
+        roomData?.skillsConfig?.enabledSkillCards?.map((f) => f.sourceUrl) ??
+        null,
+      disabledSkillCards:
+        roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
+        null,
+      commandDefinitionsCount:
+        roomData?.skillsConfig?.commandDefinitions?.length ?? null,
+      roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
+      roomResourceCommandCount: roomResource?.commands?.length ?? null,
+    };
+    let originalMessage = err instanceof Error ? err.message : String(err);
+    let enriched = new Error(
+      `${originalMessage} | diagnostics: ${JSON.stringify(diagnostic)}`,
+    );
+    (enriched as Error & { cause?: unknown }).cause =
+      err instanceof Error ? err : undefined;
+    throw enriched;
+  }
 }

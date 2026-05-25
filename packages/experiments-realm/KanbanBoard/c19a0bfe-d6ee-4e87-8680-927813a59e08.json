@@ -1,0 +1,92 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "KanbanBoard",
+        "module": "/software-factory/kanban-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "columns": [
+        {
+          "key": "author",
+          "label": "Author",
+          "color": "#3ddbc9",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "representative",
+          "label": "Representative",
+          "color": "#2e50d6",
+          "wipLimit": 1,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "blog-post",
+          "label": "Blog Post",
+          "color": "#29c758",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        }
+      ],
+      "boardKey": "generic-kanban",
+      "cardInfo": {
+        "name": "Generic Kanban Board",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "boardTitle": "Generic Kanban Board",
+      "placements": [
+        {
+          "itemId": "https://localhost:4201/experiments/Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7",
+          "columnKey": "author",
+          "sortOrder": 1
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Author/3a655a91-98b5-4f33-a071-b62d39218b33",
+          "columnKey": "author",
+          "sortOrder": 2
+        },
+        {
+          "itemId": "https://localhost:4201/experiments/Representative/880c1d41-2563-43da-999d-ef577fa3eac9",
+          "columnKey": "representative",
+          "sortOrder": 1
+        }
+      ],
+      "hideEmptyColumns": false
+    },
+    "relationships": {
+      "cards.0": {
+        "links": {
+          "self": "../Author/0b9c06fd-3833-4947-a0b8-ac24b8e71ee7"
+        }
+      },
+      "cards.1": {
+        "links": {
+          "self": "../Author/3a655a91-98b5-4f33-a071-b62d39218b33"
+        }
+      },
+      "cards.2": {
+        "links": {
+          "self": "../Representative/880c1d41-2563-43da-999d-ef577fa3eac9"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

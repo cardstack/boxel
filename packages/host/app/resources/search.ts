@@ -15,6 +15,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import type {
   QueryResultsMeta,
   ErrorEntry,
+  RealmIdentifier,
   RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
@@ -24,6 +25,8 @@ import {
   normalizeQueryForSignature,
   buildQueryParamValue,
   parseSearchURL,
+  ri,
+  RealmPaths,
   runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -58,6 +61,11 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
             message: string;
             status?: number;
           }>;
+          // The IDs the parent's `relationships.{field}.data` named.
+          // Used when `cards` is empty because the server skipped the
+          // expansion in prerender mode — the resource fetches each
+          // ID by URL instead of running a live re-query.
+          cardURLs?: string[];
         }
       | undefined;
     dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
@@ -70,7 +78,7 @@ export class SearchResource<
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   #storeServiceOverride: StoreService | undefined;
-  @tracked private realmsToSearch: string[] = [];
+  @tracked private realmsToSearch: RealmIdentifier[] = [];
   // Resist the urge to expose this property publicly as that may entice
   // consumers of this resource to use it in a non-reactive manner (pluck off
   // the instances and throw away the resource).
@@ -203,8 +211,8 @@ export class SearchResource<
     this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
-        ? this.realmServer.availableRealmURLs
-        : realms;
+        ? this.realmServer.availableRealmIdentifiers
+        : realms.map(ri);
     this.#log.info(
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
@@ -225,6 +233,40 @@ export class SearchResource<
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
+      // Non-live (prerender) callers treat the parent doc's
+      // serialized `relationships.{field}.data` as authoritative —
+      // the indexer just wrote it. Any of:
+      //   - seed.cards.length > 0: the parent serialized resolved
+      //     instances in this document.
+      //   - seed.cardURLs is defined: captureQueryFieldSeedData saw
+      //     the parent's relationship data array (even if empty) and
+      //     captured the IDs. An empty array means "no items" — the
+      //     parent doc says this field has no entries — and is just
+      //     as authoritative as a populated one in prerender.
+      //   - seed.searchURL is set: legacy authoritative signal (the
+      //     parent's `links.search` only ships when the relationship
+      //     is fully resolved).
+      // Live-SPA callers (`isLive: true`) ignore this branch entirely
+      // and always perform() to pick up concurrent writes.
+      let seedIsAuthoritative =
+        seed.cards.length > 0 ||
+        seed.cardURLs !== undefined ||
+        Boolean(seed.searchURL);
+      if (!isLive && seedIsAuthoritative) {
+        // The parent document already serialized the relationship set
+        // we are resolving, so a re-query would only re-derive the
+        // same data and (in prerender) burn a `_federated-search`
+        // round-trip per field per loaded card. Skip the search and
+        // also bypass the query/realm equality check below so a
+        // signature drift between the parent doc's `links.search` and
+        // the recomputed query doesn't sneak a fetch back in.
+        this.#previousRealms = realms;
+        this.#previousQuery = query;
+        this.#previousQueryString = buildQueryParamValue(
+          normalizeQueryForSignature(query),
+        );
+        return;
+      }
     }
 
     if (
@@ -299,7 +341,8 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
-        let cards = this.instances.filter((card) => card.id.startsWith(realm));
+        let realmPath = new RealmPaths(realm);
+        let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
         return { realm, cards };
       })
       .filter((r) => r.cards.length > 0);
@@ -384,9 +427,39 @@ export class SearchResource<
         'search-resource:applySeed',
       );
       await Promise.resolve();
-      this._meta = seed.meta ?? { page: { total: seed.cards.length } };
+      // When the parent doc named relationship IDs in
+      // `relationships.{field}.data` but didn't include the resolved
+      // cards in `included` (the prerender-mode server skip), load
+      // each named ID by URL instead of running a live re-query.
+      // Per-URL GETs are stable (deterministic by URL) — the realm
+      // server's instance-GET in prerender mode also skips
+      // query-backed expansion, so each GET is cheap.
+      let cards = seed.cards;
+      if (cards.length === 0 && seed.cardURLs && seed.cardURLs.length > 0) {
+        let results = await Promise.all(
+          seed.cardURLs.map(async (url) => {
+            try {
+              return await this.runtimeStore.get(url, {
+                dependencyTrackingContext,
+              });
+            } catch (err) {
+              console.warn(
+                `SearchResource: failed to load seed cardURL ${url}`,
+                err,
+              );
+              return undefined;
+            }
+          }),
+        );
+        cards = results.filter((r) => {
+          if (r == null) return false;
+          let type = (r as unknown as { type?: string })?.type;
+          return type !== 'card-error';
+        }) as unknown as T[];
+      }
+      this._meta = seed.meta ?? { page: { total: cards.length } };
       this._errors = seed.errors;
-      await this.updateInstances(seed.cards, dependencyTrackingContext);
+      await this.updateInstances(cards, dependencyTrackingContext);
     },
   );
 
@@ -454,6 +527,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
             message: string;
             status?: number;
           }>;
+          cardURLs?: string[];
         }
       | undefined;
     dependencyTracking?: RuntimeDependencyTrackingContext | undefined;

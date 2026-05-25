@@ -14,6 +14,12 @@ import {
 } from '#realm-server/tests/helpers/index';
 import { createJWT as createRealmServerJWT } from '#realm-server/utils/jwt';
 import { registerUser } from '#realm-server/synapse';
+
+export { registerUser } from '#realm-server/synapse';
+export {
+  matrixURL,
+  matrixRegistrationSecret,
+} from '#realm-server/tests/helpers/index';
 import {
   PgQueuePublisher,
   PgQueueRunner,
@@ -40,8 +46,8 @@ const noopPrerenderer: Prerenderer = {
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
 
-const TEST_USERNAME = `cli-test-${Date.now()}`;
-const TEST_PASSWORD = 'test-password-for-cli';
+export const TEST_USERNAME = `cli-test-${Date.now()}`;
+export const TEST_PASSWORD = 'test-password-for-cli';
 
 let testRealmHttpServer: Server | undefined;
 let activeRealms: Realm[] = [];
@@ -94,6 +100,22 @@ export async function startTestRealmServer(
   prepareTestDB();
   dbAdapter = await createTestPgAdapter();
   publisher = new PgQueuePublisher(dbAdapter);
+  // Test-only hardening for a leak in runtime-common's enqueueReindexRealmJob:
+  // server.createRealm, handle-publish-realm, and full-reindex discard the Job
+  // returned by queue.publish(), but publish() still registers a Deferred that
+  // rejects when cancelRunningJobsInConcurrencyGroup fires during a concurrent
+  // delete-realm (status: 418, "User initiated job cancellation"). A discarded
+  // Deferred with no handler surfaces to vitest as an unhandled rejection and
+  // fails the suite even though every assertion passes. Other consumers chained
+  // off the same job.done still see the rejection through their own handlers.
+  // Upstream fix belongs in packages/runtime-common/jobs/reindex-realm.ts; we
+  // keep this branch scoped to boxel-cli.
+  let basePublish = publisher.publish.bind(publisher);
+  publisher.publish = (async (args) => {
+    let job = await basePublish(args);
+    void job.done.catch(() => {});
+    return job;
+  }) as typeof publisher.publish;
   runner = new PgQueueRunner({
     adapter: dbAdapter,
     workerId: 'cli-test-worker',
@@ -231,11 +253,17 @@ export async function setupJwtTestProfile(
     sessionRoom?: string;
   },
 ): Promise<void> {
-  await pm.addProfile(
+  // Use addProfileWithAuth so we skip the real Matrix login round-trip — the
+  // injected realm-server JWT means we never need a working Matrix token.
+  await pm.addProfileWithAuth(
     opts.user,
-    'unused-password',
+    {
+      accessToken: 'test-access-token',
+      userId: opts.user,
+      deviceId: 'CLI_TEST_DEVICE',
+      matrixUrl: matrixURL.href,
+    },
     'CLI Test User',
-    matrixURL.href,
     opts.realmServerUrl,
   );
   let jwt = createRealmServerJWT(

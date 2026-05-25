@@ -384,6 +384,20 @@ export function update(
 
 export const tableValuedFunctionsPlaceholder = '__TABLE_VALUED_FUNCTIONS__';
 
+// A connection-pinned query function. PgAdapter.withConnection hands one of
+// these to its callback; it executes against a checked-out client so its
+// queries share that connection (and therefore the connection's transaction
+// state) with whatever else is running inside the same withConnection scope.
+//
+// CS-10898 plumbs an optional `Querier` through the realm-destruction helpers
+// so a transaction wrapper above them can run their DELETEs on a single
+// pinned connection. Helpers default to the shared dbAdapter when no Querier
+// is provided, which preserves their pre-existing semantics for callers that
+// don't need transactional grouping.
+export type Querier = (
+  expression: Expression,
+) => Promise<Record<string, PgPrimitive>[]>;
+
 export async function query(
   dbAdapter: DBAdapter,
   query: Expression,
@@ -394,6 +408,14 @@ export async function query(
     coerceTypes,
     bind: sql.values,
   });
+}
+
+// Build a Querier that runs against the shared `dbAdapter` (i.e. checks out a
+// fresh pool client per call). Helpers use this as the fallback when no
+// pinned Querier is passed in.
+export function dbAdapterQuerier(dbAdapter: DBAdapter): Querier {
+  return (expression: Expression) =>
+    query(dbAdapter, expression) as Promise<Record<string, PgPrimitive>[]>;
 }
 
 export function expressionToSql(

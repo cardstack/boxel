@@ -50,7 +50,7 @@ jobs:
     # extra safety, since the dispatcher is already a trusted operator.
     environment:
       name: observability-production
-      url: https://grafana.boxel.ai
+      url: https://dashboard.boxel.ai
 
     env:
       AWS_REGION: us-east-1
@@ -58,13 +58,28 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /production/grafana/grafanactl_token  (added in cardstack/infra#666)
       #   /production/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      #   /production/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
+      #                                         button panels for `Authorization:
+      #                                         Bearer ${grafana_secret}`; matches
+      #                                         the realm-server task's existing
+      #                                         shared secret)
       AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-apply
       # Server URL is NOT set here — single source of truth is
       # packages/observability/grafanactl/config.yaml (see staging workflow
       # for the rationale). The pre-flight check below asserts the expected
       # hostname for paranoia.
-      EXPECTED_GRAFANA_HOSTNAME: grafana.boxel.ai
+      EXPECTED_GRAFANA_HOSTNAME: dashboard.boxel.ai
       GRAFANACTL_VERSION: "0.1.10"
+      # Worker CloudWatch log group + owning AWS account, substituted into
+      # provisioning/alerting/worker-status-group.json at push time
+      # (CS-11107). Hardcoded here rather than fetched from SSM: the log
+      # group name follows the deterministic `ecs-boxel-worker-<env>`
+      # convention and the account-id is already baked into AWS_ROLE_ARN
+      # above. Without this, the same provisioning file shipped to both
+      # envs would have prod querying staging's log group (the original
+      # CS-11107 bug — every evaluation failed with ResourceNotFoundException).
+      WORKER_LOG_GROUP_NAME: ecs-boxel-worker-production
+      WORKER_LOG_GROUP_ACCOUNT_ID: "120317779495"
 
     steps:
       - name: Refuse to apply from non-main branches
@@ -107,8 +122,7 @@ jobs:
           echo "expected:                       https://${EXPECTED_GRAFANA_HOSTNAME}"
           if [[ "$ACTUAL" != "https://${EXPECTED_GRAFANA_HOSTNAME}" ]]; then
             echo "::error::config.yaml's production context server URL doesn't match expected hostname." >&2
-            echo "If this is intentional (e.g., Phase 6 cutover renaming to dashboard.boxel.ai)," >&2
-            echo "update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
+            echo "If this is an intentional rename, update EXPECTED_GRAFANA_HOSTNAME in this workflow to match." >&2
             exit 1
           fi
 
@@ -146,9 +160,24 @@ jobs:
           fetch LOKI_URL               /production/loki/internal_url
           fetch BOXEL_DB_HOST          /production/boxel-grafana/db_host
           fetch SYNAPSE_PROMETHEUS_URL /production/boxel-grafana/prometheus_url
+          fetch REALM_SERVER_URL       /production/boxel-grafana/realm_server_url
           fetch BOXEL_DB_NAME          /production/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /production/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /production/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+          fetch GRAFANA_SECRET         /production/boxel/GRAFANA_SECRET       --with-decryption
+
+      - name: Lint
+        # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time
+        # without a token. Here, with the production token already sourced
+        # from SSM, GRAFANACTL_VALIDATE_ENV adds a "validate against the
+        # live production Grafana" step. PRETTIER_SKIP avoids duplicating
+        # ci-lint's YAML format check (which requires pnpm install —
+        # overkill for this focused workflow).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: production
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Apply
         working-directory: packages/observability

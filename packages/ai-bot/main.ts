@@ -205,6 +205,10 @@ let assistant: Assistant;
 
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
+  if (!process.env.OPENROUTER_API_KEY) {
+    log.error('OPENROUTER_API_KEY is required.');
+    process.exit(1);
+  }
   let matrixDebugLogger = !process.env.DISABLE_MATRIX_JS_LOGGING
     ? new DebugLogger(debug(`matrix-js-sdk:${aiBotUsername}`))
     : undefined;

@@ -10,21 +10,25 @@ import {
   getMultiRealmAuthorization,
   getSearchRequestPayload,
 } from '../middleware/multi-realm-authorization';
+import { resolveRealmsForFederatedRequest } from '../lib/realm-routing';
+import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler';
 import { getPublicReadableRealms } from '../utils/realm-readability';
 
 const log = logger('realm-server');
 
 export default function handleFederatedTypes({
   dbAdapter,
+  reconciler,
 }: {
   dbAdapter: DBAdapter;
+  reconciler: RealmRegistryReconciler;
 }): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
-    let { realmList, realmByURL } = getMultiRealmAuthorization(ctxt);
-    let publicReadableRealms = await getPublicReadableRealms(
-      dbAdapter,
-      realmList,
-    );
+    let { realmList } = getMultiRealmAuthorization(ctxt);
+    let [publicReadableRealms, realmInstances] = await Promise.all([
+      getPublicReadableRealms(dbAdapter, realmList),
+      resolveRealmsForFederatedRequest(reconciler, realmList),
+    ]);
 
     let payload = getSearchRequestPayload(ctxt) as
       | {
@@ -38,15 +42,20 @@ export default function handleFederatedTypes({
 
     let allEntries: FederatedCardTypeSummaryEntry[] = [];
 
-    for (let realmURL of realmList) {
-      let realm = realmByURL.get(realmURL);
+    for (let i = 0; i < realmList.length; i++) {
+      let realmURL = realmList[i];
+      let realm = realmInstances[i];
       if (!realm) {
         continue;
       }
       try {
+        // `fetchCardTypeSummary` now returns the partitioned shape
+        // `{ instances, files }`. Federate both arms into the flat response,
+        // tagging each entry with its `kind` so clients (CardsGrid, etc.)
+        // can partition the list back into "All Cards" vs "All Files" groups.
         let summaries =
           await realm.realmIndexQueryEngine.fetchCardTypeSummary();
-        for (let summary of summaries) {
+        for (let summary of summaries.instances) {
           allEntries.push({
             type: 'card-type-summary',
             id: summary.code_ref,
@@ -54,6 +63,22 @@ export default function handleFederatedTypes({
               displayName: summary.display_name,
               total: summary.total,
               iconHTML: summary.icon_html,
+              kind: 'instance',
+            },
+            meta: {
+              realmURL,
+            },
+          });
+        }
+        for (let summary of summaries.files) {
+          allEntries.push({
+            type: 'card-type-summary',
+            id: summary.code_ref,
+            attributes: {
+              displayName: summary.display_name,
+              total: summary.total,
+              iconHTML: summary.icon_html,
+              kind: 'file',
             },
             meta: {
               realmURL,

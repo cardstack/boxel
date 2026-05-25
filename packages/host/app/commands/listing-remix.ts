@@ -2,6 +2,7 @@ import {
   isResolvedCodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import type { Listing } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -17,8 +18,6 @@ import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 import ValidateRealmCommand from './validate-realm';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
@@ -109,16 +108,16 @@ export default class RemixCommand extends HostBaseCommand<
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
     let { realm, listing: listingInput } = input;
-    let { realmUrl } = await new ValidateRealmCommand(
+    let { realmIdentifier } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmUrl: realm });
+    ).execute({ realmIdentifier: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
 
     const { selectedCodeRef, exampleCardId, skillCardId } =
       await new ListingInstallCommand(this.commandContext).execute({
-        realm: realmUrl,
+        realm: realmIdentifier,
         listing,
       });
     await this.navigateView({

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "boardTitle": "Sticky Note",
+      "hideEmptyColumns": false
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Projects/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "IssueTracker"
+      }
+    }
+  }
+}

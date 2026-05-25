@@ -11,8 +11,8 @@ import difference from 'lodash/difference';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
-  cardIdToURL,
   isCardInstance,
+  rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
@@ -78,7 +78,10 @@ export type RoomSkill = {
 interface Args {
   named: {
     roomId: string | undefined;
-    events: DiscreteMatrixEvent[] | undefined;
+    // Reactivity hook only — RoomResource never reads this. Returning whatever
+    // tracked deps the caller wants the resource to invalidate on (e.g. events
+    // alone, or [events, hasRoomState]) is sufficient. See CS-6987.
+    deps: unknown;
   };
 }
 
@@ -318,7 +321,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOfURL(cardIdToURL(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOf(rri(skillCard.sourceUrl)),
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
@@ -696,7 +699,20 @@ export class RoomResource extends Resource<Args> {
         (e.event_id === effectiveEventId ||
           e.content['m.relates_to']?.event_id === effectiveEventId),
     )! as CardMessageEvent | undefined;
-    let message = this._messageCache.get(effectiveEventId);
+    // CS-11045: _messageCache is keyed by the bot message's effective/parent
+    // event_id — getEffectiveEventId resolves an m.replace event back to its
+    // parent, so when an m.replace Y of original X arrives loadRoomMessage
+    // keys the cache by X. The commandResult event's own effectiveEventId is
+    // its m.relates_to.event_id verbatim, which under the CS-11045 host fix
+    // is the latest m.replace id Y rather than the parent X. Looking up the
+    // cache by Y would miss and silently fail to flip MessageCommand status
+    // to 'applied'. Instead, derive the cache key from the bot-message event
+    // we just located (messageEventWithCommand): for the m.replace event Y,
+    // getEffectiveEventId returns parent X — which is what the cache holds.
+    let messageCacheKey = messageEventWithCommand
+      ? this.getEffectiveEventId(messageEventWithCommand)
+      : effectiveEventId;
+    let message = this._messageCache.get(messageCacheKey);
     if (!message || !messageEventWithCommand) {
       return;
     }
@@ -710,7 +726,7 @@ export class RoomResource extends Resource<Args> {
       getOwner(this)!,
       {
         roomId,
-        effectiveEventId,
+        effectiveEventId: messageCacheKey,
         author,
         index,
         events: this.events,
@@ -837,12 +853,12 @@ export class RoomResource extends Resource<Args> {
 export function getRoom(
   parent: object,
   roomId: () => string | undefined,
-  events: () => any | undefined, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
+  deps: () => unknown, //TODO: This line of code is needed to get the room to react to new messages. This should be removed in CS-6987
 ) {
   return RoomResource.from(parent, () => ({
     named: {
       roomId: roomId(),
-      events: events ? events() : [],
+      deps: deps(),
     },
   }));
 }

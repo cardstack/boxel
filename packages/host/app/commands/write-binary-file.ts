@@ -2,6 +2,8 @@ import { service } from '@ember/service';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import { rri } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -56,7 +58,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.WriteBinaryFileResult> {
     let realm;
     if (input.realm) {
-      realm = this.realm.realmOfURL(new URL(input.realm));
+      realm = this.realm.realmOf(rri(input.realm));
       if (!realm) {
         throw new Error(`Invalid or unknown realm provided: ${input.realm}`);
       }
@@ -67,7 +69,7 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
       path = path.slice(1);
     }
 
-    let url = new URL(path, realm?.href);
+    let url = new URL(path, realm);
     let finalUrl = url;
 
     if (input.useNonConflictingFilename) {
@@ -130,11 +132,11 @@ export default class WriteBinaryFileCommand extends HostBaseCommand<
 
     let commandModule = await this.loadCommandModule();
     const { WriteBinaryFileResult } = commandModule;
-    return new WriteBinaryFileResult({ fileUrl: finalUrl.href });
+    return new WriteBinaryFileResult({ fileIdentifier: finalUrl.href });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     return getSourceResult.status !== 404;
   }
 }

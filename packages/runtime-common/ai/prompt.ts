@@ -155,7 +155,7 @@ function getReadFileUrl(request?: CommandRequest): string | undefined {
       typeof request?.arguments === 'string'
         ? JSON.parse(request.arguments)
         : request?.arguments;
-    return args?.attributes?.fileUrl;
+    return args?.attributes?.fileIdentifier;
   } catch {
     return undefined;
   }
@@ -814,11 +814,25 @@ function getCommandResults(
   cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ) {
+  // CS-11045: pair tool_results with the bot message by commandRequestId in
+  // addition to m.relates_to.event_id. The host can emit a commandResult whose
+  // m.relates_to.event_id is the streaming/original event_id while the matrix
+  // server's /messages view normalizes the bot message to the latest m.replace
+  // event_id. Without the commandRequestId fallback the result gets dropped,
+  // leaving an orphan tool_use that Anthropic rejects.
+  let requestIds = new Set(
+    (cardMessageEvent.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [])
+      .map((r) => r.id)
+      .filter(Boolean) as string[],
+  );
   let commandResultEvents = history.filter((e) => {
-    if (
-      isCommandResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
-    ) {
+    if (!isCommandResultEvent(e)) {
+      return false;
+    }
+    if (e.content['m.relates_to']?.event_id === cardMessageEvent.event_id) {
+      return true;
+    }
+    if (requestIds.has(e.content.commandRequestId)) {
       return true;
     }
     return false;

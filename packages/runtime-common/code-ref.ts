@@ -133,24 +133,26 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-export function codeRefWithAbsoluteURL(
+export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
-  relativeTo?: URL | undefined,
+  relativeTo?: RealmResourceIdentifier | URL | undefined,
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(ref.module, relativeTo);
-      let moduleURL = new URL(moduleHref);
+      let moduleHref = resolveCardReference(
+        ref.module,
+        relativeTo,
+      ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
-        moduleURL = trimExecutableExtension(moduleURL);
+        moduleHref = trimExecutableExtension(moduleHref);
       }
-      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
+      return { ...ref, module: moduleHref };
     } catch {
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -162,7 +164,7 @@ export async function loadCardDef(
   ref: CodeRef,
   opts: {
     loader: Loader;
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
   },
 ): Promise<typeof BaseDef> {
@@ -202,7 +204,7 @@ export async function loadCardDef(
 
 export function identifyCard(
   card: typeof BaseDef | undefined,
-  maybeRelativeURL?: ((possibleURL: string) => string) | null,
+  maybeRelativeReference?: ((possibleReference: string) => string) | null,
   visited = new WeakSet<typeof BaseDef>(),
 ): CodeRef | undefined {
   if (!card) {
@@ -219,10 +221,10 @@ export function identifyCard(
 
   let ref = Loader.identify(card);
   if (ref) {
-    return maybeRelativeURL
+    return maybeRelativeReference
       ? {
           ...ref,
-          module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
+          module: maybeRelativeReference(ref.module) as RealmResourceIdentifier,
         }
       : (ref as ResolvedCodeRef);
   }
@@ -231,7 +233,7 @@ export function identifyCard(
   if (!local) {
     return undefined;
   }
-  let innerRef = identifyCard(local.card, maybeRelativeURL, visited);
+  let innerRef = identifyCard(local.card, maybeRelativeReference, visited);
   if (!innerRef) {
     return undefined;
   }
@@ -391,7 +393,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(
+  let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
     instance[relativeTo] || cardIdToURL(instance.id),
   );
@@ -419,7 +421,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteURL(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {

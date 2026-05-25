@@ -42,6 +42,14 @@ export interface QueueCoalesceCandidate extends QueueJobSpec {
 export interface QueueCoalesceContext {
   incoming: QueueJobSpec;
   candidates: QueueCoalesceCandidate[];
+  // Unfulfilled jobs in the concurrency group whose worker has already
+  // claimed them (an active job_reservations row exists). The worker has
+  // already loaded args into memory, so DB-side args mutations won't
+  // propagate. Attaching here is purely "register a late waiter on this
+  // jobId"; the publish path will not call the join `update` for an
+  // in-flight target. Handlers must verify the running job's existing
+  // work covers the incoming request before joining.
+  inFlightCandidates: QueueCoalesceCandidate[];
 }
 
 export type QueueCoalesceJoinUpdate = Partial<

@@ -24,12 +24,43 @@ fi
 target_env="${1:-local}"
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 src="$script_dir/../grafanactl/config.yaml"
+
+# Catch typos early; otherwise the rendered file would have an empty `contexts:`
+# mapping and grafanactl would emit a confusing error.
+if ! grep -qE "^  ${target_env}:[[:space:]]*\$" "$src"; then
+  echo "error: env '$target_env' not found in $src (expected one of: local, staging, production)" >&2
+  exit 1
+fi
+
 out="$(mktemp -t grafanactl-config.XXXXXX)"
 
 # Substitute ONLY ${GRAFANA_TOKEN}; everything else passes through literally.
 # (Important — Grafana template syntax inside dashboard JSON also uses ${...}.)
+#
+# Then filter `contexts:` to only the requested env. Why: `grafanactl config
+# check` iterates over EVERY context in the file regardless of `--context` or
+# `current-context`, so leaving staging/production in the rendered file makes
+# `check.sh --env local` 401 against them whenever no SSM token has been
+# sourced. apply/pull only act on the current context, so dropping the others
+# doesn't change their behavior.
+# shellcheck disable=SC2016  # the literal `${GRAFANA_TOKEN}` is the allow-list arg to envsubst, not a shell expansion.
 GRAFANA_TOKEN="${GRAFANA_TOKEN:-}" envsubst '${GRAFANA_TOKEN}' < "$src" \
   | grep -v '^current-context:' \
+  | awk -v target="$target_env" '
+      BEGIN { in_ctx = 0; emit = 1 }
+      /^contexts:[[:space:]]*$/ { in_ctx = 1; print; next }
+      in_ctx && /^[[:space:]]*$/ { if (emit) print; next }
+      in_ctx && /^[^[:space:]]/ { in_ctx = 0; emit = 1; print; next }
+      in_ctx && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
+        name = $0
+        sub(/^[[:space:]]*/, "", name)
+        sub(/:[[:space:]]*$/, "", name)
+        emit = (name == target) ? 1 : 0
+        if (emit) print
+        next
+      }
+      { if (!in_ctx || emit) print }
+    ' \
   > "$out"
 
 printf '\ncurrent-context: %s\n' "$target_env" >> "$out"

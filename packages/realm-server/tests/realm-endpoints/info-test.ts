@@ -1,9 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, basename } from 'path';
-import type { Server } from 'http';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync } from 'fs-extra';
+import { basename } from 'path';
+import type { RealmHttpServer as Server } from '../../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
@@ -21,24 +19,16 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
 
     function onRealmSetup(args: {
       testRealm: Realm;
       testRealmHttpServer: Server;
       request: SuperTest<Test>;
-      dir: DirResult;
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
       request = args.request;
-      dir = args.dir;
     }
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, '..', 'cards'), dir.name);
-    });
 
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
@@ -47,6 +37,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('public readable realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
+        fixture: 'realistic',
         permissions: {
           '*': ['read'],
         },
@@ -91,6 +82,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealmCached(hooks, {
+        fixture: 'realistic',
         permissions: {
           '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
@@ -163,6 +155,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       'shared realm because there is `users` permission',
       function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           permissions: {
             users: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -204,6 +197,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('shared realm because there are multiple users', function (hooks) {
       setupPermissionedRealmCached(hooks, {
+        fixture: 'realistic',
         permissions: {
           bob: ['read'],
           jane: ['read'],

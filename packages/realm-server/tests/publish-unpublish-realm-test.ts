@@ -12,7 +12,7 @@ import {
   removeSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import { dirSync, type DirResult } from 'tmp';
 import type { Realm, VirtualNetwork } from '@cardstack/runtime-common';
 import {
@@ -27,6 +27,7 @@ import {
   runTestRealmServer,
   closeServer,
   createVirtualNetwork,
+  fixtureDir,
   realmSecretSeed,
   matrixURL,
   waitUntil,
@@ -39,6 +40,9 @@ module(basename(__filename), function () {
   module('publish and unpublish realm tests', function (hooks) {
     let testRealmHttpServer: Server;
     let testRealm: Realm;
+    let testRealmServer: Awaited<
+      ReturnType<typeof runTestRealmServer>
+    >['testRealmServer'];
     let dbAdapter: PgAdapter;
     let publisher: QueuePublisher;
     let runner: QueueRunner;
@@ -50,6 +54,7 @@ module(basename(__filename), function () {
     let dir: DirResult;
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'simple',
       permissions: {
         '*': ['read', 'write'],
       },
@@ -58,7 +63,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
+      copySync(fixtureDir('simple'), dir.name);
     });
 
     async function startRealmServer(
@@ -67,25 +72,28 @@ module(basename(__filename), function () {
       runner: QueueRunner,
     ) {
       virtualNetwork = createVirtualNetwork();
-      ({ testRealm: testRealm, testRealmHttpServer: testRealmHttpServer } =
-        await runTestRealmServer({
-          virtualNetwork,
-          testRealmDir,
-          realmsRootPath: join(dir.name, 'realm_server_3'),
-          realmURL: new URL(testRealm2URL),
-          dbAdapter,
-          publisher,
-          runner,
-          matrixURL,
-          permissions: {
-            '*': ['read', 'write'],
-            [ownerUserId]: DEFAULT_PERMISSIONS,
-          },
-          domainsForPublishedRealms: {
-            boxelSpace: 'localhost',
-            boxelSite: 'localhost:4445',
-          },
-        }));
+      ({
+        testRealm: testRealm,
+        testRealmServer: testRealmServer,
+        testRealmHttpServer: testRealmHttpServer,
+      } = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_3'),
+        realmURL: new URL(testRealm2URL),
+        dbAdapter,
+        publisher,
+        runner,
+        matrixURL,
+        permissions: {
+          '*': ['read', 'write'],
+          [ownerUserId]: DEFAULT_PERMISSIONS,
+        },
+        domainsForPublishedRealms: {
+          boxelSpace: 'localhost',
+          boxelSite: 'localhost:4445',
+        },
+      }));
       request = supertest(testRealmHttpServer);
     }
 
@@ -96,7 +104,7 @@ module(basename(__filename), function () {
         runner = _runner;
         testRealmDir = join(dir.name, 'realm_server_3', 'test');
         ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
+        copySync(fixtureDir('simple'), testRealmDir);
         await startRealmServer(dbAdapter, publisher, runner);
       },
       afterEach: async () => {
@@ -190,7 +198,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
         assert.strictEqual(response.body.data.type, 'published_realm');
         assert.ok(response.body.data.id, 'published realm has an ID');
         assert.strictEqual(
@@ -205,6 +213,34 @@ module(basename(__filename), function () {
         assert.ok(
           response.body.data.attributes.lastPublishedAt,
           'last published at timestamp is present',
+        );
+        assert.strictEqual(
+          response.body.data.attributes.status,
+          'pending',
+          'status is pending — client should poll _readiness-check',
+        );
+
+        // Phase 3: publish only writes registry + NOTIFY + enqueues
+        // an indexing job. Drive a reconcile pass to mount the new
+        // published realm, then wait for the from-scratch-index job
+        // to populate boxel_index before asserting on it below.
+        let publishedRealmURLEarly =
+          response.body.data.attributes.publishedRealmURL;
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 LIMIT 1`,
+              { bind: [publishedRealmURLEarly] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'boxel_index entries for published realm did not appear',
+          },
         );
 
         // Verify that the correct directory within _published was created
@@ -222,16 +258,18 @@ module(basename(__filename), function () {
           'published realm has index.json',
         );
 
-        let publishedRealmConfig = readJsonSync(
-          join(publishedRealmPath, '.realm.json'),
-        );
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable is in realm_metadata, not the sidecar.
+        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for published realm has publishable: false',
         );
 
         // Verify that boxel_index entries exist for the published realm
-        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let indexResults = await dbAdapter.execute(
           `SELECT * FROM boxel_index WHERE realm_url = '${publishedRealmURL}'`,
         );
@@ -356,6 +394,122 @@ module(basename(__filename), function () {
         );
       });
 
+      test('publishing a realm with the default CardsGrid index writes includePrerenderedDefaultRealmIndex into the published realm.json', async function (assert) {
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL:
+                'http://testuser.localhost:4445/cards-grid-default/',
+            }),
+          );
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmConfigPath = join(
+          publishedDir,
+          publishedRealmId,
+          'realm.json',
+        );
+        assert.ok(
+          existsSync(publishedRealmConfigPath),
+          'published realm.json exists on disk',
+        );
+        let publishedRealmConfig = readJsonSync(publishedRealmConfigPath) as {
+          data?: {
+            attributes?: { includePrerenderedDefaultRealmIndex?: boolean };
+          };
+        };
+        assert.true(
+          publishedRealmConfig?.data?.attributes
+            ?.includePrerenderedDefaultRealmIndex,
+          'published realm.json carries includePrerenderedDefaultRealmIndex: true after publish',
+        );
+      });
+
+      test('publishing a realm whose index.json is not a CardsGrid leaves the published realm.json untouched', async function (assert) {
+        let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+        // Replace the source realm's default CardsGrid index with a
+        // bespoke CardDef-adopting index so the publish handler should
+        // NOT set the opt-in flag.
+        let customIndexResponse = await request
+          .post(`${sourceRealmPath}index.json`)
+          .set('Accept', 'application/vnd.card+source')
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            }),
+          );
+        assert.strictEqual(
+          customIndexResponse.status,
+          204,
+          'custom non-CardsGrid index.json can be written',
+        );
+
+        let response = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/custom-index/',
+            }),
+          );
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
+
+        let publishedRealmId = response.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmConfigPath = join(
+          publishedDir,
+          publishedRealmId,
+          'realm.json',
+        );
+        assert.ok(
+          existsSync(publishedRealmConfigPath),
+          'published realm.json exists on disk',
+        );
+        let publishedRealmConfig = readJsonSync(publishedRealmConfigPath) as {
+          data?: {
+            attributes?: { includePrerenderedDefaultRealmIndex?: boolean };
+          };
+        };
+        assert.notStrictEqual(
+          publishedRealmConfig?.data?.attributes
+            ?.includePrerenderedDefaultRealmIndex,
+          true,
+          'published realm.json does NOT carry includePrerenderedDefaultRealmIndex when the source index is a non-CardsGrid card',
+        );
+      });
+
       test('POST /_publish-realm serves cached module entries for published realm URLs', async function (assert) {
         let requestedPublishedRealmURL = 'http://localhost:4445/test-realm/';
         let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
@@ -428,7 +582,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'HTTP 201 status');
+        assert.strictEqual(publishResponse.status, 202, 'HTTP 202 status');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
         let publishedRealmPath = new URL(publishedRealmURL).pathname;
@@ -543,7 +697,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(response.status, 201, 'HTTP 201 status');
+        assert.strictEqual(response.status, 202, 'HTTP 202 status');
 
         let publishedRealmId = response.body.data.id;
         let publishedRealmPath = join(
@@ -561,9 +715,15 @@ module(basename(__filename), function () {
           `${response.body.data.attributes.publishedRealmURL}${hostHomePath}`,
           'hostHome points at published realm',
         );
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable lives in realm_metadata.
+        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for published realm has publishable: false',
         );
       });
 
@@ -587,7 +747,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
         let firstTimestamp = firstResponse.body.data.attributes.lastPublishedAt;
 
         // Wait a bit to ensure timestamp difference
@@ -612,7 +772,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(secondResponse.status, 202, 'Republish succeeds');
         assert.strictEqual(
           secondResponse.body.data.id,
           firstResponse.body.data.id,
@@ -629,17 +789,16 @@ module(basename(__filename), function () {
           'Timestamp is updated on republish',
         );
 
-        let publishedRealmId = secondResponse.body.data.id;
-        let publishedDir = join(dir.name, 'realm_server_3', '_published');
-        let publishedRealmPath = join(publishedDir, publishedRealmId);
-
-        let publishedRealmConfig = readJsonSync(
-          join(publishedRealmPath, '.realm.json'),
-        );
-
-        assert.notOk(
-          publishedRealmConfig.publishable,
-          'published realm config should have publishable: false',
+        // CS-10053: publishable lives in realm_metadata.
+        let publishedRealmURL =
+          secondResponse.body.data.attributes.publishedRealmURL;
+        let metaRows = (await dbAdapter.execute(
+          `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
+        )) as { publishable: boolean | null }[];
+        assert.deepEqual(
+          metaRows,
+          [{ publishable: false }],
+          'realm_metadata for republished realm has publishable: false',
         );
       });
 
@@ -689,7 +848,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(
           firstPublishResponse.status,
-          201,
+          202,
           'First publish succeeds',
         );
 
@@ -729,12 +888,162 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(republishResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(republishResponse.status, 202, 'Republish succeeds');
 
         // Verify the file no longer exists on disk in the published realm
         assert.notOk(
           existsSync(join(publishedRealmPath, 'ephemeral-card.json')),
           'ephemeral-card.json should not exist in published realm after republish',
+        );
+      });
+
+      // CS-11043 regression. The production failure mode was:
+      // republish completes (status 202), but the reindex it kicks off
+      // serves PRE-swap source bytes out of the realm-server's
+      // per-Realm #sourceCache, producing a fresh boxel_index row whose
+      // head_html / isolated_html reflects the OLD card. Until the
+      // file-watcher catches up (potentially many hours later in
+      // production), the published URL keeps serving stale HTML.
+      //
+      // The fix (handle-publish-realm calling Realm.clearLocalSourceCaches()
+      // before enqueueing the reindex) is verified end-to-end by the
+      // matrix Playwright test, but the data-layer invariant is faster
+      // to assert here: after republish, the boxel_index row for the
+      // published instance reflects the NEW title, not the initial.
+      test('republishing reflects updated source content in boxel_index (CS-11043)', async function (assert) {
+        let sourceRealmURL = new URL(sourceRealmUrlString);
+        let sourceRealmFsPath = join(
+          dir.name,
+          'realm_server_3',
+          ...sourceRealmURL.pathname.split('/').filter(Boolean),
+        );
+        let publishedRealmURL = 'http://testuser.localhost:4445/test-realm/';
+        let cardFilename = 'sentinel-card.json';
+        let initialName = `sentinel-initial-${uuidv4()}`;
+        let updatedName = `sentinel-updated-${uuidv4()}`;
+        // cardInfo.name feeds the computed cardTitle field on CardDef,
+        // which is what shows up in search_doc / head_html. Plain
+        // `attributes.title` is not a CardDef field and would be
+        // silently dropped during serialization.
+        let buildCardJson = (name: string) => ({
+          data: {
+            type: 'card',
+            id: `${sourceRealmUrlString}sentinel-card`,
+            attributes: { cardInfo: { name } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        });
+
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(initialName),
+        );
+
+        let publishHeaders = {
+          Authorization: `Bearer ${createRealmServerJWT(
+            { user: ownerUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        };
+        let publishBody = JSON.stringify({
+          sourceRealmURL: sourceRealmUrlString,
+          publishedRealmURL,
+        });
+
+        let firstResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', publishHeaders.Authorization)
+          .send(publishBody);
+        assert.strictEqual(firstResponse.status, 202, 'first publish accepted');
+
+        // The publish handler upserts the registry row asynchronously
+        // and enqueues a from-scratch index — drive a reconcile so the
+        // realm-server picks up the new published realm before we wait
+        // on boxel_index. search_doc is jsonb; cast to text and use a
+        // substring match so we don't have to encode the exact JSON
+        // path (cardInfo.name vs the computed cardTitle).
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index
+                 WHERE realm_url = $1
+                   AND type = 'instance'
+                   AND search_doc::text LIKE '%' || $2 || '%'
+                 LIMIT 1`,
+              { bind: [publishedRealmURL, initialName] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'initial sentinel never appeared in boxel_index.search_doc for published realm',
+          },
+        );
+
+        // Rewrite the source instance with a fresh sentinel string.
+        // After republish, boxel_index for the published realm must
+        // reflect updatedName (and the cached initialName row must be
+        // gone). If the realm-server's #sourceCache is not invalidated
+        // before the reindex, the reindex re-reads the OLD bytes and
+        // the assertion below times out, exactly as the production bug
+        // would have it.
+        writeJsonSync(
+          join(sourceRealmFsPath, cardFilename),
+          buildCardJson(updatedName),
+        );
+
+        let secondResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', publishHeaders.Authorization)
+          .send(publishBody);
+        assert.strictEqual(secondResponse.status, 202, 'republish accepted');
+
+        await testRealmServer.testingOnlyReconcile();
+        await waitUntil(
+          async () => {
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index
+                 WHERE realm_url = $1
+                   AND type = 'instance'
+                   AND search_doc::text LIKE '%' || $2 || '%'
+                 LIMIT 1`,
+              { bind: [publishedRealmURL, updatedName] },
+            );
+            return rows.length > 0 ? rows : undefined;
+          },
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage:
+              'updated sentinel never appeared in boxel_index.search_doc for published realm — republish served pre-swap source bytes (CS-11043)',
+          },
+        );
+
+        // Belt-and-suspenders: the row that previously held the
+        // initial sentinel should no longer reference it.
+        let staleRows = await dbAdapter.execute(
+          `SELECT 1 FROM boxel_index
+             WHERE realm_url = $1
+               AND type = 'instance'
+               AND search_doc::text LIKE '%' || $2 || '%'`,
+          { bind: [publishedRealmURL, initialName] },
+        );
+        assert.strictEqual(
+          staleRows.length,
+          0,
+          'no boxel_index instance rows still reference the initial sentinel after republish',
         );
       });
 
@@ -758,7 +1067,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'Publish succeeds');
+        assert.strictEqual(publishResponse.status, 202, 'Publish succeeds');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
@@ -777,6 +1086,12 @@ module(basename(__filename), function () {
             `Entry ${entry.url} should not be marked as deleted (tombstone) before unpublish`,
           );
         }
+
+        let versionBeforeUnpublish = (
+          await dbAdapter.execute(
+            `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
+          )
+        )[0]?.current_version as number | undefined;
 
         // Now unpublish the realm
         let unpublishResponse = await request
@@ -797,6 +1112,10 @@ module(basename(__filename), function () {
           );
 
         assert.strictEqual(unpublishResponse.status, 200, 'HTTP 200 status');
+        // Phase 3: unmount is reconciler-driven (NOTIFY realm_registry).
+        // Force a reconcile pass so the published realm is unmounted on
+        // this instance before the "404 after unpublish" assertion below.
+        await testRealmServer.testingOnlyReconcile();
         assert.strictEqual(
           unpublishResponse.body.data.type,
           'unpublished_realm',
@@ -835,10 +1154,14 @@ module(basename(__filename), function () {
           await dbAdapter.execute(
             `SELECT current_version FROM realm_versions WHERE realm_url = '${publishedRealmURL}'`,
           )
-        )[0];
-        assert.strictEqual(
-          realmVersion.current_version,
-          3,
+        )[0] as { current_version: number };
+        assert.notStrictEqual(
+          versionBeforeUnpublish,
+          undefined,
+          'realm version of published realm is set before unpublish',
+        );
+        assert.ok(
+          realmVersion.current_version > (versionBeforeUnpublish ?? 0),
           'realm version of published realm is increased',
         );
 
@@ -959,7 +1282,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(publishResponse.status, 201, 'Publish succeeds');
+        assert.strictEqual(publishResponse.status, 202, 'Publish succeeds');
         let publishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
 
@@ -1048,7 +1371,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
 
         // Simulate a stale modules cache entry with an error for the published realm
         let moduleUrl = `${publishedRealmURL}my-module`;
@@ -1090,7 +1413,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(secondResponse.status, 201, 'Republish succeeds');
+        assert.strictEqual(secondResponse.status, 202, 'Republish succeeds');
 
         // Verify the stale modules cache entries were cleared
         let modulesAfter = await dbAdapter.execute(
@@ -1127,7 +1450,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(firstResponse.status, 201, 'First publish succeeds');
+        assert.strictEqual(firstResponse.status, 202, 'First publish succeeds');
 
         let republishResponse = await request
           .post('/_publish-realm')
@@ -1147,7 +1470,7 @@ module(basename(__filename), function () {
             }),
           );
 
-        assert.strictEqual(republishResponse.status, 201, `Republish succeeds`);
+        assert.strictEqual(republishResponse.status, 202, `Republish succeeds`);
         assert.strictEqual(
           republishResponse.body.data.id,
           firstResponse.body.data.id,
@@ -1195,7 +1518,7 @@ module(basename(__filename), function () {
 
         assert.strictEqual(
           republishAfterUnpublishResponse.status,
-          201,
+          202,
           'Republish after unpublish succeeds',
         );
         assert.notEqual(

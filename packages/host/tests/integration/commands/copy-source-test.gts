@@ -68,15 +68,15 @@ module('Integration | commands | copy-source', function (hooks) {
     let copySourceCommand = new CopySourceCommand(
       commandService.commandContext,
     );
-    const originSourceUrl = testRealmURL + 'person.gts';
-    const destinationSourceUrl = testRealmURL + 'person-copy.gts';
+    const originSourceIdentifier = testRealmURL + 'person.gts';
+    const destinationSourceIdentifier = testRealmURL + 'person-copy.gts';
     await copySourceCommand.execute({
-      originSourceUrl,
-      destinationSourceUrl,
+      originSourceIdentifier,
+      destinationSourceIdentifier,
     });
-    let personResponse = await fetch(new URL(originSourceUrl));
+    let personResponse = await fetch(new URL(originSourceIdentifier));
     let personContent = await personResponse.text();
-    let personCopyResponse = await fetch(new URL(destinationSourceUrl));
+    let personCopyResponse = await fetch(new URL(destinationSourceIdentifier));
     let personCopyContent = await personCopyResponse.text();
 
     assert.strictEqual(personCopyContent, personContent);

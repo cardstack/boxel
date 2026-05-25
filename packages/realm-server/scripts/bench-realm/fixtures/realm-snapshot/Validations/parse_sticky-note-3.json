@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sequenceNumber": 3,
+      "runAt": "2026-05-06T20:15:29.324Z",
+      "status": "passed",
+      "completedAt": "2026-05-06T20:16:10.942Z",
+      "durationMs": 41597,
+      "fileResults": [
+        {
+          "file": "sticky-note.gts",
+          "errors": []
+        },
+        {
+          "file": "sticky-note.test.gts",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/blocker-pink.json",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/decision-purple.json",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/idea-yellow.json",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/info-blue.json",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/todo-green.json",
+          "errors": []
+        },
+        {
+          "file": "StickyNote/warning-orange.json",
+          "errors": []
+        }
+      ]
+    },
+    "relationships": {
+      "issue": {
+        "links": {
+          "self": "../Issues/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/parse-result",
+        "name": "ParseResult"
+      }
+    }
+  }
+}

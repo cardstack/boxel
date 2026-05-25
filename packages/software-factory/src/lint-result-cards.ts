@@ -29,7 +29,7 @@ export interface LintResultAttributes {
 }
 
 export interface LintResultRealmOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Local workspace directory — LintResult cards are written here. */
   workspaceDir: string;

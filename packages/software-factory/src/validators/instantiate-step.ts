@@ -69,7 +69,7 @@ export interface InstantiateValidationStepConfig {
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
     slug: string,
-    targetRealmUrl: string,
+    targetRealm: string,
   ) => Promise<number>;
 }
 
@@ -99,10 +99,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
   private fetchFilenamesFn: (
     realmUrl: string,
   ) => Promise<{ filenames: string[]; error?: string }>;
-  private getNextSeqFn: (
-    slug: string,
-    targetRealmUrl: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: InstantiateValidationStepConfig) {
     this.config = config;
@@ -111,26 +108,26 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       ((realmUrl: string) => config.client.listFiles(realmUrl));
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
-      ((slug: string, targetRealmUrl: string) =>
+      ((slug: string, targetRealm: string) =>
         getNextValidationSequenceNumber(
           config.client,
           slug,
           'Validations/instantiate_',
           config.instantiateResultsModuleUrl,
           'InstantiateResult',
-          targetRealmUrl,
+          targetRealm,
         ));
   }
 
   async run(
-    targetRealmUrl: string,
+    targetRealm: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover specs in the realm
     let specInfos: SpecInfo[];
     try {
       let result = await discoverRealmSpecs({
-        targetRealmUrl,
+        targetRealm,
         client: this.config.client,
         searchSpecsFn: this.config.searchSpecsFn,
       });
@@ -153,13 +150,30 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     // Check if there's anything to validate before creating artifacts
     if (specInfos.length === 0) {
       let hasModules = false;
+      let filenames: string[] = [];
+      let listError: string | undefined;
       try {
-        let filesResult = await this.fetchFilenamesFn(targetRealmUrl);
-        hasModules = (filesResult.filenames ?? []).some(
-          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+        let filesResult = await this.fetchFilenamesFn(targetRealm);
+        // `fetchFilenamesFn` (defaults to `client.listFiles`) reports
+        // failures via a returned `error` field, not by throwing. Treat
+        // either path as "we don't actually know what's in the realm" and
+        // fall back to the no-modules branch so we don't fail the step
+        // with a misleading "modules exist but no specs" message.
+        if (filesResult.error) {
+          listError = filesResult.error;
+        } else {
+          filenames = filesResult.filenames ?? [];
+          hasModules = filenames.some(
+            (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+          );
+        }
+      } catch (err) {
+        listError = err instanceof Error ? err.message : String(err);
+      }
+      if (listError) {
+        log.warn(
+          `Failed to list realm files while diagnosing empty spec search: ${listError}`,
         );
-      } catch {
-        // If we can't check filenames, treat as nothing to validate
       }
 
       if (!hasModules) {
@@ -168,8 +182,22 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         return { step: 'instantiate', passed: true, files: [], errors: [] };
       }
 
-      // Modules exist but no specs — fail with actionable message
-      log.info('Card modules exist but no Spec cards found — failing');
+      // Modules exist but no specs — likely either a real "no Catalog Spec"
+      // configuration miss OR an indexer/search-readiness lag where the
+      // Spec source file is on disk but `_federated-search` hasn't picked
+      // it up yet. Dump the filename list (filtered to spec-like paths)
+      // and the count of total files so future flakes can be triaged
+      // against an actual log line instead of an assertion that swallows
+      // the context.
+      let specLikeFilenames = filenames.filter(
+        (f) =>
+          f.endsWith('.json') &&
+          (f.startsWith('Spec/') || f.includes('-spec.json')),
+      );
+      log.warn(
+        `Card modules exist but no Spec cards found in search — failing. ` +
+          `realm=${targetRealm} totalFiles=${filenames.length} specLikeFiles=${JSON.stringify(specLikeFilenames)}`,
+      );
       return {
         step: 'instantiate',
         passed: false,
@@ -193,7 +221,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       : 'validation';
 
     let issueURL = this.config.issueId
-      ? new URL(this.config.issueId, targetRealmUrl).href
+      ? new URL(this.config.issueId, targetRealm).href
       : undefined;
 
     let seq: number;
@@ -201,7 +229,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       seq = iteration;
     } else {
       try {
-        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        let realmSeq = await this.getNextSeqFn(slug, targetRealm);
         seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
       } catch (err) {
         log.warn(
@@ -218,7 +246,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         slug,
         this.config.instantiateResultsModuleUrl,
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
@@ -244,7 +272,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     // Step 3: Instantiate each spec's examples via the shared engine.
     let { records, durationMs } = await instantiateRealmSpecs(
       {
-        targetRealmUrl,
+        targetRealm,
         realmServerUrl: this.config.realmServerUrl,
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
@@ -277,7 +305,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
           cardResults: allCardResults,
         },
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
         },

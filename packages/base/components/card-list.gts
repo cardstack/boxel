@@ -7,10 +7,13 @@ import { consume } from 'ember-provide-consume-context';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
+import FileIcon from '@cardstack/boxel-icons/file';
+
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   removeFileExtension,
+  rri,
   CardCrudFunctionsContextName,
   type Query,
 } from '@cardstack/runtime-common';
@@ -43,8 +46,35 @@ export default class CardList extends Component<Signature> {
   handleCardClick(cardUrl: string, event?: Event) {
     if (this.cardCrudFunctions?.viewCard) {
       event?.preventDefault();
-      this.cardCrudFunctions.viewCard(new URL(cardUrl));
+      this.cardCrudFunctions.viewCard(rri(cardUrl));
     }
+  }
+
+  // Last URL segment, used as a visible label when the prerender pipeline
+  // didn't produce HTML for a file row (CS-11171 — `.gts`/`.ts` FileDef rows
+  // currently skip the FileRender pass, so their `fitted_html` is null and
+  // `<card.component />` renders nothing).
+  fileNameFromUrl(url: string): string {
+    try {
+      let pathname = new URL(url).pathname;
+      let segment = pathname.split('/').filter(Boolean).pop();
+      return segment ?? url;
+    } catch {
+      let segments = url.split('/').filter(Boolean);
+      return segments[segments.length - 1] ?? url;
+    }
+  }
+
+  // Render the filename fallback only when the prerender pipeline produced
+  // no HTML AND the row is not an error. Error rows have their own
+  // dedicated error component built by PrerenderedCard's constructor, which
+  // also has empty `html`; treating them like file fallbacks would swap a
+  // helpful "rendering error" affordance for a bare filename.
+  shouldRenderFallback(card: {
+    hasHtml?: boolean;
+    isError?: boolean;
+  }): boolean {
+    return card.hasHtml === false && !card.isError;
   }
 
   <template>
@@ -76,6 +106,7 @@ export default class CardList extends Component<Signature> {
                   'boxel-card-list-item'
                   instance-error=card.isError
                   clickable=(if this.cardCrudFunctions.viewCard true false)
+                  fallback=(this.shouldRenderFallback card)
                 }}
                 data-test-instance-error={{card.isError}}
                 data-test-cards-grid-item={{removeFileExtension card.url}}
@@ -85,7 +116,23 @@ export default class CardList extends Component<Signature> {
                 tabindex={{if this.cardCrudFunctions.viewCard '0'}}
                 {{on 'click' (fn this.handleCardClick card.url)}}
               >
-                <card.component />
+                {{#if (this.shouldRenderFallback card)}}
+                  {{! CS-11171: file rows whose prerender produced no HTML
+                      (currently `.gts`/`.ts` FileDef rows) — render a name
+                      so the row is at least visible and the click handler on
+                      this `<li>` can still route the user into interact-mode
+                      (and from there into Code Mode via the kebab menu).
+                      Error rows are excluded so PrerenderedCard's dedicated
+                      error component still gets rendered for them. }}
+                  <div class='card-fallback' data-test-card-fallback>
+                    <FileIcon class='card-fallback__icon' role='presentation' />
+                    <div class='card-fallback__name'>
+                      {{this.fileNameFromUrl card.url}}
+                    </div>
+                  </div>
+                {{else}}
+                  <card.component />
+                {{/if}}
               </li>
             {{else}}
               <p>No results were found</p>
@@ -145,6 +192,49 @@ export default class CardList extends Component<Signature> {
         height: auto;
         max-width: var(--embedded-card-max-width);
         min-height: var(--embedded-card-min-height);
+      }
+      .boxel-card-list-item.fallback {
+        background-color: var(--boxel-100);
+        border: 1px solid var(--boxel-200);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp-xs);
+        align-items: center;
+        justify-content: flex-start;
+      }
+      .card-fallback {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        text-align: center;
+      }
+      .card-fallback__icon {
+        width: 2rem;
+        height: 2rem;
+        color: var(--boxel-500);
+        flex-shrink: 0;
+      }
+      .card-fallback__name {
+        font: 500 var(--boxel-font-sm);
+        color: var(--boxel-dark);
+        word-break: break-word;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+      }
+      .strip-view .card-fallback {
+        flex-direction: row;
+        justify-content: flex-start;
+        text-align: left;
+      }
+      .strip-view .card-fallback__icon {
+        width: 1.5rem;
+        height: 1.5rem;
       }
       .instance-error {
         position: relative;

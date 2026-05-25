@@ -21,10 +21,43 @@ interface Signature {
     error: {
       message: string;
       stack?: string;
+      // CS-10977: optional structured payload — additional errors
+      // captured by the prerender runner and prerender diagnostics
+      // pulled off the error doc. Forwarded into the AI prompt body
+      // so the assistant has the underlying template throw and the
+      // timing context, not just the swallowed top-level message.
+      additionalErrors?: Array<{
+        message?: string;
+        stack?: string;
+        status?: number;
+        title?: string;
+      }>;
+      diagnostics?: Record<string, unknown>;
     };
     errorType: 'syntax' | 'runtime';
     fileToAttach: FileDef;
   };
+}
+
+// Per-entry / per-call budgets (UTF-16 code units, not bytes). Truncation
+// keeps the final string at or below the configured max, including the
+// suffix.
+const AI_ADDITIONAL_ERROR_STACK_MAX_CHARS = 8 * 1024;
+const AI_ADDITIONAL_ERROR_MESSAGE_MAX_CHARS = 4 * 1024;
+const AI_TOP_LEVEL_STACK_MAX_CHARS = 16 * 1024;
+const AI_TOP_LEVEL_MESSAGE_MAX_CHARS = 4 * 1024;
+const AI_ADDITIONAL_ERRORS_LIMIT = 50;
+// Total prompt cap. Matrix events are typically capped at 65 KB. Stay
+// well below so the rest of the message envelope (room + headers + the
+// fixed prefix the assistant adds) has room.
+const AI_PROMPT_TOTAL_MAX_CHARS = 48 * 1024;
+const AI_TRUNCATION_SUFFIX = ' …[truncated]';
+
+function truncateForAi(s: string | undefined, max: number): string | undefined {
+  if (s == null) return s;
+  if (s.length <= max) return s;
+  let body = Math.max(0, max - AI_TRUNCATION_SUFFIX.length);
+  return s.slice(0, body) + AI_TRUNCATION_SUFFIX;
 }
 
 export default class SendErrorToAIAssistant extends Component<Signature> {
@@ -35,10 +68,63 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
   private get errorMessage() {
     let { error, errorType } = this.args;
     let prefix = errorType === 'syntax' ? 'Syntax Error' : 'Card Error';
-    let message = error.message;
-    let stack = error.stack ? `\n\nStack trace:\n${error.stack}` : '';
+    let message =
+      truncateForAi(error.message, AI_TOP_LEVEL_MESSAGE_MAX_CHARS) ?? '';
+    let truncatedStack = truncateForAi(
+      error.stack,
+      AI_TOP_LEVEL_STACK_MAX_CHARS,
+    );
+    let stack = truncatedStack ? `\n\nStack trace:\n${truncatedStack}` : '';
 
-    return `${prefix}\n\n${message}${stack}`;
+    let diagnosticsSection = '';
+    if (
+      error.diagnostics &&
+      typeof error.diagnostics === 'object' &&
+      Object.keys(error.diagnostics).length > 0
+    ) {
+      try {
+        diagnosticsSection = `\n\nDiagnostics:\n${JSON.stringify(
+          error.diagnostics,
+          null,
+          2,
+        )}`;
+      } catch {
+        // best-effort: skip diagnostics if unserializable
+      }
+    }
+
+    let additionalErrorsSection = '';
+    let entries = error.additionalErrors;
+    if (entries && entries.length > 0) {
+      let shown = entries.slice(0, AI_ADDITIONAL_ERRORS_LIMIT);
+      let parts = shown.map((e, i) => {
+        let title = e?.title ?? `Error ${i + 1}`;
+        let truncatedMessage = truncateForAi(
+          e?.message,
+          AI_ADDITIONAL_ERROR_MESSAGE_MAX_CHARS,
+        );
+        let body = truncatedMessage ? `\n${truncatedMessage}` : '';
+        let entryStack = truncateForAi(
+          e?.stack,
+          AI_ADDITIONAL_ERROR_STACK_MAX_CHARS,
+        );
+        let stackPart = entryStack ? `\nStack:\n${entryStack}` : '';
+        return `--- ${title} ---${body}${stackPart}`;
+      });
+      let footer =
+        entries.length > AI_ADDITIONAL_ERRORS_LIMIT
+          ? `\n\n(${entries.length - AI_ADDITIONAL_ERRORS_LIMIT} additional errors omitted)`
+          : '';
+      additionalErrorsSection = `\n\nAdditional Errors:\n${parts.join('\n\n')}${footer}`;
+    }
+
+    let assembled = `${prefix}\n\n${message}${stack}${diagnosticsSection}${additionalErrorsSection}`;
+    // Final safety net: per-entry budgets above bound the assembled
+    // string at roughly 50 × (4 + 8) KiB ≈ 600 KiB worst case (50 entries
+    // each at the per-entry max), still well over Matrix's typical 65 KB
+    // event ceiling. Cap the whole string here so a pathological doc
+    // can't make Fix-with-AI fail to send.
+    return truncateForAi(assembled, AI_PROMPT_TOTAL_MAX_CHARS) ?? assembled;
   }
 
   get commandContext() {
@@ -52,7 +138,7 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
     await new SendAiAssistantMessageCommand(this.commandContext).execute({
       roomId: this.matrixService.currentRoomId,
       prompt: `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
-      attachedFileURLs: this.args.fileToAttach
+      attachedFileIdentifiers: this.args.fileToAttach
         ? [this.args.fileToAttach.sourceUrl]
         : [],
     });

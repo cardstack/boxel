@@ -1,0 +1,31 @@
+# LOCAL ONLY — bind-mounted into the Grafana container at
+# /etc/grafana/provisioning/datasources/synapse-prometheus.yaml by
+# observability/docker-compose.yml, masking the canonical AMP-shaped file
+# in provisioning/datasources/synapse-prometheus.yaml.
+#
+# Why not edit the canonical file?
+#   - The canonical file targets AWS Managed Prometheus (AMP) via sigV4
+#     and is push-applied to staging/production by apply-datasources.sh.
+#     Templating the AMP/local switch through env vars is awkward
+#     (sigV4Auth is bool-typed and Grafana's provisioning loader has no
+#     ${VAR:-default} syntax) — a single-file bind-mount override at the
+#     local mount point is cleaner and keeps the staging/production code
+#     path untouched.
+#   - apply-datasources.sh only iterates provisioning/datasources/*.yaml,
+#     so this directory is invisible to the staging/production push.
+apiVersion: 1
+datasources:
+  - name: synapse-prometheus
+    # Same UID as the canonical datasource so the vendored Synapse
+    # dashboard (boxel-status/synapse.json, datasource uid bes7ustjf8w74b)
+    # binds to it without modification.
+    uid: bes7ustjf8w74b
+    type: prometheus
+    access: proxy
+    # Local Prometheus container, reachable from Grafana on the
+    # observability docker-compose network.
+    url: http://prometheus:9090
+    isDefault: false
+    editable: false
+    jsonData:
+      httpMethod: POST

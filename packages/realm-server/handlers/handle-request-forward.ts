@@ -9,189 +9,10 @@ import {
   fetchRequestFromContext,
 } from '../middleware';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations';
+import { handleStreamingRequest } from '../lib/proxy-forward';
 import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
-
-// Track pending cost-saving promises per user so we can ensure the previous
-// request's cost has been recorded before allowing a new one
-const pendingCostPromises = new Map<string, Promise<void>>();
-
-async function handleStreamingRequest(
-  ctxt: Koa.Context,
-  url: string,
-  method: string,
-  headers: Record<string, string>,
-  requestBody: BodyInit | undefined,
-  endpointConfig: any,
-  dbAdapter: DBAdapter,
-  matrixUserId: string,
-) {
-  try {
-    setupSSEHeaders(ctxt);
-
-    const fetchInit: RequestInit = {
-      method,
-      headers,
-    };
-    if (requestBody !== undefined) {
-      fetchInit.body = requestBody;
-    }
-
-    const externalResponse = await fetch(url, fetchInit);
-
-    ctxt.res.write(': connected\n\n');
-
-    if (!externalResponse.ok) {
-      const errorData = await externalResponse.text();
-      log.error(
-        `Streaming request failed: ${externalResponse.status} - ${errorData}`,
-      );
-      ctxt.status = externalResponse.status;
-      ctxt.res.write(`data: ${JSON.stringify({ error: errorData })}\n\n`);
-      ctxt.res.write('data: [DONE]\n\n');
-      return;
-    }
-
-    const reader = externalResponse.body?.getReader();
-    if (!reader) throw new Error('No readable stream available');
-
-    let generationId: string | undefined;
-    let costInUsd: number | undefined;
-    let lastPing = Date.now();
-
-    await proxySSE(
-      reader,
-      async (data) => {
-        // Handle end of stream
-        if (data === '[DONE]') {
-          // Only deduct credits when we observed billable metadata during
-          // the stream (an inline cost or a generation ID for the fallback).
-          if (
-            generationId != null ||
-            (typeof costInUsd === 'number' &&
-              Number.isFinite(costInUsd) &&
-              costInUsd > 0)
-          ) {
-            const previousPromise =
-              pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-            const costPromise = previousPromise
-              .then(() =>
-                endpointConfig.creditStrategy.saveUsageCost(
-                  dbAdapter,
-                  matrixUserId,
-                  { id: generationId, usage: { cost: costInUsd } },
-                ),
-              )
-              .finally(() => {
-                if (pendingCostPromises.get(matrixUserId) === costPromise) {
-                  pendingCostPromises.delete(matrixUserId);
-                }
-              });
-            pendingCostPromises.set(matrixUserId, costPromise);
-          } else {
-            log.warn(
-              `Streaming response for user ${matrixUserId} contained no generation ID or usage cost, skipping credit deduction`,
-            );
-          }
-
-          ctxt.res.write(`data: [DONE]\n\n`);
-          return 'stop';
-        }
-
-        // Try parsing JSON data
-        try {
-          const dataObj = JSON.parse(data);
-
-          if (!generationId && dataObj.id) {
-            generationId = dataObj.id;
-          }
-
-          if (dataObj.usage?.cost != null) {
-            costInUsd = dataObj.usage.cost;
-          }
-        } catch {
-          log.warn('Invalid JSON in streaming response:', data);
-        }
-
-        ctxt.res.write(`data: ${data}\n\n`);
-        return;
-      },
-      () => {
-        // Keep-alive ping
-        const now = Date.now();
-        if (now - lastPing > KEEP_ALIVE_INTERVAL_MS) {
-          ctxt.res.write(': ping\n\n');
-          lastPing = now;
-        }
-      },
-    );
-  } catch (error) {
-    log.error('Error in streaming request:', error);
-    Sentry.captureException(error);
-    ctxt.res.write(
-      `data: ${JSON.stringify({ error: 'Streaming error occurred' })}\n\n`,
-    );
-    ctxt.res.write('data: [DONE]\n\n');
-  }
-}
-
-/** ---------------------------
- * Helper functions
- * --------------------------- */
-const KEEP_ALIVE_INTERVAL_MS = 15000;
-
-function setupSSEHeaders(ctx: Koa.Context) {
-  ctx.set('Content-Type', 'text/event-stream');
-  ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  ctx.set('Connection', 'keep-alive');
-  ctx.set('Access-Control-Allow-Origin', '*');
-  ctx.set('Access-Control-Allow-Headers', 'Cache-Control');
-  ctx.set('X-Accel-Buffering', 'no'); // Disable nginx buffering
-  ctx.set('Transfer-Encoding', 'chunked');
-  ctx.body = null;
-  ctx.status = 200;
-  ctx.res.flushHeaders();
-}
-
-async function proxySSE(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  onData: (data: string) => Promise<void | 'stop'>,
-  onTick?: () => void,
-) {
-  let buffer = '';
-  try {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += new TextDecoder().decode(value);
-      if (onTick) onTick();
-
-      for (const line of extractSSELines(buffer)) {
-        if (!line || line.startsWith(':')) continue;
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          const result = await onData(data);
-          if (result === 'stop') return;
-        }
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function extractSSELines(buffer: string): string[] {
-  const lines: string[] = [];
-  let lineEnd: number;
-  while ((lineEnd = buffer.indexOf('\n')) !== -1) {
-    lines.push(buffer.slice(0, lineEnd).trim());
-    buffer = buffer.slice(lineEnd + 1);
-  }
-  return lines;
-}
 
 interface MultipartFileField {
   filename: string;
@@ -358,37 +179,7 @@ export default function handleRequestForward({
         return;
       }
 
-      // 4. Wait for any pending cost from a previous request to be recorded
-      const pendingCost = pendingCostPromises.get(matrixUserId);
-      if (pendingCost) {
-        try {
-          await pendingCost;
-        } catch (e) {
-          log.error('Error waiting for pending cost:', e);
-          await sendResponseForSystemError(
-            ctxt,
-            'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-          );
-          return;
-        }
-      }
-
-      // 5. Check user has sufficient credits using credit strategy
-      const creditValidation =
-        await destinationConfig.creditStrategy.validateCredits(
-          dbAdapter,
-          matrixUserId,
-        );
-
-      if (!creditValidation.hasEnoughCredits) {
-        await sendResponseForForbiddenRequest(
-          ctxt,
-          creditValidation.errorMessage || 'Insufficient credits',
-        );
-        return;
-      }
-
-      // 5. Forward request to external endpoint
+      // 4. Forward request to external endpoint
       let parsedRequestBody: unknown;
       if (json.requestBody) {
         try {
@@ -470,78 +261,88 @@ export default function handleRequestForward({
         setContentTypeHeader(headers, 'application/json');
       }
 
-      // Handle streaming requests
-      if (json.stream) {
-        if (!(await destinationsConfig.supportsStreaming(json.url))) {
-          await sendResponseForBadRequest(
-            ctxt,
-            `Streaming is not supported for endpoint ${json.url}`,
-          );
-          return;
-        }
-
-        await handleStreamingRequest(
+      if (
+        json.stream &&
+        !(await destinationsConfig.supportsStreaming(json.url))
+      ) {
+        await sendResponseForBadRequest(
           ctxt,
-          finalUrl,
-          json.method,
-          headers,
-          finalBody,
-          destinationConfig,
-          dbAdapter,
-          matrixUserId,
+          `Streaming is not supported for endpoint ${json.url}`,
         );
         return;
       }
 
-      // Handle non-streaming requests
-      const fetchOptions: RequestInit = {
-        method: json.method,
-        headers,
-      };
-
-      // Only add body for non-GET requests or when requestBody is provided
-      if (json.method !== 'GET' && finalBody !== undefined) {
-        fetchOptions.body = finalBody;
-      }
-
-      // FIXME undici or something is swallowing the errors, making them useless:
-      /*
-        Error in request forward handler: TypeError: fetch failed
-          at node:internal/deps/undici/undici:13510:13
-          at processTicksAndRejections (node:internal/process/task_queues:105:5)
-      */
-      const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
-
-      const responseData = await externalResponse.json();
-
-      // 6. Deduct credits in the background using the cost from the response.
-      const previousPromise =
-        pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-      const costPromise = previousPromise
-        .then(() =>
-          destinationConfig.creditStrategy.saveUsageCost(
+      // 5. Serialize concurrent requests from the same matrix user across
+      // replicas: the next request can't kick off another billable upstream
+      // call before the previous request's cost row has landed in the
+      // credits ledger. The lock is held through validate-credits →
+      // upstream call → save-cost; on streaming, save-cost happens inside
+      // handleStreamingRequest after the `[DONE]` marker.
+      await dbAdapter.withUserCostLock(matrixUserId, async () => {
+        const creditValidation =
+          await destinationConfig.creditStrategy.validateCredits(
             dbAdapter,
             matrixUserId,
-            responseData,
-          ),
-        )
-        .finally(() => {
-          if (pendingCostPromises.get(matrixUserId) === costPromise) {
-            pendingCostPromises.delete(matrixUserId);
-          }
+          );
+
+        if (!creditValidation.hasEnoughCredits) {
+          await sendResponseForForbiddenRequest(
+            ctxt,
+            creditValidation.errorMessage || 'Insufficient credits',
+          );
+          return;
+        }
+
+        if (json.stream) {
+          await handleStreamingRequest(
+            ctxt,
+            finalUrl,
+            json.method,
+            headers,
+            finalBody,
+            destinationConfig,
+            dbAdapter,
+            matrixUserId,
+          );
+          return;
+        }
+
+        const fetchOptions: RequestInit = {
+          method: json.method,
+          headers,
+        };
+
+        // Only add body for non-GET requests or when requestBody is provided
+        if (json.method !== 'GET' && finalBody !== undefined) {
+          fetchOptions.body = finalBody;
+        }
+
+        // FIXME undici or something is swallowing the errors, making them useless:
+        /*
+          Error in request forward handler: TypeError: fetch failed
+            at node:internal/deps/undici/undici:13510:13
+            at processTicksAndRejections (node:internal/process/task_queues:105:5)
+        */
+        const externalResponse = await globalThis.fetch(finalUrl, fetchOptions);
+
+        const responseData = await externalResponse.json();
+
+        await destinationConfig.creditStrategy.saveUsageCost(
+          dbAdapter,
+          matrixUserId,
+          responseData,
+        );
+
+        const response = new Response(JSON.stringify(responseData), {
+          status: externalResponse.status,
+          statusText: externalResponse.statusText,
+          headers: {
+            'content-type': SupportedMimeType.JSON,
+          },
         });
-      pendingCostPromises.set(matrixUserId, costPromise);
 
-      // 7. Return response
-      const response = new Response(JSON.stringify(responseData), {
-        status: externalResponse.status,
-        statusText: externalResponse.statusText,
-        headers: {
-          'content-type': SupportedMimeType.JSON,
-        },
+        await setContextResponse(ctxt, response);
       });
-
-      await setContextResponse(ctxt, response);
     } catch (error) {
       log.error('Error in request forward handler:', error);
       Sentry.captureException(error);

@@ -17,14 +17,12 @@ export async function getPublishedRealmURLs(
   }
 
   let publishedRealms = (await query(dbAdapter, [
-    'SELECT published_realm_url FROM published_realms WHERE published_realm_url IN (',
+    "SELECT url FROM realm_registry WHERE kind = 'published' AND url IN (",
     ...separatedByCommas(realmList.map((realmURL) => [param(realmURL)])),
     ')',
-  ] as Expression)) as { published_realm_url: string }[];
+  ] as Expression)) as { url: string }[];
 
-  return new Set(
-    publishedRealms.map((row) => ensureTrailingSlash(row.published_realm_url)),
-  );
+  return new Set(publishedRealms.map((row) => ensureTrailingSlash(row.url)));
 }
 
 export function buildReadableRealms(

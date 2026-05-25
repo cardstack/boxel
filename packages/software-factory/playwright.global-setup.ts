@@ -8,13 +8,13 @@ import {
   writeSupportMetadata,
   getSupportMetadataFile,
   type PreparedTemplateMetadata,
-} from './src/runtime-metadata';
+} from '@cardstack/realm-test-harness';
 
 const packageRoot = resolve(__dirname);
 const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
 const configuredRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
+  process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const fallbackRealmDir = resolve(
   packageRoot,
@@ -32,10 +32,10 @@ const realmDir = existsSync(configuredRealmDir)
   ? configuredRealmDir
   : fallbackRealmDir;
 const SETUP_COMMAND_TIMEOUT_MS = Number(
-  process.env.SOFTWARE_FACTORY_SETUP_COMMAND_TIMEOUT_MS ?? 900_000,
+  process.env.TEST_HARNESS_SETUP_COMMAND_TIMEOUT_MS ?? 900_000,
 );
 const SUPPORT_METADATA_TIMEOUT_MS = Number(
-  process.env.SOFTWARE_FACTORY_SUPPORT_METADATA_TIMEOUT_MS ?? 120_000,
+  process.env.TEST_HARNESS_SUPPORT_METADATA_TIMEOUT_MS ?? 120_000,
 );
 
 const setupLog = logger('software-factory:playwright');
@@ -194,8 +194,8 @@ async function prepareTemplatesForRealms(
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
-      SOFTWARE_FACTORY_CONTEXT: JSON.stringify(context),
-      SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+      TEST_HARNESS_CONTEXT: JSON.stringify(context),
+      TEST_HARNESS_METADATA_FILE: metadataFile,
     },
   });
 
@@ -268,7 +268,7 @@ export default async function globalSetup() {
       env: {
         ...process.env,
         NODE_NO_WARNINGS: '1',
-        SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: metadataFile,
+        TEST_HARNESS_SUPPORT_METADATA_FILE: metadataFile,
       },
     },
   );

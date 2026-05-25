@@ -1,12 +1,29 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start development worker manager"
 #MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# Propagate the worker's exit status through the trailing `| dev-log-tee.sh`
+# pipeline so mise sees crashes instead of the tee stage's clean EOF.
+# `set -o pipefail` is a bashism — Ubuntu CI's /bin/sh is dash and rejects it
+# as "Illegal option", so this script must run under bash.
+set -o pipefail
+
+# Treat SIGTERM/SIGINT as a clean shutdown. The dev/dev-all orchestrators
+# SIGTERM this script during Ctrl-C; without this trap the pipefail-aware
+# pipe below exits 143, mise reports it as "task failed", and run-p prints
+# `ERROR: "start:worker-development" exited with 143` — pure shutdown
+# noise. Real crashes (ts-node faulting on its own) still propagate, since
+# the trap only fires when *we* receive the signal.
+trap 'exit 0' INT TERM
+
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
+
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_LEGACY_CATALOG_REALM_URL="${REALM_BASE_URL}/legacy-catalog/"
-LEGACY_CATALOG_REALM_URL="${RESOLVED_LEGACY_CATALOG_REALM_URL:-$DEFAULT_LEGACY_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
@@ -43,12 +60,10 @@ NODE_ENV=development \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
-  ${START_CATALOG:+--fromUrl="${LEGACY_CATALOG_REALM_URL}"} \
-  ${START_CATALOG:+--toUrl="${LEGACY_CATALOG_REALM_URL}"} \
-  \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
-  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
- 
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  2>&1 | "$LOG_TEE" worker
+

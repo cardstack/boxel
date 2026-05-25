@@ -10,6 +10,7 @@ import {
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -21,10 +22,12 @@ import { Prerenderer } from './index';
 import type { Timings } from './render-runner';
 import { resolvePrerenderManagerURL } from './config';
 import {
+  PRERENDER_JOB_ID_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  sanitizePrerenderJobId,
   sanitizePrerenderRequestId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
@@ -65,15 +68,10 @@ export function buildPrerenderApp(options: {
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
-  // Resolved pool size (explicit option → env → default). Returned so
-  // `createPrerenderHttpServer` can report the same value to the
-  // manager in `sendHeartbeat` without duplicating the resolution.
-  maxPages: number;
 } {
   let app = new Koa<Koa.DefaultState, Koa.Context>();
   let router = new Router();
-  let maxPages =
-    options?.maxPages ?? Number(process.env.PRERENDER_PAGE_POOL_SIZE ?? 5);
+  let maxPages = options?.maxPages ?? 5;
   let prerenderer = new Prerenderer({
     maxPages,
     serverURL: options.serverURL,
@@ -109,6 +107,11 @@ export function buildPrerenderApp(options: {
   type RouteBaseArgs = {
     auth: string;
     renderOptions: RenderRouteOptions;
+    // Worker-job priority threaded from the producer side. Stamped
+    // onto the diagnostics blob and used by the per-tab queue / per-
+    // affinity admission semaphore / global render semaphore for
+    // priority-aware dequeue.
+    priority?: number;
   };
 
   type PrerenderArgs = RouteBaseArgs & {
@@ -123,6 +126,14 @@ export function buildPrerenderApp(options: {
     affinityValue: string;
     command: string;
     commandInput?: unknown;
+  };
+
+  type ScreenshotRouteArgs = RouteBaseArgs & {
+    affinityType: 'realm';
+    affinityValue: string;
+    realm: string;
+    url: string;
+    format: 'isolated' | 'embedded';
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -157,6 +168,16 @@ export function buildPrerenderApp(options: {
       ? (attrs.renderOptions as RenderRouteOptions)
       : {};
 
+  // Optional `priority` from the wire format. Coerce to a finite
+  // number; reject non-numeric values silently (defaults to undefined,
+  // server treats as 0).
+  let parsePriority = (attrs: any): number | undefined => {
+    let raw = attrs?.priority;
+    if (raw === undefined || raw === null) return undefined;
+    let n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
+
   let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
     attrsToCheck
       .filter(({ value }) => !isNonEmptyString(value))
@@ -181,6 +202,7 @@ export function buildPrerenderApp(options: {
       },
       { value: rawAffinityValue, name: 'affinityValue' },
     ]);
+    let priority = parsePriority(attrs);
     return {
       args:
         missing.length > 0
@@ -192,6 +214,7 @@ export function buildPrerenderApp(options: {
               url: rawUrl as string,
               auth: rawAuth as string,
               renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
@@ -223,6 +246,7 @@ export function buildPrerenderApp(options: {
     if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
     if (!isNonEmptyString(command)) missing.push('command');
     let commandValue = isNonEmptyString(command) ? command : undefined;
+    let priority = parsePriority(attrs);
     return {
       args:
         missing.length > 0
@@ -234,6 +258,7 @@ export function buildPrerenderApp(options: {
               command: command as string,
               commandInput,
               renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
@@ -245,6 +270,63 @@ export function buildPrerenderApp(options: {
       } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} authProvided=${
         typeof rawAuth === 'string' && rawAuth.trim().length > 0
       } commandProvided=${Boolean(commandValue)}`,
+    };
+  };
+
+  let parseScreenshotAttributes = (
+    attrs: any,
+  ): RouteParseResult<ScreenshotRouteArgs> => {
+    let rawUrl = attrs.url;
+    let rawAuth = attrs.auth;
+    let rawRealm = attrs.realm;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
+    let rawFormat = attrs.format;
+    let renderOptions = parseRenderOptions(attrs);
+    let priority = parsePriority(attrs);
+    let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    let missing = missingAttrs([
+      { value: rawUrl, name: 'url' },
+      { value: rawRealm, name: 'realm' },
+      { value: rawAuth, name: 'auth' },
+      {
+        value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+        name: 'affinityType',
+      },
+      { value: rawAffinityValue, name: 'affinityValue' },
+      {
+        value: formatIsValid ? rawFormat : undefined,
+        name: 'format',
+      },
+    ]);
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              affinityType: 'realm',
+              affinityValue: rawAffinityValue as string,
+              realm: rawRealm as string,
+              url: rawUrl as string,
+              auth: rawAuth as string,
+              format: rawFormat as 'isolated' | 'embedded',
+              renderOptions,
+              ...(priority !== undefined ? { priority } : {}),
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+      logTarget: (rawUrl as string | undefined) ?? '<missing>',
+      responseId: (rawUrl as string | undefined) ?? 'unknown',
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } url=${(rawUrl as string | undefined) ?? '<missing>'} format=${
+        (rawFormat as string | undefined) ?? '<missing>'
+      } authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      }`,
     };
   };
 
@@ -323,9 +405,12 @@ export function buildPrerenderApp(options: {
           (routeArgs as { affinityValue?: string } | undefined)
             ?.affinityValue ?? (attrs.affinityValue as string);
         let renderOptionsForLog = routeArgs?.renderOptions ?? {};
+        let priorityForLog =
+          (routeArgs as { priority?: number } | undefined)?.priority ??
+          (typeof attrs.priority === 'number' ? attrs.priority : 0);
 
         log.debug(
-          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
+          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} priority=${priorityForLog} options=${JSON.stringify(renderOptionsForLog)}`,
         );
         if (parsed.missing.length > 0 || !routeArgs) {
           log.warn(
@@ -389,10 +474,11 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+          '%s %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
           parsed.logTarget,
           requestId,
+          priorityForLog,
           totalMs,
           timings.launchMs,
           timings.waits.semaphoreMs,
@@ -500,6 +586,29 @@ export function buildPrerenderApp(options: {
           auth: args.auth,
           command: args.command,
           commandInput: args.commandInput as Record<string, unknown> | null,
+          ...(args.priority !== undefined ? { priority: args.priority } : {}),
+          signal,
+        }),
+      drainingPromise: options.drainingPromise,
+    },
+  );
+
+  registerPrerenderRoute<ScreenshotPrerenderResponse, ScreenshotRouteArgs>(
+    '/prerender-screenshot',
+    {
+      requestDescription: 'screenshot prerender request',
+      responseType: 'screenshot-result',
+      infoLabel: 'card screenshotted',
+      warnTimeoutMessage: (url) => `screenshot of ${url} timed out`,
+      errorContext: '/prerender-screenshot',
+      parseAttributes: parseScreenshotAttributes,
+      execute: (args, { signal }) =>
+        prerenderer.prerenderScreenshot({
+          realm: args.realm,
+          url: args.url,
+          auth: args.auth,
+          format: args.format,
+          priority: args.priority,
           signal,
         }),
       drainingPromise: options.drainingPromise,
@@ -601,8 +710,9 @@ export function buildPrerenderApp(options: {
         );
       }
 
+      let priority = parsePriority(attrs);
       log.debug(
-        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
+        `received visit prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm} priority=${priority ?? 0} options=${JSON.stringify(renderOptions)}`,
       );
       if (missing.length > 0) {
         ctxt.status = 400;
@@ -631,6 +741,14 @@ export function buildPrerenderApp(options: {
           ? rawBatchId
           : undefined;
 
+      // Indexer job correlation id. Already carried on the inbound
+      // `x-boxel-job-id` header for log-tagging; forward it to the
+      // prerenderer so it can be exposed to the host SPA via a global
+      // (`__boxelJobId`) — the host's `_federated-search` fetch
+      // wrapper reads it and re-stamps the header on outbound calls
+      // so `handle-search` can gate the job-scoped search cache.
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+
       let start = Date.now();
       let execPromise = prerenderer
         .prerenderVisit({
@@ -643,6 +761,8 @@ export function buildPrerenderApp(options: {
           ...(fileData ? { fileData } : {}),
           ...(Array.isArray(types) ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          ...(priority !== undefined ? { priority } : {}),
+          ...(jobId ? { jobId } : {}),
           signal: ac.signal,
         })
         .then((result) => ({ result }));
@@ -686,9 +806,10 @@ export function buildPrerenderApp(options: {
         .join(', ');
       let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
       log.info(
-        'visit prerendered %s requestId=%s total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        'visit prerendered %s requestId=%s priority=%d total=%dms launch=%dms (semaphore=%dms, tabQueue=%dms, tabStartup=%dms) render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
         url,
         requestId,
+        priority ?? 0,
         totalMs,
         timings.launchMs,
         timings.waits.semaphoreMs,
@@ -842,12 +963,14 @@ export function buildPrerenderApp(options: {
       return next();
     })
     .use((ctxt: Koa.Context, next: Koa.Next) => {
+      let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
+      let jobTag = jobId ? ` [job: ${jobId}]` : '';
       log.info(
-        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}`,
+        `<-- ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}${jobTag}`,
       );
       ctxt.res.on('finish', () => {
         log.info(
-          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}`,
+          `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
         );
         log.debug(JSON.stringify(ctxt.req.headers));
       });
@@ -860,7 +983,7 @@ export function buildPrerenderApp(options: {
     log.error(`prerender server HTTP error: ${err.message}`);
   });
 
-  return { app, prerenderer, maxPages };
+  return { app, prerenderer };
 }
 
 function resolvePrerenderServerURL(port?: number): string {
@@ -901,15 +1024,7 @@ export function createPrerenderHttpServer(options?: {
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
-  let {
-    app,
-    prerenderer,
-    // Reuse the resolved value `buildPrerenderApp` computed so
-    // `sendHeartbeat` reports the same pool size the PagePool was
-    // actually constructed with — no duplicate resolution, no drift
-    // when the default or env var changes.
-    maxPages: resolvedMaxPages,
-  } = buildPrerenderApp({
+  let { app, prerenderer } = buildPrerenderApp({
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -945,7 +1060,7 @@ export function createPrerenderHttpServer(options?: {
   async function sendHeartbeat(status?: 'active' | 'draining') {
     try {
       const managerURL = resolvePrerenderManagerURL();
-      const capacity = resolvedMaxPages;
+      const capacity = prerenderer.currentPoolCapacity;
       let body = {
         data: {
           type: 'prerender-server',

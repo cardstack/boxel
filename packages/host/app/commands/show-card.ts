@@ -5,6 +5,7 @@ import {
   identifyCard,
   internalKeyFor,
   isCardErrorJSONAPI,
+  rri,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -71,13 +72,13 @@ export default class ShowCardCommand extends HostBaseCommand<
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
         await operatorModeStateService.updateCodePath(
-          new URL(cardDefRef.module + '.gts'),
+          rri(`${cardDefRef.module}.gts`),
           'preview',
         );
       }
       this.playgroundPanelService.persistSelections(
         internalKeyFor(cardDefRef, undefined),
-        input.cardId,
+        rri(input.cardId),
         (input.format as Format) || 'isolated',
         undefined,
       );

@@ -37,6 +37,11 @@ jobs:
       # in cardstack/infra. Permissions are ssm:GetParameter on:
       #   /staging/grafana/grafanactl_token  (added in cardstack/infra#665)
       #   /staging/loki/internal_url         (added in cardstack/infra#674, CS-10968)
+      #   /staging/boxel/GRAFANA_SECRET      (CS-10929 — used by operator-action
+      #                                      button panels for `Authorization:
+      #                                      Bearer ${grafana_secret}`; matches
+      #                                      the realm-server task's existing
+      #                                      shared secret)
       # If the role doesn't exist or is missing one of those grants, the
       # configure-aws-credentials step below will succeed but the SSM
       # fetch step will fail with AccessDenied — apply the infra config first.
@@ -52,6 +57,15 @@ jobs:
       # grafanactl is still pre-1.0 — bump as needed; the install action
       # (.github/actions/install-grafanactl) verifies the SHA-256.
       GRAFANACTL_VERSION: "0.1.10"
+      # Worker CloudWatch log group + owning AWS account, substituted into
+      # provisioning/alerting/worker-status-group.json at push time
+      # (CS-11107). Hardcoded here rather than fetched from SSM: the log
+      # group name follows the deterministic `ecs-boxel-worker-<env>`
+      # convention and the account-id is already baked into AWS_ROLE_ARN
+      # above. If the staging account ever moves, both values below and
+      # AWS_ROLE_ARN need to update together.
+      WORKER_LOG_GROUP_NAME: ecs-boxel-worker-staging
+      WORKER_LOG_GROUP_ACCOUNT_ID: "680542703984"
 
     steps:
       - name: Checkout
@@ -93,9 +107,24 @@ jobs:
           fetch LOKI_URL               /staging/loki/internal_url
           fetch BOXEL_DB_HOST          /staging/boxel-grafana/db_host
           fetch SYNAPSE_PROMETHEUS_URL /staging/boxel-grafana/prometheus_url
+          fetch REALM_SERVER_URL       /staging/boxel-grafana/realm_server_url
           fetch BOXEL_DB_NAME          /staging/boxel/PGDATABASE
           fetch BOXEL_DB_USER          /staging/boxel/GRAFANA_DB_USER
           fetch BOXEL_DB_PASSWORD      /staging/boxel/GRAFANA_DB_PASSWORD  --with-decryption
+          fetch GRAFANA_SECRET         /staging/boxel/GRAFANA_SECRET       --with-decryption
+
+      - name: Lint
+        # Belt-and-suspenders: ci-lint.yaml runs the same lint at PR time
+        # without GRAFANA_TOKEN. Here, with the staging token already
+        # sourced from SSM, GRAFANACTL_VALIDATE_ENV adds a "validate
+        # against the live staging Grafana" step that ci-lint can't do.
+        # PRETTIER_SKIP avoids duplicating ci-lint's YAML format check
+        # (which requires pnpm install — overkill for this focused workflow).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: staging
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Apply
         # apply.sh sources its own grafanactl-env.sh helper, which for

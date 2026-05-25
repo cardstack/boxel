@@ -1,0 +1,3228 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxeloverview1"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "Top-level health view. Service-health stats use Loki log volume over the dashboard time range as a liveness proxy (CloudWatch-based ECS metrics are deferred until cluster naming is standardized). Narrow the time picker to ~5m for strict liveness; widen to surface bursty local-dev activity. Each service stat drills into the per-service dashboard; each indexing stat drills into the Indexing dashboard.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "id": 32,
+        "type": "text",
+        "title": "",
+        "gridPos": {
+          "h": 3,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "description": "Which Grafana environment you are looking at. Rendered from the `env` constant template variable, which apply.sh substitutes to local / staging / production at push time. Designed to make staging vs production unmistakable at a glance.",
+        "transparent": true,
+        "options": {
+          "mode": "html",
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "<div style=\"display:flex;align-items:center;justify-content:center;height:100%;width:100%;overflow:hidden;font-size:36px;font-weight:700;letter-spacing:2px;text-transform:capitalize;font-family:Inter,system-ui,sans-serif;color:var(--text-primary)\">${env}</div>"
+        },
+        "pluginVersion": "12.4.3"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Total realms (count of distinct realm_url in realm_meta) plus cumulative growth curve. The big number is the current total; the area sparkline shows the full history of when each realm was first indexed (min(indexed_at) per realm_url). Click to drill into the Realms dashboard for per-realm permissions, indexing status, and recent errors.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Realms dashboard",
+                "url": "/d/boxelrealms001",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Realms"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#6638ff"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 3
+        },
+        "id": 21,
+        "links": [
+          {
+            "title": "Open Realms dashboard",
+            "url": "/d/boxelrealms001",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "timeFrom": "1y",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT to_timestamp(min_at) AS time, ROW_NUMBER() OVER (ORDER BY min_at) AS \"Realms\" FROM (SELECT MIN(indexed_at) AS min_at FROM realm_meta GROUP BY realm_url) sub UNION ALL SELECT NOW(), (SELECT COUNT(DISTINCT realm_url) FROM realm_meta) ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Realms",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Total registered users (count of users table) plus cumulative growth curve. Big number is the current total; sparkline shows the full history of user signups by users.created_at. Click to drill into the Users dashboard for credits, realm permissions, and access management.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Users dashboard",
+                "url": "/d/boxelusers0001",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Users"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#00ffba"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 3
+        },
+        "id": 22,
+        "links": [
+          {
+            "title": "Open Users dashboard",
+            "url": "/d/boxelusers0001",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "timeFrom": "1y",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT to_timestamp(created_at) AS time, ROW_NUMBER() OVER (ORDER BY created_at) AS \"Users\" FROM users UNION ALL SELECT NOW(), (SELECT COUNT(*) FROM users) ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Users",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Concurrent users right now: count of distinct Matrix users seen on the Synapse Sliding Sync endpoint within a rolling 5-minute window, evaluated across the dashboard time range. Big number is the latest 5-minute count; sparkline shows how the active-user count moved over the range. Sourced from Synapse access logs via Loki — matches `Processed request` lines hitting the MSC3575 Sliding Sync path (`simplified_msc3575/sync`) and extracts the `@user:server` token from the log prefix. Path is on the unstable MSC3575 namespace and may shift when sliding-sync stabilises upstream.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Users dashboard",
+                "url": "/d/boxelusers0001?${__url_time_range}",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Concurrent Users"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 5,
+          "w": 8,
+          "x": 16,
+          "y": 3
+        },
+        "id": 30,
+        "links": [
+          {
+            "title": "Open Users dashboard",
+            "url": "/d/boxelusers0001?${__url_time_range}",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "count(count by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))) or vector(0)",
+            "queryType": "range",
+            "legendFormat": "Concurrent Users",
+            "refId": "A"
+          }
+        ],
+        "title": "Concurrent Users",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Matrix user IDs seen on the Synapse Sliding Sync endpoint within the last 5 minutes. Click a user to open the Users dashboard focused on them.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 120
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "user"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Matrix User"
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff66c4"
+                  }
+                },
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open in Users dashboard",
+                      "url": "/d/boxelusers0001?${__url_time_range}&var-matrix_user_id=${__value.text:percentencode}",
+                      "targetBlank": false
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "id": 31,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": false,
+          "sortBy": [
+            {
+              "desc": false,
+              "displayName": "Matrix User"
+            }
+          ]
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (user) (count_over_time({service=\"synapse\"} |= \"Processed request\" |= \"simplified_msc3575/sync\" | regexp `\\{(?P<user>@[^}]+:[^}]+)\\}` [5m]))",
+            "queryType": "instant",
+            "legendFormat": "{{user}}",
+            "refId": "A"
+          }
+        ],
+        "title": "",
+        "transformations": [
+          {
+            "id": "labelsToFields",
+            "options": {
+              "mode": "columns"
+            }
+          },
+          {
+            "id": "filterFieldsByName",
+            "options": {
+              "include": {
+                "pattern": "^user$"
+              }
+            }
+          }
+        ],
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "Realm-server ALB metrics: request count, error rate (target 5XX + ELB-emitted 5XX combined), client 4xx rate, and target response time (p50/p95/p99 on the right axis in seconds). All series come from `AWS/ApplicationELB` CloudWatch metrics; request/error/4xx counts are normalized to per-minute regardless of the selected time range. Locally these read 'No data' — CloudWatch is staging/production only. Legend shows the mean over the visible window.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 50,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Application Load Balancer dashboard",
+                "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HTTP req/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#0069f9"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HTTP err/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff5050"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "HTTP 4xx/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#f2cc0c"
+                  }
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 5
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p50"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#73bf69"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p95"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff9830"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "p99"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "custom.axisPlacement",
+                  "value": "right"
+                },
+                {
+                  "id": "custom.fillOpacity",
+                  "value": 0
+                },
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#f2495c"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 11
+        },
+        "id": 1,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "RequestCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "a",
+            "hide": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "b",
+            "hide": true,
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_ELB_5XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "h",
+            "hide": true,
+            "refId": "H"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "HTTPCode_Target_4XX_Count",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "Sum",
+            "period": "",
+            "region": "default",
+            "id": "i",
+            "hide": true,
+            "refId": "I"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "FILL(a, 0) / PERIOD(a) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP req/min",
+            "refId": "e1",
+            "id": "e1"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "(FILL(b, 0) + FILL(h, 0)) / PERIOD(b) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP err/min",
+            "refId": "e2",
+            "id": "e2"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "FILL(i, 0) / PERIOD(i) * 60",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "label": "HTTP 4xx/min",
+            "refId": "e3",
+            "id": "e3"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "p50",
+            "period": "",
+            "region": "default",
+            "label": "p50",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "p95",
+            "period": "",
+            "region": "default",
+            "label": "p95",
+            "refId": "D"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ApplicationELB",
+            "metricName": "TargetResponseTime",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "LoadBalancer": "$realm_server_alb"
+            },
+            "statistic": "p99",
+            "period": "",
+            "region": "default",
+            "label": "p99",
+            "refId": "E"
+          }
+        ],
+        "title": "Application Load Balancer",
+        "type": "timeseries",
+        "links": [
+          {
+            "title": "Open Application Load Balancer dashboard",
+            "url": "/d/boxel-aws-elb?var-loadbalancername=$realm_server_alb",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ]
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Priority-pending worker jobs (status='unfulfilled' with no active reservation AND priority < 0). Sparkline shows resolved jobs/min over the dashboard time range, with the trailing point set to the current priority-pending count so `lastNotNull` matches the displayed value. Color thresholds: green ≤3, yellow >3, red >10. Counts ALL job types — for indexing-only depth see the Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "links": [
+              {
+                "title": "Open Job Queue dashboard",
+                "url": "/d/boxeljobqueue1",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 4
+                },
+                {
+                  "color": "red",
+                  "value": 11
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 11
+        },
+        "id": 4,
+        "links": [
+          {
+            "title": "Open Job Queue dashboard",
+            "url": "/d/boxeljobqueue1",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*)::int AS \"Pending priority jobs\"\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\nUNION ALL\nSELECT EXTRACT(EPOCH FROM NOW()),\n       (SELECT COUNT(*)::int\n          FROM jobs j\n          LEFT JOIN job_reservations jr\n            ON j.id = jr.job_id\n           AND jr.completed_at IS NULL\n           AND jr.locked_until > NOW()\n         WHERE j.status = 'unfulfilled'\n           AND j.priority < 0\n           AND jr.id IS NULL)\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Job Queue",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Synapse send-event rate — `PUT /_matrix/client/.../send/<event-type>/<txnId>` requests parsed from synapse INFO-level access logs (`Processed request: ... \"PUT .../send/... HTTP/1.1\"`). Counts ALL Matrix event types (`m.room.message` for chat, `app.boxel.realm-event` for boxel realm sync, etc.) since boxel uses Matrix as its event bus, not just for chat. Legend shows the mean over the visible time range.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 50,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Synapse dashboard",
+                "url": "/d/000000012",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Events/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#6638ff"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 11
+        },
+        "id": 5,
+        "links": [
+          {
+            "title": "Open Synapse dashboard",
+            "url": "/d/000000012",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "60 * sum(rate({service=\"synapse\"} |~ \"\\\"PUT [^\\\"]*/send/\" [5m])) or vector(0)",
+            "queryType": "range",
+            "legendFormat": "Events/min",
+            "refId": "A"
+          }
+        ],
+        "title": "Matrix Events",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-realm-server-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Realm Server dashboard",
+                "url": "/d/boxel-svc-realm-server",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 0,
+          "y": 19
+        },
+        "id": 13,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "Realm Server",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-realm-server-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 0,
+          "y": 23
+        },
+        "id": 23,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-realm-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-prerender-server-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Prerender Server dashboard",
+                "url": "/d/boxel-svc-prerender-server",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 4,
+          "y": 19
+        },
+        "id": 14,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "Prerender",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-prerender-server-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 4,
+          "y": 23
+        },
+        "id": 24,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-server-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-prerender-manager-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Prerender Manager dashboard",
+                "url": "/d/boxel-svc-prerender-manager",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 8,
+          "y": 19
+        },
+        "id": 15,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "Prerender Mgr",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-prerender-manager-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 8,
+          "y": 23
+        },
+        "id": 25,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-prerender-manager-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-worker-${env}` on cluster `${env}` — averages over the panel refresh window. Task counts (Run / Need) appear in the stat row below this bargauge. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Worker dashboard",
+                "url": "/d/boxel-svc-worker",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 4,
+          "x": 12,
+          "y": 19
+        },
+        "id": 16,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "Worker",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-worker-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need means the service is under-scaled or tasks are crashing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 3,
+          "w": 4,
+          "x": 12,
+          "y": 23
+        },
+        "id": 26,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "bes7ustjf8w74b"
+        },
+        "description": "Synapse process metrics scraped from /\\_synapse/metrics via the synapse-prometheus datasource (local Prometheus locally; AMP in staging/production). CPU is rate over 5m as a percentage of one core; Mem is process_resident_memory_bytes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "links": [
+              {
+                "title": "Open Synapse dashboard",
+                "url": "/d/000000012",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "decbytes"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "max",
+                  "value": 8589934592
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 4,
+          "x": 16,
+          "y": 19
+        },
+        "id": 17,
+        "links": [
+          {
+            "title": "Open Synapse dashboard",
+            "url": "/d/000000012",
+            "targetBlank": false,
+            "type": "link",
+            "icon": "external link"
+          }
+        ],
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "text": {
+            "titleSize": 22,
+            "valueSize": 21
+          },
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "bes7ustjf8w74b"
+            },
+            "expr": "rate(process_cpu_seconds_total{job=\"synapse\"}[5m]) * 100",
+            "legendFormat": "CPU",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "prometheus",
+              "uid": "bes7ustjf8w74b"
+            },
+            "expr": "process_resident_memory_bytes{job=\"synapse\"}",
+            "legendFormat": "Mem",
+            "instant": true,
+            "refId": "B"
+          }
+        ],
+        "title": "Synapse Process",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Boxel application database transaction rate (xact_commit + xact_rollback) averaged since the postmaster started. Not a rolling window — recent spikes will be smoothed. Drill into the DB-specific dashboard for detail.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 0,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 0
+                }
+              ]
+            },
+            "unit": "short",
+            "links": [
+              {
+                "title": "Open Database dashboard",
+                "url": "/d/boxeldatabase1",
+                "targetBlank": false
+              }
+            ]
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 7,
+          "w": 4,
+          "x": 20,
+          "y": 19
+        },
+        "id": 18,
+        "options": {
+          "colorMode": "background_solid",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "vertical",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "value_and_name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 60.0 * (xact_commit + xact_rollback) / NULLIF(EXTRACT(EPOCH FROM (NOW() - pg_postmaster_start_time())), 0) AS \"txn/min\" FROM pg_stat_database WHERE datname = 'boxel';",
+            "refId": "A"
+          }
+        ],
+        "title": "Postgres DB",
+        "type": "stat"
+      },
+      {
+        "description": "All firing and pending Grafana alert rules. Drill into a rule for details and silences. Replaces the Worker Status alertlist (which was a single-panel dashboard).",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 36
+        },
+        "id": 6,
+        "options": {
+          "alertInstanceLabelFilter": "",
+          "alertName": "",
+          "dashboardAlerts": false,
+          "groupBy": [],
+          "groupMode": "default",
+          "maxItems": 30,
+          "sortOrder": 1,
+          "stateFilter": {
+            "error": true,
+            "firing": true,
+            "noData": true,
+            "normal": false,
+            "pending": true
+          },
+          "viewMode": "list"
+        },
+        "title": "Active Alerts",
+        "type": "alertlist"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing jobs (from-scratch-index, incremental-index, full-reindex) waiting on a worker. Click to open Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "links": [
+              {
+                "title": "Open Indexing dashboard",
+                "url": "/d/aetquzjcf2znke",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 50
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 26
+        },
+        "id": 7,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS pending FROM jobs j LEFT JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pending Indexing Jobs",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing jobs currently being processed by a worker.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "links": [
+              {
+                "title": "Open Indexing dashboard",
+                "url": "/d/aetquzjcf2znke",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 26
+        },
+        "id": 8,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS in_flight FROM jobs j JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.finished_at IS NULL AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex');",
+            "refId": "A"
+          }
+        ],
+        "title": "In-flight",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Age of the oldest pending indexing job. Yellow at 1 minute, red at 5 minutes.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "links": [
+              {
+                "title": "Open Indexing dashboard",
+                "url": "/d/aetquzjcf2znke",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            },
+            "unit": "s"
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 26
+        },
+        "id": 9,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at))) AS oldest_pending_seconds FROM jobs j LEFT JOIN job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW() WHERE j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Oldest Pending",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Files in boxel_index whose latest index attempt failed (across all realms).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "links": [
+              {
+                "title": "Open Realms dashboard",
+                "url": "/d/boxelrealms001",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 26
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS errors FROM boxel_index WHERE type = 'error' AND is_deleted IS NOT TRUE;",
+            "refId": "A"
+          }
+        ],
+        "title": "Indexing Errors",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing throughput across all realms in the dashboard time window. Drills into the Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "links": [
+              {
+                "title": "Open Indexing dashboard",
+                "url": "/d/aetquzjcf2znke",
+                "targetBlank": false
+              }
+            ],
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "arrived"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#0069f9"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "started"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ffd800"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "completed"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#00ffba"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "id": 11,
+        "options": {
+          "legend": {
+            "calcs": [],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s'), COUNT(*) AS arrived FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(j.created_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s'), COUNT(*) AS started FROM job_reservations jr JOIN jobs j ON j.id = jr.job_id WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND $__timeFilter(jr.created_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s'), COUNT(*) AS completed FROM jobs j WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex') AND j.finished_at IS NOT NULL AND $__timeFilter(j.finished_at) GROUP BY 1 ORDER BY 1;",
+            "refId": "C"
+          }
+        ],
+        "title": "Indexing throughput",
+        "type": "timeseries"
+      },
+      {
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        },
+        "id": 12,
+        "options": {
+          "code": {
+            "language": "plaintext",
+            "showLineNumbers": false,
+            "showMiniMap": false
+          },
+          "content": "### Other dashboards\n\n- **Entity dashboards** — pick a specific entity to inspect:\n  - [Realms](/d/boxelrealms001) — counts, permissions, indexing status, recent errors\n  - [Users](/d/boxelusers0001) — credits, realm permissions, grant access\n- **Workflow dashboards**:\n  - [Indexing](/d/aetquzjcf2znke) — pipeline metrics + operator actions\n  - [Job Queue](/d/boxeljobqueue1) — generic worker queue (all job types)\n- **Forensics**: [Logs](/d/fetquzizsej28b) — filter by service, user, realm\n- **Service deep-dives** (stub — currently filtered logs only): [Realm Server](/d/boxel-svc-realm-server) · [Prerender Server](/d/boxel-svc-prerender-server) · [Prerender Manager](/d/boxel-svc-prerender-manager) · [Worker](/d/boxel-svc-worker) · [Synapse](/d/000000012)",
+          "mode": "markdown"
+        },
+        "pluginVersion": "12.4.3",
+        "title": "Other dashboards",
+        "type": "text"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "overview"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "hide": 2,
+          "includeAll": false,
+          "name": "realm_server_alb",
+          "options": [],
+          "query": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "refresh": 1,
+          "regex": "/^(?<value>app\\/boxel-realm-server-${env}\\/[a-f0-9]+)$/",
+          "skipUrlSync": true,
+          "sort": 1,
+          "type": "query"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Overview",
+    "weekStart": ""
+  }
+}

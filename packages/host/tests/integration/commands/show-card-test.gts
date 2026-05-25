@@ -51,7 +51,7 @@ class MockOperatorModeStateService extends Service {
   @tracked codePathString: string | undefined;
 
   addedStackItems: StackItem[] = [];
-  updatedCodePaths: URL[] = [];
+  updatedCodePaths: (URL | string)[] = [];
 
   numberOfStacks() {
     return 2;
@@ -74,9 +74,9 @@ class MockOperatorModeStateService extends Service {
     this.addedStackItems.push(stackItem);
   }
 
-  updateCodePath(url: URL) {
+  updateCodePath(url: URL | string) {
     this.updatedCodePaths.push(url);
-    this.codePathString = url.href;
+    this.codePathString = url instanceof URL ? url.href : url;
   }
 
   reset() {
@@ -432,7 +432,7 @@ module('Integration | Command | show-card', function (hooks) {
       );
       const updatedPath = mockOperatorModeStateService.updatedCodePaths[0];
       assert.strictEqual(
-        updatedPath.href,
+        updatedPath instanceof URL ? updatedPath.href : updatedPath,
         `${testRealmURL}person.gts`,
         'Code path points to person.gts module',
       );
@@ -476,7 +476,7 @@ module('Integration | Command | show-card', function (hooks) {
       );
       const updatedPath = mockOperatorModeStateService.updatedCodePaths[0];
       assert.strictEqual(
-        updatedPath.href,
+        updatedPath instanceof URL ? updatedPath.href : updatedPath,
         `${testRealmURL}pet.gts`,
         'Code path was updated to pet.gts module',
       );
@@ -489,22 +489,52 @@ module('Integration | Command | show-card', function (hooks) {
       // @ts-expect-error - intentionally setting invalid submode for testing
       mockOperatorModeStateService.state = { submode: 'unknown' };
 
-      let consoleErrorCalled = false;
+      // Pre-warm the base/command import that `execute()` performs via
+      // `getInputType()`. Without this, a transient fetch failure loading that
+      // module surfaces inside `execute()` as a `[test-fetch] ... failed:
+      // TypeError: Failed to fetch` console.error from helpers/setup.ts's fetch
+      // wrapper — which would race ahead of the 'Unknown submode:' call we are
+      // trying to verify and trip the spy on the wrong message.
+      await command.getInputType();
+
+      // Capture every console.error call rather than asserting on the first
+      // one. Other infra (notably the [test-fetch] wrapper in helpers/setup.ts)
+      // can legitimately call console.error during the run; we must filter for
+      // the specific 'Unknown submode:' message and forward the rest so test
+      // diagnostics aren't swallowed.
+      const capturedErrors: Array<{ message: unknown; args: unknown[] }> = [];
       const originalConsoleError = console.error;
-      console.error = (message: string, submode: string) => {
-        consoleErrorCalled = true;
-        assert.strictEqual(
-          message,
-          'Unknown submode:',
-          'Correct error message logged',
-        );
-        assert.strictEqual(submode, 'unknown', 'Correct submode logged');
+      console.error = (message: unknown, ...args: unknown[]) => {
+        capturedErrors.push({ message, args });
+        originalConsoleError.call(console, message, ...args);
       };
 
       try {
         await command.execute({ cardId });
 
-        assert.ok(consoleErrorCalled, 'console.error was called');
+        const unknownSubmodeError = capturedErrors.find(
+          (e) => e.message === 'Unknown submode:',
+        );
+        if (!unknownSubmodeError) {
+          // Diagnostic: dump everything that was logged so a future flake
+          // points at the colliding caller instead of just reporting an
+          // undefined expected value.
+          const summary = capturedErrors.map((e) => ({
+            message: String(e.message),
+            args: e.args.map((a) => String(a)),
+          }));
+          assert.ok(
+            false,
+            `'Unknown submode:' was not logged. Captured ${capturedErrors.length} console.error call(s): ${JSON.stringify(summary)}`,
+          );
+        } else {
+          assert.strictEqual(
+            unknownSubmodeError.args[0],
+            'unknown',
+            'Correct submode logged',
+          );
+        }
+
         assert.strictEqual(
           mockOperatorModeStateService.addedStackItems.length,
           0,

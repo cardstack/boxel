@@ -14,11 +14,37 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
-import { compiler } from './etc';
+
+//@ts-ignore no upstream types
+import * as emberCompiler from 'ember-source/ember-template-compiler/index.js';
+
+import * as ContentTag from 'content-tag';
+
+import { md5 } from 'super-fast-md5';
 
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
 }) as ExtendedPluginBuilder;
+
+// ember-source's defaultId hashes the template source via node's crypto
+// module, looked up through `module.require` / `globalThis.require`. Under
+// the ESM compiler entry neither is defined, so defaultId falls back to
+// `() => null` and the emitted template JSON contains `"id": null`. Wrap
+// precompile with a deterministic id derived from super-fast-md5, which
+// works identically in node and the browser.
+function templateId(src: string) {
+  return md5(src).substring(0, 8);
+}
+
+const compiler = {
+  ...emberCompiler,
+  precompile(template: string, options: Record<string, unknown> = {}) {
+    return (emberCompiler as { precompile: Function }).precompile(template, {
+      ...options,
+      id: options.id || templateId,
+    });
+  },
+};
 
 export async function transpileJS(
   content: string,
@@ -30,9 +56,16 @@ export async function transpileJS(
     return '';
   }
 
-  const processor = new ContentTagGlobal.Preprocessor();
+  const processor = new ContentTag.Preprocessor();
+  // content-tag surfaces this filename in user-facing "Parse Error at ..."
+  // messages. The caller passes an absolute path (e.g. "/broken.gts") so
+  // babel's moduleName resolution is deterministic, but for error messages
+  // we want the cleaner relative form.
+  let contentTagFilename = debugFilename.startsWith('/')
+    ? debugFilename.slice(1)
+    : debugFilename;
   content = processor.process(content, {
-    filename: debugFilename,
+    filename: contentTagFilename,
     inline_source_map: true,
   }).code;
 

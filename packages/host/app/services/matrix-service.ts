@@ -33,6 +33,7 @@ import {
   logger,
   isCardInstance,
   Deferred,
+  ri,
   SEARCH_MARKER,
   REPLACE_MARKER,
   SEPARATOR_MARKER,
@@ -282,6 +283,9 @@ export default class MatrixService extends Service {
   }
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
+    if (isTesting()) {
+      console.log(`[read-receipt-trace] arrived event=${eventId}`);
+    }
     this.currentUserEventReadReceipts.set(eventId, receipt);
   }
 
@@ -368,8 +372,8 @@ export default class MatrixService extends Service {
         async (e) => {
           switch (e.event.type) {
             case APP_BOXEL_REALMS_EVENT_TYPE:
-              await this.realmServer.setAvailableRealmURLs(
-                e.event.content.realms,
+              await this.realmServer.setAvailableRealmIdentifiers(
+                (e.event.content.realms as string[]).map(ri),
               );
               // Only do this after we've completed our overall login
               if (this.postLoginCompleted) {
@@ -651,7 +655,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmURLs(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
   }
 
   public async removeRealmFromAccountData(realmURLString: string) {
@@ -664,7 +668,7 @@ export default class MatrixService extends Service {
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });
-    await this.realmServer.setAvailableRealmURLs(newRealms);
+    await this.realmServer.setAvailableRealmIdentifiers(newRealms.map(ri));
   }
 
   public async getWorkspaceFavorites(): Promise<string[]> {
@@ -764,13 +768,13 @@ export default class MatrixService extends Service {
 
         await Promise.all([
           this.realmServer.fetchCatalogRealms(),
-          this.realmServer.setAvailableRealmURLs(
-            accountDataContent?.realms ?? [],
+          this.realmServer.setAvailableRealmIdentifiers(
+            (accountDataContent?.realms ?? []).map(ri),
           ),
         ]);
 
         await this.realm.prefetchRealmInfos(
-          this.realmServer.availableRealmURLs,
+          this.realmServer.availableRealmIdentifiers,
         );
 
         await this.initSlidingSync(accountDataContent);
@@ -879,7 +883,7 @@ export default class MatrixService extends Service {
   async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
     // user's profile based on this.client.getUserId();
-    let activeRealms = this.realmServer.availableRealmURLs;
+    let activeRealms = this.realmServer.availableRealmIdentifiers;
 
     await Promise.all(
       activeRealms.map(async (realmURL: string) => {
@@ -1332,7 +1336,18 @@ export default class MatrixService extends Service {
         getRoom(
           this,
           () => roomId,
-          () => this.getRoomData(roomId)?.events,
+          () => {
+            let data = this.getRoomData(roomId);
+            // Return both _events and _roomState (via hasRoomState) so the
+            // resource re-runs when either changes. processRoomTask returns
+            // early if the aiBot isn't in memberIds, and memberIds is
+            // derived from _roomState (set by drainRoomState) independently
+            // from _events (updated by drainTimeline). Encoding both as the
+            // returned arg ensures invalidation regardless of whether
+            // ember-resources reacts to consumed-but-unreturned tracked deps
+            // or only to argument value changes.
+            return [data?.events, data?.hasRoomState] as const;
+          },
         ),
       );
     }

@@ -6,6 +6,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -35,7 +36,10 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type {
+  RealmResourceIdentifier,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   baseFileRef,
   formattedError,
@@ -1016,9 +1020,19 @@ export default class Room extends Component<Signature> {
 
   private sendReadReceipt(message: Message) {
     if (this.matrixService.profile.userId === message.author.userId) {
+      if (isTesting()) {
+        console.log(
+          `[read-receipt-trace] skip self event=${message.eventId} room=${this.args.roomId}`,
+        );
+      }
       return;
     }
     if (this.matrixService.currentUserEventReadReceipts.has(message.eventId)) {
+      if (isTesting()) {
+        console.log(
+          `[read-receipt-trace] skip already-acked event=${message.eventId} room=${this.args.roomId}`,
+        );
+      }
       return;
     }
 
@@ -1031,10 +1045,20 @@ export default class Room extends Component<Signature> {
       getTs: () => message.created.getTime(),
     };
 
+    if (isTesting()) {
+      console.log(
+        `[read-receipt-trace] schedule event=${message.eventId} room=${this.args.roomId}`,
+      );
+    }
     // Without scheduling this after render, this produces the "attempted to
     // update value, but it had already been used previously in the same
     // computation" error
     schedule('afterRender', () => {
+      if (isTesting()) {
+        console.log(
+          `[read-receipt-trace] dispatch event=${message.eventId} room=${this.args.roomId}`,
+        );
+      }
       this.matrixService.sendReadReceipt(matrixEvent as MatrixEvent);
     });
   }
@@ -1587,7 +1611,7 @@ export default class Room extends Component<Signature> {
       let openCardIds = new Set([
         ...(this.operatorModeStateService.getOpenCardIds() || []),
         ...this.autoAttachedCardIds,
-      ]);
+      ]) as Set<RealmResourceIdentifier>;
       let context =
         await this.operatorModeStateService.getSummaryForAIBot(openCardIds);
       try {

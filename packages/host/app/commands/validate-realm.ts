@@ -4,7 +4,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
+import GetAvailableRealmIdentifiersCommand from './get-available-realm-identifiers';
 
 export default class ValidateRealmCommand extends HostBaseCommand<
   typeof BaseCommandModule.ValidateRealmInput,
@@ -18,23 +18,23 @@ export default class ValidateRealmCommand extends HostBaseCommand<
     return ValidateRealmInput;
   }
 
-  requireInputFields = ['realmUrl'];
+  requireInputFields = ['realmIdentifier'];
 
   protected async run(
     input: BaseCommandModule.ValidateRealmInput,
   ): Promise<BaseCommandModule.ValidateRealmResult> {
-    let realmUrl = new RealmPaths(new URL(input.realmUrl)).url;
+    let realmIdentifier = new RealmPaths(new URL(input.realmIdentifier)).url;
 
-    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+    let { realmIdentifiers } = await new GetAvailableRealmIdentifiersCommand(
       this.commandContext,
     ).execute();
 
-    if (!realmUrls.includes(realmUrl)) {
-      throw new Error(`Invalid realm: ${realmUrl}`);
+    if (!realmIdentifiers.includes(realmIdentifier)) {
+      throw new Error(`Invalid realm: ${realmIdentifier}`);
     }
 
     let commandModule = await this.loadCommandModule();
     const { ValidateRealmResult } = commandModule;
-    return new ValidateRealmResult({ realmUrl });
+    return new ValidateRealmResult({ realmIdentifier });
   }
 }

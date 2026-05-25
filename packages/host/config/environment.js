@@ -1,5 +1,6 @@
 'use strict';
 
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
@@ -7,6 +8,32 @@ const DEFAULT_CARD_SIZE_LIMIT_BYTES = 512 * 1024; // 512KB
 const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
+
+// Classic ember-cli injected APP.version automatically; the Vite/Embroider
+// build does not, so we populate it here from package.json + the short git
+// SHA (matching ember-cli's `0.0.0+abcdef12` shape) so the submode-switcher
+// tooltip and any other consumer keeps working.
+function computeAppVersion() {
+  let pkgVersion = '0.0.0';
+  try {
+    pkgVersion = require('../package.json').version || pkgVersion;
+  } catch (_) {
+    // fall through with default
+  }
+  let sha = '';
+  try {
+    sha = execSync('git rev-parse --short=8 HEAD', {
+      cwd: __dirname,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch (_) {
+    // git unavailable (e.g. docker build without .git); fall back to pkg only
+  }
+  return sha ? `${pkgVersion}+${sha}` : pkgVersion;
+}
+const APP_VERSION = computeAppVersion();
 
 // Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames.
 // ENV_SLUG is set by mise's env-vars.sh; fall back to computing it for non-mise contexts.
@@ -23,28 +50,43 @@ function getEnvSlug() {
 
 function environmentDefaults() {
   if (!process.env.BOXEL_ENVIRONMENT) {
+    // Local realm-server speaks HTTPS+HTTP/2 in every environment
+    // (dev + Host Tests + Live Tests). The dev cert is mandatory (see
+    // `infra:ensure-dev-cert`); there is no HTTP fallback. Test mode
+    // still uses these defaults — the host's in-memory test-realm
+    // registry intercepts `http://test-realm/...` fetches before they
+    // hit the wire, while fetches to the realm-server's real wire URL
+    // need to go to https to match the actual listener. See the
+    // repo-root README "Local HTTPS dev access".
     return {
-      realmServerURL: 'http://localhost:4201/',
+      realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
-      baseRealmURL: 'http://localhost:4201/base/',
-      catalogRealmURL: 'http://localhost:4201/catalog/',
-      legacyCatalogRealmURL: 'http://localhost:4201/legacy-catalog/',
-      skillsRealmURL: 'http://localhost:4201/skills/',
-      openRouterRealmURL: 'http://localhost:4201/openrouter/',
+      matrixURL: 'http://localhost:8008',
+      baseRealmURL: 'https://localhost:4201/base/',
+      catalogRealmURL: 'https://localhost:4201/catalog/',
+      skillsRealmURL: 'https://localhost:4201/skills/',
+      openRouterRealmURL: 'https://localhost:4201/openrouter/',
     };
   }
   let slug = getEnvSlug();
   let realmHost = `realm-server.${slug}.localhost`;
+  // Env-mode services sit behind Traefik, which terminates TLS on :443
+  // with the mkcert leaf and 308-redirects :80 to https. The host page
+  // is loaded over https, so the realm URLs the host bundle fetches
+  // must match — http URLs trigger mixed-content blocking, and the
+  // CORS preflight refuses to follow Traefik's http→https redirect
+  // ("Redirect is not allowed for a preflight request"). Mirrors the
+  // standard-mode `https://localhost:4201` defaults above.
   return {
-    realmServerURL: `http://${realmHost}/`,
+    realmServerURL: `https://${realmHost}/`,
     realmHost,
-    iconsURL: `http://icons.${slug}.localhost`,
-    baseRealmURL: `http://${realmHost}/base/`,
-    catalogRealmURL: `http://${realmHost}/catalog/`,
-    legacyCatalogRealmURL: `http://${realmHost}/legacy-catalog/`,
-    skillsRealmURL: `http://${realmHost}/skills/`,
-    openRouterRealmURL: `http://${realmHost}/openrouter/`,
+    iconsURL: `https://icons.${slug}.localhost`,
+    matrixURL: `https://matrix.${slug}.localhost`,
+    baseRealmURL: `https://${realmHost}/base/`,
+    catalogRealmURL: `https://${realmHost}/catalog/`,
+    skillsRealmURL: `https://${realmHost}/skills/`,
+    openRouterRealmURL: `https://${realmHost}/openrouter/`,
   };
 }
 
@@ -68,13 +110,20 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
+      version: APP_VERSION,
     },
     'ember-cli-mirage': {
       enabled: false,
     },
     logLevels:
       process.env.LOG_LEVELS || '*=info,matrix=info,realm:events=debug',
-    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    // In environment mode, use computed Traefik hostname (not env var,
+    // which may be stale from mise's shell-activation cache in standard
+    // mode and would otherwise force an http:// matrix URL onto an
+    // https:// host page).
+    matrixURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.matrixURL
+      : process.env.MATRIX_URL || defaults.matrixURL,
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
@@ -103,23 +152,20 @@ module.exports = function (environment) {
 
     // the fields below may be rewritten by the realm server
     hostsOwnAssets: true,
+    // CS-10055: realm-server injects per-request when the request is for
+    // a realm whose config card has hostRoutingRules; empty otherwise.
+    hostRoutingMap: [],
     realmServerURL: process.env.REALM_SERVER_DOMAIN || defaults.realmServerURL,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || defaults.baseRealmURL,
     resolvedCatalogRealmURL: skipCatalog
       ? undefined
       : process.env.RESOLVED_CATALOG_REALM_URL || defaults.catalogRealmURL,
-    resolvedLegacyCatalogRealmURL: skipCatalog
-      ? undefined
-      : process.env.RESOLVED_LEGACY_CATALOG_REALM_URL ||
-        defaults.legacyCatalogRealmURL,
     resolvedSkillsRealmURL:
       process.env.RESOLVED_SKILLS_REALM_URL || defaults.skillsRealmURL,
     resolvedOpenRouterRealmURL:
       process.env.RESOLVED_OPENROUTER_REALM_URL || defaults.openRouterRealmURL,
-    featureFlags: {
-      SHOW_ASK_AI: process.env.SHOW_ASK_AI === 'true' || false,
-    },
+    featureFlags: {},
   };
 
   if (environment === 'test') {
@@ -140,14 +186,12 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {
-      SHOW_ASK_AI: true,
-    };
+    ENV.featureFlags = {};
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;
-    ENV.resolvedLegacyCatalogRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
+    ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
   }
 
   if (environment === 'production') {
@@ -158,6 +202,10 @@ module.exports = function (environment) {
   if (ENV.resolvedCatalogRealmURL) {
     ENV.defaultSystemCardId = new URL(
       'SystemCard/default',
+      withTrailingSlash(ENV.resolvedCatalogRealmURL),
+    ).href;
+    ENV.defaultFieldSpecId = new URL(
+      'Spec/fields/field',
       withTrailingSlash(ENV.resolvedCatalogRealmURL),
     ).href;
   }

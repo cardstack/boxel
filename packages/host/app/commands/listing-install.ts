@@ -1,8 +1,3 @@
-import type {
-  ListingPathResolver,
-  ModuleResource,
-  LooseCardResource,
-} from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
   join,
@@ -11,8 +6,15 @@ import {
   PlanBuilder,
   extractRelationshipIds,
   type Relationship,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
+import type {
+  ListingPathResolver,
+  ModuleResource,
+  LooseCardResource,
+} from '@cardstack/runtime-common';
+import type { Listing } from '@cardstack/runtime-common';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
@@ -27,8 +29,6 @@ import GetCardCommand from './get-card';
 import ReadSourceCommand from './read-source';
 import SerializeCardCommand from './serialize-card';
 import ValidateRealmCommand from './validate-realm';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 const log = logger('catalog:install');
 
@@ -52,9 +52,9 @@ export default class ListingInstallCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.ListingInstallResult> {
     let { realm, listing: listingInput } = input;
 
-    let { realmUrl } = await new ValidateRealmCommand(
+    let { realmIdentifier } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmUrl: realm });
+    ).execute({ realmIdentifier: realm });
 
     // this is intentionally to type because base command cannot interpret Listing type from catalog
     const listing = listingInput as Listing;
@@ -69,7 +69,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let selectedCodeRef: ResolvedCodeRef | undefined;
     let skillCardId: string | undefined;
 
-    const builder = new PlanBuilder(realmUrl, listing);
+    const builder = new PlanBuilder(realmIdentifier, listing);
 
     builder
       .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) => {
@@ -80,13 +80,13 @@ export default class ListingInstallCommand extends HostBaseCommand<
       .addIf(examplesToInstall?.length > 0, (resolver: ListingPathResolver) => {
         let r = planInstanceInstall(examplesToInstall, resolver);
         let firstInstance = r.instancesCopy[0];
-        exampleCardId = join(realmUrl, firstInstance.lid);
+        exampleCardId = join(realmIdentifier, firstInstance.lid);
         selectedCodeRef = firstInstance.targetCodeRef;
         return r;
       })
       .addIf(listing.skills?.length > 0, (resolver: ListingPathResolver) => {
         let r = planInstanceInstall(listing.skills, resolver);
-        skillCardId = join(realmUrl, r.instancesCopy[0].lid);
+        skillCardId = join(realmIdentifier, r.instancesCopy[0].lid);
         return r;
       });
 
@@ -113,7 +113,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
         let { sourceCard } = copyInstanceMeta;
         let { document: doc } = await new FetchCardJsonCommand(
           this.commandContext,
-        ).execute({ url: sourceCard.id });
+        ).execute({ cardIdentifier: sourceCard.id });
         if (!doc || !('data' in doc)) {
           throw new Error('We are only expecting single documents returned');
         }
@@ -121,7 +121,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
         delete (doc as any).included;
         let cardResource: LooseCardResource = (doc as any)
           .data as LooseCardResource;
-        let href = join(realmUrl, copyInstanceMeta.lid) + '.json';
+        let href = join(realmIdentifier, copyInstanceMeta.lid) + '.json';
         return { op: 'add' as const, href, data: cardResource };
       }),
     );
@@ -132,7 +132,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     try {
       ({ results: atomicResults } = await new ExecuteAtomicOperationsCommand(
         this.commandContext,
-      ).execute({ realmUrl, operations }));
+      ).execute({ realmIdentifier, operations }));
     } catch (e: any) {
       if (
         typeof e?.message === 'string' &&
@@ -162,11 +162,11 @@ export default class ListingInstallCommand extends HostBaseCommand<
 
   // Walk relationships by fetching linked cards and enqueueing their ids.
   private async expandInstances(instances: CardDef[]): Promise<CardDef[]> {
-    let instancesById = new Map<string, CardDef>();
-    let visited = new Set<string>();
-    let queue: string[] = instances
+    let instancesById = new Map<RealmResourceIdentifier, CardDef>();
+    let visited = new Set<RealmResourceIdentifier>();
+    let queue: RealmResourceIdentifier[] = instances
       .map((instance) => instance.id)
-      .filter((id): id is string => typeof id === 'string');
+      .filter((id): id is RealmResourceIdentifier => typeof id === 'string');
 
     // - Queue of ids to traverse; visited prevents duplicate relationship ids.
     // - Each loop extracts relationship ids and enqueues them, so we descend

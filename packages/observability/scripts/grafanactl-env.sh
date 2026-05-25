@@ -67,4 +67,5 @@ _grafanactl_env_rc=$?
 unset -f _grafanactl_env_main
 
 # Mirror the function's return code, using `return` if sourced, `exit` if not.
+# shellcheck disable=SC2317  # `return` works only when sourced; the `|| exit` fallback runs when executed.
 return "$_grafanactl_env_rc" 2>/dev/null || exit "$_grafanactl_env_rc"

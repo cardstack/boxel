@@ -6,7 +6,8 @@ export type Format =
   | 'atom'
   | 'head'
   | 'metadata'
-  | 'markdown';
+  | 'markdown'
+  | 'form';
 
 export function isValidFormat(
   format: string,
@@ -23,6 +24,26 @@ export const formats: Format[] = [
   'edit',
   'head',
   'markdown',
+];
+
+export const cardDefFormats: Format[] = formats;
+
+export const fieldDefFormats: Format[] = [
+  'embedded',
+  'fitted',
+  'atom',
+  'edit',
+  'markdown',
+];
+
+export const fileDefFormats: Format[] = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+  'head',
+  'markdown',
+  'metadata',
 ];
 
 export const FITTED_FORMATS = [

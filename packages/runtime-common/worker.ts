@@ -1,5 +1,5 @@
 import type * as JSONTypes from 'json-typescript';
-import { Readable } from 'stream';
+import type { Readable as NodeReadable } from 'stream';
 import { parse } from 'date-fns';
 import {
   authorizationMiddleware,
@@ -54,6 +54,15 @@ export interface Reader {
 export interface JobInfo extends JSONTypes.Object {
   jobId: number;
   reservationId: number;
+  // Priority of the job this handler is running for, threaded from
+  // the queue row. `0` is the system default; user-initiated jobs use
+  // `10`. Forwarded into the prerenderer call chain so the prerender
+  // server can route by priority. Required because
+  // `JSONTypes.Object`'s index signature doesn't accept `undefined`;
+  // the queue layer always supplies the value from the row, and tests
+  // / non-job callers that mint a synthetic JobInfo can pass
+  // `priority: 0`.
+  priority: number;
 }
 
 export interface StatusArgs {
@@ -179,6 +188,10 @@ export class Worker {
         Tasks['dailyCreditGrant'](taskArgs),
       ),
       this.#queue.register(`run-command`, Tasks['runCommand'](taskArgs)),
+      this.#queue.register(
+        `screenshot-card`,
+        Tasks['screenshotCard'](taskArgs),
+      ),
     ]);
     await this.#queue.start();
   }
@@ -334,6 +347,11 @@ export function getReader(
 
       let stream: ByteStream;
       if ('nodeStream' in response && response.nodeStream) {
+        // Lazy-load node stream in the node worker path; browsers never hit
+        // this branch (no response.nodeStream) and don't need the module.
+        let { Readable } = (await import('stream')) as {
+          Readable: typeof NodeReadable;
+        };
         if (Readable.toWeb) {
           stream = Readable.toWeb(
             response.nodeStream,

@@ -103,7 +103,7 @@ export class ModuleContentsResource
     }
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
-      new URL(executableFile.url),
+      executableFile.url,
     );
     let declarations =
       await this.moduleContentsService.assembleFromModuleSyntax(

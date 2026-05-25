@@ -15,7 +15,7 @@ import {
 } from '../src/factory-target-realm';
 import { installTestProfile } from './helpers/test-profile';
 
-const targetRealmUrl = 'https://realms.example.test/hassan/personal/';
+const targetRealm = 'https://realms.example.test/testuser/personal/';
 
 module('factory-target-realm', function (hooks) {
   let cleanupProfile: (() => void) | undefined;
@@ -27,7 +27,7 @@ module('factory-target-realm', function (hooks) {
 
   function useTestProfile() {
     cleanupProfile = installTestProfile({
-      username: 'hassan',
+      username: 'testuser',
       matrixUrl: 'https://matrix.example.test/',
       realmServerUrl: 'https://realms.example.test/',
       password: 'secret',
@@ -38,24 +38,24 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmUrl,
+      targetRealm,
       realmServerUrl: null,
     });
 
-    assert.strictEqual(resolution.url, targetRealmUrl);
+    assert.strictEqual(resolution.url, targetRealm);
     assert.strictEqual(
       resolution.serverUrl,
       'https://realms.example.test/',
       'defaults to active profile realmServerUrl when --realm-server-url is not provided',
     );
-    assert.strictEqual(resolution.ownerUsername, 'hassan');
+    assert.strictEqual(resolution.ownerUsername, 'testuser');
   });
 
   test('resolveFactoryTargetRealm accepts an explicit realm server URL override', function (assert) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmUrl: 'https://realms.example.test/boxel/hassan/personal/',
+      targetRealm: 'https://realms.example.test/boxel/testuser/personal/',
       realmServerUrl: 'https://realms.example.test/boxel/',
     });
 
@@ -71,19 +71,19 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmUrl: null,
+          targetRealm: null,
           realmServerUrl: null,
         }),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message === 'Missing required --target-realm-url',
+        error.message === 'Missing required --target-realm',
     );
   });
 
   test('resolveFactoryTargetRealm rejects when target realm origin does not match profile', function (assert) {
     // Profile points to staging, but target realm is localhost
     cleanupProfile = installTestProfile({
-      username: 'hassan',
+      username: 'testuser',
       matrixUrl: 'https://matrix-staging.stack.cards/',
       realmServerUrl: 'https://realms-staging.stack.cards/',
       password: 'secret',
@@ -92,7 +92,7 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmUrl: 'http://localhost:4201/hassan/my-realm/',
+          targetRealm: 'http://localhost:4201/testuser/my-realm/',
           realmServerUrl: null,
         }),
       (error: unknown) =>
@@ -118,7 +118,7 @@ module('factory-target-realm', function (hooks) {
     assert.throws(
       () =>
         resolveFactoryTargetRealm({
-          targetRealmUrl,
+          targetRealm,
           realmServerUrl: null,
         }),
       (error: unknown) =>
@@ -132,7 +132,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmUrl,
+      targetRealm,
       realmServerUrl: null,
     });
     let createCalls = 0;
@@ -155,7 +155,7 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmUrl,
+      targetRealm,
       realmServerUrl: null,
     });
 
@@ -173,20 +173,20 @@ module('factory-target-realm', function (hooks) {
     useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
-      targetRealmUrl: 'https://realms.example.test/typed-by-user/personal/',
+      targetRealm: 'https://realms.example.test/typed-by-user/personal/',
       realmServerUrl: null,
     });
 
     let result = await bootstrapFactoryTargetRealm(resolution, {
       createRealm: async () => ({
         createdRealm: true,
-        url: 'https://realms.example.test/hassan/personal/',
+        url: 'https://realms.example.test/testuser/personal/',
       }),
     });
 
     assert.strictEqual(
       result.url,
-      'https://realms.example.test/hassan/personal/',
+      'https://realms.example.test/testuser/personal/',
     );
   });
 });

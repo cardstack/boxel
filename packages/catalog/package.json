@@ -2,9 +2,51 @@
   "name": "@cardstack/catalog",
   "version": "1.0.0",
   "license": "MIT",
+  "devDependencies": {
+    "@babel/plugin-proposal-decorators": "catalog:",
+    "@cardstack/boxel-icons": "workspace:*",
+    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@ember/test-helpers": "catalog:",
+    "@glint/ember-tsc": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "@types/lodash": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
+    "concurrently": "catalog:",
+    "ember-concurrency": "catalog:",
+    "ember-eslint-parser": "0.5.9",
+    "ember-modifier": "^4.1.0",
+    "ember-resources": "catalog:",
+    "ember-template-lint": "catalog:",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-import": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "lodash": "catalog:",
+    "prettier": "catalog:",
+    "prettier-plugin-ember-template-tag": "catalog:",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
+    "tracked-built-ins": "catalog:"
+  },
+  "dependencies": {
+    "ember-modify-based-class-resource": "catalog:"
+  },
   "scripts": {
     "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
     "catalog:update": "sh scripts/catalog-update.sh",
-    "catalog:reset": "rm -rf contents && pnpm catalog:setup"
+    "catalog:reset": "rm -rf contents && pnpm catalog:setup",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:hbs": "ember-template-lint contents --no-error-on-unmatched-pattern",
+    "lint:hbs:fix": "ember-template-lint contents --fix --no-error-on-unmatched-pattern",
+    "lint:js": "eslint contents --report-unused-disable-directives --cache --no-error-on-unmatched-pattern",
+    "lint:js:fix": "eslint contents --report-unused-disable-directives --fix --no-error-on-unmatched-pattern",
+    "lint:types": "ember-tsc --noEmit"
   }
 }

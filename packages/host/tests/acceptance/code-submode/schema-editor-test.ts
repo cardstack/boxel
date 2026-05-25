@@ -34,6 +34,39 @@ import { setupApplicationTest } from '../../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// Realm icons render via `realm.info(url)`, which returns a placeholder
+// (no `data-test-realm-icon-url` attribute) until the async fetch resolves.
+// This wrapper gives the wait a generous timeout and, on timeout, logs
+// surrounding DOM state so future flakes are easier to diagnose.
+async function waitForRealmIcon(selector: string, timeoutMs = 5000) {
+  try {
+    await waitFor(selector, { timeout: timeoutMs });
+  } catch (e) {
+    let parentSelector = selector
+      .replace(/\s*\[data-test-realm-icon-url\][^[]*$/, '')
+      .trim();
+    let parent = parentSelector ? document.querySelector(parentSelector) : null;
+    let allIcons = Array.from(
+      document.querySelectorAll('[data-test-realm-icon-url]'),
+    ).map((el) => ({
+      url: el.getAttribute('data-test-realm-icon-url'),
+      schema: el
+        .closest('[data-test-card-schema]')
+        ?.getAttribute('data-test-card-schema'),
+      fieldName: el
+        .closest('[data-test-field-name]')
+        ?.getAttribute('data-test-field-name'),
+    }));
+    console.error(
+      `[schema-editor diagnostic] waitFor("${selector}") timed out after ${timeoutMs}ms. ` +
+        `Parent ("${parentSelector}") HTML: ${
+          parent?.outerHTML?.slice(0, 2000) ?? '<missing>'
+        } | All [data-test-realm-icon-url] in DOM: ${JSON.stringify(allIcons)}`,
+    );
+    throw e;
+  }
+}
+
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
 
@@ -305,6 +338,46 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
               },
             },
           },
+          'fields/biginteger-field.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Bigint Field',
+                cardDescription: 'A field that captures big int values',
+                specType: 'field',
+                ref: {
+                  module: `${baseRealm.url}big-integer`,
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'fields/date-field.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Date Field',
+                cardDescription: 'A field that captures date values',
+                specType: 'field',
+                ref: {
+                  module: `${baseRealm.url}date`,
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
           'index.json': {
             data: {
               type: 'card',
@@ -474,7 +547,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
     let realm2IconUrl = 'https://boxel-images.boxel.ai/icons/cardstack.png';
 
-    await waitFor(
+    await waitForRealmIcon(
       // using non test selectors to disambiguate what we are waiting for, as
       // without these the selectors are matching DOM that is not being tested
       '[data-test-card-schema="Person"] .pill .icon [data-test-realm-icon-url]',
@@ -483,7 +556,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .dom(`[data-test-card-schema="Person"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm1IconUrl);
 
-    await waitFor(
+    await waitForRealmIcon(
       '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-realm-icon-url]',
     );
 
@@ -493,7 +566,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       )
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
 
-    await waitFor(
+    await waitForRealmIcon(
       // using non test selectors to disambiguate what we are waiting for, as
       // without these the selectors are matching DOM that is not being tested
       '[data-test-card-schema="Card"] .pill .icon [data-test-realm-icon-url]',
@@ -629,10 +702,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -643,6 +716,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         ?.textContent?.includes('BigInteger'),
     );
 
+    await waitForRealmIcon(
+      '[data-test-selected-type] [data-test-realm-icon-url]',
+    );
     await assert
       .dom('[data-test-selected-type] [data-test-realm-icon-url]')
       .exists();
@@ -656,11 +732,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
     );
 
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/date-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -730,10 +806,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
@@ -910,10 +986,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${testRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');

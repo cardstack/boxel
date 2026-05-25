@@ -1,8 +1,9 @@
 import {
   type ResolvedCodeRef,
   isCardDef,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
 } from './code-ref';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai';
@@ -116,12 +117,12 @@ function friendlyModuleName(fullModuleUrl: string) {
 
 export function buildCommandFunctionName(
   commandCodeRef: ResolvedCodeRef,
-  relativeTo?: URL,
+  relativeTo?: RealmResourceIdentifier | URL,
 ) {
   if (!commandCodeRef?.module || !commandCodeRef?.name) {
     return '';
   }
-  let absoluteCodeRef = codeRefWithAbsoluteURL(
+  let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
     commandCodeRef,
     relativeTo,
   ) as ResolvedCodeRef;

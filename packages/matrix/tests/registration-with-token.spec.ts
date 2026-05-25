@@ -63,6 +63,22 @@ test.describe('User Registration w/ Token', () => {
       'token field is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
+
+    await expect(page.locator('[data-test-email-field]')).toHaveAttribute(
+      'name',
+      'email',
+    );
+    await expect(
+      page.locator('[data-test-username-field] input'),
+    ).toHaveAttribute('name', 'username');
+    await expect(page.locator('[data-test-password-field]')).toHaveAttribute(
+      'name',
+      'password',
+    );
+    await expect(
+      page.locator('[data-test-confirm-password-field]'),
+    ).toHaveAttribute('name', 'confirm-password');
+
     await page.locator('[data-test-name-field]').fill(firstUser.displayName);
     await expect(page.locator('[data-test-register-btn]')).toBeDisabled();
     await page.locator('[data-test-email-field]').fill(firstUser.email);
@@ -253,7 +269,7 @@ test.describe('User Registration w/ Token', () => {
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
-      realms: [`http://localhost:4205/${firstUser.username}/personal/`],
+      realms: [`https://localhost:4205/${firstUser.username}/personal/`],
     });
   });
 

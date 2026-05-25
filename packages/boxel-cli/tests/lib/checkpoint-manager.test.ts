@@ -336,6 +336,23 @@ describe('CheckpointManager', () => {
       expect(milestones[0].milestoneName).toBe('release 1');
     });
 
+    it('getMilestones returns milestones beyond the most recent 100 checkpoints', async () => {
+      // Tag the earliest checkpoint, then bury it under 120 more checkpoints.
+      // The old implementation walked `getCheckpoints(100)` and would miss it.
+      await cm.markMilestone(firstHash, 'ancient');
+      for (let i = 0; i < 120; i++) {
+        writeFile(workspaceDir, `f${i}.gts`, String(i));
+        await cm.createCheckpoint('manual', [
+          { file: `f${i}.gts`, status: 'added' },
+        ]);
+      }
+
+      const milestones = await cm.getMilestones();
+      expect(milestones.length).toBe(1);
+      expect(milestones[0].hash).toBe(firstHash);
+      expect(milestones[0].milestoneName).toBe('ancient');
+    });
+
     it('unmarkMilestone removes the tag; second call returns false', async () => {
       await cm.markMilestone(firstHash, 'release-1');
       expect(await cm.unmarkMilestone(firstHash)).toBe(true);

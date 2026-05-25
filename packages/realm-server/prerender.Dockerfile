@@ -47,7 +47,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g pnpm@10.30.0
+RUN npm install -g pnpm@11.0.9
 
 RUN groupadd -r pptruser \
     && useradd -r -m -d /home/pptruser -g pptruser -G audio,video pptruser
@@ -60,14 +60,15 @@ ENV PUPPETEER_CHROME_ARGS="--disable-dev-shm-usage"
 
 RUN mkdir -p /home/pptruser/Downloads "${PUPPETEER_CACHE_DIR}"
 
-COPY pnpm-lock.yaml ./
-
+# Cache-friendly dependency fetch: this layer only re-runs when the lockfile
+# (or patches it references) changes, not on every source edit. `pnpm fetch`
+# populates the global pnpm store in $HOME from the lockfile alone, so the
+# subsequent `pnpm install --offline` doesn't need the registry.
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches/ ./patches
-COPY vendor/ ./vendor
-
-ADD . ./
-
 RUN CI=1 pnpm fetch
+
+COPY . ./
 RUN CI=1 pnpm install -r --offline
 RUN chown -R pptruser:pptruser /home/pptruser /realm-server
 
@@ -78,4 +79,4 @@ EXPOSE 4221
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD curl --fail --silent --show-error --max-time 5 --output /dev/null http://localhost:4221/ || exit 1
 
-CMD pnpm --filter "./packages/realm-server" $prerender_script
+CMD exec /realm-server/packages/realm-server/$prerender_script

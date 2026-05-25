@@ -6,14 +6,18 @@ import {
   type RenderVisitResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
+  PRERENDER_JOB_ID_HEADER,
+  PRERENDER_JOB_PRIORITY_HEADER,
   PRERENDER_REQUEST_ID_HEADER,
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
   resolvePrerenderManagerRequestTimeoutMs,
+  sanitizePrerenderJobId,
 } from './prerender-constants';
 import { randomUUID } from 'crypto';
 
@@ -69,12 +73,31 @@ export function createRemotePrerenderer(
     validatePrerenderAttributes(type, attributes);
 
     let endpoint = new URL(path, prerenderURL);
+    // jobId is request metadata, not part of the validated body — strip
+    // it out before sending so the prerender-server's payload schema
+    // doesn't need to know about it. `priority` IS part of the validated
+    // body (existing PagePool plumbing), so we read it without stripping
+    // and additionally forward it as a header so the host's
+    // `_federated-search` fetch wrapper can re-stamp it on sub-prerender
+    // requests fired during render.
+    let { jobId, ...attributesWithoutJobId } = attributes as Record<
+      string,
+      any
+    >;
     let body = {
       data: {
         type,
-        attributes,
+        attributes: attributesWithoutJobId,
       },
     };
+    let sanitizedJobId =
+      typeof jobId === 'string' ? sanitizePrerenderJobId(jobId) : null;
+    let priorityHeaderValue =
+      typeof attributes.priority === 'number' &&
+      Number.isSafeInteger(attributes.priority) &&
+      attributes.priority >= 0
+        ? String(attributes.priority)
+        : null;
     // CS-10872: one correlation ID per logical client call, reused on
     // retries so operators can follow the full manager/prerender-server
     // log story for the same intent rather than hunting through N
@@ -96,6 +119,12 @@ export function createRemotePrerenderer(
           headers: {
             ...jsonApiHeaders,
             [PRERENDER_REQUEST_ID_HEADER]: requestId,
+            ...(sanitizedJobId
+              ? { [PRERENDER_JOB_ID_HEADER]: sanitizedJobId }
+              : {}),
+            ...(priorityHeaderValue
+              ? { [PRERENDER_JOB_PRIORITY_HEADER]: priorityHeaderValue }
+              : {}),
           },
           body: JSON.stringify(body),
           signal: ac.signal,
@@ -183,7 +212,7 @@ export function createRemotePrerenderer(
   }
 
   return {
-    async prerenderModule({ realm, url, auth, renderOptions }) {
+    async prerenderModule({ realm, url, auth, renderOptions, priority }) {
       return await requestWithRetry<ModuleRenderResponse>(
         'prerender-module',
         'prerender-module-request',
@@ -194,6 +223,7 @@ export function createRemotePrerenderer(
           url,
           auth,
           renderOptions: renderOptions ?? {},
+          ...(priority !== undefined ? { priority } : {}),
         },
       );
     },
@@ -205,6 +235,8 @@ export function createRemotePrerenderer(
       fileData,
       types,
       batchId,
+      priority,
+      jobId,
     }: PrerenderVisitArgs): Promise<RenderVisitResponse> {
       return await requestWithRetry<RenderVisitResponse>(
         'prerender-visit',
@@ -219,10 +251,12 @@ export function createRemotePrerenderer(
           ...(fileData ? { fileData } : {}),
           ...(types ? { types } : {}),
           ...(batchId ? { batchId } : {}),
+          ...(priority !== undefined ? { priority } : {}),
+          ...(jobId ? { jobId } : {}),
         },
       );
     },
-    async runCommand({ userId, auth, command, commandInput }) {
+    async runCommand({ userId, auth, command, commandInput, priority }) {
       return await requestWithRetry<RunCommandResponse>(
         'run-command',
         'run-command-request',
@@ -232,6 +266,22 @@ export function createRemotePrerenderer(
           auth,
           command,
           commandInput,
+          ...(priority !== undefined ? { priority } : {}),
+        },
+      );
+    },
+    async prerenderScreenshot({ realm, url, auth, format, priority }) {
+      return await requestWithRetry<ScreenshotPrerenderResponse>(
+        'prerender-screenshot',
+        'screenshot-request',
+        {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url,
+          auth,
+          format,
+          ...(priority !== undefined ? { priority } : {}),
         },
       );
     },

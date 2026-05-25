@@ -24,6 +24,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
+
 import type { ViewCardFn } from 'https://cardstack.com/base/card-api';
 
 import HostModeContent from '../host-mode/content';
@@ -163,7 +165,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
-    let cardId = cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
@@ -270,7 +272,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
         --submode-bar-item-box-shadow: var(--boxel-deep-box-shadow);
         --submode-bar-item-outline: var(--boxel-border-flexible);
         --operator-mode-left-column: calc(
-          21.5rem - var(--submode-new-file-button-width)
+          21.5rem - var(--new-file-button-width)
         );
         background-color: var(--host-submode-background);
       }

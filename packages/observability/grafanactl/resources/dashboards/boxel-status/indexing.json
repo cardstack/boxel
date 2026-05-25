@@ -1,0 +1,1626 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "aetquzjcf2znke"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "entity:realm"
+        ],
+        "title": "Realms",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:queue"
+        ],
+        "title": "Job Queue",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "System-wide operator action: queue a full reindex across every realm. The button disables itself while a `full-reindex` orchestration job is already pending or running. Per-realm reindex moved to the Realms dashboard. Click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 4,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "pending_full_reindex",
+              "type": "disabled",
+              "title": "Pending full-reindex",
+              "tooltip": "Number of `full-reindex` orchestration jobs currently queued or running. While > 0, the \"Reindex ALL realms\" button is disabled to prevent stacking duplicate full reindexes.",
+              "labelWidth": 28,
+              "section": "current",
+              "fieldName": "pending_full_reindex",
+              "queryField": {
+                "refId": "A",
+                "value": "pending_full_reindex"
+              }
+            },
+            {
+              "id": "btn_reindex_all",
+              "type": "button",
+              "title": "",
+              "buttonLabel": "Reindex ALL realms",
+              "tooltip": "POST /_grafana-full-reindex. Disabled while a `full-reindex` orchestration job is already pending or running. Long-running — every realm is reindexed.",
+              "labelWidth": 28,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='pending_full_reindex';})||{}).value || 0) > 0;",
+              "customCode": "const pendingFull = Number((context.panel.elements.find(function(e){return e.id==='pending_full_reindex';})||{}).value || 0);\nif (pendingFull > 0) {\n  context.grafana.notifyWarning(['Full reindex blocked', 'A full-reindex job is already pending or running. Wait for it to finish before triggering another.']);\n  return;\n}\nif (!window.confirm('Reindex ALL realms?\\n\\nThis kicks off an indexing job for every realm on the server and can take a long time.')) { return; }\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-full-reindex', { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Full reindex queued', 'Started reindex of all realms.']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Full reindex failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Full reindex failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "query",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "current",
+                "name": "Current state"
+              },
+              {
+                "id": "actions",
+                "name": "Actions"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "backgroundColor": "purple",
+            "foregroundColor": "yellow",
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS pending_full_reindex FROM jobs WHERE job_type = 'full-reindex' AND finished_at IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Operator Actions: Full reindex",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing jobs waiting for a worker across all realm-server tasks (CS-10930). Reconciles with `SELECT count(*) FROM jobs WHERE status='unfulfilled' AND job_type IN ('from-scratch-index','incremental-index','full-reindex')` minus those with an active reservation.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "red",
+                  "value": 200
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS pending\n  FROM jobs j\n  LEFT JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.status = 'unfulfilled'\n   AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pending Indexing Jobs",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing jobs currently held by a worker (live reservation, finished_at NULL).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        },
+        "id": 12,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS in_flight\n  FROM jobs j\n  JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.finished_at IS NULL\n   AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex');",
+            "refId": "A"
+          }
+        ],
+        "title": "In-flight Indexing Jobs",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Age of the oldest pending indexing job. Red after 5 minutes — sustained values here usually mean workers are saturated or stuck.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at))) AS oldest_pending_seconds\n  FROM jobs j\n  LEFT JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.status = 'unfulfilled'\n   AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Oldest Pending",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing-job flow rates. Three series — `arrived` (jobs queued), `started` (a worker reserved them), `completed` (jobs.finished_at set). Bucketed by 30s. A persistent gap between arrived and completed indicates worker saturation.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisGridShow": true,
+              "axisLabel": "jobs / 30s",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "lineInterpolation": "smooth",
+              "lineWidth": 1,
+              "pointSize": 4,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "mode": "none"
+              }
+            },
+            "mappings": [],
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 12
+        },
+        "id": 14,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.created_at, '30s'),\n       COUNT(*) AS arrived\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(j.created_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(jr.created_at, '30s'),\n       COUNT(*) AS started\n  FROM job_reservations jr\n  JOIN jobs j ON j.id = jr.job_id\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND $__timeFilter(jr.created_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(j.finished_at, '30s'),\n       COUNT(*) AS completed\n  FROM jobs j\n WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n   AND j.finished_at IS NOT NULL\n   AND $__timeFilter(j.finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "C"
+          }
+        ],
+        "title": "Indexing throughput (arrived / started / completed)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Stocks of indexing jobs over time. `pending` = queued, no live reservation; `in_flight` = a worker has an open reservation; `completed` = cumulative finished. Bucketed at 1 minute over the panel's time range. Cost: O(buckets × indexing-jobs in window) per refresh — if this gets slow, switch to a snapshot/materialized table.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisGridShow": true,
+              "axisLabel": "jobs",
+              "axisPlacement": "auto",
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "lineInterpolation": "smooth",
+              "lineWidth": 1,
+              "pointSize": 4,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": true,
+              "stacking": {
+                "mode": "none"
+              }
+            },
+            "mappings": [],
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 20
+        },
+        "id": 15,
+        "options": {
+          "legend": {
+            "calcs": [
+              "max",
+              "lastNotNull"
+            ],
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "WITH buckets AS (\n  SELECT generate_series($__timeFrom()::timestamptz, $__timeTo()::timestamptz, '1 minute') AS bucket\n),\nindexing_jobs AS (\n  SELECT j.id, j.created_at, j.finished_at,\n    (SELECT MIN(jr.created_at) FROM job_reservations jr WHERE jr.job_id = j.id) AS first_started_at\n   FROM jobs j\n   WHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n     AND j.created_at <= $__timeTo()::timestamptz\n)\nSELECT b.bucket AS time,\n  COUNT(*) FILTER (WHERE ij.created_at <= b.bucket\n    AND (ij.first_started_at IS NULL OR ij.first_started_at > b.bucket)\n    AND (ij.finished_at IS NULL OR ij.finished_at > b.bucket)) AS pending,\n  COUNT(*) FILTER (WHERE ij.first_started_at IS NOT NULL\n    AND ij.first_started_at <= b.bucket\n    AND (ij.finished_at IS NULL OR ij.finished_at > b.bucket)) AS in_flight,\n  COUNT(*) FILTER (WHERE ij.finished_at IS NOT NULL AND ij.finished_at <= b.bucket) AS completed\n FROM buckets b LEFT JOIN indexing_jobs ij ON TRUE\n GROUP BY b.bucket\n ORDER BY b.bucket;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pending vs in-flight vs completed (over time)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "One row per indexing job currently held by a worker (across all realm-server / worker tasks). `progress` and `current files` come from `job_progress` (CS-10930), populated by each realm-server's IndexingEventSink write-through. Click the realm cell to drill into the live activity feed.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 100
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "percent"
+              },
+              "properties": [
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "gauge",
+                    "mode": "gradient",
+                    "valueDisplayMode": "hidden"
+                  }
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "min",
+                  "value": 0
+                },
+                {
+                  "id": "max",
+                  "value": 100
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "pct"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "decimals",
+                  "value": 1
+                },
+                {
+                  "id": "displayName",
+                  "value": " "
+                },
+                {
+                  "id": "custom.align",
+                  "value": "left"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 70
+                },
+                {
+                  "id": "custom.width",
+                  "value": 70
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "elapsed_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_url"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete reservation ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "reservation_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View activity feed",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-realm_url=${__data.fields.realm_url:queryparam}&var-job_id=${__data.fields.job_id}.${__data.fields.reservation_id}&orgId=1&viewPanel=11"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View job logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-indexing_job_full=${__data.fields.job_id}.${__data.fields.reservation_id}&var-indexing_job_short=${__data.fields.job_id}&orgId=1&viewPanel=20"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 28
+        },
+        "id": 16,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  job_id,\n  realm,\n  realm_url,\n  job_type,\n  files_completed,\n  total_files,\n  percent,\n  percent AS pct,\n  elapsed_seconds,\n  started_at,\n  worker_id,\n  reservation_id\nFROM (\n  SELECT\n    j.id AS job_id,\n    COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    ) AS realm,\n    COALESCE(j.args->>'realmURL','') AS realm_url,\n    j.job_type,\n    COALESCE(jp.files_completed, 0) AS files_completed,\n    COALESCE(jp.total_files, 0) AS total_files,\n    CASE WHEN COALESCE(jp.total_files, 0) > 0\n      THEN (jp.files_completed::float / jp.total_files) * 100\n      ELSE 0\n    END AS percent,\n    EXTRACT(EPOCH FROM (NOW() - jr.created_at)) AS elapsed_seconds,\n    jr.created_at AS started_at,\n    jr.worker_id,\n    jr.id AS reservation_id\n  FROM jobs j\n  JOIN job_reservations jr ON jr.job_id = j.id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n  LEFT JOIN job_progress jp ON jp.job_id = j.id\n  WHERE j.job_type IN ('from-scratch-index','incremental-index')\n    AND j.finished_at IS NULL\n) active\nORDER BY started_at DESC;",
+            "refId": "A"
+          }
+        ],
+        "title": "Active Indexing",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Per-realm aggregate of indexing-job state. `oldest_pending_seconds` red after 5 min flags realms whose backlog isn't draining.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 100
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_url"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "oldest_pending_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green"
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 60
+                      },
+                      {
+                        "color": "red",
+                        "value": 300
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View activity feed",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-realm_url=${__data.fields.realm_url:queryparam}&orgId=1&viewPanel=11"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 6,
+          "w": 24,
+          "x": 0,
+          "y": 38
+        },
+        "id": 17,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  COALESCE(\n    NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n    REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n  ) AS realm,\n  COALESCE(j.args->>'realmURL','') AS realm_url,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL) AS pending,\n  COUNT(*) FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NOT NULL) AS in_flight,\n  MAX(j.finished_at) AS last_completed_at,\n  EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at)\n    FILTER (WHERE j.status = 'unfulfilled' AND jr.id IS NULL))) AS oldest_pending_seconds\n FROM jobs j\n LEFT JOIN job_reservations jr ON j.id = jr.job_id\n   AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.job_type IN ('from-scratch-index','incremental-index')\n GROUP BY j.args->>'realmURL'\n ORDER BY pending DESC, in_flight DESC, last_completed_at DESC NULLS LAST\n LIMIT 200;",
+            "refId": "A"
+          }
+        ],
+        "title": "Per-realm indexing status",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job_id"
+              },
+              "properties": [
+                {
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete job ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "job_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Delete waiting job ${__value.raw}? This marks it as completed without running it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 44
+        },
+        "id": 18,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  j.id, \n  j.priority, \n  j.job_type, \n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n j.id as job_id\n\nFROM \n  jobs j\n  \nLEFT JOIN \n  job_reservations jr ON j.id = jr.job_id\n\nWHERE\njr.job_id IS NULL AND j.status = 'unfulfilled' AND j.job_type IN ('from-scratch-index','incremental-index','full-reindex') \n  \nORDER BY \n  j.created_at ASC\nLIMIT 500;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Queued Indexing Jobs",
+        "type": "table",
+        "description": "Indexing jobs (from-scratch-index, incremental-index) waiting on a worker. Same query as Job Queue → Waiting Jobs, narrowed to indexing job types."
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Indexing jobs (from-scratch-index, incremental-index, full-reindex) that finished in the past 24 hours, newest first. `wait_seconds` is queue time (created_at → first reservation). `run_seconds` is the duration of the attempt that completed it (latest reservation → finished_at). Force-cancelled jobs that never got a reservation appear with NULL started_at / wait_seconds / run_seconds / worker_id.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 100
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "wait_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 54
+        },
+        "id": 22,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "finished_at"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  j.job_type,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  j.created_at,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (fr.first_started_at - j.created_at)) AS wait_seconds,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nLEFT JOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nLEFT JOIN LATERAL (\n  SELECT MIN(jr.created_at) AS first_started_at\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n) fr ON TRUE\nWHERE j.job_type IN ('from-scratch-index','incremental-index','full-reindex')\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY j.finished_at DESC\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Completed Indexing Jobs",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Top 10 from-scratch-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Use this to spot realms whose full reindex is regressing.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 0,
+          "y": 64
+        },
+        "id": 20,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "run_seconds"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'from-scratch-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
+            "refId": "A"
+          }
+        ],
+        "title": "Longest from-scratch-index jobs (24h)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Top 10 incremental-index jobs that finished in the past 24 hours, ranked by run duration. `run_seconds` measures from the final reservation's `created_at` to `finished_at`, so a job that was retried is timed on the attempt that completed it. Outliers here usually mean a heavy invalidation fan-out from a single edit.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "run_seconds"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 12,
+          "x": 12,
+          "y": 64
+        },
+        "id": 21,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "run_seconds"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT\n  j.id,\n  lr.reservation_id,\n  CASE\n    WHEN j.job_type = 'full-reindex' THEN '(all realms)'\n    ELSE COALESCE(\n      NULLIF(RTRIM(REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://[^/]+/', ''), '/'), ''),\n      REGEXP_REPLACE(COALESCE(j.args->>'realmURL',''), '^https?://([^./:]+).*$', '\\1')\n    )\n  END AS realm,\n  j.status,\n  lr.started_at,\n  j.finished_at,\n  EXTRACT(EPOCH FROM (j.finished_at - lr.started_at)) AS run_seconds,\n  lr.worker_id\nFROM jobs j\nJOIN LATERAL (\n  SELECT jr.id AS reservation_id, jr.created_at AS started_at, jr.worker_id\n  FROM job_reservations jr\n  WHERE jr.job_id = j.id\n  ORDER BY jr.created_at DESC\n  LIMIT 1\n) lr ON TRUE\nWHERE j.job_type = 'incremental-index'\n  AND j.finished_at IS NOT NULL\n  AND j.finished_at > NOW() - INTERVAL '24 hours'\nORDER BY run_seconds DESC NULLS LAST\nLIMIT 10;",
+            "refId": "A"
+          }
+        ],
+        "title": "Longest incremental-index jobs (24h)",
+        "type": "table"
+      }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 42,
+    "tags": [
+      "workflow:indexing"
+    ],
+    "templating": {
+      "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "Realm to Full Index",
+          "multi": false,
+          "name": "full_index_realm",
+          "options": [],
+          "query": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Indexing",
+    "weekStart": ""
+  }
+}

@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
-import { join, scheduleOnce } from '@ember/runloop';
+import { join, schedule, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -23,6 +23,7 @@ import {
   isCardError,
   isBaseDefInstance,
   cardIdToURL,
+  rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RealmIdentifier,
@@ -32,7 +33,10 @@ import {
   logger as runtimeLogger,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { serializableError } from '@cardstack/runtime-common/error';
+import {
+  coerceErrorMessage,
+  serializableError,
+} from '@cardstack/runtime-common/error';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -154,6 +158,23 @@ export default class RenderRoute extends Route<Model> {
     if (isTesting()) {
       (globalThis as any).__boxelRenderContext = undefined;
     }
+    // Drop any pending `_federated-search` in-flight entries the
+    // render-context coalescer accumulated during this visit. Entries
+    // self-clear on settle, but a deactivate while one is still
+    // in-flight could otherwise let a same-key caller arriving in the
+    // next render coalesce onto a promise belonging to the previous
+    // visit. The window is small (typically <1s per search) but the
+    // cost of an explicit clear is also small.
+    this.store.clearInFlightSearch();
+    // The resolved-doc search cache is INTENTIONALLY NOT cleared
+    // here. A single indexing job renders many cards in the same
+    // prerender tab — each card navigation activates and deactivates
+    // this route, but all those visits share one `__boxelJobId` and
+    // a stable view of the consuming realm's `boxel_index`. Cached
+    // entries from earlier renders in the job are the entire point;
+    // dropping them per-render would defeat the cache. Cross-job
+    // invalidation is handled by `fetchSearchDoc`'s entry-time
+    // jobId-change clear (and by `resetState` on harder resets).
     (globalThis as any).__renderModel = undefined;
     (globalThis as any).__docsInFlight = undefined;
     (globalThis as any).__boxelRenderStage = undefined;
@@ -214,6 +235,24 @@ export default class RenderRoute extends Route<Model> {
     let parsedOptions = parseRenderRouteOptions(options);
     let canonicalOptions = serializeRenderRouteOptions(parsedOptions);
     this.#setupTransitionHelper(id, nonce, canonicalOptions);
+    // Stamp the "consuming realm" — the realm that owns the card being
+    // rendered — onto a global the store-service's federated-search
+    // wrapper reads. The realm-server's job-scoped search cache pairs
+    // this with `x-boxel-job-id` to gate same-realm-only caching:
+    // cross-realm reads bypass the cache because peer realms can swap
+    // independently.
+    try {
+      let consumingRealm = this.realm.realmOf(new URL(id));
+      (
+        globalThis as unknown as { __boxelConsumingRealm?: string }
+      ).__boxelConsumingRealm = consumingRealm
+        ? String(consumingRealm)
+        : undefined;
+    } catch {
+      (
+        globalThis as unknown as { __boxelConsumingRealm?: string }
+      ).__boxelConsumingRealm = undefined;
+    }
     // CS-10872: render-stage breadcrumb. `model()` running means we
     // made it past route setup and are about to build the render
     // model. Each long-running stage below updates this slot so the
@@ -494,7 +533,7 @@ export default class RenderRoute extends Route<Model> {
 
           (globalThis as any).__boxelSetRenderStage?.('buildModel:hydrating');
           let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: cardIdToURL(id),
+            relativeTo: rri(id),
             realm: realmURL,
             doNotPersist: true,
           });
@@ -1038,8 +1077,26 @@ export default class RenderRoute extends Route<Model> {
       cardId: context.cardId,
       nonce: context.nonce,
     });
-    this.#applyErrorMetadata(context);
+    this.#applyErrorMetadataAttrs(context);
+    let canTransitionToErrorRoute = this.renderBaseParams !== undefined;
     this.#transitionToErrorRoute(transition);
+
+    // The prerender server's wait condition treats data-prerender-status='error'
+    // as "DOM is settled, snapshot now". Writing it synchronously alongside the
+    // transition means the server can poll between the status flip and Glimmer
+    // flushing the render.error template, capturing an empty <pre data-prerender-error>
+    // (CS-11024). Defer the status flip to afterRender so the readiness signal
+    // is only raised once the error template's textContent has been written.
+    //
+    // Skip the schedule when #transitionToErrorRoute took its early-failure
+    // fallback (no renderBaseParams — error fired before model() ran). That
+    // path writes data-prerender-status='unusable' synchronously to force page
+    // eviction, and the error textContent is also written synchronously on
+    // the same path, so deferring isn't needed — and overwriting 'unusable'
+    // with 'error' here would defeat the eviction signal.
+    if (canTransitionToErrorRoute) {
+      schedule('afterRender', this, this.#applyErrorStatus, context);
+    }
   }
 
   #serializeRenderError(
@@ -1111,8 +1168,31 @@ export default class RenderRoute extends Route<Model> {
       withTimerSummary,
       fallbackDeps,
     );
+    // The persisted error doc is useless if `message` is empty or
+    // undefined — the indexer's index-writer guard refuses such rows
+    // and fails the whole indexing job. Guarantee a non-empty message
+    // here as the last stop before serialization to the DOM. The
+    // synthesized fallback names the affected URL (from error.id,
+    // the first dep, or the most recent render base param) so the
+    // persisted row is at least diagnosable by URL.
+    let urlContext =
+      (typeof withRuntimeDeps.error.id === 'string' &&
+        withRuntimeDeps.error.id) ||
+      withRuntimeDeps.error.deps?.[0] ||
+      this.renderBaseParams?.[0] ||
+      'unknown URL';
+    let withGuaranteedMessage: RenderError = {
+      ...withRuntimeDeps,
+      error: {
+        ...withRuntimeDeps.error,
+        message: coerceErrorMessage(
+          withRuntimeDeps.error,
+          `Render failed for ${urlContext} (host produced no error message)`,
+        ),
+      },
+    };
     return JSON.stringify(
-      this.#stripLastKnownGoodHtml(withRuntimeDeps),
+      this.#stripLastKnownGoodHtml(withGuaranteedMessage),
       null,
       2,
     );
@@ -1248,7 +1328,7 @@ export default class RenderRoute extends Route<Model> {
     }
   }
 
-  #applyErrorMetadata(context: { cardId?: string; nonce?: string }) {
+  #applyErrorMetadataAttrs(context: { cardId?: string; nonce?: string }) {
     if (typeof document === 'undefined') {
       return;
     }
@@ -1256,7 +1336,6 @@ export default class RenderRoute extends Route<Model> {
       '[data-prerender]',
     ) as HTMLElement | null;
     if (container) {
-      container.dataset.prerenderStatus = 'error';
       if (context.cardId) {
         container.dataset.prerenderId = context.cardId;
       }
@@ -1274,6 +1353,28 @@ export default class RenderRoute extends Route<Model> {
       if (context.nonce) {
         errorElement.dataset.prerenderNonce = context.nonce;
       }
+    }
+  }
+
+  #applyErrorStatus(context: { cardId?: string; nonce?: string }) {
+    if (this.isDestroying || this.isDestroyed) {
+      return;
+    }
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let container = document.querySelector(
+      '[data-prerender]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return;
+    }
+    container.dataset.prerenderStatus = 'error';
+    if (context.cardId && !container.dataset.prerenderId) {
+      container.dataset.prerenderId = context.cardId;
+    }
+    if (context.nonce && !container.dataset.prerenderNonce) {
+      container.dataset.prerenderNonce = context.nonce;
     }
   }
 

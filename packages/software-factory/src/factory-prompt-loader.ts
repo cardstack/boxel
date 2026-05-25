@@ -370,6 +370,29 @@ function buildToolResultsData(
 }
 
 /**
+ * Resolve `context.darkfactoryModuleUrl` for prompt rendering, throwing
+ * if it's missing or empty.
+ *
+ * The system prompt interpolates this value as the `meta.adoptsFrom.module`
+ * the agent should set on every Project / Issue / KnowledgeArticle JSON
+ * file it writes. Letting an empty string flow through would silently
+ * produce malformed tracker cards. In production this is always set by
+ * `factory-issue-loop-wiring.ts` (via `inferDarkfactoryModuleUrl`); a
+ * missing value indicates a plumbing bug, so fail fast.
+ */
+export function requireDarkfactoryModuleUrl(context: AgentContext): string {
+  let url = context.darkfactoryModuleUrl;
+  if (typeof url !== 'string' || url.trim() === '') {
+    throw new Error(
+      'AgentContext.darkfactoryModuleUrl is required for system prompt rendering ' +
+        '(it becomes `meta.adoptsFrom.module` on every tracker-schema card the agent writes). ' +
+        'This is normally set by factory-issue-loop-wiring via inferDarkfactoryModuleUrl(targetRealm).',
+    );
+  }
+  return url;
+}
+
+/**
  * Assemble the system prompt for a one-shot LLM call.
  * This is the same for all calls within an issue.
  *
@@ -389,7 +412,8 @@ export function assembleSystemPrompt(
   }));
 
   return loader.load('system', {
-    targetRealmUrl: context.targetRealmUrl,
+    targetRealm: context.targetRealm,
+    darkfactoryModuleUrl: requireDarkfactoryModuleUrl(context),
     skills,
   });
 }
@@ -406,7 +430,7 @@ export function assembleImplementPrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('ticket-implement', {
+  return loader.load('issue-implement', {
     project: context.project,
     issue: context.issue,
     knowledge: context.knowledge,
@@ -436,7 +460,7 @@ export function assembleBootstrapPrompt(
 export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
   let { context, implementedFiles, loader } = options;
 
-  return loader.load('ticket-test', {
+  return loader.load('issue-test', {
     issue: context.issue,
     implementedFiles,
   });
@@ -459,7 +483,7 @@ export function assembleIteratePrompt(
 
   let toolResultsData = buildToolResultsData(context);
 
-  return loader.load('ticket-iterate', {
+  return loader.load('issue-iterate', {
     project: context.project,
     issue: context.issue,
     iteration,

@@ -38,17 +38,17 @@ export default class ReadBinaryFileCommand extends HostBaseCommand<
     return ReadBinaryFileInput;
   }
 
-  requireInputFields = ['url'];
+  requireInputFields = ['fileIdentifier'];
 
   protected async run(
     input: BaseCommandModule.ReadBinaryFileInput,
   ): Promise<BaseCommandModule.ReadBinaryFileResult> {
-    let response = await this.network.authedFetch(input.url);
+    let response = await this.network.authedFetch(input.fileIdentifier);
     let { ReadBinaryFileResult } = await this.loadCommandModule();
 
     if (!response.ok) {
       throw new Error(
-        `Error reading binary file ${input.url}: ${response.statusText}`,
+        `Error reading binary file ${input.fileIdentifier}: ${response.statusText}`,
       );
     }
 

@@ -7,6 +7,7 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
 import {
@@ -33,7 +34,7 @@ import {
 const log = logger('prerenderer');
 const defaultHostURL = isEnvironmentMode()
   ? serviceURL('host')
-  : 'http://localhost:4200';
+  : 'https://localhost:4200';
 const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
 const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
 
@@ -84,12 +85,22 @@ export class Prerenderer {
     let maxPages = options.maxPages ?? 5;
     this.#semaphore = new AsyncSemaphore(maxPages);
     this.#browserManager = new BrowserManager();
+    // Local HTTPS dev (vite on https://localhost:4200 with HTTP/2) needs
+    // a more generous standby navigation timeout than the 30s default.
+    // The host bundle's first cold-start over h2 multiplexes ~1000+
+    // module requests through vite's optimizer; on a cold runner the
+    // initial `_standby` load can comfortably exceed 30s even though
+    // the server is healthy. Configurable via env so production /
+    // hosted runners can keep the tighter default.
+    let standbyTimeoutMs =
+      parseInt(process.env.PRERENDER_STANDBY_TIMEOUT_MS ?? '', 10) || undefined;
     this.#pagePool = new PagePool({
       maxPages,
       serverURL: options.serverURL,
       browserManager: this.#browserManager,
       boxelHostURL,
       renderSemaphore: this.#semaphore,
+      ...(standbyTimeoutMs ? { standbyTimeoutMs } : {}),
       onAffinityDisposed: (affinityKey) => {
         // Affinity tear-down implies the warm loader is gone, so any
         // owner entry for that affinity is now meaningless. Clear it
@@ -132,7 +143,10 @@ export class Prerenderer {
     return this.#pagePool.getWarmAffinities();
   }
 
-  getVacancySnapshot(): Record<string, { idle: boolean; tabCount: number }> {
+  getVacancySnapshot(): Record<
+    string,
+    { idle: boolean; tabCount: number; maxPendingPriority?: number }
+  > {
     return this.#pagePool.getVacancySnapshot();
   }
 
@@ -141,6 +155,13 @@ export class Prerenderer {
   // (operators read this locally) so we don't inflate every heartbeat.
   getQueueDepthSnapshot() {
     return this.#pagePool.getQueueDepthSnapshot();
+  }
+
+  // Manager heartbeats should reflect the pool's live tab capacity, not
+  // the constructor fallback. Under the dynamic-pool config this value
+  // mutates between MIN and MAX as expansion / contraction runs.
+  get currentPoolCapacity(): number {
+    return this.#pagePool.currentMaxPages;
   }
 
   // Test-only seam — see PagePool.__test_seedRevokedException.
@@ -177,6 +198,15 @@ export class Prerenderer {
     let affinityKey = toAffinityKey({ affinityType, affinityValue });
     this.#renderRunner.clearAuthCache(affinityKey);
     await this.#pagePool.disposeAffinity(affinityKey);
+  }
+
+  // Block until the standby pool has reached its desired count. The
+  // constructor and `disposeAffinity` both kick refill fire-and-forget;
+  // tests that need a fresh tab in their *next* `prerenderVisit` call
+  // (rather than racing the kicked refill) await this instead. Wraps
+  // `PagePool.warmStandbys`, which dedupes against any in-flight kick.
+  async warmStandbys(): Promise<void> {
+    await this.#pagePool.warmStandbys();
   }
 
   // Emit the `render cancelled` log line (format from CS-10872)
@@ -277,6 +307,7 @@ export class Prerenderer {
     auth,
     opts,
     renderOptions,
+    priority,
     signal,
   }: {
     affinityType: AffinityType;
@@ -286,6 +317,11 @@ export class Prerenderer {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    // Priority threaded from the producer side. Stamped into
+    // `response.meta.diagnostics.priority` for telemetry, and honored
+    // by PagePool's tab queue / per-affinity admission semaphore /
+    // global render semaphore for priority-aware dequeue.
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: ModuleRenderResponse;
@@ -301,6 +337,7 @@ export class Prerenderer {
       url,
       'module',
       'module',
+      priority,
     );
     // Declared before the try so the finally releases both even if the
     // register call itself throws synchronously (e.g. setInterval
@@ -341,6 +378,7 @@ export class Prerenderer {
             auth,
             opts,
             renderOptions: attemptOptions,
+            priority,
             signal,
             onTabAcquired: activity.markRunning,
           });
@@ -370,6 +408,7 @@ export class Prerenderer {
               auth,
               opts,
               renderOptions: attemptOptions,
+              priority,
               signal,
               onTabAcquired: activity.markRunning,
             });
@@ -422,7 +461,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -436,7 +479,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
@@ -453,6 +500,7 @@ export class Prerenderer {
     command,
     commandInput,
     opts,
+    priority,
     signal,
   }: {
     userId: string;
@@ -460,6 +508,8 @@ export class Prerenderer {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    // See prerenderModule for the priority contract.
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
@@ -482,12 +532,14 @@ export class Prerenderer {
         command,
         commandInput,
         opts,
+        priority,
         signal,
       });
       Prerenderer.decorateRenderErrorsWithTimings(
         result.response,
         result.timings,
         Date.now() - commandStart,
+        { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
@@ -501,6 +553,63 @@ export class Prerenderer {
         throw e;
       }
       log.error(`command run attempt failed (user ${userId})`, e);
+      throw e;
+    }
+  }
+
+  async prerenderScreenshot({
+    realm,
+    url,
+    auth,
+    format,
+    priority,
+    opts,
+    signal,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    format: 'isolated' | 'embedded';
+    priority?: number;
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    signal?: AbortSignal;
+  }): Promise<{
+    response: ScreenshotPrerenderResponse;
+    timings: Timings;
+    pool: PoolMeta;
+  }> {
+    if (this.#stopped) {
+      throw new Error('Prerenderer has been stopped and cannot be used');
+    }
+    let screenshotStart = Date.now();
+    let affinityKey = toAffinityKey({
+      affinityType: 'realm',
+      affinityValue: realm,
+    });
+    try {
+      let result = await this.#renderRunner.captureScreenshotAttempt({
+        affinityType: 'realm',
+        affinityValue: realm,
+        realm,
+        url,
+        auth,
+        format,
+        priority,
+        opts,
+        signal,
+      });
+      Prerenderer.decorateRenderErrorsWithTimings(
+        result.response,
+        result.timings,
+        Date.now() - screenshotStart,
+      );
+      return result;
+    } catch (e) {
+      if (e instanceof PrerenderCancelledError) {
+        await this.#handlePrerenderCancel(e, affinityKey, screenshotStart, url);
+        throw e;
+      }
+      log.error(`screenshot attempt failed (url ${url})`, e);
       throw e;
     }
   }
@@ -538,6 +647,8 @@ export class Prerenderer {
       fileData,
       types,
       opts,
+      priority,
+      jobId,
     } = this.#gateClearCache(rawArgs);
     let signal = (rawArgs as { signal?: AbortSignal }).signal;
     let testOnTabAcquired = (
@@ -549,6 +660,7 @@ export class Prerenderer {
       url,
       'visit',
       'file',
+      priority,
     );
     let onTabAcquired = (info: { pageId: string }) => {
       activity.markRunning();
@@ -593,6 +705,8 @@ export class Prerenderer {
             renderOptions: attemptOptions,
             fileData,
             types,
+            priority,
+            jobId,
             signal,
             onTabAcquired,
           });
@@ -624,6 +738,8 @@ export class Prerenderer {
               renderOptions: attemptOptions,
               fileData,
               types,
+              priority,
+              jobId,
               signal,
               onTabAcquired,
             });
@@ -674,7 +790,11 @@ export class Prerenderer {
           result.response,
           result.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: result.pool?.reused,
+          },
         );
         return result;
       }
@@ -683,7 +803,11 @@ export class Prerenderer {
           lastResult.response,
           lastResult.timings,
           Date.now() - attemptStart,
-          poller.currentPeak(),
+          {
+            affinitySnapshot: poller.currentPeak(),
+            priority,
+            tabReused: lastResult.pool?.reused,
+          },
         );
         return lastResult;
       }
@@ -823,7 +947,19 @@ export class Prerenderer {
               a.admission.cap > 0 && a.admission.pending > 0
                 ? `, admission=pending=${a.admission.pending}/cap=${a.admission.cap}`
                 : '';
-            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail})`;
+            // Priority breakdown of *queued* waiters for this affinity
+            // (does NOT count the in-flight holder, which is what
+            // `pending=` above includes). Format:
+            // `priorities=<src>:<p>:<n>,<p>:<n>` where `<src>` is `tab`
+            // for tab-queue waiters or `adm` for file-admission
+            // waiters. Skipped when nothing is queued — idle affinities
+            // stay compact. Format chosen so a single grep can pull
+            // priority distributions out of the logs.
+            let priorityDetail = formatQueuedByPriority(
+              a.tabQueuedByPriority,
+              a.admissionQueuedByPriority,
+            );
+            return `${a.affinityKey}(tabs=${a.tabCount}, pending=${a.pendingTotal}, max=${a.maxPending}${queueDetail}${admissionDetail}${priorityDetail})`;
           })
           .join(' ');
         log.info(
@@ -839,4 +975,34 @@ export class Prerenderer {
     }, intervalMs);
     this.#queueSnapshotInterval.unref?.();
   }
+}
+
+// Format helper for the `prerender-queue-snapshot` log line's priority
+// breakdown. Counts queued waiters only; the in-flight holder is
+// reflected separately in the `pending=` field on the same log entry.
+// Returns `, priorities=tab:10:3,0:1` when the affinity has 3
+// priority-10 + 1 priority-0 tab-queue waiters and no admission
+// waiters. Returns `, priorities=tab:10:3|adm:0:2` when the breakdown
+// also includes admission-queue waiters. Returns the empty string when
+// nothing is queued. Numeric keys sort descending within each source
+// (highest priority first), matching dequeue order.
+function formatQueuedByPriority(
+  tab: Record<number, number>,
+  admission: Record<number, number>,
+): string {
+  let segments: string[] = [];
+  let tabSegment = formatPriorityCounts(tab);
+  if (tabSegment) segments.push(`tab:${tabSegment}`);
+  let admSegment = formatPriorityCounts(admission);
+  if (admSegment) segments.push(`adm:${admSegment}`);
+  if (segments.length === 0) return '';
+  return `, priorities=${segments.join('|')}`;
+}
+
+function formatPriorityCounts(counts: Record<number, number>): string {
+  let entries = Object.entries(counts)
+    .map(([k, v]) => [Number(k), v] as [number, number])
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[0] - a[0]);
+  return entries.map(([prio, n]) => `${prio}:${n}`).join(',');
 }

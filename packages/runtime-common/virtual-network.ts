@@ -1,5 +1,5 @@
 import { RealmPaths, ensureTrailingSlash } from './paths';
-import { baseRealm, isNode } from './index';
+import { baseRealm } from './index';
 import {
   registerCardReferencePrefix,
   type RealmIdentifier,
@@ -12,6 +12,7 @@ import {
 } from './package-shim-handler';
 import type { Readable } from 'stream';
 import { fetcher, type FetcherMiddlewareHandler } from './fetcher';
+import { createEnvironmentAwareFetch } from '#fetch';
 
 export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
@@ -272,87 +273,18 @@ export function isUrlLike(moduleIdentifier: string): boolean {
   );
 }
 
-/**
- * Creates a fetch implementation that's appropriate for the current environment.
- * In Node.js, it enhances localhost subdomain resolution using Undici agent.
- * In browsers, it uses native fetch.
- */
-function createEnvironmentAwareFetch(): typeof globalThis.fetch {
-  if (!isNode) {
-    // Browser environment - use native fetch
-    return globalThis.fetch.bind(globalThis);
-  }
-
-  // Node.js environment - create enhanced fetch with Undici dispatcher
-  try {
-    // Check if we're in a browser-like environment (even if isNode is true)
-    if (
-      typeof window !== 'undefined' ||
-      typeof globalThis.fetch === 'undefined'
-    ) {
-      // Browser environment or no fetch available - use native fetch
-      return globalThis.fetch.bind(globalThis);
-    }
-
-    // Check if undici and dns are available at runtime
-    let undici: any;
-    let dns: any;
-    try {
-      undici = require('undici');
-      dns = require('dns');
-    } catch (e) {
-      // Undici not available - fallback to native fetch
-      return globalThis.fetch.bind(globalThis);
-    }
-
-    const { Agent } = undici;
-
-    // Create a custom agent with localhost subdomain resolution
-    const agent = new Agent({
-      connect: {
-        // This replaces dns.lookup for sockets created by this Agent
-        lookup(hostname: string, options: any, cb: any) {
-          if (hostname?.endsWith('.localhost')) {
-            if (options.all) {
-              // Return array format if options.all is true
-              return cb(null, [{ address: '127.0.0.1', family: 4 }], null);
-            } else {
-              // Return standard format otherwise
-              return cb(null, '127.0.0.1', 4);
-            }
-          }
-          // Use default DNS lookup for all other hostnames
-          // Use a lazy-loaded function to avoid bundler issues
-          function performDNSLookup() {
-            try {
-              return dns.lookup(hostname, options, cb);
-            } catch (e) {
-              return cb(new Error('DNS lookup failed'), null, null);
-            }
-          }
-          return performDNSLookup();
-        },
-      },
-    });
-
-    // Create a custom fetch function that uses our agent
-    return async (input: RequestInfo | URL, init?: RequestInit) => {
-      let fetch = globalThis.fetch.bind(globalThis);
-      return fetch(input, {
-        ...init,
-        dispatcher: agent,
-      } as any);
-    };
-  } catch (e) {
-    // Fallback to native fetch if undici setup fails
-    return globalThis.fetch.bind(globalThis);
-  }
-}
-
 // This is to handle a very mysterious situation in our CI environment where
 // fetches for base realm artifacts seem to vanish and we see "TypeError:
 // Fetch failed" exceptions.
-const maxAttempts = 5;
+//
+// Why 10 attempts: with the triangular backoff below (attempt * backOffMs),
+// 10 retries widens the total backoff window from ~1.5s to ~5.5s. CI has been
+// observed losing localhost:4201/base/* fetches for multi-second stretches
+// (TCP/process scheduling glitches), so the prior 5-attempt cap was tight
+// enough that a single transient stall would surface as a test timeout.
+// Gated on `__environment === 'test'` via shouldRetryFetch, so production
+// behaviour is unaffected.
+const maxAttempts = 10;
 const backOffMs = 100;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
@@ -382,6 +314,15 @@ async function withRetries(
       return await fetchFn();
     } catch (err: any) {
       if (!shouldRetryFetch(url) || ++attempt > maxAttempts) {
+        if (shouldRetryFetch(url) && attempt > maxAttempts) {
+          // Final-exhaustion log: distinct from the per-attempt warning so
+          // CI output can be grepped for the actual cap being hit.
+          console.error(
+            `Exhausted ${attempt - 1} fetch retries for ${url.href}: ${
+              err?.name ?? 'Error'
+            }: ${err?.message ?? String(err)}`,
+          );
+        }
         throw err;
       }
       console.error(

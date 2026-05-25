@@ -2,10 +2,10 @@
   "apiVersion": "dashboard.grafana.app/v1beta1",
   "kind": "Dashboard",
   "metadata": {
-    "name": "fetquzizsej28b",
     "annotations": {
       "grafana.app/folder": "defd2d156sav4d"
-    }
+    },
+    "name": "fetquzizsej28b"
   },
   "spec": {
     "annotations": {
@@ -27,13 +27,72 @@
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
-    "id": 25,
-    "links": [],
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "entity:realm"
+        ],
+        "title": "Realms",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "entity:user"
+        ],
+        "title": "Users",
+        "type": "dashboards"
+      }
+    ],
     "panels": [
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Streaming feed of file-by-file indexing activity emitted by every realm-server's IndexingEventSink (CS-10930). Filter narrows by the realm picker above; pre-fills when arrived via 'View activity feed' from Boxel Jobs. Set the time range wide enough to cover the indexing run you're investigating.",
+        "gridPos": {
+          "h": 12,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "id": 11,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"${realm_url}\" |= \"${matrix_user_id}\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Indexing Activity Feed",
+        "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "This panel displays the logs for the job selected in the drop down above. Make sure to set the date range wide enough to capture the selected logs.",
         "gridPos": {
@@ -56,32 +115,12 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n parse @message /\\[job: (?<jobId>.*?)\\]/ |\n filter (jobId = \"$job_id\") |\n sort @timestamp asc",
-            "id": "",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                "name": "ecs-boxel-worker-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: $job_id]\" |= \"${realm_url}\" |= \"${matrix_user_id}\"",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Job Logs",
@@ -89,8 +128,8 @@
       },
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "This panel displays the logs for the selected worker. Make sure to set the date range wide enough to capture the selected logs.",
         "gridPos": {
@@ -113,32 +152,12 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n parse @message /^\\[worker (?<workerId>.*?) / |\n filter (workerId = \"$worker_id\") |\n sort @timestamp asc",
-            "id": "4",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-worker-staging",
-                "name": "ecs-boxel-worker-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=\"worker\", worker_id=\"$worker_id\"} |= \"${realm_url}\" |= \"${matrix_user_id}\"",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Worker Logs",
@@ -146,8 +165,8 @@
       },
       {
         "datasource": {
-          "type": "cloudwatch",
-          "uid": "cef5x9o3yzawwf"
+          "type": "loki",
+          "uid": "loki"
         },
         "description": "The realm server logs. Make sure to set the duration to the value that encapsulates time frame for the logs that you want. Note that these logs have been truncated to 1000 lines.",
         "gridPos": {
@@ -170,43 +189,130 @@
         "targets": [
           {
             "datasource": {
-              "type": "cloudwatch",
-              "uid": "cef5x9o3yzawwf"
+              "type": "loki",
+              "uid": "loki"
             },
-            "dimensions": {},
-            "expression": "fields @timestamp, @message |\n sort @timestamp desc |\n limit 1000",
-            "id": "",
-            "label": "",
-            "logGroups": [
-              {
-                "accountId": "680542703984",
-                "arn": "arn:aws:logs:us-east-1:680542703984:log-group:ecs-boxel-realm-server-staging",
-                "name": "ecs-boxel-realm-server-staging"
-              }
-            ],
-            "matchExact": true,
-            "metricEditorMode": 0,
-            "metricName": "",
-            "metricQueryType": 0,
-            "namespace": "",
-            "period": "",
-            "queryMode": "Logs",
-            "refId": "A",
-            "region": "default",
-            "sqlExpression": "",
-            "statistic": "Average",
-            "statsGroups": []
+            "expr": "{service=\"realm-server\"} |= \"${realm_url}\" |= \"${matrix_user_id}\"",
+            "queryType": "range",
+            "refId": "A"
           }
         ],
         "title": "Realm Server Logs",
         "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Logs from realm-server, worker, prerender, and prerender-manager for a specific indexing job. Two query patterns: (A) `[job: J.R]` substring — emitted by all four services after the `x-boxel-job-id` header was wired through the prerender call chain; (B) `[indexing-progress] ... job=J` events emitted by the worker (file-by-file progress feed). Both vars pre-set by drill-throughs from the Indexing dashboard.",
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 34
+        },
+        "id": 20,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker|prerender|prerender-manager\"} |= \"[job: ${indexing_job_full}]\"",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=~\"realm-server|worker\"} |= \"[indexing-progress]\" |= \"job=${indexing_job_short}\"",
+            "queryType": "range",
+            "refId": "B"
+          }
+        ],
+        "title": "Indexing Job Activity",
+        "type": "logs"
       }
     ],
     "refresh": "",
-    "schemaVersion": 39,
-    "tags": [],
+    "schemaVersion": 42,
+    "tags": [
+      "forensics"
+    ],
     "templating": {
       "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "allValue": "",
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "definition": "SELECT DISTINCT realm_url AS __value, REPLACE(REPLACE(realm_url, '${realm_server}', ''), 'https://', '') AS __text FROM boxel_index ORDER BY __text;",
+          "description": "Filter all log panels to lines mentioning this realm. 'All' = no realm filter. Drill-throughs from other dashboards prefill this.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "Realm",
+          "multi": false,
+          "name": "realm_url",
+          "options": [],
+          "query": "SELECT DISTINCT realm_url AS __value, REPLACE(REPLACE(realm_url, '${realm_server}', ''), 'https://', '') AS __text FROM boxel_index ORDER BY __text;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "allValue": "",
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "definition": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "description": "Filter all log panels to lines mentioning this user. 'All' = no user filter. Drill-throughs from other dashboards prefill this.",
+          "hide": 0,
+          "includeAll": true,
+          "label": "User",
+          "multi": false,
+          "name": "matrix_user_id",
+          "options": [],
+          "query": "SELECT DISTINCT matrix_user_id FROM users ORDER BY matrix_user_id;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
@@ -246,6 +352,36 @@
           "skipUrlSync": false,
           "sort": 0,
           "type": "query"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Full job.reservation id (e.g., 20678.26619) for the Indexing Job Activity panel. Set automatically by drill-throughs from the Indexing dashboard.",
+          "hide": 0,
+          "label": "Indexing job (full id)",
+          "name": "indexing_job_full",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
+        },
+        {
+          "current": {
+            "selected": false,
+            "text": "",
+            "value": ""
+          },
+          "description": "Short job id (just j.id, no reservation suffix) for matching `[indexing-progress] ... job=J` events.",
+          "hide": 0,
+          "label": "Indexing job (short id)",
+          "name": "indexing_job_short",
+          "options": [],
+          "query": "",
+          "skipUrlSync": false,
+          "type": "textbox"
         }
       ]
     },
@@ -256,8 +392,6 @@
     "timepicker": {},
     "timezone": "browser",
     "title": "Boxel Logs",
-    "uid": "fetquzizsej28b",
-    "version": 1,
     "weekStart": ""
   }
 }

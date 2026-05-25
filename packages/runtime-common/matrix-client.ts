@@ -1,7 +1,6 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
-import { Deferred } from './deferred';
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -20,7 +19,7 @@ export class MatrixClient {
   private access: MatrixAccess | undefined;
   private password?: string;
   private seed?: string;
-  private loggedInDeferred: Deferred<void> | undefined;
+  private loginPromise: Promise<void> | undefined;
   private lastTxnTimestamp = 0;
   private txnSequence = 0;
 
@@ -76,10 +75,31 @@ export class MatrixClient {
   }
 
   async login() {
-    if (this.loggedInDeferred) {
-      return await this.loggedInDeferred.promise;
+    if (this.loginPromise) {
+      return await this.loginPromise;
     }
-    this.loggedInDeferred = new Deferred();
+    // Cache the in-flight login promise so concurrent callers share the
+    // same network roundtrip. On failure, clear the cache so retries
+    // get a fresh attempt — without this, a transient network blip on
+    // the very first login (e.g. matrix not yet reachable during boot)
+    // would leave every future `login()` awaiting a never-resolving
+    // promise, surfacing as every `/_server-session` hanging forever.
+    // The `.catch(() => {})` is mandatory: if `login()` is called with
+    // no concurrent awaiter and the request rejects, Node 19+ treats
+    // the unawaited rejection as fatal and tears the process down.
+    // Pre-attaching a no-op handler claims the rejection so the
+    // caller's own `await` is the only thing that re-surfaces it.
+    let promise = this.doLogin();
+    this.loginPromise = promise;
+    promise.catch(() => {
+      if (this.loginPromise === promise) {
+        this.loginPromise = undefined;
+      }
+    });
+    return await promise;
+  }
+
+  private async doLogin(): Promise<void> {
     let password: string | undefined;
     if (this.password) {
       password = this.password;
@@ -110,13 +130,11 @@ export class MatrixClient {
     let json = await response.json();
 
     if (!response.ok) {
-      let error = new Error(
+      throw new Error(
         `Unable to login to matrix ${this.matrixURL.href} as user ${
           this.username
         }: status ${response.status} - ${JSON.stringify(json)}`,
       );
-      this.loggedInDeferred.reject(error);
-      throw error;
     }
     let {
       access_token: accessToken,
@@ -124,7 +142,6 @@ export class MatrixClient {
       user_id: userId,
     } = json;
     this.access = { accessToken, deviceId, userId };
-    this.loggedInDeferred.fulfill();
   }
 
   async getJoinedRooms() {

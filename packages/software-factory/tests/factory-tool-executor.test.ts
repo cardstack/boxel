@@ -1,13 +1,9 @@
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-
-import type { ToolResult } from '../src/factory-agent';
 import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-  composeBoxelCliInvocation,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
 } from '../src/factory-tool-executor';
@@ -24,11 +20,23 @@ function makeConfig(
   let { fetch: fetchOverride, client, ...rest } = overrides ?? {};
   return {
     packageRoot: '/fake/software-factory',
-    targetRealmUrl: 'https://realms.example.test/user/target/',
+    targetRealm: 'https://realms.example.test/user/target/',
     client:
       client ??
       createMockClient(fetchOverride ? { fetch: fetchOverride } : undefined),
     ...rest,
+  };
+}
+
+// Valid args for realm-create against the default target realm in makeConfig
+// — used as a baseline for safety-rule tests where we mutate one arg at a
+// time and expect the executor to reject the result.
+function realmCreateArgs(overrides?: Record<string, unknown>) {
+  return {
+    'realm-server-url': 'https://realms.example.test/',
+    name: 'My Realm',
+    endpoint: 'my-realm',
+    ...overrides,
   };
 }
 
@@ -37,7 +45,7 @@ function makeConfig(
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor > unregistered tool rejection', function () {
-  test('rejects invoke_tool with empty tool name', async function (assert) {
+  test('rejects empty tool name', async function (assert) {
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, makeConfig());
 
@@ -68,16 +76,25 @@ module('factory-tool-executor > unregistered tool rejection', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor > argument validation', function () {
-  test('rejects missing required arguments', async function (assert) {
+  test('rejects missing required arguments for realm-create', async function (assert) {
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute('search-realm', {});
+      await executor.execute('realm-create', {});
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof Error);
-      assert.true((err as Error).message.includes('realm'));
+      // realm-create requires realm-server-url + name + endpoint;
+      // any/all of them missing produces an error message that names
+      // them. Pick one to spot-check (the executor reports all
+      // missing args but for assertion-rule reasons we test a single
+      // membership rather than an OR).
+      let message = (err as Error).message;
+      assert.true(
+        message.includes('realm-server-url'),
+        `error message names "realm-server-url": ${message}`,
+      );
     }
   });
 });
@@ -87,389 +104,131 @@ module('factory-tool-executor > argument validation', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor > source realm protection', function () {
-  test('rejects tool targeting source realm', async function (assert) {
+  test('rejects tool targeting source realm via realm-server-url', async function (assert) {
     let registry = new ToolRegistry();
+    let sourceUrl = 'https://realms.example.test/source/';
     let executor = new ToolExecutor(
       registry,
-      makeConfig({
-        sourceRealmUrl: 'https://realms.example.test/user/source/',
-      }),
+      makeConfig({ sourceRealm: sourceUrl }),
     );
 
     try {
-      await executor.execute('search-realm', {
-        realm: 'https://realms.example.test/user/source/',
-      });
+      await executor.execute(
+        'realm-create',
+        realmCreateArgs({ 'realm-server-url': sourceUrl }),
+      );
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
       assert.true((err as Error).message.includes('source realm'));
     }
   });
+});
 
-  test('rejects source realm without trailing slash', async function (assert) {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({
-        sourceRealmUrl: 'https://realms.example.test/user/source/',
-      }),
-    );
+// ---------------------------------------------------------------------------
+// Safety: realm-server-url origin allowlist
+// ---------------------------------------------------------------------------
 
-    try {
-      await executor.execute('search-realm', {
-        realm: 'https://realms.example.test/user/source',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-    }
-  });
+module(
+  'factory-tool-executor > realm-server-url origin allowlist',
+  function () {
+    test('rejects realm-server-url whose origin is outside the allowed set', async function (assert) {
+      let registry = new ToolRegistry();
+      let executor = new ToolExecutor(registry, makeConfig());
 
-  test('allows tool targeting target realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      sourceRealmUrl: 'https://realms.example.test/user/source/',
-      fetch: createMockFetch(200, { data: [] }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
+      try {
+        await executor.execute(
+          'realm-create',
+          realmCreateArgs({ 'realm-server-url': 'https://evil.example/' }),
+        );
+        assert.ok(false, 'should have thrown');
+      } catch (err) {
+        assert.true(err instanceof ToolSafetyError);
+        assert.true(
+          (err as Error).message.includes('not in the allowed origins'),
+        );
+      }
     });
 
-    assert.strictEqual(result.exitCode, 0);
-  });
+    test('accepts realm-server-url that matches the target-realm origin', async function (assert) {
+      let registry = new ToolRegistry();
+      // The mock client's createRealm returns a fake URL; the executor
+      // doesn't fail on that (logs an OK result). What we want here is
+      // for the safety check to NOT throw — the call reaches the client.
+      let executor = new ToolExecutor(registry, makeConfig());
 
-  test('rejects realm-read targeting the target realm (workspace-only tools)', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(200, { data: [] }),
+      let result = await executor.execute('realm-create', realmCreateArgs());
+      // realm-create may return an error from the mock client (it doesn't
+      // actually create a realm), but the safety check should have passed
+      // — i.e., we should reach a ToolResult, not a thrown ToolSafetyError.
+      assert.strictEqual(typeof result, 'object', 'returned a ToolResult');
+      assert.strictEqual(result.tool, 'realm-create');
     });
-    let executor = new ToolExecutor(registry, config);
 
-    try {
-      await executor.execute('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-      assert.true(
-        (err as Error).message.includes('cannot target the target realm'),
-        `error should mention target-realm rejection, got: ${(err as Error).message}`,
+    test('accepts realm-server-url that matches an allowed prefix origin', async function (assert) {
+      let registry = new ToolRegistry();
+      let executor = new ToolExecutor(
+        registry,
+        makeConfig({
+          allowedRealmPrefixes: ['https://scratch.example.test/'],
+        }),
       );
-    }
-  });
 
-  test('rejects realm-write targeting the target realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig();
-    let executor = new ToolExecutor(registry, config);
-
-    try {
-      await executor.execute('realm-write', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-        content: '{}',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-    }
-  });
-
-  test('rejects realm-delete targeting the target realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig();
-    let executor = new ToolExecutor(registry, config);
-
-    try {
-      await executor.execute('realm-delete', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-    }
-  });
-
-  test('allows realm-read targeting a scratch realm prefix', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
-      fetch: createMockFetch(200, { ok: true }),
+      let result = await executor.execute(
+        'realm-create',
+        realmCreateArgs({
+          'realm-server-url': 'https://scratch.example.test/',
+        }),
+      );
+      assert.strictEqual(typeof result, 'object');
     });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/scratch-123/',
-      path: 'foo.json',
-    });
-
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('rejects realm-api tool targeting unknown realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({
-        sourceRealmUrl: 'https://realms.example.test/user/source/',
-      }),
-    );
-
-    try {
-      await executor.execute('realm-search', {
-        'realm-url': 'https://realms.example.test/other/unrelated/',
-        query: '{}',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-      assert.true((err as Error).message.includes('not in the allowed list'));
-    }
-  });
-
-  test('allows realm-api tool targeting scratch realm via prefix', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      sourceRealmUrl: 'https://realms.example.test/user/source/',
-      allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
-      fetch: createMockFetch(200, { ok: true }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/scratch-123/',
-      query: '{}',
-    });
-
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('rejects unknown realm even without sourceRealmUrl configured', async function (assert) {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({
-        // No sourceRealmUrl — safety should still enforce allowed-realm targeting
-      }),
-    );
-
-    try {
-      await executor.execute('realm-search', {
-        'realm-url': 'https://evil.example.test/hacker/realm/',
-        query: '{}',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-      assert.true((err as Error).message.includes('not in the allowed list'));
-    }
-  });
-
-  test('rejects script tool targeting unknown realm URL', async function (assert) {
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(registry, makeConfig());
-
-    try {
-      await executor.execute('search-realm', {
-        realm: 'https://evil.example.test/hacker/realm/',
-      });
-      assert.ok(false, 'should have thrown');
-    } catch (err) {
-      assert.true(err instanceof ToolSafetyError);
-      assert.true((err as Error).message.includes('not in the allowed list'));
-    }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Realm API execution
-// ---------------------------------------------------------------------------
-
-module('factory-tool-executor > realm-api execution', function () {
-  test('realm-search makes QUERY request', async function (assert) {
-    let capturedMethod: string | undefined;
-    let capturedUrl: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedMethod = init?.method;
-        return new Response(JSON.stringify({ data: [] }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
-    });
-
-    assert.strictEqual(capturedMethod, 'QUERY');
-    assert.true(capturedUrl!.endsWith('_search'));
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('non-ok response produces exitCode 1', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(404, { error: 'Not found' }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
-    });
-
-    assert.strictEqual(result.exitCode, 1);
-    let error = (result.output as Record<string, unknown>).error as string;
-    assert.true(error.startsWith('HTTP 404'));
-  });
-});
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor > logging', function () {
-  test('logs successful tool execution', async function (assert) {
-    let logEntries: ToolExecutionLogEntry[] = [];
-
+  test('logs each in-flight execution', async function (assert) {
     let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(200, { data: [] }),
-      log: (entry) => logEntries.push(entry),
-    });
-    let executor = new ToolExecutor(registry, config);
+    let entries: ToolExecutionLogEntry[] = [];
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({
+        log: (entry) => entries.push(entry),
+      }),
+    );
 
-    await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: '{}',
-    });
-
-    assert.strictEqual(logEntries.length, 1);
-    assert.strictEqual(logEntries[0].tool, 'realm-search');
-    assert.strictEqual(logEntries[0].category, 'realm-api');
-    assert.strictEqual(logEntries[0].exitCode, 0);
-    assert.strictEqual(typeof logEntries[0].durationMs, 'number');
-    assert.strictEqual(logEntries[0].error, undefined);
+    await executor.execute('realm-create', realmCreateArgs());
+    assert.strictEqual(entries.length, 1, 'logged the invocation');
+    assert.strictEqual(entries[0].tool, 'realm-create');
+    assert.strictEqual(entries[0].category, 'realm-api');
   });
 
-  test('logs failed tool execution', async function (assert) {
-    let logEntries: ToolExecutionLogEntry[] = [];
-
+  test('does not log executions rejected by pre-flight checks', async function (assert) {
+    // Argument validation, unregistered-tool rejection, source-realm
+    // protection, and foreign-origin rejection all throw BEFORE the
+    // executor enters its try/catch around executeRealmApi — those are
+    // input rejections, not in-flight executions, and the log is
+    // reserved for the latter.
     let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(500, { error: 'Internal error' }),
-      log: (entry) => logEntries.push(entry),
-    });
-    let executor = new ToolExecutor(registry, config);
+    let entries: ToolExecutionLogEntry[] = [];
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({
+        log: (entry) => entries.push(entry),
+      }),
+    );
 
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: '{}',
-    });
-
-    assert.strictEqual(result.exitCode, 1);
-    assert.strictEqual(logEntries.length, 1);
-    assert.strictEqual(logEntries[0].exitCode, 1);
+    try {
+      await executor.execute(
+        'realm-create',
+        realmCreateArgs({ 'realm-server-url': 'https://evil.example/' }),
+      );
+    } catch {
+      // expected
+    }
+    assert.deepEqual(entries, [], 'no log entry for safety rejection');
   });
 });
-
-// ---------------------------------------------------------------------------
-// ToolResult serialization
-// ---------------------------------------------------------------------------
-
-module('factory-tool-executor > ToolResult shape', function () {
-  test('successful result has expected shape', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(200, { cards: ['a', 'b'] }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: '{}',
-    });
-
-    assert.strictEqual(typeof result.tool, 'string');
-    assert.strictEqual(typeof result.exitCode, 'number');
-    assert.strictEqual(typeof result.durationMs, 'number');
-    assert.notStrictEqual(result.output, undefined, 'output is defined');
-  });
-
-  test('ToolResult can be serialized to JSON', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: createMockFetch(200, { data: [1, 2, 3] }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-search', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      query: '{}',
-    });
-
-    let serialized = JSON.stringify(result);
-    let deserialized = JSON.parse(serialized) as ToolResult;
-    assert.strictEqual(deserialized.tool, 'realm-search');
-    assert.strictEqual(deserialized.exitCode, 0);
-    assert.deepEqual(deserialized.output, { data: [1, 2, 3] });
-  });
-});
-
-// Timeout enforcement for realm-api calls is now the client's responsibility
-// (BoxelCLIClient/ProfileManager own the fetch pipeline), so the executor no
-// longer wraps calls in an AbortController. The spawn-based timeout for
-// script and boxel-cli tools is covered elsewhere.
-
-// ---------------------------------------------------------------------------
-// composeBoxelCliInvocation
-// ---------------------------------------------------------------------------
-
-module('factory-tool-executor > composeBoxelCliInvocation', function () {
-  test('prepends --quiet by default', function (assert) {
-    let args = composeBoxelCliInvocation(['sync', '.', '--prefer-local']);
-    assert.deepEqual(args, ['boxel', '--quiet', 'sync', '.', '--prefer-local']);
-  });
-
-  test('omits --quiet when debug is true', function (assert) {
-    let args = composeBoxelCliInvocation(['sync', '.', '--prefer-local'], {
-      debug: true,
-    });
-    assert.deepEqual(args, ['boxel', 'sync', '.', '--prefer-local']);
-  });
-
-  test('treats debug:false the same as omitted', function (assert) {
-    let args = composeBoxelCliInvocation(['status', '.'], { debug: false });
-    assert.deepEqual(args, ['boxel', '--quiet', 'status', '.']);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function createMockFetch(
-  status: number,
-  body: unknown,
-): typeof globalThis.fetch {
-  return (async () => {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': SupportedMimeType.JSON },
-    });
-  }) as typeof globalThis.fetch;
-}

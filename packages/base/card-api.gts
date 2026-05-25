@@ -91,7 +91,8 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   resolveCardReference,
-  cardIdToURL,
+  rri,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -151,6 +152,8 @@ import {
 } from './card-serialization';
 import {
   assertScalar,
+  beginComputePass,
+  endComputePass,
   entangleWithCardTracking,
   getDataBucket,
   getFieldDescription,
@@ -168,6 +171,7 @@ import {
   relationshipMeta,
   setFieldDescription,
   setRealmContextOnField,
+  type ComputePassSnapshot,
   type NotLoadedValue,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
@@ -188,6 +192,8 @@ interface CardOrFieldTypeIconSignature {
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
 export {
+  beginComputePass,
+  endComputePass,
   deserialize,
   getCardMeta,
   getDataBucket,
@@ -209,6 +215,7 @@ export {
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
+  type ComputePassSnapshot,
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
@@ -430,6 +437,11 @@ export type GetSearchResourceFuncOpts = {
       message: string;
       status?: number;
     }>;
+    // IDs the parent doc named in `relationships.{field}.data`. Used
+    // by the SearchResource when `cards` is empty and the parent
+    // skipped query-backed expansion — the resource loads each ID by
+    // URL instead of running a live re-query.
+    cardURLs?: string[];
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -533,7 +545,7 @@ export interface Field<
     store: CardStore | undefined,
     instancePromise: Promise<BaseDef>,
     loadedValue: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: DeserializeOpts,
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
@@ -676,7 +688,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             meta.fields[fieldName] = {
               adoptsFrom: identifyCard(
                 override,
-                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeReference,
               ),
             };
           }
@@ -753,7 +765,7 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
     store: CardStore,
     instancePromise: Promise<BaseDef>,
     _loadedValue: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<FieldT>[] | null> {
     if (value == null) {
@@ -988,7 +1000,9 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
               [this.name]: {
                 adoptsFrom: identifyCard(
                   this.card,
-                  opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
+                  opts?.useAbsoluteURL
+                    ? undefined
+                    : opts?.maybeRelativeReference,
                 ),
               },
             },
@@ -1044,7 +1058,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     store: CardStore,
     _instancePromise: Promise<BaseDef>,
     _loadedValue: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT>> {
     if (primitive in this.card) {
@@ -1316,7 +1330,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     store: CardStore,
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
@@ -1812,7 +1826,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     store: CardStore,
     instancePromise: Promise<BaseDef>,
     loadedValues: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts: DeserializeOpts,
   ): Promise<(BaseInstanceType<FieldT> | NotLoadedValue)[]> {
     let relationships: Relationship[];
@@ -2182,7 +2196,7 @@ export class BaseDef {
   // may contain interior fields that have relative links. FieldDef's though have no ID.
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
-  [relativeTo]: URL | undefined = undefined;
+  [relativeTo]: RealmResourceIdentifier | URL | undefined = undefined;
   [meta]: CardResourceMeta | undefined = undefined;
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
@@ -2241,11 +2255,11 @@ export class BaseDef {
       if (stack.includes(value)) {
         return { id: valueId };
       }
-      function makeAbsoluteURL(maybeRelativeURL: string) {
+      function makeAbsoluteURL(maybeRelativeReference: string) {
         if (!value[relativeTo]) {
-          return maybeRelativeURL;
+          return maybeRelativeReference;
         }
-        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
+        return resolveCardReference(maybeRelativeReference, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2275,9 +2289,13 @@ export class BaseDef {
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
+          // Reuse the value we already peeked above instead of re-reading
+          // through the descriptor — for computed fields the descriptor
+          // get path re-invokes `computeVia`, doubling the work for every
+          // contains/contains-many/links-to field in the search doc.
           return [
             fieldName,
-            getQueryableValue(field!, value[fieldName], [value, ...stack]),
+            getQueryableValue(field!, rawValue, [value, ...stack]),
           ];
         }),
       );
@@ -2287,7 +2305,7 @@ export class BaseDef {
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     data: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     doc?: CardDocument,
     store?: CardStore,
     opts?: DeserializeOpts,
@@ -2328,9 +2346,8 @@ export class Component<
 
 export type CreateCardFn = (
   ref: CodeRef,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
   opts?: {
-    closeAfterCreating?: boolean;
     realmURL?: URL; // the realm to create the card in
     localDir?: LocalPath; // the local directory path within the realm to create the card file
     doc?: LooseSingleCardDocument; // initial data for the card
@@ -2339,7 +2356,7 @@ export type CreateCardFn = (
 ) => Promise<string | undefined>;
 
 export type ViewCardFn = (
-  cardOrURL: CardDef | URL,
+  cardOrURL: CardDef | URL | RealmResourceIdentifier,
   format?: Format,
   opts?: {
     type?: 'card' | 'file';
@@ -2356,7 +2373,7 @@ export type EditCardFn = (
   opts?: { useBaseTemplate?: boolean },
 ) => void;
 
-export type SaveCardFn = (id: string) => void;
+export type SaveCardFn = (id: RealmResourceIdentifier) => void;
 
 export type DeleteCardFn = (cardOrId: CardDef | URL | string) => Promise<void>;
 
@@ -2740,7 +2757,9 @@ export class FileDef extends BaseDef {
     }
   }
 
-  @field id = contains(ReadOnlyField);
+  @field id: RealmResourceIdentifier = contains(
+    ReadOnlyField,
+  ) as unknown as RealmResourceIdentifier;
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
@@ -2900,7 +2919,9 @@ export class CardDef extends BaseDef {
     // notify glimmer to rerender this card
     notifyCardTracking(this);
   }
-  @field id = contains(ReadOnlyField);
+  @field id: RealmResourceIdentifier = contains(
+    ReadOnlyField,
+  ) as unknown as RealmResourceIdentifier;
   @field cardInfo = contains(CardInfoField);
   @field cardTitle = contains(StringField, {
     computeVia: function (this: CardDef) {
@@ -3277,7 +3298,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           fileMetaDoc.data,
           fileMetaDoc,
-          cardIdToURL(fileMetaDoc.data.id!),
+          fileMetaDoc.data.id!,
           { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
@@ -3293,7 +3314,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           cardDoc.data,
           cardDoc,
-          cardIdToURL(cardDoc.data.id!),
+          cardDoc.data.id!,
           { store, dependencyTrackingContext },
         )) as CardDef;
       }
@@ -3462,7 +3483,7 @@ function trackRuntimeRelationshipModuleDependencies(
   }
 }
 
-export function setId(instance: CardDef, id: string) {
+export function setId(instance: CardDef, id: RealmResourceIdentifier) {
   let field = getField(instance, 'id');
   if (field) {
     setField(instance, field, id);
@@ -3532,7 +3553,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
   modelPromise: Promise<BaseDef>;
   doc: LooseSingleCardDocument | CardDocument;
   store: CardStore;
-  relativeTo: URL | undefined;
+  relativeTo: RealmResourceIdentifier | URL | undefined;
   opts?: DeserializeOpts;
 }): Promise<any> {
   let field = getField(isCardInstance(value) ? value : card, fieldName);
@@ -3572,7 +3593,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   doc:
     | LooseSingleResourceDocument<CardResource | FileMetaResource>
     | LinkableDocument,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
   opts?: DeserializeOpts & {
     store?: CardStore;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
@@ -3618,7 +3639,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = cardIdToURL(doc.data.id);
+    instance[relativeTo] = rri(doc.data.id);
   }
 
   if (isCardInstance(instance)) {
@@ -3644,7 +3665,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   card: T,
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
-  _relativeTo: URL | undefined,
+  _relativeTo: RealmResourceIdentifier | URL | undefined,
   store: CardStore = new FallbackCardStore(),
   opts?: DeserializeOpts,
 ): Promise<BaseInstanceType<T>> {
@@ -3741,10 +3762,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
 
   let existingOverrides = getFieldOverrides(instance);
   let loadedValues = getDataBucket(instance);
-  let instanceRelativeTo =
+  let instanceRelativeTo: RealmResourceIdentifier | URL | undefined =
     instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
-      ? cardIdToURL(instance.id)
+      ? (instance.id as RealmResourceIdentifier)
       : undefined);
 
   function getFieldMeta(
@@ -3814,10 +3835,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // Prefer the deserialization context (instanceRelativeTo) so overrides resolve
       // relative to the document we fetched (e.g. catalog/index), then fall back to the resource id.
       relativeTo:
-        instanceRelativeTo ??
-        (resource.id && typeof resource.id === 'string'
-          ? cardIdToURL(resource.id)
-          : undefined),
+        instanceRelativeTo ?? (resource.id ? rri(resource.id) : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
     });
     if (!override) {
@@ -3924,10 +3942,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         field = (getField(instance, fieldName) ?? field) as Field<T>;
       }
       // Prefer the deserialization context ([relativeTo]) when available; fall back to the instance id
-      let relativeToVal =
+      let relativeToVal: RealmResourceIdentifier | URL | undefined =
         instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
-          ? cardIdToURL(instance.id)
+          ? (instance.id as RealmResourceIdentifier)
           : undefined);
       let deserializedValue = await getDeserializedValue({
         card,
@@ -4138,18 +4156,54 @@ export type SignatureFor<CardT extends BaseDefConstructor> = {
   };
 };
 
+// Cache top-level BoxComponents by (model, componentCodeRef). CardRenderer's
+// `renderedCard` getter runs on every reactive re-render, and without this
+// cache it would call `Box.create(model)` + `getBoxComponent(...)` afresh
+// each time — producing a brand-new FieldComponent class that Glimmer's
+// `<this.renderedCard />` would treat as a new component, remounting the
+// entire card tree on every reactive update. Cache key includes the
+// codeRef so that toggling `useBaseTemplate` (which threads a different
+// codeRef into `getComponent`) still produces a fresh component, since
+// the captured `opts` lives in the FieldComponent's closure and can't be
+// mutated. Field invocations (field !== undefined) go through `fieldComponent`
+// → `Box.field(name)` (already cached on the parent Box), so they bypass
+// this cache.
+const componentByModel = new WeakMap<object, Map<string, BoxComponent>>();
+
+function codeRefCacheKey(codeRef: CodeRef | undefined): string {
+  return codeRef ? JSON.stringify(codeRef) : '';
+}
+
 export function getComponent(
   model: BaseDef,
   field?: Field,
   opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
-  let box = Box.create(model);
+  if (field) {
+    return getBoxComponent(
+      model.constructor as BaseDefConstructor,
+      Box.create(model),
+      field,
+      opts,
+    );
+  }
+  let perModel = componentByModel.get(model);
+  if (!perModel) {
+    perModel = new Map();
+    componentByModel.set(model, perModel);
+  }
+  let key = codeRefCacheKey(opts?.componentCodeRef);
+  let cached = perModel.get(key);
+  if (cached) {
+    return cached;
+  }
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
-    box,
+    Box.create(model),
     field,
     opts,
   );
+  perModel.set(key, boxComponent);
   return boxComponent;
 }
 

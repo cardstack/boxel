@@ -34,6 +34,14 @@ import { initSharedState } from './shared-state';
 interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
+  // When the parent doc carries `relationships.{field}.data` IDs but
+  // no resolved cards in `included` (the server's
+  // skipQueryBackedExpansion path), captureQueryFieldSeedData stashes
+  // the IDs here. The SearchResource consumes them in prerender mode
+  // to load each card by URL instead of running a live re-query —
+  // turning the cascade of `_federated-search` QUERY calls into a
+  // batch of stable per-card GETs.
+  seedCardURLs?: string[];
   seedRealms?: string[];
   seedErrors?: Array<{
     realm: string;
@@ -91,7 +99,18 @@ export function ensureQueryFieldSearchResource(
   }
   let searchResource = fieldState.searchResource;
   if (searchResource) {
-    trackQueryFieldLoads(store, field.name, fieldState);
+    // Intentionally do NOT call `trackQueryFieldLoads` here. The barrier
+    // it registers exists to plug a one-shot timing race at resource
+    // creation, between the field getter returning and the resource's
+    // `modify` lifecycle running `store.trackLoad` for the real search.
+    // On the reuse path that race no longer applies — the resource
+    // already exists and its own `modify`-driven trackLoad is the
+    // authoritative signal for render-stability. Re-arming the barrier
+    // on every read creates a feedback loop: the barrier registers a
+    // tracked load, its resolution invalidates the read-tracker that
+    // drove the read, Glimmer reads again, a fresh barrier registers,
+    // and so on. With N query-field consumers in a single render the
+    // loop saturates the JS thread for minutes per card.
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
@@ -102,8 +121,23 @@ export function ensureQueryFieldSearchResource(
   let seedSearchURL = fieldState?.seedSearchURL;
   let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
 
+  // Inside a prerender the parent doc's `relationships.{field}.data` is
+  // the authoritative cardinality for this field — the indexer just
+  // wrote it. A live re-query would fire a `_federated-search`
+  // round-trip per field per loaded card to re-validate what the
+  // parent doc already serialized. With N query-backed `linksToMany`
+  // fields fanning out across M loaded cards that cascade is O(N*M)
+  // extra fetches. It is also an internal-inconsistency vector: if
+  // the live re-query returns a different set than the parent doc's
+  // serialized relationships, the rendered HTML iterates a different
+  // set than the parent doc describes. `isLive: false` in prerender
+  // keeps the SearchResource resolved from the seed and exits; the
+  // SPA path is unchanged.
+  let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
+  let isLive = !inPrerender;
+
   log.info(
-    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${true}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
   searchResource = store.getSearchResource(
     instance,
@@ -113,7 +147,7 @@ export function ensureQueryFieldSearchResource(
       return realm ? [realm] : undefined;
     },
     {
-      isLive: true,
+      isLive,
       dependencyTracking: trackingContext,
       seed: seedRecords
         ? {
@@ -121,6 +155,7 @@ export function ensureQueryFieldSearchResource(
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
+            cardURLs: fieldState?.seedCardURLs,
           }
         : undefined,
     },
@@ -331,6 +366,46 @@ export function captureQueryFieldSeedData(
   let shouldTreatEmptySeedAsUnresolved =
     fieldState.seedRecords.length === 0 &&
     (seedComesFromSearch || relationshipHasUnhydratedTargets);
+  // Capture the relationship's serialized IDs as a fallback the
+  // SearchResource consumes when the parent doc didn't include the
+  // resolved cards — the prerender-mode server skip leaves
+  // `relationship.data` populated but `included` empty, and the host
+  // materializes each listed ID via a per-URL GET instead of running
+  // a live `_federated-search`.
+  //
+  // Trust the IDs whenever the umbrella carries `links.search`:
+  // `applyQueryResults` is the only writer of that key, so its
+  // presence is the unambiguous signal that the indexer (not the
+  // user's raw source file) resolved this field. The IDs in
+  // `relationship.data` are resource pointers the indexer wrote
+  // alongside `links.search`, so they're authoritative regardless
+  // of whether the document also inlined the resolved instances in
+  // `included[]` — query-backed fields on `_federated-search`
+  // responses intentionally skip that inline in prerender mode.
+  //
+  // A raw source's empty `data: []` lacks `links.search` and must
+  // NOT be treated as an authoritative empty seed — the
+  // SearchResource needs to fall through to a live query to
+  // populate the field for the first time.
+  let relationshipIsIndexerResolved = Boolean(relationship?.links?.search);
+  let seedCardURLsUntrustworthy = !relationshipIsIndexerResolved;
+  if (seedCardURLsUntrustworthy) {
+    fieldState.seedCardURLs = undefined;
+  } else if (Array.isArray(relationship?.data)) {
+    fieldState.seedCardURLs = relationship.data
+      .map((entry) => {
+        let id = (entry as { id?: unknown })?.id;
+        return typeof id === 'string' ? id : undefined;
+      })
+      .filter((id): id is string => Boolean(id));
+  } else if (
+    relationship?.data &&
+    typeof (relationship.data as { id?: unknown }).id === 'string'
+  ) {
+    fieldState.seedCardURLs = [(relationship.data as { id: string }).id];
+  } else {
+    fieldState.seedCardURLs = undefined;
+  }
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
     : (relationship?.links?.search ?? null);

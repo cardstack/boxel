@@ -30,6 +30,10 @@ test.describe('Forgot password', () => {
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
     ).toBeDisabled();
+    await expect(page.locator('[data-test-email-field]')).toHaveAttribute(
+      'name',
+      'email',
+    );
     await page.locator('[data-test-email-field]').fill(userEmail);
     await expect(
       page.locator('[data-test-reset-your-password-btn]'),
@@ -63,6 +67,12 @@ test.describe('Forgot password', () => {
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-btn]'),
     ).toBeDisabled();
+    await expect(
+      resetPasswordPage.locator('[data-test-password-field]'),
+    ).toHaveAttribute('name', 'password');
+    await expect(
+      resetPasswordPage.locator('[data-test-confirm-password-field]'),
+    ).toHaveAttribute('name', 'confirm-password');
     await resetPasswordPage
       .locator('[data-test-password-field]')
       .fill(newPassword);

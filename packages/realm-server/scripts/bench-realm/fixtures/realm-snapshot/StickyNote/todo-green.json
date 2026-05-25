@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Try with new API",
+      "body": "Wire up the search bar against the v2 endpoint and benchmark p95 latency.",
+      "color": "green",
+      "x": 120,
+      "y": 320,
+      "rotation": 2,
+      "author": "Alex",
+      "createdAt": "2026-04-28T16:45:00.000Z",
+      "cardInfo": {
+        "name": "Try with new API"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

@@ -17,7 +17,9 @@ import {
   ensureTrailingSlash,
   SupportedMimeType,
   Deferred,
+  ri,
   testRealmURL,
+  type RealmIdentifier,
   type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
@@ -253,8 +255,8 @@ export default class RealmServerService extends Service {
   }
 
   @cached
-  get availableRealmURLs() {
-    return this.availableRealms.map((r) => r.url);
+  get availableRealmIdentifiers(): RealmIdentifier[] {
+    return this.availableRealms.map((r) => ri(r.url));
   }
 
   assertOwnRealmServer(realmServerURLs: string[]): void {
@@ -338,27 +340,27 @@ export default class RealmServerService extends Service {
   }
 
   @cached
-  get userRealmURLs() {
+  get userRealmIdentifiers(): RealmIdentifier[] {
     return this.availableRealms
       .filter((r) => r.type === 'user')
-      .map((r) => r.url);
+      .map((r) => ri(r.url));
   }
 
   @cached
-  get catalogRealmURLs() {
+  get catalogRealmIdentifiers(): RealmIdentifier[] {
     return this.availableRealms
       .filter((r) => r.type === 'catalog')
-      .map((r) => r.url);
+      .map((r) => ri(r.url));
   }
 
   @cached
-  get displayedCatalogRealmURLs() {
-    return this.catalogRealmURLs;
+  get displayedCatalogRealmIdentifiers(): RealmIdentifier[] {
+    return this.catalogRealmIdentifiers;
   }
 
   @cached
   get availableRealmIndexCardIds() {
-    return this.availableRealmURLs.map((url) => `${url}index`);
+    return this.availableRealmIdentifiers.map((url) => `${url}index`);
   }
 
   async authenticateToAllAccessibleRealms() {
@@ -389,22 +391,22 @@ export default class RealmServerService extends Service {
     }
   }
 
-  async setAvailableRealmURLs(userRealmURLs: string[]) {
+  async setAvailableRealmIdentifiers(userRealmIdentifiers: RealmIdentifier[]) {
     await this._ready.promise;
-    userRealmURLs.forEach((userRealmURL) => {
-      if (!this.availableRealms.find((r) => r.url === userRealmURL)) {
+    userRealmIdentifiers.forEach((userRealmIdentifier) => {
+      if (!this.availableRealms.find((r) => r.url === userRealmIdentifier)) {
         this.availableRealms.push({
           type: 'user',
-          url: userRealmURL,
+          url: userRealmIdentifier,
         });
       }
     });
 
-    // pluck out any user realms that aren't a part of the userRealmsURLs
+    // pluck out any user realms that aren't a part of userRealmIdentifiers
     this.availableRealms
       .filter((r) => r.type === 'user')
       .forEach((realm) => {
-        if (!userRealmURLs.includes(realm.url)) {
+        if (!userRealmIdentifiers.includes(ri(realm.url))) {
           this.availableRealms.splice(
             this.availableRealms.findIndex((r) => r.url === realm.url),
             1,
@@ -414,7 +416,7 @@ export default class RealmServerService extends Service {
   }
 
   async fetchCatalogRealms() {
-    if (this.catalogRealmURLs.length > 0) {
+    if (this.catalogRealmIdentifiers.length > 0) {
       return;
     }
     let response = await this.network.fetch(
@@ -503,7 +505,18 @@ export default class RealmServerService extends Service {
     data: {
       id: string;
       type: 'card-type-summary';
-      attributes: { displayName: string; total: number; iconHTML: string };
+      attributes: {
+        displayName: string;
+        total: number;
+        iconHTML: string;
+        // The federated `_types` response now stamps `kind` on every
+        // entry. Keeping it in the declared return type — not just the
+        // local `json` cast — means callers see the discriminator and
+        // can partition card vs file summaries instead of conflating
+        // them. `?` for back-compat with the still-supported legacy
+        // response shape (no kind, treated as 'instance').
+        kind?: 'instance' | 'file';
+      };
       meta?: { realmURL: string };
     }[];
     meta: { page: { total: number } };
@@ -554,6 +567,7 @@ export default class RealmServerService extends Service {
           displayName: string;
           total: number;
           iconHTML: string;
+          kind?: 'instance' | 'file';
         };
         meta?: { realmURL: string };
       }[];

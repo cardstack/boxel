@@ -6,15 +6,38 @@ import { basename, dirname, resolve } from 'node:path';
 
 import {
   ensureCombinedFactoryRealmTemplate,
-  ensureFactoryRealmTemplate,
-} from '../harness';
-import { isFactorySupportContext } from '../harness/shared';
-import { readSupportContext } from '../runtime-metadata';
+  isFactorySupportContext,
+  readSupportContext,
+} from '@cardstack/realm-test-harness';
 import { logger } from '../logger';
 
 let log = logger('cache-realm');
 
 const KNOWN_FLAGS = new Set(['--force']);
+
+// Glob controlling which SF source-realm files are copied into the
+// template. Card definitions only — no instance data (e.g. wiki briefs,
+// documents) which tests don't depend on and which would slow indexing.
+// Format: space-separated patterns; prefix with `!` to exclude. Last
+// matching pattern wins.
+const SF_CARD_DEFINITIONS_GLOB =
+  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+
+function cardDefinitionsOnly(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of SF_CARD_DEFINITIONS_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
 
 async function main(): Promise<void> {
   let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
@@ -32,7 +55,8 @@ async function main(): Promise<void> {
       ),
     ),
   ];
-  let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
+  let sfSourceRealmDir = resolve(process.cwd(), 'realm');
+  let serializedSupportContext = process.env.TEST_HARNESS_CONTEXT;
 
   let parsedEnvContext = serializedSupportContext
     ? (JSON.parse(serializedSupportContext) as unknown)
@@ -89,78 +113,61 @@ async function main(): Promise<void> {
     }
   }
 
-  let payload;
+  // SF tests adopt cards from `software-factory/...` modules. Always mount
+  // the SF source realm alongside whichever fixture(s) the caller asked
+  // for, with a card-definitions-only filter so instance data (briefs,
+  // documents) doesn't leak into the template.
+  let realms = [
+    ...realmDirs.map((dir, i) => ({
+      dir,
+      // Primary realm mounts at 'test/', siblings get unique paths from dirname.
+      path: i === 0 ? 'test/' : `${basename(dir)}/`,
+    })),
+    {
+      dir: sfSourceRealmDir,
+      path: 'software-factory/',
+      fileFilter: cardDefinitionsOnly,
+    },
+  ];
 
-  if (realmDirs.length > 1) {
-    // Combined template: one DB covering all realm fixtures.
-    let fixtures = realmDirs.map((realmDir, i) => ({
-      realmDir,
-      // Primary realm gets 'test/', additional get unique paths based on dirname.
-      realmPath: i === 0 ? 'test/' : `${basename(realmDir)}/`,
-    }));
+  let result = await ensureCombinedFactoryRealmTemplate(realms, {
+    context: supportContext,
+    forceRebuild,
+  });
 
-    let result = await ensureCombinedFactoryRealmTemplate(fixtures, {
-      context: supportContext,
-      forceRebuild,
-    });
+  // preparedTemplates only advertises the user-supplied fixture realms —
+  // the SF source realm is an implementation detail of the SF cache
+  // shape, not a fixture any test would select as primary.
+  let preparedTemplates = realmDirs.map((realmDir, i) => ({
+    realmDir,
+    templateDatabaseName: result.templateDatabaseName,
+    templateRealmURL:
+      result.realmServerURL.href +
+      (i === 0 ? 'test/' : `${basename(realmDir)}/`),
+    templateRealmServerURL: result.realmServerURL.href,
+    cacheHit: result.cacheHit,
+    cacheMissReason: result.cacheMissReason,
+    coveredRealmDirs: result.coveredRealmDirs,
+  }));
 
-    payload = {
-      realmDir: realmDirs[0],
-      cacheKey: result.cacheKey,
-      templateDatabaseName: result.templateDatabaseName,
-      fixtureHash: result.combinedFixtureHash,
-      cacheHit: result.cacheHit,
-      cacheMissReason: result.cacheMissReason,
-      realmURL: result.realmServerURL.href + 'test/',
-      realmServerURL: result.realmServerURL.href,
-      preparedTemplates: realmDirs.map((realmDir) => ({
-        realmDir,
-        templateDatabaseName: result.templateDatabaseName,
-        templateRealmURL:
-          result.realmServerURL.href +
-          (realmDir === realmDirs[0] ? 'test/' : `${basename(realmDir)}/`),
-        templateRealmServerURL: result.realmServerURL.href,
-        cacheHit: result.cacheHit,
-        cacheMissReason: result.cacheMissReason,
-        coveredRealmDirs: result.coveredRealmDirs,
-      })),
-    };
-  } else {
-    // Single realm: backward-compatible path.
-    let template = await ensureFactoryRealmTemplate({
-      realmDir: realmDirs[0],
-      context: supportContext,
-      forceRebuild,
-    });
+  let payload = {
+    realmDir: realmDirs[0],
+    cacheKey: result.cacheKey,
+    templateDatabaseName: result.templateDatabaseName,
+    fixtureHash: result.combinedFixtureHash,
+    cacheHit: result.cacheHit,
+    cacheMissReason: result.cacheMissReason,
+    realmURL: result.realmServerURL.href + 'test/',
+    realmServerURL: result.realmServerURL.href,
+    preparedTemplates,
+  };
 
-    payload = {
-      realmDir: realmDirs[0],
-      cacheKey: template.cacheKey,
-      templateDatabaseName: template.templateDatabaseName,
-      fixtureHash: template.fixtureHash,
-      cacheHit: template.cacheHit,
-      cacheMissReason: template.cacheMissReason,
-      realmURL: template.realmURL.href,
-      realmServerURL: template.realmServerURL.href,
-      preparedTemplates: [
-        {
-          realmDir: realmDirs[0],
-          templateDatabaseName: template.templateDatabaseName,
-          templateRealmURL: template.realmURL.href,
-          templateRealmServerURL: template.realmServerURL.href,
-          cacheHit: template.cacheHit,
-          cacheMissReason: template.cacheMissReason,
-        },
-      ],
-    };
-  }
-
-  if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
-    mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {
+  if (process.env.TEST_HARNESS_METADATA_FILE) {
+    mkdirSync(dirname(process.env.TEST_HARNESS_METADATA_FILE), {
       recursive: true,
     });
     writeFileSync(
-      process.env.SOFTWARE_FACTORY_METADATA_FILE,
+      process.env.TEST_HARNESS_METADATA_FILE,
       JSON.stringify(payload, null, 2),
     );
   }

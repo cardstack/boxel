@@ -31,10 +31,6 @@ import {
 
 const log = logger('download-realm');
 
-type PublishedRealmRow = {
-  id: string;
-};
-
 export default function handleDownloadRealm({
   dbAdapter,
   realmSecretSeed,
@@ -216,11 +212,11 @@ async function resolveRealmPath({
   realmsRootPath: string;
 }): Promise<string | null> {
   let published = (await query(dbAdapter, [
-    'SELECT id FROM published_realms WHERE published_realm_url =',
+    "SELECT disk_id FROM realm_registry WHERE kind = 'published' AND url =",
     param(realmURL),
-  ])) as PublishedRealmRow[];
+  ])) as { disk_id: string }[];
   if (published.length > 0) {
-    return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, published[0].id);
+    return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, published[0].disk_id);
   }
 
   let realm = realms.find((r) => ensureTrailingSlash(r.url) === realmURL);

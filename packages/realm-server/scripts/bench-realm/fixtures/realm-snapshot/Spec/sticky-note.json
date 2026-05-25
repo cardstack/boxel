@@ -1,0 +1,70 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Spec",
+        "module": "https://cardstack.com/base/spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "StickyNote",
+        "module": "../sticky-note"
+      },
+      "readMe": "# Sticky Note\n\nA first-class Boxel card for short-form notes designed for spatial arrangement on boards and artboards.\n\n## What it does\n\nSticky notes give the workspace a structured home for short, colorful notes. They look and feel like physical Post-it notes — colored backgrounds, slightly rotated, with a hand-written feel — so they fit naturally on dashboards, boards, and artboards.\n\nUnlike a free-form text document, a Sticky Note is a real card: it can be linked to adjacent records, surfaced in filtered views, and updated by people or automation without losing provenance.\n\n## Fields\n\n- **title** — optional short label\n- **body** — the note's content (short-form)\n- **color** — one of `yellow`, `pink`, `blue`, `green`, `orange`, `purple`. Defaults to `yellow`.\n- **x**, **y** — board position (advisory; queryable)\n- **rotation** — degrees of rotation for visual variety on a board\n- **author** — free-form author name\n- **createdAt** — datetime the note was created\n\n## Templates\n\n- **isolated** — large square (~360px) with a subtle rotation and box shadow\n- **embedded** — fixed 200×200 preview showing color and a snippet of the body\n- **fitted** — fills its container with no rotation; clamps body to ~3 lines",
+      "cardInfo": {
+        "name": "Sticky Note",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "card",
+      "cardTitle": "Sticky Note",
+      "cardDescription": "A colorful, short-form note designed for spatial arrangement on boards and artboards.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "../StickyNote/idea-yellow"
+        }
+      },
+      "linkedExamples.1": {
+        "links": {
+          "self": "../StickyNote/blocker-pink"
+        }
+      },
+      "linkedExamples.2": {
+        "links": {
+          "self": "../StickyNote/info-blue"
+        }
+      },
+      "linkedExamples.3": {
+        "links": {
+          "self": "../StickyNote/todo-green"
+        }
+      },
+      "linkedExamples.4": {
+        "links": {
+          "self": "../StickyNote/warning-orange"
+        }
+      },
+      "linkedExamples.5": {
+        "links": {
+          "self": "../StickyNote/decision-purple"
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

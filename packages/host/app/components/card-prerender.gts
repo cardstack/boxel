@@ -44,6 +44,7 @@ import {
 } from '../routes/module';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import { REALM_INDEX_BOILERPLATE_HTML } from '../utils/realm-index-boilerplate';
 import {
   RenderCardTypeTracker,
   type CardRenderContext,
@@ -56,6 +57,8 @@ import {
   enableRenderTimerStub,
   withTimersBlocked,
 } from '../utils/render-timer-stub';
+
+import type { Model as HtmlRouteModel } from '../routes/render/html';
 
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
@@ -599,6 +602,19 @@ export default class CardPrerender extends Component {
       );
       if (this.localIndexer.renderError) {
         throw new Error(this.localIndexer.renderError);
+      }
+      // The html sub-route flags this when the card is the realm's
+      // default CardsGrid index and the realm has not opted in to
+      // keeping its prerendered isolated HTML. Short-circuit the
+      // Glimmer render entirely and return the boilerplate so the
+      // indexer pays a constant write cost regardless of realm size.
+      if (
+        format === 'isolated' &&
+        ancestorLevel === 0 &&
+        (routeInfo.attributes as HtmlRouteModel).useRealmIndexBoilerplate
+      ) {
+        await this.#ensureRenderReady(routeInfo);
+        return REALM_INDEX_BOILERPLATE_HTML;
       }
       let component = routeInfo.attributes.Component;
       this.#renderErrorPayload = undefined;

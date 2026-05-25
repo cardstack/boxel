@@ -13,6 +13,7 @@ import {
 } from './index';
 import {
   isRegisteredPrefix,
+  rri,
   unresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -39,6 +40,7 @@ import type { TimingDiagnostics } from './index';
 import {
   coerceTypes,
   type BoxelIndexTable,
+  type CardTypeSummary,
   type RealmVersionsTable,
 } from './index-structure';
 import { v4 as uuidv4 } from '@lukeed/uuid';
@@ -159,6 +161,15 @@ export interface FileEntry {
 export class Batch {
   readonly ready: Promise<void>;
   #invalidations = new Set<string>();
+  // URLs already written to boxel_index_working by an earlier attempt
+  // of *this same job*, with the last_modified value the previous
+  // attempt observed. Populated during `ready`. The visit loop in
+  // IndexRunner consults this map to skip work the previous attempt
+  // already finished; the from-scratch path additionally compares the
+  // stored last_modified against the current EFS mtime so a file that
+  // changed mid-attempt is re-visited rather than silently resumed
+  // with stale content.
+  #resumedRows = new Map<string, number | null>();
   // Correlation ID minted once per Batch and stamped into every row's
   // `timing_diagnostics` via `updateEntry`, so operators can
   // `SELECT ... WHERE timing_diagnostics->>'invalidationId' = '...'`
@@ -180,7 +191,76 @@ export class Batch {
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
-    this.ready = this.setNextRealmVersion();
+    this.ready = this.setupBatch();
+  }
+
+  private async setupBatch(): Promise<void> {
+    await this.setNextRealmVersion();
+    await this.loadResumedRows();
+  }
+
+  private async loadResumedRows(): Promise<void> {
+    if (!this.jobInfo || this.jobInfo.jobId <= 0) {
+      return;
+    }
+    // Exclude `has_error = true` rows. A retry exists precisely so a
+    // transient failure (renderer hang, network blip, OOM) gets a
+    // second chance — preserving the prior error row would freeze
+    // the URL in the failed state until some unrelated change kicks
+    // a different job. Tombstones (`is_deleted = true`) are
+    // similarly excluded so the deletion intent flows through to
+    // `applyBatchUpdates` instead of being skipped as resumed work.
+    let rows = (await this.#query([
+      `SELECT url, last_modified FROM boxel_index_working WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['job_id =', param(this.jobInfo.jobId)],
+        any([['is_deleted = false'], ['is_deleted IS NULL']]),
+        any([['has_error = false'], ['has_error IS NULL']]),
+      ]),
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'last_modified'>[];
+    for (let { url, last_modified } of rows) {
+      this.#resumedRows.set(
+        url,
+        last_modified == null ? null : parseInt(last_modified),
+      );
+      // Pre-seed the in-memory invalidation set so `applyBatchUpdates`
+      // promotes the resumed rows even though no `updateEntry` /
+      // `invalidate` call in this attempt added them. Without this,
+      // resumed work would sit in the working table indefinitely
+      // because the SELECT ... INTO boxel_index keys on
+      // `#invalidations`.
+      this.#invalidations.add(url);
+    }
+    this.#perfLog.debug(
+      `${jobIdentity(this.jobInfo)} resuming ${this.#resumedRows.size} URLs from prior attempt for ${this.realmURL.href}`,
+    );
+  }
+
+  /**
+   * URLs already processed by an earlier attempt of this job. The map
+   * value is the `last_modified` the previous attempt observed (null
+   * for tombstones / file rows without an mtime). The from-scratch
+   * caller compares this against the current EFS mtime to decide
+   * whether the resumed row is still authoritative.
+   */
+  get resumedRows(): ReadonlyMap<string, number | null> {
+    return this.#resumedRows;
+  }
+
+  /**
+   * Drop URLs from the resumed-row map. Call this when the caller has
+   * concluded the previous attempt's content for those URLs is no
+   * longer authoritative — typically because the file has been
+   * deleted from disk between attempts. After calling this,
+   * `tombstoneEntries` will tombstone the URLs normally and
+   * `applyBatchUpdates` will promote the tombstones to
+   * `boxel_index`, so the deletion lands.
+   */
+  forgetResumedRows(urls: string[]): void {
+    for (let url of urls) {
+      this.#resumedRows.delete(url);
+    }
   }
 
   get invalidations() {
@@ -204,8 +284,8 @@ export class Batch {
 
   @Memoize()
   private get nodeResolvedInvalidations() {
-    return [...this.invalidations].map(
-      (href) => trimExecutableExtension(new URL(href)).href,
+    return [...this.invalidations].map((href) =>
+      trimExecutableExtension(rri(href)),
     );
   }
 
@@ -253,6 +333,7 @@ export class Batch {
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.realm_version = this.realmVersion;
+      entry.job_id = this.jobInfo?.jobId ?? null;
       entry.file_alias = copyURL(entry.file_alias);
       entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
       entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
@@ -312,6 +393,28 @@ export class Batch {
       // TODO this is a workaround for CS-6886. after we have solved that issue we can
       // drop this band-aid
       return;
+    }
+    // An instance-error / file-error entry whose `.error.message` is
+    // empty would persist as a row with `has_error = true` and an
+    // error_doc that is null or missing the human-readable text. Such
+    // a row is invisible to UI and DB-only triage, and historically
+    // produced indexing jobs that re-reserved indefinitely without
+    // ever rejecting. Throw at the boundary so the caller's stderr log
+    // carries the underlying render error and the worker can finalize
+    // the reservation against the per-job cap instead of silently
+    // writing a black-hole row.
+    if (
+      isErrorEntry(entry) &&
+      (!entry.error ||
+        typeof entry.error.message !== 'string' ||
+        entry.error.message.length === 0)
+    ) {
+      throw new Error(
+        `indexer refused ${entry.type} entry for ${url.href}: ` +
+          `error.message is empty. An upstream entry-construction site dropped ` +
+          `the underlying render error. Check worker stderr for the actual ` +
+          `failure text.`,
+      );
     }
     let href = url.href;
     this.#invalidations.add(url.href);
@@ -432,11 +535,12 @@ export class Batch {
     }
     let preparedEntry = {
       url: href,
-      file_alias: trimExecutableExtension(url).href.replace(/\.json$/, ''),
+      file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_version: this.realmVersion,
       realm_url: this.realmURL.href,
       is_deleted: false,
       indexed_at: Date.now(),
+      job_id: this.jobInfo?.jobId ?? null,
       ...entryPayload,
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
@@ -514,6 +618,7 @@ export class Batch {
       last_modified: _remove2,
       resource_created_at: _remove3,
       realm_version: _remove4,
+      job_id: _remove5,
       ...productionVersion
     } = entry;
     return {
@@ -558,31 +663,16 @@ export class Batch {
   }
 
   private async updateRealmMeta() {
-    let results = await this.#query([
-      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, i.display_names->>0 as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
-       FROM boxel_index_working as i
-          WHERE`,
-      ...every([
-        ['i.realm_url =', param(this.realmURL.href)],
-        ['i.type = ', param('instance')],
-        ['i.types IS NOT NULL'],
-        [
-          dbExpression({
-            pg: `(i.types->>0) IS NOT NULL`,
-            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
-          }),
-        ],
-        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
-      ]),
-      `GROUP BY i.display_names->>0, i.types->>0`,
-      `ORDER BY i.display_names->>0 ASC`,
-    ] as Expression);
+    let instances = await this.#fetchTypeSummary('instance');
+    let files = await this.#fetchTypeSummary('file');
+
+    let value = { instances, files };
 
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
         realm_version: this.realmVersion,
-        value: results,
+        value,
         indexed_at: unixTime(new Date().getTime()),
       } as Omit<RealmMetaTable, 'indexed_at'> & {
         indexed_at: number;
@@ -600,6 +690,46 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  // Aggregates per-type summaries (count, display name, code-ref key, icon)
+  // for one kind of row in boxel_index_working — either CardDef instances or
+  // FileDef files. The shape of the result rows matches `CardTypeSummary`
+  // exactly, so callers can drop them straight into `realm_meta.value`.
+  //
+  // Grouping is by `code_ref` only (not also by display_name). Display name
+  // is aggregated with `MAX(...)`, which skips NULLs — so if some rows for
+  // a given code_ref carry a populated display_name (extracted by the
+  // current FileDefAttributesExtractor) and others carry an empty
+  // `display_names` array (extracted by older indexer code that hadn't
+  // shipped Step 2 yet), the rollup still produces a single summary row
+  // with the non-null label. Without this, CardsGrid's sidebar shows two
+  // entries for the same type — one labeled "Markdown", one labeled
+  // "MarkdownDef" (the CodeRef-name fallback) — that resolve to identical
+  // searches and confuse users during the transition window.
+  async #fetchTypeSummary(
+    indexType: BoxelIndexTable['type'],
+  ): Promise<CardTypeSummary[]> {
+    let results = await this.#query([
+      `SELECT CAST(count(DISTINCT i.url) AS INTEGER) as total, MAX(i.display_names->>0) as display_name, i.types->>0 as code_ref, MAX(i.icon_html) as icon_html
+       FROM boxel_index_working as i
+          WHERE`,
+      ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.type = ', param(indexType)],
+        ['i.types IS NOT NULL'],
+        [
+          dbExpression({
+            pg: `(i.types->>0) IS NOT NULL`,
+            sqlite: `json_extract(i.types, '$[0]') IS NOT NULL`,
+          }),
+        ],
+        any([['i.is_deleted = false'], ['i.is_deleted IS NULL']]),
+      ]),
+      `GROUP BY i.types->>0`,
+      `ORDER BY MAX(i.display_names->>0) ASC NULLS LAST`,
+    ] as Expression);
+    return results as unknown as CardTypeSummary[];
   }
 
   private async applyBatchUpdates() {
@@ -646,11 +776,20 @@ export class Batch {
   }
 
   private async pruneObsoleteEntries() {
+    // Delete every realm_meta row for this realm except the one we just
+    // wrote. The previous predicate (`realm_version < this.realmVersion`)
+    // only swept rows from incremental indexing where versions march
+    // forward. A from-scratch reindex resets the version to a low number,
+    // leaving older high-version rows orphaned forever — those legacy rows
+    // then poisoned `_types` reads when the SELECT picked the wrong one.
+    // Cleaning by `!=` covers both directions safely; the unique key on
+    // (realm_url, realm_version) guarantees we never accidentally keep
+    // two current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
       'WHERE',
       ...every([
-        ['realm_version <', param(this.realmVersion)],
+        ['realm_version !=', param(this.realmVersion)],
         ['realm_url =', param(this.realmURL.href)],
       ]),
     ] as Expression);
@@ -688,7 +827,27 @@ export class Batch {
     // = <id>`) also surface the delete rows for this pass — otherwise
     // tombstones would inherit a stale ID from a prior write or stay
     // NULL entirely, misattributing deletes in the grouping view.
-    let existingTypes = await this.existingIndexTypes(invalidations);
+    //
+    // Filter out URLs the previous attempt of this job already wrote
+    // a real (non-tombstone) row for. Tombstoning would upsert over
+    // that real content and erase the previous attempt's progress,
+    // defeating the resume.
+    let toTombstone = invalidations.filter(
+      (url) => !this.#resumedRows.has(url),
+    );
+    if (toTombstone.length === 0) {
+      return;
+    }
+    let existingTypes = await this.existingIndexTypes(toTombstone);
+    // `has_error` and `error_doc` are listed (with explicit false / null
+    // values per row) so the upsert's ON CONFLICT SET clause clears them.
+    // The primary key is `(url, realm_url, type)` — no `realm_version` —
+    // so a tombstone always collides with the prior row, and any column
+    // NOT in this list keeps its previous value. Without these two,
+    // a row that ever held `has_error = true` would carry that flag
+    // (and whatever `error_doc` it had at the time, including
+    // `jsonb null`) through every subsequent reindex, producing a row
+    // that reads as "errored but with no message" indefinitely.
     let columns = [
       'url',
       'file_alias',
@@ -696,7 +855,10 @@ export class Batch {
       'realm_version',
       'realm_url',
       'is_deleted',
+      'has_error',
+      'error_doc',
       'timing_diagnostics',
+      'job_id',
     ].map((c) => [c]);
     let tombstoneDiagnostics: TimingDiagnostics = {
       invalidationId: this.#currentInvalidationId,
@@ -708,7 +870,8 @@ export class Batch {
     // regular `updateEntry` path reaches jsonb via `asExpressions`
     // with a `jsonFields` list, which does the same thing).
     let tombstoneDiagnosticsJson = JSON.stringify(tombstoneDiagnostics);
-    let rows = invalidations.flatMap((id) => {
+    let jobIdValue = this.jobInfo?.jobId ?? null;
+    let rows = toTombstone.flatMap((id) => {
       let types = existingTypes.get(id);
       if (!types || types.length === 0) {
         return [];
@@ -716,14 +879,16 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          isRegisteredPrefix(id)
-            ? id.replace(/\.(gts|ts|js|gjs)$/, '')
-            : trimExecutableExtension(new URL(id)).href,
+          trimExecutableExtension(rri(id)),
           type,
           this.realmVersion,
           this.realmURL.href,
-          true,
+          true, // is_deleted
+          false, // has_error — explicit clear so stale error state from
+          // a prior pass does not survive the deletion
+          null, // error_doc — same rationale
           tombstoneDiagnosticsJson,
+          jobIdValue,
         ].map((v) => [param(v)]),
       );
     });
@@ -838,7 +1003,7 @@ export class Batch {
     let invalidations: string[] = [];
     for (let url of urls) {
       for (let seed of await this.invalidationSeeds(url)) {
-        let alias = trimExecutableExtension(new URL(seed)).href;
+        let alias = trimExecutableExtension(rri(seed));
         let workingInvalidations = [
           ...new Set([
             ...(!this.nodeResolvedInvalidations.includes(alias) ? [seed] : []),
@@ -869,6 +1034,90 @@ export class Batch {
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
+  }
+
+  // Returns the minimum projection (url, type, deps) needed to order
+  // invalidations by dependency. Server-side selection picks one row per
+  // (url, type) with priority: working-non-deleted > production > working-deleted,
+  // applied via a window function over UNION ALL of both tables. Avoids the
+  // double client-side merge and the dead-weight `error_doc` payload that
+  // `getDependencyRows` carries for the error fan-out path.
+  async getOrderingDependencyRows(
+    urls: string[],
+  ): Promise<Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[]> {
+    await this.ready;
+    if (urls.length === 0) {
+      return [];
+    }
+
+    let uniqueUrls = [...new Set(urls)];
+    // SQLite has a lower parameter limit than Postgres. Each batch binds
+    // `realm_url` and the URL list once per source table, so the per-batch
+    // param count is roughly 2 * (urlBatchSize + 1). Keep the per-call total
+    // within safe bounds for both adapters.
+    let urlBatchSize = this.#dbAdapter.kind === 'sqlite' ? 450 : 2500;
+    let selected: Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[] = [];
+    for (let i = 0; i < uniqueUrls.length; i += urlBatchSize) {
+      let urlBatch = uniqueUrls.slice(i, i + urlBatchSize);
+      let batchRows = await this.queryOrderingDependencyRows(urlBatch);
+      selected.push(...batchRows);
+    }
+    return selected;
+  }
+
+  private async queryOrderingDependencyRows(
+    urls: string[],
+  ): Promise<Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>[]> {
+    if (urls.length === 0) {
+      return [];
+    }
+    let rows = (await this.#query([
+      'SELECT url, type, deps FROM (',
+      'SELECT url, type, deps,',
+      'ROW_NUMBER() OVER (PARTITION BY url, type ORDER BY source_priority) AS rn',
+      'FROM (',
+      'SELECT url, type, deps,',
+      'CASE WHEN is_deleted THEN 2 ELSE 0 END AS source_priority',
+      'FROM boxel_index_working WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+      'UNION ALL',
+      'SELECT url, type, deps, 1 AS source_priority',
+      'FROM boxel_index WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        [
+          'url IN',
+          ...addExplicitParens(
+            separatedByCommas(urls.map((url) => [param(url)])),
+          ),
+        ],
+        any([
+          ['type =', param('instance')],
+          ['type =', param('file')],
+        ]),
+      ]),
+      ') candidates',
+      ') ranked',
+      'WHERE rn = 1',
+    ] as Expression)) as Pick<BoxelIndexTable, 'url' | 'type' | 'deps'>[];
+
+    return rows.map((row) => ({
+      url: row.url,
+      type: row.type,
+      deps: row.deps ?? null,
+    }));
   }
 
   async getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]> {
@@ -1069,7 +1318,7 @@ export class Batch {
   ): Promise<string[]> {
     if (
       visited.has(resolvedPath) ||
-      this.nodeResolvedInvalidations.includes(resolvedPath)
+      this.nodeResolvedInvalidations.includes(rri(resolvedPath))
     ) {
       return [];
     }
@@ -1168,7 +1417,7 @@ export class Batch {
       resolved.search = '';
       resolved.hash = '';
       resolved = depMapper ? depMapper(resolved) : resolved;
-      return trimExecutableExtension(resolved).href;
+      return trimExecutableExtension(rri(resolved.href));
     } catch (_err) {
       return dep;
     }

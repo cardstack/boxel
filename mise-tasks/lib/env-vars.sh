@@ -26,15 +26,16 @@ export PGPORT="${PGPORT:-5435}"
 # All turbo defaults can be overridden individually.
 if [ "${BOXEL_TURBO:-}" = "true" ]; then
   : "${PRERENDER_COUNT:=3}"
-  : "${PRERENDER_PAGE_POOL_SIZE:=4}"
+  : "${PRERENDER_PAGE_POOL_MIN:=4}"
+  : "${PRERENDER_PAGE_POOL_MAX:=4}"
   : "${WORKER_HIGH_PRIORITY_COUNT:=4}"
   : "${WORKER_ALL_PRIORITY_COUNT:=4}"
 fi
 
 # Prerender scaling
 export PRERENDER_COUNT="${PRERENDER_COUNT:-1}"
-export PRERENDER_PAGE_POOL_SIZE="${PRERENDER_PAGE_POOL_SIZE:-4}"
-export PRERENDER_AFFINITY_TAB_MAX="${PRERENDER_AFFINITY_TAB_MAX:-$PRERENDER_PAGE_POOL_SIZE}"
+export PRERENDER_PAGE_POOL_MIN="${PRERENDER_PAGE_POOL_MIN:-4}"
+export PRERENDER_PAGE_POOL_MAX="${PRERENDER_PAGE_POOL_MAX:-4}"
 export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 
 # Worker scaling
@@ -46,15 +47,31 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ENV_SLUG
   export ENV_MODE=true
 
-  # Service URLs (Traefik hostnames)
-  export REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
-  export REALM_TEST_URL="http://realm-test.${ENV_SLUG}.localhost"
-  export MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
-  export WORKER_MGR_URL="http://worker.${ENV_SLUG}.localhost"
-  export WORKER_TEST_MGR_URL="http://worker-test.${ENV_SLUG}.localhost"
-  export PRERENDER_MGR_URL="http://prerender-mgr.${ENV_SLUG}.localhost"
-  export ICONS_URL="http://icons.${ENV_SLUG}.localhost"
-  export HOST_URL="http://host.${ENV_SLUG}.localhost"
+  # Drop standard-mode TLS env vars if they leaked in from a parent
+  # shell or a prior mise activation. In env mode Traefik terminates
+  # TLS in front of plain-HTTP services; leaving these set tells vite
+  # and the realm-server to terminate TLS themselves, so Traefik then
+  # speaks HTTP to a TLS-expecting upstream and every request fails
+  # with "HTTP/0.9 when not allowed". NODE_EXTRA_CA_CERTS is kept —
+  # Node clients still need to trust Traefik's mkcert leaf.
+  unset REALM_SERVER_TLS_CERT_FILE
+  unset REALM_SERVER_TLS_KEY_FILE
+
+  # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
+  # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
+  # traefik/dynamic/tls.yml references). Plain :80 routes 308-redirect
+  # to https — see packages/host/scripts/traefik-helpers.js and
+  # packages/realm-server/lib/dev-service-registry.ts. Everything is
+  # https so the host app's same-origin / mixed-content rules don't
+  # block fetches from the https host page to the realm services.
+  export REALM_BASE_URL="https://realm-server.${ENV_SLUG}.localhost"
+  export REALM_TEST_URL="https://realm-test.${ENV_SLUG}.localhost"
+  export MATRIX_URL_VAL="https://matrix.${ENV_SLUG}.localhost"
+  export WORKER_MGR_URL="https://worker.${ENV_SLUG}.localhost"
+  export WORKER_TEST_MGR_URL="https://worker-test.${ENV_SLUG}.localhost"
+  export PRERENDER_MGR_URL="https://prerender-mgr.${ENV_SLUG}.localhost"
+  export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
+  export HOST_URL="https://host.${ENV_SLUG}.localhost"
 
   # Database
   export PGDATABASE="${PGDATABASE:-boxel_${ENV_SLUG}}"
@@ -82,15 +99,17 @@ else
     # Transitioning from env mode to standard mode in the same shell:
     # reset derived variables to standard defaults to avoid stale env-mode values.
 
-    # Service URLs
-    export REALM_BASE_URL="http://localhost:4201"
-    export REALM_TEST_URL="http://localhost:4202"
+    # Service URLs. Realm-server speaks HTTPS+HTTP/2 in local dev — the
+    # dev cert is mandatory (see `infra:ensure-dev-cert` and the
+    # repo-root README "Local HTTPS dev access" section).
+    export REALM_BASE_URL="https://localhost:4201"
+    export REALM_TEST_URL="https://localhost:4202"
     export MATRIX_URL_VAL="http://localhost:8008"
     export WORKER_MGR_URL="http://localhost:4210"
     export WORKER_TEST_MGR_URL="http://localhost:4211"
     export PRERENDER_MGR_URL="http://localhost:4222"
     export ICONS_URL="http://localhost:4206"
-    export HOST_URL="http://localhost:4200"
+    export HOST_URL="https://localhost:4200"
 
     # Database
     export PGDATABASE="boxel"
@@ -112,15 +131,18 @@ else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
 
-    # Service URLs — use :- so production/staging env vars are not clobbered
-    export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
-    export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
+    # Service URLs — use :- so production/staging env vars are not
+    # clobbered. Realm-server speaks HTTPS+HTTP/2 in local dev; the dev
+    # cert is mandatory (see `infra:ensure-dev-cert` and the repo-root
+    # README "Local HTTPS dev access").
+    export REALM_BASE_URL="${REALM_BASE_URL:-https://localhost:4201}"
+    export REALM_TEST_URL="${REALM_TEST_URL:-https://localhost:4202}"
     export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
     export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
     export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
     export PRERENDER_MGR_URL="${PRERENDER_MGR_URL:-http://localhost:4222}"
     export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
-    export HOST_URL="${HOST_URL:-http://localhost:4200}"
+    export HOST_URL="${HOST_URL:-https://localhost:4200}"
 
     # Database
     export PGDATABASE="${PGDATABASE:-boxel}"
@@ -141,4 +163,96 @@ else
   fi
 
   unset _PREV_ENV_MODE
+
+  # Local HTTPS dev access: when the cert provisioned by
+  # `mise run infra:ensure-dev-cert` is present, expose its paths to
+  # the realm-server so it terminates HTTPS+HTTP/2 on the canonical
+  # port, and point Node clients at mkcert's local CA via
+  # NODE_EXTRA_CA_CERTS so they trust the cert without requiring
+  # `mkcert -install` to have written it into the system trust store.
+  # If the cert is missing, the realm-server falls back to plain HTTP
+  # (tests/CI path). See the repo-root README "Local HTTPS dev access".
+  _BOXEL_DEV_CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+  _BOXEL_DEV_CERT_FILE="$_BOXEL_DEV_CERT_DIR/localhost.pem"
+  _BOXEL_DEV_KEY_FILE="$_BOXEL_DEV_CERT_DIR/localhost-key.pem"
+  if [ -f "$_BOXEL_DEV_CERT_FILE" ] && [ -f "$_BOXEL_DEV_KEY_FILE" ]; then
+    export REALM_SERVER_TLS_CERT_FILE="$_BOXEL_DEV_CERT_FILE"
+    export REALM_SERVER_TLS_KEY_FILE="$_BOXEL_DEV_KEY_FILE"
+    # Vite's dev server terminates TLS using the same cert (see
+    # packages/host/vite.config.mjs). Flip HOST_URL to https so every
+    # consumer (browser, realm-server distURL rewriter, prerender
+    # standby probe) hits the same scheme — mixing http + https
+    # between vite and realm-server triggers CORS preflight failures
+    # ("Redirect is not allowed for a preflight request").
+    export HOST_URL="https://localhost:4200"
+    if command -v mkcert >/dev/null 2>&1; then
+      _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+      if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+        # Node's NODE_EXTRA_CA_CERTS accepts a single PEM file path (not
+        # a colon-separated list). If the dev has already pointed it at
+        # something, leave their value in place — they presumably have
+        # mkcert's CA in there already, or know what they're doing.
+        # Otherwise point at mkcert's rootCA so realm-server fetches
+        # validate against the local cert without `mkcert -install`.
+        if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+          export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
+        fi
+      fi
+      unset _BOXEL_MKCERT_CAROOT
+    fi
+  fi
+  unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
+
+  # Puppeteer 24.35 (and the lockfile's tree) bundles Chrome 143, which
+  # has a known h2 stream-window bug that hangs the dev prerender forever
+  # on the first cold-start fetch of vite's large pre-optimized
+  # `indexeddb-crypto-store` chunk (matrix-js-sdk). Newer Chrome (148+)
+  # doesn't hit the bug. Both prerender's BrowserManager and the
+  # standby-warmup probe (`scripts/wait-for-host-standby.ts`) already
+  # honor `PUPPETEER_EXECUTABLE_PATH`, so just point them at the system
+  # chrome when one's installed. Devs without google-chrome installed
+  # keep the bundled puppeteer chromium — they'll see the hang stall
+  # longer until vite's optimizer cache warms up.
+  if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
+    # Explicit checks (not a for-loop) so the macOS path's embedded space
+    # doesn't get word-split by /bin/sh — env-vars.sh runs under whatever
+    # shell mise invokes, and POSIX sh handles backslash-escapes in for-
+    # loop word lists inconsistently across implementations.
+    if [ -x /usr/bin/google-chrome ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+    elif [ -x /usr/bin/google-chrome-stable ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+    elif [ -x /usr/bin/chromium ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+    elif [ -x /usr/bin/chromium-browser ]; then
+      export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+    elif [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+      export PUPPETEER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    elif [ -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]; then
+      export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
+    fi
+  fi
+fi
+
+# Trust the mkcert root CA in Node clients regardless of env-mode vs
+# standard mode. Both modes serve the same mkcert leaf — standard
+# mode via the realm-server's own h2 dispatcher, env mode via Traefik
+# in front of plain-HTTP services — so any Node-side fetch to
+# `https://host/matrix/realm-server.<...>.localhost` needs the CA
+# trusted to pass `tls.checkServerIdentity`. Without this, env-mode
+# realm-server's startup `getIndexHTML()` smoke-test fetch fails with
+# `TypeError: fetch failed` and `process.exit(-2)` — the visible
+# symptom is realm-server crash-looping and every public URL 502-ing.
+if command -v mkcert >/dev/null 2>&1; then
+  _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+  if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+    # NODE_EXTRA_CA_CERTS accepts a single PEM file path (not a
+    # colon-separated list). If the dev has already pointed it at
+    # something, leave their value in place — they presumably have
+    # mkcert's CA bundled in already, or know what they're doing.
+    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+      export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
+    fi
+  fi
+  unset _BOXEL_MKCERT_CAROOT
 fi

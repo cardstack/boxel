@@ -51,6 +51,15 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     targetPassword,
   );
 
+  // CS-10725: profile manager now requires `matrixAccessToken` on
+  // the stored profile instead of `password`. Log in once here so we
+  // can write the post-swap shape into the temp profile below.
+  let matrixAuth = await loginToMatrix(
+    matrixURL,
+    targetUsername,
+    targetPassword,
+  );
+
   // Serve the brief from a local HTTP server since the harness source realm
   // uses a fixture that doesn't include Wiki cards
   let briefServer = createServer((request, response) => {
@@ -68,26 +77,25 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
   let realmServerURL = realm.realmServerURL.href;
   let newEndpoint = `e2e-realm-${Date.now()}`;
-  let targetRealmUrl = new URL(
-    `${targetUsername}/${newEndpoint}/`,
-    realmServerURL,
-  ).href;
+  let targetRealm = new URL(`${targetUsername}/${newEndpoint}/`, realmServerURL)
+    .href;
 
   let tempProfileHome = createTempProfileHome(
     targetUsername,
-    targetPassword,
+    matrixAuth,
     matrixURL,
     realmServerURL,
   );
 
   try {
     // The factory always runs the issue loop after seed creation. We
-    // force the OpenRouter path here so the loop fails deterministically
-    // on the missing OPENROUTER_API_KEY — this test is only validating
-    // seed-issue creation and target-realm bootstrap, not the agent loop.
-    // Without the explicit `--agent openrouter`, the default `claude`
-    // backend would try to use the Claude Agent SDK, with less
-    // predictable failure modes in the test harness.
+    // force the OpenRouter path with an obviously-invalid API key so
+    // opencode takes the direct path and fail-fasts on a 401 from
+    // openrouter.ai — this test is only validating seed-issue creation
+    // and target-realm bootstrap, not the agent loop. Without the
+    // explicit key, the openrouter path falls into passthrough mode and
+    // opencode hangs trying to reach the realm-server proxy, which
+    // would time out the whole test.
     let result = await runCommand(
       'node',
       [
@@ -97,13 +105,15 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         resolve(packageRoot, 'src/cli/factory-entrypoint.ts'),
         '--brief-url',
         briefUrl,
-        '--target-realm-url',
-        targetRealmUrl,
+        '--target-realm',
+        targetRealm,
         '--realm-server-url',
         realmServerURL,
         '--no-retry-blocked',
         '--agent',
         'openrouter',
+        '--openrouter-api-key',
+        'sk-or-test-invalid',
       ],
       {
         cwd: packageRoot,
@@ -128,10 +138,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       matrixURL,
       targetUsername,
       targetPassword,
-      targetRealmUrl,
+      targetRealm,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmUrl).href;
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealm).href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,
@@ -150,9 +160,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       };
     };
     expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-    // The loop picks up the seed issue and sets it to in_progress before
-    // the agent fails (no OPENROUTER_API_KEY), so the status is in_progress.
-    expect(issueJson.data.attributes.status).toBe('in_progress');
+    // The loop picks up the seed issue and starts it, the agent reports
+    // a hard backend error (401 from openrouter.ai because we passed an
+    // invalid key on purpose), and the loop marks the issue blocked.
+    expect(issueJson.data.attributes.status).toBe('blocked');
     expect(issueJson.data.attributes.summary).toContain(
       'Process brief and create project artifacts',
     );
@@ -164,9 +175,43 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   }
 });
 
-function createTempProfileHome(
+interface MatrixAuth {
+  accessToken: string;
+  userId: string;
+  deviceId: string;
+}
+
+async function loginToMatrix(
+  matrixURL: string,
   username: string,
   password: string,
+): Promise<MatrixAuth> {
+  let baseUrl = matrixURL.endsWith('/') ? matrixURL : `${matrixURL}/`;
+  let response = await fetch(`${baseUrl}_matrix/client/v3/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': SupportedMimeType.JSON },
+    body: JSON.stringify({
+      type: 'm.login.password',
+      identifier: { type: 'm.id.user', user: username },
+      password,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to login to Matrix as ${username}: HTTP ${response.status} ${await response.text()}`,
+    );
+  }
+  let { access_token, user_id, device_id } = (await response.json()) as {
+    access_token: string;
+    user_id: string;
+    device_id: string;
+  };
+  return { accessToken: access_token, userId: user_id, deviceId: device_id };
+}
+
+function createTempProfileHome(
+  username: string,
+  auth: MatrixAuth,
   matrixUrl: string,
   realmServerUrl: string,
 ): string {
@@ -179,7 +224,13 @@ function createTempProfileHome(
     join(boxelCliDir, 'profiles.json'),
     JSON.stringify({
       profiles: {
-        [profileId]: { matrixUrl, realmServerUrl, password },
+        [profileId]: {
+          matrixUrl,
+          realmServerUrl,
+          matrixAccessToken: auth.accessToken,
+          matrixUserId: auth.userId,
+          matrixDeviceId: auth.deviceId,
+        },
       },
       activeProfile: profileId,
     }),

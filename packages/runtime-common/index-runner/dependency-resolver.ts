@@ -3,7 +3,7 @@ import type {
   SearchIndexErrorEntry,
   SingleCardDocument,
 } from '../index';
-import type { ModuleCacheEntries } from '../definition-lookup';
+import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
 import { canonicalURL } from './dependency-url';
 import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
@@ -12,10 +12,17 @@ import {
   type RelationshipSource,
 } from './relationship-dependency-extractor';
 
+type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
+
 interface DependencyResolverOptions {
   realmURL: URL;
-  readModuleCacheEntries(moduleIds: string[]): Promise<ModuleCacheEntries>;
+  readDefinitionCacheEntries(
+    moduleIds: string[],
+  ): Promise<DefinitionCacheEntries>;
   getDependencyRows(urls: string[]): Promise<DependencyIndexRow[]>;
+  // Slim projection (url, type, deps only) used by invalidation ordering.
+  // Selection priority is applied server-side; see IndexWriter.
+  getOrderingDependencyRows(urls: string[]): Promise<OrderingDependencyRow[]>;
   getInvalidations(): string[];
 }
 
@@ -29,20 +36,23 @@ interface DependencyResolverOptions {
  *   paths when runtime capture can be incomplete (short-circuit failures).
  */
 export class IndexRunnerDependencyManager {
-  #getDependencyRows: (urls: string[]) => Promise<DependencyIndexRow[]>;
+  #getOrderingDependencyRows: (
+    urls: string[],
+  ) => Promise<OrderingDependencyRow[]>;
   #indexBackedDependencyErrors: IndexBackedDependencyErrors;
   #relationshipDependencyExtractor: RelationshipDependencyExtractor;
 
   constructor({
     realmURL,
-    readModuleCacheEntries,
+    readDefinitionCacheEntries,
     getDependencyRows,
+    getOrderingDependencyRows,
     getInvalidations,
   }: DependencyResolverOptions) {
-    this.#getDependencyRows = getDependencyRows;
+    this.#getOrderingDependencyRows = getOrderingDependencyRows;
     this.#indexBackedDependencyErrors = new IndexBackedDependencyErrors({
       realmURL,
-      readModuleCacheEntries,
+      readDefinitionCacheEntries,
       getDependencyRows,
       getInvalidations,
     });
@@ -71,7 +81,7 @@ export class IndexRunnerDependencyManager {
     let byHref = new Map(urls.map((url) => [url.href, url]));
     let hrefs = [...byHref.keys()];
     let order = new Map(hrefs.map((href, index) => [href, index]));
-    let rows = await this.#getDependencyRows(hrefs);
+    let rows = await this.#getOrderingDependencyRows(hrefs);
 
     let edges = new Map<string, Set<string>>();
     let indegree = new Map<string, number>();

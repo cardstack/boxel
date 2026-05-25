@@ -18,6 +18,11 @@ import {
   readTranspiledModule,
   type ReadTranspiledResult,
 } from '../commands/read-transpiled';
+import {
+  touchFiles as coreTouchFiles,
+  type TouchResult,
+  type TouchCommandOptions,
+} from '../commands/file/touch';
 import { write as coreWrite, type WriteResult } from '../commands/file/write';
 import {
   cancelIndexing as coreCancelIndexing,
@@ -37,6 +42,7 @@ export type {
   SyncResult,
   SearchResult,
   SearchCommandOptions,
+  TouchResult,
 };
 
 const MIME = {
@@ -84,6 +90,16 @@ export interface SyncOptions {
   delete?: boolean;
   /** Preview without making changes. */
   dryRun?: boolean;
+  /**
+   * Block on the realm-server until uploaded cards have been indexed,
+   * not just durably written. Appends `?waitForIndex=true` to the
+   * `_atomic` POST. Trades upload latency for read-after-write
+   * consistency — useful when the next step queries the realm's index
+   * (search / list) and can't tolerate the indexer lag introduced by
+   * CS-11003 PR 2's deferred `+source` POST. Off by default; flip on
+   * for hand-off boundaries like the factory's post-seed sync.
+   */
+  waitForIndex?: boolean;
 }
 
 export type { DeleteResult };
@@ -200,6 +216,21 @@ export class BoxelCLIClient {
    */
   async delete(realmUrl: string, path: string): Promise<DeleteResult> {
     return deleteFile(realmUrl, path, {
+      profileManager: this.pm,
+    });
+  }
+
+  /**
+   * Touch one or more files in a realm to force re-indexing. Delegates to
+   * `touchFiles()` in `commands/file/touch.ts`.
+   */
+  async touch(
+    realmUrl: string,
+    paths: string[],
+    options?: Pick<TouchCommandOptions, 'all' | 'dryRun'>,
+  ): Promise<TouchResult> {
+    return coreTouchFiles(realmUrl, paths, {
+      ...options,
       profileManager: this.pm,
     });
   }
@@ -419,6 +450,18 @@ export class BoxelCLIClient {
     return this.pm.authedRealmServerFetch(input, init);
   }
 
+  /**
+   * Return the realm-server JWT, fetching one via Matrix login if no token
+   * is cached. Use only when you need to hand the bare token to a downstream
+   * client that can't go through `authedServerFetch` (e.g. opencode's
+   * static-Authorization provider config). Prefer `authedServerFetch` for
+   * server endpoints called from JS — it handles per-request 401 retries
+   * that this getter cannot.
+   */
+  async getServerToken(): Promise<string> {
+    return this.pm.getOrRefreshServerToken();
+  }
+
   async pull(
     realmUrl: string,
     localDir: string,
@@ -446,6 +489,7 @@ export class BoxelCLIClient {
       preferNewest: options?.preferNewest,
       delete: options?.delete,
       dryRun: options?.dryRun,
+      waitForIndex: options?.waitForIndex,
       profileManager: this.pm,
     });
   }

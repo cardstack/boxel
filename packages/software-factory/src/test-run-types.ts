@@ -2,37 +2,12 @@ import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 // ---------------------------------------------------------------------------
-// Realm Test Output Types
-// ---------------------------------------------------------------------------
-
-/**
- * Shape of the JSON summary emitted by `scripts/run-realm-tests.ts`.
- */
-export interface RunRealmTestsOutput {
-  sourceRealmPath?: string;
-  sourceRealmUrl?: string;
-  scratchPath?: string;
-  scratchRealmUrl?: string;
-  copiedFixtures?: string[];
-  expected?: number;
-  unexpected?: number;
-  skipped?: number;
-  failures?: RunRealmTestsFailure[];
-}
-
-export interface RunRealmTestsFailure {
-  title: string;
-  outcome: string;
-  error: string;
-}
-
-// ---------------------------------------------------------------------------
 // TestRun Card Types
 // ---------------------------------------------------------------------------
 
 /** Realm connection options for TestRun card operations. */
 export interface TestRunRealmOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   /** URL to the test-results module in the source realm. Required, never inferred. */
   testResultsModuleUrl: string;
   client: BoxelCLIClient;
@@ -127,7 +102,7 @@ export interface QunitResults {
 // ---------------------------------------------------------------------------
 
 export interface RunTestsInMemoryOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** URL of the host app served by the compat proxy (typically the realm server URL). */
   hostAppUrl: string;
@@ -158,7 +133,7 @@ export interface RunTestsResult {
 }
 
 export interface ExecuteTestRunOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   testResultsModuleUrl: string;
   slug: string;
   testNames: string[];
@@ -169,7 +144,7 @@ export interface ExecuteTestRunOptions {
   issueURL?: string;
   /** URL to the Project card — used for TestRun relationship. */
   projectCardUrl?: string;
-  /** Realm server URL. Required — never inferred from targetRealmUrl. */
+  /** Realm server URL. Required — never inferred from targetRealm. */
   realmServerUrl: string;
   /** URL of the host app served by the compat proxy (e.g., the realm server URL). */
   hostAppUrl: string;

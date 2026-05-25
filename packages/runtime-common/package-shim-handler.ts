@@ -1,3 +1,4 @@
+import { rri } from './card-reference-resolver';
 import { logger, trimExecutableExtension } from './index';
 
 export type ModuleLike = Record<string, any>;
@@ -6,7 +7,7 @@ export type ModuleDescriptor =
   | { id: string; resolve: () => Promise<ModuleLike> };
 
 function trimModuleIdentifier(moduleIdentifier: string): string {
-  return trimExecutableExtension(new URL(moduleIdentifier)).href;
+  return trimExecutableExtension(rri(moduleIdentifier));
 }
 
 export const PACKAGES_FAKE_ORIGIN = 'https://packages/';

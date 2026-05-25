@@ -1,4 +1,4 @@
-import { click, find, visit } from '@ember/test-helpers';
+import { click, find, visit, waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -115,6 +115,27 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')
       .containsText('Hello, world');
+  });
+
+  test('submode switcher exposes an app version tooltip', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor('[data-test-submode-switcher]');
+
+    let trigger = find(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    assert.ok(trigger, 'submode-switcher trigger renders');
+    let title = trigger?.getAttribute('title') ?? '';
+    assert.notStrictEqual(
+      title,
+      'Version undefined',
+      'app version is populated (not the broken Vite default)',
+    );
+    assert.ok(
+      /^Version \S+/.test(title),
+      `app version tooltip has the expected shape, got: ${title}`,
+    );
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {

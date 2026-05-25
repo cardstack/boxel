@@ -7,8 +7,10 @@ import { isTesting } from '@embroider/macros';
 
 import {
   baseFileRef,
+  baseRealm,
   formattedError,
   snapshotRuntimeDependencies,
+  trackRuntimeModuleDependency,
   withRuntimeDependencyTrackingContext,
   type RenderError,
 } from '@cardstack/runtime-common';
@@ -97,6 +99,7 @@ export default class RenderFileExtractRoute extends Route<Model> {
       contentSize,
       buildError: this.#buildError.bind(this),
     });
+    let fileApiURL = `${baseRealm.url}file-api`;
     let result: FileDefExtractResult;
     try {
       result = await withRuntimeDependencyTrackingContext(
@@ -106,7 +109,26 @@ export default class RenderFileExtractRoute extends Route<Model> {
           consumer: id,
           consumerKind: 'file',
         },
-        async () => await extractor.extract(),
+        async () => {
+          // `${baseRealm.url}file-api` is the public URL the indexer
+          // uses to invalidate file extracts, but the FileDef class
+          // physically lives in `card-api` (`baseFileRef.module`). The
+          // extractor only imports `card-api`, so without this line
+          // `file-api` never enters the tracker.
+          //
+          // Stamp the dep on the tracker directly rather than relying
+          // on `loader.import(fileApiURL)` to do it. `loader.import`'s
+          // synchronous `trackRuntimeModuleDependency` call sits behind
+          // a moduleShims check, the resolveImport URL rewrite, and the
+          // advanceToState machine — any of which can interpose if the
+          // page's loader was replaced (e.g. after
+          // `BrowserManager.restartBrowser()`), which is exactly the
+          // condition the file-extract test flakes under. Stamping the
+          // tracker directly here is one synchronous call with no
+          // moving parts.
+          trackRuntimeModuleDependency(fileApiURL);
+          return extractor.extract();
+        },
       );
     } catch (error) {
       result = {
@@ -117,7 +139,15 @@ export default class RenderFileExtractRoute extends Route<Model> {
       };
     }
     let { deps } = snapshotRuntimeDependencies({ excludeQueryOnly: true });
-    let mergedDeps = [...new Set([...(result.deps ?? []), ...deps])];
+    // Belt-and-suspenders: if the tracker call above didn't land in
+    // the snapshot for any reason (session ended, URL normalization
+    // mismatch), explicitly stamp `file-api` into the merged deps.
+    // The indexer's invalidation contract requires this URL to be
+    // present for file extracts; missing it produces silent
+    // never-invalidated rows.
+    let mergedDeps = [
+      ...new Set([...(result.deps ?? []), ...deps, fileApiURL]),
+    ];
     return {
       id,
       nonce,

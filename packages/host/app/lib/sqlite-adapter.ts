@@ -9,6 +9,7 @@ import {
   type DBAdapter,
   type PgPrimitive,
   type ExecuteOptions,
+  type Querier,
   Deferred,
 } from '@cardstack/runtime-common';
 
@@ -51,6 +52,34 @@ export default class SQLiteAdapter implements DBAdapter {
     this.assertNotClosed();
     await this.started;
     return await this.internalExecute(sql, opts);
+  }
+
+  // SQLite has no pub/sub primitive and the host runs a single in-process
+  // realm with no peers to notify, so this is intentionally a no-op.
+  async notify(_channel: string, _payload: string): Promise<void> {}
+
+  // SQLite has no cross-connection concurrency to coordinate, so this is
+  // a passthrough — `txQuerier` is always undefined; callers shouldn't
+  // depend on any transactional grouping here. The PG implementation
+  // provides the real serialization across replicas. We match the
+  // `DBAdapter` signature (`Querier | undefined`) rather than narrowing
+  // to `undefined` so callers of this concrete class get the same
+  // contextually-typed callback parameter as they would for any DBAdapter.
+  async withWriteLock<T>(
+    _realmUrl: string,
+    fn: (txQuerier: Querier | undefined) => Promise<T>,
+  ): Promise<T> {
+    return await fn(undefined);
+  }
+
+  // SQLite has no cross-connection concurrency to coordinate, so the
+  // per-user cost-barrier lock is a passthrough. The PG implementation
+  // provides the real serialization across replicas.
+  async withUserCostLock<T>(
+    _matrixUserId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    return await fn();
   }
 
   private async internalExecute(sql: string, opts?: ExecuteOptions) {

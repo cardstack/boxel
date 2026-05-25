@@ -14,7 +14,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import {
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
@@ -261,7 +261,7 @@ export default class CreateSpecCommand extends HostBaseCommand<
     let url: string;
     if (codeRef) {
       let relativeTo = new URL(targetRealm);
-      let maybeAbsoluteRef = codeRefWithAbsoluteURL(codeRef, relativeTo);
+      let maybeAbsoluteRef = codeRefWithAbsoluteIdentifier(codeRef, relativeTo);
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         codeRef = maybeAbsoluteRef;
       }

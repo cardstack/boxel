@@ -28,6 +28,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     }
 
     setupPermissionedRealmCached(hooks, {
+      fixture: 'blank',
       permissions: {
         mary: ['read'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],

@@ -9,6 +9,18 @@ import type { SynapseInstance } from '../docker/synapse';
 
 setGracefulCleanup();
 
+// The isolated realm-server / worker stack matches production:
+// HTTPS+HTTP/2 on `https://localhost:4205`. URL maps, realm registry
+// entries, and the Playwright `baseURL` all hardcode `https://`, and
+// the spawned child processes inherit `REALM_SERVER_TLS_CERT_FILE` /
+// `_KEY_FILE` from `mise-tasks/lib/env-vars.sh` so the same mkcert
+// leaf the parent dev stack uses on :4201/:4202 also terminates TLS
+// on :4205. Keeping the wire protocol identical to prod means the
+// matrix suite acts as a regression guard on the h2 framing changes
+// elsewhere in this PR (`setContextResponse` h1-only-header filter,
+// `fetchRequestFromContext` pseudo-header strip, the HEAD-stream
+// `writable` patch, and the hand-rolled `proxyAsset` forwarder).
+
 const testRealmCards = resolve(
   join(__dirname, '..', '..', 'host', 'tests', 'cards'),
 );
@@ -18,9 +30,13 @@ const skillsRealmDir = resolve(
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
-export const appURL = 'http://localhost:4205/test';
+export const appURL = 'https://localhost:4205/test';
 
 const DEFAULT_PRERENDER_PORT = 4231;
+const DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS = 120_000;
+const DEFAULT_WORKER_START_TIMEOUT_MS = 90_000;
+const DEFAULT_REALM_SERVER_START_TIMEOUT_MS = 120_000;
+const STARTUP_LOG_TAIL_LINES = 80;
 
 export interface PrerenderServerConfig {
   port?: number;
@@ -39,6 +55,85 @@ export interface StartRealmServerOptions {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseTimeoutMs(
+  rawValue: string | undefined,
+  fallbackMs: number,
+): number {
+  let parsed = Number.parseInt(rawValue ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
+function pushOutputTail(output: string[], prefix: string, data: Buffer): void {
+  for (let line of data.toString().split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    output.push(`${prefix}${line}`);
+  }
+  if (output.length > STARTUP_LOG_TAIL_LINES) {
+    output.splice(0, output.length - STARTUP_LOG_TAIL_LINES);
+  }
+}
+
+function readMetadataFile(filePath: string): unknown | undefined {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function describeChildProcess(proc: ChildProcess | undefined) {
+  if (!proc) {
+    return { started: false };
+  }
+  return {
+    started: true,
+    pid: proc.pid ?? null,
+    exitCode: proc.exitCode,
+    signalCode: proc.signalCode,
+    killed: proc.killed,
+    connected: 'connected' in proc ? proc.connected : undefined,
+  };
+}
+
+function describeError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return {
+    value: String(error),
+  };
+}
+
+function buildStartupFailure(
+  reason: unknown,
+  diagnostics: Record<string, unknown>,
+): Error {
+  let message =
+    reason instanceof Error
+      ? reason.message
+      : `Startup failed: ${String(reason)}`;
+  let error = new Error(
+    `${message}\nStartup diagnostics:\n${JSON.stringify(
+      {
+        ...diagnostics,
+        startupFailure: describeError(reason),
+      },
+      null,
+      2,
+    )}`,
+  );
+  if (reason instanceof Error) {
+    (error as Error & { cause?: unknown }).cause = reason;
+  }
+  return error;
 }
 
 async function isPortAvailable(port: number): Promise<boolean> {
@@ -89,43 +184,50 @@ async function waitForHttpReady(url: string, timeoutMs = 60_000) {
 }
 
 function stopChildProcess(
-  proc: ChildProcess,
+  proc: ChildProcess | undefined,
   signal: NodeJS.Signals = 'SIGINT',
 ) {
   return new Promise<void>((resolve) => {
-    if (proc.exitCode !== null || proc.killed) {
+    if (!proc) {
+      resolve();
+      return;
+    }
+    let child = proc;
+    if (child.exitCode !== null || child.killed) {
       resolve();
       return;
     }
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
+    let onExit = () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    };
+    let onError = () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    };
     function cleanup() {
       if (timer) {
         clearTimeout(timer);
       }
-      proc.removeAllListeners('exit');
-      proc.removeAllListeners('error');
+      child.removeListener('exit', onExit);
+      child.removeListener('error', onError);
     }
-    proc.once('exit', () => {
-      if (!settled) {
-        settled = true;
-        cleanup();
-        resolve();
-      }
-    });
-    proc.once('error', () => {
-      if (!settled) {
-        settled = true;
-        cleanup();
-        resolve();
-      }
-    });
+    child.once('exit', onExit);
+    child.once('error', onError);
     timer = setTimeout(() => {
       if (!settled) {
-        proc.kill('SIGTERM');
+        child.kill('SIGTERM');
       }
     }, 5_000);
-    proc.kill(signal);
+    child.kill(signal);
   });
 }
 
@@ -142,9 +244,26 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    // The mkcert leaf for the isolated stack covers `*.localhost`, but
+    // Node's `tls.checkServerIdentity` hardcodes-disallows wildcard
+    // matching against TLDs (it treats `localhost` as a TLD per RFC
+    // 6125 strict interpretation), so worker fetches to
+    // `https://publish-realm-XXX.localhost:4205/...` fail with
+    // ERR_TLS_CERT_ALTNAME_INVALID. Relax cert validation in the
+    // harness's spawned Node children — the wire is loopback only and
+    // the cert is still being validated end-to-end against the mkcert
+    // root via NODE_EXTRA_CA_CERTS, just without strict SAN matching
+    // on subdomains.
+    NODE_TLS_REJECT_UNAUTHORIZED: '0',
+    // vite preview always serves HTTPS on :4200 in this harness
+    // (vite.config.mjs reads the mkcert leaf, which mise activates via
+    // infra:ensure-dev-cert before boot). Hardcode the canonical here
+    // rather than reading process.env.HOST_URL — a shell that
+    // mise-activated before the cert existed leaks a stale http://...
+    // value and sends the prerender to a port that doesn't speak HTTP.
+    BOXEL_HOST_URL: 'https://localhost:4200',
     LOG_LEVELS:
-      process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
+      process.env.TEST_HARNESS_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
   let prerenderArgs = [
     '--transpileOnly',
@@ -216,6 +335,26 @@ export async function startServer({
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
   let workerManagerPort = await findAvailablePort(4232);
+  let workerManagerReadyTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_WORKER_MANAGER_READY_TIMEOUT_MS,
+    DEFAULT_WORKER_MANAGER_READY_TIMEOUT_MS,
+  );
+  let workerStartTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_WORKER_START_TIMEOUT_MS,
+    DEFAULT_WORKER_START_TIMEOUT_MS,
+  );
+  let realmServerStartTimeoutMs = parseTimeoutMs(
+    process.env.TEST_HARNESS_REALM_SERVER_START_TIMEOUT_MS,
+    DEFAULT_REALM_SERVER_START_TIMEOUT_MS,
+  );
+  let workerManagerMetadataFile = join(
+    dir.name,
+    'worker-manager-metadata.json',
+  );
+  let realmServerMetadataFile = join(dir.name, 'realm-server-metadata.json');
+  let workerManagerOutput: string[] = [];
+  let realmServerOutput: string[] = [];
+  let realmServer: ReturnType<typeof spawn> | undefined;
 
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = testDBName;
@@ -237,31 +376,98 @@ export async function startServer({
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='https://localhost:4205/test/'`,
+    `--toUrl='https://localhost:4205/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='@cardstack/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--toUrl='https://localhost:4205/skills/'`,
   ]);
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='https://localhost:4205/base/'`,
   ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    env: {
+      ...process.env,
+      // See the prerender spawn above for why this is needed (Node's
+      // `tls.checkServerIdentity` doesn't honor `*.localhost` wildcard
+      // SANs, so publish-realm subdomain fetches from the spawned
+      // worker fail with ERR_TLS_CERT_ALTNAME_INVALID).
+      NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      TEST_HARNESS_WORKER_START_TIMEOUT_MS: String(workerStartTimeoutMs),
+      TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
+    },
   });
   if (workerManager.stdout) {
-    workerManager.stdout.on('data', (data: Buffer) =>
-      console.log(`worker: ${data.toString()}`),
-    );
+    workerManager.stdout.on('data', (data: Buffer) => {
+      pushOutputTail(workerManagerOutput, 'stdout: ', data);
+      console.log(`worker: ${data.toString()}`);
+    });
   }
   if (workerManager.stderr) {
-    workerManager.stderr.on('data', (data: Buffer) =>
-      console.error(`worker: ${data.toString()}`),
-    );
+    workerManager.stderr.on('data', (data: Buffer) => {
+      pushOutputTail(workerManagerOutput, 'stderr: ', data);
+      console.error(`worker: ${data.toString()}`);
+    });
+  }
+
+  let workerManagerExitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
+  let workerManagerErrorListener: ((err: Error) => void) | undefined;
+  let workerManagerExitPromise = new Promise<never>((_, reject) => {
+    workerManagerExitListener = (
+      code: number | null,
+      signal: NodeJS.Signals | null,
+    ) => {
+      reject(
+        new Error(
+          `worker manager exited before it became ready (code: ${code}, signal: ${signal})`,
+        ),
+      );
+    };
+    workerManagerErrorListener = (err: Error) => reject(err);
+    workerManager.once('exit', workerManagerExitListener);
+    workerManager.once('error', workerManagerErrorListener);
+  });
+
+  let startupDiagnostics = () => ({
+    realmPath: testRealmDir,
+    database: testDBName,
+    workerManagerPort,
+    workerManagerReadyTimeoutMs,
+    workerStartTimeoutMs,
+    realmServerStartTimeoutMs,
+    workerManagerState: describeChildProcess(workerManager),
+    realmServerState: describeChildProcess(realmServer),
+    workerManagerMetadata: readMetadataFile(workerManagerMetadataFile),
+    realmServerMetadata: readMetadataFile(realmServerMetadataFile),
+    workerManagerOutputTail: workerManagerOutput,
+    realmServerOutputTail: realmServerOutput,
+  });
+
+  try {
+    await Promise.race([
+      waitForHttpReady(
+        `http://localhost:${workerManagerPort}`,
+        workerManagerReadyTimeoutMs,
+      ),
+      workerManagerExitPromise,
+    ]);
+  } catch (error) {
+    await stopChildProcess(workerManager);
+    throw buildStartupFailure(error, startupDiagnostics());
+  } finally {
+    if (workerManagerExitListener) {
+      workerManager.removeListener('exit', workerManagerExitListener);
+    }
+    if (workerManagerErrorListener) {
+      workerManager.removeListener('error', workerManagerErrorListener);
+    }
   }
 
   let serverArgs = [
@@ -276,46 +482,61 @@ export async function startServer({
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='https://localhost:4205/test/'`,
+    `--toUrl='https://localhost:4205/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
     `--fromUrl='@cardstack/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--toUrl='https://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='https://localhost:4205/base/'`,
   ]);
 
   console.log(`realm server database: ${testDBName}`);
 
-  let realmServer = spawn('ts-node', serverArgs, {
+  realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
+      // See the prerender spawn for why this is needed (Node's
+      // `tls.checkServerIdentity` doesn't honor `*.localhost` wildcard
+      // SANs, so publish-realm subdomain fetches from the spawned
+      // realm-server fail with ERR_TLS_CERT_ALTNAME_INVALID).
+      NODE_TLS_REJECT_UNAUTHORIZED: '0',
+      // Override HOST_URL explicitly: main.ts reads it as `distURL` (the
+      // URL the realm-server fetches index.html from at boot). A stale
+      // HOST_URL=http leaking in from a shell that mise-activated before
+      // the cert existed would land the boot fetch on a port that doesn't
+      // speak HTTP, and the realm-server would exit -2 before any test
+      // can run. The harness boots vite preview as HTTPS on :4200.
+      HOST_URL: 'https://localhost:4200',
       // Matrix tests don't exercise GitHub PR creation, so disable that route
       // to avoid pulling Octokit into the realm server startup path.
       DISABLE_GITHUB_PR_ROUTE: 'true',
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
     },
   });
   realmServer.unref();
   if (realmServer.stdout) {
-    realmServer.stdout.on('data', (data: Buffer) =>
-      console.log(`realm server: ${data.toString()}`),
-    );
+    realmServer.stdout.on('data', (data: Buffer) => {
+      pushOutputTail(realmServerOutput, 'stdout: ', data);
+      console.log(`realm server: ${data.toString()}`);
+    });
   }
   if (realmServer.stderr) {
-    realmServer.stderr.on('data', (data: Buffer) =>
-      console.error(`realm server: ${data.toString()}`),
-    );
+    realmServer.stderr.on('data', (data: Buffer) => {
+      pushOutputTail(realmServerOutput, 'stderr: ', data);
+      console.error(`realm server: ${data.toString()}`);
+    });
   }
   realmServer.on('message', (message) => {
     if (message === 'get-registration-secret' && realmServer.send) {
@@ -327,34 +548,92 @@ export async function startServer({
     }
   });
 
-  let timeout = await Promise.race([
-    new Promise<void>((r) => {
-      if (!realmServer) {
-        r();
-        return;
-      }
-      const onMessage = (message: unknown) => {
-        if (message === 'ready') {
-          realmServer?.off('message', onMessage);
-          r();
-        }
-      };
-      realmServer.on('message', onMessage);
-    }),
-    new Promise<true>((r) => setTimeout(() => r(true), 1500_000)),
-  ]);
-  if (timeout) {
-    throw new Error(
-      `timed-out waiting for realm server to start. Stopping server`,
-    );
+  let realmServerExitListener:
+    | ((code: number | null, signal: NodeJS.Signals | null) => void)
+    | undefined;
+  let realmServerErrorListener: ((err: Error) => void) | undefined;
+  let realmServerReadyListener: ((message: unknown) => void) | undefined;
+  let realmServerStartTimeout: NodeJS.Timeout | undefined;
+
+  try {
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        let onRealmServerReady = (message: unknown) => {
+          if (message === 'ready') {
+            realmServer.off('message', onRealmServerReady);
+            resolve();
+          }
+        };
+        realmServerReadyListener = onRealmServerReady;
+        realmServer.on('message', onRealmServerReady);
+      }),
+      new Promise<never>((_, reject) => {
+        realmServerExitListener = (
+          code: number | null,
+          signal: NodeJS.Signals | null,
+        ) => {
+          reject(
+            new Error(
+              `realm server exited before it became ready (code: ${code}, signal: ${signal})`,
+            ),
+          );
+        };
+        realmServerErrorListener = (err: Error) => reject(err);
+        realmServer.once('exit', realmServerExitListener);
+        realmServer.once('error', realmServerErrorListener);
+      }),
+      new Promise<never>((_, reject) => {
+        realmServerStartTimeout = setTimeout(() => {
+          reject(
+            new Error(
+              `timed-out waiting for realm server to start after ${realmServerStartTimeoutMs}ms. Stopping server`,
+            ),
+          );
+        }, realmServerStartTimeoutMs);
+        realmServerStartTimeout.unref();
+      }),
+    ]);
+  } catch (error) {
+    await Promise.all([
+      stopChildProcess(realmServer),
+      stopChildProcess(workerManager),
+    ]);
+    throw buildStartupFailure(error, startupDiagnostics());
+  } finally {
+    if (realmServerExitListener) {
+      realmServer.removeListener('exit', realmServerExitListener);
+    }
+    if (realmServerErrorListener) {
+      realmServer.removeListener('error', realmServerErrorListener);
+    }
+    if (realmServerReadyListener) {
+      realmServer.removeListener('message', realmServerReadyListener);
+    }
+    if (realmServerStartTimeout) {
+      clearTimeout(realmServerStartTimeout);
+    }
   }
 
-  return new IsolatedRealmServer(
+  let server = new IsolatedRealmServer(
     realmServer,
     workerManager,
     testRealmDir,
     testDBName,
   );
+
+  // /_catalog-realms only surfaces realms with show_as_catalog = true.
+  // Matrix tests treat the test fixture realm and the skills realm as
+  // catalogs (workspace chooser, card-catalog modal); opt them in here
+  // so the harness doesn't depend on a sidecar value that the
+  // metadata backfill trims on first boot.
+  await server.executeSQL(
+    `INSERT INTO realm_metadata (url, show_as_catalog) VALUES
+       ('https://localhost:4205/test/', true),
+       ('https://localhost:4205/skills/', true)
+     ON CONFLICT (url) DO UPDATE SET show_as_catalog = true`,
+  );
+
+  return server;
 }
 
 export interface SQLExecutor {

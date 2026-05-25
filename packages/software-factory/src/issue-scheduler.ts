@@ -444,5 +444,7 @@ function mapCardToSchedulableIssue(
     order: (attrs.order as number) ?? 0,
     summary: (attrs.summary as string) ?? undefined,
     issueType: (attrs.issueType as string) ?? undefined,
+    description: (attrs.description as string) ?? undefined,
+    acceptanceCriteria: (attrs.acceptanceCriteria as string) ?? undefined,
   };
 }

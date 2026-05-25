@@ -1,6 +1,7 @@
 /**
  * Shared helpers for Traefik registration in environment mode.
- * Both ember-serve.js and serve-dist.js use these.
+ * Used by scripts/vite-with-traefik.js (which both vite-serve.js and
+ * serve-dist.js delegate to).
  */
 
 const path = require('path');
@@ -38,6 +39,11 @@ function registerWithTraefik(slug, hostname, port) {
   const configPath = path.join(dynamicDir, `${slug}-host.yml`);
   const routerKey = `host-${slug}`;
 
+  // Two routers: `websecure` terminates TLS at Traefik using the mkcert
+  // leaf in traefik/dynamic/tls.yml; the sibling `-http` router on :80
+  // 308-redirects to https so stale http:// links still work. Both
+  // point at the same upstream — vite serves plain HTTP on the dynamic
+  // internal port; Traefik is the only place TLS is terminated locally.
   const entry = [
     'http:',
     '  routers:',
@@ -45,7 +51,20 @@ function registerWithTraefik(slug, hostname, port) {
     '      rule: "Host(`' + hostname + '`)"',
     `      service: ${routerKey}`,
     '      entryPoints:',
+    '        - websecure',
+    '      tls: {}',
+    `    ${routerKey}-http:`,
+    '      rule: "Host(`' + hostname + '`)"',
+    '      entryPoints:',
     '        - web',
+    '      middlewares:',
+    `        - ${routerKey}-https-redirect`,
+    `      service: ${routerKey}`,
+    '  middlewares:',
+    `    ${routerKey}-https-redirect:`,
+    '      redirectScheme:',
+    '        scheme: https',
+    '        permanent: true',
     '  services:',
     `    ${routerKey}:`,
     '      loadBalancer:',
@@ -56,6 +75,25 @@ function registerWithTraefik(slug, hostname, port) {
   const tmpPath = configPath + '.tmp';
   fs.writeFileSync(tmpPath, entry, 'utf-8');
   fs.renameSync(tmpPath, configPath);
+  kickTraefikIfNeeded();
+}
+
+// Bounce Traefik on macOS after a config write — see the matching
+// helper in packages/realm-server/lib/dev-service-registry.ts for the
+// rationale (Docker Desktop's bind mounts don't propagate inotify,
+// and Traefik v3 file provider has no polling option).
+function kickTraefikIfNeeded() {
+  if (process.platform !== 'darwin') return;
+  const { spawn } = require('child_process');
+  const child = spawn('docker', ['restart', 'boxel-traefik'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  child.on('error', () => {
+    // Docker not running, container missing, etc. — readiness probes
+    // through Traefik will surface the underlying problem.
+  });
+  child.unref();
 }
 
 module.exports = { getEnvSlug, getTraefikDynamicDir, registerWithTraefik };

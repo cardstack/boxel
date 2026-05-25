@@ -1,0 +1,66 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Project",
+        "module": "/software-factory/issue-tracker"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "scope": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "objective": "Modernizing the company's public-facing website",
+      "projectCode": "HBR",
+      "projectName": "Horizon Rebrand",
+      "projectStatus": "planning",
+      "successCriteria": null,
+      "technicalContext": null,
+      "issueStatusOptions": [
+        {
+          "value": "backlog",
+          "label": "Backlog",
+          "color": "#2b4fff"
+        },
+        {
+          "value": "in_progress",
+          "label": "In Progress",
+          "color": "#f9cd4a"
+        },
+        {
+          "value": "blocked",
+          "label": "Blocked",
+          "color": "#db1731"
+        },
+        {
+          "value": "review",
+          "label": "In Review",
+          "color": "#285028"
+        },
+        {
+          "value": "done",
+          "label": "Done",
+          "color": "#7a2cf4"
+        }
+      ],
+      "testArtifactsRealmUrl": null
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

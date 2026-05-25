@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task, WorkerArgs } from './index';
 import {
   jobIdentity,
+  notifyAllFileChanges,
   userIdFromUsername,
   fetchUserPermissions,
   type RealmPermissions,
@@ -55,7 +56,18 @@ export interface IncrementalDoneResult extends IncrementalResult {
   clientRequestId: string | null;
 }
 
-export type FromScratchArgs = WorkerArgs;
+export interface FromScratchArgs extends WorkerArgs {
+  // True when the caller cleared `boxel_index.last_modified` for the
+  // realm before publishing. The worker doesn't need to act on this
+  // (the clear already happened in the DB) — it's surfaced in args
+  // so the coalesce decision can refuse to attach a clearing publish
+  // to an already-running same-realm from-scratch whose
+  // `Batch.getModifiedTimes` snapshot pre-dates the clear, which would
+  // otherwise let the running job report success without re-rendering
+  // the swapped files. Always present (non-optional) so the args
+  // object satisfies WorkerArgs's JSON-shape index signature.
+  clearLastModified: boolean;
+}
 
 export interface FromScratchResult extends JSONTypes.Object {
   invalidations: string[];
@@ -153,75 +165,145 @@ function parseIncrementalArgsForCoalesce(
   };
 }
 
+function incrementalChangesCover(
+  existing: IncrementalChange[],
+  incoming: IncrementalChange[],
+): boolean {
+  let existingByUrl = new Map<string, IncrementalChange>();
+  for (let change of existing) {
+    existingByUrl.set(change.url, change);
+  }
+  for (let change of incoming) {
+    let match = existingByUrl.get(change.url);
+    if (!match || match.operation !== change.operation) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function chooseIncrementalCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
+  let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
-  if (!sameTypeCandidate) {
-    return { type: 'insert' };
-  }
+  if (sameTypeCandidate) {
+    let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
+    let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
+    if (!existingArgs || !incomingArgs) {
+      return {
+        type: 'join',
+        jobId: sameTypeCandidate.id,
+        update: {
+          ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        },
+      };
+    }
 
-  let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
-  let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
-  if (!existingArgs || !incomingArgs) {
     return {
       type: 'join',
       jobId: sameTypeCandidate.id,
       update: {
         ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        args: {
+          ...existingArgs,
+          changes: mergeIncrementalChanges(
+            existingArgs.changes,
+            incomingArgs.changes,
+          ),
+          coalescedCallers: mergeCoalescedCallers(
+            existingArgs.coalescedCallers,
+            incomingArgs.coalescedCallers,
+          ),
+        },
       },
     };
   }
 
-  return {
-    type: 'join',
-    jobId: sameTypeCandidate.id,
-    update: {
-      ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
-      args: {
-        ...existingArgs,
-        changes: mergeIncrementalChanges(
-          existingArgs.changes,
-          incomingArgs.changes,
-        ),
-        coalescedCallers: mergeCoalescedCallers(
-          existingArgs.coalescedCallers,
-          incomingArgs.coalescedCallers,
-        ),
-      },
-    },
-  };
+  // No still-pending candidate to merge into. Closes the race where the
+  // PATCH-path enqueue gets claimed by a worker before the file-watcher
+  // echo (or any second wave of callers) can attach via pre-claim
+  // coalesce. We piggyback on the running job, but only when its args
+  // already cover every (url, operation) we need — operation mismatch
+  // (update vs delete) means different work, so we must enqueue a new
+  // job in that case.
+  let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
+  if (incomingArgs) {
+    for (let candidate of inFlightCandidates) {
+      if (candidate.jobType !== incoming.jobType) {
+        continue;
+      }
+      let existingArgs = parseIncrementalArgsForCoalesce(candidate.args);
+      if (!existingArgs) {
+        continue;
+      }
+      if (incrementalChangesCover(existingArgs.changes, incomingArgs.changes)) {
+        return { type: 'join', jobId: candidate.id };
+      }
+    }
+  }
+
+  return { type: 'insert' };
 }
 
 function chooseFromScratchCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
-  let { incoming, candidates } = context;
+  let { incoming, candidates, inFlightCandidates } = context;
   let sameTypeCandidate = candidates.find(
     (candidate) => candidate.jobType === incoming.jobType,
   );
-  if (!sameTypeCandidate) {
-    return { type: 'insert' };
+  if (sameTypeCandidate) {
+    return {
+      type: 'join',
+      jobId: sameTypeCandidate.id,
+      update: {
+        ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
+        args: {
+          ...(isObjectLike(sameTypeCandidate.args)
+            ? sameTypeCandidate.args
+            : {}),
+          ...(isObjectLike(incoming.args) ? incoming.args : {}),
+          coalescedCallers: mergeCoalescedCallers(
+            getCoalescedCallers(sameTypeCandidate.args),
+            getCoalescedCallers(incoming.args),
+          ),
+        },
+      },
+    };
   }
 
-  return {
-    type: 'join',
-    jobId: sameTypeCandidate.id,
-    update: {
-      ...maxPriorityAndTimeout(sameTypeCandidate, incoming),
-      args: {
-        ...(isObjectLike(sameTypeCandidate.args) ? sameTypeCandidate.args : {}),
-        ...(isObjectLike(incoming.args) ? incoming.args : {}),
-        coalescedCallers: mergeCoalescedCallers(
-          getCoalescedCallers(sameTypeCandidate.args),
-          getCoalescedCallers(incoming.args),
-        ),
-      },
-    },
-  };
+  // No still-pending candidate. Attach to an in-flight same-realm
+  // from-scratch instead — same concurrency group + same jobType is
+  // sufficient because a from-scratch reindex subsumes any other
+  // from-scratch for that realm by definition. Without this fallback,
+  // a worker claiming the first enqueue between two pre-claim publishes
+  // forces the second to insert a fresh row at its own priority, even
+  // though the in-flight job will produce exactly the result the second
+  // caller wanted.
+  //
+  // Exception: a publish carrying `clearLastModified: true` has already
+  // nulled `boxel_index.last_modified` for the realm so the next
+  // from-scratch pass re-renders every row even where mtimes didn't
+  // change. An already-running from-scratch read its mtimes snapshot
+  // before that clear, so attaching this publish to it would let the
+  // caller observe a successful job that did NOT actually re-render
+  // the swapped files. Force a fresh row instead.
+  if (!incomingClearsLastModified(incoming.args)) {
+    for (let candidate of inFlightCandidates) {
+      if (candidate.jobType === incoming.jobType) {
+        return { type: 'join', jobId: candidate.id };
+      }
+    }
+  }
+
+  return { type: 'insert' };
+}
+
+function incomingClearsLastModified(args: unknown): boolean {
+  return isObjectLike(args) && args.clearLastModified === true;
 }
 
 registerQueueJobDefinition({
@@ -268,6 +350,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       indexWriter,
       definitionLookup,
       jobInfo,
+      jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
       auth,
@@ -283,6 +366,20 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         args.realmURL
       }:\n${JSON.stringify(stats, null, 2)}`,
     );
+    // CS-11182: emit the cross-replica `<realmURL>:*` wildcard so every
+    // mounted Realm drops its in-memory `#sourceCache` / `#transpiledModuleCache`
+    // and fires the L2 `module_transpile_cache` bulk tombstone for this
+    // realm. This is the single chokepoint that every from-scratch
+    // reindex flows through — startReindex's post-completion `.then`
+    // (the original fix) only covered POST /_full-reindex and
+    // POST /_reindex; the Grafana `/_grafana-reindex`,
+    // `/_grafana-full-reindex`, `/_post-deployment`, publish-realm
+    // `Realm.fullIndex`, and direct `enqueueReindexRealmJob` paths all
+    // bypassed it, leaving stale L1+L2 even after a successful reindex.
+    // Doing it here covers them all uniformly. Best-effort: failures
+    // fall back to a bounded staleness window because the next
+    // reader's transpile path re-tombstones the L2 row.
+    await notifyAllFileChanges(dbAdapter, args.realmURL);
     reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,
@@ -327,6 +424,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       indexWriter,
       definitionLookup,
       jobInfo,
+      jobPriority: jobInfo?.priority,
       reportStatus,
       onProgress: reportProgress,
       auth,

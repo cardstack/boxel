@@ -815,7 +815,16 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await click(`[data-test-enter-room="${anotherRoomId}"]`);
     await waitFor('[data-test-message-idx="0"]');
 
+    // Read receipts are delivered via IntersectionObserver → afterRender
+    // schedule → matrix client → Receipt event, which is not captured by
+    // `waitFor` settling on a DOM element. Wait until both receipts have
+    // landed before asserting their order.
     let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.currentUserEventReadReceipts.has(eventId2) &&
+        matrixService.currentUserEventReadReceipts.has(eventId3),
+    );
     assert.deepEqual(
       Array.from(matrixService.currentUserEventReadReceipts.keys()),
       [eventId2, eventId3],

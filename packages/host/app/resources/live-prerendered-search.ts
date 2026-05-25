@@ -8,10 +8,13 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { QueryResultsMeta, Format } from '@cardstack/runtime-common';
+import {
+  isScopedCSSRequest,
+  type QueryResultsMeta,
+  type Format,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';

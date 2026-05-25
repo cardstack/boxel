@@ -22,6 +22,7 @@ import {
   Deferred,
   loadCardDef,
   internalKeyFor,
+  rri,
   trimExecutableExtension,
   isCardError,
   isCardDef,
@@ -201,7 +202,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(new URL(id));
+  let moduleURL = trimExecutableExtension(rri(id));
   registerBoxelTransitionTo(context.router, context.owner);
 
   if (parsedOptions.clearCache) {
@@ -286,12 +287,12 @@ export async function buildModuleModel(
         // however the deps will only be the shimmed file
         lastModified = 0;
         createdAt = 0;
-        deps = [moduleURL.href];
+        deps = [moduleURL];
       } else {
         let consumes = (
           await context.loaderService.loader.getConsumedModules(id)
         ).filter((u) => u !== id);
-        deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+        deps = consumes.map((d) => trimExecutableExtension(rri(d)));
         let lastModifiedRFC7321 = response.headers.get('last-modified');
         let createdAtRFC7321 = response.headers.get('x-created');
         if (!lastModifiedRFC7321) {
@@ -360,21 +361,23 @@ async function makeDefinition(
     name,
     cardOrFieldDef,
   }: {
-    url: URL;
+    url: RealmResourceIdentifier | URL;
     name: string;
     cardOrFieldDef: typeof BaseDef;
   },
   context: ModuleModelContext,
 ): Promise<ModuleDefinitionResult | ErrorEntry> {
+  let urlString = url instanceof URL ? url.href : url;
   try {
     let api = await context.loaderService.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    let fields = getFieldDefinitions(api, cardOrFieldDef);
+    let { fields, fieldDefs } = getFieldDefinitions(api, cardOrFieldDef);
     let codeRef = identifyCard(cardOrFieldDef) as ResolvedCodeRef;
     let definition: Definition = {
       codeRef,
       fields,
+      fieldDefs,
       type: isCardDef(cardOrFieldDef) ? 'card-def' : 'field-def',
       displayName: isCardDef(cardOrFieldDef)
         ? cardOrFieldDef.displayName
@@ -385,7 +388,7 @@ async function makeDefinition(
       : { type: 'types' as const, types: [] };
     if (typesMaybeError.type === 'error') {
       console.warn(
-        `encountered error indexing definition  "${url.href}/${name}": ${typesMaybeError.error.message}`,
+        `encountered error indexing definition  "${urlString}/${name}": ${typesMaybeError.error.message}`,
       );
       return {
         type: 'module-error',
@@ -398,18 +401,18 @@ async function makeDefinition(
     return {
       type: 'definition',
       definition,
-      moduleURL: trimExecutableExtension(new URL(url)).href,
+      moduleURL: trimExecutableExtension(rri(urlString)),
       types: typesMaybeError.types.map(({ refURL }) => refURL),
     };
   } catch (err: any) {
     console.warn(
-      `encountered error indexing definition "${url.href}/${name}": ${err.message}`,
+      `encountered error indexing definition "${urlString}/${name}": ${err.message}`,
     );
     return {
       type: 'module-error',
       error: toSerializedError(
         err,
-        `encountered error indexing definition "${url.href}/${name}": ${describeError(err)}`,
+        `encountered error indexing definition "${urlString}/${name}": ${describeError(err)}`,
       ),
     } as ErrorEntry;
   }

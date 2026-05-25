@@ -21,7 +21,7 @@ import { createTestWorkspace } from './helpers/workspace-fixture';
 // ---------------------------------------------------------------------------
 
 const testRealmOptions = {
-  targetRealmUrl: 'https://realms.example.test/user/personal-tests/',
+  targetRealm: 'https://realms.example.test/user/personal-tests/',
   testResultsModuleUrl:
     'https://realms.example.test/software-factory/test-results',
   realmServerUrl: 'https://realms.example.test/',
@@ -589,7 +589,7 @@ module('factory-test-realm > resolveTestRun', function () {
   test('creates new TestRun when no existing runs', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
@@ -604,7 +604,7 @@ module('factory-test-realm > resolveTestRun', function () {
   test('creates new TestRun when most recent is completed', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
@@ -627,7 +627,7 @@ module('factory-test-realm > resolveTestRun', function () {
   test('resumes most recent running TestRun by default', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A', 'test B'],
       realmServerUrl: 'https://realms.example.test/',
@@ -658,7 +658,7 @@ module('factory-test-realm > resolveTestRun', function () {
   test('ignores partial TestRun with forceNew: true', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
@@ -685,7 +685,7 @@ module('factory-test-realm > resolveTestRun', function () {
     // The most recent (seq 3) is completed, so we create a new one.
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
@@ -708,7 +708,7 @@ module('factory-test-realm > resolveTestRun', function () {
   test('sequence numbers increment correctly', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
@@ -733,7 +733,7 @@ module('factory-test-realm > resolveTestRun', function () {
     // regression test for the bug where iterations shared a single TestRun.
     let handle1 = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
@@ -748,7 +748,7 @@ module('factory-test-realm > resolveTestRun', function () {
     // Second call with forceNew — should get sequence 2, not resume sequence 1
     let handle2 = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      targetRealm: 'https://realms.example.test/user/personal/',
       slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
@@ -781,8 +781,8 @@ module('factory-test-realm > resolveTestRun', function () {
     // return 1 again and overwrite the first TestRun.
     let handle1 = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      targetRealm: 'https://realms.example.test/user/personal/',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
@@ -790,14 +790,14 @@ module('factory-test-realm > resolveTestRun', function () {
       client: createMockClient({ fetch: buildMockSearchFetch([]) }),
     });
 
-    assert.strictEqual(handle1.testRunId, 'Validations/test_my-ticket-1');
+    assert.strictEqual(handle1.testRunId, 'Validations/test_my-issue-1');
 
     // Second call — search index is STALE (still returns empty), but
     // lastSequenceNumber=1 prevents reusing sequence 1.
     let handle2 = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      targetRealm: 'https://realms.example.test/user/personal/',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       lastSequenceNumber: 1,
@@ -808,15 +808,15 @@ module('factory-test-realm > resolveTestRun', function () {
 
     assert.strictEqual(
       handle2.testRunId,
-      'Validations/test_my-ticket-2',
+      'Validations/test_my-issue-2',
       'uses lastSequenceNumber as floor even when index returns nothing',
     );
 
     // Third call — index still stale, lastSequenceNumber=2
     let handle3 = await resolveTestRun({
       ...testRealmOptions,
-      targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      targetRealm: 'https://realms.example.test/user/personal/',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       lastSequenceNumber: 2,
@@ -827,7 +827,7 @@ module('factory-test-realm > resolveTestRun', function () {
 
     assert.strictEqual(
       handle3.testRunId,
-      'Validations/test_my-ticket-3',
+      'Validations/test_my-issue-3',
       'continues incrementing from lastSequenceNumber floor',
     );
   });

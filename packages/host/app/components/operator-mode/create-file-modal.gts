@@ -32,14 +32,13 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  cardIdToURL,
   specRef,
   chooseCard,
   baseRealm,
   RealmPaths,
   Deferred,
   SupportedMimeType,
-  maybeRelativeURL,
+  maybeRelativeReference,
   GetCardContextName,
   isCardInstance,
   type getCard,
@@ -50,9 +49,10 @@ import {
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
-import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
+import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
+import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -524,17 +524,28 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   private get isReady() {
-    if (this.definitionClass) {
-      return true;
-    }
-    if (this.maybeFileType?.id === 'text-file') {
-      return true;
-    }
-    return Boolean(this.defaultSpecResource?.isLoaded);
+    return (
+      !this.defaultSpecResource || Boolean(this.defaultSpecResource.isLoaded)
+    );
   }
 
   private get selectedSpecResource() {
     return this.chosenSpecResource || this.defaultSpecResource;
+  }
+
+  // URL of the spec to preselect when opening the modal. `default` covers
+  // card-definition, card-instance, duplicate-instance, and spec-instance —
+  // all of which start from a Card spec.
+  private getDefaultSpecId(): string | undefined {
+    switch (this.fileType.id) {
+      case 'text-file':
+      case 'file-definition':
+        return undefined;
+      case 'field-definition':
+        return config.defaultFieldSpecId;
+      default:
+        return `${baseRealm.url}types/card`;
+    }
   }
 
   private makeCreateFileRequest = enqueueTask(
@@ -556,18 +567,9 @@ export default class CreateFileModal extends Component<Signature> {
         sourceInstance,
       };
       if (!this.definitionClass) {
-        if (
-          this.fileType.id !== 'text-file' &&
-          this.fileType.id !== 'file-definition'
-        ) {
-          let specEntryPath =
-            this.fileType.id === 'field-definition'
-              ? 'fields/field'
-              : 'types/card';
-          this.defaultSpecResource = this.getCard(
-            this,
-            () => `${baseRealm.url}${specEntryPath}`,
-          );
+        let defaultSpecId = this.getDefaultSpecId();
+        if (defaultSpecId) {
+          this.defaultSpecResource = this.getCard(this, () => defaultSpecId);
         }
       }
       let url = await this.currentRequest.newFileDeferred.promise;
@@ -832,7 +834,7 @@ export default class CreateFileModal extends Component<Signature> {
     } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
     const absoluteModuleHref = (
-      codeRefWithAbsoluteURL(
+      codeRefWithAbsoluteIdentifier(
         {
           module: (spec?.moduleHref ?? module) as RealmResourceIdentifier,
           name: exportName,
@@ -841,7 +843,7 @@ export default class CreateFileModal extends Component<Signature> {
       ) as ResolvedCodeRef
     ).module;
     const absoluteModule = new URL(absoluteModuleHref);
-    let moduleURL = maybeRelativeURL(
+    let moduleURL = maybeRelativeReference(
       absoluteModule,
       url,
       new URL(this.selectedRealmURL),
@@ -943,11 +945,11 @@ export class ${className} extends ${exportName} {
 
     let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = spec?.id ? cardIdToURL(spec.id) : undefined;
+    let relativeTo = spec?.id;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation
-    let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+    let maybeRef = codeRefWithAbsoluteIdentifier(ref, relativeTo);
     if ('name' in maybeRef && 'module' in maybeRef) {
       ref = maybeRef;
     }

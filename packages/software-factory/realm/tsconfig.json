@@ -22,9 +22,14 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../../base/*"]
+      "https://cardstack.com/base/*": ["../../base/*"],
+      "@cardstack/boxel-ui": ["../../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../../boxel-ui/addon/*"],
+      "@cardstack/host/*": ["../../host/app/*"],
+      "@cardstack/host/tests/*": ["../../host/tests/*"],
+      "*": ["../../host/types/*"]
     },
-    "types": ["@cardstack/local-types"]
+    "types": ["@cardstack/local-types", "qunit", "qunit-dom"]
   },
-  "include": ["**/*.ts", "**/*.gts"]
+  "include": ["../../host/types/**/*", "**/*.ts", "**/*.gts"]
 }

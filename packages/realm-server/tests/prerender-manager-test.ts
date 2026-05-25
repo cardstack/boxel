@@ -4,7 +4,7 @@ import supertest from 'supertest';
 import { basename } from 'path';
 import Koa from 'koa';
 import Router from '@koa/router';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import http, { createServer } from 'http';
 import { buildPrerenderManagerApp } from '../prerender/manager-app';
 import {
@@ -1366,6 +1366,220 @@ module(basename(__filename), function () {
         response.headers['x-boxel-prerender-target'],
         serverUrlB,
         'warm+busy B beats cold+busy A when nothing idle exists',
+      );
+    });
+
+    // ---- priority-aware routing within a vacancy bucket ----
+
+    test('within warm+busy bucket: high-priority request prefers server with low-priority pending', async function (assert) {
+      // Two warm+busy servers compete for a priority-10 request. Server
+      // A's queue is all priority-0 work, server B's queue includes a
+      // priority-10 entry. The priority-10 incoming request would jump
+      // to the head on A (its priority strictly beats A's pending work)
+      // but would queue behind on B. The router prefers A.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, chooseServerForAffinity } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/priority-bucket-tiebreak';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Server A: warm + busy, queue is all priority-0.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 0,
+              },
+            },
+          },
+        },
+      });
+      // Server B: warm + busy, queue already has priority-10 work.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 10,
+              },
+            },
+          },
+        },
+      });
+
+      let target = chooseServerForAffinity('realm', realm, { priority: 10 });
+      assert.strictEqual(
+        target,
+        serverUrlA,
+        'priority-10 request prefers warm+busy A (queue has no >=10 work) over warm+busy B (queue has priority-10 work)',
+      );
+    });
+
+    test('priority preference does not override bucket: cold+idle still beats warm+busy with priority-10', async function (assert) {
+      // Soft tie-break: priority preference must not promote a cold+idle
+      // candidate above a warm+busy one. Warmth is the primary signal —
+      // the cold-tab penalty would re-emerge if priority routing
+      // overrode warmth. Verify by giving the warm+busy server a queue
+      // full of priority-10 work and routing a priority-10 request: the
+      // warm+busy server should still win on bucket alone.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, chooseServerForAffinity } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/priority-doesnt-override-warmth';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Server A: cold+idle.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: { capacity: 4, url: serverUrlA },
+        },
+      });
+      // Server B: warm+busy, queue full of priority-10 work.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 10,
+              },
+            },
+          },
+        },
+      });
+
+      let target = chooseServerForAffinity('realm', realm, { priority: 10 });
+      assert.strictEqual(
+        target,
+        serverUrlA,
+        'cold+idle A wins over warm+busy B per the warmth bucket order — priority preference is a within-bucket tie-break only, never overrides the cold+idle > warm+busy invariant',
+      );
+    });
+
+    test('legacy server (no maxPendingPriority) is not demoted by priority preference', async function (assert) {
+      // During a rolling deploy a legacy prerender server's heartbeat
+      // omits maxPendingPriority. scoreCandidate must treat absent =
+      // preferred (priorityPref = 0) so the legacy server isn't pushed
+      // behind a fully-reporting peer that happens to have any pending
+      // queue. Verify by giving both servers warm+busy state, only the
+      // upgraded one reporting priority data, and routing a priority-10
+      // request — the legacy server keeps its warmth advantage.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app, chooseServerForAffinity } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/priority-legacy-server';
+      let affinityKey = realmAffinityKey(realm);
+
+      // Server A: legacy heartbeat — no maxPendingPriority. busy, but the
+      // priority bar is unknown, so router treats it as preferred.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: { idle: false, tabCount: 1 },
+            },
+          },
+        },
+      });
+      // Server B: upgraded, reports a priority-10 ceiling. Same warmth
+      // bucket otherwise.
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 10,
+              },
+            },
+          },
+        },
+      });
+
+      let target = chooseServerForAffinity('realm', realm, { priority: 10 });
+      assert.strictEqual(
+        target,
+        serverUrlA,
+        'legacy server A (no priority data → priorityPref=0) ties B on warmth and beats it on priorityPref',
+      );
+    });
+
+    test('priority from request body is threaded through to scoreCandidate', async function (assert) {
+      // Integration check: when the request body includes
+      // `attributes.priority`, the proxy parses it and passes it into
+      // chooseServerForAffinity. Confirm by setting up two warm+busy
+      // candidates differing only in maxPendingPriority and verifying
+      // the priority-10 body is routed to the lower-pending server.
+      process.env.PRERENDER_MULTIPLEX = '2';
+      let { app } = buildPrerenderManagerApp();
+      let request: SuperTest<Test> = supertest(app.callback());
+      let realm = 'https://realm.example/priority-from-request-body';
+      let affinityKey = realmAffinityKey(realm);
+
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlA,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 0,
+              },
+            },
+          },
+        },
+      });
+      await request.post('/prerender-servers').send({
+        data: {
+          type: 'prerender-server',
+          attributes: {
+            capacity: 4,
+            url: serverUrlB,
+            affinityVacancy: {
+              [affinityKey]: {
+                idle: false,
+                tabCount: 1,
+                maxPendingPriority: 10,
+              },
+            },
+          },
+        },
+      });
+
+      let body = makeBody(realm, `${realm}/1`);
+      (body.data.attributes as any).priority = 10;
+      let response = await request.post('/prerender-visit').send(body);
+      assert.strictEqual(response.status, 201, 'proxy ok');
+      assert.strictEqual(
+        response.headers['x-boxel-prerender-target'],
+        serverUrlA,
+        'priority-10 in request body routes to the warm+busy server with the lower priority ceiling',
       );
     });
 

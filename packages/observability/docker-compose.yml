@@ -21,6 +21,14 @@ services:
       # Data sources go here because grafanactl does not manage data sources.
       - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./provisioning/alerting:/etc/grafana/provisioning/alerting:ro
+      # Local-only override of the synapse-prometheus datasource — points
+      # at the local Prometheus container instead of AMP. The single-file
+      # bind below is layered ON TOP of the directory mount above, masking
+      # provisioning/datasources/synapse-prometheus.yaml inside the
+      # container only. apply-datasources.sh (staging/prod) iterates the
+      # committed provisioning/datasources/ tree only and never sees this
+      # override. See provisioning/local-only/synapse-prometheus.yaml.
+      - ./provisioning/local-only/synapse-prometheus.yaml:/etc/grafana/provisioning/datasources/synapse-prometheus.yaml:ro
       # Dashboards arrive via grafanactl resources push (Phase 3 / CS-10922).
       # Local file-based dashboard provisioning is also possible — uncomment
       # the next line if a dev wants dashboards baked into the container.
@@ -29,8 +37,38 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Business Forms panel — used by the Operator Actions panels in the
+      # boxel-status/indexing, realms, users, and job-queue dashboards.
+      # Community-signed; maintained by Grafana Labs (the original Volkov
+      # Labs repo was archived but Grafana picked up maintenance, so this
+      # is a regular active plugin, not a dead-end).
+      #
+      # Version pin keeps task replacements (local + staging/prod) on
+      # the same release — `customCode` semantics can shift between
+      # versions and we don't want a silent upgrade. Bump deliberately;
+      # check https://grafana.com/api/plugins/volkovlabs-form-panel for
+      # the latest version. Staging / production install via
+      # cardstack/infra configs/grafana/base/container-definitions/grafana.yaml
+      # and need a matching bump there when this one moves.
+      GF_INSTALL_PLUGINS: "volkovlabs-form-panel 6.3.3"
       # Substituted into provisioning/datasources/loki.yaml at startup.
       LOKI_URL: http://loki:3100
+      # Substituted into provisioning/datasources/boxel-db.yaml at startup.
+      # Defaults target the local boxel-pg container reachable via the
+      # host-gateway alias below; override by exporting these (or via a
+      # `.env` file in this directory) before `docker compose up`.
+      BOXEL_DB_HOST: ${BOXEL_DB_HOST:-host.docker.internal:5435}
+      BOXEL_DB_NAME: ${BOXEL_DB_NAME:-boxel}
+      BOXEL_DB_USER: ${BOXEL_DB_USER:-postgres}
+      BOXEL_DB_PASSWORD: ${BOXEL_DB_PASSWORD:-postgres}
+      # Substituted into provisioning/alerting/worker-status-group.json at
+      # startup (CS-11107). Defaults to staging so the rule loads with a
+      # real-shaped value; local Grafana has no AWS creds so the rule will
+      # never actually evaluate against CloudWatch — substituting empty
+      # strings here would just put a malformed-looking ARN into the rule
+      # body, which Grafana would log at startup.
+      WORKER_LOG_GROUP_NAME: ${WORKER_LOG_GROUP_NAME:-ecs-boxel-worker-staging}
+      WORKER_LOG_GROUP_ACCOUNT_ID: ${WORKER_LOG_GROUP_ACCOUNT_ID:-680542703984}
     extra_hosts:
       # Lets the Grafana container reach the host's Postgres
       # (boxel-pg on 5435) for the local postgres data source.
@@ -55,7 +93,15 @@ services:
       - ./loki/config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3100/ready",
+        ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -83,11 +129,53 @@ services:
       # Acceptable for local dev only — never replicate this pattern in
       # staging/production.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Native-process logs from the mise dev tasks (CS-10984). The
+      # realm-server / worker / prerender / prerender-manager mise tasks tee
+      # stdout+stderr into ${BOXEL_LOG_DIR:-/tmp/boxel-logs} on the host;
+      # alloy/config.alloy follows the per-service files via loki.source.file.
+      # If you override BOXEL_LOG_DIR for the mise tasks, also export it here
+      # (or in a `.env` file beside this compose file) so both ends agree.
+      # Must be an absolute path: the mise tasks and Compose resolve relative
+      # paths from different base directories. dev-log-tee.sh enforces this.
+      - ${BOXEL_LOG_DIR:-/tmp/boxel-logs}:/var/log/boxel-host:ro
     depends_on:
       loki:
         condition: service_healthy
     restart: unless-stopped
 
+  # Local Prometheus — scrapes the dev Synapse container's `/metrics`
+  # endpoint so the vendored Synapse dashboard works without an AMP
+  # workspace. Joined to the `boxel` Docker network (created by
+  # `mise run start-synapse` / packages/matrix/docker/synapse/index.ts)
+  # so it can resolve `boxel-synapse:9001` directly. Staging and
+  # production scrape via AMP and ignore this service entirely.
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    ports:
+      # Exposed for ad-hoc curl/inspection from the host. Grafana itself
+      # reaches Prometheus via the docker network at `prometheus:9090`.
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - default
+      - boxel
+    restart: unless-stopped
+
+networks:
+  default:
+  # The synapse dev container runs on the `boxel` Docker network (created
+  # by packages/matrix/docker/synapse/index.ts). Marked external so this
+  # compose project doesn't try to manage its lifecycle. If you bring up
+  # the observability stack BEFORE starting synapse, run
+  # `docker network create boxel` first — or just `mise run start-synapse`,
+  # which creates the network as a side-effect.
+  boxel:
+    name: boxel
+    external: true
+
 volumes:
   grafana_data:
   loki_data:
+  prometheus_data:

@@ -145,7 +145,7 @@ module('Integration | commands | check-correctness', function (hooks) {
     // is broken and patching won't work. Instead, we need to patch the code directly.
 
     let revertResult = await patchCodeCommand.execute({
-      fileUrl: `${cardId}.json`,
+      fileIdentifier: `${cardId}.json`,
       codeBlocks: [
         `╔═══ SEARCH ════╗
       "hasError": true,
@@ -204,7 +204,7 @@ module('Integration | commands | check-correctness', function (hooks) {
     ];
 
     await patchCodeCommand.execute({
-      fileUrl,
+      fileIdentifier: fileUrl,
       codeBlocks: patchBlocks,
       roomId,
     });
@@ -233,7 +233,7 @@ module('Integration | commands | check-correctness', function (hooks) {
 
     // Put the card back to its working state
     let revertResult = await patchCodeCommand.execute({
-      fileUrl,
+      fileIdentifier: fileUrl,
       codeBlocks: revertBlocks,
       roomId,
     });
@@ -268,7 +268,7 @@ ${SEPARATOR_MARKER}
 ${REPLACE_MARKER}`;
 
     await patchCodeCommand.execute({
-      fileUrl: emptyFileUrl,
+      fileIdentifier: emptyFileUrl,
       codeBlocks: [codeBlock],
       roomId,
     });
@@ -312,7 +312,7 @@ ${SEPARATOR_MARKER}
 ${'x'.repeat(21)}
 ${REPLACE_MARKER}`;
       await patchCodeCommand.execute({
-        fileUrl,
+        fileIdentifier: fileUrl,
         codeBlocks: [codeBlock],
         roomId,
       });

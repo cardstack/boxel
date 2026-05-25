@@ -2,6 +2,7 @@ import {
   click,
   waitFor,
   fillIn,
+  triggerEvent,
   triggerKeyEvent,
   waitUntil,
   scrollTo,
@@ -20,6 +21,8 @@ import {
   baseRealm,
   type LooseSingleCardDocument,
   rri,
+  fileDefFormats,
+  cardDefFormats,
 } from '@cardstack/runtime-common';
 
 import type { Realm } from '@cardstack/runtime-common/realm';
@@ -253,6 +256,20 @@ const petCardSource = `
         <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
+  }
+`;
+
+const customEditCardSource = `
+  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringField from "https://cardstack.com/base/string";
+  export class CustomEdit extends CardDef {
+    static displayName = 'Custom Edit';
+    @field name = contains(StringField);
+    static edit = class Edit extends Component<typeof this> {
+      <template>
+        <div data-test-custom-edit>Custom Edit: <@fields.name /></div>
+      </template>
+    };
   }
 `;
 
@@ -616,6 +633,18 @@ module('Acceptance | code submode tests', function (_hooks) {
             'trips.gts': tripsFieldSource,
             'broken.gts': brokenSource,
             'broken-country.gts': brokenCountryCardSource,
+            'custom-edit.gts': customEditCardSource,
+            'CustomEdit/sample.json': {
+              data: {
+                attributes: { name: 'Sample' },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}custom-edit`,
+                    name: 'CustomEdit',
+                  },
+                },
+              },
+            },
             'broken-adoption-instance.json': brokenAdoptionInstance,
             'not-found-adoption-instance.json': notFoundAdoptionInstance,
             'person-entry.json': {
@@ -1046,11 +1075,16 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-card-error]');
+      // drain pending card-type priming async before navigating again — otherwise
+      // an in-flight fetch from the first navigation can reject after teardown
+      // and surface as an unowned "A network error occurred." rejection.
+      await settled();
 
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
         .includesText(`${testRealmURL}non-card not found`);
+      await settled();
 
       await visitOperatorMode({
         submode: 'code',
@@ -1058,6 +1092,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitFor('[data-test-card-error]');
+      await settled();
 
       await click('[data-test-toggle-details]');
       assert
@@ -1237,12 +1272,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
     module('with connection to test realm', function (hooks) {
       hooks.beforeEach(function () {
-        setActiveRealms([testRealmURL, 'http://localhost:4202/test/']);
+        setActiveRealms([testRealmURL, 'https://localhost:4202/test/']);
       });
       test('code submode handles binary files', async function (assert) {
         await visitOperatorMode({
           submode: 'code',
-          codePath: `http://localhost:4202/test/mango.png`,
+          codePath: `https://localhost:4202/test/mango.png`,
         });
 
         await waitFor('[data-test-binary-info]');
@@ -1323,6 +1358,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
 
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: cardDefFormats.length });
       // Cards HAVE the edit format option (contrast with files)
       assert.dom('[data-test-format-chooser="edit"]').exists();
 
@@ -1384,6 +1422,57 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-card-schema]').doesNotExist();
     });
 
+    test('"form" format button appears only for cards with a custom edit template', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}CustomEdit/sample.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: cardDefFormats.length + 1 });
+      assert
+        .dom('[data-test-format-chooser="form"]')
+        .exists(
+          '"form" button appears because CustomEdit defines a custom edit template',
+        );
+      assert
+        .dom('[data-test-format-chooser="edit"]')
+        .exists('"edit" button still present alongside "form"');
+
+      await click('[data-test-format-chooser="form"]');
+      assert.dom('[data-test-format-chooser="form"]').hasClass('active');
+      assert
+        .dom('[data-test-code-mode-card-renderer-body] [data-test-custom-edit]')
+        .doesNotExist(
+          'base CardDef template is used, not the custom edit template',
+        );
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-body] .field-component-card.edit-format',
+        )
+        .exists('card renders in edit format');
+
+      await click('[data-test-format-chooser="edit"]');
+      assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
+      assert
+        .dom('[data-test-code-mode-card-renderer-body] [data-test-custom-edit]')
+        .exists('custom edit template is used when "edit" is selected');
+
+      // Person has no custom edit template — "form" must not appear
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+      assert
+        .dom('[data-test-format-chooser="form"]')
+        .doesNotExist(
+          '"form" button absent for cards without a custom edit template',
+        );
+    });
+
     test('non-card file preview shows "metadata" format option and not "edit"', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -1400,6 +1489,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-code-mode-card-renderer-body]');
 
+      assert
+        .dom('[data-test-format-chooser]')
+        .exists({ count: fileDefFormats.length });
       // Non-card files should have the metadata format option
       assert.dom('[data-test-format-chooser="metadata"]').exists();
 
@@ -1487,6 +1579,131 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-format-chooser="isolated"]')
         .hasClass('active', 'isolated button is active after switching');
+    });
+
+    test('format chooser flips to compact mode in a narrow preview panel and restores on widen', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/fadhlan.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      let chooser = document.querySelector(
+        '[data-test-format-chooser-root]',
+      ) as HTMLElement | null;
+      assert.ok(chooser, 'format chooser is rendered');
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'full',
+          'chooser starts in full icon+text mode',
+        );
+
+      let handles = Array.from(
+        document.querySelectorAll(
+          '[data-test-code-mode] .separator-horizontal[data-boxel-panel-resize-handle-id]',
+        ),
+      ) as HTMLElement[];
+      let previewResizeHandle = handles.at(-1);
+      assert.ok(previewResizeHandle, 'preview panel resize handle exists');
+
+      let shrinkRect = previewResizeHandle!.getBoundingClientRect();
+      await triggerEvent(previewResizeHandle!, 'pointerdown', {
+        button: 0,
+        pointerId: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointermove', {
+        pointerId: 1,
+        buttons: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointerup', {
+        pointerId: 1,
+        clientX: shrinkRect.x + shrinkRect.width / 2 + 320,
+        clientY: shrinkRect.y + shrinkRect.height / 2,
+      });
+
+      await waitUntil(
+        () =>
+          chooser?.getAttribute('data-test-format-chooser-mode') === 'compact',
+      );
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'compact',
+          'chooser switches to compact icon-only mode',
+        );
+
+      let embeddedButton = document.querySelector(
+        '[data-test-format-chooser="embedded"]',
+      ) as HTMLElement | null;
+      assert.ok(embeddedButton, 'embedded format button exists');
+      let embeddedRect = embeddedButton!.getBoundingClientRect();
+      await triggerEvent(embeddedButton!, 'mouseenter', {
+        clientX: embeddedRect.x + embeddedRect.width / 2,
+        clientY: embeddedRect.y + embeddedRect.height / 2,
+      });
+      await triggerEvent(embeddedButton!, 'mousemove', {
+        clientX: embeddedRect.x + embeddedRect.width / 2,
+        clientY: embeddedRect.y + embeddedRect.height / 2,
+      });
+
+      await waitFor('[data-test-tooltip-content]');
+      assert
+        .dom('[data-test-tooltip-content]')
+        .hasText('embedded', 'compact chooser shows an instant hover tooltip');
+
+      let widenRect = previewResizeHandle!.getBoundingClientRect();
+      await triggerEvent(previewResizeHandle!, 'pointerdown', {
+        button: 0,
+        pointerId: 2,
+        clientX: widenRect.x + widenRect.width / 2,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointermove', {
+        pointerId: 2,
+        buttons: 1,
+        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+      await triggerEvent(previewResizeHandle!, 'pointerup', {
+        pointerId: 2,
+        clientX: widenRect.x + widenRect.width / 2 - 320,
+        clientY: widenRect.y + widenRect.height / 2,
+      });
+
+      await waitUntil(
+        () => chooser?.getAttribute('data-test-format-chooser-mode') === 'full',
+      );
+      await triggerEvent(chooser!, 'mouseleave');
+
+      assert
+        .dom('[data-test-format-chooser-root]')
+        .hasAttribute(
+          'data-test-format-chooser-mode',
+          'full',
+          'chooser returns to full icon+text mode after widening',
+        );
+      assert
+        .dom('[data-test-tooltip-content]')
+        .doesNotExist('compact tooltip does not stick after widening');
+      assert
+        .dom('[data-test-format-chooser-pill-label]')
+        .hasText('isolated', 'full chooser label is restored');
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
@@ -1766,7 +1983,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       setPlaygroundSelections({
         [`${testRealmURL}person/Person`]: {
-          cardId: `${testRealmURL}Person/with-friends`,
+          cardId: rri(`${testRealmURL}Person/with-friends`),
           format: 'isolated',
         },
       });
@@ -2103,7 +2320,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
-      await waitUntil(() => getMonacoContent().includes('Fadhlan'));
+      await waitUntil(() => getMonacoContent().includes('Fadhlan'), {
+        timeout: 5_000,
+      });
 
       await realm.write(
         'Person/fadhlan.json',
@@ -2123,7 +2342,48 @@ module('Acceptance | code submode tests', function (_hooks) {
         } as LooseSingleCardDocument),
       );
 
-      await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
+      // The realm-write → matrix-broadcast → message-service → file-resource
+      // refetch → monaco rerender chain crosses a setTimeout(0) hop in
+      // mock-matrix's addRoomEvent, so realm.write resolves before the event
+      // is even dispatched. Default waitUntil timeout (1s) is too tight for
+      // this chain under CI load — matches sibling 'card preview live updates
+      // when there is a change in module' which already uses 5s for the same
+      // reason. On timeout we dump enough state to tell next time whether the
+      // failure was monaco-side render lag, file-resource refetch never firing,
+      // or the source file itself never updating.
+      try {
+        await waitUntil(() => getMonacoContent().includes('FadhlanXXX'), {
+          timeout: 5_000,
+        });
+      } catch (err) {
+        let monacoContent = getMonacoContent();
+        let sourceProbe: string;
+        let sourceOk: boolean;
+        try {
+          let network = getService('network');
+          let res = await network.authedFetch(
+            `${testRealmURL}Person/fadhlan.json`,
+            { headers: { Accept: 'application/vnd.card+source' } },
+          );
+          let body = await res.text();
+          sourceOk = res.ok;
+          sourceProbe = sourceOk
+            ? body
+            : `<source-probe non-ok: ${res.status} ${res.statusText} body=${JSON.stringify(body)}>`;
+        } catch (e: any) {
+          sourceOk = false;
+          sourceProbe = `<source-probe error: ${e?.message ?? e}>`;
+        }
+        console.warn(
+          '[monaco-live-updates flake-probe] waitUntil timed out. ' +
+            `monaco includes "FadhlanXXX"=${monacoContent.includes('FadhlanXXX')}; ` +
+            `source fetch ok=${sourceOk}; ` +
+            `source on disk includes "FadhlanXXX"=${sourceOk && sourceProbe.includes('FadhlanXXX')}. ` +
+            `monaco snapshot: ${JSON.stringify(monacoContent)}. ` +
+            `source snapshot: ${JSON.stringify(sourceProbe)}.`,
+        );
+        throw err;
+      }
       assert.true(
         getMonacoContent().includes('FadhlanXXX'),
         'monaco editor updated from index event',

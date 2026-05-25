@@ -1,16 +1,46 @@
 // This should be first
 import '../setup-logger';
 
-import { readSupportContext } from '../runtime-metadata';
+import {
+  readSupportContext,
+  startFactoryRealmServer,
+  type RealmConfig,
+} from '@cardstack/realm-test-harness';
 import { logger } from '../logger';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { RealmPermissions } from '@cardstack/runtime-common';
 
-import { startFactoryRealmServer } from '../harness';
-
 let log = logger('serve-realm');
+
+// Glob controlling which SF source-realm files are copied into the
+// realm process. Card definitions only — no instance data (e.g. wiki
+// briefs, documents) which tests don't depend on and which would slow
+// indexing. Format: space-separated patterns; prefix with `!` to exclude.
+// Last matching pattern wins. Must agree with the same constant in
+// `cli/cache-realm.ts` so the per-process realm and the cached template
+// see the exact same fixture contents.
+const SF_CARD_DEFINITIONS_GLOB =
+  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+
+function cardDefinitionsOnly(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of SF_CARD_DEFINITIONS_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
+
+const sfSourceRealmDir = resolve(__dirname, '..', '..', 'realm');
 
 function parseCliArg(name: string): string | undefined {
   let prefix = `--${name}=`;
@@ -30,39 +60,102 @@ function parseCliNumber(name: string): number | undefined {
   return parsed;
 }
 
+interface SerializableRealmConfig {
+  dir: string;
+  path: string;
+  permissions?: RealmPermissions;
+  username?: string;
+}
+
+function parseRealmsEnv(): RealmConfig[] | undefined {
+  let raw = process.env.TEST_HARNESS_REALMS;
+  if (!raw) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new Error(
+      `TEST_HARNESS_REALMS is not valid JSON: ${e instanceof Error ? e.message : e}`,
+    );
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error(
+      'TEST_HARNESS_REALMS must be a non-empty array of realm configs',
+    );
+  }
+  return (parsed as SerializableRealmConfig[]).map((entry) => ({
+    dir: resolve(process.cwd(), entry.dir),
+    path: entry.path,
+    permissions: entry.permissions,
+    username: entry.username,
+  }));
+}
+
 async function main(): Promise<void> {
-  // First positional arg is realmDir (skip --flags)
+  // First positional arg is the primary realmDir (skip --flags). Used only
+  // when TEST_HARNESS_REALMS is not provided (single-realm convenience).
   let positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-  let realmDir = resolve(
+  let realmDirArg = resolve(
     process.cwd(),
     positional[0] ?? 'test-fixtures/darkfactory-adopter',
   );
 
-  if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
+  if (!process.env.TEST_HARNESS_CONTEXT) {
     let supportContext = readSupportContext();
     if (supportContext) {
-      process.env.SOFTWARE_FACTORY_CONTEXT = JSON.stringify(supportContext);
+      process.env.TEST_HARNESS_CONTEXT = JSON.stringify(supportContext);
     }
   }
 
   let permissions: RealmPermissions | undefined;
-  if (process.env.SOFTWARE_FACTORY_PERMISSIONS) {
+  if (process.env.TEST_HARNESS_PERMISSIONS) {
     try {
-      permissions = JSON.parse(process.env.SOFTWARE_FACTORY_PERMISSIONS);
+      permissions = JSON.parse(process.env.TEST_HARNESS_PERMISSIONS);
     } catch (e) {
       throw new Error(
-        `SOFTWARE_FACTORY_PERMISSIONS is not valid JSON: ${e instanceof Error ? e.message : e}`,
+        `TEST_HARNESS_PERMISSIONS is not valid JSON: ${e instanceof Error ? e.message : e}`,
       );
     }
   }
 
+  let realms = parseRealmsEnv();
+  if (!realms) {
+    realms = [{ dir: realmDirArg, path: 'test/', permissions }];
+  } else if (permissions) {
+    // TEST_HARNESS_PERMISSIONS overrides the primary realm's permissions —
+    // matches the previous single-realm flag's contract.
+    realms = [{ ...realms[0], permissions }, ...realms.slice(1)];
+  }
+  // SF tests adopt cards from `software-factory/...` modules. Always mount
+  // the SF source realm alongside the test fixture so those module URLs
+  // resolve. The fileFilter is materialized here (rather than passed via
+  // env from fixtures.ts) because functions aren't JSON-serializable.
+  if (!realms.some((r) => r.path === 'software-factory/')) {
+    realms = [
+      ...realms,
+      {
+        dir: sfSourceRealmDir,
+        path: 'software-factory/',
+        username: 'software_factory_realm',
+        // fileFilter is added below — we have to keep RealmConfig
+        // serializable up to this point in case TEST_HARNESS_REALMS was used.
+      },
+    ];
+  }
+  realms = realms.map((realm) =>
+    realm.path === 'software-factory/'
+      ? { ...realm, fileFilter: cardDefinitionsOnly }
+      : realm,
+  );
+  let primaryRealmDir = realms[0].dir;
+
   let runtime = await startFactoryRealmServer({
-    realmDir,
-    permissions,
-    templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
-    templateRealmServerURL: process.env
-      .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
-      ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
+    realms,
+    templateDatabaseName: process.env.TEST_HARNESS_TEMPLATE_DATABASE_NAME,
+    templateRealmServerURL: process.env.TEST_HARNESS_TEMPLATE_REALM_SERVER_URL
+      ? new URL(process.env.TEST_HARNESS_TEMPLATE_REALM_SERVER_URL)
       : undefined,
     realmServerPort: parseCliNumber('realmServerPort'),
     compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
@@ -70,7 +163,7 @@ async function main(): Promise<void> {
   });
 
   let payload = {
-    realmDir,
+    realmDir: primaryRealmDir,
     realmURL: runtime.realmURL.href,
     realmServerURL: runtime.realmServerURL.href,
     databaseName: runtime.databaseName,
@@ -79,9 +172,9 @@ async function main(): Promise<void> {
     ownerBearerToken: runtime.createBearerToken(),
   };
 
-  if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
+  if (process.env.TEST_HARNESS_METADATA_FILE) {
     writeFileSync(
-      process.env.SOFTWARE_FACTORY_METADATA_FILE,
+      process.env.TEST_HARNESS_METADATA_FILE,
       JSON.stringify(payload, null, 2),
     );
   }

@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
+import { fetchRealmPermissions } from '@cardstack/runtime-common';
 import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
@@ -28,9 +29,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           0
         ) RETURNING id`)) as { id: string }[];
         let response = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${id}`,
-          )
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
         let [job] = await context.dbAdapter.execute(
@@ -75,9 +75,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         (job_id, locked_until ) VALUES (${runningJobId}, NOW() + INTERVAL '3 minutes')`);
 
         let pendingResponse = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${pendingJobId}`,
-          )
+          .post(`/_grafana-complete-job?job_id=${pendingJobId}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(
           pendingResponse.status,
@@ -86,9 +85,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         let runningResponse = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${runningJobId}`,
-          )
+          .post(`/_grafana-complete-job?job_id=${runningJobId}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(
           runningResponse.status,
@@ -150,9 +148,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         await context.dbAdapter.execute(`INSERT INTO job_reservations
         (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
         let response = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
-          )
+          .post(`/_grafana-complete-job?reservation_id=${reservationId}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
         let reservations = await context.dbAdapter.execute(
@@ -194,9 +191,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         await context.dbAdapter.execute(`INSERT INTO job_reservations
         (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
         let response = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
-          )
+          .post(`/_grafana-complete-job?job_id=${jobId}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
         let reservations = await context.dbAdapter.execute(
@@ -272,9 +268,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(reservationId, 'reservation exists for running job');
 
         let response = await context.request
-          .get(
-            `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
-          )
+          .post(`/_grafana-complete-job?reservation_id=${reservationId}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 204, 'HTTP 204 response');
 
@@ -352,7 +347,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           0
         ) RETURNING id`)) as { id: string }[];
         let response = await context.request
-          .get(`/_grafana-complete-job?job_id=${id}`)
+          .post(`/_grafana-complete-job?job_id=${id}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
         let [job] = await context.dbAdapter.execute(
@@ -364,6 +359,104 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           null,
           'job was not marked with finish time',
         );
+      });
+
+      // Grafana operator endpoints: POST-only, `Authorization: Bearer
+      // <secret>` only. Bearer parsing follows RFC 6750 — scheme name is
+      // case-insensitive, any 1+ whitespace separator is allowed.
+      async function insertCancellableJob(): Promise<string> {
+        let [{ id }] = (await context.dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          'indexing:${testRealmURL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        return id;
+      }
+      async function assertJobRejected(assert: Assert, id: string) {
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(job.status, 'rejected', 'job was rejected');
+      }
+
+      test('grafana endpoint accepts POST with Authorization: Bearer header', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
+      });
+
+      test('grafana endpoint rejects POST with bare-secret Authorization header (no Bearer prefix)', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', grafanaSecret)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(
+          job.status,
+          'unfulfilled',
+          'job not touched on auth failure',
+        );
+      });
+
+      test('grafana endpoint rejects GET (POST-only routing)', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .get(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(
+          job.status,
+          'unfulfilled',
+          'job not touched on missing route',
+        );
+      });
+
+      test('grafana endpoint rejects POST with wrong Bearer token', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', 'Bearer not-the-real-secret')
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        assert.true(
+          response.text.includes('Token invalid'),
+          'reports invalid token (not missing-header) when an Authorization header is present but wrong',
+        );
+        let [job] = await context.dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${id}`,
+        );
+        assert.strictEqual(
+          job.status,
+          'unfulfilled',
+          'job not touched on auth failure',
+        );
+      });
+
+      test('grafana endpoint accepts lowercase scheme + extra whitespace in Bearer header', async function (assert) {
+        let id = await insertCancellableJob();
+        let response = await context.request
+          .post(`/_grafana-complete-job?job_id=${id}`)
+          .set('Authorization', `  bearer   ${grafanaSecret}  `)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+        await assertJobRejected(assert, id);
       });
 
       test('can add user credit via grafana endpoint', async function (assert) {
@@ -380,9 +473,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(sum, 0, `user has 0 extra credit`);
 
         let response = await context.request
-          .get(
-            `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=1000`,
-          )
+          .post(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.deepEqual(
@@ -401,7 +493,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('returns 400 when calling grafana add credit endpoint without a user', async function (assert) {
         let response = await context.request
-          .get(`/_grafana-add-credit?authHeader=${grafanaSecret}&credit=1000`)
+          .post(`/_grafana-add-credit?credit=1000`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
@@ -414,9 +507,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@test.com',
         );
         let response = await context.request
-          .get(
-            `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=a+million+dollars`,
+          .post(
+            `/_grafana-add-credit?user=${user.matrixUserId}&credit=a+million+dollars`,
           )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
         let sum = await sumUpCreditsLedger(context.dbAdapter, {
@@ -428,9 +522,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
         let response = await context.request
-          .get(
-            `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
-          )
+          .post(`/_grafana-add-credit?user=nobody&credit=1000`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
       });
@@ -443,7 +536,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@test.com',
         );
         let response = await context.request
-          .get(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
+          .post(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
         let sum = await sumUpCreditsLedger(context.dbAdapter, {
@@ -481,7 +574,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -521,9 +614,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             new URL(testRealmURL.origin).href.length,
           );
           let response = await context.request
-            .get(
-              `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${realmPath}`,
-            )
+            .post(`/_grafana-reindex?realm=${realmPath}`)
+            .set('Authorization', `Bearer ${grafanaSecret}`)
             .set('Content-Type', 'application/json');
           assert.deepEqual(response.body, {
             fileErrors: 0,
@@ -573,6 +665,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           {
             realmURL,
             realmUsername: owner,
+            // The grafana reindex path passes clearLastModified: true so
+            // every file in boxel_index re-renders even when its mtime
+            // hasn't changed. Surfaced in args so the from-scratch
+            // coalesce can refuse to attach this kind of publish to an
+            // already-running same-realm from-scratch.
+            clearLastModified: true,
           },
           'realm args are correct',
         );
@@ -606,13 +704,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         {
           let response = await context.request
-            .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
+            .post(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
             .set('Content-Type', 'application/json');
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         }
@@ -660,8 +758,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           boxelUIChangeChecker,
           'writeCurrentBoxelUIChecksum',
         );
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
 
         try {
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
+              '${testRealmURL.href}',
+              'source',
+              'node-test/pre-mounted-${uuidv4()}',
+              'node-test',
+              false
+            )
+            ON CONFLICT (url) DO NOTHING`);
+          await context.dbAdapter.execute(`INSERT INTO realm_registry
+            (url, kind, disk_id, owner_username, pinned)
+            VALUES
+            (
+              '${registryOnlyRealmURL}',
+              'source',
+              'owner/registry-only-${uuidv4()}',
+              'owner',
+              false
+            )`);
+
           // Seed a modules row to verify it gets cleared
           await context.dbAdapter.execute(
             `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
@@ -712,7 +833,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
           let reindexJob = finalJobs.find(
             (job) => job.job_type === 'full-reindex',
-          );
+          ) as
+            | {
+                job_type: string;
+                concurrency_group: string;
+                timeout: number;
+                args: { realmUrls: string[] };
+              }
+            | undefined;
           assert.ok(reindexJob, 'full-reindex job exists');
           if (reindexJob) {
             assert.strictEqual(
@@ -724,6 +852,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               reindexJob.timeout,
               360,
               'job has correct timeout (6 minutes)',
+            );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(registryOnlyRealmURL),
+              'job args include registry-only realm URLs',
+            );
+            assert.ok(
+              reindexJob.args.realmUrls.includes(testRealmURL.href),
+              'job args still include mounted realms',
             );
           }
 
@@ -817,6 +953,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let owner = 'mango';
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
+        let registryOnlyRealmURL = `http://localhost:4201/registry-only-${uuidv4()}/`;
         {
           let response = await context.request
             .post('/_create-realm')
@@ -840,9 +977,30 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           realmURL = response.body.data.id;
         }
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${testRealmURL.href}',
+            'source',
+            'node-test/pre-mounted-${uuidv4()}',
+            'node-test',
+            false
+          )
+          ON CONFLICT (url) DO NOTHING`);
+        await context.dbAdapter.execute(`INSERT INTO realm_registry
+          (url, kind, disk_id, owner_username, pinned)
+          VALUES
+          (
+            '${registryOnlyRealmURL}',
+            'source',
+            'owner/registry-only-${uuidv4()}',
+            'owner',
+            false
+          )`);
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(
           initialJobs.length,
@@ -869,12 +1027,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         {
           let response = await context.request
-            .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+            .post(`/_grafana-full-reindex`)
+            .set('Authorization', `Bearer ${grafanaSecret}`)
             .set('Content-Type', 'application/json');
-          assert.deepEqual(
-            response.body.realms,
-            [testRealmURL.href, realmURL],
-            'indexed realms are correct',
+          assert.ok(
+            response.body.realms.includes(registryOnlyRealmURL),
+            'response includes registry-only realms',
+          );
+          assert.ok(
+            response.body.realms.includes(testRealmURL.href),
+            'response still includes existing mounted realms',
+          );
+          assert.ok(
+            response.body.realms.includes(realmURL),
+            'response includes newly created realms too',
           );
         }
         let seededRowsAfter = await context.dbAdapter.execute(
@@ -891,7 +1057,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           3,
           'realm full reindex job was created',
         );
-        let jobs = finalJobs.slice(2);
+        let jobs = finalJobs.slice(2) as {
+          job_type: string;
+          concurrency_group: string;
+          args: { realmUrls: string[] };
+        }[];
         assert.strictEqual(
           jobs[0].job_type,
           'full-reindex',
@@ -901,6 +1071,18 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           jobs[0].concurrency_group,
           `full-reindex-group`,
           'concurrency group is correct',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(registryOnlyRealmURL),
+          'job args include registry-only realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(testRealmURL.href),
+          'job args still include existing mounted realms',
+        );
+        assert.ok(
+          jobs[0].args.realmUrls.includes(realmURL),
+          'job args include newly created realms too',
         );
       });
 
@@ -932,7 +1114,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               }),
             );
-          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
           botRealmURL = response.body.data.id;
         }
 
@@ -948,7 +1130,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         let response = await context.request
-          .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+          .post(`/_grafana-full-reindex`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
 
@@ -974,7 +1157,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         {
           let response = await context.request
-            .get(`/_grafana-full-reindex`)
+            .post(`/_grafana-full-reindex`)
             .set('Content-Type', 'application/json');
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
         }
@@ -984,6 +1167,199 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           initialJobs.length,
           'an index job was not created',
         );
+      });
+
+      test('grants read-only via grafana upsert-realm-user-permission endpoint', async function (assert) {
+        let user = '@op-test:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(perms[user], ['read'], 'user has read only');
+      });
+
+      test('grants read+write via grafana upsert-realm-user-permission endpoint', async function (assert) {
+        let user = '@op-test-rw:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'write'],
+          'user has read+write',
+        );
+      });
+
+      test('upserts: re-grant on the same user updates instead of duplicating', async function (assert) {
+        let user = '@op-test-upsert:localhost';
+        let url = (read: string, write: string) =>
+          `/_grafana-upsert-realm-user-permission` +
+          `?realm=${encodeURIComponent(testRealmURL.href)}` +
+          `&user=${encodeURIComponent(user)}` +
+          `&read=${read}&write=${write}`;
+        // First call: read only.
+        await context.request
+          .post(url('true', 'false'))
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        // Second call: upgrade to read+write.
+        let response = await context.request
+          .post(url('true', 'true'))
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'write'],
+          'second call replaced the first',
+        );
+      });
+
+      test('normalises realm URL — trailing slash and stripped querystring/hash', async function (assert) {
+        let user = '@op-test-normalize:localhost';
+        // Pass a URL without trailing slash + with extraneous querystring +
+        // fragment. Both should be normalised before insert so the row keys
+        // exactly to the canonical realm root the runtime consults.
+        let raw = testRealmURL.href.replace(/\/$/, '') + '?token=secret#frag';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(raw)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notOk(
+          response.body.message?.includes('token=secret'),
+          'response message does not echo the raw querystring',
+        );
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user],
+          ['read'],
+          'permission written under the canonical realm URL',
+        );
+      });
+
+      test('rejects write-only (write requires read)', async function (assert) {
+        let user = '@op-test-bad:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=false&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects read=false write=false (use the delete flow to revoke)', async function (assert) {
+        let user = '@op-test-revoke:localhost';
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=false&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects non-boolean read/write flags', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=TRUE&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects missing realm param', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('rejects non-URL realm param', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=not-a-url` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test('returns 401 without a grafana secret', async function (assert) {
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      });
+
+      test('returns 404 on GET (POST-only routing)', async function (assert) {
+        let response = await context.request
+          .get(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent('@op-test:localhost')}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
     },
   );

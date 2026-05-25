@@ -1,4 +1,3 @@
-import type { RealmInfo } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   DefinitionLookup,
@@ -11,7 +10,9 @@ import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
 import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session';
-import handleCreateRealmRequest from './handlers/handle-create-realm';
+import handleCreateRealmRequest, {
+  type CreateRealmDeps,
+} from './handlers/create-realm';
 import handleDeleteRealm from './handlers/handle-delete-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
@@ -26,8 +27,10 @@ import handleReindex from './handlers/handle-reindex';
 import handleFullReindex from './handlers/handle-full-reindex';
 import handleRemoveJob from './handlers/handle-remove-job';
 import handleAddCredit from './handlers/handle-add-credit';
+import handleUpsertRealmUserPermission from './handlers/handle-upsert-realm-user-permission';
 import handleCreateStripeSessionRequest from './handlers/handle-create-stripe-session';
 import handleRequestForward from './handlers/handle-request-forward';
+import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthrough';
 import handlePostDeployment from './handlers/handle-post-deployment';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability';
 import handleRealmAuth from './handlers/handle-realm-auth';
@@ -36,6 +39,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import handleFederatedTypes from './handlers/handle-federated-types';
@@ -63,7 +67,9 @@ import {
 } from './handlers/handle-webhook-commands';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
 import handleRunCommand from './handlers/handle-run-command';
+import handleScreenshotCard from './handlers/handle-screenshot-card';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -76,28 +82,9 @@ export type CreateRoutesArgs = {
   virtualNetwork: VirtualNetwork;
   queue: QueuePublisher;
   realms: Realm[];
+  reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
-  createAndMountRealm: (
-    path: string,
-    url: string,
-    copiedFromRealm?: URL,
-    enableFileWatcher?: boolean,
-    fromScratchIndexPriority?: number,
-  ) => Realm;
-  createRealm: ({
-    ownerUserId,
-    endpoint,
-    name,
-    backgroundURL,
-    iconURL,
-  }: {
-    ownerUserId: string;
-    endpoint: string;
-    name: string;
-    backgroundURL?: string;
-    iconURL?: string;
-  }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
@@ -120,6 +107,24 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
+  // One job-scoped same-realm search cache per realm-server process.
+  // Lives for the life of the process; TTL-evicts entries 10 min after
+  // their initial populate (hits do NOT refresh the TTL — tying it to
+  // populate time bounds the leak deterministically, where touch-
+  // refresh would let a hot entry survive indefinitely past job
+  // completion). Future work wires NOTIFY-driven eviction so a job
+  // completion releases its entries immediately. Hard-capped to bound
+  // worst-case memory under a synthetic-jobId flood.
+  let searchCache = new JobScopedSearchCache();
+
+  let createRealmDeps: CreateRealmDeps = {
+    serverURL: new URL(args.serverURL),
+    realms: args.realms,
+    dbAdapter: args.dbAdapter,
+    virtualNetwork: args.virtualNetwork,
+    realmsRootPath: args.realmsRootPath,
+    reconciler: args.reconciler,
+  };
 
   router.get(
     '/',
@@ -133,7 +138,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed),
-    handleCreateRealmRequest(args),
+    handleCreateRealmRequest(createRealmDeps),
   );
   router.delete(
     '/_delete-realm',
@@ -170,25 +175,38 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
     }),
   );
+  router.post(
+    '/_openrouter/chat/completions',
+    jwtMiddleware(args.realmSecretSeed),
+    handleOpenRouterPassthrough({
+      dbAdapter: args.dbAdapter,
+    }),
+  );
   router.all(
     '/_federated-search',
     multiRealmAuthorization(args),
-    handleSearch(),
+    handleSearch({ reconciler: args.reconciler, searchCache }),
   );
   router.all(
     '/_federated-info',
     multiRealmAuthorization(args),
-    handleRealmInfo({ dbAdapter: args.dbAdapter }),
+    handleRealmInfo({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
   );
   router.all(
     '/_federated-types',
     multiRealmAuthorization(args),
-    handleFederatedTypes({ dbAdapter: args.dbAdapter }),
+    handleFederatedTypes({
+      dbAdapter: args.dbAdapter,
+      reconciler: args.reconciler,
+    }),
   );
   router.all(
     '/_federated-search-prerendered',
     multiRealmAuthorization(args),
-    handleSearchPrerendered(),
+    handleSearchPrerendered({ reconciler: args.reconciler, searchCache }),
   );
   router.post(
     '/_prerender-card',
@@ -221,6 +239,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     }),
   );
   router.post(
+    '/_screenshot-card',
+    jwtMiddleware(args.realmSecretSeed),
+    handleScreenshotCard(args),
+  );
+  router.post(
     '/_publish-realm',
     jwtMiddleware(args.realmSecretSeed),
     handlePublishRealm(args),
@@ -231,26 +254,20 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleUnpublishRealm(args),
   );
 
-  // it's awkward that these are GET's but we are working around grafana's limitations
-  router.get(
-    '/_grafana-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleReindex(args),
-  );
-  router.get(
-    '/_grafana-complete-job',
-    grafanaAuthorization(args.grafanaSecret),
-    handleRemoveJob(args),
-  );
-  router.get(
-    '/_grafana-add-credit',
-    grafanaAuthorization(args.grafanaSecret),
-    handleAddCredit(args),
-  );
-  router.get(
-    '/_grafana-full-reindex',
-    grafanaAuthorization(args.grafanaSecret),
-    handleFullReindex(args),
+  // Grafana operator-action endpoints. All POST-only with
+  // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
+  // Handlers read params from `ctxt.URL.searchParams` (Grafana button
+  // panels POST with the params on the querystring, not in a JSON body).
+  let registerGrafanaEndpoint = (path: string, handler: Koa.Middleware) => {
+    router.post(path, grafanaAuthorization(args.grafanaSecret), handler);
+  };
+  registerGrafanaEndpoint('/_grafana-reindex', handleReindex(args));
+  registerGrafanaEndpoint('/_grafana-complete-job', handleRemoveJob(args));
+  registerGrafanaEndpoint('/_grafana-add-credit', handleAddCredit(args));
+  registerGrafanaEndpoint('/_grafana-full-reindex', handleFullReindex(args));
+  registerGrafanaEndpoint(
+    '/_grafana-upsert-realm-user-permission',
+    handleUpsertRealmUserPermission(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(

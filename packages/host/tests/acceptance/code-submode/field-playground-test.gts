@@ -2,7 +2,12 @@ import { click, fillIn, settled } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { specRef, type Realm } from '@cardstack/runtime-common';
+import {
+  fieldDefFormats,
+  rri,
+  specRef,
+  type Realm,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -513,8 +518,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         declaration: 'Comment',
       });
       assert
-        .dom('[data-test-playground-format-chooser] button')
-        .exists({ count: 5 });
+        .dom('[data-test-playground-format-chooser] [data-test-format-chooser]')
+        .exists({ count: fieldDefFormats.length });
       assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert
@@ -542,6 +547,10 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assert.dom('[data-test-fitted-comment]').containsText('by Marco');
 
       await selectFormat('markdown');
+      // The markdown fallback renders a hidden CardRenderer + DefaultMarkdownFallbackTemplate
+      // whose MutationObserver schedules afterRender capture passes; without an
+      // explicit settle the test can finish before the capture chain quiesces.
+      await settled();
       assert.dom('[data-test-format-chooser="markdown"]').hasClass('active');
       assert
         .dom('[data-test-markdown-preview]')
@@ -653,7 +662,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-main`,
+        cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -692,7 +701,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-alt`,
+        cardId: rri(`${testRealmURL}Spec/comment-alt`),
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -712,7 +721,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-main`,
+        cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -736,7 +745,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-main`,
+        cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 1,
         url: `${testRealmURL}blog-post.gts`,
@@ -746,7 +755,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     test('preview the next available example if the previously selected one has been deleted', async function (assert) {
       setPlaygroundSelections({
         [`${testRealmURL}blog-post/Comment`]: {
-          cardId: `${testRealmURL}Spec/comment-main`,
+          cardId: rri(`${testRealmURL}Spec/comment-main`),
           format: 'embedded',
           fieldIndex: 1,
         },
@@ -847,7 +856,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-main`,
+        cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
         url: `${testRealmURL}blog-post.gts`,
@@ -862,7 +871,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-main`,
+        cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'edit',
         fieldIndex: 2,
         url: `${testRealmURL}blog-post.gts`,
@@ -929,7 +938,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}author/FullNameField`];
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/full-name`,
+        cardId: rri(`${testRealmURL}Spec/full-name`),
         format: 'edit',
         fieldIndex: 0,
         url: `${testRealmURL}author.gts`,
@@ -959,8 +968,8 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('does not persist the wrong card for field', async function (assert) {
-      const cardId = `${testRealmURL}Pet/mango`;
-      const specId = `${testRealmURL}Spec/toy`;
+      const cardId = rri(`${testRealmURL}Pet/mango`);
+      const specId = rri(`${testRealmURL}Spec/toy`);
       let selections: Record<string, PlaygroundSelection> = {
         [`${testRealmURL}pet/PetCard`]: {
           cardId,
@@ -1276,7 +1285,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       let selection =
         getPlaygroundSelections()?.[`${additionalRealmURL}pet/ToyField`];
       assert.deepEqual(selection, {
-        cardId: `${additionalRealmURL}Spec/toy`,
+        cardId: rri(`${additionalRealmURL}Spec/toy`),
         format: 'atom',
         fieldIndex: 0,
         url: `${additionalRealmURL}pet.gts`,
@@ -1291,7 +1300,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       selection =
         getPlaygroundSelections()?.[`${additionalRealmURL}pet/ToyField`];
       assert.deepEqual(selection, {
-        cardId: `${additionalRealmURL}Spec/toy`,
+        cardId: rri(`${additionalRealmURL}Spec/toy`),
         format: 'edit',
         fieldIndex: 1,
         url: `${additionalRealmURL}pet.gts`,
@@ -1362,7 +1371,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           `${additionalRealmURL}author/FullNameField`
         ];
       assert.deepEqual(selection, {
-        cardId: `${additionalRealmURL}Spec/full-name`,
+        cardId: rri(`${additionalRealmURL}Spec/full-name`),
         format: 'edit',
         fieldIndex: 0,
         url: `${additionalRealmURL}author.gts`,

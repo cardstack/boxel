@@ -1,0 +1,22 @@
+#!/bin/bash
+#MISE description="Force-kill any leaked boxel dev-stack processes (recovery from abnormal exit)"
+#MISE dir="packages/realm-server"
+
+. "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+
+echo "[kill-all] Cleaning up dev-stack processes..."
+# Pidfiles are now per-session (`boxel-dev-all-<pid>.pids`), so walk
+# every stale one in the runtime dir — recovery means we don't know
+# which session left orphans. Each iteration overrides PIDFILE for
+# the helper that consumes it, then removes the file via the helper's
+# own `rm -f` at the end.
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+for pf in "$RUNTIME_DIR"/boxel-dev-all-*.pids "$RUNTIME_DIR"/boxel-dev-all.pids; do
+  [ -e "$pf" ] || continue
+  PIDFILE="$pf" kill_from_pidfile
+done
+# Explicit recovery — bypass the "another dev-all is alive" guard the
+# guardian's automatic sweep honors, since the user is asking us to
+# nuke everything matching the regexes.
+SWEEP_FORCE=1 sweep_orphaned_services
+echo "[kill-all] All dev-stack processes stopped. Verify ports with: ss -tlnp | grep -E ':(4200|4201|4202|4206|4210|4211|4221|4222|4213)'"

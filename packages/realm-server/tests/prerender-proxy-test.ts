@@ -20,6 +20,7 @@ module(basename(__filename), function () {
     function makeDbAdapter(rows: any[]): DBAdapter {
       return {
         kind: 'pg',
+        async notify() {},
         isClosed: false,
         async execute() {
           return rows;
@@ -27,6 +28,12 @@ module(basename(__filename), function () {
         async close() {},
         async getColumnNames() {
           return [];
+        },
+        async withWriteLock(_url, fn) {
+          return await fn(undefined);
+        },
+        async withUserCostLock(_userId, fn) {
+          return await fn();
         },
       };
     }

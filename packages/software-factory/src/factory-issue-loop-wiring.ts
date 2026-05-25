@@ -7,7 +7,7 @@
  * - RealmIssueRelationshipLoader for context building
  * - ContextBuilder with issue-aware mode
  * - ToolRegistry, ToolExecutor, FactoryTool[] via buildFactoryTools
- * - OpenRouterFactoryAgent as the LoopAgent
+ * - ClaudeCodeFactoryAgent or OpencodeFactoryAgent as the LoopAgent
  * - ValidationPipeline as the Validator
  * - runIssueLoop() invocation
  */
@@ -15,16 +15,14 @@
 import { resolve } from 'node:path';
 
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
-import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 
 import {
   ClaudeCodeFactoryAgent,
-  OpenRouterFactoryAgent,
+  OpencodeFactoryAgent,
   FACTORY_DEFAULT_OPENROUTER_MODEL,
-  type FactoryAgentConfig,
   type FactoryAgentProvider,
   type LoopAgent,
 } from './factory-agent';
@@ -37,11 +35,7 @@ import {
   type ToolBuilderConfig,
 } from './factory-tool-builder';
 import { ToolExecutor } from './factory-tool-executor';
-import {
-  ToolRegistry,
-  SCRIPT_TOOLS,
-  REALM_API_TOOLS,
-} from './factory-tool-registry';
+import { ToolRegistry, REALM_API_TOOLS } from './factory-tool-registry';
 import {
   runIssueLoop,
   createDefaultPipeline,
@@ -50,7 +44,6 @@ import {
 } from './issue-loop';
 import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
-import { fetchCardTypeSchema } from './darkfactory-schemas';
 import { withStdoutRedirected } from './redirect-stdout';
 
 let log = logger('factory-issue-loop-wiring');
@@ -63,7 +56,7 @@ const PACKAGE_ROOT = resolve(__dirname, '..');
 
 export interface IssueLoopWiringConfig {
   briefUrl: string;
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   ownerUsername: string;
   /** Boxel CLI client — owns all realm auth and API calls. */
@@ -78,6 +71,14 @@ export interface IssueLoopWiringConfig {
   agent?: FactoryAgentProvider;
   /** Explicit OpenRouter model id; only honoured when agent === 'openrouter'. */
   openRouterModel?: string;
+  /**
+   * OpenRouter API key for direct billing. Only honoured when
+   * `agent === 'openrouter'`. When unset, the OpenRouter path falls
+   * back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). The CLI plumbs this through from
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
+   */
+  openRouterApiKey?: string;
   debug?: boolean;
   /** Inject a pre-built LoopAgent instance (tests only). Wins over `agent`. */
   agentOverride?: LoopAgent;
@@ -101,15 +102,15 @@ export interface IssueLoopWiringConfig {
 export async function runFactoryIssueLoop(
   config: IssueLoopWiringConfig,
 ): Promise<IssueLoopResult> {
-  let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
+  let targetRealm = ensureTrailingSlash(config.targetRealm);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let client = config.client;
   let workspaceDir = config.workspaceDir;
 
   // 1. Issue store
-  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealmUrl);
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm);
   let issueStore = new RealmIssueStore({
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
     darkfactoryModuleUrl,
     client,
     workspaceDir,
@@ -123,7 +124,7 @@ export async function runFactoryIssueLoop(
   // 2. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
     workspaceDir,
-    realmUrl: targetRealmUrl,
+    realmUrl: targetRealm,
   });
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
@@ -132,21 +133,13 @@ export async function runFactoryIssueLoop(
   });
 
   // 3. Tool infrastructure
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
+  let toolRegistry = new ToolRegistry([...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
-    targetRealmUrl,
+    targetRealm,
     client,
     debug: config.debug,
   });
-
-  let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;
-  let cardTypeSchemas = await loadDarkFactorySchemas(
-    client,
-    realmServerUrl,
-    targetRealmUrl,
-    darkfactoryModuleBase,
-  );
 
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
@@ -169,15 +162,16 @@ export async function runFactoryIssueLoop(
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
+  let syncWorkspace = () =>
+    syncWorkspaceToRealm(client, targetRealm, workspaceDir);
   let toolBuilderConfig: ToolBuilderConfig = {
-    targetRealmUrl,
-    darkfactoryModuleUrl,
+    targetRealm,
     realmServerUrl,
     client,
     workspaceDir,
     testResultsModuleUrl,
-    cardTypeSchemas,
     hostAppUrl,
+    syncWorkspace,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -196,9 +190,11 @@ export async function runFactoryIssueLoop(
     let built = createLoopAgentWithLabel({
       provider,
       openRouterModel: config.openRouterModel,
+      openRouterApiKey: config.openRouterApiKey,
       realmServerUrl,
       client,
       debug: config.debug,
+      workspaceDir,
     });
     agent = built.agent;
     // For the claude backend, the specific model is only known after the
@@ -227,7 +223,7 @@ export async function runFactoryIssueLoop(
     });
 
   // 6. Run issue loop
-  log.info(`Starting issue loop: targetRealm=${targetRealmUrl}`);
+  log.info(`Starting issue loop: targetRealm=${targetRealm}`);
 
   let issueLoopConfig: IssueLoopConfig = {
     agent,
@@ -235,16 +231,29 @@ export async function runFactoryIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealm,
+    darkfactoryModuleUrl,
     workspaceDir,
-    syncWorkspace: () =>
-      syncWorkspaceToRealm(client, targetRealmUrl, workspaceDir),
+    syncWorkspace,
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
     maxOuterCycles: config.maxOuterCycles,
   };
 
-  return runIssueLoop(issueLoopConfig);
+  try {
+    return await runIssueLoop(issueLoopConfig);
+  } finally {
+    // Some agents (notably `OpencodeFactoryAgent`) hold persistent
+    // backend state across iterations — long-lived opencode subprocess
+    // + MCP server + JWT'd HTTP client. Tear that down here so a
+    // crash mid-loop doesn't orphan an opencode process holding
+    // port 4096.
+    if (typeof agent.close === 'function') {
+      await agent.close().catch((err) => {
+        log.warn(`agent.close() failed: ${String(err)}`);
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -255,9 +264,23 @@ export interface CreateLoopAgentConfig {
   provider: FactoryAgentProvider;
   /** Only used when provider === 'openrouter'. */
   openRouterModel?: string;
+  /**
+   * Optional OpenRouter API key. When set, the opencode-backed
+   * `--agent openrouter` path uses it directly; when unset, the agent
+   * falls back to the realm-server `/_openrouter/chat/completions`
+   * passthrough (boxel tokens). Read from CLI flag
+   * `--openrouter-api-key` or env `OPENROUTER_API_KEY`.
+   */
+  openRouterApiKey?: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   debug?: boolean;
+  /**
+   * Factory workspace directory. Both the Claude path and the
+   * opencode-backed OpenRouter path use this as their cwd so native
+   * fs tools resolve realm-relative paths inside the workspace.
+   */
+  workspaceDir?: string;
 }
 
 /**
@@ -298,7 +321,10 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
   switch (config.provider) {
     case 'claude':
       return {
-        agent: new ClaudeCodeFactoryAgent({ debug: config.debug }),
+        agent: new ClaudeCodeFactoryAgent({
+          debug: config.debug,
+          workspaceDir: config.workspaceDir,
+        }),
         label: 'claude',
       };
 
@@ -313,14 +339,27 @@ export function createLoopAgentWithLabel(config: CreateLoopAgentConfig): {
         config.openRouterModel && config.openRouterModel.trim() !== ''
           ? config.openRouterModel.trim()
           : FACTORY_DEFAULT_OPENROUTER_MODEL;
+      if (!config.workspaceDir) {
+        throw new Error(
+          '--agent openrouter requires a workspaceDir — opencode mounts ' +
+            'it as cwd for native fs tools.',
+        );
+      }
+      let apiKey =
+        config.openRouterApiKey && config.openRouterApiKey.trim() !== ''
+          ? config.openRouterApiKey.trim()
+          : (process.env.OPENROUTER_API_KEY?.trim() ?? undefined);
+      let mode = apiKey ? 'direct' : 'passthrough';
       return {
-        agent: new OpenRouterFactoryAgent({
+        agent: new OpencodeFactoryAgent({
           model,
           realmServerUrl: config.realmServerUrl,
           client: config.client,
+          openRouterApiKey: apiKey,
+          workspaceDir: config.workspaceDir,
           debug: config.debug,
-        } satisfies FactoryAgentConfig),
-        label: `openrouter (model=${model})`,
+        }),
+        label: `openrouter (model=${model}, mode=${mode})`,
       };
     }
   }
@@ -345,12 +384,12 @@ export interface WorkspaceSyncOutcome {
 
 export async function syncWorkspaceToRealm(
   client: BoxelCLIClient,
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
 ): Promise<WorkspaceSyncOutcome> {
   try {
     let result = await withStdoutRedirected(() =>
-      client.sync(targetRealmUrl, workspaceDir, { preferLocal: true }),
+      client.sync(targetRealm, workspaceDir, { preferLocal: true }),
     );
     if (result.error) {
       log.warn(`Workspace sync error: ${result.error}`);
@@ -425,83 +464,4 @@ export async function retryBlockedIssues(
   } else {
     log.info('Retry: no eligible blocked issues found to reset');
   }
-}
-
-// ---------------------------------------------------------------------------
-// DarkFactory schema loading
-// ---------------------------------------------------------------------------
-
-const DARKFACTORY_CARD_TYPES = ['Project', 'Issue', 'KnowledgeArticle'];
-const BASE_CARD_TYPES: { module: string; name: string }[] = [
-  { module: 'https://cardstack.com/base/spec', name: 'Spec' },
-];
-
-async function loadDarkFactorySchemas(
-  client: BoxelCLIClient,
-  realmServerUrl: string,
-  commandRealmUrl: string,
-  darkfactoryModuleBase: string,
-): Promise<
-  | Map<
-      string,
-      {
-        attributes: Record<string, unknown>;
-        relationships?: Record<string, unknown>;
-      }
-    >
-  | undefined
-> {
-  let darkfactoryModule = `${ensureTrailingSlash(darkfactoryModuleBase)}darkfactory`;
-  let schemas = new Map<
-    string,
-    {
-      attributes: Record<string, unknown>;
-      relationships?: Record<string, unknown>;
-    }
-  >();
-
-  for (let cardName of DARKFACTORY_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        {
-          module: rri(darkfactoryModule),
-          name: cardName,
-        },
-      );
-      if (schema) {
-        schemas.set(cardName, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${cardName}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  for (let { module: mod, name } of BASE_CARD_TYPES) {
-    try {
-      let schema = await fetchCardTypeSchema(
-        client,
-        realmServerUrl,
-        commandRealmUrl,
-        { module: rri(mod), name },
-      );
-      if (schema) {
-        schemas.set(name, schema);
-      }
-    } catch (error) {
-      log.warn(
-        `Could not fetch schema for ${name}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  return schemas.size > 0 ? schemas : undefined;
 }

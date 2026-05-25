@@ -12,6 +12,7 @@ Router.map(function () {
     this.route('html', { path: '/html/:format/:ancestor_level' });
     this.route('icon');
     this.route('meta');
+    this.route('types');
     this.route('file-extract');
     this.route('error');
   });

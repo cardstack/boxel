@@ -4,14 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 
 import type { PgAdapter } from '@cardstack/postgres';
 import {
-  asExpressions,
   fetchAllRealmsWithOwners,
   fetchUserPermissions,
-  insert,
   insertPermissions,
-  query,
 } from '@cardstack/runtime-common';
 
+import { upsertPublishedRealmInRegistry } from '../lib/realm-registry-writes';
 import { setupDB } from './helpers';
 
 module(basename(__filename), function () {
@@ -37,18 +35,13 @@ module(basename(__filename), function () {
       publishedRealmURL: string;
       ownerUsername?: string;
     }) {
-      let publishedRealmId = uuidv4();
-      let { nameExpressions, valueExpressions } = asExpressions({
-        id: publishedRealmId,
-        owner_username: ownerUsername,
-        source_realm_url: sourceRealmURL,
-        published_realm_url: publishedRealmURL,
-        last_published_at: Date.now().toString(),
+      await upsertPublishedRealmInRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId: uuidv4(),
+        ownerUsername,
+        sourceRealmURL,
+        lastPublishedAt: Date.now(),
       });
-      await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      );
     }
 
     test('can fetch only own realms, filtering out public and published realms', async function (assert) {
@@ -167,18 +160,13 @@ module(basename(__filename), function () {
       publishedRealmURL: string;
       ownerUsername?: string;
     }) {
-      let publishedRealmId = uuidv4();
-      let { nameExpressions, valueExpressions } = asExpressions({
-        id: publishedRealmId,
-        owner_username: ownerUsername,
-        source_realm_url: sourceRealmURL,
-        published_realm_url: publishedRealmURL,
-        last_published_at: Date.now().toString(),
+      await upsertPublishedRealmInRegistry(dbAdapter, {
+        publishedRealmURL,
+        publishedRealmId: uuidv4(),
+        ownerUsername,
+        sourceRealmURL,
+        lastPublishedAt: Date.now(),
       });
-      await query(
-        dbAdapter,
-        insert('published_realms', nameExpressions, valueExpressions),
-      );
     }
 
     test('uses source realm owner when published realm permissions are missing', async function (assert) {

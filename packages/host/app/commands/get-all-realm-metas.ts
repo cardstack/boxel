@@ -30,7 +30,7 @@ export default class GetAllRealmMetasCommand extends HostBaseCommand<
         return new RealmMetaField({
           info: new RealmInfoField({ ...realmMeta.info }),
           canWrite: realmMeta.canWrite,
-          url: url,
+          realmIdentifier: url,
         });
       }),
     });

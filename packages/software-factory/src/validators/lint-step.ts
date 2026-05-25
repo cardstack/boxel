@@ -58,7 +58,7 @@ export interface LintValidationStepConfig {
   /** Injected for testing — defaults to getNextValidationSequenceNumber. */
   getNextSequenceNumber?: (
     slug: string,
-    targetRealmUrl: string,
+    targetRealm: string,
   ) => Promise<number>;
 }
 
@@ -81,35 +81,32 @@ export class LintValidationStep implements ValidationStepRunner {
   private config: LintValidationStepConfig;
   private lastSequenceNumber = 0;
 
-  private getNextSeqFn: (
-    slug: string,
-    targetRealmUrl: string,
-  ) => Promise<number>;
+  private getNextSeqFn: (slug: string, targetRealm: string) => Promise<number>;
 
   constructor(config: LintValidationStepConfig) {
     this.config = config;
     this.getNextSeqFn =
       config.getNextSequenceNumber ??
-      ((slug: string, targetRealmUrl: string) =>
+      ((slug: string, targetRealm: string) =>
         getNextValidationSequenceNumber(
           config.client,
           slug,
           'Validations/lint_',
           config.lintResultsModuleUrl,
           'LintResult',
-          targetRealmUrl,
+          targetRealm,
         ));
   }
 
   async run(
-    targetRealmUrl: string,
+    targetRealm: string,
     iteration?: number,
   ): Promise<ValidationStepResult> {
     // Step 1: Discover lintable files
     let lintableFiles: string[];
     try {
       lintableFiles = await discoverLintableFiles({
-        targetRealmUrl,
+        targetRealm,
         client: this.config.client,
         fetchFilenames: this.config.fetchFilenames,
       });
@@ -140,7 +137,7 @@ export class LintValidationStep implements ValidationStepRunner {
       : 'validation';
 
     let issueURL = this.config.issueId
-      ? new URL(this.config.issueId, targetRealmUrl).href
+      ? new URL(this.config.issueId, targetRealm).href
       : undefined;
 
     let seq: number;
@@ -148,7 +145,7 @@ export class LintValidationStep implements ValidationStepRunner {
       seq = iteration;
     } else {
       try {
-        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        let realmSeq = await this.getNextSeqFn(slug, targetRealm);
         // Use the higher of realm state vs in-memory floor. The realm index
         // may be stale if the prior lint run just completed (lint is fast),
         // so the floor prevents sequence reuse / artifact overwrite.
@@ -168,7 +165,7 @@ export class LintValidationStep implements ValidationStepRunner {
         slug,
         this.config.lintResultsModuleUrl,
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
           sequenceNumber: seq,
@@ -198,7 +195,7 @@ export class LintValidationStep implements ValidationStepRunner {
       durationMs,
     } = await lintRealmFiles(
       {
-        targetRealmUrl,
+        targetRealm,
         client: this.config.client,
         workspaceDir: this.config.workspaceDir,
         lintFileFn: this.config.lintFileFn,
@@ -219,7 +216,7 @@ export class LintValidationStep implements ValidationStepRunner {
           fileResults: allFileResults,
         },
         {
-          targetRealmUrl,
+          targetRealm,
           client: this.config.client,
           workspaceDir: this.config.workspaceDir,
         },

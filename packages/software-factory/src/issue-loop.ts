@@ -26,6 +26,7 @@ import type { IssueStore } from './issue-scheduler';
 
 import { IssueScheduler } from './issue-scheduler';
 import { logger } from './logger';
+import { retryWithPoll } from './retry-with-poll';
 
 let log = logger('issue-loop');
 
@@ -39,10 +40,7 @@ let log = logger('issue-loop');
  * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
-  validate(
-    targetRealmUrl: string,
-    iteration: number,
-  ): Promise<ValidationResults>;
+  validate(targetRealm: string, iteration: number): Promise<ValidationResults>;
   /** Format validation results for LLM context and issue descriptions. */
   formatForContext(results: ValidationResults): string;
 }
@@ -83,7 +81,8 @@ export {
 export interface IssueContextBuilderLike {
   buildForIssue(params: {
     issue: IssueData;
-    targetRealmUrl: string;
+    targetRealm: string;
+    darkfactoryModuleUrl?: string;
     validationResults?: ValidationResults;
     /** Pre-formatted validation context from Validator.formatForContext(). */
     validationContext?: string;
@@ -106,7 +105,13 @@ export interface IssueLoopConfig {
    * slugs) to the specific issue being validated.
    */
   createValidator: (issueId: string) => Validator;
-  targetRealmUrl: string;
+  targetRealm: string;
+  /**
+   * Module URL for the tracker schema (Project / Issue / KnowledgeArticle).
+   * Surfaced in the system prompt so the agent can hand-write the correct
+   * `meta.adoptsFrom.module` when constructing tracker JSON via native `Write`.
+   */
+  darkfactoryModuleUrl?: string;
   /**
    * Local workspace directory mirroring the target realm. Passed to the
    * loop so it can interleave sync calls with agent turns and validation.
@@ -218,7 +223,8 @@ export async function runIssueLoop(
     tools,
     issueStore,
     createValidator,
-    targetRealmUrl,
+    targetRealm,
+    darkfactoryModuleUrl,
     syncWorkspace,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -233,7 +239,7 @@ export async function runIssueLoop(
   let exhaustedIssues = new Set<string>();
 
   log.info(
-    `Starting issue loop: targetRealm=${targetRealmUrl}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
+    `Starting issue loop: targetRealm=${targetRealm}, maxIterationsPerIssue=${maxIterationsPerIssue}`,
   );
 
   if (!scheduler.hasUnblockedIssues()) {
@@ -293,7 +299,16 @@ export async function runIssueLoop(
             `  in_progress flip didn't sync to realm — realm still shows ${issue.status}; sync error: ${pickupSync.error ?? 'unknown'}`,
           );
         } else {
-          issue = await scheduler.refreshIssueState(issue);
+          // The realm's source POST returns once writes are durable,
+          // but the search index that refreshIssueState consults
+          // settles asynchronously. Bound-poll until the index reflects
+          // the status flip we just synced; fall through to whatever
+          // the index shows after the deadline.
+          let pickupIssue: SchedulableIssue = issue;
+          issue = await retryWithPoll(
+            () => scheduler.refreshIssueState(pickupIssue),
+            (r) => r.status !== 'in_progress',
+          );
         }
       } catch (err) {
         log.warn(
@@ -326,7 +341,8 @@ export async function runIssueLoop(
       // Build context — includes pre-formatted validation context from prior iteration
       let context = await contextBuilder.buildForIssue({
         issue,
-        targetRealmUrl,
+        targetRealm,
+        darkfactoryModuleUrl,
         validationResults,
         validationContext,
         briefUrl,
@@ -338,6 +354,28 @@ export async function runIssueLoop(
 
       log.info(`  Agent returned ${result.toolCalls.length} tool call(s)`);
 
+      // The agent itself reports "I cannot proceed" via two paths:
+      // calling `request_clarification` (clarification.message), or
+      // an unrecoverable backend error (e.g. session.error from
+      // opencode on a 401). Both surface as `result.status === 'blocked'`.
+      // Mark the issue blocked and exit the inner loop — validation and
+      // further iterations would just spin without making progress.
+      if (result.status === 'blocked') {
+        let blockMessage =
+          result.message?.trim() || 'agent reported it could not proceed';
+        log.info(`  Agent reported blocked: ${blockMessage}`);
+        try {
+          await issueStore.updateIssue(issue.id, { status: 'blocked' });
+          await syncWorkspace();
+        } catch (err) {
+          log.warn(
+            `  Failed to mark issue as blocked after agent block: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        exitReason = 'blocked';
+        break;
+      }
+
       // Push the agent's workspace writes to the realm so the prerenderer-
       // backed validators (eval / instantiate / test-step's QUnit run) see
       // the latest source when they execute against the realm.
@@ -346,7 +384,7 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn.
       // Pass the iteration number so all steps use it as the sequence
       // number in artifact filenames (parse_slug-1, lint_slug-1, etc.)
-      validationResults = await validator.validate(targetRealmUrl, iteration);
+      validationResults = await validator.validate(targetRealm, iteration);
 
       // Push the validator's artifact cards (ParseResult / LintResult /
       // EvalResult / InstantiateResult / TestRun) to the realm so they
@@ -429,8 +467,21 @@ export async function runIssueLoop(
         );
       }
 
-      // Refresh issue state from realm
-      issue = await scheduler.refreshIssueState(issue);
+      // Refresh issue state from realm. When the agent signal_done'd and
+      // we just synced status='done' to the realm, bound-poll until the
+      // search index reflects that — otherwise we'd read stale
+      // `in_progress` here, run a wasted inner iteration, and only
+      // settle on the next pass. Other paths (sync failed, validation
+      // failed) refresh once and trust whatever the index shows.
+      let expectedDoneSync =
+        agentSignaledDone && validationResults?.passed && !syncFailed;
+      let currentIssue: SchedulableIssue = issue;
+      issue = expectedDoneSync
+        ? await retryWithPoll(
+            () => scheduler.refreshIssueState(currentIssue),
+            (r) => r.status !== 'done',
+          )
+        : await scheduler.refreshIssueState(currentIssue);
       log.info(`  Issue state after refresh: status=${issue.status}`);
 
       // Check exit conditions
@@ -544,6 +595,18 @@ export async function runIssueLoop(
     if (allRealmIssuesDone) {
       try {
         await issueStore.updateProjectStatus('completed');
+        // updateProjectStatus writes the new status to the workspace
+        // mirror but doesn't push — without this sync the realm-side
+        // Project card keeps its bootstrap "active" status forever
+        // (catalog UI shows it as ACTIVE even after every issue is
+        // marked done). Same syncWorkspace the orchestrator uses
+        // elsewhere; failure logs but doesn't block.
+        let projectSync = await syncWorkspace();
+        if (!projectSync.ok) {
+          log.warn(
+            `Failed to sync project status update: ${projectSync.error ?? 'unknown error'}`,
+          );
+        }
       } catch (err) {
         log.warn(
           `Failed to update project status to completed: ${err instanceof Error ? err.message : String(err)}`,

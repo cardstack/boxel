@@ -13,6 +13,8 @@ import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils, getRoomIdForRealmAndUser } from './mock-matrix/_utils';
 
+import { getTestRealmRegistry } from './test-realm-registry';
+
 import { registerRealmAuthSessionRoomEnsurer } from './index';
 
 export const testRealmServerMatrixUsername = 'realm_server';
@@ -168,6 +170,27 @@ export function setupMockMatrix(
   // adapters, registered queue handlers, bound Worker methods, etc.) alive.
   hooks.afterEach(async function () {
     await settled();
+    // Drain any pending realm indexing BEFORE we null out testState.sdk —
+    // the IIFE inside RealmIndexUpdater.enqueueUpdate fires its broadcast
+    // (eventName: 'index') as the last step of the deferred indexing
+    // chain, and that broadcast goes through the test adapter's
+    // broadcastRealmEvent which reads mockMatrixUtils.serverState. If we
+    // tear down matrix first, in-flight broadcasts throw on undefined
+    // serverState. QUnit afterEach is LIFO, so setupLocalIndexing's drain
+    // (which would normally take care of this) actually runs AFTER this
+    // hook in test files where setupMockMatrix is registered after
+    // setupLocalIndexing. Doing the drain here, in the same hook, before
+    // the teardown step, fixes the order regardless of which sibling
+    // hook is registered last.
+    for (let entry of getTestRealmRegistry().values()) {
+      try {
+        await entry.realm.incrementalIndexing();
+      } catch {
+        // Indexing errors are surfaced via error_doc in the worker; the
+        // drain itself swallows them so a single in-flight failure can't
+        // break teardown for unrelated tests.
+      }
+    }
     testState.owner = undefined;
     testState.sdk = undefined;
     testState.opts = undefined;

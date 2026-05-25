@@ -40,6 +40,12 @@ export interface BoxelIndexTable {
   // operators can post-hoc investigate slow (but not failing)
   // renders too.
   timing_diagnostics: Record<string, unknown> | null;
+  // Originating worker job id. Stamped on every working-table write so
+  // a retry of the same job can find (and skip) URLs the previous
+  // attempt already processed. Only present on `boxel_index_working`
+  // — the production `boxel_index` mirror does not carry this column,
+  // hence the field is optional.
+  job_id?: number | null;
 }
 
 export interface RealmVersionsTable {
@@ -54,11 +60,43 @@ export interface CardTypeSummary {
   icon_html: string;
 }
 
+// Top-level shape of `realm_meta.value`. `instances` summarizes CardDef rows
+// (boxel_index.type='instance') and `files` summarizes FileDef rows
+// (boxel_index.type='file'). Both arrays use the same per-type-summary shape.
+// CardsGrid's sidebar partitions these into the "All Cards" and "All Files"
+// top-level groups.
+//
+// Legacy realms written before this column was partitioned stored `value` as a
+// bare `CardTypeSummary[]` (instances only). Readers should call
+// `normalizeRealmMetaValue` (defined below) to tolerate that shape during the
+// transition until every realm has been reindexed.
+export interface RealmMetaValue {
+  instances: CardTypeSummary[];
+  files: CardTypeSummary[];
+}
+
 export interface RealmMetaTable {
   realm_version: number;
   realm_url: string;
-  value: Record<string, string>[];
+  value: RealmMetaValue;
   indexed_at: string | null;
+}
+
+// Tolerate the legacy `value` shape (a bare CardTypeSummary[]) stored before
+// realm_meta was partitioned into instances/files. Once every realm has been
+// reindexed, the array branch becomes dead code and can be removed.
+export function normalizeRealmMetaValue(raw: unknown): RealmMetaValue {
+  if (!raw) {
+    return { instances: [], files: [] };
+  }
+  if (Array.isArray(raw)) {
+    return { instances: raw as CardTypeSummary[], files: [] };
+  }
+  let value = raw as Partial<RealmMetaValue>;
+  return {
+    instances: value.instances ?? [],
+    files: value.files ?? [],
+  };
 }
 
 export const coerceTypes = Object.freeze({
@@ -79,11 +117,3 @@ export const coerceTypes = Object.freeze({
   value: 'JSON',
   timing_diagnostics: 'JSON',
 });
-
-export interface PublishedRealmTable {
-  id: string;
-  owner_username: string;
-  source_realm_url: string;
-  published_realm_url: string;
-  last_published_at: string;
-}

@@ -212,6 +212,128 @@ module(basename(__filename), function (hooks) {
         /Missing prerender run-command-request attributes: affinityValue/,
       );
     });
+
+    test('threads jobId through as x-boxel-job-id header and strips from body', async function (assert) {
+      let receivedHeaders: any;
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        receivedHeaders = req.headers;
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              data: { attributes: { ok: true } },
+            }),
+          );
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+          jobId: '20678.26619',
+        });
+
+        assert.strictEqual(
+          receivedHeaders?.['x-boxel-job-id'],
+          '20678.26619',
+          'jobId is sent as x-boxel-job-id header',
+        );
+        assert.notOk(
+          'jobId' in (receivedBody?.data?.attributes ?? {}),
+          'jobId is not present in data.attributes (request metadata, not payload)',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('omits x-boxel-job-id header when jobId is not provided', async function (assert) {
+      let receivedHeaders: any;
+      let server = createServer((req, res) => {
+        receivedHeaders = req.headers;
+        req.on('data', () => {});
+        req.on('end', () => {
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+        });
+
+        assert.notOk(
+          'x-boxel-job-id' in (receivedHeaders ?? {}),
+          'x-boxel-job-id header absent when jobId is omitted',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('omits x-boxel-job-id header when jobId fails sanitization', async function (assert) {
+      let receivedHeaders: any;
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        receivedHeaders = req.headers;
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        // Newline in the job-id string is the canonical log-injection
+        // shape that sanitizePrerenderJobId is designed to reject.
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+          jobId: '20678.26619\nX-Injected: bad',
+        });
+
+        assert.notOk(
+          'x-boxel-job-id' in (receivedHeaders ?? {}),
+          'x-boxel-job-id header absent when jobId fails sanitization',
+        );
+        assert.notOk(
+          'jobId' in (receivedBody?.data?.attributes ?? {}),
+          'jobId stripped from body even when sanitization rejects it',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
   });
 
   module('remote prerenderer retries', function () {

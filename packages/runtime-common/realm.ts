@@ -1,6 +1,7 @@
 import { Deferred } from './deferred';
 import {
   resolveCardReference,
+  rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
@@ -17,7 +18,7 @@ import {
   type LinkableCollectionDocument,
   type PrerenderedCardCollectionDocument,
 } from './document-types';
-import { isMeta, type CardResource, type Relationship } from './resource-types';
+import type { CardResource, Relationship } from './resource-types';
 import { normalizeRelationships } from './relationship-utils';
 import type { LocalPath } from './paths';
 import { RealmPaths, ensureTrailingSlash, join } from './paths';
@@ -63,6 +64,7 @@ import {
   unixTime,
   query,
   param,
+  dbExpression,
   isValidPrerenderedHtmlFormat,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -75,7 +77,6 @@ import {
   type DirectoryMeta,
   type ResolvedCodeRef,
   isResolvedCodeRef,
-  type FieldDefinition,
   type RealmPermissions,
   type RealmAction,
   type LintArgs,
@@ -83,7 +84,7 @@ import {
   type Query,
   type PrerenderedHtmlFormat,
   codeRefFromInternalKey,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
   systemInitiatedPriority,
   userIdFromUsername,
@@ -101,7 +102,6 @@ import isEqual from 'lodash/isEqual';
 import isPlainObject from 'lodash/isPlainObject';
 import { z } from 'zod';
 import { inferContentType } from './infer-content-type';
-import type { CardFields } from './resource-types';
 import {
   fileContentToText,
   fileContentToBytes,
@@ -131,7 +131,6 @@ import {
 } from './matrix-client';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
-import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
@@ -162,6 +161,7 @@ import { filterAtomicOperations } from './atomic-document';
 import {
   isFilterRefersToNonexistentTypeError,
   type DefinitionLookup,
+  type PopulateCoordinator,
 } from './definition-lookup';
 import {
   fetchSessionRoom,
@@ -199,19 +199,54 @@ export type RealmInfo = {
   realmUserId?: string;
   publishable: boolean | null;
   lastPublishedAt: string | Record<string, string> | null;
+  // Opt-in to producing the full prerendered isolated HTML for the
+  // realm's default CardsGrid index card. When undefined / null /
+  // false the host's render route substitutes a small boilerplate
+  // placeholder instead and skips the (expensive) isolated render.
+  // The lever is primarily set by the publish handler on the
+  // published realm snapshot so anonymous-visitor SSR injection has
+  // real content; unpublished realms typically have nothing reading
+  // the index's isolated HTML. Optional to avoid forcing every
+  // RealmInfo fixture to update.
+  includePrerenderedDefaultRealmIndex?: boolean | null;
 };
 
 const PROTECTED_REALM_CONFIG_PROPERTIES = ['showAsCatalog'];
 
+// Marker header the host SPA attaches to outbound _federated-search /
+// _search calls when it's running inside a prerender tab. The prerender
+// server uses puppeteer's `evaluateOnNewDocument` to inject a window
+// global (`__boxelRenderContext = true`) into every Chrome tab before
+// the host loads; the host's realm-server fetch wrapper then reads that
+// flag and adds this header on its own outbound search requests only —
+// narrowly scoped so non-realm-server origins (icons, vite, etc.) don't
+// see it on a CORS preflight. When the realm sees this on an inbound
+// _search request it knows the caller is the host SPA mid-render and
+// switches the search to cacheOnlyDefinitions:true, which short-circuits
+// the recursive lookupDefinition → prerenderModule path in
+// populateQueryFields that causes self-referential prerender deadlocks
+// under parallel indexing. Kept as a bare string here so runtime-common
+// stays independent of realm-server. The realm-server prerender side
+// re-exports the same value from prerender-constants.ts.
+export const DURING_PRERENDER_HEADER = 'x-boxel-during-prerender';
+function isDuringPrerenderRequest(request: Request): boolean {
+  return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
+}
+
 // Fields owned by the RealmConfig card instance at /realm.json. Anything not
 // in this set is still written to the legacy .realm.json sidecar until
-// CS-10053 / CS-10055 move the remaining flags off-file.
+// CS-10055 moves hostHome / interactHome off-file.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
   'iconURL',
   'hostRoutingRules',
+  'includePrerenderedDefaultRealmIndex',
 ]);
+
+// Fields owned by the realm_metadata DB table. Routes through
+// upsertRealmMetadata rather than the sidecar.
+const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
   path: LocalPath;
@@ -224,8 +259,122 @@ export interface FileRef {
 const CACHE_HEADER = 'X-Boxel-Cache';
 const CACHE_HIT_VALUE = 'hit';
 const CACHE_MISS_VALUE = 'miss';
+// CS-11030: DB table backing the cross-process transpile cache and
+// the matching budget the loser path waits before re-reading. Same
+// 180 s budget as CachingDefinitionLookup's COALESCE_NOTIFY_WAIT_MS —
+// prerenders + transpiles run on similar timescales; bigger budgets
+// just delay the fallthrough on missed NOTIFY, smaller budgets risk
+// a second transpile before the winner finishes.
+const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
+const COALESCE_NOTIFY_WAIT_MS = 180_000;
 const MODULE_ETAG_VARIANT = 'module';
 const SOURCE_ETAG_VARIANT = 'source';
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>:card"` — quoted
+// per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
+// validators and split the cache key. Two inputs feed the base:
+//   - `indexed_at` on the primary card's index row, which bumps on
+//     direct writes AND dependency-triggered re-writes (so the deps
+//     graph carries cascading invalidations forward through it);
+//   - md5 of the cached `RealmInfo`, since `attachRealmInfo()`
+//     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
+//     into the assembled response at request time and that field
+//     can change without any card being re-indexed.
+// `buildCardJsonEtag()` constructs the value; cards with foreign-
+// realm instance deps suppress emission entirely because cross-realm
+// invalidation doesn't cascade `indexed_at` today.
+const CARD_JSON_ETAG_VARIANT = 'card';
+
+// Postgres NOTIFY channel for cross-instance invalidation of #sourceCache /
+// #transpiledModuleCache entries on file writes. Two payload shapes:
+//
+//   `<realmURL>:<path>` — invalidate a single path's cached source +
+//      (for executable extensions) module entry. Emitted by every
+//      single-file write/delete via Realm.#notifyFileChange. Receiver
+//      calls Realm.invalidateCache(path).
+//   `<realmURL>:*`      — bulk-invalidate every cached path for this
+//      realm. Emitted by the publish-realm / unpublish-realm /
+//      delete-realm handlers after the FS swap or removal, so peer
+//      replicas (which do NOT receive the file-watcher events that
+//      drive single-file invalidation in-process) drop pre-swap bytes
+//      from `#sourceCache` / `#transpiledModuleCache` before serving the next
+//      source read. Receiver calls Realm.clearLocalSourceCaches(). See
+//      CS-11156. (`*` is reserved as the wildcard sentinel; real
+//      LocalPath values never contain it.)
+//
+// See docs/db-authoritative-realm-registry.md §6 "Cache invalidation channel"
+// and §9 "Cache-invalidation NOTIFY missed" for the semantics (best-effort,
+// missed-NOTIFY is a cache-staleness window, not data corruption).
+export const REALM_FILE_CHANGES_CHANNEL = 'realm_file_changes';
+export const REALM_FILE_CHANGES_WILDCARD = '*';
+
+// CS-11119: Postgres NOTIFY channel announcing that a realm's read-side
+// derived caches (`#inFlightSearch`, `#cachedRealmInfo`) must drop.
+// Payload is the realm URL.
+//
+// Distinct from REALM_FILE_CHANGES_CHANNEL (which fires at file-WRITE
+// time, before indexing has run). Originally introduced for INDEX-UPDATE
+// fan-out — emitted after the worker's batch.done() committed
+// boxel_index — but the receiver also drops `#cachedRealmInfo`, which is
+// derived from `realm_permissions`. CS-11178 extends the publisher list
+// so a `realm_permissions` write (`patchRealmPermissions`) fires the
+// same NOTIFY: peers drop their cached RealmInfo (whose `visibility`
+// field is permissions-derived) and an unrelated in-flight searchCards
+// pays at most one extra DB round-trip — admin-rare PATCHes make the
+// over-invalidation negligible. If a future caller needs to invalidate
+// permissions-derived state without touching index-derived state,
+// introduce a dedicated `realm_permissions_changed` channel.
+//
+// Same best-effort semantics as the other realm-server NOTIFY channels: a
+// missed NOTIFY leaves a bounded staleness window (one in-flight
+// searchCards walk plus a stale RealmInfo on `_info` until the next swap
+// or write), not data corruption.
+export const REALM_INDEX_UPDATED_CHANNEL = 'realm_index_updated';
+
+// Emit `NOTIFY realm_index_updated, '<realmURL>'`. Called from every
+// post-update site inside Realm (Realm.update's onInvalidation, the
+// deferred variant, and Realm.fullReindex). Adapters without pub/sub
+// (e.g. SQLite in the host/browser context) implement notify as a no-op.
+export async function notifyRealmIndexUpdated(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<void> {
+  try {
+    await dbAdapter.notify(REALM_INDEX_UPDATED_CHANNEL, realmURL);
+  } catch (err: unknown) {
+    logger('realm').warn(
+      `notify ${REALM_INDEX_UPDATED_CHANNEL} failed for ${realmURL}: ${String(err)}`,
+    );
+  }
+}
+
+// Emit a bulk `<realmURL>:*` NOTIFY on the `realm_file_changes` channel so
+// peer realm-server replicas drop every cached path for this realm. Use
+// directly when the caller has a DBAdapter + realm URL but isn't keeping
+// the realm running locally (the unpublish-realm and delete-realm
+// handlers — the realm is about to be torn down, so this replica's own
+// in-process cache will be garbage-collected with the Realm instance).
+// When the caller wants the SAME local cache wipe AND the broadcast
+// — i.e. its own next read must not hit pre-swap bytes — call
+// `Realm.clearLocalSourceCachesAndBroadcast()` instead. Same best-effort
+// semantics as `Realm.#notifyFileChange`: failures are logged and
+// swallowed (missed NOTIFY is a bounded staleness window, not data
+// corruption). See CS-11156.
+export async function notifyAllFileChanges(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<void> {
+  try {
+    await dbAdapter.notify(
+      REALM_FILE_CHANGES_CHANNEL,
+      `${realmURL}:${REALM_FILE_CHANGES_WILDCARD}`,
+    );
+  } catch (err: unknown) {
+    logger('realm').warn(
+      `notify ${REALM_FILE_CHANGES_CHANNEL} (bulk) failed for ${realmURL}: ${String(err)}`,
+    );
+  }
+}
+
 export const FILE_META_RESERVED_KEYS = new Set([
   'name',
   'url',
@@ -257,7 +406,7 @@ type CachedSourceRedirectEntry = {
 
 type SourceCacheEntry = CachedSourceFileEntry | CachedSourceRedirectEntry;
 
-type ModuleCacheEntry = {
+type TranspiledModuleEntry = {
   canonicalPath: LocalPath;
   body: string;
   headers: Record<string, string>;
@@ -273,12 +422,19 @@ type ModuleLoadResult =
       canonicalPath: LocalPath;
       headers: Record<string, string>;
     }
-  | {
-      kind: 'module';
-      canonicalPath: LocalPath;
-      body: string;
-      headers: Record<string, string>;
-    };
+  | ModuleTranspileResult;
+
+type ModuleTranspileResult = {
+  kind: 'module';
+  canonicalPath: LocalPath;
+  body: string;
+  headers: Record<string, string>;
+  // Computed once at the transpile/L2-hit boundary so fallbackHandle's L1
+  // write can reuse them instead of re-running extractModuleDependencyKeys
+  // on every L1 miss. Carried through the L2 row so a cross-process L2 hit
+  // also skips the AST scan.
+  dependencyKeys: Set<string>;
+};
 
 // ETag base prefers a content fingerprint (md5 of the file body) over
 // `lastModified` because the unix-second timestamp collides for two
@@ -298,6 +454,43 @@ function buildEtag(
   }
   let baseStr = String(base);
   return variant ? `${baseStr}:${variant}` : baseStr;
+}
+
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>:card"`. The value
+// is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
+// browsers don't re-quote inbound validators and an unquoted token
+// would fail strict-validator parsing in some intermediaries.
+// `indexedAt` captures direct + dep-cascaded writes; the
+// `realmInfoHash` captures `attachRealmInfo()`'s request-time
+// injection of `meta.realmInfo` (which can flip without re-indexing
+// any card). A null `indexedAt` suppresses ETag emission entirely.
+function buildCardJsonEtag(
+  indexedAt: number | null | undefined,
+  realmInfoHash: string | undefined,
+): string | undefined {
+  if (indexedAt == null) {
+    return undefined;
+  }
+  let base = realmInfoHash ? `${indexedAt}-${realmInfoHash}` : `${indexedAt}`;
+  return `"${base}:${CARD_JSON_ETAG_VARIANT}"`;
+}
+
+// RFC 9110 §13.1.2: `If-None-Match` may be `*`, a comma-separated
+// list of validators, and individual entries may be weak (`W/`-
+// prefixed). For GET we don't distinguish weak vs. strong (spec
+// says weak comparison is fine for non-range requests), so strip
+// the `W/` prefix on *both* sides and compare the bare quoted
+// values — a server-emitted weak ETag must still match an echoed
+// `If-None-Match: W/"..."` from the client.
+export function ifNoneMatchMatches(headerValue: string, etag: string): boolean {
+  let value = headerValue.trim();
+  if (value === '*') {
+    return true;
+  }
+  let normalizedEtag = etag.replace(/^W\//, '');
+  return value
+    .split(',')
+    .some((token) => token.trim().replace(/^W\//, '') === normalizedEtag);
 }
 
 function computeContentHash(content: string | Uint8Array): string {
@@ -389,6 +582,20 @@ export interface FileWriteResult extends AdapterWriteResult {
 export interface WriteOptions {
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
+  // When false, the write returns as soon as the source bytes are durable;
+  // the *final* index flush kicks off in the background. Callers that need
+  // to know when indexing has settled can `await realm.incrementalIndexing()`.
+  // Defaults to true (preserve the synchronous-indexing semantic existing
+  // callers depend on).
+  //
+  // Note: in a mixed-batch `writeMany` call where a module is followed by
+  // an instance, the *intermediate* index flush that fileSerialization
+  // depends on is still awaited inline regardless of this flag — without
+  // it, the next instance's serialization would fail. This flag governs
+  // only the final indexing await. The first concrete caller is the per-
+  // file `+source` POST handler, which writes a single file at a time, so
+  // the intermediate-flush path is not exercised in practice.
+  waitForIndex?: boolean | null;
 }
 
 export interface RealmAdapter {
@@ -488,6 +695,11 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
+  // [readiness-diag] — opt-in logger, off in production, enabled in CI
+  // host tests via `readiness-diag=debug` in HOST_TEST_LOG_LEVELS.
+  // Remove this field together with the [readiness-diag] call sites
+  // once the CI readiness-check timeout flake is rooted out.
+  #readinessDiag = logger('readiness-diag');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -498,7 +710,56 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
-  #moduleCache = new AliasCache<ModuleCacheEntry>();
+  #transpiledModuleCache = new AliasCache<TranspiledModuleEntry>();
+  // CS-11028: per-path generation counters for #transpiledModuleCache. Bumped
+  // synchronously by invalidateCache(path) before any await. fallbackHandle
+  // snapshots at entry and discards its post-transpile cache write if the
+  // path's generation moved during the in-flight transpile — otherwise the
+  // pre-invalidation bytes would re-populate the slot that invalidate just
+  // cleared and serve stale code until the next invalidate of that path.
+  // #transpiledModuleCacheGlobalGeneration covers __testOnlyClearCaches, which wipes
+  // the whole map; a snapshot taken before the wipe sees its `path`
+  // component reset to 0 alongside the live counter, so a global generation
+  // is the only thing that reliably mismatches afterwards.
+  #transpiledModuleCacheGenerations: Map<LocalPath, number> = new Map();
+  #transpiledModuleCacheGlobalGeneration = 0;
+  // CS-11029: in-process inflight dedup for the transpile pipeline.
+  // Concurrent same-path callers that miss #transpiledModuleCache used to each call
+  // transpileJS independently — 50–500 ms of babel + ember-template-
+  // compilation + decorator transforms wasted per duplicate. The map is
+  // keyed by local path so the second-and-onward caller awaits the first
+  // caller's promise instead of running babel again. Invalidation paths
+  // (writeMany, invalidateCache, the full-index clear, etc.) drop the
+  // entry through the shared #dropTranspiledModuleEntry /
+  // #dropAllTranspiledModuleCacheEntries helpers so post-invalidate callers don't
+  // join a stale transpile whose #transpiledModuleCache.set will be discarded by
+  // CS-11028's generation guard anyway. Identity-checked cleanup on
+  // settle is the same shape as CachingDefinitionLookup's #inFlight — a
+  // newer pending entry installed after a drop survives an older
+  // promise's eventual settle.
+  #inFlightTranspiles: Map<LocalPath, Promise<ModuleTranspileResult>> =
+    new Map();
+  // Monotonic count of transpileJS invocations, used by the CS-11029
+  // dedup tests to assert that N concurrent same-path readers triggered
+  // exactly one transpile call. Reset by __testOnlyClearCaches so each
+  // test reasons from a clean baseline.
+  #transpileCallCount = 0;
+  // Monotonic count of times the `existing` branch was taken in
+  // #transpileModuleDeduped — i.e., a concurrent caller joined a
+  // previously-installed in-flight promise instead of installing its
+  // own. Lets the dedup tests deterministically observe "B has joined
+  // A's pending" without racing on event-loop timing in CI. Reset by
+  // __testOnlyClearCaches alongside #transpileCallCount.
+  #transpileJoinCount = 0;
+  // CS-11030: optional cross-process coalesce coordinator. When set, the
+  // first realm-server in the fleet to miss the in-memory cache for a
+  // given (realm_url, canonical_path) acquires an advisory lock, writes
+  // the transpiled bytes to module_transpile_cache, and emits NOTIFY;
+  // peers wait on NOTIFY and re-read the row instead of each running
+  // babel independently. Undefined in deployments without pg (sqlite /
+  // in-memory) — the realm then runs the uncoordinated CS-11029 path
+  // and writes nothing to the DB cache.
+  #transpileCoordinator?: PopulateCoordinator;
   #cardSizeLimitBytes: number;
   #fileSizeLimitBytes: number;
 
@@ -515,22 +776,17 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #cachedRealmInfo: RealmInfo | null = null;
+  // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
+  // card+json ETag so a /_config PATCH (or any other path that nulls
+  // `#cachedRealmInfo`) invalidates cached card responses, even
+  // though the index row's `indexed_at` doesn't bump on a config
+  // change. Recomputed lazily alongside the cached realm info.
+  #cachedRealmInfoHash: string | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly __fetchForTesting: typeof globalThis.fetch;
   readonly paths: RealmPaths;
-
-  private visibilityPromise?: Promise<RealmVisibility>;
-
-  // We are caching world readable permissions for realms such that we can avoid
-  // having to look up the realm permissions for world-read realms on every HTTP
-  // HEAD and GET request. the tradeoff is that if there is an out-of-band
-  // update to the permissions that effects world readability (e.g. directly
-  // updating the DB), that will mean we need to restart the realm server to
-  // pick up the permissions change.
-  #worldReadable?: boolean;
-  #worldReadablePromise?: Promise<boolean>;
 
   get url(): string {
     return this.paths.url;
@@ -557,6 +813,7 @@ export class Realm {
       definitionLookup,
       cardSizeLimitBytes,
       fileSizeLimitBytes,
+      transpileCoordinator,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -569,6 +826,13 @@ export class Realm {
       definitionLookup: DefinitionLookup;
       cardSizeLimitBytes?: number;
       fileSizeLimitBytes?: number;
+      // CS-11030: when set, the realm coalesces concurrent cross-process
+      // transpiles through an advisory-lock + NOTIFY winner/loser flow
+      // and persists the resulting bytes to `module_transpile_cache` so
+      // peers re-read instead of re-running babel. Optional — sqlite /
+      // in-memory deployments leave this undefined and the uncoordinated
+      // CS-11029 in-process dedup is the only sharing layer.
+      transpileCoordinator?: PopulateCoordinator;
     },
     opts?: Options,
   ) {
@@ -586,6 +850,7 @@ export class Realm {
       this.#matrixClient.matrixURL.href,
     );
     this.#realmServerURL = ensureTrailingSlash(realmServerURL);
+    this.#transpileCoordinator = transpileCoordinator;
     this.#cardSizeLimitBytes =
       cardSizeLimitBytes ?? DEFAULT_CARD_SIZE_LIMIT_BYTES;
     this.#fileSizeLimitBytes =
@@ -609,7 +874,7 @@ export class Realm {
         return (await maybeHandleScopedCSSRequest(req)) || next(req);
       },
       async (request, next) => {
-        if (!this.paths.inRealm(new URL(request.url))) {
+        if (!this.paths.inRealm(rri(request.url))) {
           return next(request);
         }
         return await this.internalHandle(request, true);
@@ -811,7 +1076,19 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
+    // [readiness-diag] — entry / fulfillment markers. The per-realm
+    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
+    // probe cadence doesn't multiply heartbeat intervals (~300 of them
+    // accumulating across a 10-minute hang) on a single Deferred.
+    let waitStart = Date.now();
+    this.#readinessDiag.debug(
+      `readiness check requested for realm ${this.url}`,
+    );
     await this.#startedUp.promise;
+    let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
+    this.#readinessDiag.debug(
+      `readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
+    );
 
     return createResponse({
       body: null,
@@ -827,6 +1104,15 @@ export class Realm {
     return this.#realmIndexUpdater.indexing();
   }
 
+  // Returns undefined when there is no in-flight incremental indexing, or a
+  // Promise that resolves once every currently in-flight job settles. Not
+  // declared `async` on purpose — the `async` wrapper would force a Promise
+  // return even in the no-pending case, defeating callers (and tests) that
+  // synchronously check whether indexing is pending.
+  incrementalIndexing(): Promise<void> | undefined {
+    return this.#realmIndexUpdater.incrementalIndexing();
+  }
+
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
@@ -839,9 +1125,28 @@ export class Realm {
         },
       );
 
+    // CS-11182: previously the chain was
+    //   await clearRealmDefinitions;
+    //   #dropAllTranspiledModuleCacheEntries();
+    //   broadcastIncrementalInvalidationEvent(...);
+    //   broadcastRealmEvent(...);
+    // — so a throw or hang in clearRealmDefinitions left the transpile-
+    // cache rows live and the broadcasts unsent, and clients kept being
+    // served pre-reindex bytes. Reorder so the synchronous, no-upstream-
+    // dependency work (L1 wipe, fire-and-forget L2 tombstone, broadcasts)
+    // happens first, and the awaited clearRealmDefinitions runs last
+    // where its rejection or stall can no longer block the rest. The
+    // broadcast helpers are fire-and-forget by design (the adapter call
+    // inside `broadcastRealmEvent` is invoked without `await`) so we
+    // call them without a try/catch, matching every other call site.
     let completed = indexingCompleted.then(async ({ invalidations }) => {
-      await this.#definitionLookup.clearRealmCache(this.url);
-      this.#moduleCache.clear();
+      try {
+        this.#dropAllTranspiledModuleCacheEntries();
+      } catch (err: unknown) {
+        this.#log.error(
+          `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
       if (invalidations.length > 0) {
         this.broadcastIncrementalInvalidationEvent(invalidations);
       }
@@ -850,6 +1155,13 @@ export class Realm {
         indexType: 'full',
         realmURL: this.url,
       });
+      try {
+        await this.#definitionLookup.clearRealmDefinitions(this.url);
+      } catch (err: unknown) {
+        this.#log.error(
+          `clearRealmDefinitions failed after reindex of ${this.url}: ${String(err)}`,
+        );
+      }
     });
 
     void completed.catch((error: unknown) => {
@@ -961,6 +1273,13 @@ export class Realm {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
       onInvalidation: async (invalidatedURLs: URL[]) => {
+        // Drop the searchCards in-flight map: the worker's batch.done()
+        // swap landed in this realm's boxel_index, so any pending
+        // pre-update promises must not be coalesced into by post-update
+        // callers. CS-11119 also broadcasts the same wipe to peer
+        // replicas via NOTIFY realm_index_updated so their #inFlightSearch
+        // maps don't coalesce post-update callers into pre-update promises.
+        await this.clearRealmIndexCachesAndBroadcast();
         await this.handleExecutableInvalidations(invalidatedURLs);
         for (let invalidatedURL of invalidatedURLs) {
           invalidations.add(invalidatedURL.href);
@@ -969,6 +1288,56 @@ export class Realm {
     });
 
     return [...invalidations];
+  }
+
+  // Two-phase variant for the deferred-indexing path. Awaits the durable
+  // queue insert so pre-enqueue failures (DB partial outage) propagate to
+  // the caller; the returned `settled` promise resolves once the worker
+  // finishes, onInvalidation runs, and the caller's onSettled hook runs.
+  // Worker-time and post-worker failures reject `settled` and surface via
+  // error_doc inside the worker as before.
+  //
+  // The caller's onSettled hook receives the collected invalidations and
+  // runs *inside the indexing deferred lifecycle* — before the deferred is
+  // fulfilled and removed from #incrementalIndexingDeferreds. Routing the
+  // post-worker invalidation broadcast through this hook (instead of an
+  // outer .then() on settled) means realm.incrementalIndexing() genuinely
+  // waits for the broadcast, which is the only way an afterEach drain can
+  // prevent the broadcast from racing with mock-matrix teardown.
+  private async enqueueIndexUpdateAndCollectInvalidations(
+    urls: URL[],
+    opts: {
+      delete?: true;
+      clientRequestId?: string | null;
+      onSettled?: (invalidations: string[]) => Promise<void> | void;
+    },
+  ): Promise<{ settled: Promise<void> }> {
+    if (urls.length === 0) {
+      if (opts.onSettled) {
+        await opts.onSettled([]);
+      }
+      return { settled: Promise.resolve() };
+    }
+
+    let invalidations = new Set<string>();
+    let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
+      ...(opts?.delete ? { delete: true } : {}),
+      clientRequestId: opts?.clientRequestId ?? null,
+      onInvalidation: async (invalidatedURLs: URL[]) => {
+        await this.clearRealmIndexCachesAndBroadcast();
+        await this.handleExecutableInvalidations(invalidatedURLs);
+        for (let invalidatedURL of invalidatedURLs) {
+          invalidations.add(invalidatedURL.href);
+        }
+      },
+      onSettled: async () => {
+        if (opts.onSettled) {
+          await opts.onSettled([...invalidations]);
+        }
+      },
+    });
+
+    return { settled };
   }
 
   private broadcastIncrementalInvalidationEvent(
@@ -1056,8 +1425,14 @@ export class Realm {
     });
   }
 
-  async start() {
-    this.#startedUp.fulfill((() => this.#startup())());
+  // `fromScratchIndexPriority` overrides the realm's default priority
+  // for the from-scratch-index job that `#startup` enqueues when the
+  // realm has no prior index. Callers that mount-on-demand for a
+  // user-initiated flow (e.g. realm creation) pass
+  // `userInitiatedPriority` so the resulting job jumps ahead of any
+  // backlog of system-priority indexing work.
+  async start(opts?: { fromScratchIndexPriority?: number }) {
+    this.#startedUp.fulfill((() => this.#startup(opts))());
 
     if (this.#adapter.fileWatcherEnabled) {
       await this.startFileWatcher();
@@ -1066,8 +1441,26 @@ export class Realm {
     await this.#startedUp.promise;
   }
 
-  async fullIndex(priority?: number) {
-    await this.realmIndexUpdater.fullIndex(priority);
+  async fullIndex(priority?: number, opts?: { clearLastModified?: boolean }) {
+    // Clear the realmInfo cache before re-indexing so cards rendered
+    // during this pass read /realm.json from the now-populated index
+    // rather than a stale "Unnamed Workspace" cached during an earlier
+    // from-scratch pass that processed /index before /realm.json.
+    // CardsGrid.cardTitle → realmInfo.name drives og:title, which is
+    // baked into the prerendered HTML — clearing only after the pass
+    // would be too late.
+    this.invalidateCachedRealmInfo();
+    let { completed } = this.#realmIndexUpdater.publishFullIndex(
+      priority ?? systemInitiatedPriority,
+      { clearLastModified: opts?.clearLastModified },
+    );
+    await completed;
+    // The from-scratch swap has landed in boxel_index: drop searchCards
+    // in-flight entries + the cached RealmInfo (which may have been
+    // re-parsed from /realm.json during the pass), and broadcast the
+    // same wipe to peer replicas via NOTIFY realm_index_updated so
+    // their caches don't continue serving pre-update state (CS-11119).
+    await this.clearRealmIndexCachesAndBroadcast();
   }
 
   async flushUpdateEvents() {
@@ -1076,19 +1469,273 @@ export class Realm {
 
   __testOnlyClearCaches() {
     this.#sourceCache.clear();
-    this.#moduleCache.clear();
+    this.#dropAllTranspiledModuleCacheEntries();
+    // Reset the transpile counter so each test reasons about its own
+    // delta. Production never reads this counter — only the CS-11029
+    // dedup tests do (CS-11029).
+    this.#transpileCallCount = 0;
+    this.#transpileJoinCount = 0;
+  }
+
+  // CS-11043. Bulk-invalidate this realm's in-process byte caches.
+  // Called by the publish-realm handler after the FS swap, BEFORE the
+  // reindex enqueues — so that subsequent source reads (which the
+  // reindex's prerender fans out across many of) bypass any
+  // pre-swap bytes the realm still has in `#sourceCache` /
+  // `#transpiledModuleCache`. The Phase-3-PR-2 publish flow relies on the
+  // NodeAdapter file-watcher to pick up the swap, but that's an
+  // async-event race against the immediately-enqueued reindex; this
+  // method makes the invalidation synchronous from the publish
+  // handler's vantage point. Different from `__testOnlyClearCaches`
+  // in that it does NOT reset the transpile counter (which is
+  // test-only diagnostic state, unrelated to byte-correctness).
+  // CS-11156: this is the local bulk-invalidate primitive that both the
+  // publish-realm handler and the cross-replica `realm_file_changes:*`
+  // listener invoke. The publish handler reaches it via
+  // `clearLocalSourceCachesAndBroadcast` (local clear + peer broadcast);
+  // the listener invokes it directly (no broadcast — would NOTIFY-loop).
+  clearLocalSourceCaches(): void {
+    this.#sourceCache.clear();
+    this.#dropAllTranspiledModuleCacheEntries();
+  }
+
+  // CS-11029 test seams: tests need to assert "N concurrent same-path
+  // readers triggered exactly one transpile" and "the in-flight slot
+  // released after the shared transpile settled." Exposing the
+  // monotonic counter + the live map size is the smallest surface that
+  // satisfies both — no externally-observable behavior changes.
+  __testOnlyGetTranspileCallCount(): number {
+    return this.#transpileCallCount;
+  }
+  __testOnlyGetInFlightTranspileCount(): number {
+    return this.#inFlightTranspiles.size;
+  }
+  // Counts every time a concurrent caller of #transpileModuleDeduped
+  // joined an existing in-flight entry instead of starting a new one.
+  // The dedup tests poll this to know "B has joined A's pending" so
+  // they can release the gate at a deterministic point — without it,
+  // tests using a real .gts that throws fast at babel can't reliably
+  // observe the in-flight overlap window before A settles.
+  __testOnlyGetTranspileJoinCount(): number {
+    return this.#transpileJoinCount;
+  }
+  // Test-only gate: when set, #materializeAndTranspile awaits the
+  // returned promise before calling transpileJS. Lets the dedup tests
+  // park a transpile mid-flight so they can observe inflight state
+  // without racing real .gts transpile timing in CI. The hook fires
+  // BEFORE #transpileCallCount is bumped — when the count rises, the
+  // gate has released and babel is running.
+  __testOnlyDelayTranspile(fn: (() => Promise<void>) | undefined): void {
+    this.#testOnlyTranspileDelay = fn;
+  }
+  #testOnlyTranspileDelay?: () => Promise<void>;
+
+  // CS-11119: Drop every read-side cache whose content derives from
+  // server-side state — currently `#inFlightSearch` (the searchCards
+  // coalesce map, index-derived) and `#cachedRealmInfo` (cached
+  // `RealmInfo` + ETag-hash; mostly index-derived but its `visibility`
+  // field is permissions-derived per CS-11178). Called by the
+  // realm_index_updated LISTEN handler on peer instances after a swap
+  // commits — or after a `realm_permissions` PATCH lands — somewhere
+  // else in the fleet. Public so the realm-server process can wire the
+  // listener without reaching into private state. Callers awaiting a
+  // pre-clear in-flight searchCards promise still receive its
+  // pre-update result (the SQL was already in motion); only NEW callers
+  // after the clear miss the map and fire a fresh search against the
+  // now-current index.
+  clearRealmIndexCaches(): void {
+    this.#realmIndexQueryEngine.clearInFlightSearch();
+    this.invalidateCachedRealmInfo();
+  }
+
+  // Drop local realm-index caches AND broadcast the same wipe to peer
+  // replicas via realm_index_updated. Called at every site where this
+  // replica's boxel_index has just swapped — closes the post-update
+  // staleness window both locally and on peers. Best-effort broadcast;
+  // a missed NOTIFY is a bounded staleness window (one in-flight
+  // searchCards walk + a slightly stale ETag), not data corruption.
+  // Mirrors CS-11156's clearLocalSourceCachesAndBroadcast pattern for
+  // the byte-cache surface.
+  async clearRealmIndexCachesAndBroadcast(): Promise<void> {
+    this.clearRealmIndexCaches();
+    await notifyRealmIndexUpdated(this.#dbAdapter, this.url);
+  }
+
+  // Invalidate the in-memory byte caches for a single path. Called by the
+  // realm_file_changes LISTEN handler on peer instances after a write lands
+  // somewhere else in the fleet. The shape matches the file-watcher receiver
+  // below — invalidate source always, invalidate module only for executable
+  // extensions. Public so the realm-server process can wire a NOTIFY listener
+  // without reaching into private state.
+  invalidateCache(path: LocalPath): void {
+    this.#sourceCache.invalidate(path);
+    if (hasExecutableExtension(path)) {
+      this.#dropTranspiledModuleEntry(path);
+    }
+  }
+
+  // CS-11028: shared drop helper for any in-process site that invalidates a
+  // single #transpiledModuleCache entry — writeMany, delete/deleteAll, the local
+  // file-watcher callback, the index-updater's executable-invalidation
+  // cascade, the public invalidateCache entry point, etc. Bumps the
+  // per-path generation BEFORE the cache delete so a concurrent in-flight
+  // transpile for the same path — already past its generation snapshot in
+  // fallbackHandle — observes the new value at persist time and drops its
+  // #transpiledModuleCache.set instead of re-filling the slot we're about to empty.
+  #dropTranspiledModuleEntry(path: LocalPath): void {
+    this.#bumpTranspiledModuleCacheGeneration(path);
+    this.#transpiledModuleCache.invalidate(path);
+    // CS-11029: drop the in-flight transpile entry too. Existing
+    // waiters on the old promise still receive its result — their
+    // requests preceded the invalidate, so pre-invalidation bytes are
+    // the correct response. But a caller arriving AFTER this point
+    // must not join the stale transpile (its #transpiledModuleCache.set is
+    // about to be discarded by the generation guard); they install
+    // their own pending against current source instead.
+    this.#inFlightTranspiles.delete(path);
+    // CS-11030: also DELETE the cross-process L2 row. Fire-and-forget
+    // because invalidateCache is sync (called from the LISTEN handler
+    // among others). Best-effort by design — every peer's listener
+    // runs the same DELETE for its own copy, so a transient pg
+    // failure on one peer is repaired by the next; and a stale L2
+    // row that survives is corrected on next reader's invalidate
+    // path or by the writer overwriting it via the ON CONFLICT DO
+    // NOTHING (which becomes a no-op once we re-DELETE).
+    let canonicalPath = this.paths.fileURL(path).href;
+    void this.#deleteTranspileCacheRow(canonicalPath);
+  }
+
+  // Wipes every #transpiledModuleCache entry and bumps the global generation so any
+  // in-flight transpile whose snapshot was taken before this wipe discards
+  // its post-transpile cache write rather than re-populating the
+  // just-cleared map (CS-11028). The per-path map is cleared because the
+  // generations it held are no longer reachable — the global counter is
+  // what catches in-flight snapshots after a wipe.
+  #dropAllTranspiledModuleCacheEntries(): void {
+    this.#transpiledModuleCache.clear();
+    this.#transpiledModuleCacheGenerations.clear();
+    this.#transpiledModuleCacheGlobalGeneration += 1;
+    // CS-11029: same reason as #dropTranspiledModuleEntry — post-wipe
+    // callers must not join a stale transpile.
+    this.#inFlightTranspiles.clear();
+    // CS-11030: fire-and-forget bulk DELETE for the realm's L2 rows.
+    void this.#deleteAllTranspileCacheRows();
+  }
+
+  #bumpTranspiledModuleCacheGeneration(path: LocalPath): void {
+    this.#transpiledModuleCacheGenerations.set(
+      path,
+      (this.#transpiledModuleCacheGenerations.get(path) ?? 0) + 1,
+    );
+  }
+
+  // Snapshot generations for every path the in-flight request could end
+  // up resolving to. fallbackHandle hands us the request's localPath
+  // (e.g. "foo"), but loadModuleFromDisk's getFileWithFallbacks may
+  // resolve to "foo" or to "foo.<ext>" for each executable extension —
+  // and invalidateCache fires against the canonical (with-extension)
+  // path. Snapshotting only "foo" would let an invalidate of "foo.gts"
+  // bump the canonical's generation while leaving the snapshotted
+  // "foo" gen unchanged, so the post-await check would miss the race
+  // and re-populate the "foo" alias with pre-invalidation bytes. By
+  // snapshotting all candidates here and letting the post-await check
+  // key on result.canonicalPath, we catch the race whether the request
+  // was extensionless or not.
+  #snapshotModuleCacheGeneration(localPath: LocalPath): {
+    pathGens: Map<LocalPath, number>;
+    global: number;
+  } {
+    let pathGens = new Map<LocalPath, number>();
+    pathGens.set(
+      localPath,
+      this.#transpiledModuleCacheGenerations.get(localPath) ?? 0,
+    );
+    if (!hasExecutableExtension(localPath)) {
+      for (let ext of executableExtensions) {
+        let candidate = localPath + ext;
+        pathGens.set(
+          candidate,
+          this.#transpiledModuleCacheGenerations.get(candidate) ?? 0,
+        );
+      }
+    }
+    return { pathGens, global: this.#transpiledModuleCacheGlobalGeneration };
+  }
+
+  #transpiledModuleCacheGenerationChanged(
+    canonicalPath: LocalPath,
+    snapshot: { pathGens: Map<LocalPath, number>; global: number },
+  ): boolean {
+    if (this.#transpiledModuleCacheGlobalGeneration !== snapshot.global) {
+      return true;
+    }
+    let snapGen = snapshot.pathGens.get(canonicalPath) ?? 0;
+    let curGen = this.#transpiledModuleCacheGenerations.get(canonicalPath) ?? 0;
+    return curGen !== snapGen;
+  }
+
+  // Broadcast a file-change notification to peer realm-server instances so
+  // they can invalidate their own #sourceCache / #transpiledModuleCache entries for the
+  // same path. Best-effort — failures are logged and swallowed because the
+  // local write already succeeded and a missed NOTIFY is a bounded cache-
+  // staleness window (see docs §9 "Cache-invalidation NOTIFY missed"), not
+  // a correctness failure. Adapters without pub/sub (e.g. SQLite in the
+  // host/browser context) implement notify as a no-op.
+  async #notifyFileChange(path: LocalPath): Promise<void> {
+    try {
+      await this.#dbAdapter.notify(
+        REALM_FILE_CHANGES_CHANNEL,
+        `${this.url}:${path}`,
+      );
+    } catch (err: unknown) {
+      this.#log.warn(
+        `notify ${REALM_FILE_CHANGES_CHANNEL} failed for ${this.url}:${path}: ${String(err)}`,
+      );
+    }
+  }
+
+  // Drop this replica's own `#sourceCache` / `#transpiledModuleCache` AND broadcast
+  // the same wipe to peer replicas. Used by the publish-realm handler
+  // before the reindex enqueue: this replica's own prerender fan-out must
+  // bypass its cache (sync local clear), and peer replicas must drop
+  // their pre-swap bytes too (cross-instance NOTIFY). Self-receive of the
+  // NOTIFY is a no-op since `clearLocalSourceCaches()` is idempotent.
+  //
+  // Bundles local + broadcast in one call, mirroring
+  // `CachingDefinitionLookup.clearRealmDefinitions(url)` — handlers don't have
+  // to remember both steps. Callers that only need the peer broadcast
+  // (because their own Realm instance is about to be unmounted anyway —
+  // unpublish/delete handlers) use the standalone `notifyAllFileChanges`
+  // free function above instead.
+  async clearLocalSourceCachesAndBroadcast(): Promise<void> {
+    this.clearLocalSourceCaches();
+    await notifyAllFileChanges(this.#dbAdapter, this.url);
   }
 
   createJWT(claims: TokenClaims, expiration: ms.StringValue): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
+  // Public mutation entry points (`write`, `writeMany`, `delete`, `deleteAll`)
+  // serialize concurrent same-URL writers across replicas via the per-realm
+  // advisory lock. The lock spans the FS write + index update so two
+  // replicas can't both commit on top of the same pre-state.
+  //
+  // HTTP route handlers in this file that need their READ to be inside the
+  // same critical section as the write (the `/_atomic` precheck and
+  // `patchCardInstance`'s indexEntry read) take the lock themselves at the
+  // handler boundary and invoke `_batchWriteUnlocked` directly — re-entering
+  // through the public methods would deadlock (a second
+  // `pg_advisory_xact_lock` on the same key would block on its own pinned
+  // pool connection).
   async write(
     path: LocalPath,
     contents: string | Uint8Array,
     options?: WriteOptions,
   ): Promise<FileWriteResult> {
-    let results = await this._batchWrite(new Map([[path, contents]]), options);
+    let results = await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._batchWriteUnlocked(new Map([[path, contents]]), options),
+    );
     return results[0];
   }
 
@@ -1096,14 +1743,29 @@ export class Realm {
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    return this._batchWrite(files, options);
+    return this.#dbAdapter.withWriteLock(this.url, () =>
+      this._batchWriteUnlocked(files, options),
+    );
   }
 
-  private async _batchWrite(
+  private async _batchWriteUnlocked(
     files: Map<LocalPath, string | Uint8Array>,
     options?: WriteOptions,
   ): Promise<FileWriteResult[]> {
-    await this.indexing();
+    // The /_atomic endpoint (and any other writeMany caller that opts
+    // out of post-write indexing via waitForIndex:false) does not read
+    // its response from the index, so it has no reason to wait for
+    // prior incremental indexing to settle either. Skipping the gate
+    // here is what keeps consecutive atomic writes responsive when a
+    // previous mutation's deferred indexing job is back-pressured in
+    // the worker pool — without it, every follow-up POST /_atomic
+    // stalls on whichever earlier write/delete is still draining.
+    // Callers that DO read indexed state after the write (the JSON-API
+    // postCardInstance / patchCardInstance handlers) keep the original
+    // deadlock-prevention semantics by omitting waitForIndex.
+    if (options?.waitForIndex !== false) {
+      await this.incrementalIndexing();
+    }
     let urls: URL[] = [];
     // Collect write results for all files we wrote
     let results: { path: LocalPath; lastModified: number }[] = [];
@@ -1214,10 +1876,8 @@ export class Realm {
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       (isNewFile ? addedFiles : updatedFiles).push(path);
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
+      await this.#notifyFileChange(path);
       results.push({ path, lastModified });
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
@@ -1230,7 +1890,7 @@ export class Realm {
           (f) => f === '.realm.json' || f === 'realm.json',
         )
       ) {
-        this.#cachedRealmInfo = null;
+        this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
         eventName: 'update',
@@ -1242,12 +1902,68 @@ export class Realm {
 
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
+    let waitForIndex = options?.waitForIndex !== false;
     if (urls.length > 0) {
-      await performIndex();
+      if (waitForIndex) {
+        await performIndex();
+        this.broadcastIncrementalInvalidationEvent([...invalidations], {
+          clientRequestId,
+        });
+      } else {
+        // Two-phase: await the durable queue insert inline so pre-enqueue
+        // failures (DB partial outage) propagate back to this method's
+        // caller and ultimately to the HTTP client — without that, a write
+        // could land on disk and never get indexed, leaving the realm
+        // silently stale. The worker settle is fire-and-forget; worker-
+        // time failures surface via error_doc inside the worker as before.
+        // Deferred is registered synchronously inside enqueueUpdate before
+        // any await, so realm.incrementalIndexing() reflects this work as
+        // pending the moment we return.
+        // Snapshot any invalidations from in-loop intermediate flushes (the
+        // module-then-instance gate at line 1262) so the broadcast unions
+        // them with the deferred-flush results. Without this, mixed-batch
+        // writeMany calls with waitForIndex:false would silently drop the
+        // earlier flushes' invalidations and leave subscribers with stale
+        // state for those URLs. Single-file callers (+source / binary)
+        // never hit the intermediate path, so this snapshot is empty for
+        // them — but it's correct for the primitive in general.
+        let priorInvalidations = [...invalidations];
+        let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+          urls,
+          {
+            clientRequestId,
+            // Route the post-worker broadcast through onSettled so it runs
+            // INSIDE the indexing deferred lifecycle. Without this, the
+            // broadcast would fire from an outer .then() after the deferred
+            // is already removed — meaning realm.incrementalIndexing()
+            // resolves before the broadcast, and an afterEach drain that
+            // awaits the drain still races with the broadcast against
+            // test teardown (mock-matrix already destroyed → broadcast
+            // throws on serverState).
+            onSettled: (deferredInvalidations) => {
+              this.broadcastIncrementalInvalidationEvent(
+                [...new Set([...priorInvalidations, ...deferredInvalidations])],
+                { clientRequestId },
+              );
+            },
+          },
+        );
+        settled.catch((err: unknown) => {
+          let message = err instanceof Error ? err.message : String(err);
+          // Covers worker job rejection AND post-worker realm-side work
+          // (onInvalidation / handleExecutableInvalidations / broadcast).
+          this.#log.error(
+            `Deferred indexing chain failed for ${this.url}: ${message}`,
+          );
+        });
+      }
+    } else {
+      // No urls actually written (e.g., content unchanged). Preserve the
+      // pre-existing always-broadcast behavior.
+      this.broadcastIncrementalInvalidationEvent([...invalidations], {
+        clientRequestId,
+      });
     }
-    this.broadcastIncrementalInvalidationEvent([...invalidations], {
-      clientRequestId,
-    });
     return results.map(({ path, lastModified }) => ({
       path,
       lastModified,
@@ -1423,142 +2139,172 @@ export class Realm {
       });
     }
     let atomicOperations = json['atomic:operations'] as AtomicOperation[];
-    let atomicCheckErrors = await this.checkBeforeAtomicWrite(atomicOperations);
-    if (atomicCheckErrors.length > 0) {
+
+    // Take the per-realm advisory lock from the precheck through the
+    // write. Without this, two replicas could both pass
+    // `checkBeforeAtomicWrite` for the same `add` operation (file does
+    // not exist), then both proceed to write — last writer wins on disk
+    // but indexer state is incoherent. Inside the lock we invoke
+    // `_batchWriteUnlocked` directly to avoid re-acquiring the same
+    // advisory lock through `writeMany` (which would deadlock on a
+    // different pinned pool connection).
+    return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      let atomicCheckErrors =
+        await this.checkBeforeAtomicWrite(atomicOperations);
+      if (atomicCheckErrors.length > 0) {
+        return createResponse({
+          body: JSON.stringify({ errors: atomicCheckErrors }),
+          init: {
+            status: this.lowestStatusCode(atomicCheckErrors),
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+          requestContext,
+        });
+      }
+
+      let operations = filterAtomicOperations(atomicOperations);
+      let files = new Map<LocalPath, string>();
+      let writeResults: FileWriteResult[] = [];
+
+      for (let operation of operations) {
+        let resource = operation.data;
+        let href = operation.href;
+        let localPath = this.paths.local(new URL(href, this.paths.url));
+        let exists = await this.#adapter.exists(localPath);
+        if (operation.op === 'add' && exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource already exists',
+                  detail: `Resource ${href} already exists`,
+                  status: 409,
+                },
+              ],
+            }),
+            init: {
+              status: 409,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+        if (operation.op === 'update' && !exists) {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  title: 'Resource does not exist',
+                  detail: `Resource ${href} does not exist`,
+                  status: 404,
+                },
+              ],
+            }),
+            init: {
+              status: 404,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+        if (isModuleResource(resource)) {
+          let content = resource.attributes?.content ?? '';
+          this.assertWriteSize(content, 'file');
+          files.set(localPath, content);
+        } else if (isCardResource(resource)) {
+          let doc = {
+            data: resource,
+          };
+          let jsonString = JSON.stringify(doc, null, 2);
+          this.assertWriteSize(jsonString, 'card');
+          files.set(localPath, jsonString);
+        } else {
+          return createResponse({
+            body: JSON.stringify({
+              errors: [
+                {
+                  status: 400,
+                  title: 'Invalid resource',
+                  detail: `Operation data is not a valid card resource or module resource`,
+                },
+              ],
+            }),
+            init: {
+              status: 400,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
+
+      if (files.size > 0) {
+        try {
+          // /_atomic returns once writes are durable, not once they are
+          // indexed. Callers that need indexed state must drain via
+          // realm.incrementalIndexing() (server-side), wait on the
+          // matrix 'index' incremental event (client-side), or opt-in
+          // to a synchronous response by passing `?waitForIndex=true`
+          // on the POST URL. The query-param path is intended for
+          // one-shot CLI / agent flows where Matrix subscription is
+          // impractical and a search poll-loop would race indexing
+          // latency. Mixed module+instance batches are still
+          // serialized correctly: the in-loop intermediate flush in
+          // _batchWriteUnlocked at the `lastWriteType === 'module' &&
+          // currentWriteType === 'instance'` gate is always awaited,
+          // so an instance's fileSerialization sees its module already
+          // indexed.
+          let waitForIndex =
+            new URL(request.url).searchParams.get('waitForIndex') === 'true';
+          writeResults = await this._batchWriteUnlocked(files, {
+            clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+            serializeFile: true,
+            waitForIndex,
+          });
+        } catch (e: any) {
+          if (e instanceof CardError) {
+            return responseWithError(e, requestContext);
+          }
+          // Log the underlying exception before returning 500 —
+          // otherwise callers only see "Write Error" and the original
+          // stack trace is lost, making atomic-batch failures
+          // effectively undebuggable.
+          this.#log.error(
+            `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
+          );
+          return createResponse({
+            body: JSON.stringify({
+              errors: [{ title: 'Write Error', detail: e.message }],
+            }),
+            init: {
+              status: 500,
+              headers: { 'content-type': SupportedMimeType.JSONAPI },
+            },
+            requestContext,
+          });
+        }
+      }
+
+      let results: AtomicOperationResult[] = writeResults.map(
+        ({ path, created }) => ({
+          data: {
+            id: this.paths.fileURL(path).href,
+          },
+          meta: {
+            created,
+          },
+        }),
+      );
       return createResponse({
-        body: JSON.stringify({ errors: atomicCheckErrors }),
+        body: JSON.stringify({ 'atomic:results': results }, null, 2),
         init: {
-          status: this.lowestStatusCode(atomicCheckErrors),
-          headers: { 'content-type': SupportedMimeType.JSONAPI },
+          status: 201,
+          headers: {
+            'content-type': SupportedMimeType.JSONAPI,
+          },
         },
         requestContext,
       });
-    }
-
-    let operations = filterAtomicOperations(atomicOperations);
-    let files = new Map<LocalPath, string>();
-    let writeResults: FileWriteResult[] = [];
-
-    for (let operation of operations) {
-      let resource = operation.data;
-      let href = operation.href;
-      let localPath = this.paths.local(new URL(href, this.paths.url));
-      let exists = await this.#adapter.exists(localPath);
-      if (operation.op === 'add' && exists) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                title: 'Resource already exists',
-                detail: `Resource ${href} already exists`,
-                status: 409,
-              },
-            ],
-          }),
-          init: {
-            status: 409,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-      if (operation.op === 'update' && !exists) {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                title: 'Resource does not exist',
-                detail: `Resource ${href} does not exist`,
-                status: 404,
-              },
-            ],
-          }),
-          init: {
-            status: 404,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-      if (isModuleResource(resource)) {
-        let content = resource.attributes?.content ?? '';
-        this.assertWriteSize(content, 'file');
-        files.set(localPath, content);
-      } else if (isCardResource(resource)) {
-        let doc = {
-          data: resource,
-        };
-        let jsonString = JSON.stringify(doc, null, 2);
-        this.assertWriteSize(jsonString, 'card');
-        files.set(localPath, jsonString);
-      } else {
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: 400,
-                title: 'Invalid resource',
-                detail: `Operation data is not a valid card resource or module resource`,
-              },
-            ],
-          }),
-          init: {
-            status: 400,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    if (files.size > 0) {
-      try {
-        writeResults = await this.writeMany(files, {
-          clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-          serializeFile: true,
-        });
-      } catch (e: any) {
-        if (e instanceof CardError) {
-          return responseWithError(e, requestContext);
-        }
-        // Log the underlying exception before returning 500 — otherwise
-        // callers only see "Write Error" and the original stack trace is
-        // lost, making atomic-batch failures effectively undebuggable.
-        this.#log.error(
-          `Atomic write failed: ${e.message}\n${e.stack ?? '(no stack)'}`,
-        );
-        return createResponse({
-          body: JSON.stringify({
-            errors: [{ title: 'Write Error', detail: e.message }],
-          }),
-          init: {
-            status: 500,
-            headers: { 'content-type': SupportedMimeType.JSONAPI },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    let results: AtomicOperationResult[] = writeResults.map(
-      ({ path, created }) => ({
-        data: {
-          id: this.paths.fileURL(path).href,
-        },
-        meta: {
-          created,
-        },
-      }),
-    );
-    return createResponse({
-      body: JSON.stringify({ 'atomic:results': results }, null, 2),
-      init: {
-        status: 201,
-        headers: {
-          'content-type': SupportedMimeType.JSONAPI,
-        },
-      },
-      requestContext,
     });
   }
 
@@ -1612,7 +2358,19 @@ export class Realm {
     return { isTracked: false, url };
   }
 
-  async delete(path: LocalPath): Promise<void> {
+  async delete(
+    path: LocalPath,
+    options?: { waitForIndex?: boolean },
+  ): Promise<void> {
+    await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._deleteUnlocked(path, options),
+    );
+  }
+
+  private async _deleteUnlocked(
+    path: LocalPath,
+    options?: { waitForIndex?: boolean },
+  ): Promise<void> {
     let url = this.paths.fileURL(path);
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
@@ -1622,19 +2380,58 @@ export class Realm {
       removed: [path],
       realmURL: this.url,
     });
-    this.#sourceCache.invalidate(path);
-    if (hasExecutableExtension(path)) {
-      this.#moduleCache.invalidate(path);
-    }
+    this.invalidateCache(path);
+    await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
-    let invalidations = await this.updateIndexAndCollectInvalidations([url], {
-      delete: true,
-    });
-    this.broadcastIncrementalInvalidationEvent(invalidations);
+    let waitForIndex = options?.waitForIndex !== false;
+    if (waitForIndex) {
+      let invalidations = await this.updateIndexAndCollectInvalidations([url], {
+        delete: true,
+      });
+      this.broadcastIncrementalInvalidationEvent(invalidations);
+    } else {
+      // Mirrors the write() waitForIndex:false path: await the durable
+      // enqueue so DB-side failures still bubble out, but fire-and-forget
+      // the worker settle. The post-worker broadcast runs inside the
+      // deferred lifecycle via onSettled so realm.incrementalIndexing()
+      // doesn't resolve before the broadcast.
+      let enqueueStart = Date.now();
+      let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+        [url],
+        {
+          delete: true,
+          onSettled: (deferredInvalidations) => {
+            this.broadcastIncrementalInvalidationEvent(deferredInvalidations);
+          },
+        },
+      );
+      settled.then(
+        () => {
+          this.#log.info(
+            `Deferred delete-indexing settled for ${url.href} in ${Date.now() - enqueueStart}ms`,
+          );
+        },
+        (err: unknown) => {
+          let detail =
+            err instanceof Error
+              ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
+              : String(err);
+          this.#log.error(
+            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${detail}`,
+          );
+        },
+      );
+    }
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
+    await this.#dbAdapter.withWriteLock(this.url, () =>
+      this._deleteAllUnlocked(paths),
+    );
+  }
+
+  private async _deleteAllUnlocked(paths: LocalPath[]): Promise<void> {
     let urls: URL[] = [];
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
@@ -1645,14 +2442,12 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
       removePromises.push(this.#adapter.remove(path));
-      this.#sourceCache.invalidate(path);
-      if (hasExecutableExtension(path)) {
-        this.#moduleCache.invalidate(path);
-      }
+      this.invalidateCache(path);
     }
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    await Promise.all(paths.map((path) => this.#notifyFileChange(path)));
     this.broadcastRealmEvent({
       eventName: 'update',
       removed: paths,
@@ -1679,37 +2474,91 @@ export class Realm {
     await completed;
   }
 
-  async #startup() {
+  async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    if (this.#copiedFromRealm) {
-      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'copy',
-        sourceRealmURL: this.#copiedFromRealm.href,
-        realmURL: this.url,
-      });
-    } else {
-      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-      if (isNewIndex || this.#fullIndexOnStartup) {
-        let promise = this.#realmIndexUpdater.fullIndex(
-          this.#fromScratchIndexPriority,
+    // [readiness-diag] — every `this.#readinessDiag.debug(...)` line in
+    // this method is a temporary phase marker for the CI readiness-check
+    // timeout flake. The whole logger is opt-in (off in production, on
+    // in CI host tests via HOST_TEST_LOG_LEVELS). Remove the call sites
+    // together with the `#readinessDiag` field once root cause is found.
+    this.#readinessDiag.debug(`startup begin for realm ${this.url}`);
+    // [readiness-diag] — one heartbeat per realm-lifetime, not per
+    // readiness-probe (wait-on polls every 0.5–2s; a per-request
+    // heartbeat would multiply to hundreds of concurrent intervals).
+    // Cleared in the finally below so a startup that fails or throws
+    // doesn't leak the timer past the lifetime of this method.
+    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
+      () => {
+        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        this.#readinessDiag.debug(
+          `startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
         );
-        if (isNewIndex) {
-          // we only await the full indexing at boot if this is a brand new index
-          await promise;
-        }
-        // not sure how useful this event is--nothing is currently listening for
-        // it, and it may happen during or after the full index...
+      },
+      15_000,
+    );
+    if (
+      heartbeat &&
+      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
+        'function'
+    ) {
+      (heartbeat as unknown as { unref: () => void }).unref();
+    }
+    try {
+      if (this.#copiedFromRealm) {
+        this.#readinessDiag.debug(
+          `startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
+        );
+        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+        this.#readinessDiag.debug(
+          `startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+        );
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'full',
+          indexType: 'copy',
+          sourceRealmURL: this.#copiedFromRealm.href,
           realmURL: this.url,
         });
+      } else {
+        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+        this.#readinessDiag.debug(
+          `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
+        );
+        if (isNewIndex || this.#fullIndexOnStartup) {
+          let priority =
+            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+          let promise = this.#realmIndexUpdater.fullIndex(priority);
+          if (isNewIndex) {
+            // we only await the full indexing at boot if this is a brand new index
+            this.#readinessDiag.debug(
+              `startup awaiting fullIndex (new index) for realm ${this.url}`,
+            );
+            await promise;
+            this.#readinessDiag.debug(
+              `startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
+            );
+          } else {
+            this.#readinessDiag.debug(
+              `startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
+            );
+          }
+          // not sure how useful this event is--nothing is currently listening for
+          // it, and it may happen during or after the full index...
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'full',
+            realmURL: this.url,
+          });
+        }
+      }
+      this.#readinessDiag.debug(
+        `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
+      );
+    } finally {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
       }
     }
-    await this.isWorldReadable();
 
     this.#perfLog.debug(
       `realm server ${this.url} startup in ${Date.now() - startTime} ms`,
@@ -1720,14 +2569,14 @@ export class Realm {
   maybeHandle = async (
     request: Request,
   ): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, true);
   };
 
   handle = async (request: Request): Promise<ResponseWithNodeStream | null> => {
-    if (!this.paths.inRealm(new URL(request.url))) {
+    if (!this.paths.inRealm(rri(request.url))) {
       return null;
     }
     return await this.internalHandle(request, false);
@@ -1934,7 +2783,7 @@ export class Realm {
       Boolean(request.headers.get('X-Boxel-Disable-Module-Cache'));
 
     if (!moduleCachingDisabled) {
-      let cached = this.#moduleCache.get(localPath);
+      let cached = this.#transpiledModuleCache.get(localPath);
       if (cached) {
         try {
           let etag = cached.headers.etag;
@@ -1975,6 +2824,26 @@ export class Realm {
       }
     }
 
+    // CS-11028: snapshot module-cache generations BEFORE the first await
+    // for every candidate path getFileWithFallbacks could resolve to
+    // (localPath plus each executable-extension fallback when the
+    // request is extensionless). invalidateCache(path) bumps the
+    // counter synchronously, so if it fires while loadModuleFromDisk
+    // is in-flight (typically 50–500 ms for a .gts transpile) the
+    // post-await comparison against result.canonicalPath's snapshotted
+    // gen catches the race and we skip the cache write — otherwise the
+    // pre-invalidation bytes we just produced would re-fill the slot
+    // invalidate just cleared. Checking by canonicalPath rather than
+    // localPath is what makes the discard work for extensionless alias
+    // requests (e.g. /foo → loadModuleFromDisk returns foo.gts);
+    // invalidateCache targets the canonical, so the gen we need to
+    // compare against is the canonical's. We still serve our own
+    // response: it reflects the source A read at request time, which
+    // is consistent with the caller's happens-before ordering.
+    let cacheGenSnapshot = moduleCachingDisabled
+      ? undefined
+      : this.#snapshotModuleCacheGeneration(localPath);
+
     let response: ResponseWithNodeStream;
     try {
       let result = await this.loadModuleFromDisk(
@@ -1984,17 +2853,19 @@ export class Realm {
       );
       switch (result.kind) {
         case 'module': {
-          if (!moduleCachingDisabled) {
-            this.#moduleCache.set(localPath, {
+          if (
+            !moduleCachingDisabled &&
+            cacheGenSnapshot &&
+            !this.#transpiledModuleCacheGenerationChanged(
+              result.canonicalPath,
+              cacheGenSnapshot,
+            )
+          ) {
+            this.#transpiledModuleCache.set(localPath, {
               canonicalPath: result.canonicalPath,
               body: result.body,
               headers: result.headers,
-              dependencyKeys: extractModuleDependencyKeys(
-                result.body,
-                result.canonicalPath,
-                this.url,
-                this.paths,
-              ),
+              dependencyKeys: result.dependencyKeys,
             });
           }
           response = createResponse({
@@ -2099,11 +2970,406 @@ export class Realm {
       };
     }
 
+    return this.#transpileModuleDeduped(localPath, fileRef, etag);
+  }
+
+  // Dedups the materialize + transpile pipeline across concurrent
+  // same-path callers (CS-11029). The first caller installs a pending
+  // promise keyed by localPath; any caller that arrives while it's
+  // in-flight returns the same promise instead of running babel a
+  // second time. Identity-checked cleanup on settle mirrors
+  // CachingDefinitionLookup.#inFlight — a newer pending entry installed
+  // after invalidateCache drops the slot is preserved when the older
+  // promise eventually settles.
+  async #transpileModuleDeduped(
+    localPath: LocalPath,
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let existing = this.#inFlightTranspiles.get(localPath);
+    if (existing) {
+      this.#transpileJoinCount += 1;
+      return existing;
+    }
+    // Assign the chained `.finally` to `pending` and store/return THAT
+    // (not the raw layered promise). If we kept the raw promise in the
+    // map and dangled an unused `.finally(...)` chain, a rejection from
+    // transpileJS would propagate through both promises but only the
+    // raw one has waiters — the chained one would surface as an
+    // unhandled rejection in Node's host hook. Same shape as
+    // CachingDefinitionLookup.#inFlight.
+    let pending: Promise<ModuleTranspileResult>;
+    let core = this.#transpileWithLayers(fileRef, etag);
+    pending = core.finally(() => {
+      if (this.#inFlightTranspiles.get(localPath) === pending) {
+        this.#inFlightTranspiles.delete(localPath);
+      }
+    });
+    this.#inFlightTranspiles.set(localPath, pending);
+    return pending;
+  }
+
+  // CS-11030: orchestrates the cache layers below the in-process inflight
+  // dedup. Layering:
+  //   1. read module_transpile_cache — a peer (or this process on a
+  //      prior request that fell out of the in-memory cache) may have
+  //      already produced the bytes; just return them.
+  //   2. (with coordinator) tryAcquireAndRun: winner re-reads the DB,
+  //      transpiles on miss, persists to module_transpile_cache, and
+  //      emits NOTIFY before commit; losers waitForKey + re-read.
+  //   3. (no coordinator, or loser fell through) run #materializeAndTranspile
+  //      directly. The L2 DB write still happens — sqlite deployments
+  //      simply skip the cross-process coalesce.
+  //
+  // The L2 write uses an OCC pattern: the writer captures the row's
+  // `generation` at the L2 read step (or 0 if the row is absent) and
+  // UPSERTs with that captured value via `ON CONFLICT DO UPDATE
+  // WHERE existing.generation <= captured`. An invalidate that lands
+  // during the transpile bumps the row's generation past the captured
+  // value, so the writer's UPSERT is rejected by the WHERE clause and
+  // a stale transpile started before the invalidate cannot resurrect
+  // the row. Mirrors CS-11028's L1 generation guard but with a durable
+  // counter visible to every peer.
+  async #transpileWithLayers(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
+    let coordinator = this.#transpileCoordinator;
+
+    // L2 read first — cheap query (UNLOGGED, indexed PK), saves babel.
+    let cached = await this.#readTranspileCacheRow(canonicalPath);
+    if (cached?.result) {
+      return cached.result;
+    }
+    // capturedGeneration is the row's generation observed at this
+    // point in time — 0 if the row was absent, the tombstone's
+    // generation otherwise. The L2 write uses this value as its OCC
+    // token: any invalidate that races the transpile bumps generation
+    // past `capturedGeneration`, so the write's WHERE clause rejects
+    // the UPSERT.
+    let capturedGeneration = cached?.generation ?? 0;
+
+    if (!coordinator) {
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        capturedGeneration,
+      );
+      return result;
+    }
+
+    let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
+    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
+      // Winner path: a peer may have written between our miss and our
+      // lock acquisition; re-read so we don't redo their work AND
+      // refresh our captured generation in case a tombstone landed.
+      let recheck = await this.#readTranspileCacheRow(canonicalPath);
+      if (recheck?.result) {
+        return recheck.result;
+      }
+      let result = await this.#materializeAndTranspile(fileRef, etag);
+      await this.#writeTranspileCacheRow(
+        canonicalPath,
+        result,
+        recheck?.generation ?? 0,
+      );
+      return result;
+    });
+    if (attempt.acquired) {
+      return attempt.result;
+    }
+
+    // Loser path: park on NOTIFY (resolves on either the populate
+    // signal or a bounded timeout — see CachingDefinitionLookup's
+    // COALESCE_NOTIFY_WAIT_MS for the rationale on the budget). On
+    // wake, re-read; the row should be there if the winner succeeded.
+    await coordinator.waitForKey(coalesceKey, COALESCE_NOTIFY_WAIT_MS);
+    let postWait = await this.#readTranspileCacheRow(canonicalPath);
+    if (postWait?.result) {
+      return postWait.result;
+    }
+    // Missed NOTIFY, peer crashed, or the winner skipped persist (e.g.
+    // a generation discard upstream). Fall through to a local transpile;
+    // we still persist so the NEXT reader sees a cached row. Use the
+    // freshest generation we've observed for the OCC token.
+    let result = await this.#materializeAndTranspile(fileRef, etag);
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      result,
+      postWait?.generation ?? 0,
+    );
+    return result;
+  }
+
+  async #readTranspileCacheRow(canonicalPath: string): Promise<
+    | {
+        result?: ModuleTranspileResult;
+        generation: number;
+      }
+    | undefined
+  > {
+    let rows = (await query(this.#dbAdapter, [
+      'SELECT body, headers, dependency_keys, generation',
+      'FROM',
+      MODULE_TRANSPILE_CACHE_TABLE,
+      'WHERE realm_url =',
+      param(this.url),
+      'AND canonical_path =',
+      param(canonicalPath),
+    ])) as {
+      body: string | null;
+      headers: Record<string, string> | string | null;
+      dependency_keys: string[] | string | null;
+      generation: string | number;
+    }[];
+    if (!rows.length) {
+      return undefined;
+    }
+    let row = rows[0];
+    let generation =
+      typeof row.generation === 'string'
+        ? Number(row.generation)
+        : row.generation;
+    if (row.body == null || row.headers == null) {
+      // Tombstone — surface only the generation so the writer can
+      // capture it for OCC.
+      return { generation };
+    }
+    let headers =
+      typeof row.headers === 'string'
+        ? (JSON.parse(row.headers) as Record<string, string>)
+        : row.headers;
+    let canonicalFromHeader = headers['X-Boxel-Canonical-Path'];
+    // canonical_path stores the realm-relative + extension form
+    // matching fileRef.path; the header carries the full URL.
+    // Either is sufficient to reconstruct the result, but the
+    // header is what the response uses, so prefer that and parse
+    // back to the local path for the returned `canonicalPath`.
+    let pathFromHeader: string | undefined = undefined;
+    if (canonicalFromHeader) {
+      try {
+        pathFromHeader = this.paths.local(new URL(canonicalFromHeader));
+      } catch {
+        // ignore
+      }
+    }
+    let canonicalPathLocal =
+      pathFromHeader ?? this.paths.local(new URL(canonicalPath));
+    let depsArray =
+      typeof row.dependency_keys === 'string'
+        ? (JSON.parse(row.dependency_keys) as string[])
+        : (row.dependency_keys ?? []);
+    // Carry the writer's deps through. The writer always persists the
+    // full set computed from the transpiled body, so an empty array
+    // legitimately means the module has no in-realm imports. A row
+    // written before deps were carried (rollout window) will also read
+    // as empty here — its L1 entry will be missing dep edges until the
+    // next invalidate forces a re-transpile. The table is UNLOGGED, so
+    // pre-rollout rows age out on any pg restart.
+    let dependencyKeys = new Set<string>(depsArray);
+    return {
+      result: {
+        kind: 'module',
+        canonicalPath: canonicalPathLocal,
+        body: row.body,
+        headers,
+        dependencyKeys,
+      },
+      generation,
+    };
+  }
+
+  async #writeTranspileCacheRow(
+    canonicalPath: string,
+    result: ModuleTranspileResult,
+    capturedGeneration: number,
+  ): Promise<void> {
+    try {
+      // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
+      // if the row's current generation is still <= capturedGeneration.
+      // If an invalidate has tombstoned-and-bumped the row past that
+      // value, the WHERE clause rejects the UPDATE and the stale
+      // transpile is discarded. capturedGeneration may legitimately be
+      // 0 (row absent at read time, tombstone never created) — in
+      // that case the WHERE 0 <= 0 still allows a no-op same-gen
+      // overwrite which is benign because the bytes are deterministic
+      // for the same source.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        param(result.body),
+        ',',
+        param(JSON.stringify(result.headers)),
+        dbExpression({ pg: '::jsonb' }),
+        ',',
+        // Persist the full deps set computed once at the transpile
+        // boundary so a cross-process L2 reader can populate its L1
+        // entry directly instead of re-running extractModuleDependencyKeys
+        // on the bytes.
+        param(JSON.stringify([...result.dependencyKeys])),
+        dbExpression({ pg: '::jsonb' }),
+        ',',
+        param(capturedGeneration),
+        ',',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = EXCLUDED.body,',
+        'headers = EXCLUDED.headers,',
+        'dependency_keys = EXCLUDED.dependency_keys,',
+        'generation = EXCLUDED.generation,',
+        'created_at = EXCLUDED.created_at',
+        `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
+      ]);
+    } catch (err: unknown) {
+      // L2 persistence is best-effort. A transient pg failure must not
+      // break the response the caller is about to serve — they already
+      // have the bytes in memory. Log and move on; the next reader will
+      // re-try the write.
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  // Test seam: lets host SQLite tests verify that #writeTranspileCacheRow
+  // produces dialect-correct SQL without re-issuing the UPSERT in a
+  // parallel build. Production code must never call this — go through
+  // the private method directly. The wrapper just forwards arguments;
+  // the swallow-and-log behavior of the private method means the test
+  // confirms success by reading the row back, not by exception.
+  async __testOnlyUpsertTranspileCacheRow(args: {
+    canonicalPath: string;
+    body: string;
+    headers: Record<string, string>;
+    dependencyKeys: Iterable<string>;
+    capturedGeneration: number;
+  }): Promise<void> {
+    let { canonicalPath, body, headers, dependencyKeys, capturedGeneration } =
+      args;
+    await this.#writeTranspileCacheRow(
+      canonicalPath,
+      {
+        kind: 'module',
+        canonicalPath,
+        body,
+        headers,
+        dependencyKeys: new Set(dependencyKeys),
+      },
+      capturedGeneration,
+    );
+  }
+
+  async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {
+    try {
+      // Tombstone-and-bump rather than physically DELETE: an in-flight
+      // writer that captured this path's generation BEFORE the
+      // invalidate needs to observe the bumped generation when it
+      // tries to UPSERT, so its WHERE existing.generation <= captured
+      // clause fails and the stale bytes are rejected. A physical
+      // DELETE would let the writer's INSERT succeed (no conflict, no
+      // row to compare against) and resurrect the stale transpile.
+      await query(this.#dbAdapter, [
+        'INSERT INTO',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        'VALUES (',
+        param(this.url),
+        ',',
+        param(canonicalPath),
+        ',',
+        'NULL, NULL, NULL, 1,',
+        param(Date.now()),
+        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        'body = NULL,',
+        'headers = NULL,',
+        'dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at = EXCLUDED.created_at',
+      ]);
+    } catch (err: unknown) {
+      // Same best-effort posture as #writeTranspileCacheRow — the in-memory
+      // L1 cache for this path was already invalidated, so a stale L2 row
+      // is at worst a brief window before the next reader's transpile
+      // overwrites it (or the next invalidate retries the tombstone).
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} tombstone failed for ${this.url}${canonicalPath}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #deleteAllTranspileCacheRows(): Promise<void> {
+    try {
+      // Bulk tombstone-and-bump rather than DELETE — same reason as
+      // #deleteTranspileCacheRow: any in-flight writer captured the
+      // pre-wipe generation and must see a bumped row when it tries
+      // to UPSERT so the OCC WHERE clause rejects the stale write.
+      // Note that this bumps existing rows but does not create new
+      // tombstones for paths that didn't yet have a row; a writer
+      // for one of those paths that captured generation 0 would still
+      // succeed post-wipe, but that's a narrow window and currently
+      // limited to the __testOnly bulk-wipe path.
+      //
+      // CS-11182: RETURNING canonical_path so we can surface a zero-row
+      // result as a warning — a silent no-op here used to mask a
+      // realm_url mismatch between writer and bulk-wiper, leaving rows
+      // live across a reindex.
+      let updated = (await query(this.#dbAdapter, [
+        'UPDATE',
+        MODULE_TRANSPILE_CACHE_TABLE,
+        'SET body = NULL, headers = NULL, dependency_keys = NULL,',
+        `generation = ${MODULE_TRANSPILE_CACHE_TABLE}.generation + 1,`,
+        'created_at =',
+        param(Date.now()),
+        'WHERE realm_url =',
+        param(this.url),
+        'RETURNING canonical_path',
+      ])) as { canonical_path: string }[];
+      if (updated.length === 0) {
+        this.#log.warn(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched zero rows`,
+        );
+      } else {
+        this.#log.debug(
+          `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone for ${this.url} matched ${updated.length} row(s)`,
+        );
+      }
+    } catch (err: unknown) {
+      this.#log.warn(
+        `${MODULE_TRANSPILE_CACHE_TABLE} bulk tombstone failed for ${this.url}: ${String(err)}`,
+      );
+    }
+  }
+
+  async #materializeAndTranspile(
+    fileRef: FileRef,
+    etag: string | undefined,
+  ): Promise<ModuleTranspileResult> {
+    let canonicalPath = this.paths.fileURL(fileRef.path).href;
     let fileWithContent = await this.materializeFileRef(fileRef);
     let source = await fileContentToText(fileWithContent);
     let transpiled: string;
     try {
-      transpiled = await transpileJS(source, fileWithContent.path);
+      // Force an absolute path so babel's internal path.resolve doesn't depend
+      // on process.cwd(), which differs between node and browser shims and was
+      // observed to drop the leading slash on vite builds — producing a
+      // moduleName of "dir/person.gts" instead of "/dir/person.gts" in
+      // compiled templates.
+      let debugFilename = fileWithContent.path.startsWith('/')
+        ? fileWithContent.path
+        : `/${fileWithContent.path}`;
+      if (this.#testOnlyTranspileDelay) {
+        await this.#testOnlyTranspileDelay();
+      }
+      this.#transpileCallCount += 1;
+      transpiled = await transpileJS(source, debugFilename);
     } catch (err: any) {
       let cardError =
         err instanceof CardError
@@ -2128,11 +3394,22 @@ export class Realm {
     }
     headers['X-Boxel-Canonical-Path'] = canonicalPath;
 
+    // Compute deps once here so callers (L1 write site, L2 persist)
+    // reuse them. Carrying the set through the L2 row lets a peer
+    // skip this scan entirely on a cross-process cache hit.
+    let dependencyKeys = extractModuleDependencyKeys(
+      transpiled,
+      fileRef.path,
+      this.url,
+      this.paths,
+    );
+
     return {
       kind: 'module',
       canonicalPath: fileRef.path,
       body: transpiled,
       headers,
+      dependencyKeys,
     };
   }
 
@@ -2325,13 +3602,13 @@ export class Realm {
         );
       }
     } catch (e: any) {
-      if (e instanceof TokenExpiredError) {
+      if (e?.constructor?.name === 'TokenExpiredError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
-      if (e instanceof JsonWebTokenError) {
+      if (e?.constructor?.name === 'JsonWebTokenError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );
@@ -2345,12 +3622,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Source-content-type callers, by definition, don't depend on indexed
+    // state — if they did they would use application/vnd.card+json. Return
+    // as soon as the source bytes are durable; indexing happens async and
+    // surfaces errors via error_doc as before. Subscribers to indexing
+    // events still see the broadcast once the worker settles.
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({
@@ -2370,6 +3653,9 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Binary files have no indexable card representation, so awaiting the
+    // index update would be even more wasteful than for card source. Return
+    // as soon as the bytes are durable.
     let bytes = new Uint8Array(await request.arrayBuffer());
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
@@ -2377,6 +3663,7 @@ export class Realm {
       {
         clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
         serializeFile: false,
+        waitForIndex: false,
       },
     );
     return createResponse({
@@ -2542,6 +3829,11 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Source-content-type callers, by definition, don't depend on indexed
+    // state — symmetric with upsertCardSource. Return as soon as the file
+    // is gone from disk; indexing happens async and surfaces errors via
+    // error_doc as before. Subscribers to indexing events still see the
+    // broadcast once the worker settles.
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -2550,7 +3842,7 @@ export class Realm {
     if (!handle) {
       return notFound(request, requestContext, `${localName} not found`);
     }
-    await this.delete(handle.path);
+    await this.delete(handle.path, { waitForIndex: false });
     return createResponse({
       body: null,
       init: { status: 204 },
@@ -2620,7 +3912,7 @@ export class Realm {
     for (const invalidatedURL of invalidatedURLs) {
       if (hasExecutableExtension(invalidatedURL.href)) {
         let invalidatedPath = this.paths.local(invalidatedURL);
-        this.#moduleCache.invalidate(invalidatedPath);
+        this.#dropTranspiledModuleEntry(invalidatedPath);
         changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         definitionInvalidations.push(
           this.#definitionLookup.invalidate(invalidatedURL.href),
@@ -2633,7 +3925,7 @@ export class Realm {
       for (let invalidatedModuleURL of invalidatedModuleURLs) {
         try {
           let invalidatedPath = this.paths.local(new URL(invalidatedModuleURL));
-          this.#moduleCache.invalidate(invalidatedPath);
+          this.#dropTranspiledModuleEntry(invalidatedPath);
           changedDependencyKeys.add(moduleDependencyKey(invalidatedPath));
         } catch (_err) {
           // ignore invalidations outside this realm
@@ -2642,15 +3934,15 @@ export class Realm {
     }
     let dependentInvalidations = collectDependentModuleCacheInvalidations(
       changedDependencyKeys,
-      this.moduleCacheDependencyEntries(),
+      this.transpiledModuleDependencyEntries(),
     );
     for (let invalidatedPath of dependentInvalidations) {
-      this.#moduleCache.invalidate(invalidatedPath);
+      this.#dropTranspiledModuleEntry(invalidatedPath);
     }
   }
 
-  private *moduleCacheDependencyEntries() {
-    for (let [, cachedEntry] of this.#moduleCache.entries()) {
+  private *transpiledModuleDependencyEntries() {
+    for (let [, cachedEntry] of this.#transpiledModuleCache.entries()) {
       yield {
         canonicalPath: cachedEntry.canonicalPath,
         dependencyKeys: cachedEntry.dependencyKeys,
@@ -2856,6 +4148,18 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before serializing the new
+    // card. fileSerialization runs lookupDefinition on the card's
+    // adoptsFrom module, and with CS-11003's deferred +source POST a
+    // module that was just uploaded may not be indexed yet —
+    // serialization would then throw FilterRefersToNonexistentTypeError
+    // and the +json POST would fail. Draining here makes the JSON-API
+    // path tolerant of an immediately-preceding +source POST without
+    // disturbing the +json POST's own synchronous-indexing contract.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let body = await request.text();
     let json;
     try {
@@ -2956,6 +4260,7 @@ export class Realm {
       new URL(newURL),
       {
         loadLinks: true,
+        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
       },
     );
     if (!entry || entry?.type === 'error') {
@@ -2997,7 +4302,6 @@ export class Realm {
     if (await this.nonJsonFileExists(localPath)) {
       return unsupportedMediaType(request, requestContext);
     }
-    let primarySerialization: LooseSingleCardDocument | undefined;
     if (localPath.startsWith('_')) {
       return methodNotAllowed(request, requestContext);
     }
@@ -3007,12 +4311,6 @@ export class Realm {
 
     let url = this.paths.fileURL(localPath);
     let instanceURL = url.href.replace(/\.json$/, '');
-    let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
-      includeErrors: true,
-    });
-    if (!indexEntry) {
-      return notFound(request, requestContext);
-    }
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -3037,238 +4335,470 @@ export class Realm {
         }
       }
     }
-    let original = cloneDeep(
-      indexEntry.instance ?? {
-        type: 'card',
-        meta: { adoptsFrom: patch.meta.adoptsFrom },
-      },
-    ) as CardResource;
-    original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
-    original.meta.adoptsFrom =
-      original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
-    delete original.meta.lastModified;
-    let originalClone = cloneDeep(original);
 
-    if (
-      originalClone.meta?.adoptsFrom &&
-      internalKeyFor(patch.meta.adoptsFrom, url) !==
-        internalKeyFor(originalClone.meta.adoptsFrom, url)
-    ) {
-      return badRequest({
-        message: `Cannot change card instance type to ${JSON.stringify(
-          patch.meta.adoptsFrom,
-        )}`,
-        requestContext,
-        id: instanceURL,
+    // CS-11125: serialize concurrent PATCHes against the same realm so the
+    // indexEntry read, merge, and write are all inside one critical
+    // section. Without the lock, two replicas could both read the same
+    // `original` from boxel_index, compute independent merges, and the
+    // second writer's merge would silently lose the first's changes.
+    // writeMany below uses the default `waitForIndex: true`, so once the
+    // lock releases the index reflects the just-committed state and the
+    // next waiter's `indexEntry` read sees it.
+    //
+    // Inside the lock we invoke `_batchWriteUnlocked` rather than the
+    // public `writeMany` — re-entering the lock through the public method
+    // would block on a different pinned pool connection.
+    return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      let primarySerialization: LooseSingleCardDocument | undefined;
+      let indexEntry = await this.#realmIndexQueryEngine.instance(url, {
+        includeErrors: true,
       });
-    }
-    let included = (maybeIncluded ?? []) as CardResource[];
-
-    delete (patch as any).type;
-    delete (patch as any).meta.realmInfo;
-    delete (patch as any).meta.realmURL;
-
-    promoteLocalIdsToRemoteIds({
-      resource: patch,
-      included,
-      realmURL: new URL(this.url),
-    });
-
-    let primaryResource = mergeWith(
-      originalClone,
-      patch,
-      (_objectValue: any, sourceValue: any) => {
-        // a patched array should overwrite the original array instead of merging
-        // into an original array, otherwise we won't be able to remove items in
-        // the original array
-        return Array.isArray(sourceValue) ? sourceValue : undefined;
-      },
-    );
-
-    if (primaryResource.relationships || patch.relationships) {
-      let merged = mergeRelationships(
-        primaryResource.relationships,
-        patch.relationships,
-      );
-
-      if (merged && Object.keys(merged).length !== 0) {
-        primaryResource.relationships = merged;
+      if (!indexEntry) {
+        return notFound(request, requestContext);
       }
-    }
+      let original = cloneDeep(
+        indexEntry.instance ?? {
+          type: 'card',
+          meta: { adoptsFrom: patch.meta.adoptsFrom },
+        },
+      ) as CardResource;
+      original.meta ??= { adoptsFrom: patch.meta.adoptsFrom };
+      original.meta.adoptsFrom =
+        original.meta.adoptsFrom ?? patch.meta.adoptsFrom;
+      delete original.meta.lastModified;
+      let originalClone = cloneDeep(original);
 
-    // If the patch makes no semantic changes and doesn't include side-loaded
-    // resources, short-circuit to avoid touching the file (and changing mtime).
-    if (included.length === 0 && isEqual(primaryResource, original)) {
-      let entry = await this.#realmIndexQueryEngine.cardDocument(
-        new URL(instanceURL),
-        { loadLinks: true },
-      );
-      if (entry && entry.type !== 'error') {
-        let existingDoc = merge({}, entry.doc, {
-          data: {
-            links: { self: instanceURL },
-            meta: { lastModified: entry.doc.data.meta.lastModified },
-          },
-        });
-        let createdAt = await this.getCreatedTime(
-          this.paths.local(url) + '.json',
-        );
-        return createResponse({
-          body: JSON.stringify(existingDoc, null, 2),
-          init: {
-            headers: {
-              'content-type': SupportedMimeType.CardJson,
-              ...lastModifiedHeader(existingDoc),
-              ...(createdAt != null
-                ? { 'x-created': formatRFC7231(createdAt * 1000) }
-                : {}),
-            },
-          },
-          requestContext,
-        });
-      }
-    }
-
-    delete (primaryResource as any).id; // don't write the ID to the file
-    let files = new Map<LocalPath, string>();
-    let resources = [primaryResource, ...included];
-    for (let [i, resource] of resources.entries()) {
       if (
-        (i > 0 && typeof resource.lid !== 'string') ||
-        (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+        originalClone.meta?.adoptsFrom &&
+        internalKeyFor(patch.meta.adoptsFrom, url) !==
+          internalKeyFor(originalClone.meta.adoptsFrom, url)
       ) {
-        continue;
-      }
-      let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
-      let fileURL =
-        i === 0
-          ? new URL(`${url}.json`)
-          : this.paths.fileURL(
-              `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
-            );
-      // we already did this one
-      if (i !== 0) {
-        promoteLocalIdsToRemoteIds({
-          resource,
-          included,
-          realmURL: new URL(this.url),
-        });
-        visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-          setModuleURL(
-            resolveCardReference(
-              moduleURL,
-              instanceURL,
-            ) as RealmResourceIdentifier,
-          );
+        return badRequest({
+          message: `Cannot change card instance type to ${JSON.stringify(
+            patch.meta.adoptsFrom,
+          )}`,
+          requestContext,
+          id: instanceURL,
         });
       }
-      let fileSerialization: LooseSingleCardDocument | undefined;
-      try {
-        fileSerialization = await this.fileSerialization(
-          {
-            data: merge(resource, { meta: { realmURL: this.url } }),
-          },
-          fileURL,
+      let included = (maybeIncluded ?? []) as CardResource[];
+
+      delete (patch as any).type;
+      delete (patch as any).meta.realmInfo;
+      delete (patch as any).meta.realmURL;
+
+      promoteLocalIdsToRemoteIds({
+        resource: patch,
+        included,
+        realmURL: new URL(this.url),
+      });
+
+      let primaryResource = mergeWith(
+        originalClone,
+        patch,
+        (_objectValue: any, sourceValue: any) => {
+          // a patched array should overwrite the original array instead of merging
+          // into an original array, otherwise we won't be able to remove items in
+          // the original array
+          return Array.isArray(sourceValue) ? sourceValue : undefined;
+        },
+      );
+
+      if (primaryResource.relationships || patch.relationships) {
+        let merged = mergeRelationships(
+          primaryResource.relationships,
+          patch.relationships,
         );
-      } catch (err: any) {
-        if (err.message.startsWith('field validation error')) {
-          return badRequest({
-            message: err.message,
-            requestContext,
-            id: instanceURL,
+
+        if (merged && Object.keys(merged).length !== 0) {
+          primaryResource.relationships = merged;
+        }
+      }
+
+      // If the patch makes no semantic changes and doesn't include side-loaded
+      // resources, short-circuit to avoid touching the file (and changing mtime).
+      if (included.length === 0 && isEqual(primaryResource, original)) {
+        let entry = await this.#realmIndexQueryEngine.cardDocument(
+          new URL(instanceURL),
+          {
+            loadLinks: true,
+            skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+          },
+        );
+        if (entry && entry.type !== 'error') {
+          let existingDoc = merge({}, entry.doc, {
+            data: {
+              links: { self: instanceURL },
+              meta: { lastModified: entry.doc.data.meta.lastModified },
+            },
           });
-        } else {
-          return systemError({
+          let createdAt = await this.getCreatedTime(
+            this.paths.local(url) + '.json',
+          );
+          // entry.doc came from cardDocument(), which already called
+          // attachRealmInfo() and (re)populated the realm-info cache —
+          // so the cached hash is current as of this response.
+          await this.getRealmInfo();
+          let foreignDeps = this.hasForeignRealmDeps(entry.deps);
+          let etag = foreignDeps
+            ? undefined
+            : buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash());
+          return createResponse({
+            body: JSON.stringify(existingDoc, null, 2),
+            init: {
+              headers: {
+                'content-type': SupportedMimeType.CardJson,
+                'cache-control': this.cardJsonCacheControl(requestContext),
+                ...(etag ? { etag } : {}),
+                ...etagSuppressedHeader(foreignDeps),
+                ...lastModifiedHeader(existingDoc),
+                ...(createdAt != null
+                  ? { 'x-created': formatRFC7231(createdAt * 1000) }
+                  : {}),
+              },
+            },
             requestContext,
-            message: err.message,
-            additionalError: err,
-            id: instanceURL,
           });
         }
       }
-      let path = this.paths.local(fileURL);
-      files.set(path, JSON.stringify(fileSerialization, null, 2));
-      if (i === 0) {
-        primarySerialization = fileSerialization;
-      }
-    }
-    let [{ lastModified, created }] = await this.writeMany(files, {
-      clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
-    });
-    let entry = await this.#realmIndexQueryEngine.cardDocument(
-      new URL(instanceURL),
-      {
-        loadLinks: true,
-      },
-    );
-    let doc: SingleCardDocument;
-    if (!entry || entry?.type === 'error') {
-      if (
-        primarySerialization &&
-        isBrowserTestEnv() &&
-        !(globalThis as any).__emulateServerPatchFailure
-      ) {
-        doc = merge({}, primarySerialization, {
-          data: {
-            id: instanceURL,
-            links: { self: instanceURL },
-            meta: {
-              ...(primarySerialization.data.meta ?? {}),
-              lastModified,
+
+      delete (primaryResource as any).id; // don't write the ID to the file
+      let files = new Map<LocalPath, string>();
+      let resources = [primaryResource, ...included];
+      for (let [i, resource] of resources.entries()) {
+        if (
+          (i > 0 && typeof resource.lid !== 'string') ||
+          (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+        ) {
+          continue;
+        }
+        let name = getCardDirectoryName(resource.meta?.adoptsFrom, this.paths);
+        let fileURL =
+          i === 0
+            ? new URL(`${url}.json`)
+            : this.paths.fileURL(
+                `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
+              );
+        // we already did this one
+        if (i !== 0) {
+          promoteLocalIdsToRemoteIds({
+            resource,
+            included,
+            realmURL: new URL(this.url),
+          });
+          visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+            setModuleURL(
+              resolveCardReference(
+                moduleURL,
+                instanceURL,
+              ) as RealmResourceIdentifier,
+            );
+          });
+        }
+        let fileSerialization: LooseSingleCardDocument | undefined;
+        try {
+          fileSerialization = await this.fileSerialization(
+            {
+              data: merge(resource, { meta: { realmURL: this.url } }),
             },
-          },
-        }) as SingleCardDocument;
+            fileURL,
+          );
+        } catch (err: any) {
+          if (err.message.startsWith('field validation error')) {
+            return badRequest({
+              message: err.message,
+              requestContext,
+              id: instanceURL,
+            });
+          } else {
+            return systemError({
+              requestContext,
+              message: err.message,
+              additionalError: err,
+              id: instanceURL,
+            });
+          }
+        }
+        let path = this.paths.local(fileURL);
+        files.set(path, JSON.stringify(fileSerialization, null, 2));
+        if (i === 0) {
+          primarySerialization = fileSerialization;
+        }
+      }
+      // Use the unlocked inner write so we don't re-enter
+      // withWriteLock (which would block on a different pinned pool
+      // connection).
+      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
+        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+      });
+      let entry = await this.#realmIndexQueryEngine.cardDocument(
+        new URL(instanceURL),
+        {
+          loadLinks: true,
+          skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+        },
+      );
+      let doc: SingleCardDocument;
+      if (!entry || entry?.type === 'error') {
+        if (
+          primarySerialization &&
+          isBrowserTestEnv() &&
+          !(globalThis as any).__emulateServerPatchFailure
+        ) {
+          doc = merge({}, primarySerialization, {
+            data: {
+              id: instanceURL,
+              links: { self: instanceURL },
+              meta: {
+                ...(primarySerialization.data.meta ?? {}),
+                lastModified,
+              },
+            },
+          }) as SingleCardDocument;
+        } else {
+          return systemError({
+            requestContext,
+            message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+            id: instanceURL,
+            additionalError: entry
+              ? CardError.fromSerializableError(entry.error)
+              : undefined,
+          });
+        }
       } else {
-        return systemError({
-          requestContext,
-          message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
-          id: instanceURL,
-          additionalError: entry
-            ? CardError.fromSerializableError(entry.error)
-            : undefined,
+        doc = merge({}, entry.doc, {
+          data: {
+            links: { self: instanceURL },
+            meta: { lastModified },
+          },
         });
       }
-    } else {
-      doc = merge({}, entry.doc, {
-        data: {
-          links: { self: instanceURL },
-          meta: { lastModified },
+      // Same rationale as the no-op short-circuit branch above:
+      // cardDocument() above primed the realm-info cache via
+      // attachRealmInfo(), but only when entry was a non-error doc.
+      // On the error fallback we may still need to populate it.
+      await this.getRealmInfo();
+      let foreignDeps =
+        entry && entry.type !== 'error'
+          ? this.hasForeignRealmDeps(entry.deps)
+          : false;
+      let etag =
+        entry && entry.type !== 'error' && !foreignDeps
+          ? buildCardJsonEtag(entry.indexedAt, this.getCachedRealmInfoHash())
+          : undefined;
+      return createResponse({
+        body: JSON.stringify(doc, null, 2),
+        init: {
+          headers: {
+            'content-type': SupportedMimeType.CardJson,
+            'cache-control': this.cardJsonCacheControl(requestContext),
+            ...(etag ? { etag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
+            ...lastModifiedHeader(doc),
+            ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+          },
         },
+        requestContext,
       });
-    }
-    return createResponse({
-      body: JSON.stringify(doc, null, 2),
-      init: {
-        headers: {
-          'content-type': SupportedMimeType.CardJson,
-          ...lastModifiedHeader(doc),
-          ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
-        },
-      },
-      requestContext,
     });
+  }
+
+  // Card+JSON ETags are unsafe when the card has dependencies that live
+  // in OTHER realms — `index-writer.calculateInvalidations` filters
+  // dependents by `realm_url = $thisRealm` (see the comment there:
+  // "probably need to reevaluate this condition when we get to cross
+  // realm invalidation"), so a foreign card change propagates to the
+  // foreign realm's `indexed_at` but never to ours. With cross-realm
+  // invalidation off, a stable local `indexed_at` does NOT mean the
+  // assembled `included[]` is current — `loadLinks` will re-fetch the
+  // foreign card via HTTP and may surface new content. To avoid
+  // serving stale 304s, suppress ETag emission entirely when any dep
+  // points outside this realm.
+  private hasForeignRealmDeps(deps: string[] | null | undefined): boolean {
+    if (!deps?.length) {
+      return false;
+    }
+    for (let dep of deps) {
+      if (this.isForeignRealmDep(dep)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isForeignRealmDep(dep: string): boolean {
+    // Resolve registered prefixes back to absolute URLs first.
+    // Production deployments register every realm via
+    // `addRealmMapping`, so deps in `boxel_index.deps` are typically
+    // stored in prefix form (`@cardstack/foreign-realm/foo.json`) —
+    // comparing them as raw strings against `this.url` would always
+    // say "not foreign" and the guard would silently fail to fire.
+    let resolved: string;
+    try {
+      resolved = resolveCardReference(dep, undefined);
+    } catch {
+      // Bare specifier with no matching prefix mapping. `loadLinks`
+      // can't fetch it, so it's not a request-time mutation source —
+      // not a foreign-instance dep for our purposes.
+      return false;
+    }
+    // Only foreign card *instance* deps put us at risk of stale 304s.
+    // Module deps (`.gts`/`.ts`/`.js`) and scoped CSS don't load
+    // through `loadLinks` and don't contribute to the assembled
+    // `included[]`. Cards universally adopt from base modules
+    // (`https://cardstack.com/base/card-api.gts`) — treating those
+    // as foreign would blanket-suppress every card's ETag. The
+    // relationship-dependency extractor normalizes instance deps to
+    // `.json` (see `dependency-normalization.ts`), so checking that
+    // suffix isolates the deps we actually care about.
+    if (!resolved.endsWith('.json')) {
+      return false;
+    }
+    return !resolved.startsWith(this.url);
+  }
+
+  private cardJsonCacheControl(requestContext: RequestContext): string {
+    // Mirrors the source/module convention for the public/private
+    // visibility decision (world-readable realms get `public` so a
+    // CDN can revalidate; auth-gated realms get `private` so a shared
+    // cache won't serve one user's body to another). Adds an explicit
+    // `must-revalidate` that source/module don't need: card+json
+    // responses are richer (full JSON:API doc), so we want to be
+    // strict that intermediaries can't serve stale-while-revalidate
+    // even briefly. With `max-age=0` the browser always asks, the
+    // ETag short-circuit returns 304 cheaply when nothing changed.
+    let cacheVisibility = requestContext.permissions['*']?.includes('read')
+      ? 'public'
+      : 'private';
+    return `${cacheVisibility}, max-age=0, must-revalidate`;
   }
 
   private async getCard(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading the card from
+    // the index. With CS-11003's deferred +source POST, an immediately-
+    // following GET +json after a definition rewrite would otherwise read
+    // a stale snapshot — e.g. a post-rename instance still serialized
+    // under the old schema. Read endpoints serve the realm's canonical
+    // indexed view; the small wait when indexing is genuinely pending is
+    // the right tradeoff vs returning stale state.
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let requestedLocalPath = this.paths.local(new URL(request.url));
     let requestedHadJsonExtension = requestedLocalPath.endsWith('.json');
+    // `.json` requests always 302 to the canonical no-extension URL,
+    // regardless of cache state. Doing the redirect before any DB
+    // peek keeps clients consistent: the canonical URL is the only
+    // one that ever serves a 200 + ETag, and intermediaries that
+    // cache the 302 don't end up holding a cache key against the
+    // `.json` form. (Was previously only checked on the cache-miss
+    // path, so a `.json` request with `If-None-Match` could short-
+    // circuit to 304 with no redirect — splitting client/server
+    // cache keys.)
+    if (requestedHadJsonExtension) {
+      let canonicalPath = this.paths.local(
+        this.paths.fileURL(
+          requestedLocalPath.replace(/\.json$/, '') || 'index',
+        ),
+      );
+      return createResponse({
+        requestContext,
+        body: null,
+        init: {
+          status: 302,
+          headers: {
+            Location: `${new URL(this.url).pathname}${canonicalPath}`,
+          },
+        },
+      });
+    }
     let localPath = requestedLocalPath;
     if (localPath === '') {
       localPath = 'index';
     }
-    localPath = localPath.replace(/\.json$/, '');
     let url = this.paths.fileURL(localPath);
-    let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
-      loadLinks: true,
-    });
     let start = Date.now();
     try {
+      let cacheControl = this.cardJsonCacheControl(requestContext);
+      let ifNoneMatch = request.headers.get('if-none-match');
+
+      // Conditional-GET fast path. Only run the cheap `instance()`
+      // peek when the client sent a validator — otherwise we'd be
+      // paying an extra DB round-trip on cache misses since
+      // `cardDocument()` below does its own `instance()` lookup.
+      if (ifNoneMatch) {
+        await this.getRealmInfo();
+        let realmInfoHash = this.getCachedRealmInfoHash();
+        let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
+          includeErrors: true,
+        });
+        if (instanceEntry === undefined) {
+          if (await this.nonJsonFileExists(localPath)) {
+            // A path that points to a non-JSON file (e.g. an uploaded
+            // binary) was asked for as card+json. Return a file-meta JSON
+            // document so the caller receives valid JSON it can
+            // discriminate via `data.type === 'file-meta'` — instead of
+            // raw binary bytes that crash a downstream `response.json()`.
+            let fileMeta = await this.fileMetaDocument(
+              requestContext,
+              localPath,
+              SupportedMimeType.CardJson,
+            );
+            return fileMeta ?? notFound(request, requestContext);
+          } else {
+            return notFound(request, requestContext);
+          }
+        }
+        if (
+          !this.hasForeignRealmDeps(instanceEntry.deps) &&
+          instanceEntry.type === 'instance' &&
+          instanceEntry.indexedAt != null
+        ) {
+          let etag = buildCardJsonEtag(instanceEntry.indexedAt, realmInfoHash);
+          if (etag && ifNoneMatchMatches(ifNoneMatch, etag)) {
+            return createResponse({
+              requestContext,
+              body: null,
+              init: {
+                status: 304,
+                headers: {
+                  etag,
+                  'cache-control': cacheControl,
+                  ...(instanceEntry.lastModified != null
+                    ? {
+                        'last-modified': formatRFC7231(
+                          instanceEntry.lastModified * 1000,
+                        ),
+                      }
+                    : {}),
+                },
+              },
+            });
+          }
+        }
+      }
+
+      // Cache miss (or the conditional was a non-match): assemble
+      // the full doc. `cardDocument()` runs `attachRealmInfo()`
+      // which (re)populates the realm-info cache, so the hash we
+      // read for the response ETag below reflects the post-assembly
+      // realm info.
+      let maybeError = await this.#realmIndexQueryEngine.cardDocument(url, {
+        loadLinks: true,
+        skipQueryBackedExpansion: isDuringPrerenderRequest(request),
+      });
       if (maybeError === undefined) {
         if (await this.nonJsonFileExists(localPath)) {
-          return unsupportedMediaType(request, requestContext);
+          let fileMeta = await this.fileMetaDocument(
+            requestContext,
+            localPath,
+            SupportedMimeType.CardJson,
+          );
+          return fileMeta ?? notFound(request, requestContext);
         } else {
           return notFound(request, requestContext);
         }
@@ -3299,17 +4829,12 @@ export class Realm {
       let { doc: card } = maybeError;
       card.data.links = { self: url.href };
 
+      // The 302 redirect for the `.json` form is now done up-front
+      // (see top of method). Here we only need to redirect for the
+      // legacy normalization case where `paths.fileURL(localPath)`
+      // produces a different `paths.local()` than what we started
+      // with — same as the prior implementation's behavior.
       let foundPath = this.paths.local(url);
-      if (requestedHadJsonExtension) {
-        return createResponse({
-          requestContext,
-          body: null,
-          init: {
-            status: 302,
-            headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
-          },
-        });
-      }
       if (localPath !== foundPath) {
         return createResponse({
           requestContext,
@@ -3324,11 +4849,28 @@ export class Realm {
       // Prefer created_at from DB for instance JSON
       let pathForDb = this.paths.local(url) + '.json';
       let createdAt = await this.getCreatedTime(pathForDb);
+      // Use deps + indexedAt from the just-loaded doc — `cardDocument()`
+      // saw a snapshot that may differ from the early peek if a write
+      // landed between the two reads. Suppress the ETag if the doc
+      // depends on foreign-realm cards: cross-realm invalidation
+      // doesn't cascade `indexed_at`, so a validator we emit here
+      // could 304 a follow-up request whose `included[]` should have
+      // been re-fetched from the foreign realm.
+      let foreignDeps = this.hasForeignRealmDeps(maybeError.deps);
+      let responseEtag = foreignDeps
+        ? undefined
+        : buildCardJsonEtag(
+            maybeError.indexedAt,
+            this.getCachedRealmInfoHash(),
+          );
       return createResponse({
         body: JSON.stringify(card, null, 2),
         init: {
           headers: {
             'content-type': SupportedMimeType.CardJson,
+            'cache-control': cacheControl,
+            ...(responseEtag ? { etag: responseEtag } : {}),
+            ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(card),
             ...(createdAt != null
               ? { 'x-created': formatRFC7231(createdAt * 1000) }
@@ -3351,40 +4893,64 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    localPath = localPath.replace(/\.json$/, '');
-    let url = this.paths.fileURL(localPath);
-    let entry = await this.#realmIndexQueryEngine.instance(url, {
+    let trimmedLocalPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(trimmedLocalPath);
+    let instanceEntry = await this.#realmIndexQueryEngine.instance(url, {
       includeErrors: true,
     });
-    if (!entry) {
-      if (await this.nonJsonFileExists(localPath)) {
-        return unsupportedMediaType(request, requestContext);
+    if (instanceEntry) {
+      if (instanceEntry.type === 'instance-error') {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation unavailable: ${request.url} has an indexing error`,
+        );
       }
-      return notFound(request, requestContext);
-    }
-    if (entry.type === 'instance-error') {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation unavailable: ${request.url} has an indexing error`,
-      );
-    }
-    if (entry.markdown == null) {
-      return notAcceptable(
-        request,
-        requestContext,
-        `markdown representation not available for ${request.url}`,
-      );
-    }
-    return createResponse({
-      body: entry.markdown,
-      init: {
-        headers: {
-          'content-type': 'text/markdown; charset=utf-8',
+      if (instanceEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: instanceEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
         },
-      },
-      requestContext,
-    });
+        requestContext,
+      });
+    }
+    // No instance row — for FileDef rows (e.g. `.md`, `.csv`, `.gts`) the
+    // markdown lives on the `file` entry instead. Look the unstripped local
+    // path up against the file index before giving up. Without this branch
+    // CardsGrid's "Copy as Markdown" action 415s on any non-card file.
+    let fileURL = this.paths.fileURL(localPath);
+    let fileEntry = await this.#realmIndexQueryEngine.file(fileURL);
+    if (fileEntry) {
+      if (fileEntry.markdown == null) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation not available for ${request.url}`,
+        );
+      }
+      return createResponse({
+        body: fileEntry.markdown,
+        init: {
+          headers: {
+            'content-type': 'text/markdown; charset=utf-8',
+          },
+        },
+        requestContext,
+      });
+    }
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
+    return notFound(request, requestContext);
   }
 
   private async removeCard(
@@ -3528,10 +5094,20 @@ export class Realm {
     return this.#realmIndexUpdater.isIgnored(url);
   }
 
-  public async search(query: Query): Promise<LinkableCollectionDocument> {
+  public async search(
+    query: Query,
+    opts?: {
+      cacheOnlyDefinitions?: boolean;
+      skipQueryBackedExpansion?: boolean;
+    },
+  ): Promise<LinkableCollectionDocument> {
     assertQuery(query);
     return await this.#realmIndexQueryEngine.searchCards(query, {
       loadLinks: true,
+      ...(opts?.cacheOnlyDefinitions ? { cacheOnlyDefinitions: true } : {}),
+      ...(opts?.skipQueryBackedExpansion
+        ? { skipQueryBackedExpansion: true }
+        : {}),
     });
   }
 
@@ -3582,7 +5158,18 @@ export class Realm {
 
     try {
       assertQuery(cardsQuery);
-      let doc = await this.search(cardsQuery);
+      let duringPrerender = isDuringPrerenderRequest(request);
+      let doc = await this.search(cardsQuery, {
+        cacheOnlyDefinitions: duringPrerender,
+        // Inside a prerender, leave `relationships.{field}.data`
+        // populated for query-backed `linksTo` / `linksToMany` but
+        // skip transitive expansion into `included[]`. The host
+        // resolves the listed IDs via per-URL fetches against the
+        // store (which has the same prerender skip applied on
+        // instance-GET); the eager closure is a wasted round-trip in
+        // the prerender path.
+        skipQueryBackedExpansion: duringPrerender,
+      });
       return createResponse({
         body: JSON.stringify(doc, null, 2),
         init: {
@@ -3955,6 +5542,16 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // The publishability report scans indexed instances for private-realm
+    // imports + error_doc rows; with CS-11003's deferred indexing on
+    // +source POSTs, an immediately-following publishability call could
+    // otherwise see a stale snapshot and miss real violations (e.g. a
+    // leaky card that just landed but isn't indexed yet).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let sourceRealmURL = ensureTrailingSlash(this.url);
     let resourceEntries = new Map<string, ResourceIndexEntry[]>();
     let visibilityCache = new Map<string, RealmVisibility>();
@@ -4442,12 +6039,19 @@ export class Realm {
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);
-    if (Object.prototype.hasOwnProperty.call(patch, '*')) {
-      let worldReadable =
-        Array.isArray(patch['*']) && patch['*'].includes('read');
-      this.#worldReadable = worldReadable;
-      this.#worldReadablePromise = Promise.resolve(worldReadable);
-    }
+    // CS-11178: `RealmInfo.visibility` is derived from `realm_permissions`
+    // and memoized into `#cachedRealmInfo` by `parseRealmInfo`. Without
+    // this invalidation a PATCH on this replica leaves the *local*
+    // `_info` response stale until the next index swap, and a PATCH on
+    // any peer replica leaves *every* replica's `_info` response stale
+    // until process restart — the same multi-replica staleness pattern
+    // CS-11126 closed at the auth layer, surviving one layer up.
+    // Reuses the existing realm_index_updated channel: the peer listener
+    // calls `clearRealmIndexCaches()` which drops `#cachedRealmInfo`
+    // (exactly what we need) and `#inFlightSearch` (a no-op when empty;
+    // permission PATCHes are admin-rare so the over-invalidation is
+    // negligible).
+    await this.clearRealmIndexCachesAndBroadcast();
     return await this.getRealmPermissions(request, requestContext);
   }
 
@@ -4486,7 +6090,7 @@ export class Realm {
   } | null> {
     try {
       let results = (await query(this.#dbAdapter, [
-        `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
+        `SELECT last_published_at FROM realm_registry WHERE kind = 'published' AND url =`,
         param(this.url),
       ])) as { last_published_at: string }[];
 
@@ -4501,9 +6105,18 @@ export class Realm {
     { published_realm_url: string; last_published_at: string }[]
   > {
     try {
+      // Phase 4: read from realm_registry; aliases keep callers stable.
+      // ORDER BY pins the result order so that
+      // `getLastPublishedAt()` -> `Object.fromEntries(rows.map(...))` ->
+      // `JSON.stringify(realmInfo)` produces a *deterministic* hash for
+      // the same logical state. Without it, two realm-server instances
+      // (or the same instance after a restart) can hash the same data
+      // to different ETag bases purely on Postgres row-order luck —
+      // missed-304 storms instead of cache hits.
       let results = (await query(this.#dbAdapter, [
-        `SELECT published_realm_url, last_published_at FROM published_realms WHERE source_realm_url =`,
+        `SELECT url AS published_realm_url, last_published_at FROM realm_registry WHERE kind = 'published' AND source_url =`,
         param(this.url),
+        `ORDER BY url`,
       ])) as { published_realm_url: string; last_published_at: string }[];
 
       return results;
@@ -4513,18 +6126,169 @@ export class Realm {
     }
   }
 
+  // Reads showAsCatalog / publishable from realm_metadata. Both columns
+  // are nullable; missing rows or query failures return null/null,
+  // matching the pre-CS-10053 behavior of "absent in sidecar".
+  private async getRealmMetadata(): Promise<{
+    showAsCatalog: boolean | null;
+    publishable: boolean | null;
+  }> {
+    try {
+      let results = (await query(this.#dbAdapter, [
+        `SELECT show_as_catalog, publishable FROM realm_metadata WHERE url =`,
+        param(this.url),
+      ])) as {
+        show_as_catalog: boolean | null;
+        publishable: boolean | null;
+      }[];
+      if (results.length === 0) {
+        return { showAsCatalog: null, publishable: null };
+      }
+      return {
+        showAsCatalog: results[0].show_as_catalog,
+        publishable: results[0].publishable,
+      };
+    } catch (error) {
+      this.#log.warn(`Failed to query realm metadata: ${error}`);
+      return { showAsCatalog: null, publishable: null };
+    }
+  }
+
+  // CS-10054: read host routing rules from the indexed RealmConfig card.
+  // The `instance` field is `linksTo(CardDef)`, so the indexed
+  // searchDoc flattens each rule's link as `{ id, ...flattened
+  // linked-card attrs }`. We only need the absolute `id` here.
+  // Returns absolute URLs.
+  async getHostRoutingMap(): Promise<{ path: string; id: string }[]> {
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+      if (indexEntry?.type !== 'instance') {
+        return [];
+      }
+      let rules = (indexEntry.searchDoc ?? {}).hostRoutingRules;
+      if (!Array.isArray(rules)) {
+        return [];
+      }
+      return rules.flatMap((rule) => {
+        if (!rule || typeof rule !== 'object') return [];
+        let path = (rule as Record<string, unknown>).path;
+        let instance = (rule as Record<string, unknown>).instance;
+        if (typeof path !== 'string') return [];
+        if (!instance || typeof instance !== 'object') return [];
+        let id = (instance as Record<string, unknown>).id;
+        if (typeof id !== 'string') return [];
+        let idURL: URL;
+        try {
+          idURL = new URL(id);
+        } catch {
+          return [];
+        }
+        // Defensive same-realm guard. The project spec restricts
+        // routing rules to cards within the same realm; CS-10052
+        // enforces that in the UI but the file is hand-editable, so
+        // the read path filters too. Without this guard a realm owner
+        // could point `instance` at a private realm's card and the
+        // serve-index cardURL rewrite would surface its prerendered
+        // HTML through their public realm's routed path. `inRealm`
+        // is URL-aware, so neighbouring realms with shared prefixes
+        // (`/realm-evil/` vs `/realm/`) and trailing-slash variance
+        // are handled correctly.
+        if (!this.paths.inRealm(idURL)) {
+          this.#log.warn(
+            `dropping host routing rule for path "${path}" — target ${id} is outside this realm`,
+          );
+          return [];
+        }
+        return [{ path, id }];
+      });
+    } catch (e) {
+      this.#log.warn(
+        `failed to read host routing map from RealmConfig card: ${e}`,
+      );
+      return [];
+    }
+  }
+
+  // Upserts the patch into realm_metadata for this realm. Only the
+  // provided keys are written; absent keys retain their existing column
+  // values via COALESCE on the EXCLUDED row's NULL. Pass an explicit
+  // null to clear a column.
+  private async upsertRealmMetadata(patch: {
+    publishable?: boolean | null;
+    showAsCatalog?: boolean | null;
+  }): Promise<void> {
+    if (patch.publishable === undefined && patch.showAsCatalog === undefined) {
+      return;
+    }
+    let publishable =
+      patch.publishable === undefined ? null : patch.publishable;
+    let showAsCatalog =
+      patch.showAsCatalog === undefined ? null : patch.showAsCatalog;
+    let publishableProvided = patch.publishable !== undefined;
+    let showAsCatalogProvided = patch.showAsCatalog !== undefined;
+    await query(this.#dbAdapter, [
+      `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
+      param(this.url),
+      `,`,
+      param(publishable),
+      `,`,
+      param(showAsCatalog),
+      `) ON CONFLICT (url) DO UPDATE SET `,
+      // Update only the columns that were provided; preserve the
+      // existing values of the others.
+      ...(publishableProvided
+        ? [`publishable = `, param(publishable), `, `]
+        : []),
+      ...(showAsCatalogProvided
+        ? [`show_as_catalog = `, param(showAsCatalog), `, `]
+        : []),
+      `updated_at = now()`,
+    ]);
+  }
+
   async getRealmInfo(): Promise<RealmInfo> {
     if (!this.#cachedRealmInfo) {
       this.#cachedRealmInfo = await this.parseRealmInfo();
+      this.#cachedRealmInfoHash = computeContentHash(
+        JSON.stringify(this.#cachedRealmInfo),
+      );
     }
     return this.#cachedRealmInfo;
+  }
+
+  // Snapshot of the realm-info hash used as part of the card+json ETag.
+  // Returns undefined if the cache has been invalidated since the last
+  // `getRealmInfo()` call — callers should call `getRealmInfo()` first
+  // (which we already do on every getCard request) to refresh the hash.
+  private getCachedRealmInfoHash(): string | undefined {
+    return this.#cachedRealmInfoHash ?? undefined;
+  }
+
+  // Public so the publish/unpublish handlers can invalidate the SOURCE
+  // realm's cache when a derivative is (un)published. The source
+  // realm's `lastPublishedAt` map (which feeds into `RealmInfo` and
+  // therefore the card+json ETag's hash) is computed from
+  // `realm_registry` rows where `source_url = this.url`; publishing
+  // X' from X bumps that map but doesn't otherwise touch X's
+  // `.realm.json` or `realm_metadata`, so without this hook a 304
+  // would be served against the *pre-publish* hash forever.
+  invalidateCachedRealmInfo(): void {
+    this.#cachedRealmInfo = null;
+    this.#cachedRealmInfoHash = null;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let realmConfig = await this.readFileAsText(localPath, undefined);
-    let lastPublishedAt = await this.getLastPublishedAt();
+    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
+      this.readFileAsText(localPath, undefined),
+      this.getLastPublishedAt(),
+      this.getRealmMetadata(),
+    ]);
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -4539,6 +6303,7 @@ export class Realm {
       ),
       publishable: null,
       lastPublishedAt,
+      includePrerenderedDefaultRealmIndex: null,
     };
 
     if (realmConfig) {
@@ -4548,8 +6313,6 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.showAsCatalog =
-          realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
         realmInfo.interactHome =
           realmConfigJson.interactHome ?? realmInfo.interactHome;
         realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
@@ -4558,8 +6321,6 @@ export class Realm {
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),
           this.#matrixClient.matrixURL.href,
         );
-        realmInfo.publishable =
-          realmConfigJson.publishable ?? realmInfo.publishable;
         realmInfo.lastPublishedAt =
           realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
       } catch (e) {
@@ -4567,14 +6328,73 @@ export class Realm {
       }
     }
 
-    // Overlay from the RealmConfig card instance at /realm.json when it has
-    // been indexed. Uses instance() rather than cardDocument() to avoid
-    // recursing through attachRealmInfo → getRealmInfo → parseRealmInfo.
+    // showAsCatalog and publishable live in realm_metadata after CS-10053.
+    // The sidecar-parse block above intentionally does not read them; the
+    // DB is the only source.
+    realmInfo.showAsCatalog = metadata.showAsCatalog;
+    realmInfo.publishable = metadata.publishable;
+
+    // Overlay from the RealmConfig card file at /realm.json on disk. The
+    // file is the source of truth — patchRealmConfig writes it, publish
+    // copySync's it from the source realm — and exists before the indexer
+    // ever processes it. Reading from disk closes the gap during indexing,
+    // when /_info can fire mid-pass via the prerender host's cardRender:
+    // parseRealmInfo's overlay below queries `boxel_index` (without
+    // useWorkInProgressIndex), which can't see entries written to
+    // boxel_index_working until `batch.done()` swaps; without this file
+    // overlay, the very first /_info during a from-scratch pass falls
+    // back to "Unnamed Workspace", the prerender host caches that on its
+    // RealmResource (`fetchInfo` short-circuits if `info` is set), and
+    // /index's prerendered head HTML carries the wrong og:title.
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
     try {
-      let cardURL = new URL(
-        this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+      let cardFilePath: LocalPath = this.paths.local(
+        this.paths.fileURL('realm.json'),
       );
-      let indexEntry = await this.#realmIndexQueryEngine.instance(cardURL);
+      let cardFile = await this.readFileAsText(cardFilePath, undefined);
+      if (cardFile?.content) {
+        let cardDoc = JSON.parse(cardFile.content) as {
+          data?: { attributes?: Record<string, unknown> };
+        };
+        let attrs = (cardDoc?.data?.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        let cardInfo = (attrs.cardInfo ?? {}) as Record<string, unknown>;
+        if (typeof cardInfo.name === 'string') {
+          realmInfo.name = cardInfo.name;
+        }
+        if ('backgroundURL' in attrs) {
+          realmInfo.backgroundURL =
+            typeof attrs.backgroundURL === 'string'
+              ? attrs.backgroundURL
+              : null;
+        }
+        if ('iconURL' in attrs) {
+          realmInfo.iconURL =
+            typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
+        }
+      }
+    } catch (e) {
+      this.#log.warn(`failed to read RealmConfig card from disk: ${e}`);
+    }
+
+    // Final overlay from the indexed RealmConfig card. Wins over the file
+    // read above so that any post-indexing transformations (search-doc
+    // shape, etc.) take precedence in steady state. Uses instance() rather
+    // than cardDocument() to avoid recursing through attachRealmInfo →
+    // getRealmInfo → parseRealmInfo.
+    try {
+      let indexEntry =
+        await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
       if (indexEntry?.type === 'instance') {
         let attrs = (indexEntry.instance.attributes ?? {}) as Record<
           string,
@@ -4593,6 +6413,12 @@ export class Realm {
         if ('iconURL' in attrs) {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
+        }
+        if ('includePrerenderedDefaultRealmIndex' in attrs) {
+          realmInfo.includePrerenderedDefaultRealmIndex =
+            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
+              ? attrs.includePrerenderedDefaultRealmIndex
+              : null;
         }
       }
     } catch (e) {
@@ -4661,20 +6487,39 @@ export class Realm {
       });
     }
 
+    // Validate types of fields bound for realm_metadata BEFORE any
+    // writes. The patch schema accepts arbitrary attribute values
+    // (z.record(z.unknown())); without this check a non-boolean
+    // would reach the SQL boolean column and surface as an opaque
+    // 500. Card and sidecar fields rely on their own downstream
+    // validation; the DB-bound fields don't have one.
+    if ('publishable' in attributes) {
+      let publishableValue = attributes.publishable;
+      if (publishableValue !== null && typeof publishableValue !== 'boolean') {
+        return badRequest({
+          message: `'publishable' must be a boolean or null`,
+          requestContext,
+        });
+      }
+    }
+
     let cardAttrs: Record<string, unknown> = {};
+    let metadataAttrs: Record<string, unknown> = {};
     let sidecarAttrs: Record<string, unknown> = {};
     for (let [key, value] of Object.entries(attributes)) {
       if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
         cardAttrs[key] = value;
+      } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
+        metadataAttrs[key] = value;
       } else {
         sidecarAttrs[key] = value;
       }
     }
 
-    // Read and merge BOTH files before writing either. A mixed PATCH like
-    // { name, publishable } touches both the card and the sidecar, and we
-    // don't want a malformed sidecar to surface 500 *after* the card has
-    // already been mutated.
+    // Read and validate BOTH files before writing anything. A mixed PATCH
+    // like { name, publishable } touches the card, the realm_metadata
+    // table, and possibly the sidecar; we don't want a malformed sidecar
+    // to surface 500 *after* the card has already been mutated.
     let cardPath: LocalPath | undefined;
     let cardDoc:
       | {
@@ -4801,8 +6646,16 @@ export class Realm {
         JSON.stringify(realmConfig, null, 2) + '\n',
       );
     }
+    if (Object.keys(metadataAttrs).length > 0) {
+      await this.upsertRealmMetadata({
+        publishable:
+          'publishable' in metadataAttrs
+            ? (metadataAttrs.publishable as boolean | null)
+            : undefined,
+      });
+    }
 
-    this.#cachedRealmInfo = null;
+    this.invalidateCachedRealmInfo();
 
     let realmInfo = await this.parseRealmInfo();
     let doc = {
@@ -4847,7 +6700,7 @@ export class Realm {
     doc: LooseSingleCardDocument,
     relativeTo: URL,
   ): Promise<LooseSingleCardDocument> {
-    let absoluteCodeRef = codeRefWithAbsoluteURL(
+    let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
       doc.data.meta.adoptsFrom,
       relativeTo,
     ) as ResolvedCodeRef;
@@ -4859,94 +6712,12 @@ export class Realm {
       );
     }
 
-    let customFieldDefinitions: Record<string, FieldDefinition> = {};
-    if (doc.data.meta?.fields) {
-      await this.buildCustomFieldDefinitions(
-        doc.data.meta.fields,
-        '',
-        customFieldDefinitions,
-        relativeTo,
-      );
-    }
-
-    return serialize({
+    return await serialize({
       doc,
       definition,
       relativeTo,
-      customFieldDefinitions,
+      definitionLookup: this.#definitionLookup,
     });
-  }
-
-  private async buildCustomFieldDefinitions(
-    fields: CardFields,
-    basePath: string,
-    customFieldDefinitions: Record<string, FieldDefinition>,
-    relativeTo: URL,
-  ): Promise<void> {
-    for (const [fieldName, fieldValue] of Object.entries(fields)) {
-      const fieldPath = basePath ? `${basePath}.${fieldName}` : fieldName;
-      if (isMeta(fieldValue) && fieldValue?.fields) {
-        // if we have nested fields, we need to recurse into them
-        await this.buildCustomFieldDefinitions(
-          fieldValue.fields,
-          fieldPath,
-          customFieldDefinitions,
-          relativeTo,
-        );
-        continue;
-      }
-      if (Array.isArray(fieldValue)) {
-        for (const item of fieldValue) {
-          if (item.adoptsFrom) {
-            let absoluteCodeRef = codeRefWithAbsoluteURL(
-              item.adoptsFrom,
-              relativeTo,
-            ) as ResolvedCodeRef;
-            let fieldDefinition =
-              await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
-            if (fieldDefinition) {
-              for (const [subFieldName, subFieldDefinition] of Object.entries(
-                fieldDefinition.fields,
-              )) {
-                const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-                customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
-              }
-            }
-          }
-          if (item.fields) {
-            await this.buildCustomFieldDefinitions(
-              item.fields,
-              fieldPath,
-              customFieldDefinitions,
-              relativeTo,
-            );
-          }
-        }
-      } else if (fieldValue.adoptsFrom) {
-        let absoluteCodeRef = codeRefWithAbsoluteURL(
-          fieldValue.adoptsFrom,
-          relativeTo,
-        ) as ResolvedCodeRef;
-        let fieldDefinition =
-          await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
-        if (fieldDefinition) {
-          for (const [subFieldName, subFieldDefinition] of Object.entries(
-            fieldDefinition.fields,
-          )) {
-            const prefixedFieldPath = `${fieldPath}.${subFieldName}`;
-            customFieldDefinitions[prefixedFieldPath] = subFieldDefinition;
-          }
-        }
-        if (fieldValue.fields) {
-          await this.buildCustomFieldDefinitions(
-            fieldValue.fields,
-            fieldPath,
-            customFieldDefinitions,
-            relativeTo,
-          );
-        }
-      }
-    }
   }
 
   private async startFileWatcher() {
@@ -4957,10 +6728,9 @@ export class Realm {
       }
 
       let localPath = this.paths.local(tracked.url);
-      this.#sourceCache.invalidate(localPath);
+      this.invalidateCache(localPath);
 
       if (hasExecutableExtension(localPath)) {
-        this.#moduleCache.invalidate(localPath);
         await this.#definitionLookup.invalidate(tracked.url.href);
       }
 
@@ -5023,45 +6793,31 @@ export class Realm {
     );
   }
 
-  private async isWorldReadable(): Promise<boolean> {
-    if (this.#worldReadable !== undefined) {
-      return this.#worldReadable;
-    }
-    if (!this.#worldReadablePromise) {
-      this.#worldReadablePromise = (async () => {
-        let permissions = await fetchRealmPermissions(
-          this.#dbAdapter,
-          new URL(this.url),
-        );
-        let worldReadable = permissions['*']?.includes('read') ?? false;
-        if (this.#worldReadable === undefined) {
-          this.#worldReadable = worldReadable;
-          return worldReadable;
-        }
-        return this.#worldReadable;
-      })();
-    }
-    return await this.#worldReadablePromise;
-  }
-
+  // CS-11126: no memoization. `realm_permissions` is indexed by
+  // realm_url and a permissions PATCH from a peer replica must take
+  // effect here without a restart, so every read-path callsite fetches
+  // fresh. For requests, this is one extra indexed SELECT; for
+  // world-readable reads `createRequestContext` derives the flag from
+  // the same single fetch rather than calling this helper plus a
+  // second fetch.
   private async createRequestContext(
     requiredPermission: RealmAction,
   ): Promise<RequestContext> {
-    let permissions: RealmPermissions;
-    let shouldUseWorldReadable =
-      requiredPermission === 'read' && (await this.isWorldReadable());
-
-    if (shouldUseWorldReadable) {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        '*': ['read'],
-      };
-    } else {
-      permissions = {
-        [this.#matrixClientUserId]: ['assume-user'],
-        ...(await fetchRealmPermissions(this.#dbAdapter, new URL(this.url))),
-      };
-    }
+    let fetched = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+    let isWorldReadable = fetched['*']?.includes('read') ?? false;
+    let permissions: RealmPermissions =
+      requiredPermission === 'read' && isWorldReadable
+        ? {
+            [this.#matrixClientUserId]: ['assume-user'],
+            '*': ['read'],
+          }
+        : {
+            [this.#matrixClientUserId]: ['assume-user'],
+            ...fetched,
+          };
 
     return {
       realm: this,
@@ -5070,31 +6826,21 @@ export class Realm {
   }
 
   public async visibility(): Promise<RealmVisibility> {
-    if (this.visibilityPromise) {
-      return this.visibilityPromise;
+    let permissions = await fetchRealmPermissions(
+      this.#dbAdapter,
+      new URL(this.url),
+    );
+
+    let usernames = Object.keys(permissions).filter(
+      (username) => !username.startsWith('@realm/'),
+    );
+    if (usernames.includes('*')) {
+      return 'public';
+    } else if (usernames.includes('users') || usernames.length > 1) {
+      return 'shared';
+    } else {
+      return 'private';
     }
-
-    this.visibilityPromise = (async () => {
-      let permissions = await fetchRealmPermissions(
-        this.#dbAdapter,
-        new URL(this.url),
-      );
-
-      let usernames = Object.keys(permissions).filter(
-        (username) => !username.startsWith('@realm/'),
-      );
-      if (usernames.includes('*')) {
-        return 'public';
-      } else if (usernames.includes('users')) {
-        return 'shared';
-      } else if (usernames.length > 1) {
-        return 'shared';
-      } else {
-        return 'private';
-      }
-    })();
-
-    return this.visibilityPromise;
   }
 
   #logRequestPerformance(
@@ -5180,6 +6926,19 @@ function lastModifiedHeader(
       ? { 'last-modified': formatRFC7231(card.data.meta.lastModified * 1000) }
       : {}
   ) as {} | { 'last-modified': string };
+}
+
+// Visibility hook for the foreign-realm-deps ETag suppression — when
+// a card+json response declines to emit an ETag because it has
+// dependencies in another realm, this header surfaces the reason so
+// ops can measure how often the guard fires (Grafana / log
+// aggregation) and prioritize wiring up cross-realm dep
+// invalidation in `index-writer.calculateInvalidations`. Once that
+// lands, both this header and the suppression itself can come out.
+function etagSuppressedHeader(
+  hasForeignDeps: boolean,
+): {} | { 'X-Boxel-Etag-Suppressed': string } {
+  return hasForeignDeps ? { 'X-Boxel-Etag-Suppressed': 'foreign-deps' } : {};
 }
 
 export type ErrorReporter = (error: Error) => void;

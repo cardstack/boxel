@@ -10,17 +10,24 @@ import { test as base, expect } from '@playwright/test';
 import type { RealmAction, RealmPermissions } from '@cardstack/runtime-common';
 
 import {
+  buildRealmToken,
+  buildServerToken,
   defaultSupportMetadataFile,
   type PreparedTemplateMetadata,
   readSupportMetadata,
-} from '../src/runtime-metadata';
-import { buildRealmToken, buildServerToken } from '../src/harness/shared';
-import { startHarnessPrerenderServer } from '../src/harness/support-services';
+  startHarnessPrerenderServer,
+} from '@cardstack/realm-test-harness';
+import { logger } from '../src/logger';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 import {
   allocateTestWorkerPortSet,
   type TestWorkerPortReservation,
 } from './helpers/port-allocator';
+
+// Same name `playwright.global-setup.ts` already uses, and already
+// configured at `info` in `playwright.config.ts` so heartbeat lines
+// surface in CI without a log-level override.
+let log = logger('software-factory:playwright');
 
 type StartedFactoryRealm = {
   realmDir: string;
@@ -80,7 +87,7 @@ const packageRoot = resolve(process.cwd());
 const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
 const defaultRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
+  process.env.TEST_HARNESS_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
 
@@ -117,7 +124,12 @@ async function waitForPortFree(
           }
         });
       });
-      server.listen(port, '127.0.0.1', () => {
+      // Bind wildcard so we don't return "free" while the port is still
+      // bound on a different interface (e.g. the previous worker-manager
+      // listened on `::port`; a 127.0.0.1-only probe would succeed and
+      // the next test could allocate that same port, then EADDRINUSE
+      // when its child also binds `::port`).
+      server.listen(port, () => {
         server.close((closeError) => {
           if (closeError) {
             reject(closeError);
@@ -135,13 +147,37 @@ async function waitForPortFree(
   throw new Error(`Port ${port} still in use after ${timeoutMs}ms`);
 }
 
+// 240s default leaves a 60s margin under Playwright's 300s setup-realm
+// timeout. Without that margin Playwright's blanket "Test timeout
+// exceeded while setting up "realm"" message wins the race and the
+// child's last 20K of stdout/stderr — captured below — never make it
+// into the failure log. With the margin our `timed out waiting for
+// software-factory metadata file …` error surfaces first, carrying
+// the realm child's actual startup logs.
+const DEFAULT_METADATA_FILE_TIMEOUT_MS = 240_000;
+// How often to print a heartbeat while we're still waiting on the
+// metadata file. Useful in CI where the stdout stream is the only
+// real-time signal — without these lines a 5-minute hang looks
+// identical to a slow-but-progressing setup.
+const METADATA_FILE_HEARTBEAT_MS = 30_000;
+
+// `chars` not `bytes` because `string.length` / `slice()` operate on
+// UTF-16 code units. The realm child's logs are ASCII in practice, but
+// labeling this as bytes would be misleading if a non-ASCII glyph ever
+// landed in the tail window.
+function tailLogs(buffer: string, chars: number): string {
+  if (buffer.length <= chars) return buffer;
+  return `…(truncated, last ${chars} chars)…\n${buffer.slice(-chars)}`;
+}
+
 async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
   getLogs: () => string,
-  timeoutMs = 300_000,
+  timeoutMs = DEFAULT_METADATA_FILE_TIMEOUT_MS,
 ): Promise<T> {
   let startedAt = Date.now();
+  let nextHeartbeat = startedAt + METADATA_FILE_HEARTBEAT_MS;
 
   while (Date.now() - startedAt < timeoutMs) {
     if (existsSync(metadataFile)) {
@@ -154,11 +190,22 @@ async function waitForMetadataFile<T>(
       );
     }
 
+    if (Date.now() >= nextHeartbeat) {
+      let elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      log.warn(
+        `realm-fixture: still waiting for ${metadataFile} after ${elapsedSec}s ` +
+          `(child pid=${child.pid ?? '?'} exitCode=${child.exitCode ?? 'null'}). ` +
+          `Last child log tail:\n${tailLogs(getLogs(), 2_000)}`,
+      );
+      nextHeartbeat = Date.now() + METADATA_FILE_HEARTBEAT_MS;
+    }
+
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   throw new Error(
-    `timed out waiting for software-factory metadata file ${metadataFile}\n${getLogs()}`,
+    `timed out waiting for software-factory metadata file ${metadataFile} ` +
+      `after ${Math.round((Date.now() - startedAt) / 1000)}s\n${getLogs()}`,
   );
 }
 
@@ -239,29 +286,27 @@ async function startRealmProcess(
         env: {
           ...process.env,
           NODE_NO_WARNINGS: '1',
-          SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+          TEST_HARNESS_METADATA_FILE: metadataFile,
           ...(supportMetadata?.context
             ? {
-                SOFTWARE_FACTORY_CONTEXT: JSON.stringify(
-                  supportMetadata.context,
-                ),
+                TEST_HARNESS_CONTEXT: JSON.stringify(supportMetadata.context),
               }
             : {}),
           ...(preparedTemplate
             ? {
-                SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+                TEST_HARNESS_TEMPLATE_DATABASE_NAME:
                   preparedTemplate.templateDatabaseName,
               }
             : {}),
           ...(preparedTemplate
             ? {
-                SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
+                TEST_HARNESS_TEMPLATE_REALM_SERVER_URL:
                   preparedTemplate.templateRealmServerURL,
               }
             : {}),
           ...(permissions
             ? {
-                SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
+                TEST_HARNESS_PERMISSIONS: JSON.stringify(permissions),
               }
             : {}),
         },
@@ -269,11 +314,25 @@ async function startRealmProcess(
       },
     );
 
+    // Opt-in real-time forwarding of the realm child's stdio. Default
+    // off so CI logs stay readable; flip on
+    // (`TEST_HARNESS_FORWARD_REALM_LOGS=1`) when reproducing a hang
+    // locally and you want to watch the child's startup unfold instead
+    // of waiting for the heartbeat tail in `waitForMetadataFile`.
+    let forwardRealmLogs = process.env.TEST_HARNESS_FORWARD_REALM_LOGS === '1';
     child.stdout?.on('data', (chunk) => {
-      logs = appendLog(logs, String(chunk));
+      let str = String(chunk);
+      logs = appendLog(logs, str);
+      if (forwardRealmLogs) {
+        log.info(`realm-child stdout: ${str.replace(/\s+$/, '')}`);
+      }
     });
     child.stderr?.on('data', (chunk) => {
-      logs = appendLog(logs, String(chunk));
+      let str = String(chunk);
+      logs = appendLog(logs, str);
+      if (forwardRealmLogs) {
+        log.info(`realm-child stderr: ${str.replace(/\s+$/, '')}`);
+      }
     });
 
     // Race the metadata-file poll against an early `'error'` from the

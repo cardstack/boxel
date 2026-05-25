@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { hasExecutableExtension } from '@cardstack/runtime-common';
+import { hasExecutableExtension, rri } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -44,12 +44,12 @@ export default class PatchCodeCommand extends HostBaseCommand<
     return PatchCodeInput;
   }
 
-  requireInputFields = ['fileUrl', 'codeBlocks'];
+  requireInputFields = ['fileIdentifier', 'codeBlocks'];
 
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.PatchCodeCommandResult> {
-    let { fileUrl, codeBlocks, roomId } = input;
+    let { fileIdentifier: fileUrl, codeBlocks, roomId } = input;
 
     let fileInfo = await this.getFileInfo(fileUrl);
     let hasEmptySearchPortion = this.hasEmptySearchPortion(codeBlocks);
@@ -58,7 +58,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
       sourceContent,
       codeBlocks,
     );
-    let finalFileUrl = fileUrl;
+    let finalFileIdentifier = fileUrl;
     let lintIssues: string[] = [];
     if (results.some((r) => r.status === 'applied')) {
       if (patchedCode.trim() !== '' && this.isLintableFile(fileUrl)) {
@@ -67,7 +67,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
         lintIssues = lintResult.lintIssues ?? [];
       }
 
-      finalFileUrl = await this.determineFinalFileUrl(
+      finalFileIdentifier = await this.determineFinalFileUrl(
         fileUrl,
         fileInfo,
         hasEmptySearchPortion,
@@ -76,18 +76,18 @@ export default class PatchCodeCommand extends HostBaseCommand<
       let clientRequestId = this.commandService.trackAiAssistantCardRequest({
         action: 'patch-code',
         roomId,
-        fileUrl: finalFileUrl,
+        fileUrl: finalFileIdentifier,
       });
 
       let savedThroughOpenFile = await this.trySaveThroughOpenFile(
-        finalFileUrl,
+        finalFileIdentifier,
         patchedCode,
         clientRequestId,
       );
       if (!savedThroughOpenFile) {
         this.cardService
-          .saveSource(new URL(finalFileUrl), patchedCode, 'bot-patch', {
-            resetLoader: hasExecutableExtension(finalFileUrl),
+          .saveSource(new URL(finalFileIdentifier), patchedCode, 'bot-patch', {
+            resetLoader: hasExecutableExtension(finalFileIdentifier),
             clientRequestId,
           })
           .catch((error: unknown) => {
@@ -101,7 +101,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
 
     return new PatchCodeCommandResult({
       patchedContent: patchedCode,
-      finalFileUrl,
+      finalFileIdentifier,
       lintIssues,
       results: results.map((result) => {
         return new PatchCodeResultField({
@@ -150,7 +150,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async getFileInfo(fileUrl: string): Promise<FileInfo> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     let exists = getSourceResult.status !== 404;
     let content = exists ? getSourceResult.content : '';
     let hasContent = exists && content.trim() !== '';
@@ -237,7 +237,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
-    let getSourceResult = await this.cardService.getSource(new URL(fileUrl));
+    let getSourceResult = await this.cardService.getSource(rri(fileUrl));
     return getSourceResult.status !== 404;
   }
 }

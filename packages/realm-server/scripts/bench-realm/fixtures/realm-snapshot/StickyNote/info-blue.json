@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Q2 retro on Friday",
+      "body": "10am Friday, board room. Bring three highlights and one thing we should stop doing.",
+      "color": "blue",
+      "x": 520,
+      "y": 80,
+      "rotation": -3,
+      "author": "Maya",
+      "createdAt": "2026-05-01T09:00:00.000Z",
+      "cardInfo": {
+        "name": "Q2 retro on Friday"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

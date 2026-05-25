@@ -1,0 +1,281 @@
+#!/usr/bin/env bash
+#MISE description="Provision a local dev TLS cert so realm-server can speak HTTP/2"
+#
+# Generates ~/.local/share/boxel/dev-certs/{localhost.pem, localhost-key.pem}
+# using mkcert. Idempotent — re-runs are a no-op if the cert already exists
+# and isn't near expiry.
+#
+# Why this exists
+# ---------------
+# Heavy aggregator-card prerenders (Cohort, dashboards) fan out 80+
+# federated-search requests in a single Chromium tab. Chrome's HTTP/1.1
+# per-origin connection limit (6) serializes them and turns one cohort
+# render into multiple minutes. HTTP/2 multiplexes them over a single
+# TCP connection and the same render finishes in seconds.
+#
+# Browsers only do HTTP/2 over TLS, so the realm-server has to terminate
+# a cert. We use mkcert because:
+#   1. It can install a local CA into the system trust store (one-time,
+#      requires sudo) so the dev's normal browser and command-line tools
+#      silently accept the cert.
+#   2. The leaf cert it generates is short-lived and replaceable; it
+#      lives under the dev's home dir and is never committed.
+#
+# This task verifies the mkcert root CA is already trusted (system
+# store + NSS DB) and fails fast with instructions otherwise. It does
+# NOT run `mkcert -install` itself, because that prompts for sudo and
+# `mise run dev-all`'s parallel runner multiplexes child stdout into
+# one stream where the prompt is unsendable — the whole stack would
+# deadlock and SIGTERM-cascade. The companion task
+# `mise run infra:trust-dev-cert` handles the one-time install. After
+# that, this task is a fast no-op on every invocation.
+
+set -euo pipefail
+
+CERT_DIR="${BOXEL_DEV_CERT_DIR:-$HOME/.local/share/boxel/dev-certs}"
+CERT_FILE="$CERT_DIR/localhost.pem"
+KEY_FILE="$CERT_DIR/localhost-key.pem"
+# Persists the set of env-mode slugs (BOXEL_ENVIRONMENT values) that any
+# worktree on this machine has used, so the leaf cert can carry a
+# `*.<slug>.localhost` SAN for each. RFC 6125 wildcards only cover one
+# DNS label, so `*.localhost` does NOT match `host.<slug>.localhost`;
+# we have to pre-declare the slug's wildcard explicitly.
+SLUGS_FILE="$CERT_DIR/known-env-slugs.txt"
+
+# Source the shared slug-computation helper. Resolved relative to this
+# script's location: mise-tasks/infra/ensure-dev-cert → scripts/env-slug.sh.
+_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$_REPO_ROOT/scripts/env-slug.sh"
+unset _REPO_ROOT
+
+CURRENT_SLUG="$(resolve_env_slug 2>/dev/null || true)"
+
+# Stamp the current slug into the persistent slug list so subsequent
+# regenerations keep covering it. Done up-front (before the idempotent
+# skip check) so adding a fresh worktree triggers exactly one regen.
+mkdir -p "$CERT_DIR"
+touch "$SLUGS_FILE"
+if [ -n "$CURRENT_SLUG" ] && ! grep -qxF "$CURRENT_SLUG" "$SLUGS_FILE"; then
+  echo "$CURRENT_SLUG" >> "$SLUGS_FILE"
+  echo "[ensure-dev-cert] Recorded new env-mode slug '$CURRENT_SLUG' in $SLUGS_FILE"
+fi
+
+# mkcert is required even on the idempotent-skip path: env-vars.sh needs
+# `mkcert -CAROOT` to populate `NODE_EXTRA_CA_CERTS` so Node clients
+# trust the cert. An existing cert without a working mkcert binary leaves
+# the trust path half-wired.
+if ! command -v mkcert >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+[ensure-dev-cert] mkcert is required but not installed.
+
+The realm-server speaks HTTPS+HTTP/2 in every environment — there is
+no HTTP fallback. mkcert provisions the cert; install it before
+running `mise run dev` (or running CI):
+
+  Linux (Debian/Ubuntu): sudo apt install -y mkcert libnss3-tools
+  Linux (Fedora/RHEL):   sudo dnf install -y mkcert nss-tools
+  macOS (Homebrew):      brew install mkcert nss
+
+Then re-run `mise run infra:ensure-dev-cert` (or just `mise run dev`).
+
+See the repo-root README ("Local HTTPS dev access") for the why.
+EOF
+  exit 1
+fi
+
+# Verify the mkcert root CA is already trusted in both the system store
+# and the user's NSS DB. If either is missing, fail fast and point at
+# `infra:trust-dev-cert` to install it. Sequenced before the leaf-cert
+# idempotent-skip so re-runs still surface a trust regression (e.g.
+# someone deleted the cert from /etc/ssl/certs) rather than booting a
+# realm-server with a half-wired trust chain.
+CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+ROOT_CA_FILE=""
+if [ -n "$CAROOT" ] && [ -f "$CAROOT/rootCA.pem" ]; then
+  ROOT_CA_FILE="$CAROOT/rootCA.pem"
+fi
+
+system_trust_has_root_ca() {
+  [ -n "$ROOT_CA_FILE" ] || return 1
+  case "$(uname -s)" in
+    Linux)
+      # `mkcert -install` adds the CA as a file named like
+      # mkcert_development_CA_<serial>.{crt,pem} under the update-ca-
+      # certificates source dir, and ca-certificates-symlinker hashes
+      # it into /etc/ssl/certs/. Check both locations by filename —
+      # grepping the file contents doesn't work because PEM is base64-
+      # encoded and the subject string isn't present in plaintext.
+      ls /etc/ssl/certs/mkcert_development_CA_*.pem >/dev/null 2>&1 && return 0
+      ls /etc/ssl/certs/mkcert_development_CA_*.crt >/dev/null 2>&1 && return 0
+      ls /usr/local/share/ca-certificates/mkcert_development_CA_*.crt >/dev/null 2>&1 && return 0
+      return 1
+      ;;
+    Darwin)
+      security find-certificate -c 'mkcert' /Library/Keychains/System.keychain >/dev/null 2>&1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+nss_db_has_root_ca() {
+  command -v certutil >/dev/null 2>&1 || return 1
+  [ -d "$HOME/.pki/nssdb" ] || return 1
+  certutil -d "sql:$HOME/.pki/nssdb" -L 2>/dev/null | grep -q 'mkcert'
+}
+
+if ! system_trust_has_root_ca || ! nss_db_has_root_ca; then
+  # CI runners have passwordless sudo, so we can run the install
+  # ourselves without ever prompting — that path is load-bearing for
+  # `./.github/actions/init` to set the cert up on a fresh runner.
+  # `sudo -n true` succeeds silently when sudo won't prompt for a
+  # password (passwordless config or a cached credential), and exits
+  # non-zero otherwise. We only auto-install when it succeeds — on a
+  # dev's machine where sudo would prompt, we fail fast with a clear
+  # message pointing at `infra:trust-dev-cert`, because letting the
+  # prompt fire from inside `mise run dev` / `dev-all`'s parallel
+  # stack would deadlock the whole stack on unsendable stdin.
+  if sudo -n true 2>/dev/null; then
+    echo "[ensure-dev-cert] mkcert root CA missing; running trust-dev-cert (passwordless sudo available)"
+    mise run infra:trust-dev-cert
+  else
+    # `BOXEL_DEV_INVOKED_AS` is set by the dev / dev-all wrappers so we
+    # can name the outer command exactly in the rerun hint. Falls back
+    # to ensure-dev-cert itself, which is the most likely command when
+    # someone invoked this task directly.
+    invoked_as="${BOXEL_DEV_INVOKED_AS:-mise run infra:ensure-dev-cert}"
+    if [ "$(uname -s)" = "Linux" ] && ! command -v certutil >/dev/null 2>&1; then
+      # System store may already be trusted but Chromium needs the NSS
+      # DB path, which requires certutil. Call this out specifically —
+      # the generic "not installed" message would have a dev re-run
+      # `trust-dev-cert` and get the same warning mkcert prints.
+      cat >&2 <<EOF
+[ensure-dev-cert] The mkcert dev root CA can't be trusted in Chromium/Firefox
+on this machine — \`certutil\` (from libnss3-tools) is not installed, so
+mkcert can't populate the NSS DB at ~/.pki/nssdb. Chromium reads NSS,
+not the system trust store, so without this Chromium will reject the
+dev cert and h2 fetches will hang.
+
+Install the NSS tools, then run trust-dev-cert (prompts for sudo):
+
+  sudo apt install -y libnss3-tools      # or: sudo dnf install -y nss-tools
+  mise run infra:trust-dev-cert
+
+Then re-run \`${invoked_as}\`.
+EOF
+    else
+      cat >&2 <<EOF
+[ensure-dev-cert] The mkcert dev root CA is not installed on this machine.
+
+Run this once to install it (prompts for sudo):
+
+  mise run infra:trust-dev-cert
+
+Then re-run \`${invoked_as}\`.
+EOF
+    fi
+    exit 1
+  fi
+fi
+echo "[ensure-dev-cert] mkcert root CA already trusted (system + NSS DB)"
+
+# Idempotent skip when the leaf cert already exists, isn't within 7
+# days of expiry, AND covers the subdomains the dev + matrix-harness
+# publish-realm flows + env-mode services use.
+#
+# SAN layout note: published-realm tenant subdomains in standard dev
+# mode use a 3-label wildcard (`*.boxel-dev.localhost`). RFC 6125 §7.2
+# — which Node's tls.checkServerIdentity and every mainstream browser
+# enforce — refuses 2-label wildcards (e.g. `*.localhost`), so a
+# single-label `.localhost` SAN cannot wildcard-cover dev tenant
+# subdomains. The second label `boxel-dev` exists purely as the
+# RFC-required filler and reads as obviously-local-only in browser
+# tabs. Source realms in the dev stack (`user.localhost`) are covered
+# as an explicit SAN entry, no wildcard needed.
+#
+# Env mode (BOXEL_ENVIRONMENT set, see lib/env-vars.sh) layers two
+# additional SANs per recorded slug:
+#   * `*.<slug>.localhost`              — env-mode services routed by
+#                                         Traefik (host.<slug>.localhost,
+#                                          matrix.<slug>.localhost, etc.)
+#   * `*.realm-server.<slug>.localhost` — published realms living one
+#                                         label deeper, under the
+#                                         realm-server hostname
+# Slugs persist in $SLUGS_FILE (stamped above) so the cert keeps
+# covering older worktrees too — see $SLUGS_FILE stamping for why
+# we accumulate rather than overwrite.
+#
+# Older certs were issued for `localhost 127.0.0.1 ::1` only, or with
+# the no-longer-effective `*.localhost`; the SAN check below forces a
+# regenerate when an older shape is detected.
+if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
+  if openssl x509 -in "$CERT_FILE" -checkend $((7 * 24 * 60 * 60)) -noout >/dev/null 2>&1; then
+    # Validate the SAN set against the current recipe — checking just
+    # the wildcard isn't enough, because a cert with `*.boxel-dev
+    # .localhost` but missing `user.localhost` (the explicit
+    # source-realm SAN) or `published.realm` would silently pass and
+    # then fail at runtime against URLs we expect to cover.
+    CERT_TEXT=$(openssl x509 -in "$CERT_FILE" -noout -text 2>/dev/null || true)
+    cert_has_san() {
+      printf '%s\n' "$CERT_TEXT" | grep -q -- "$1"
+    }
+    needs_regen=
+    if ! { cert_has_san 'DNS:localhost' \
+      && cert_has_san 'DNS:user\.localhost' \
+      && cert_has_san 'DNS:\*\.boxel-dev\.localhost' \
+      && cert_has_san 'DNS:published\.realm' \
+      && cert_has_san 'IP Address:127\.0\.0\.1'; }; then
+      needs_regen=1
+    fi
+    if [ -z "$needs_regen" ]; then
+      while IFS= read -r slug; do
+        [ -z "$slug" ] && continue
+        # Each env-mode slug needs both a service wildcard and the
+        # deeper publish-realm wildcard. RFC 6125 wildcards only
+        # match one label, so we can't fold these into a single SAN.
+        if ! cert_has_san "DNS:\\*\\.${slug}\\.localhost"; then
+          needs_regen=1
+          break
+        fi
+        if ! cert_has_san "DNS:\\*\\.realm-server\\.${slug}\\.localhost"; then
+          needs_regen=1
+          break
+        fi
+      done < "$SLUGS_FILE"
+    fi
+    if [ -z "$needs_regen" ]; then
+      exit 0
+    fi
+    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is missing one or more required SANs; regenerating."
+  else
+    echo "[ensure-dev-cert] Existing cert at $CERT_FILE is near expiry; regenerating."
+  fi
+fi
+
+echo "[ensure-dev-cert] Generating cert at $CERT_FILE"
+# Build SAN list:
+#   * `localhost` / `127.0.0.1` / `::1` — base loopback names
+#   * `user.localhost`                  — standard-mode source realm
+#   * `*.boxel-dev.localhost`           — standard-mode published-realm
+#                                         tenants (3-label wildcard so
+#                                         RFC 6125 §7.2 accepts it; see
+#                                         comment block above)
+#   * `published.realm`                 — matrix-harness host-resolver
+#                                         custom domain
+#   * Per env-mode slug in $SLUGS_FILE:
+#     - `*.<slug>.localhost`              env-mode services
+#     - `*.realm-server.<slug>.localhost` env-mode published realms
+# The leaf is shared across worktrees, so we accumulate slugs rather
+# than overwriting them — see $SLUGS_FILE stamping above.
+SANS=(localhost user.localhost 127.0.0.1 ::1 "*.boxel-dev.localhost" published.realm)
+while IFS= read -r slug; do
+  [ -z "$slug" ] && continue
+  SANS+=("*.$slug.localhost")
+  SANS+=("*.realm-server.$slug.localhost")
+done < "$SLUGS_FILE"
+
+mkcert \
+  -cert-file "$CERT_FILE" \
+  -key-file "$KEY_FILE" \
+  "${SANS[@]}"

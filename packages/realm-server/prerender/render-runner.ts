@@ -1,5 +1,6 @@
 import {
   type PrerenderMeta,
+  type PrerenderTypes,
   type RenderError,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -7,6 +8,7 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotPrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
   type RenderVisitResponse,
@@ -23,15 +25,18 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
+  captureScreenshot,
   isRenderError,
   renderAncestors,
   renderHTML,
   renderIcon,
   renderMeta,
+  renderTypes,
   type RenderCapture,
   type CaptureOptions,
   type ModuleCapture,
   type FileExtractCapture,
+  type ScreenshotCapture,
   cardRenderTimeout,
   withTimeout,
   transitionTo,
@@ -136,6 +141,7 @@ export class RenderRunner {
     auth: string,
     queue: PrerenderQueue,
     signal?: AbortSignal,
+    priority?: number,
   ) {
     let lastAuth = this.#lastAuthByAffinity.get(affinityKey);
     if (lastAuth) {
@@ -153,6 +159,7 @@ export class RenderRunner {
     }
     let pageInfo = await this.#pagePool.getPage(affinityKey, queue, {
       signal,
+      ...(priority !== undefined ? { priority } : {}),
     });
     this.#lastAuthByAffinity.set(affinityKey, auth);
     return pageInfo;
@@ -178,6 +185,7 @@ export class RenderRunner {
     command,
     commandInput,
     opts,
+    priority,
     signal,
   }: {
     affinityType: AffinityType;
@@ -186,6 +194,7 @@ export class RenderRunner {
     command: string;
     commandInput?: Record<string, unknown> | null;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    priority?: number;
     signal?: AbortSignal;
   }): Promise<{
     response: RunCommandResponse;
@@ -199,7 +208,13 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, 'command', signal);
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'command',
+        signal,
+        priority,
+      );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -373,6 +388,132 @@ export class RenderRunner {
     }
   }
 
+  async captureScreenshotAttempt({
+    affinityType,
+    affinityValue,
+    realm,
+    url,
+    auth,
+    format,
+    opts,
+    priority,
+    signal,
+  }: {
+    affinityType: AffinityType;
+    affinityValue: string;
+    realm: string;
+    url: string;
+    auth: string;
+    format: 'isolated' | 'embedded';
+    opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
+    priority?: number;
+    signal?: AbortSignal;
+  }): Promise<{
+    response: ScreenshotPrerenderResponse;
+    timings: Timings;
+    pool: PoolInfo;
+  }> {
+    this.#nonce++;
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    log.info(
+      `screenshot prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
+    );
+
+    const { page, reused, launchMs, waits, pageId, release } =
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'file',
+        signal,
+        priority,
+      );
+    const poolInfo: PoolInfo = {
+      pageId: pageId ?? 'unknown',
+      affinityType,
+      affinityValue,
+      reused,
+      evicted: false,
+      timedOut: false,
+    };
+    this.#pagePool.resetConsoleErrors(pageId);
+    const markTimeout = (err?: RenderError) => {
+      if (!poolInfo.timedOut && err?.error?.title === 'Render timeout') {
+        poolInfo.timedOut = true;
+      }
+    };
+
+    try {
+      // See runCommandAttempt: tag as 'queued' and keep the check inside the
+      // try so `finally { release() }` frees the tab slot if the caller
+      // aborted during the getPage handoff.
+      throwIfAborted(signal, 'queued');
+      await page.evaluate((sessionAuth) => {
+        localStorage.setItem('boxel-session', sessionAuth);
+      }, auth);
+
+      let renderStart = Date.now();
+      let nonce = String(this.#nonce);
+      let renderOptions: RenderRouteOptions = { cardRender: true };
+      let serializedOptions = serializeRenderRouteOptions(renderOptions);
+      const captureOptions: CaptureOptions = {
+        expectedId: url.replace(/\.json$/i, ''),
+        expectedNonce: nonce,
+        simulateTimeoutMs: opts?.simulateTimeoutMs,
+        timeoutMs: opts?.timeoutMs,
+      };
+
+      let capture = await withTimeout(
+        page,
+        async () => {
+          await transitionTo(
+            page,
+            'render.html',
+            url,
+            nonce,
+            serializedOptions,
+            format,
+            '0',
+          );
+          return await captureScreenshot(page, format, 0, captureOptions);
+        },
+        opts?.timeoutMs,
+      );
+
+      let response: ScreenshotPrerenderResponse;
+      if (isRenderError(capture)) {
+        let renderError = capture as RenderError;
+        markTimeout(renderError);
+        if (
+          await this.#maybeEvict(affinityKey, 'screenshot render', renderError)
+        ) {
+          poolInfo.evicted = true;
+        }
+        let isUnusable = poolInfo.evicted || renderError.evict === true;
+        response = {
+          status: isUnusable ? 'unusable' : 'error',
+          error: renderError.error.message ?? 'screenshot render failed',
+        };
+      } else {
+        let shot = capture as ScreenshotCapture;
+        response = {
+          status: 'ready',
+          base64: shot.base64,
+          width: shot.width,
+          height: shot.height,
+          contentType: 'image/png',
+        };
+      }
+
+      return {
+        response,
+        timings: { launchMs, renderMs: Date.now() - renderStart, waits },
+        pool: poolInfo,
+      };
+    } finally {
+      release();
+    }
+  }
+
   async prerenderModuleAttempt({
     affinityType,
     affinityValue,
@@ -381,6 +522,7 @@ export class RenderRunner {
     auth,
     opts,
     renderOptions,
+    priority,
     signal,
     onTabAcquired,
   }: {
@@ -391,6 +533,7 @@ export class RenderRunner {
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
+    priority?: number;
     signal?: AbortSignal;
     // Fires after `getPageForAffinity` resolves AND the per-page
     // console/exception bucket has been reset — i.e. when this attempt
@@ -416,7 +559,13 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, 'module', signal);
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'module',
+        signal,
+        priority,
+      );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -567,6 +716,8 @@ export class RenderRunner {
     renderOptions,
     fileData,
     types,
+    priority,
+    jobId,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -592,7 +743,13 @@ export class RenderRunner {
     );
 
     const { page, reused, launchMs, waits, pageId, release } =
-      await this.#getPageForAffinity(affinityKey, auth, 'file', signal);
+      await this.#getPageForAffinity(
+        affinityKey,
+        auth,
+        'file',
+        signal,
+        priority,
+      );
     const poolInfo: PoolInfo = {
       pageId: pageId ?? 'unknown',
       affinityType,
@@ -620,9 +777,36 @@ export class RenderRunner {
       // The check lives inside the try so `finally { release() }` frees
       // the tab slot if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
-      await page.evaluate((sessionAuth) => {
-        localStorage.setItem('boxel-session', sessionAuth);
-      }, auth);
+      // Single CDP round-trip that sets the session auth and the
+      // indexing job's id + priority on the page. Both surface to the
+      // host's `_federated-search` fetch wrapper via
+      // `globalThis.__boxelJobId` / `__boxelJobPriority` — the
+      // realm-server's handle-search gate pairs the id with
+      // `x-boxel-consuming-realm` to decide whether to consult the
+      // JobScopedSearchCache, and threads the priority into
+      // `LookupContext.priority` so any sub-`prerenderModule` fired by
+      // `CachingDefinitionLookup` for a missed definition inherits the
+      // originating priority instead of silently dropping to 0. Always
+      // overwrite (including with undefined) so a tab reused across
+      // multiple visits never bleeds a prior visit's values into the
+      // next render.
+      await page.evaluate(
+        (
+          sessionAuth: string,
+          id: string | undefined,
+          jobPriority: number | undefined,
+        ) => {
+          localStorage.setItem('boxel-session', sessionAuth);
+          (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
+            id;
+          (
+            globalThis as unknown as { __boxelJobPriority?: number }
+          ).__boxelJobPriority = jobPriority;
+        },
+        auth,
+        jobId,
+        priority,
+      );
       // defense-in-depth: clear any stale file render data left on globalThis
       // from a prior visit before we start running passes.
       await page
@@ -900,7 +1084,7 @@ export class RenderRunner {
           types: null,
         };
         let meta: PrerenderMeta = emptyMeta;
-        let metaForTypes: PrerenderMeta = emptyMeta;
+        let typesForAncestors: PrerenderTypes = { types: null };
         let headHTML: string | null = null;
         let atomHTML: string | null = null;
         let iconHTML: string | null = null;
@@ -946,17 +1130,28 @@ export class RenderRunner {
           }
         }
 
+        // First pass is the lightweight /types route — just the type
+        // chain the ancestor renders below need. The full render.meta
+        // (serialized + searchDoc + deps + displayNames) runs once
+        // afterwards, because the fitted/embedded ancestor renders are
+        // what mark linksTo / linksToMany fields as "used"; the final
+        // renderMeta's queryableValue then includes those linked fields
+        // in the search doc. Running render.meta before the ancestor
+        // renders breaks the isUsed-via-non-isolated-render contract
+        // that
+        // `non-isolated formats render linked fields and those links appear in search doc`
+        // covers.
         if (!cardShortCircuit) {
-          let metaForTypesResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (types)',
-            () => renderMeta(page, captureOptions),
+          let typesResult = await runTimedStep<PrerenderTypes>(
+            'visit card render.types',
+            () => renderTypes(page, captureOptions),
           );
-          if (metaForTypesResult !== undefined) {
-            metaForTypes = metaForTypesResult;
+          if (typesResult !== undefined) {
+            typesForAncestors = typesResult;
           }
         }
 
-        if (!cardShortCircuit && metaForTypes.types) {
+        if (!cardShortCircuit && typesForAncestors.types) {
           const ancestorSteps = [
             {
               name: 'visit card fitted render',
@@ -964,7 +1159,7 @@ export class RenderRunner {
                 renderAncestors(
                   page,
                   'fitted',
-                  metaForTypes.types!,
+                  typesForAncestors.types!,
                   captureOptions,
                 ),
               assign: (v: Record<string, string>) => {
@@ -977,7 +1172,7 @@ export class RenderRunner {
                 renderAncestors(
                   page,
                   'embedded',
-                  metaForTypes.types!,
+                  typesForAncestors.types!,
                   captureOptions,
                 ),
               assign: (v: Record<string, string>) => {
@@ -997,7 +1192,7 @@ export class RenderRunner {
 
         if (!cardShortCircuit) {
           let finalMetaResult = await runTimedStep<PrerenderMeta>(
-            'visit card render.meta (final)',
+            'visit card render.meta',
             () => renderMeta(page, captureOptions),
           );
           if (finalMetaResult !== undefined) {

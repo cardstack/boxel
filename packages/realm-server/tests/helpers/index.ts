@@ -21,7 +21,6 @@ import type {
 import {
   Realm,
   baseRealm,
-  rri,
   VirtualNetwork,
   Worker,
   insertPermissions,
@@ -39,21 +38,28 @@ import {
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
-  type Definition,
   type Prerenderer,
+  type PopulateCoordinator,
   CachingDefinitionLookup,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { RealmServer } from '../../server';
+import { sign as jwtSign } from 'jsonwebtoken';
+import {
+  RealmRegistryReconciler,
+  type RealmRegistryRow,
+} from '../../lib/realm-registry-reconciler';
+import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes';
 
 import {
   PgAdapter,
   PgQueuePublisher,
   PgQueueRunner,
 } from '@cardstack/postgres';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../../server';
+import { Socket as NetSocket } from 'net';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import {
   Prerenderer as LocalPrerenderer,
@@ -203,6 +209,7 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
+  includePrerenderedDefaultRealmIndex: false,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -231,6 +238,33 @@ export const matrixRegistrationSecret = getMatrixRegistrationSecret();
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
+const PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS = [
+  'PRERENDER_PAGE_POOL_MIN',
+  'PRERENDER_PAGE_POOL_MAX',
+  'PRERENDER_PAGE_POOL_INITIAL',
+  'PRERENDER_PAGE_POOL_HIGH_PRIORITY_MAX',
+  'PRERENDER_HIGH_PRIORITY_THRESHOLD',
+  'PRERENDER_POOL_IDLE_CONTRACTION_MS',
+] as const;
+
+function withEnvUnset<T>(keys: readonly string[], fn: () => T): T {
+  let previous = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (let key of keys) {
+      delete process.env[key];
+    }
+    return fn();
+  } finally {
+    for (let [key, value] of previous) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+}
+
 let prerenderServer: Server | undefined;
 let prerenderServerStart: Promise<void> | undefined;
 const trackedServers = new Set<Server>();
@@ -253,6 +287,90 @@ export function createVirtualNetwork() {
 }
 
 let testDbCounter = 0;
+
+// Build a reconciler suitable for tests. Pre-constructed realms (passed
+// via `realms`) are registered into `mounted` so subsequent
+// lookupOrMount() calls resolve from the fast path.
+//
+// When `dynamicMountDeps` is provided, prepareRealmFromRow constructs a
+// real Realm from a registry row — required by Phase 3 stateless
+// handler tests where /_create-realm + /_publish-realm only write to
+// realm_registry and rely on the reconciler / lazy mount to mount on
+// first request. Without these deps, lookupOrMount on an
+// unpre-mounted URL throws (used by tests that don't exercise the
+// dynamic-creation path).
+//
+// unmount on the test reconciler calls realm.unsubscribe() (matches
+// production) and removes the realm from realms[] / virtualNetwork so
+// the deletion-path assertions about file-watcher cleanup work the
+// same way they did pre-Phase 3.
+export function makeTestReconciler(
+  dbAdapter: PgAdapter,
+  realms: Realm[],
+  dynamicMountDeps?: {
+    realmsRootPath: string;
+    virtualNetwork: VirtualNetwork;
+    queue: QueuePublisher;
+    matrixClient: MatrixClient;
+    serverURL: URL;
+    definitionLookup: CachingDefinitionLookup;
+    enableFileWatcher?: boolean;
+  },
+): RealmRegistryReconciler {
+  let reconciler = new RealmRegistryReconciler({
+    dbAdapter,
+    prepareRealmFromRow: (row: RealmRegistryRow) => {
+      if (!dynamicMountDeps) {
+        throw new Error(
+          `test reconciler cannot construct realms; URL not pre-mounted: ${row.url}`,
+        );
+      }
+      let diskPath: string;
+      if (row.kind === 'bootstrap') {
+        diskPath = row.disk_id;
+      } else if (row.kind === 'source') {
+        diskPath = join(dynamicMountDeps.realmsRootPath, row.disk_id);
+      } else {
+        diskPath = join(
+          dynamicMountDeps.realmsRootPath,
+          PUBLISHED_DIRECTORY_NAME,
+          row.disk_id,
+        );
+      }
+      let adapter = new NodeAdapter(
+        diskPath,
+        dynamicMountDeps.enableFileWatcher,
+      );
+      let reconciledRealm = new Realm({
+        url: row.url,
+        adapter,
+        secretSeed: realmSecretSeed,
+        virtualNetwork: dynamicMountDeps.virtualNetwork,
+        dbAdapter,
+        queue: dynamicMountDeps.queue,
+        matrixClient: dynamicMountDeps.matrixClient,
+        realmServerURL: dynamicMountDeps.serverURL.href,
+        definitionLookup: dynamicMountDeps.definitionLookup,
+      });
+      realms.push(reconciledRealm);
+      dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
+      return reconciledRealm;
+    },
+    unmount: async (realm) => {
+      realm.unsubscribe();
+      if (dynamicMountDeps) {
+        dynamicMountDeps.virtualNetwork.unmount(realm.handle);
+      }
+      let idx = realms.findIndex((r) => r.url === realm.url);
+      if (idx !== -1) {
+        realms.splice(idx, 1);
+      }
+    },
+  });
+  reconciler.registerExistingMounts(realms);
+  return reconciler;
+}
+
 export function prepareTestDB(): void {
   // PID + monotonic counter rules out same-process collisions and makes
   // cross-process collisions essentially impossible. The previous
@@ -409,13 +527,97 @@ export async function closeServer(server: Server) {
   if (!server) {
     return;
   }
+  // Capture the listening address before close() so we can poll the OS until
+  // the port is fully unbound. node's `server.close(cb)` only waits for the
+  // listener to stop accepting new connections — under load, the kernel can
+  // hold the port in TIME_WAIT briefly and the next bind() races into
+  // EADDRINUSE.
+  let address = server.address();
+  let host: string | undefined;
+  let port: number | undefined;
+  if (address && typeof address === 'object') {
+    host = address.address;
+    port = address.port;
+  }
+
   // Force-close idle keep-alive sockets so server.close() resolves promptly.
   // Without this, a lingering connection from the host page (puppeteer fetching
   // from the realm server) can hold the port bound long after the test moves
-  // on, causing EADDRINUSE when the next test tries to re-bind.
-  server.closeIdleConnections?.();
-  server.closeAllConnections?.();
+  // on, causing EADDRINUSE when the next test tries to re-bind. http.Server
+  // exposes these methods; Http2SecureServer does not — cast to widen at this
+  // call site and let the optional chain swallow the missing case.
+  (server as { closeIdleConnections?: () => void }).closeIdleConnections?.();
+  (server as { closeAllConnections?: () => void }).closeAllConnections?.();
   await new Promise<void>((r) => server.close(() => r()));
+
+  if (host && typeof port === 'number' && port > 0) {
+    await awaitPortRelease(host, port);
+  }
+}
+
+/**
+ * Poll a TCP port on `host` until a fresh connect() is refused (i.e. nothing
+ * is LISTENing there anymore). Used after `server.close()` returns to give
+ * the kernel a chance to fully release the bind slot before the next fixture
+ * tries to listen on the same port.
+ *
+ * Resolves on first refusal. Logs a clear diagnostic on timeout so the next
+ * failure points to the leaked port rather than the downstream EADDRINUSE.
+ */
+export async function awaitPortRelease(
+  host: string,
+  port: number,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<void> {
+  let timeoutMs = options.timeoutMs ?? 2000;
+  let intervalMs = options.intervalMs ?? 25;
+  // Map the wildcard bind address back to a connectable loopback address.
+  // Server.address() reports `::` for IPv6-any, `0.0.0.0` for IPv4-any —
+  // neither is a valid connect target. Probe in the same address family the
+  // listener was bound to: if we map `::` to `127.0.0.1` and the system has
+  // IPv6-only binding behavior, the IPv4 probe gets ECONNREFUSED while the
+  // original IPv6 listener is still bound, falsely reporting release.
+  let connectHost = host;
+  if (host === '::') {
+    connectHost = '::1';
+  } else if (host === '0.0.0.0') {
+    connectHost = '127.0.0.1';
+  }
+
+  let started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    let stillListening = await new Promise<boolean>((resolve) => {
+      let socket = new NetSocket();
+      let settled = false;
+      let done = (listening: boolean) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve(listening);
+      };
+      socket.setTimeout(Math.max(50, intervalMs * 2));
+      socket.once('connect', () => done(true));
+      socket.once('timeout', () => done(true));
+      socket.once('error', () => {
+        // ECONNREFUSED is the expected signal that the port is fully released.
+        // Anything else (host unreachable, etc.) we also treat as released —
+        // we're not the right place to diagnose upstream network errors and
+        // a non-listening socket is a non-listening socket.
+        done(false);
+      });
+      socket.connect(port, connectHost);
+    });
+
+    if (!stillListening) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  console.warn(
+    `awaitPortRelease: ${connectHost}:${port} still appears bound after ${timeoutMs}ms; ` +
+      `the next fixture binding this port will likely EADDRINUSE.`,
+  );
 }
 
 function trackServer(server: Server): Server {
@@ -437,7 +639,12 @@ export function getPrerendererForTesting(options: {
   serverURL: string;
   maxPages?: number;
 }): TestPrerenderer {
-  let prerenderer = new LocalPrerenderer(options);
+  let prerenderer =
+    options.maxPages === undefined
+      ? new LocalPrerenderer(options)
+      : withEnvUnset(PRERENDER_POOL_CAPACITY_OVERRIDE_ENV_KEYS, () => {
+          return new LocalPrerenderer(options);
+        });
   trackPrerenderer(prerenderer);
   return prerenderer;
 }
@@ -630,9 +837,9 @@ export async function stopTestPrerenderServer() {
   prerenderServerStart = undefined;
 }
 
-interface StoppablePrerenderServer extends Server {
+type StoppablePrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
-}
+};
 
 function hasStopPrerenderer(
   server: Server,
@@ -796,6 +1003,7 @@ export async function createRealm({
   enableFileWatcher = false,
   cardSizeLimitBytes,
   fileSizeLimitBytes,
+  transpileCoordinator,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -812,6 +1020,12 @@ export async function createRealm({
   enableFileWatcher?: boolean;
   cardSizeLimitBytes?: number;
   fileSizeLimitBytes?: number;
+  // CS-11030: optional cross-process transpile coordinator. Tests that
+  // simulate two peer realms need each peer to hold its own coordinator
+  // pointing at the same dbAdapter so the advisory-lock + NOTIFY plumbing
+  // is the only thing serializing them — that's the behavior we want to
+  // exercise.
+  transpileCoordinator?: PopulateCoordinator;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -879,12 +1093,30 @@ export async function createRealm({
       Number(
         process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
       ),
+    transpileCoordinator,
   });
   if (worker) {
     virtualNetwork.mount(realm.handle);
     await worker.run();
   }
   return { realm, adapter };
+}
+
+// Defense-in-depth for test bootstraps that don't share `tests/index.ts`:
+// strip the dev TLS env vars before any fixture realm-server is spun up.
+// `env-vars.sh` exports these whenever the local mkcert cert exists, which
+// is now the CI default (the init action provisions it). Without this
+// delete, an in-process fixture would bind the HTTPS+HTTP/2 dispatcher
+// on its random `127.0.0.1:444X` port and supertest / direct-fetch
+// callers in tests that connect plain HTTP would get 308-redirected to
+// `https://…`, breaking every assertion that expects `200`/`4xx`.
+// The qunit-runner-driven realm-server tests already do this in their
+// own `tests/index.ts`; this call covers callers like the boxel-cli and
+// workspace-sync vitest suites that consume the helpers without that
+// bootstrap.
+function stripTlsEnvVars() {
+  delete process.env.REALM_SERVER_TLS_CERT_FILE;
+  delete process.env.REALM_SERVER_TLS_KEY_FILE;
 }
 
 export async function runTestRealmServer({
@@ -928,6 +1160,7 @@ export async function runTestRealmServer({
   };
   prerenderer?: Prerenderer;
 }) {
+  stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
@@ -973,8 +1206,18 @@ export async function runTestRealmServer({
     seed: realmSecretSeed,
   });
 
+  let reconciler = makeTestReconciler(dbAdapter, realms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL: new URL(realmURL.origin),
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -1053,6 +1296,7 @@ export async function runTestRealmServerWithRealms({
   };
   prerenderer?: Prerenderer;
 }) {
+  stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
 
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1111,8 +1355,18 @@ export async function runTestRealmServerWithRealms({
   });
 
   let serverURL = new URL(realms[0].realmURL.origin);
+  let reconciler = makeTestReconciler(dbAdapter, createdRealms, {
+    realmsRootPath,
+    virtualNetwork,
+    queue: publisher,
+    matrixClient,
+    serverURL,
+    definitionLookup,
+    enableFileWatcher,
+  });
   let testRealmServer = new RealmServer({
     realms: createdRealms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -1156,6 +1410,7 @@ type InternalPermissionedRealmsSetupOptions = {
     realmURL: string;
     permissions: RealmPermissions;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    fixture?: RealmFixtureName;
   }[];
   prerenderer?: Prerenderer;
 };
@@ -1169,14 +1424,26 @@ async function startPermissionedRealmsFixture(
   let realms: PermissionedRealmsFixtureRealm[] = [];
 
   for (let realmArg of realmConfigs.values()) {
+    if (realmArg.fileSystem && realmArg.fixture) {
+      throw new Error(
+        'setupPermissionedRealms: pass either `fileSystem` or `fixture` per realm, not both',
+      );
+    }
+    let testRealmDir = dirSync().name;
+    if (!realmArg.fileSystem) {
+      // The plural helper has historically left the disk empty by default;
+      // preserve that — only copy a fixture onto disk when one is named.
+      if (realmArg.fixture) {
+        copySync(fixtureDir(realmArg.fixture), testRealmDir);
+      }
+    }
     let {
-      testRealmDir: realmPath,
       testRealm: realm,
       testRealmHttpServer: realmHttpServer,
       testRealmAdapter: realmAdapter,
     } = await runTestRealmServer({
       virtualNetwork: await createVirtualNetwork(),
-      testRealmDir: dirSync().name,
+      testRealmDir,
       realmsRootPath: dirSync().name,
       realmURL: new URL(realmArg.realmURL),
       fileSystem: realmArg.fileSystem,
@@ -1189,7 +1456,7 @@ async function startPermissionedRealmsFixture(
     });
     realms.push({
       realm,
-      realmPath,
+      realmPath: testRealmDir,
       realmHttpServer,
       realmAdapter,
     });
@@ -1221,6 +1488,7 @@ export function setupPermissionedRealms(
       realmURL: string;
       permissions: RealmPermissions;
       fileSystem?: Record<string, string | LooseSingleCardDocument>;
+      fixture?: RealmFixtureName;
     }[];
     prerenderer?: Prerenderer;
     // Internal hook used by cached setup wrappers
@@ -1554,10 +1822,25 @@ function realmEventIsIndex(
   return event.eventName === 'index';
 }
 
+// The three realm fixtures available under tests/fixtures/. See CS-10009.
+//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//                with no card content.
+//   simple     — one card def (Person), one instance, one non-card file; for
+//                tests that need *some* indexed content but nothing exotic.
+//   realistic  — kitchen-sink fixture with the full set of card defs,
+//                instances, cyclic imports, error cases, Unicode filenames,
+//                etc.; for tests that lean on that specific content.
+export type RealmFixtureName = 'blank' | 'simple' | 'realistic';
+
+export function fixtureDir(name: RealmFixtureName): string {
+  return join(__dirname, '..', 'fixtures', name);
+}
+
 type InternalPermissionedRealmSetupOptions = {
   permissions: RealmPermissions;
   realmURL?: URL;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
+  fixture?: RealmFixtureName;
   subscribeToRealmEvents?: boolean;
   prerenderer?: Prerenderer;
   published?: boolean;
@@ -1573,6 +1856,7 @@ async function startPermissionedRealmFixture(
     permissions,
     realmURL,
     fileSystem,
+    fixture,
     subscribeToRealmEvents = false,
     prerenderer,
     published = false,
@@ -1584,6 +1868,11 @@ async function startPermissionedRealmFixture(
   request: SuperTest<Test>;
   dir: DirResult;
 }> {
+  if (fileSystem && fixture) {
+    throw new Error(
+      'setupPermissionedRealm: pass either `fileSystem` or `fixture`, not both',
+    );
+  }
   let resolvedRealmURL = realmURL ?? testRealmURL;
   let dir = dirSync();
 
@@ -1591,6 +1880,9 @@ async function startPermissionedRealmFixture(
 
   if (published) {
     let publishedRealmId = uuidv4();
+    let lastPublishedAt = Date.now();
+    let ownerUsername = '@user:localhost';
+    let sourceRealmURL = 'http://example.localhost/source';
 
     testRealmDir = join(
       dir.name,
@@ -1599,28 +1891,25 @@ async function startPermissionedRealmFixture(
       publishedRealmId,
     );
 
-    await dbAdapter.execute(
-      `INSERT INTO
-        published_realms
-        (id, owner_username, source_realm_url, published_realm_url, last_published_at)
-        VALUES
-        (
-          '${publishedRealmId}',
-          '@user:localhost',
-          'http://example.localhost/source',
-          '${resolvedRealmURL.href}',
-          '${Date.now()}'
-        )`,
-    );
+    await upsertPublishedRealmInRegistry(dbAdapter, {
+      publishedRealmURL: resolvedRealmURL.href,
+      publishedRealmId,
+      ownerUsername,
+      sourceRealmURL,
+      lastPublishedAt,
+    });
   } else {
     testRealmDir = join(dir.name, 'realm_server_1', 'test');
   }
 
   ensureDirSync(testRealmDir);
 
-  // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+  // If a fileSystem is provided, the realm is populated through createRealm
+  // from that object. Otherwise copy a fixture folder onto disk. Default to
+  // `blank` — tests that need card content must opt in to `simple` or
+  // `realistic`.
   if (!fileSystem) {
-    copySync(join(__dirname, '..', 'cards'), testRealmDir);
+    copySync(fixtureDir(fixture ?? 'blank'), testRealmDir);
   }
 
   let virtualNetwork = createVirtualNetwork();
@@ -1697,6 +1986,7 @@ export function setupPermissionedRealm(
     permissions,
     realmURL,
     fileSystem,
+    fixture,
     onRealmSetup,
     subscribeToRealmEvents = false,
     mode = 'beforeEach',
@@ -1709,6 +1999,7 @@ export function setupPermissionedRealm(
     permissions: RealmPermissions;
     realmURL?: URL;
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    fixture?: RealmFixtureName;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
       publisher: QueuePublisher;
@@ -1750,6 +2041,7 @@ export function setupPermissionedRealm(
       } = await startPermissionedRealmFixture(dbAdapter, publisher, runner, {
         realmURL,
         fileSystem,
+        fixture,
         permissions,
         subscribeToRealmEvents,
         prerenderer,
@@ -1789,12 +2081,21 @@ function permissionedRealmTemplateCacheKey(
   options: SetupPermissionedRealmCachedOptions,
 ): string {
   let resolvedRealmURL = options.realmURL ?? testRealmURL;
+  // Canonicalize the fixture choice so callers that omit `fixture` (and
+  // implicitly get 'blank') share a cache with callers that pass
+  // `fixture: 'blank'` explicitly. When `fileSystem` is provided, the
+  // fixture choice is irrelevant — fileSystem's own hash carries the
+  // content.
+  let resolvedFixture = options.fileSystem
+    ? null
+    : (options.fixture ?? 'blank');
   return hashCacheKeyPayload({
     version: 1,
     type: 'permissioned-realm',
     realmURL: resolvedRealmURL.href,
     permissions: options.permissions,
     fileSystem: options.fileSystem ?? null,
+    fixture: resolvedFixture,
     subscribeToRealmEvents: Boolean(options.subscribeToRealmEvents),
     published: Boolean(options.published),
     cardSizeLimitBytes: options.cardSizeLimitBytes ?? null,
@@ -1838,6 +2139,7 @@ async function buildPermissionedRealmTemplate(
       {
         realmURL: options.realmURL,
         fileSystem: options.fileSystem,
+        fixture: options.fixture,
         permissions: options.permissions,
         subscribeToRealmEvents: options.subscribeToRealmEvents,
         prerenderer: options.prerenderer,
@@ -1930,6 +2232,20 @@ export function setupPermissionedRealmCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmCachedOptions,
 ) {
+  // Validate before the cache lookup. The cache key canonicalizes
+  // `fixture` to `null` when `fileSystem` is present (see
+  // permissionedRealmTemplateCacheKey), so an invalid call passing
+  // both would hash the same as a valid `fileSystem`-only call and
+  // silently reuse that template — the throw in
+  // startPermissionedRealmFixture only fires later at beforeEach,
+  // after the misleading reuse. Mirror the same check up front so
+  // an invalid combo errors at test-module load time, before any
+  // cache work runs.
+  if (options.fileSystem && options.fixture) {
+    throw new Error(
+      'setupPermissionedRealmCached: pass either `fileSystem` or `fixture`, not both',
+    );
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {
@@ -2081,6 +2397,16 @@ export function setupPermissionedRealmsCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmsCachedOptions,
 ) {
+  // Same up-front validation as setupPermissionedRealmCached so the
+  // per-realm fileSystem/fixture conflict errors at test-module load
+  // time rather than at beforeEach inside startPermissionedRealmsFixture.
+  for (let realm of options.realms) {
+    if (realm.fileSystem && realm.fixture) {
+      throw new Error(
+        `setupPermissionedRealmsCached: realm "${realm.realmURL}" passed both \`fileSystem\` and \`fixture\` — pass one or the other, not both`,
+      );
+    }
+  }
   let acquiredTemplateDatabase: string | undefined;
 
   hooks.before(async function () {
@@ -2112,530 +2438,39 @@ export function createJWT(
   );
 }
 
+// Variant that builds a realm JWT from URL + seed instead of a Realm
+// instance. Useful when the realm hasn't been mounted yet (Phase 3 lazy
+// mount): the request that carries this JWT is the trigger that mounts
+// the realm. Auth verification on the server side uses the same shared
+// realmSecretSeed regardless of which Realm instance handles the
+// request, so the token is accepted as long as the URL claim matches.
+export function createJWTForRealmURL({
+  realmURL,
+  realmServerURL,
+  user,
+  permissions = [],
+}: {
+  realmURL: string;
+  realmServerURL: string;
+  user: string;
+  permissions?: RealmPermissions['user'];
+}) {
+  return jwtSign(
+    {
+      user,
+      realm: realmURL,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+      realmServerURL,
+    },
+    realmSecretSeed,
+    { expiresIn: '7d' },
+  );
+}
+
 export const cardInfo = {
   notes: null,
   name: null,
   summary: null,
   cardThumbnailURL: null,
-};
-
-export const cardDefinition: Definition['fields'] = {
-  id: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  cardTitle: {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  cardDescription: {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  cardThumbnailURL: {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  cardInfo: {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CardInfoField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.name': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.summary': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.notes': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MarkdownField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme': {
-    type: 'linksTo',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'Theme',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.id': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardTitle': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardDescription': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CardInfoField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.name': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.summary': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.notes': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MarkdownField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cssVariables': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CSSField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cssImports': {
-    type: 'containsMany',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CssImportField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme': {
-    type: 'linksTo',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'Theme',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.id': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardTitle': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CardInfoField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.name': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.summary': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.notes': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MarkdownField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardDescription': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cssVariables': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CSSField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cssImports': {
-    type: 'containsMany',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CssImportField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme': {
-    type: 'linksTo',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'Theme',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CardInfoField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.notes': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'MarkdownField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CSSField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
-    type: 'containsMany',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CssImportField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'MaybeBase64Field',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme': {
-    type: 'linksTo',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'Theme',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.id': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'ReadOnlyField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardTitle': {
-    type: 'contains',
-    isComputed: true,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CardInfoField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: false,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.name': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'StringField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.summary':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'StringField',
-        module: rri('https://cardstack.com/base/card-api'),
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.cardThumbnailURL':
-    {
-      type: 'contains',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'MaybeBase64Field',
-        module: rri('https://cardstack.com/base/card-api'),
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardDescription':
-    {
-      type: 'contains',
-      isComputed: true,
-      fieldOrCard: {
-        name: 'StringField',
-        module: rri('https://cardstack.com/base/card-api'),
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssVariables': {
-    type: 'contains',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CSSField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cssImports': {
-    type: 'containsMany',
-    isComputed: false,
-    fieldOrCard: {
-      name: 'CssImportField',
-      module: rri('https://cardstack.com/base/card-api'),
-    },
-    isPrimitive: true,
-  },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardThumbnailURL':
-    {
-      type: 'contains',
-      isComputed: true,
-      fieldOrCard: {
-        name: 'MaybeBase64Field',
-        module: rri('https://cardstack.com/base/card-api'),
-      },
-      isPrimitive: true,
-    },
-  'cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme.cardInfo.theme':
-    {
-      type: 'linksTo',
-      isComputed: false,
-      fieldOrCard: {
-        name: 'Theme',
-        module: rri('https://cardstack.com/base/card-api'),
-      },
-      isPrimitive: false,
-    },
 };

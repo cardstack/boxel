@@ -10,6 +10,8 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -144,7 +146,7 @@ module('buildPromptForModel', (hooks) => {
                 currentFile: 'http://localhost:4201/experiments/Author/1',
                 moduleInspectorPanel: 'preview',
                 previewPanelSelection: {
-                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  cardId: rri('http://localhost:4201/experiments/Author/1'),
                   format: 'isolated',
                 },
               },
@@ -243,7 +245,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
                 },
                 moduleInspectorPanel: 'preview',
                 previewPanelSelection: {
-                  cardId: 'http://localhost:4201/experiments/Author/1',
+                  cardId: rri('http://localhost:4201/experiments/Author/1'),
                   format: 'isolated',
                 },
               },
@@ -462,7 +464,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
           body: 'Hey',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Author/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Author/1')],
               tools: [],
               submode: 'interact',
               realmUrl: 'http://localhost:4201/experiments',
@@ -1424,7 +1426,7 @@ Attached Files (files with newer versions don't show their content):
               },
             ],
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               submode: 'interact',
               tools: [],
               functions: [],
@@ -1591,16 +1593,19 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    type: 'object',
-                    properties: {
-                      firstName: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Friend/1'),
+                  {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        firstName: { type: 'string' },
+                      },
                     },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -1677,7 +1682,7 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [],
               submode: 'code',
               functions: [],
@@ -1753,7 +1758,7 @@ Attached Files (files with newer versions don't show their content):
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
     cardMessageContent.data.context.tools = [
-      getPatchTool('http://localhost:4201/drafts/Author/1', {
+      getPatchTool(rri('http://localhost:4201/drafts/Author/1'), {
         attributes: { firstName: { type: 'string' } },
       }),
     ];
@@ -1809,13 +1814,16 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Friend/1'],
+              openCardIds: [rri('http://localhost:4201/experiments/Friend/1')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Friend/1', {
-                  attributes: {
-                    firstName: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Friend/1'),
+                  {
+                    attributes: {
+                      firstName: { type: 'string' },
+                    },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -1840,16 +1848,19 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the location to home',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
+              openCardIds: [rri('http://localhost:4201/experiments/Meeting/2')],
               tools: [
-                getPatchTool('http://localhost:4201/experiments/Meeting/2', {
-                  attributes: {
-                    type: 'object',
-                    properties: {
-                      location: { type: 'string' },
+                getPatchTool(
+                  rri('http://localhost:4201/experiments/Meeting/2'),
+                  {
+                    attributes: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string' },
+                      },
                     },
                   },
-                }),
+                ),
               ],
               submode: 'interact',
               functions: [],
@@ -2362,7 +2373,7 @@ Attached Files (files with newer versions don't show their content):
           clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [
                 {
                   type: 'function',
@@ -2483,7 +2494,7 @@ Attached Files (files with newer versions don't show their content):
           clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [
                 {
                   type: 'function',
@@ -2581,7 +2592,7 @@ Attached Files (files with newer versions don't show their content):
           format: 'org.matrix.custom.html',
           data: {
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               functions: [],
             },
           },
@@ -2663,7 +2674,7 @@ Attached Files (files with newer versions don't show their content):
               }),
             },
             context: {
-              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
               tools: [],
               submode: 'interact',
               functions: [],
@@ -6432,7 +6443,8 @@ new
               name: 'read-file-for-ai-assistant_a831',
               arguments: JSON.stringify({
                 attributes: {
-                  fileUrl: 'http://test.com/my-realm/not-attached-file.ts',
+                  fileIdentifier:
+                    'http://test.com/my-realm/not-attached-file.ts',
                 },
                 description: 'Reading a file the user did not attach',
               }),
@@ -6557,5 +6569,451 @@ module('set model in prompt', (hooks) => {
     assert.strictEqual(model, 'google/gemini-pro-1.5');
     assert.strictEqual(toolsSupported, true);
     assert.strictEqual(reasoningEffort, 'minimal');
+  });
+
+  // Regression coverage for CS-11045: the host's `commandResult` may carry an
+  // `m.relates_to.event_id` that disagrees with the bot message's canonical
+  // event_id (the matrix server normalizes the bot message's event_id to the
+  // last m.replace's id, while the host captured the streaming/original id).
+  // ai-bot must still pair the result with the bot message via the
+  // commandRequestId.
+  test('CS-11045: getCommandResults pairs by commandRequestId when m.relates_to.event_id drifts', async () => {
+    const NEW_EVENT_ID = '$NEW-canonical-id';
+    const OLD_EVENT_ID = '$OLD-streaming-id';
+    const TOOL_CALL_ID = 'tool-call-T1';
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'do the thing',
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: 'user-msg-1',
+        } as CardMessageContent,
+        origin_server_ts: 1,
+        unsigned: { age: 1 },
+        event_id: 'user-msg-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Switching to code mode.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: {} },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: TOOL_CALL_ID,
+              name: 'switch-submode_dd88',
+              arguments: JSON.stringify({
+                attributes: { submode: 'code' },
+                description: 'Switch to code mode',
+              }),
+            },
+          ],
+        } as CardMessageContent,
+        origin_server_ts: 2,
+        unsigned: { age: 1 },
+        event_id: NEW_EVENT_ID,
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: TOOL_CALL_ID,
+          'm.relates_to': {
+            event_id: OLD_EVENT_ID,
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          data: { context: {} },
+        },
+        origin_server_ts: 3,
+        unsigned: { age: 1 },
+        event_id: 'cmd-result-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    const assistantWithToolCalls = result.find(
+      (m) => m.role === 'assistant' && (m as any).tool_calls?.length,
+    ) as any;
+    assert.ok(
+      assistantWithToolCalls,
+      'an assistant message with tool_calls should be present',
+    );
+    assert.equal(assistantWithToolCalls.tool_calls[0].id, TOOL_CALL_ID);
+
+    const toolMessages = result.filter((m) => m.role === 'tool');
+    assert.equal(
+      toolMessages.length,
+      1,
+      'tool result should be matched by commandRequestId even though m.relates_to.event_id drifted',
+    );
+    assert.equal(
+      (toolMessages[0] as any).tool_call_id,
+      TOOL_CALL_ID,
+      'tool message tool_call_id should match the bot message commandRequest id',
+    );
+  });
+
+  // CS-11045 regression: a happy-path test that the strict event_id match
+  // still works after we add the commandRequestId fallback. Specifically, if
+  // both event_id and commandRequestId would match, the result should appear
+  // exactly once (no duplicate tool messages).
+  test('CS-11045: strict event_id match still works and does not duplicate tool messages', async () => {
+    const BOT_EVENT_ID = '$bot-event-1';
+    const TOOL_CALL_ID = 'tool-call-T1';
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'do the thing',
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: 'user-msg-1',
+        } as CardMessageContent,
+        origin_server_ts: 1,
+        unsigned: { age: 1 },
+        event_id: 'user-msg-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Switching to code mode.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: {} },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: TOOL_CALL_ID,
+              name: 'switch-submode_dd88',
+              arguments: JSON.stringify({
+                attributes: { submode: 'code' },
+                description: 'Switch to code mode',
+              }),
+            },
+          ],
+        } as CardMessageContent,
+        origin_server_ts: 2,
+        unsigned: { age: 1 },
+        event_id: BOT_EVENT_ID,
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: TOOL_CALL_ID,
+          'm.relates_to': {
+            event_id: BOT_EVENT_ID,
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          data: { context: {} },
+        },
+        origin_server_ts: 3,
+        unsigned: { age: 1 },
+        event_id: 'cmd-result-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    const toolMessages = result.filter((m) => m.role === 'tool');
+    assert.equal(
+      toolMessages.length,
+      1,
+      'happy-path strict match should yield exactly one tool message',
+    );
+    assert.equal(
+      (toolMessages[0] as any).tool_call_id,
+      TOOL_CALL_ID,
+      'tool message tool_call_id should match the bot message commandRequest id',
+    );
+  });
+
+  // CS-11045 regression: reproduces the exact production failure shape from
+  // room !djuQxlnuYUoIABVEme:boxel.ai. Three bot messages: switch-submode
+  // (event_ids align), write-text-file (m.relates_to.event_id drifted to a
+  // streaming id that no longer exists in /messages), then codePatchCorrectness
+  // with a checkCorrectness tool_call (event_ids align). Without the fallback,
+  // the write-text-file tool result is dropped, leaving an orphan tool_use that
+  // Anthropic rejects with "unexpected `tool_use_id`".
+  test('CS-11045: recipe-tracker production transcript shape — every tool_call has its tool result', async () => {
+    const BOT1_EVENT_ID = '$Cz7ywwHlxOWpdM5LP9Ip-3jbPwa9TCV4-hufGm1a9gE';
+    const BOT2_EVENT_ID = '$s7uXPT1Dw_twk7XDfObHw9SVH18SlVuDIqDluEj0ygo';
+    const BOT2_DRIFTED_EVENT_ID =
+      '$eeFRvu_QCWWtidrDmb2RwG5-FAQFWiQiW4KCJyy-iWU';
+    const BOT3_EVENT_ID = '$waKMg3ayHoirxu1MvORDfheAOHIIWckjALVVcMUkxCg';
+
+    const TOOL_CALL_SWITCH_SUBMODE = 'toolu_vrtx_01LT9TcvTBDWM9XZM9KazAcK';
+    const TOOL_CALL_WRITE_TEXT_FILE = 'toolu_bdrk_01RDgbHDLs5dMUMpTYoqH5Xx';
+    const TOOL_CALL_CHECK_CORRECTNESS =
+      'check-e891cab5-a9dd-45d1-9ecc-72907e243cf1';
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'create a recipe tracker for me',
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: 'user-msg-1',
+        } as CardMessageContent,
+        origin_server_ts: 1,
+        unsigned: { age: 1 },
+        event_id: 'user-msg-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      // Bot message #1: switch-submode tool_call. event_ids align ✓
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: "I'll create a Recipe Tracker app for you!",
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: {} },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: TOOL_CALL_SWITCH_SUBMODE,
+              name: 'switch-submode_dd88',
+              arguments: JSON.stringify({
+                attributes: { submode: 'code', createFile: true },
+                description: 'Switch to code mode',
+              }),
+            },
+          ],
+        } as CardMessageContent,
+        origin_server_ts: 2,
+        unsigned: { age: 1 },
+        event_id: BOT1_EVENT_ID,
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: TOOL_CALL_SWITCH_SUBMODE,
+          'm.relates_to': {
+            event_id: BOT1_EVENT_ID,
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          data: { context: {} },
+        },
+        origin_server_ts: 3,
+        unsigned: { age: 1 },
+        event_id: 'cmd-result-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      // Bot message #2: write-text-file tool_call. The host emits its
+      // commandResult with m.relates_to.event_id pointing to the streaming
+      // id, which is NOT this bot message's canonical event_id. ✗
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Now let me create a sample recipe instance.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: {} },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: TOOL_CALL_WRITE_TEXT_FILE,
+              name: 'write-text-file_e5a1',
+              arguments: JSON.stringify({
+                attributes: {
+                  realm: 'https://example.test/',
+                  path: 'Recipe/spaghetti-carbonara.json',
+                  content: '{}',
+                },
+                description: 'Create sample recipe',
+              }),
+            },
+          ],
+        } as CardMessageContent,
+        origin_server_ts: 4,
+        unsigned: { age: 1 },
+        event_id: BOT2_EVENT_ID,
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: TOOL_CALL_WRITE_TEXT_FILE,
+          'm.relates_to': {
+            event_id: BOT2_DRIFTED_EVENT_ID,
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          data: { context: {} },
+        },
+        origin_server_ts: 5,
+        unsigned: { age: 1 },
+        event_id: 'cmd-result-2',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      // Bot message #3: codePatchCorrectness with checkCorrectness tool_call.
+      // event_ids align ✓
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+          body: '',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          'm.relates_to': {
+            rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+            event_id: BOT2_EVENT_ID,
+          },
+          data: { context: {} },
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: TOOL_CALL_CHECK_CORRECTNESS,
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                attributes: {
+                  targetType: 'file',
+                  targetRef: 'https://example.test/recipe-tracker.gts',
+                  roomId: 'room-id-1',
+                  targetEventId: BOT2_EVENT_ID,
+                  correctnessCheckAttempt: 1,
+                  lintIssues: [],
+                },
+                description: 'Check correctness',
+              }),
+            },
+          ],
+        } as CardMessageContent,
+        origin_server_ts: 6,
+        unsigned: { age: 1 },
+        event_id: BOT3_EVENT_ID,
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: TOOL_CALL_CHECK_CORRECTNESS,
+          'm.relates_to': {
+            event_id: BOT3_EVENT_ID,
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          data: { context: {} },
+        },
+        origin_server_ts: 7,
+        unsigned: { age: 1 },
+        event_id: 'cmd-result-3',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      [],
+      [],
+      [],
+      fakeMatrixClient,
+    );
+
+    // Collect every tool_call id requested by assistant messages and every
+    // tool_call_id resolved by tool messages, in order. Both lists must be
+    // identical: every tool_use must have its tool_result, and the order
+    // must alternate (assistant tool_call → tool result, repeat) without two
+    // adjacent assistant-with-tool_calls messages.
+    const requestedToolCallIds: string[] = [];
+    const resolvedToolCallIds: string[] = [];
+    let lastWasAssistantWithToolCalls = false;
+    for (const message of result) {
+      if (message.role === 'assistant' && (message as any).tool_calls?.length) {
+        for (const call of (message as any).tool_calls) {
+          requestedToolCallIds.push(call.id);
+        }
+        assert.notOk(
+          lastWasAssistantWithToolCalls,
+          'two adjacent assistant messages with tool_calls — orphan tool_use shape that Anthropic rejects',
+        );
+        lastWasAssistantWithToolCalls = true;
+      } else if (message.role === 'tool') {
+        resolvedToolCallIds.push((message as any).tool_call_id);
+        lastWasAssistantWithToolCalls = false;
+      } else {
+        lastWasAssistantWithToolCalls = false;
+      }
+    }
+
+    assert.deepEqual(
+      requestedToolCallIds,
+      [
+        TOOL_CALL_SWITCH_SUBMODE,
+        TOOL_CALL_WRITE_TEXT_FILE,
+        TOOL_CALL_CHECK_CORRECTNESS,
+      ],
+      'all three bot tool_calls should appear in order',
+    );
+    assert.deepEqual(
+      resolvedToolCallIds,
+      [
+        TOOL_CALL_SWITCH_SUBMODE,
+        TOOL_CALL_WRITE_TEXT_FILE,
+        TOOL_CALL_CHECK_CORRECTNESS,
+      ],
+      'every tool_call must have a matching tool result, including the drifted write-text-file one',
+    );
   });
 });

@@ -1,18 +1,18 @@
 import type Koa from 'koa';
 import {
   asExpressions,
+  dbAdapterQuerier,
   ensureTrailingSlash,
   fetchRealmPermissions,
   getMatrixUsername,
+  notifyAllFileChanges,
   param,
   PUBLISHED_DIRECTORY_NAME,
   query,
   removeRealmPermissions,
   SupportedMimeType,
-  type PublishedRealmTable,
   update,
 } from '@cardstack/runtime-common';
-import { pathExistsSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import {
@@ -27,9 +27,13 @@ import {
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import {
-  destroyMountedRealm,
   removeRealmDatabaseArtifacts,
+  removeRealmFiles,
 } from './realm-destruction-utils';
+import {
+  deletePublishedRowsBySourceUrl,
+  deleteRegistryRowByUrl,
+} from '../lib/realm-registry-writes';
 
 interface DeleteRealmJSON {
   data: {
@@ -40,9 +44,7 @@ interface DeleteRealmJSON {
 
 export default function handleDeleteRealm({
   dbAdapter,
-  realms,
   realmsRootPath,
-  virtualNetwork,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -88,18 +90,28 @@ export default function handleDeleteRealm({
     let realmURL = parsedRealmURL.href;
 
     try {
-      let sourceRealm = realms.find(
-        (realm) => ensureTrailingSlash(realm.url) === realmURL,
-      );
-      if (!sourceRealm) {
+      // Phase 3 PR 2: source-realm existence and disk location come from
+      // realm_registry, not from realms[]. The handler is stateless — it
+      // doesn't read or mutate realms[]/virtualNetwork. The reconciler
+      // does the unmount on every instance after the registry DELETE +
+      // NOTIFY.
+      let sourceRow = (await query(dbAdapter, [
+        `SELECT disk_id FROM realm_registry WHERE url =`,
+        param(realmURL),
+      ])) as { disk_id: string }[];
+      if (sourceRow.length === 0) {
         await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
         return;
       }
+      let sourceRealmPath = join(realmsRootPath, sourceRow[0].disk_id);
 
+      // SELECT 1 is aliased to AS found rather than relying on Postgres's
+      // default `?column?` unnamed-column label, which isn't portable
+      // across SQL adapters.
       let publishedRealmMatch = (await query(dbAdapter, [
-        `SELECT id FROM published_realms WHERE published_realm_url =`,
+        `SELECT 1 AS found FROM realm_registry WHERE kind = 'published' AND url =`,
         param(realmURL),
-      ])) as Pick<PublishedRealmTable, 'id'>[];
+      ])) as { found: number }[];
       if (publishedRealmMatch.length > 0) {
         await sendResponseForUnprocessableEntity(
           ctxt,
@@ -130,86 +142,114 @@ export default function handleDeleteRealm({
         return;
       }
 
-      if (!sourceRealm.dir) {
-        await sendResponseForNotFound(
-          ctxt,
-          `Realm files not found on disk for ${realmURL}`,
+      // Captured inside the lock from `deletePublishedRowsBySourceUrl`'s
+      // RETURNING so the post-commit FS sweep matches the rows the tx
+      // actually deleted (no TOCTOU window between a pre-lock SELECT and
+      // the in-tx DELETE).
+      let publishedRealms: { url: string; disk_id: string }[] = [];
+
+      // Serialize concurrent writers for this source realm. Lock is on the
+      // source URL — a concurrent unpublish of one of the associated
+      // published realms uses a different lock key (its own published URL),
+      // so in the rare case of overlap, the handlers interleave at the
+      // per-URL granularity rather than globally. Pragmatic for this PR;
+      // multi-instance hardening could tighten this later.
+      //
+      // CS-10898: every DB write inside the callback runs on the lock-
+      // holder's pinned querier, so the entire cleanup (registry-row
+      // deletes, per-published permissions + DB artifacts, claimed-domains
+      // soft-delete, source permissions + DB artifacts) commits atomically
+      // or rolls back atomically. A failure halfway through no longer
+      // leaves the realm half-deleted.
+      await dbAdapter.withWriteLock(realmURL, async (txQuerier) => {
+        // Delete the published rows first so the RETURNING set is the
+        // authoritative list of rows the tx will commit. Driving the
+        // per-published cleanup off this set (instead of a pre-lock
+        // SELECT) closes a TOCTOU race where a publish completing
+        // between SELECT and lock would have its registry row deleted
+        // here while its permissions + DB artifacts were never cleaned.
+        // Within the tx, ordering is invisible to other connections —
+        // the NOTIFY queues until COMMIT — so deleting before the
+        // per-row cleanup is safe.
+        publishedRealms = await deletePublishedRowsBySourceUrl(
+          dbAdapter,
+          realmURL,
+          txQuerier,
         );
-        return;
-      }
 
-      let publishedRealms = (await query(dbAdapter, [
-        `SELECT id, published_realm_url FROM published_realms WHERE source_realm_url =`,
-        param(realmURL),
-      ])) as Pick<PublishedRealmTable, 'id' | 'published_realm_url'>[];
+        for (let publishedRealm of publishedRealms) {
+          await removeRealmPermissions(
+            dbAdapter,
+            new URL(publishedRealm.url),
+            txQuerier,
+          );
+          await removeRealmDatabaseArtifacts({
+            dbAdapter,
+            realmURL: publishedRealm.url,
+            querier: txQuerier,
+          });
+        }
 
+        // Source realm's registry row.
+        await deleteRegistryRowByUrl(dbAdapter, realmURL, txQuerier);
+
+        let { nameExpressions, valueExpressions } = asExpressions({
+          removed_at: Math.floor(Date.now() / 1000),
+        });
+        let q = txQuerier ?? dbAdapterQuerier(dbAdapter);
+        await q([
+          ...update(
+            'claimed_domains_for_sites',
+            nameExpressions,
+            valueExpressions,
+          ),
+          ` WHERE source_realm_url = `,
+          param(realmURL),
+          ` AND removed_at IS NULL`,
+        ]);
+
+        await removeRealmPermissions(dbAdapter, parsedRealmURL, txQuerier);
+        await removeRealmDatabaseArtifacts({
+          dbAdapter,
+          realmURL,
+          querier: txQuerier,
+        });
+      });
+
+      // FS removals run after the DB transaction commits. If a removeRealmFiles
+      // throws here we capture it but don't re-throw — orphan disk files are
+      // recoverable by an out-of-band sweep, while a re-thrown error after a
+      // successful commit would surface as a 500 on a delete that has, in
+      // fact, succeeded from the DB's point of view (residual gap documented
+      // in CS-10898).
       for (let publishedRealm of publishedRealms) {
-        let mountedPublishedRealm = realms.find(
-          (realm) =>
-            ensureTrailingSlash(realm.url) ===
-            ensureTrailingSlash(publishedRealm.published_realm_url),
-        );
         let publishedRealmPath = join(
           realmsRootPath,
           PUBLISHED_DIRECTORY_NAME,
-          publishedRealm.id,
+          publishedRealm.disk_id,
         );
-        if (mountedPublishedRealm) {
-          destroyMountedRealm({
-            realm: mountedPublishedRealm,
-            realmPath: publishedRealmPath,
-            realms,
-            virtualNetwork,
-          });
-        } else {
-          try {
-            if (pathExistsSync(publishedRealmPath)) {
-              removeSync(publishedRealmPath);
-            }
-          } catch (error) {
-            Sentry.captureException(error);
-          }
+        try {
+          removeRealmFiles(publishedRealmPath);
+        } catch (error) {
+          Sentry.captureException(error);
         }
-        await removeRealmPermissions(
-          dbAdapter,
-          new URL(publishedRealm.published_realm_url),
-        );
-        await removeRealmDatabaseArtifacts({
-          dbAdapter,
-          realmURL: publishedRealm.published_realm_url,
-        });
+      }
+      try {
+        removeRealmFiles(sourceRealmPath);
+      } catch (error) {
+        Sentry.captureException(error);
       }
 
-      await query(dbAdapter, [
-        `DELETE FROM published_realms WHERE source_realm_url =`,
-        param(realmURL),
-      ]);
-
-      let { nameExpressions, valueExpressions } = asExpressions({
-        removed_at: Math.floor(Date.now() / 1000),
-      });
-      await query(dbAdapter, [
-        ...update(
-          'claimed_domains_for_sites',
-          nameExpressions,
-          valueExpressions,
-        ),
-        ` WHERE source_realm_url = `,
-        param(realmURL),
-        ` AND removed_at IS NULL`,
-      ]);
-
-      destroyMountedRealm({
-        realm: sourceRealm,
-        realmPath: sourceRealm.dir,
-        realms,
-        virtualNetwork,
-      });
-      await removeRealmPermissions(dbAdapter, parsedRealmURL);
-      await removeRealmDatabaseArtifacts({
-        dbAdapter,
-        realmURL,
-      });
+      // CS-11156. Broadcast a bulk cache-invalidation for the source realm
+      // and each removed published realm so any peer replicas that still
+      // have these realms mounted drop their #sourceCache / #transpiledModuleCache
+      // before the reconciler unmount lands via NOTIFY realm_registry.
+      // Best-effort, fire-and-forget; missed NOTIFY is a bounded
+      // staleness window resolved by the unmount itself.
+      for (let publishedRealm of publishedRealms) {
+        await notifyAllFileChanges(dbAdapter, publishedRealm.url);
+      }
+      await notifyAllFileChanges(dbAdapter, realmURL);
 
       await setContextResponse(
         ctxt,

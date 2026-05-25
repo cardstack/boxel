@@ -45,7 +45,7 @@ test.describe('runTestsInMemory e2e', () => {
       );
 
       let result = await runTestsInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         hostAppUrl: realm.hostAppUrl,
       });
@@ -95,7 +95,7 @@ test.describe('runTestsInMemory e2e', () => {
       );
 
       let result = await runTestsInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         hostAppUrl: realm.hostAppUrl,
       });
@@ -161,7 +161,7 @@ test.describe('runTestsInMemory e2e', () => {
       }
 
       let result = await runTestsInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         hostAppUrl: realm.hostAppUrl,
       });
@@ -186,7 +186,7 @@ test.describe('runTestsInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runTestsInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       client: thrower,
       hostAppUrl: 'http://localhost:1/',
     });

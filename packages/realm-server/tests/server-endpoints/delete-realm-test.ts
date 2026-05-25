@@ -43,7 +43,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    if (response.status !== 201) {
+    if (response.status !== 202) {
       throw new Error(
         `/_create-realm failed: ${JSON.stringify(response.body)}`,
       );
@@ -128,8 +128,13 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(publishResponse.status, 201, 'published realm created');
+    assert.strictEqual(publishResponse.status, 202, 'published realm created');
     let publishedRealmId = publishResponse.body.data.id as string;
+
+    // Phase 3: publish only writes registry + NOTIFY; drive a reconcile
+    // pass to mount the published realm so the spy assertions below
+    // observe its post-DELETE unmount.
+    await context.testRealmServer.testingOnlyReconcile();
 
     let sourceIndexURL = `${realmURL}cleanup-${uuidv4()}.json`;
     let publishedIndexURL = `${publishedRealmURL}cleanup-${uuidv4()}.json`;
@@ -256,16 +261,6 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
-    await context.dbAdapter.execute(`INSERT INTO session_rooms
-      (realm_url, matrix_user_id, room_id)
-      VALUES ('${realmURL}', '${ownerUserId}', 'source-room')`);
-    await context.dbAdapter.execute(`INSERT INTO session_rooms
-      (realm_url, matrix_user_id, room_id)
-      VALUES ('${publishedRealmURL}', '@published:localhost', 'published-room')`);
-    await context.dbAdapter.execute(`INSERT INTO session_rooms
-      (realm_url, matrix_user_id, room_id)
-      VALUES ('${unrelatedRealmURL}', '@unrelated:localhost', 'unrelated-room')`);
-
     let { valueExpressions, nameExpressions } = asExpressions({
       user_id: user.id,
       source_realm_url: realmURL,
@@ -277,6 +272,9 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
     );
 
+    // Phase 3: source realm is mounted lazily. The publish handler
+    // above called reconciler.lookupOrMount(sourceRealmURL), so by now
+    // the source realm is in realms[].
     let sourceRealm = context.testRealmServer.testingOnlyRealms.find(
       (realm) => realm.url === realmURL,
     )!;
@@ -308,6 +306,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
 
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    // Phase 3: unmount is reconciler-driven (NOTIFY → reconcile()).
+    // Force a reconcile pass synchronously so the assertion below
+    // doesn't race the LISTEN callback.
+    await context.testRealmServer.testingOnlyReconcile();
     assert.true(
       unsubscribeCalled,
       'file watcher was unsubscribed during realm destruction',
@@ -340,7 +342,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     let remainingPublishedRows = await context.dbAdapter.execute(
-      `SELECT * FROM published_realms WHERE source_realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_registry WHERE kind = 'published' AND source_url = '${realmURL}'`,
     );
     assert.strictEqual(
       remainingPublishedRows.length,
@@ -496,31 +498,6 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'unrelated realm rows remain in realm_file_meta',
     );
 
-    let sourceSessionRooms = await context.dbAdapter.execute(
-      `SELECT * FROM session_rooms WHERE realm_url = '${realmURL}'`,
-    );
-    let publishedSessionRooms = await context.dbAdapter.execute(
-      `SELECT * FROM session_rooms WHERE realm_url = '${publishedRealmURL}'`,
-    );
-    let unrelatedSessionRooms = await context.dbAdapter.execute(
-      `SELECT * FROM session_rooms WHERE realm_url = '${unrelatedRealmURL}'`,
-    );
-    assert.strictEqual(
-      sourceSessionRooms.length,
-      0,
-      'source realm rows are removed from session_rooms',
-    );
-    assert.strictEqual(
-      publishedSessionRooms.length,
-      0,
-      'published realm rows are removed from session_rooms',
-    );
-    assert.strictEqual(
-      unrelatedSessionRooms.length,
-      1,
-      'unrelated realm rows remain in session_rooms',
-    );
-
     let pendingSourceJobs = await context.dbAdapter.execute(
       `SELECT * FROM jobs WHERE concurrency_group = 'indexing:${realmURL}' AND status = 'unfulfilled'`,
     );
@@ -665,8 +642,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         }),
       );
 
-    assert.strictEqual(publishResponse.status, 201, 'published realm created');
+    assert.strictEqual(publishResponse.status, 202, 'published realm created');
     let publishedRealmId = publishResponse.body.data.id as string;
+    // Phase 3: drive reconcile so the published realm shows up in realms[].
+    await context.testRealmServer.testingOnlyReconcile();
     let publishedRealmPath = join(
       context.dir.name,
       'realm_server_1',
@@ -720,13 +699,15 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
 
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    // Phase 3: unmount is reconciler-driven.
+    await context.testRealmServer.testingOnlyReconcile();
     assert.false(
       existsSync(publishedRealmPath),
       'published realm directory is removed even when unmounted',
     );
 
     let remainingPublishedRows = await context.dbAdapter.execute(
-      `SELECT * FROM published_realms WHERE source_realm_url = '${realmURL}'`,
+      `SELECT * FROM realm_registry WHERE kind = 'published' AND source_url = '${realmURL}'`,
     );
     assert.strictEqual(
       remainingPublishedRows.length,

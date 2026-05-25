@@ -3,6 +3,7 @@ import {
   delay,
   logger,
   type PrerenderMeta,
+  type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
 } from '@cardstack/runtime-common';
@@ -194,6 +195,63 @@ export async function renderMeta(
       page,
       `render.meta returned a non-JSON response: ${result.value}`,
       { title: 'Invalid render meta response' },
+    );
+  }
+}
+
+// Lightweight first pass: the runner only needs the ancestor type chain
+// to drive fitted/embedded format renders. Hitting /meta for that
+// pulled in a full serializeCard + searchDoc walk we then threw away;
+// /types returns just the type list. The full render.meta still runs
+// after the format renders, where its searchDoc legitimately depends
+// on the linksTo / linksToMany fields those renders marked as "used".
+export async function renderTypes(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<PrerenderTypes | RenderError> {
+  log.debug(`renderTypes start url=${page.url()}`);
+  await transitionTo(page, 'render.types');
+  await waitForRoutePathSuffix(page, '/types', opts);
+  await waitForPrerenderSettle(page);
+  log.debug(`renderTypes capture url=${page.url()}`);
+  let result = await captureResult(page, 'textContent', opts);
+  log.debug(
+    `renderTypes captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
+  );
+  if (result.status === 'error' || result.status === 'unusable') {
+    return renderCaptureToError(page, result, 'render.types');
+  }
+  if (opts?.expectedId && result.id && result.id !== opts.expectedId) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types captured stale prerender output for ${result.id} (expected ${opts.expectedId})`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
+  if (
+    opts?.expectedNonce &&
+    result.nonce &&
+    result.nonce !== opts.expectedNonce
+  ) {
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types captured stale prerender output for nonce ${result.nonce} (expected ${opts.expectedNonce})`,
+      { title: 'Stale render response', evict: true },
+    );
+  }
+  try {
+    return JSON.parse(result.value) as PrerenderTypes;
+  } catch {
+    await page.evaluate(() => {
+      let el = document.querySelector('[data-prerender]') as HTMLElement;
+      console.log(
+        `capturing HTML for unknown types result\n${el.outerHTML.trim()}`,
+      );
+    });
+    return buildInvalidRenderResponseError(
+      page,
+      `render.types returned a non-JSON response: ${result.value}`,
+      { title: 'Invalid render types response' },
     );
   }
 }
@@ -1068,6 +1126,151 @@ export async function captureResult(
     await delay(opts.simulateTimeoutMs);
   }
   return result;
+}
+
+export interface ScreenshotCapture {
+  base64: string;
+  width: number;
+  height: number;
+}
+
+// Block in the browser context until images, CSS background-image URLs, and
+// fonts have finished loading, then yield one animation frame so the browser
+// actually paints the result. Resolves on `error` events too — we'd rather
+// screenshot a broken-image placeholder than hang the capture. Internal
+// timeout (10s) guards against a slow or auth-failing image stalling the
+// whole flow indefinitely.
+async function waitForImagePaint(page: Page): Promise<void> {
+  let log = logger('prerenderer');
+  let summary = await page.evaluate(async () => {
+    const TIMEOUT_MS = 10_000;
+    let race = <T>(p: Promise<T>): Promise<T | 'timeout'> =>
+      Promise.race([
+        p,
+        new Promise<'timeout'>((r) =>
+          setTimeout(() => r('timeout'), TIMEOUT_MS),
+        ),
+      ]);
+
+    let pendingImgs = Array.from(document.images).filter((i) => !i.complete);
+    let imgWait = Promise.all(
+      pendingImgs.map(
+        (i) =>
+          new Promise<void>((res) => {
+            i.addEventListener('load', () => res(), { once: true });
+            i.addEventListener('error', () => res(), { once: true });
+          }),
+      ),
+    );
+
+    let bgUrls = new Set<string>();
+    for (let el of Array.from(document.querySelectorAll('*'))) {
+      let bg = getComputedStyle(el as HTMLElement).backgroundImage;
+      if (!bg || bg === 'none') continue;
+      for (let m of bg.matchAll(/url\((["']?)(.+?)\1\)/g)) {
+        let url = m[2];
+        if (url && !url.startsWith('data:')) bgUrls.add(url);
+      }
+    }
+    let bgWait = Promise.all(
+      Array.from(bgUrls).map(
+        (u) =>
+          new Promise<void>((res) => {
+            let probe = new Image();
+            probe.addEventListener('load', () => res(), { once: true });
+            probe.addEventListener('error', () => res(), { once: true });
+            probe.src = u;
+          }),
+      ),
+    );
+
+    let fontWait = (document as any).fonts
+      ? (document as any).fonts.ready
+      : Promise.resolve();
+
+    let outcome = await race(Promise.all([imgWait, bgWait, fontWait]));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
+    return {
+      pendingImgs: pendingImgs.length,
+      bgUrls: bgUrls.size,
+      timedOut: outcome === 'timeout',
+    };
+  });
+  log.debug(
+    `waitForImagePaint done url=${page.url()} pendingImgs=${summary.pendingImgs} bgUrls=${summary.bgUrls} timedOut=${summary.timedOut}`,
+  );
+}
+
+export async function captureScreenshot(
+  page: Page,
+  format: 'isolated' | 'embedded',
+  ancestorLevel: number,
+  opts?: CaptureOptions,
+): Promise<ScreenshotCapture | RenderError> {
+  log.debug(
+    `captureScreenshot start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
+  );
+  await transitionTo(page, 'render.html', format, String(ancestorLevel));
+  await waitForRoutePathSuffix(page, `/html/${format}/${ancestorLevel}`, opts);
+  await waitForPrerenderSettle(page);
+  // After settle, surface any terminal prerender error rather than
+  // screenshotting a skeleton/error frame. Reuses the same data-attribute
+  // signaling as the HTML capture path.
+  let terminal = await page.evaluate(() => {
+    let elements = Array.from(
+      document.querySelectorAll('[data-prerender]'),
+    ) as HTMLElement[];
+    for (let element of elements) {
+      let status = element.dataset.prerenderStatus ?? '';
+      if (status === 'error' || status === 'unusable') {
+        let errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let raw = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        return { status: status as 'error' | 'unusable', raw };
+      }
+    }
+    let stray = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (stray) {
+      let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
+      if (raw.length > 0) {
+        return { status: 'error' as const, raw };
+      }
+    }
+    return null;
+  });
+  if (terminal) {
+    let capture: RenderCapture = {
+      status: terminal.status,
+      value: terminal.raw,
+    };
+    return renderCaptureToError(page, capture, 'render.screenshot');
+  }
+  // Settle hook only tracks store/loader generation + animation frames; it
+  // does NOT wait for `<img>` element loads, CSS background-image fetches, or
+  // fonts. Without this extra wait the screenshot races those resources and
+  // produces empty avatars / missing thumbnails. Bounded by an internal
+  // timeout so a slow / 401-looping image can't hang the capture.
+  await waitForImagePaint(page);
+  let dims = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  }));
+  let base64 = (await page.screenshot({
+    encoding: 'base64',
+    type: 'png',
+  })) as string;
+  let pngBytes = Buffer.byteLength(base64, 'base64');
+  log.debug(
+    `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,
+  );
+  return { base64, width: dims.width, height: dims.height };
 }
 
 export async function withTimeout<T>(

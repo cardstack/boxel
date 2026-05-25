@@ -1,9 +1,12 @@
 import { on } from '@ember/modifier';
+import { cancel, next, scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
+import { modifier } from 'ember-modifier';
+
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
-import { bool } from '@cardstack/boxel-ui/helpers';
+import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
@@ -54,9 +57,65 @@ export default class HostModeCard extends Component<Signature> {
     );
   }
 
+  // Reads a scroll offset stashed by removeIsolatedMarkup in a <meta> element
+  // and applies it once the primary card's content has rendered and the
+  // actual scroll host is available. Only runs on the primary card.
+  restoreScroll = modifier((element: HTMLElement, [card]: [unknown]) => {
+    if (!card || !this.args.isPrimary) {
+      return;
+    }
+
+    let timer: ReturnType<typeof next> | undefined;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    let restore = () => {
+      attempts++;
+
+      let meta = document.querySelector('meta[name="boxel-restore-scroll"]');
+      if (!(meta instanceof HTMLMetaElement)) {
+        return;
+      }
+
+      let scrollTop = parseInt(meta.getAttribute('content') ?? '0', 10);
+      if (scrollTop <= 0) {
+        meta.remove();
+        return;
+      }
+
+      let scrollTarget =
+        (element.querySelector(
+          '[data-host-mode-card-scroll-container]',
+        ) as HTMLElement | null) ?? element;
+      let isScrollable = scrollTarget.scrollHeight > scrollTarget.clientHeight;
+      if (!isScrollable && attempts < maxAttempts) {
+        timer = next(restore);
+        return;
+      }
+
+      scrollTarget.scrollTop = scrollTop;
+
+      if (scrollTarget.scrollTop === scrollTop || attempts >= maxAttempts) {
+        meta.remove();
+        return;
+      }
+
+      timer = next(restore);
+    };
+
+    scheduleOnce('afterRender', restore);
+
+    return () => {
+      if (timer) {
+        cancel(timer);
+      }
+    };
+  });
+
   <template>
     <CardContainer
-      class='host-mode-card {{if @isPrimary "is-primary"}}'
+      {{this.restoreScroll this.card}}
+      class={{cn 'host-mode-card' is-primary=@isPrimary}}
       displayBoundaries={{@displayBoundaries}}
       data-test-host-mode-card-loaded={{bool this.card}}
       ...attributes
@@ -72,6 +131,7 @@ export default class HostModeCard extends Component<Signature> {
           class='card'
           @card={{this.card}}
           @format='isolated'
+          data-host-mode-card-scroll-container
           data-test-host-mode-card={{@cardId}}
         />
       {{else if this.isLoading}}

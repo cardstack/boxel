@@ -85,9 +85,13 @@ const fetchRealmMetaRows = async (adapter: SQLiteAdapter) =>
 
 const fetchRealmMeta = async (adapter: SQLiteAdapter) => {
   let rows = await fetchRealmMetaRows(adapter);
+  let raw = rows[0]?.value as
+    | { instances?: RealmMetaValue[]; files?: RealmMetaValue[] }
+    | undefined;
   return {
     rows,
-    value: (rows[0]?.value ?? []) as RealmMetaValue[],
+    value: (raw?.instances ?? []) as RealmMetaValue[],
+    files: (raw?.files ?? []) as RealmMetaValue[],
   };
 };
 
@@ -1668,6 +1672,336 @@ module('Unit | index-writer', function (hooks) {
     );
   });
 
+  test('update realm meta partitions file rows into the files array', async function (assert) {
+    // CS-prep for "Include FileDefs in CardsGrid": file rows in boxel_index
+    // (type='file') should be aggregated into `realm_meta.value.files`,
+    // independently of the cards group. This is what powers CardsGrid's
+    // "All Files" sidebar leaves.
+    let iconHTML = '<svg>file icon</svg>';
+    let baseFileTypes = internalKeysFor({
+      module: rri('./card-api'),
+      name: 'FileDef',
+    });
+    let markdownTypes = internalKeysFor(
+      {
+        module: rri('./markdown-file-def'),
+        name: 'MarkdownDef',
+      },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        // Plain instance row — should land in `instances`.
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource('1', 'Mango', {
+            module: rri('./person'),
+            name: 'Person',
+          }) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: internalKeysFor(
+            { module: rri('./person'), name: 'Person' },
+            baseCardRef,
+          ),
+          icon_html: iconHTML,
+        },
+        // Two markdown files — same code_ref so they collapse into one
+        // summary row with total: 2.
+        {
+          url: `${testRealmURL}notes/a.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'a.md', url: `${testRealmURL}notes/a.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/b.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'b.md', url: `${testRealmURL}notes/b.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        // A bare-FileDef file — base type used when the extension isn't mapped.
+        {
+          url: `${testRealmURL}misc/raw.bin`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'raw.bin', url: `${testRealmURL}misc/raw.bin` },
+          display_names: ['File'],
+          types: baseFileTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    // No new writes — just finalize so updateRealmMeta runs against the
+    // working table that setupIndex seeded.
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.strictEqual(
+      realmMeta.rows.length,
+      1,
+      'one realm_meta row was written',
+    );
+    assert.deepEqual(
+      realmMeta.value,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}person/Person`,
+          'Person',
+          iconHTML,
+          1,
+        ),
+      ],
+      'instance summaries only reflect CardDef rows',
+    );
+    // Files are ordered by display_name ASC; "File" sorts before "Markdown".
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}card-api/FileDef`,
+          'File',
+          iconHTML,
+          1,
+        ),
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          2,
+        ),
+      ],
+      'file summaries collapse duplicates and live in their own arm',
+    );
+  });
+
+  test('update realm meta collapses rows with the same code_ref but mixed display_names', async function (assert) {
+    // Regression: when a realm has been partially re-indexed across a code
+    // change (some file rows have populated `display_names`, some still
+    // have `[]` from the previous indexer), the aggregation must collapse
+    // them into one summary per code_ref — using `MAX(display_name)` so
+    // the populated label wins over the empty/null one. Without the
+    // collapse, CardsGrid's sidebar shows two entries for the same type
+    // (e.g., "Markdown" and "MarkdownDef") that resolve to identical
+    // searches and confuse the user.
+    let iconHTML = '<svg>icon</svg>';
+    let markdownTypes = internalKeysFor(
+      { module: rri('./markdown-file-def'), name: 'MarkdownDef' },
+      { module: rri('./card-api'), name: 'FileDef' },
+    );
+
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        // Two markdown files with the same code_ref but different
+        // display_names — simulates the rolling-deploy state where the
+        // new extractor populated names for one file but not the other.
+        {
+          url: `${testRealmURL}notes/new.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'new.md', url: `${testRealmURL}notes/new.md` },
+          display_names: ['Markdown', 'File'],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+        {
+          url: `${testRealmURL}notes/old.md`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'file',
+          search_doc: { name: 'old.md', url: `${testRealmURL}notes/old.md` },
+          display_names: [],
+          types: markdownTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    let realmMeta = await fetchRealmMeta(adapter);
+    assert.deepEqual(
+      realmMeta.files,
+      [
+        makeCardTypeSummary(
+          `${testRealmURL}markdown-file-def/MarkdownDef`,
+          'Markdown',
+          iconHTML,
+          2,
+        ),
+      ],
+      'one summary per code_ref, with the populated display_name picked over the empty one',
+    );
+  });
+
+  test('fetchCardTypeSummary returns the realm_meta row at realm_versions.current_version', async function (assert) {
+    // Regression: the read path JOINs realm_meta against
+    // realm_versions.current_version so it always picks the row that
+    // matches the realm's authoritative current version. Without the JOIN,
+    // a naive SELECT returns an arbitrary realm_meta row when stale rows
+    // linger (e.g., after a from-scratch reindex resets the version) and
+    // CardsGrid's "All Files" group silently vanishes for any realm whose
+    // physical row order happens to surface a legacy array-shape row.
+    let iconHTML = '<svg>icon</svg>';
+    let personTypes = internalKeysFor(
+      { module: rri('./person'), name: 'Person' },
+      baseCardRef,
+    );
+
+    // Seed a CARD row at version 1 — that's the version we'll mark as
+    // current. updateRealmMeta() will aggregate this into realm_meta.value
+    // (new partitioned shape) for v1.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      [
+        {
+          url: `${testRealmURL}1.json`,
+          realm_version: 1,
+          realm_url: testRealmURL,
+          type: 'instance',
+          pristine_doc: makeCardResource('1', 'Mango', {
+            module: rri('./person'),
+            name: 'Person',
+          }) as LooseCardResource,
+          search_doc: { name: 'Mango' },
+          display_names: ['Person'],
+          deps: [`${testRealmURL}person`],
+          types: personTypes,
+          icon_html: iconHTML,
+        },
+      ],
+    );
+
+    // Have the index writer aggregate v1 into realm_meta.value with the
+    // new partitioned shape.
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    // Now plant a *stale* legacy-shape row at a HIGHER version number. This
+    // is exactly the layout you get after a from-scratch reindex: the prune
+    // predicate `realm_version < current` doesn't reach v999, so it lingers.
+    // The naive `SELECT … WHERE realm_url=…` (no ORDER BY) would happily
+    // return this row first.
+    await adapter.execute(
+      `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+       VALUES ($1, $2, $3, $4)`,
+      {
+        bind: [
+          testRealmURL,
+          999,
+          JSON.stringify([
+            {
+              code_ref: `${testRealmURL}stale/Stale`,
+              display_name: 'Stale',
+              total: 42,
+              icon_html: iconHTML,
+            },
+          ]),
+          String(Date.now() - 1000),
+        ],
+      },
+    );
+
+    let summary = await indexQueryEngine.fetchCardTypeSummary(
+      new URL(testRealmURL),
+    );
+    assert.deepEqual(
+      summary.instances.map((s) => s.code_ref),
+      [`${testRealmURL}person/Person`],
+      'fetchCardTypeSummary returns the row at realm_versions.current_version even when a higher-numbered stale row is present',
+    );
+    assert.notOk(
+      summary.instances.find((s) => s.display_name === 'Stale'),
+      'stale row contents do not leak through',
+    );
+  });
+
+  test('done() prunes realm_meta rows at any version, including ones higher than the current', async function (assert) {
+    // Regression: pruneObsoleteEntries uses != instead of < so a
+    // from-scratch reindex (which resets the realm_version to a low
+    // number) doesn't leave older high-version rows orphaned in
+    // realm_meta forever.
+    let iconHTML = '<svg>icon</svg>';
+
+    // realm_versions starts at 0, so the next batch will write at v1.
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 0 }],
+      [],
+    );
+
+    // Plant stale realm_meta rows at high version numbers — the kind of
+    // residue a long-running realm accumulates before its first
+    // from-scratch reindex.
+    for (let version of [50, 100, 200, 999]) {
+      await adapter.execute(
+        `INSERT INTO realm_meta (realm_url, realm_version, value, indexed_at)
+         VALUES ($1, $2, $3, $4)`,
+        {
+          bind: [
+            testRealmURL,
+            version,
+            JSON.stringify([
+              {
+                code_ref: `${testRealmURL}stale-${version}/Stale`,
+                display_name: `Stale-${version}`,
+                total: version,
+                icon_html: iconHTML,
+              },
+            ]),
+            String(Date.now() - version * 1000),
+          ],
+        },
+      );
+    }
+
+    let rowsBefore = await adapter.execute(
+      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      rowsBefore.map((r) => r.realm_version),
+      [50, 100, 200, 999],
+      'stale rows are seeded before the batch runs',
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL));
+    await batch.done();
+
+    let rowsAfter = await adapter.execute(
+      `SELECT realm_version FROM realm_meta WHERE realm_url = $1 ORDER BY realm_version`,
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      rowsAfter.map((r) => r.realm_version),
+      [1],
+      'pruneObsoleteEntries deletes every row that is not the current version, including higher-numbered stale ones',
+    );
+  });
+
   test('update realm meta includes error entries with last known good state', async function (assert) {
     let iconHTML = '<svg>test icon</svg>';
     let personTypes = internalKeysFor(
@@ -1727,5 +2061,583 @@ module('Unit | index-writer', function (hooks) {
       ],
       'card type summary uses last known good card type data',
     );
+  });
+
+  test('resumes URLs already processed by a previous attempt of the same job', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let lastModified = 1700000000;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: String(lastModified),
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      1,
+      'resumed rows from prior attempt of same job_id are loaded',
+    );
+    assert.strictEqual(
+      batch.resumedRows.get(url),
+      lastModified,
+      'last_modified value is preserved as a number',
+    );
+    assert.deepEqual(
+      batch.invalidations,
+      [url],
+      'resumed URLs are pre-seeded into the invalidation set so done() promotes them',
+    );
+  });
+
+  test('does not resume rows with has_error=true so the retry can re-attempt them', async function (assert) {
+    let url = `${testRealmURL}errored.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: true,
+            error_doc: {
+              message: 'transient',
+              status: 500,
+              additionalErrors: [],
+            },
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'errored rows are not resumed — the retry exists to re-attempt them',
+    );
+    assert.deepEqual(
+      batch.invalidations,
+      [],
+      'errored URLs are not pre-seeded into the invalidation set',
+    );
+  });
+
+  test('does not resume rows from a different job', async function (assert) {
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url: `${testRealmURL}from-other-job.json`,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 99,
+            last_modified: '1700000000',
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'rows tagged with a different job_id are not resumed',
+    );
+  });
+
+  test('working rows from another job are visible to dependency-walk queries but not to resumedRows', async function (assert) {
+    // The cumulative working table is the source of truth for the
+    // reverse-deps walk in `Batch.invalidate` (via
+    // `itemsThatReference`). Rows from completed prior batches must
+    // stay so subsequent jobs can find them. The `job_id` filter in
+    // `loadResumedRows` is what isolates the *current* job's
+    // resume-handoff from those rows.
+    let otherUrl = `${testRealmURL}other-job-row.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url: otherUrl,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 99,
+            last_modified: '1700000000',
+            is_deleted: false,
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'rows tagged with a different job_id are NOT in resumedRows',
+    );
+    let surviving = await adapter.execute(
+      'SELECT url FROM boxel_index_working WHERE realm_url = $1',
+      { bind: [testRealmURL] },
+    );
+    assert.deepEqual(
+      surviving.map((r) => r.url),
+      [otherUrl],
+      'cumulative working state is preserved (it is the source for reverse-deps walks)',
+    );
+  });
+
+  test('forgetResumedRows drops a URL from resumedRows so future tombstoning is no longer guarded', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            deps: [],
+            types: [],
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    assert.true(
+      batch.resumedRows.has(url),
+      'precondition: row is initially resumed',
+    );
+    batch.forgetResumedRows([url]);
+    assert.false(
+      batch.resumedRows.has(url),
+      'after forgetResumedRows the URL is no longer protected',
+    );
+    batch.forgetResumedRows([`${testRealmURL}does-not-exist.json`]);
+    assert.strictEqual(
+      batch.resumedRows.size,
+      0,
+      'forgetResumedRows on a URL that is not present is a no-op',
+    );
+  });
+
+  test('done() promotes resumed rows even though they were never visited in this attempt', async function (assert) {
+    let url = `${testRealmURL}1.json`;
+    let resumedDoc = {
+      id: url,
+      type: 'card' as const,
+      attributes: { name: 'Resumed' },
+      meta: { adoptsFrom: { module: rri(`./person`), name: 'Person' } },
+    };
+    await setupIndex(
+      adapter,
+      [{ realm_url: testRealmURL, current_version: 1 }],
+      {
+        working: [
+          {
+            url,
+            realm_version: 1,
+            realm_url: testRealmURL,
+            type: 'instance',
+            job_id: 42,
+            last_modified: '1700000000',
+            is_deleted: false,
+            has_error: false,
+            deps: [],
+            types: [],
+            pristine_doc: resumedDoc as LooseCardResource,
+            search_doc: { name: 'Resumed' },
+          },
+        ],
+        production: [],
+      },
+    );
+
+    let batch = await indexWriter.createBatch(new URL(testRealmURL), {
+      jobId: 42,
+      reservationId: 1,
+      priority: 0,
+    });
+    // Note: no updateEntry / invalidate call — simulating a retry that
+    // discovers all its work was already done by the previous attempt.
+    await batch.done();
+
+    let [promoted] = await adapter.execute(
+      `SELECT pristine_doc, search_doc FROM boxel_index WHERE url = $1`,
+      {
+        bind: [url],
+        coerceTypes: { pristine_doc: 'JSON', search_doc: 'JSON' },
+      },
+    );
+    assert.deepEqual(
+      promoted?.pristine_doc,
+      resumedDoc,
+      'resumed row was promoted to boxel_index by done()',
+    );
+    assert.deepEqual(
+      promoted?.search_doc,
+      { name: 'Resumed' },
+      'resumed row search_doc landed in boxel_index',
+    );
+  });
+
+  module('getOrderingDependencyRows', function () {
+    test('returns production row when URL exists only in boxel_index', async function (assert) {
+      let url = `${testRealmURL}prod-only.json`;
+      let depUrl = `${testRealmURL}prod-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns the production row deps',
+      );
+    });
+
+    test('returns working row when URL exists only in boxel_index_working and is not deleted', async function (assert) {
+      let url = `${testRealmURL}working-only.json`;
+      let depUrl = `${testRealmURL}working-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns the working row deps',
+      );
+    });
+
+    test('working non-deleted wins over production when both exist', async function (assert) {
+      let url = `${testRealmURL}both.json`;
+      let workingDep = `${testRealmURL}working-dep.json`;
+      let productionDep = `${testRealmURL}production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [workingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [workingDep] }],
+        'working-non-deleted beat production',
+      );
+    });
+
+    test('production wins over deleted working row', async function (assert) {
+      let url = `${testRealmURL}deleted-working.json`;
+      let workingDep = `${testRealmURL}should-not-appear.json`;
+      let productionDep = `${testRealmURL}production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: true,
+              deps: [workingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [productionDep] }],
+        'production picked when working row is deleted',
+      );
+    });
+
+    test('falls back to deleted working row when no production exists', async function (assert) {
+      let url = `${testRealmURL}deleted-only.json`;
+      let depUrl = `${testRealmURL}deleted-only-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: true,
+              deps: [depUrl],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.deepEqual(
+        rows,
+        [{ url, type: 'instance', deps: [depUrl] }],
+        'returns deleted working row as last-resort fallback',
+      );
+    });
+
+    test('mixed input returns the correct provenance per URL', async function (assert) {
+      let workingOnlyUrl = `${testRealmURL}mixed-working.json`;
+      let workingOnlyDep = `${testRealmURL}mixed-working-dep.json`;
+      let productionOnlyUrl = `${testRealmURL}mixed-production.json`;
+      let productionOnlyDep = `${testRealmURL}mixed-production-dep.json`;
+      let bothUrl = `${testRealmURL}mixed-both.json`;
+      let bothWorkingDep = `${testRealmURL}mixed-both-working-dep.json`;
+      let bothProductionDep = `${testRealmURL}mixed-both-production-dep.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url: workingOnlyUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [workingOnlyDep],
+              types: [],
+            },
+            {
+              url: bothUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              deps: [bothWorkingDep],
+              types: [],
+            },
+          ],
+          production: [
+            {
+              url: productionOnlyUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [productionOnlyDep],
+              types: [],
+            },
+            {
+              url: bothUrl,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              deps: [bothProductionDep],
+              types: [],
+            },
+          ],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([
+        workingOnlyUrl,
+        productionOnlyUrl,
+        bothUrl,
+      ]);
+      let byUrl = new Map(rows.map((r) => [r.url, r]));
+      assert.deepEqual(
+        byUrl.get(workingOnlyUrl),
+        { url: workingOnlyUrl, type: 'instance', deps: [workingOnlyDep] },
+        'working-only URL returns working deps',
+      );
+      assert.deepEqual(
+        byUrl.get(productionOnlyUrl),
+        {
+          url: productionOnlyUrl,
+          type: 'instance',
+          deps: [productionOnlyDep],
+        },
+        'production-only URL returns production deps',
+      );
+      assert.deepEqual(
+        byUrl.get(bothUrl),
+        { url: bothUrl, type: 'instance', deps: [bothWorkingDep] },
+        'URL present in both returns working deps (working wins)',
+      );
+      assert.strictEqual(rows.length, 3, 'one row returned per requested URL');
+    });
+
+    test('projection excludes error_doc, has_error, and is_deleted', async function (assert) {
+      let url = `${testRealmURL}projection.json`;
+      await setupIndex(
+        adapter,
+        [{ realm_url: testRealmURL, current_version: 1 }],
+        {
+          working: [
+            {
+              url,
+              realm_version: 1,
+              realm_url: testRealmURL,
+              type: 'instance',
+              is_deleted: false,
+              has_error: true,
+              error_doc: {
+                id: url,
+                status: 500,
+                title: 'kaboom',
+                message: 'should not be returned',
+                additionalErrors: null,
+              },
+              deps: [],
+              types: [],
+            },
+          ],
+          production: [],
+        },
+      );
+
+      let batch = await indexWriter.createBatch(new URL(testRealmURL));
+      let rows = await batch.getOrderingDependencyRows([url]);
+      assert.strictEqual(rows.length, 1, 'one row returned');
+      let row = rows[0]!;
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        ['deps', 'type', 'url'],
+        'row exposes only url, type, deps — no error_doc / has_error / is_deleted',
+      );
+    });
   });
 });

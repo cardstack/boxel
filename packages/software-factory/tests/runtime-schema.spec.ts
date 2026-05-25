@@ -17,7 +17,6 @@ import { rri } from '@cardstack/runtime-common/card-reference-resolver';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
-import { sourceRealmURLFor } from '../src/harness/shared';
 import { buildTestClient } from './helpers/test-client';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
@@ -28,12 +27,12 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
 }) => {
   let realmServerUrl = realm.realmServerURL.href;
   // The darkfactory module lives in the source realm, not the test realm
-  let sourceRealmUrl = ensureTrailingSlash(
-    sourceRealmURLFor(realm.realmServerURL).href,
+  let sourceRealm = ensureTrailingSlash(
+    new URL('software-factory/', realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealm,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -42,11 +41,11 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
   try {
     let response = await client.runCommand(
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealm,
       GET_CARD_TYPE_SCHEMA_COMMAND,
       {
         codeRef: {
-          module: `${sourceRealmUrl}darkfactory`,
+          module: `${sourceRealm}darkfactory`,
           name: 'Project',
         },
       },
@@ -71,12 +70,12 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
 
 test('fetches Issue schema with enum fields', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let sourceRealmUrl = ensureTrailingSlash(
-    sourceRealmURLFor(realm.realmServerURL).href,
+  let sourceRealm = ensureTrailingSlash(
+    new URL('software-factory/', realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealm,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -86,9 +85,9 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     let schema = await fetchCardTypeSchema(
       client,
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealm,
       {
-        module: rri(`${sourceRealmUrl}darkfactory`),
+        module: rri(`${sourceRealm}darkfactory`),
         name: 'Issue',
       },
     );
@@ -108,14 +107,14 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
   }
 });
 
-test('fetches KnowledgeArticle schema', async ({ realm }) => {
+test('fetches IssueTracker schema', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let sourceRealmUrl = ensureTrailingSlash(
-    sourceRealmURLFor(realm.realmServerURL).href,
+  let sourceRealm = ensureTrailingSlash(
+    new URL('software-factory/', realm.realmServerURL).href,
   );
 
   let { client, cleanup } = buildTestClient({
-    realmUrl: sourceRealmUrl,
+    realmUrl: sourceRealm,
     realmToken: `Bearer ${realm.ownerBearerToken}`,
     realmServerUrl,
     realmServerToken: `Bearer ${realm.serverToken}`,
@@ -125,9 +124,46 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
     let schema = await fetchCardTypeSchema(
       client,
       realmServerUrl,
-      sourceRealmUrl,
+      sourceRealm,
       {
-        module: rri(`${sourceRealmUrl}darkfactory`),
+        module: rri(`${sourceRealm}issue-tracker`),
+        name: 'IssueTracker',
+      },
+    );
+
+    expect(schema).toBeDefined();
+    let attrs = schema!.attributes as {
+      properties: Record<string, Record<string, unknown>>;
+    };
+    expect(attrs.properties).toHaveProperty('boardKey');
+    expect(attrs.properties).toHaveProperty('boardTitle');
+    expect(attrs.properties).toHaveProperty('hideEmptyColumns');
+    expect(attrs.properties).toHaveProperty('placements');
+  } finally {
+    cleanup();
+  }
+});
+
+test('fetches KnowledgeArticle schema', async ({ realm }) => {
+  let realmServerUrl = realm.realmServerURL.href;
+  let sourceRealm = ensureTrailingSlash(
+    new URL('software-factory/', realm.realmServerURL).href,
+  );
+
+  let { client, cleanup } = buildTestClient({
+    realmUrl: sourceRealm,
+    realmToken: `Bearer ${realm.ownerBearerToken}`,
+    realmServerUrl,
+    realmServerToken: `Bearer ${realm.serverToken}`,
+  });
+
+  try {
+    let schema = await fetchCardTypeSchema(
+      client,
+      realmServerUrl,
+      sourceRealm,
+      {
+        module: rri(`${sourceRealm}darkfactory`),
         name: 'KnowledgeArticle',
       },
     );

@@ -47,18 +47,17 @@ export default class AskAiCommand extends HostBaseCommand<
       enabledSkills: skills,
       llmMode: input.llmMode,
     });
-    sendMessageCommand.execute({
+    await sendMessageCommand.execute({
       roomId,
       prompt: input.prompt,
       attachedCards: openCards,
       openCardIds: openCards?.map((c: any) => c.id),
-      realmUrl: this.operatorModeStateService.realmURL,
+      realmIdentifier: this.operatorModeStateService.realmURL,
     });
 
     await openRoomCommand.execute({ roomId });
 
-    // Import AskAiOutput from the base command module
-    const commandModule = await this.loadCommandModule();
+    let commandModule = await this.loadCommandModule();
     return new commandModule.AskAiOutput({
       response:
         'AI assistant room created and opened successfully. You can now interact with the AI assistant.',

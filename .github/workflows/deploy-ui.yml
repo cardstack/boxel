@@ -53,6 +53,10 @@ jobs:
         run: pnpm deploy:boxel-ui ${{ inputs.environment }} --verbose
 
       - name: Send notification to Discord
+        # Don't let a flaky Discord webhook fail the deploy job —
+        # the deploy itself has already happened by this point.
+        continue-on-error: true
+        timeout-minutes: 2
         uses: cardstack/gh-actions/discord-notification-deploy@main
         with:
           app: "boxel-ui"

@@ -1,5 +1,16 @@
 (globalThis as any).__environment = 'test';
 
+// Strip the dev TLS env vars before any fixture realm-server is spun up.
+// `env-vars.sh` exports these whenever the local mkcert cert exists, which
+// is now the CI default. Without this delete, in-process fixture servers
+// would bind the HTTPS+HTTP/2 dispatcher on their random `127.0.0.1:444X`
+// ports and the dispatcher's plain-HTTP branch would 308-redirect every
+// supertest request to `https://…`, breaking every assertion that expects
+// `200`/`4xx`. In-process tests don't need TLS — they speak HTTP/1.1 to
+// supertest directly.
+delete process.env.REALM_SERVER_TLS_CERT_FILE;
+delete process.env.REALM_SERVER_TLS_KEY_FILE;
+
 // Ensure test timers don't hold the Node event loop open. Wrap setTimeout and
 // setInterval to unref timers so the process can exit once work is done. This
 // does have the effect of masking any issues where code should be clearing
@@ -23,9 +34,6 @@
     return handle;
   }) as typeof setInterval;
 }
-
-import * as ContentTagGlobal from 'content-tag';
-(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 import QUnit from 'qunit';
 
@@ -159,92 +167,157 @@ QUnit.done(() => {
 
 import 'decorator-transforms/globals';
 import '../setup-logger'; // This should be first
-import './atomic-endpoints-test';
-import './auth-client-test';
-import './billing-test';
-import './card-dependencies-endpoint-test';
-import './card-endpoints-test';
-import './card-source-endpoints-test';
-import './definition-lookup-test';
-import './file-watcher-events-test';
-import './full-reindex-test';
-import './indexing-test';
-import './module-syntax-test';
-import './permissions/permission-checker-test';
-import './prerendering-test';
-import './prerender-server-test';
-import './prerender-manager-test';
-import './prerender-affinity-activity-test';
-import './prerender-batch-ownership-test';
-import './prerender-cancellation-test';
-import './runtime-exception-capture-test';
-import './clamp-serialized-error-test';
-import './prerender-diagnostics-persistence-test';
-import './prerender-proxy-test';
-import './queue-test';
-import './run-command-task-test';
-import './realm-endpoints-test';
-import './realm-endpoints/dependencies-test';
-import './realm-registry-backfill-test';
-import './realm-endpoints/directory-test';
-import './realm-endpoints/info-test';
-import './realm-endpoints/invalidate-urls-test';
-import './realm-endpoints/lint-test';
-import './realm-endpoints/markdown-test';
-import './realm-endpoints/mtimes-test';
-import './realm-endpoints/permissions-test';
-import './realm-endpoints/cancel-indexing-job-test';
-import './realm-endpoints/publishability-test';
-import './realm-endpoints/reindex-test';
-import './realm-endpoints/search-test';
-import './realm-endpoints/user-test';
-import './search-prerendered-test';
-import './server-endpoints/authentication-test';
-import './server-endpoints/bot-commands-test';
-import './server-endpoints/bot-registration-test';
-import './server-endpoints/delete-realm-test';
-import './server-endpoints/download-realm-test';
-import './server-endpoints/federated-types-test';
-import './server-endpoints/index-responses-test';
-import './server-endpoints/maintenance-endpoints-test';
-import './server-endpoints/queue-status-test';
-import './server-endpoints/realm-lifecycle-test';
-import './server-endpoints/run-command-endpoint-test';
-import './server-endpoints/search-test';
-import './server-endpoints/search-prerendered-test';
-import './server-config-test';
-import './server-endpoints/info-test';
-import './server-endpoints/stripe-session-test';
-import './server-endpoints/stripe-webhook-test';
-import './server-endpoints/user-and-catalog-test';
-import './server-endpoints/incoming-webhook-test';
-import './server-endpoints/webhook-commands-test';
-import './server-endpoints/webhook-receiver-test';
-import './transpile-test';
-import './types-endpoint-test';
-import './virtual-network-test';
-import './request-forward-test';
-import './publish-unpublish-realm-test';
-import './boxel-domain-availability-test';
-import './get-boxel-claimed-domain-test';
-import './claim-boxel-domain-test';
-import './card-reference-resolver-test';
-import './bfm-card-references-test';
-import './loader-retry-test';
-import './package-shim-handler-test';
-import './command-parsing-utils-test';
-import './query-matches-filter-test';
-import './matches-filter-integration-test';
-import './delete-boxel-claimed-domain-test';
-import './realm-auth-test';
-import './queries-test';
-import './remote-prerenderer-test';
-import './runtime-dependency-tracker-test';
-import './markdown-fallback-server-isolation-test';
-import './sanitize-head-html-test';
-import './node-realm-test';
-import './session-room-queries-test';
-import './indexing-event-sink-test';
+
+const ALL_TEST_FILES: string[] = [
+  './atomic-endpoints-test',
+  './auth-client-test',
+  './billing-test',
+  './card-dependencies-endpoint-test',
+  './card-endpoints-test',
+  './card-source-endpoints-test',
+  './definition-lookup-test',
+  './file-watcher-events-test',
+  './full-index-on-startup-test',
+  './full-reindex-test',
+  './indexing-test',
+  './lazy-mount-test',
+  './listener-dispatcher-test',
+  './module-cache-race-test',
+  './module-syntax-test',
+  './permissions/permission-checker-test',
+  './prerendering-test',
+  './prerender-server-test',
+  './prerender-manager-test',
+  './prerender-affinity-activity-test',
+  './prerender-batch-ownership-test',
+  './prerender-cancellation-test',
+  './async-semaphore-test',
+  './page-pool-expansion-test',
+  './page-pool-priority-test',
+  './page-pool-eviction-recovery-test',
+  './page-pool-standby-refill-test',
+  './prerender-deadlock-test',
+  './runtime-exception-capture-test',
+  './clamp-serialized-error-test',
+  './prerender-diagnostics-persistence-test',
+  './prerender-proxy-test',
+  './queue-test',
+  './finalize-orphan-reservations-test',
+  './finalize-child-fatal-failure-test',
+  './screenshot-card-test',
+  './run-command-task-test',
+  './realm-endpoints-test',
+  './realm-endpoints/dependencies-test',
+  './realm-advisory-locks-test',
+  './realm-cleanup-transaction-test',
+  './realm-config-card-backfill-test',
+  './data-plane-write-lock-test',
+  './realm-registry-backfill-test',
+  './realm-registry-reconciler-test',
+  './realm-registry-writes-test',
+  './realm-file-changes-listener-test',
+  './realm-index-updated-listener-test',
+  './realm-routing-test',
+  './module-cache-invalidation-listener-test',
+  './pg-adapter-subscribe-test',
+  './module-cache-coordination-test',
+  './realm-endpoints/directory-test',
+  './realm-endpoints/info-test',
+  './realm-endpoints/invalidate-urls-test',
+  './realm-endpoints/lint-test',
+  './realm-endpoints/markdown-test',
+  './realm-endpoints/mtimes-test',
+  './realm-endpoints/permissions-test',
+  './realm-endpoints/cancel-indexing-job-test',
+  './realm-endpoints/publishability-test',
+  './realm-endpoints/reindex-test',
+  './realm-endpoints/search-test',
+  './realm-endpoints/user-test',
+  './search-prerendered-test',
+  './server-endpoints/authentication-test',
+  './server-endpoints/bot-commands-test',
+  './server-endpoints/bot-registration-test',
+  './server-endpoints/delete-realm-test',
+  './server-endpoints/download-realm-test',
+  './server-endpoints/federated-types-test',
+  './server-endpoints/index-responses-test',
+  './server-endpoints/maintenance-endpoints-test',
+  './server-endpoints/queue-status-test',
+  './server-endpoints/realm-lifecycle-test',
+  './server-endpoints/run-command-endpoint-test',
+  './server-endpoints/screenshot-card-endpoint-test',
+  './server-endpoints/search-test',
+  './server-endpoints/search-prerendered-test',
+  './serve-index-test',
+  './server-config-test',
+  './server-endpoints/info-test',
+  './server-endpoints/stripe-session-test',
+  './server-endpoints/stripe-webhook-test',
+  './server-endpoints/user-and-catalog-test',
+  './server-endpoints/incoming-webhook-test',
+  './server-endpoints/webhook-commands-test',
+  './server-endpoints/webhook-receiver-test',
+  './transpile-test',
+  './types-endpoint-test',
+  './virtual-network-test',
+  './request-forward-test',
+  './openrouter-passthrough-test',
+  './publish-unpublish-realm-test',
+  './boxel-domain-availability-test',
+  './get-boxel-claimed-domain-test',
+  './claim-boxel-domain-test',
+  './card-reference-resolver-test',
+  './bfm-card-references-test',
+  './package-shim-handler-test',
+  './command-parsing-utils-test',
+  './query-matches-filter-test',
+  './matches-filter-integration-test',
+  './search-in-flight-key-test',
+  './coerce-error-message-test',
+  './normalize-realm-meta-value-test',
+  './job-scoped-search-cache-test',
+  './consuming-realm-header-test',
+  './delete-boxel-claimed-domain-test',
+  './realm-auth-test',
+  './queries-test',
+  './remote-prerenderer-test',
+  './runtime-dependency-tracker-test',
+  './markdown-fallback-server-isolation-test',
+  './sanitize-head-html-test',
+  './node-realm-test',
+  './session-room-queries-test',
+  './indexing-event-sink-test',
+];
+
+// TEST_FILES limits which test files are loaded (parsed and executed). Useful
+// when measuring a single file's wall time or peak RSS in isolation —
+// TEST_MODULES only filters which modules *run*, while every file still gets
+// parsed. Accepts a comma-separated list of paths relative to this directory,
+// with or without a leading `./` or trailing `.ts`.
+const testFilesEnv = process.env.TEST_FILES?.trim();
+const filesToLoad = testFilesEnv
+  ? parseTestFiles(testFilesEnv)
+  : ALL_TEST_FILES;
+
+if (testFilesEnv) {
+  console.log(
+    `Loading only test files from TEST_FILES: ${filesToLoad.join(', ')}`,
+  );
+}
+
+for (const file of filesToLoad) {
+  require(file);
+}
+
+function parseTestFiles(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^['"]+|['"]+$/g, ''))
+    .map((entry) => entry.replace(/\.ts$/, ''))
+    .map((entry) => (entry.startsWith('./') ? entry : `./${entry}`));
+}
 
 function parseModules(value: string): string[] {
   return value

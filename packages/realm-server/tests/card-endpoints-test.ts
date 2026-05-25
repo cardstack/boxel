@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import supertest from 'supertest';
 import { join, basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { existsSync, readJSONSync, statSync, writeFileSync } from 'fs-extra';
 import type {
@@ -140,6 +140,7 @@ module(basename(__filename), function () {
     module('card GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -873,10 +874,86 @@ module(basename(__filename), function () {
             'deeply nested linksToMany returns first match',
           );
         });
+
+        test('returns an ETag and public cache-control on a 200 response', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let etag = response.get('etag') ?? '';
+          assert.ok(etag, 'response carries an ETag');
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(etag),
+            `ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${etag})`,
+          );
+          assert.strictEqual(
+            response.get('cache-control'),
+            'public, max-age=0, must-revalidate',
+            'world-readable realm advertises public cache-control',
+          );
+          // The X-Boxel-Etag-Suppressed signal only fires when the
+          // foreign-deps guard rejects the ETag; a card with purely
+          // local deps must NOT carry it, otherwise ops dashboards
+          // can't tell normal from suppressed traffic.
+          assert.notOk(
+            response.get('X-Boxel-Etag-Suppressed'),
+            'no suppression signal on a card with only local deps',
+          );
+        });
+
+        test('returns 304 when If-None-Match matches the current ETag', async function (assert) {
+          let firstResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          assert.strictEqual(firstResponse.status, 200, 'first GET succeeds');
+          let etag = firstResponse.get('etag') ?? '';
+          assert.ok(etag, 'first response carries an ETag');
+
+          let secondResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', etag);
+
+          assert.strictEqual(
+            secondResponse.status,
+            304,
+            'matching If-None-Match short-circuits to 304',
+          );
+          assert.strictEqual(
+            secondResponse.get('etag'),
+            etag,
+            '304 response echoes the ETag',
+          );
+          assert.strictEqual(
+            secondResponse.get('cache-control'),
+            'public, max-age=0, must-revalidate',
+            '304 response keeps the cache-control directive',
+          );
+          // 304 must not have a body — `response.body` may be `{}` when
+          // supertest can't decode an empty buffer, so check `response.text`.
+          assert.notOk(secondResponse.text, '304 response has no body');
+        });
+
+        test('returns 200 when If-None-Match does not match', async function (assert) {
+          let response = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', '"stale-etag"');
+
+          assert.strictEqual(
+            response.status,
+            200,
+            'non-matching If-None-Match falls through to a fresh 200',
+          );
+          assert.ok(response.body.data, 'full body is returned');
+          assert.ok(response.get('etag'), '200 response still carries an ETag');
+        });
       });
 
       module('published realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -962,6 +1039,7 @@ module(basename(__filename), function () {
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1038,6 +1116,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read'],
@@ -1102,6 +1181,15 @@ module(basename(__filename), function () {
             undefined,
             'realm is not public readable',
           );
+          assert.strictEqual(
+            response.get('cache-control'),
+            'private, max-age=0, must-revalidate',
+            'auth-gated realm advertises private cache-control so a shared cache cannot serve one user the response of another',
+          );
+          assert.ok(
+            response.get('etag'),
+            'auth-gated response carries an ETag',
+          );
         });
 
         test('200 when server user assumes user that has read permission', async function (assert) {
@@ -1145,6 +1233,7 @@ module(basename(__filename), function () {
     module('card POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1260,7 +1349,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -1288,7 +1377,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1301,7 +1390,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1314,7 +1403,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1363,7 +1452,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1404,7 +1493,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1433,7 +1522,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1462,7 +1551,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1520,7 +1609,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1587,7 +1676,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1621,7 +1710,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1655,7 +1744,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1727,7 +1816,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1776,7 +1865,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1810,7 +1899,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -1865,7 +1954,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1922,7 +2011,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1954,7 +2043,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -1968,7 +2057,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),
@@ -2016,7 +2105,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                   },
@@ -2052,7 +2141,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                   realmURL: ri(testRealmHref.replace(/\/$/, '')),
@@ -2088,7 +2177,7 @@ module(basename(__filename), function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: rri('http://localhost:4202/node-test/friend'),
+                    module: rri('https://localhost:4202/node-test/friend'),
                     name: 'Friend',
                   },
                 },
@@ -2141,7 +2230,7 @@ module(basename(__filename), function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: rri('http://localhost:4202/node-test/friend'),
+                  module: rri('https://localhost:4202/node-test/friend'),
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2156,6 +2245,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -2235,6 +2325,7 @@ module(basename(__filename), function () {
     module('card PATCH request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -2355,6 +2446,70 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.data.length, 1, 'found one card');
         });
 
+        test('PATCH preserves nested contains attribute values on disk', async function (assert) {
+          // Regression test for the file-serializer's handling of dotted
+          // attribute paths. Person.cardInfo is `contains(CardInfoField)`
+          // and CardInfoField has its own immediate fields like
+          // `summary` and `notes`. A PATCH that writes
+          // `attributes.cardInfo.summary` must persist that value to
+          // disk; an earlier shape relied on materialized
+          // `definition.fields["cardInfo.summary"]` entries to find the
+          // FieldDefinition, and the no-materialization shape requires
+          // `processAttributes` to descend into the child definition
+          // (CardInfoField) at recursion. Without that, the nested
+          // attribute is silently dropped.
+          let entry = 'person-1.json';
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Mango',
+                  cardInfo: {
+                    name: 'Mango Card',
+                    notes: 'a friendly dog',
+                    summary: 'good boy',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body.data.attributes?.cardInfo,
+            {
+              name: 'Mango Card',
+              notes: 'a friendly dog',
+              summary: 'good boy',
+              cardThumbnailURL: null,
+            },
+            'nested cardInfo values present in PATCH response',
+          );
+
+          let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
+          assert.ok(existsSync(cardFile), 'card json exists on disk');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card.data.attributes?.cardInfo,
+            {
+              name: 'Mango Card',
+              notes: 'a friendly dog',
+              summary: 'good boy',
+              cardThumbnailURL: null,
+            },
+            'nested cardInfo values persisted to disk by file-serializer',
+          );
+        });
+
         test('no-op patch returns existing lastModified and does not rewrite file', async function (assert) {
           let cardFile = join(
             dir.name,
@@ -2407,6 +2562,105 @@ module(basename(__filename), function () {
             afterStat.mtimeMs,
             initialStat.mtimeMs,
             'card file not rewritten for no-op patch',
+          );
+        });
+
+        test('PATCH response carries an ETag and writes invalidate the previous one', async function (assert) {
+          // Capture the pre-patch ETag, mutate the card, and verify the PATCH
+          // response advertises a *different* ETag for the new state — that's
+          // the contract that lets the caller cache the post-patch body
+          // without an extra round-trip GET.
+          let initialResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let originalEtag = initialResponse.get('etag') ?? '';
+          assert.ok(originalEtag, 'initial GET returns an ETag');
+
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh' },
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person.gts'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(patchResponse.status, 200, 'PATCH succeeds');
+          let patchEtag = patchResponse.get('etag') ?? '';
+          assert.ok(patchEtag, 'PATCH response carries an ETag');
+          assert.true(
+            /^"\d+(?:-[0-9a-f]+)?:card"$/.test(patchEtag),
+            `PATCH ETag matches "<indexed_at>(-<realmInfoHash>)?:card" pattern (got ${patchEtag})`,
+          );
+          assert.notStrictEqual(
+            patchEtag,
+            originalEtag,
+            'PATCH advances the ETag because indexed_at bumps on the rewrite',
+          );
+
+          // Sending the OLD etag against If-None-Match must NOT short-circuit
+          // (otherwise we'd serve a stale 304 after a write).
+          let staleResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', originalEtag);
+          assert.strictEqual(
+            staleResponse.status,
+            200,
+            'old ETag no longer matches → fresh 200',
+          );
+          assert.strictEqual(
+            staleResponse.get('etag'),
+            patchEtag,
+            'GET reports the new ETag',
+          );
+
+          // And the new etag from the PATCH must short-circuit on next GET.
+          let cachedResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json')
+            .set('If-None-Match', patchEtag);
+          assert.strictEqual(
+            cachedResponse.status,
+            304,
+            'new ETag from PATCH lets a follow-up GET short-circuit',
+          );
+        });
+
+        test('no-op PATCH response carries an ETag matching the existing one', async function (assert) {
+          let initialResponse = await request
+            .get('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+          let initialEtag = initialResponse.get('etag');
+          assert.ok(initialEtag, 'initial GET returns an ETag');
+
+          let patchResponse = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: rri('./person'),
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(patchResponse.status, 200, 'no-op PATCH succeeds');
+          assert.strictEqual(
+            patchResponse.get('etag'),
+            initialEtag,
+            'no-op PATCH returns the same ETag (no rewrite, indexed_at unchanged)',
           );
         });
 
@@ -3275,7 +3529,7 @@ module(basename(__filename), function () {
                 meta: {
                   adoptsFrom: {
                     module: rri(
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                      'https://localhost:4202/node-test/friend-with-used-link',
                     ),
                     name: 'FriendWithUsedLink',
                   },
@@ -3291,7 +3545,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3367,7 +3621,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3398,7 +3652,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3458,7 +3712,7 @@ module(basename(__filename), function () {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
                   module: rri(
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                    'https://localhost:4202/node-test/friend-with-used-link',
                   ),
                 },
                 realmInfo: testRealmInfo,
@@ -3509,7 +3763,7 @@ module(basename(__filename), function () {
                   meta: {
                     adoptsFrom: {
                       module: rri(
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                        'https://localhost:4202/node-test/friend-with-used-link',
                       ),
                       name: 'FriendWithUsedLink',
                     },
@@ -3565,7 +3819,7 @@ module(basename(__filename), function () {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
                   module: rri(
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                    'https://localhost:4202/node-test/friend-with-used-link',
                   ),
                 },
                 realmInfo: testRealmInfo,
@@ -3611,7 +3865,7 @@ module(basename(__filename), function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: rri('http://localhost:4202/node-test/friend'),
+                      module: rri('https://localhost:4202/node-test/friend'),
                       name: 'Friend',
                     },
                     realmURL: ri(`http://some-other-realm/`),
@@ -3726,6 +3980,7 @@ module(basename(__filename), function () {
 
       module('public writable realm with size limit', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -3775,6 +4030,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -3847,6 +4103,7 @@ module(basename(__filename), function () {
     module('card DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -3959,6 +4216,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -4013,18 +4271,37 @@ module(basename(__filename), function () {
         onRealmSetup,
       });
 
-      test('rejects HTTP requests to file URLs', async function (assert) {
-        let response;
-        response = await request
+      test('GET on a file URL with a card+json Accept returns a file-meta JSON document', async function (assert) {
+        let response = await request
           .get('/greeting.txt')
           .set('Accept', 'application/vnd.card+json');
 
         assert.strictEqual(
           response.status,
-          415,
-          'rejects GET for a file URL with 415 status',
+          200,
+          'GET serves a file-meta document instead of 415',
         );
+        assert.true(
+          (response.headers['content-type'] ?? '').startsWith(
+            'application/vnd.card+json',
+          ),
+          'response is JSON, not raw file bytes',
+        );
+        let doc = JSON.parse(response.text);
+        assert.strictEqual(
+          doc?.data?.type,
+          'file-meta',
+          'data.type identifies the resource as file-meta',
+        );
+        assert.strictEqual(
+          doc?.data?.attributes?.name,
+          'greeting.txt',
+          'attributes.name carries the file name',
+        );
+      });
 
+      test('rejects write requests to file URLs', async function (assert) {
+        let response;
         response = await request
           .patch('/greeting.txt')
           .send({

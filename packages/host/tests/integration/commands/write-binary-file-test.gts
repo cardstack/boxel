@@ -34,9 +34,10 @@ class StubRealmService extends RealmService {
     };
   }
 
-  realmOfURL(url: URL) {
-    if (url.href.startsWith(testRealmURL)) {
-      return new URL(testRealmURL);
+  realmOf(input: URL | string) {
+    let str = input instanceof URL ? input.href : input;
+    if (str.startsWith(testRealmURL)) {
+      return testRealmURL;
     }
     return undefined;
   }
@@ -73,7 +74,7 @@ module('Integration | commands | write-binary-file', function (hooks) {
       base64Content: TINY_PNG_BASE64,
     });
     assert.strictEqual(
-      result.fileUrl,
+      result.fileIdentifier,
       `${testRealmURL}test-image.png`,
       'returns the correct file URL',
     );
@@ -154,7 +155,7 @@ module('Integration | commands | write-binary-file', function (hooks) {
       base64Content: TINY_PNG_BASE64,
     });
     assert.strictEqual(
-      result.fileUrl,
+      result.fileIdentifier,
       `${testRealmURL}test-image.png`,
       'leading slash is stripped from path',
     );

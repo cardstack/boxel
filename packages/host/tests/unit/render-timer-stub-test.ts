@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import {
   enableRenderTimerStub,
   beginTimerBlock,
+  scheduleNativeTimeout,
 } from '@cardstack/host/utils/render-timer-stub';
 
 module('Unit | Utils | render timer stub', function () {
@@ -68,6 +69,43 @@ module('Unit | Utils | render timer stub', function () {
         postBlockTimerFired,
         'timer created after block runs normally',
       );
+    } finally {
+      restoreStub();
+    }
+  });
+
+  test('scheduleNativeTimeout resolves a sleep promise while timers are blocked', async function (assert) {
+    // The loader's transient-5xx retry uses an injected sleep that goes
+    // through scheduleNativeTimeout so the retry actually fires during
+    // prerender. Without this bypass, `setTimeout(resolve, ms)` would be
+    // silently swallowed by the stub and the awaited promise would never
+    // resolve, hanging the render until the prerender timeout.
+    assert.expect(2);
+    let restoreStub = enableRenderTimerStub();
+    try {
+      let releaseBlock = beginTimerBlock();
+      try {
+        let stubbedSleepFired = false;
+        window.setTimeout(() => {
+          stubbedSleepFired = true;
+        }, 0);
+
+        let resolved = false;
+        await new Promise<void>((resolve) =>
+          scheduleNativeTimeout(() => {
+            resolved = true;
+            resolve();
+          }, 5),
+        );
+
+        assert.true(resolved, 'native-scheduled sleep promise resolved');
+        assert.false(
+          stubbedSleepFired,
+          'a setTimeout callback scheduled while blocked still does not fire',
+        );
+      } finally {
+        releaseBlock();
+      }
     } finally {
       restoreStub();
     }

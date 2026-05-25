@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Reorganize hero section",
+      "body": "What if we lead with the live demo instead of the headline? Could test next sprint.",
+      "color": "yellow",
+      "x": 120,
+      "y": 80,
+      "rotation": -2,
+      "author": "Sam",
+      "createdAt": "2026-04-15T10:30:00.000Z",
+      "cardInfo": {
+        "name": "Reorganize hero section"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}

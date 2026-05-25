@@ -1,9 +1,19 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start realm development server"
-#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db"]
+#MISE depends=["infra:ensure-dev-cert", "infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# Propagate realm-server's exit status through the trailing `| dev-log-tee.sh`
+# pipeline so mise sees crashes instead of the tee stage's clean EOF.
+# `set -o pipefail` is a bashism — Ubuntu CI's /bin/sh is dash and rejects it
+# as "Illegal option", so this script must run under bash.
+set -o pipefail
+
 SCRIPTS_DIR="./scripts"
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
 
 sh "$SCRIPTS_DIR/start-icons.sh" &
 ICONS_PID=$!
@@ -12,7 +22,15 @@ cleanup_icons_server() {
     kill "$ICONS_PID" >/dev/null 2>&1 || true
   fi
 }
-trap cleanup_icons_server EXIT INT TERM
+# EXIT runs cleanup unconditionally. INT/TERM additionally exit 0 so that the
+# 143-on-Ctrl-C from the ts-node pipeline below isn't reported by mise /
+# run-p as "task failed" — see mise-tasks/services/worker for the broader
+# rationale. Real crashes still propagate (ts-node faulting on its own
+# leaves the trap unfired, so pipefail's 143-aware exit code wins).
+# The signal handler clears the EXIT trap before exiting so cleanup doesn't
+# run twice in succession.
+trap cleanup_icons_server EXIT
+trap 'trap - EXIT; cleanup_icons_server; exit 0' INT TERM
 
 pnpm --dir=../skills-realm skills:setup
 
@@ -40,8 +58,6 @@ START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo "";
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_LEGACY_CATALOG_REALM_URL="${REALM_BASE_URL}/legacy-catalog/"
-LEGACY_CATALOG_REALM_URL="${RESOLVED_LEGACY_CATALOG_REALM_URL:-$DEFAULT_LEGACY_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL="${REALM_BASE_URL}/boxel-homepage/"
@@ -49,9 +65,6 @@ BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HO
 DEFAULT_SUBMISSION_REALM_URL="${REALM_BASE_URL}/submissions/"
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-$DEFAULT_SUBMISSION_REALM_URL}"
 
-# Used in start-services-for-host-tests.sh to point to a trimmed down
-# version of the catalog-realm for faster startup.
-LEGACY_CATALOG_REALM_PATH="${LEGACY_CATALOG_REALM_PATH:-${CATALOG_REALM_PATH:-../catalog-realm}}"
 SUBMISSION_REALM_PATH="${SUBMISSION_REALM_PATH:-${REALMS_ROOT}/submissions}"
 
 if [ -n "$START_SUBMISSION" ]; then
@@ -95,11 +108,6 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  ${START_CATALOG:+--path="${LEGACY_CATALOG_REALM_PATH}"} \
-  ${START_CATALOG:+--username='legacy_catalog_realm'} \
-  ${START_CATALOG:+--fromUrl="${LEGACY_CATALOG_REALM_URL}"} \
-  ${START_CATALOG:+--toUrl="${LEGACY_CATALOG_REALM_URL}"} \
-  \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
   --fromUrl='@cardstack/skills/' \
@@ -128,4 +136,5 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --path='../software-factory/realm' \
   --username='software_factory_realm' \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
-  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  2>&1 | "$LOG_TEE" realm-server

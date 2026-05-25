@@ -170,10 +170,7 @@ export default class SchemaEditor extends Component<Signature> {
 
   @cached
   get moduleSyntax() {
-    return new ModuleSyntax(
-      this.args.file.content,
-      new URL(this.args.file.url),
-    );
+    return new ModuleSyntax(this.args.file.content, this.args.file.url);
   }
 
   get isLoading() {

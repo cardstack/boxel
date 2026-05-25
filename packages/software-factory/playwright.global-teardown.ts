@@ -1,5 +1,8 @@
 import { existsSync, rmSync } from 'node:fs';
-import { readSupportMetadata, sharedRuntimeDir } from './src/runtime-metadata';
+import {
+  readSupportMetadata,
+  sharedRuntimeDir,
+} from '@cardstack/realm-test-harness';
 
 function killBackgroundProcess(pid: number, signal: NodeJS.Signals) {
   try {

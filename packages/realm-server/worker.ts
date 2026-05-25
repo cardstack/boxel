@@ -1,5 +1,32 @@
 import './instrument';
 import './setup-logger'; // This should be first
+import './lib/wtfnode-on-signal';
+import { writeSync } from 'node:fs';
+
+// Swallow EPIPE from stdout/stderr so a torn-down parent (worker manager
+// SIGKILL'd or its dev-log-tee dead during dev-all Ctrl-C) doesn't make
+// every subsequent `log.info` an uncaughtException. See the matching
+// comment in worker-manager.ts (CS-11084).
+const swallowEpipe = (err: NodeJS.ErrnoException) => {
+  if (err?.code !== 'EPIPE') {
+    throw err;
+  }
+};
+process.stdout.on('error', swallowEpipe);
+process.stderr.on('error', swallowEpipe);
+
+// FD-level synchronous stderr write — `writeSync(2, ...)` calls the
+// write(2) syscall directly, bypassing Node's stream layer.
+// `process.stderr.write` is libuv-async when stderr is a pipe (the
+// Docker / ECS case), so it can be lost if the process exits before
+// libuv flushes. Stamps that fire just before death need to use the
+// FD-level form. Proof the Node process actually started, at what
+// pid/ppid, independent of the logger pipeline.
+writeSync(
+  2,
+  `[worker] STARTUP pid=${process.pid} ppid=${process.ppid} argv=${JSON.stringify(process.argv)}\n`,
+);
+
 import {
   Worker,
   VirtualNetwork,
@@ -18,6 +45,7 @@ import {
 } from '@cardstack/postgres';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import { finalizeChildReservationAsFailure } from './lib/finalize-child-fatal-failure';
 
 let log = logger('worker');
 
@@ -121,7 +149,12 @@ let autoMigrate = migrateDB || undefined;
   }
 
   function reportProgress(event: IndexingProgressEvent) {
-    if (!ECS_CONTAINER_METADATA_URI && process.send) {
+    // Emit on every worker, including ECS — the manager's
+    // IndexingEventSink turns these into `[indexing-progress]` log lines
+    // and `job_progress` row writes that feed the cluster-wide Boxel Jobs
+    // dashboard (CS-10930). Local-only HTML endpoints stay gated in
+    // worker-manager.ts.
+    if (process.send) {
       process.send(`progress|${JSON.stringify(event)}`);
     }
   }
@@ -149,8 +182,19 @@ let autoMigrate = migrateDB || undefined;
     process.send(`ready:${workerId}`);
   }
 
-  // Handle graceful shutdown
+  // Handle graceful shutdown. Registered against four triggers
+  // (SIGINT/SIGTERM, parent IPC disconnect, and a `'stop'` message from the
+  // manager), so the manager's IPC `'stop'` and a bash-trap SIGTERM can
+  // both fire on the same child during dev-all teardown. The guard makes
+  // shutdown idempotent — without it, the second invocation would call
+  // `pool.end()` a second time and pg-pool throws `Called end on pool
+  // more than once` synchronously from `dbAdapter.close()`.
+  let isShuttingDown = false;
   const shutdown = async () => {
+    if (isShuttingDown) {
+      return;
+    }
+    isShuttingDown = true;
     log.info(`Shutting down worker ${workerId}...`);
     try {
       await queue.destroy();
@@ -162,13 +206,77 @@ let autoMigrate = migrateDB || undefined;
       process.exit(1);
     }
   };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  process.on('disconnect', shutdown);
+  // `writeSync(2, ...)` (FD-level, syscall-synchronous) for the same
+  // reason as the STARTUP stamp at the top of this file.
+  process.on('SIGINT', () => {
+    writeSync(
+      2,
+      `[worker] SIGINT received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('SIGTERM', () => {
+    writeSync(
+      2,
+      `[worker] SIGTERM received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
+  process.on('disconnect', () => {
+    writeSync(
+      2,
+      `[worker] disconnect received pid=${process.pid} ppid=${process.ppid}\n`,
+    );
+    shutdown();
+  });
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async
     }
+  });
+
+  // Fatal-error backstop. Without these handlers a child that hits an
+  // unhandled promise rejection or uncaught exception exits silently,
+  // and the parent's `worker.on('exit')` finalizes the in-flight
+  // reservation as 'interrupted' — which the per-job reservation cap
+  // explicitly excludes. The result is an infinite respawn loop on any
+  // deterministic crash that doesn't surface through pg-queue's own
+  // catch path.
+  //
+  // We log, capture, and best-effort mark our reservation as a real
+  // failure ('completed'), then exit so the parent can spawn a
+  // replacement. The 5-second cap on the finalize race prevents a
+  // damaged DB connection from blocking exit indefinitely.
+  let isFatalHandlerRunning = false;
+  const fatalExit = (reason: unknown, source: string) => {
+    if (isFatalHandlerRunning || isShuttingDown) {
+      return;
+    }
+    isFatalHandlerRunning = true;
+    log.error(`Fatal ${source} in worker child ${workerId}:`, reason as Error);
+    try {
+      Sentry.captureException(reason);
+    } catch {
+      // best-effort
+    }
+    (async () => {
+      try {
+        await Promise.race([
+          finalizeChildReservationAsFailure(dbAdapter, workerId),
+          new Promise<void>((r) => setTimeout(r, 5000).unref()),
+        ]);
+      } catch (e) {
+        log.error(`Fatal handler finalize failed for ${workerId}:`, e);
+      } finally {
+        process.exit(1);
+      }
+    })();
+  };
+  process.on('unhandledRejection', (reason) => {
+    fatalExit(reason, 'unhandledRejection');
+  });
+  process.on('uncaughtException', (err) => {
+    fatalExit(err, 'uncaughtException');
   });
 })().catch((e: any) => {
   Sentry.captureException(e);

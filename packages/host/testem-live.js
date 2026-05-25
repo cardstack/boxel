@@ -6,7 +6,7 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_REALM_URLS = ['http://localhost:4201/catalog/'];
+const DEFAULT_REALM_URLS = ['https://localhost:4201/software-factory/'];
 
 const realmURLs = process.env.REALM_URL
   ? [process.env.REALM_URL]
@@ -35,6 +35,17 @@ const config = {
         '--mute-audio',
         '--remote-debugging-port=0',
         '--window-size=1440,900',
+        // Local realm-server speaks HTTPS+HTTP/2 with a mkcert leaf cert
+        // (see infra:ensure-dev-cert). `mkcert -install` is best-effort
+        // in CI and may not land the root CA in the headless Chrome
+        // trust store, so relax cert checks for the realm fetches that
+        // the live-test runner makes. Safe — the URL is fixed by
+        // REALM_URL (default https://localhost:4201/catalog/) and the
+        // connection is loopback. Chrome 144+ requires the
+        // `--allow-insecure-localhost` companion or it silently demotes
+        // `--ignore-certificate-errors` and TLS validation still fails.
+        '--ignore-certificate-errors',
+        '--allow-insecure-localhost',
       ].filter(Boolean),
     },
   },

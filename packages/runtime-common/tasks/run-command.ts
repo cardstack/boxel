@@ -97,6 +97,7 @@ const runCommand: Task<RunCommandArgs, RunCommandResponse> = ({
       auth,
       command: normalizedCommand,
       commandInput: augmentedCommandInput,
+      priority: jobInfo?.priority,
     });
 
     reportStatus(jobInfo, 'finish');

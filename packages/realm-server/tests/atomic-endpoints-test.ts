@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Server } from 'http';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { Realm, RealmAdapter } from '@cardstack/runtime-common';
@@ -122,6 +122,7 @@ module(basename(__filename), function () {
 
       module('writes', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },
@@ -893,6 +894,7 @@ module(basename(__filename), function () {
       });
       module('error handling', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },
@@ -1115,6 +1117,7 @@ module(basename(__filename), function () {
       });
       module('validation', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           permissions: {
             '*': ['read', 'write'],
           },

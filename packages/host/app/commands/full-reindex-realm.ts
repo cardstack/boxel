@@ -7,7 +7,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type RealmService from '../services/realm';
 
 export default class FullReindexRealmCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RealmUrlCard,
+  typeof BaseCommandModule.RealmIdentifierCard,
   undefined
 > {
   @service declare private realm: RealmService;
@@ -18,13 +18,13 @@ export default class FullReindexRealmCommand extends HostBaseCommand<
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
-    const { RealmUrlCard } = commandModule;
-    return RealmUrlCard;
+    const { RealmIdentifierCard } = commandModule;
+    return RealmIdentifierCard;
   }
 
   protected async run(
-    input: BaseCommandModule.RealmUrlCard,
+    input: BaseCommandModule.RealmIdentifierCard,
   ): Promise<undefined> {
-    await this.realm.fullReindex(input.realmUrl);
+    await this.realm.fullReindex(input.realmIdentifier);
   }
 }

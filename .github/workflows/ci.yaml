@@ -31,8 +31,9 @@ jobs:
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
-      workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
+      bench-amd: ${{ steps.filter.outputs.bench-amd }}
+      bench-realm: ${{ steps.filter.outputs.bench-realm }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -46,6 +47,17 @@ jobs:
               - 'packages/runtime-common/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
+              # CI boot path. Each gated suite runs `./.github/actions/init`
+              # (which calls `jdx/mise-action`, sourcing `.mise.toml` for tool
+              # versions) and then `mise run test-services:*` (which sources
+              # every script under mise-tasks/, with dev-log-tee.sh as a
+              # runtime dep). A breaking change to any of these can take down
+              # all the suites without matching a per-package filter — the
+              # exact failure mode that hid PR #4671.
+              - '.mise.toml'
+              - '.github/actions/**'
+              - 'mise-tasks/**'
+              - 'packages/observability/scripts/**'
             boxel:
               - *shared
               - '.github/workflows/build-host.yml'
@@ -58,7 +70,6 @@ jobs:
               - 'packages/boxel-ui/**'
               - 'packages/host/**'
               - 'packages/realm-server/**'
-              - 'packages/catalog-realm/**'
             ai-bot:
               - *shared
               - '.github/workflows/pr-ai-bot.yml'
@@ -104,12 +115,34 @@ jobs:
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
-            workspace-sync-cli:
-              - *shared
-              - 'packages/workspace-sync-cli/**'
             boxel-cli:
               - *shared
               - 'packages/boxel-cli/**'
+            bench-amd:
+              # The AMD transpiler is a runtime-common module with no
+              # cross-workspace deps that affect its wall-time, so the
+              # bench only needs to fire for runtime-common edits and
+              # the committed bench fixtures.
+              - 'packages/runtime-common/**'
+              - 'bench-fixtures/runtime-common/amd-transpile/**'
+            bench-realm:
+              # HTTP GET + search regression bench. Self-contained — the
+              # bench's source-realm snapshot lives under
+              # packages/realm-server/scripts/bench-realm/fixtures/, so
+              # software-factory changes can't move the bench medians.
+              # The packages that *can* affect the medians are the ones
+              # the bench's wire path actually exercises:
+              # runtime-common (definition lookup, query engine, file
+              # serializer), realm-server itself, postgres (schema
+              # migrations + the pg adapter the bench writes through),
+              # host (FastBoot prerender), the base realm, and the
+              # harness that spins up the ephemeral stack.
+              - *shared
+              - 'packages/base/**'
+              - 'packages/host/**'
+              - 'packages/postgres/**'
+              - 'packages/realm-server/**'
+              - 'packages/realm-test-harness/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -119,7 +152,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       caller: ci
@@ -347,7 +380,7 @@ jobs:
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 300 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
+          timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -678,6 +711,13 @@ jobs:
             echo "### Realm Server Test Results"
             echo
             jq -r '.summary' test-results.json
+
+            failures=$(jq -r '((.stats.tests_fail // 0) + (.stats.tests_error // 0))' test-results.json)
+            check_url=$(jq -r '.check_url // empty' test-results.json)
+            if [ -n "$check_url" ] && [ "$failures" -gt 0 ]; then
+              echo
+              echo "For more details on these errors, see [this check]($check_url)."
+            fi
           } > slot/slot.md
 
       - name: Upload realm-tests slot
@@ -687,6 +727,87 @@ jobs:
           name: pr-comment-slot-realm-tests
           path: slot/
           retention-days: 7
+
+  amd-transpile-bench:
+    name: AMD Transpile Bench
+    needs: change-check
+    # Parallel-independent bench of the loader's ES → AMD transpiler.
+    # Compares production-candidate medians against
+    # `packages/runtime-common/scripts/bench-amd/baseline.json`. When
+    # baseline.json is absent the script runs in report-only mode and
+    # exits 0 — used to anchor the initial baseline from real CI numbers
+    # before enforcement is turned on. See CS-10983.
+    if: needs.change-check.outputs.bench-amd == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: amd-transpile-bench-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # Doubled vs. the local default (50/5) to dampen GH-runner noise.
+      ITER: 100
+      WARMUP: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Run bench gate
+        run: pnpm bench:amd:check
+        working-directory: packages/runtime-common
+
+      - name: Trip-test (proves gate's failure path)
+        # Synthetic stingy baseline → confirms exit 1, FAIL-message
+        # format intact, every fixture appears in breach list. Runs
+        # only after the real gate passes so a green pipeline means
+        # "real gate accepts current code AND failure path still works."
+        run: pnpm bench:amd:check:trip-test
+        working-directory: packages/runtime-common
+
+  realm-bench:
+    name: Realm Performance Benchmark
+    needs: change-check
+    # HTTP GET and `_search` regression bench against a fixture realm
+    # snapshot. Spins up an ephemeral realm-server stack (postgres +
+    # prerender + worker + realm-server) via realm-test-harness and
+    # times representative requests. Compares medians against
+    # `packages/realm-server/scripts/bench-realm/baseline.json`. When
+    # baseline.json is absent the script runs in report-only mode and
+    # exits 0 — used to anchor the initial baseline from real CI numbers
+    # before enforcement is turned on.
+    #
+    # Runs in parallel with everything else (only depends on
+    # change-check, like `amd-transpile-bench`). The job builds host/dist
+    # itself rather than consuming the shared `test-web-assets` artifact
+    # so a slow web-assets build doesn't gate the bench.
+    if: needs.change-check.outputs.bench-realm == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: realm-bench-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    env:
+      # CI default — local default is 50/5. The bench harness amortises
+      # one stack startup across all scenarios, so doubling iterations
+      # only adds ~tens of seconds for tighter medians.
+      ITER: 100
+      WARMUP: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      # The harness mounts host/dist on the realm-server. Build it here
+      # rather than consuming the test-web-assets artifact so the bench
+      # stays parallel-independent. Host's build pulls in @cardstack/
+      # boxel-ui and @cardstack/boxel-icons via their package exports, so
+      # those need built dists before host's vite build can resolve them.
+      - name: Build Boxel Icons
+        run: pnpm run build
+        working-directory: packages/boxel-icons
+      - name: Build Boxel UI
+        run: pnpm run build
+        working-directory: packages/boxel-ui/addon
+      - name: Build host dist
+        run: pnpm build
+        working-directory: packages/host
+      - name: Run bench gate
+        run: pnpm bench:realm:check
+        working-directory: packages/realm-server
 
   post-pr-status:
     name: Update PR status comment
@@ -737,32 +858,21 @@ jobs:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
 
-  workspace-sync-cli-build:
-    name: Workspace Sync CLI Build
-    needs: change-check
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/init
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-
-  workspace-sync-cli-test:
-    name: Workspace Sync CLI Integration Tests
+  boxel-cli-build:
+    name: Boxel CLI Build
     needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
+      group: boxel-cli-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      # `pnpm build` in boxel-cli runs `build:test-harness`, which reads
+      # from `packages/host/dist/`. Restore that from the shared
+      # test-web-assets artifact so we don't have to rebuild the host
+      # here (CS-11164).
       - name: Download test web assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -773,44 +883,6 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
-      - name: Build workspace-sync-cli
-        run: pnpm build
-        working-directory: packages/workspace-sync-cli
-      - name: Serve test assets (icons + host dist)
-        run: |
-          mise run ci:serve-test-assets &
-          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
-      - name: Start PostgreSQL for tests
-        run: pnpm start:pg | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Start Matrix services for tests
-        run: pnpm start:matrix | tee -a /tmp/test-services.log &
-        working-directory: packages/realm-server
-      - name: Register realm users for tests
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
-      - name: Run integration tests
-        run: pnpm test
-        working-directory: packages/workspace-sync-cli
-      - name: Upload test services log
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ !cancelled() }}
-        with:
-          name: workspace-sync-cli-test-services-log
-          path: /tmp/test-services.log
-          retention-days: 30
-
-  boxel-cli-build:
-    name: Boxel CLI Build
-    needs: change-check
-    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: boxel-cli-build-${{ github.head_ref || github.run_id }}
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/init
       - name: Build boxel-cli
         run: pnpm build
         working-directory: packages/boxel-cli
@@ -818,7 +890,11 @@ jobs:
   boxel-cli-test:
     name: Boxel CLI Tests
     needs: [change-check, test-web-assets]
-    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    # Also run on realm-server changes: boxel-cli's integration tests cover
+    # the publish/unpublish/readiness-check HTTP contract the realm-server
+    # exposes, so a realm-server-only PR that drifts that contract (as in
+    # CS-11161) needs to fail here pre-merge rather than on main post-merge.
+    if: needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: boxel-cli-test-${{ github.head_ref || github.run_id }}
@@ -851,7 +927,13 @@ jobs:
       - name: Start dev stack (icons + host-dist + base realm + prerenderer)
         run: |
           mise run test-services:matrix | tee -a /tmp/server.log &
-          timeout 600 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null; do sleep 2; done'
+          # `-k` skips cert verification (the local realm-server speaks
+          # HTTPS with the mkcert leaf cert). `-w '%{http_code}'` + grep
+          # ensures we treat 3xx as still-not-ready instead of letting
+          # `-f` return 0 on the dispatcher's redirect response, which
+          # would race the tests ahead of the base realm finishing its
+          # initial index.
+          timeout 600 bash -c 'until curl -sk -o /dev/null -w "%{http_code}" https://localhost:4200/ | grep -qx 200 && curl -sk -o /dev/null -w "%{http_code}" -H "Accept: application/vnd.api+json" https://localhost:4201/base/_readiness-check | grep -qx 200; do sleep 2; done'
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli
@@ -889,7 +971,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
@@ -902,14 +984,14 @@ jobs:
         run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
       - name: Upload service logs
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: cache-index-log
           path: /tmp/cache-index.log
           retention-days: 7
       - name: Upload index cache
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: boxel-index-cache
           path: /tmp/boxel-index-cache.sql.gz

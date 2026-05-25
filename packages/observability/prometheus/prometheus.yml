@@ -1,0 +1,24 @@
+# Local Prometheus config — scrapes the dev Synapse container's metrics
+# listener so the vendored Synapse dashboard
+# (grafanactl/resources/dashboards/boxel-status/synapse.json) lights up
+# without an AMP workspace. Staging and production Synapses post to AMP
+# directly; this file is local-only.
+#
+# Synapse exposes its metrics on container port 9001 (see
+# packages/matrix/docker/synapse/dev/homeserver.yaml). This Prometheus
+# joins the `boxel` Docker network where the synapse container also lives,
+# so the scrape target resolves via Docker DNS as `boxel-synapse:9001` —
+# no host port mapping needed.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: synapse
+    static_configs:
+      - targets: ["boxel-synapse:9001"]
+        labels:
+          # Match what `synapse-prometheus` AMP returns in staging/prod so
+          # the dashboard's metric labels are consistent across envs.
+          instance: "boxel-synapse"
+          job: "synapse"

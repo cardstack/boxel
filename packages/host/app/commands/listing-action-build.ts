@@ -1,3 +1,4 @@
+import type { Listing } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -11,8 +12,6 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 import SetActiveLLMCommand from './set-active-llm';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateRoomSkillsCommand from './update-room-skills';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingActionBuildCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingBuildInput

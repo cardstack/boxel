@@ -1,7 +1,23 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #MISE description="Start prerender manager for development"
 #MISE depends=["infra:ensure-traefik"]
 #MISE dir="packages/realm-server"
+
+# Propagate the prerender-manager's exit status through the trailing
+# `| dev-log-tee.sh` pipeline so mise sees crashes instead of the tee stage's
+# clean EOF. `set -o pipefail` is a bashism — Ubuntu CI's /bin/sh is dash and
+# rejects it as "Illegal option", so this script must run under bash.
+set -o pipefail
+
+# Treat SIGTERM/SIGINT as a clean shutdown so mise / run-p don't report
+# 143-on-Ctrl-C as a task failure. See mise-tasks/services/worker for the
+# rationale.
+trap 'exit 0' INT TERM
+
+# Tee stdout+stderr to a per-service log file so the local Alloy scraper
+# (packages/observability/alloy/config.alloy) can pick this up via
+# loki.source.file. Alloy's Docker discovery doesn't see native processes.
+LOG_TEE="../observability/scripts/dev-log-tee.sh"
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -10,4 +26,5 @@ NODE_ENV=development \
   ts-node \
   --transpileOnly prerender/manager-server \
   --port=${PRERENDER_MANAGER_PORT:-$PRERENDER_MGR_PORT} \
-  --exit-on-signal
+  --exit-on-signal \
+  2>&1 | "$LOG_TEE" prerender-manager

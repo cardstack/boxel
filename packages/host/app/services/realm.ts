@@ -5,7 +5,7 @@ import {
 import type Owner from '@ember/owner';
 import { setOwner, getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
-import { waitForPromise } from '@ember/test-waiters';
+import { buildWaiter, waitForPromise } from '@ember/test-waiters';
 
 import { isTesting } from '@embroider/macros';
 
@@ -25,7 +25,9 @@ import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
 import type {
   Permissions,
   JWTPayload,
+  RealmIdentifier,
   RealmPermissions,
+  RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
   Deferred,
@@ -33,6 +35,8 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   logger,
+  ri,
+  rri,
   SupportedMimeType,
   type RealmInfo,
   RealmPaths,
@@ -61,6 +65,20 @@ import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 
 const log = logger('service:realm');
+
+// Reports "pending" while a realm has incremental indexing in flight (between
+// the incremental-index-initiation Matrix event and the matching incremental/
+// full/copy completion event). Lets `await settled()` automatically wait for
+// indexing to finish in tests, which is the primary leverage point for
+// fixing the test surface that pre-CS-11003 relied on the synchronous-
+// indexing semantic of the +source POST.
+const indexingWaiter = buildWaiter('realm:incremental-indexing');
+
+// The name returned by `RealmService#info()` when the corresponding realm
+// resource hasn't yet resolved its `_info` document. Exported so consumers
+// (e.g. SearchResultSection's render-race diagnostic) can detect the
+// placeholder without duplicating the literal string.
+export const UNKNOWN_REALM_NAME = 'Unknown Workspace';
 
 export type EnhancedRealmInfo = RealmInfo & {
   isIndexing: boolean;
@@ -121,6 +139,15 @@ class RealmResource {
   @tracked info: EnhancedRealmInfo | undefined;
   @tracked private realmPermissions: RealmPermissions | null | undefined;
 
+  // When realm-side indexing is in flight (incremental-index-initiation
+  // received but matching incremental/full/copy event hasn't arrived yet),
+  // hold a test-waiter token so `await settled()` and other Ember test
+  // helpers wait for the index event before proceeding. This is the
+  // primary semaphore for tests that, before CS-11003, relied on the
+  // synchronous-indexing semantic of the +source POST and now would
+  // race against the deferred indexing chain. No-op outside tests.
+  private indexingWaiterToken: unknown | null = null;
+
   @tracked
   private auth: AuthStatus = { type: 'anonymous' };
   private subscription: { unsubscribe: () => void } | undefined;
@@ -145,6 +172,12 @@ class RealmResource {
     registerDestructor(this, () => {
       if (this.subscription) {
         this.subscription.unsubscribe();
+      }
+      // Release any held test-waiter token so we don't leak pending state
+      // across tests when the resource is torn down with indexing in flight.
+      if (this.indexingWaiterToken) {
+        indexingWaiter.endAsync(this.indexingWaiterToken);
+        this.indexingWaiterToken = null;
       }
     });
   }
@@ -244,11 +277,18 @@ class RealmResource {
           switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
+              if (!this.indexingWaiterToken) {
+                this.indexingWaiterToken = indexingWaiter.beginAsync();
+              }
               break;
             case 'full':
             case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
+              if (this.indexingWaiterToken) {
+                indexingWaiter.endAsync(this.indexingWaiterToken);
+                this.indexingWaiterToken = null;
+              }
               break;
             default:
               throw assertNever(data);
@@ -807,7 +847,7 @@ export default class RealmService extends Service {
       this.identifyRealmTracker;
 
       return {
-        name: 'Unknown Workspace',
+        name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
@@ -824,7 +864,7 @@ export default class RealmService extends Service {
     if (!resource.info) {
       resource.fetchInfo();
       return {
-        name: 'Unknown Workspace',
+        name: UNKNOWN_REALM_NAME,
         backgroundURL: null,
         iconURL: null,
         showAsCatalog: null,
@@ -931,11 +971,11 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  realmOfURL(url: URL) {
+  realmOf(input: RealmResourceIdentifier | URL): RealmIdentifier | undefined {
+    let id = input instanceof URL ? rri(input.href) : input;
     for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(url)) {
-        return new URL(realmURL);
+      if (new RealmPaths(new URL(realm)).inRealm(id)) {
+        return ri(realm);
       }
     }
     return undefined;

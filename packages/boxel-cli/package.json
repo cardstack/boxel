@@ -1,6 +1,6 @@
 {
   "name": "@cardstack/boxel-cli",
-  "version": "0.0.1",
+  "version": "0.3.0-unstable.122",
   "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
@@ -11,6 +11,9 @@
     "dist/**/*",
     "src/**/*.ts",
     "api.ts",
+    "bundled-types/**/*",
+    "bundled-test-harness/**/*",
+    "bundled-realms/**/*",
     "README.md"
   ],
   "engines": {
@@ -29,17 +32,24 @@
   "author": "Cardstack",
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
+    "@glint/ember-tsc": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "commander": "^13.1.0",
+    "content-tag": "catalog:",
     "dotenv": "^16.4.7",
     "ignore": "catalog:",
     "jsonwebtoken": "catalog:",
-    "p-limit": "^7.3.0"
+    "p-limit": "^7.3.0",
+    "qunit": "catalog:",
+    "qunit-dom": "catalog:",
+    "typescript": "catalog:"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "content-tag": "catalog:",
     "@types/jsonwebtoken": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -51,13 +61,17 @@
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
     "ts-node": "^10.9.1",
-    "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
-    "build": "pnpm clean && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
-    "clean": "rm -rf dist/*",
+    "build": "pnpm clean && pnpm build:types && pnpm build:test-harness && pnpm build:realms && NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build.ts",
+    "build:plugin": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-plugin.ts",
+    "build:realms": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-realms.ts",
+    "build:skills": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-skills.ts",
+    "build:test-harness": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-test-harness.ts",
+    "build:types": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/build-types.ts",
+    "clean": "rm -rf dist/* bundled-types bundled-test-harness bundled-realms",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
@@ -66,13 +80,14 @@
     "lint:types": "tsc --noEmit",
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'tests/integration/**'",
+    "test:unit-exclude-smoke": "vitest run --exclude 'tests/integration/**' --exclude 'tests/smoke.test.ts'",
     "test:integration": "./tests/scripts/run-integration-with-test-pg.sh",
     "test:watch": "vitest",
     "version:patch": "npm version patch",
     "version:minor": "npm version minor",
     "version:major": "npm version major",
-    "publish:npm": "npm publish",
-    "publish:dry": "npm publish --dry-run"
+    "publish:npm": "pnpm publish --no-git-checks",
+    "publish:dry": "pnpm publish --dry-run --no-git-checks"
   },
   "publishConfig": {
     "access": "public",

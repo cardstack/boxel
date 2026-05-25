@@ -59,15 +59,17 @@ module('Integration | commands | validate-realm', function (hooks) {
   test('returns normalized realm URL for a valid realm', async function (assert) {
     let commandService = getService('command-service');
     let command = new ValidateRealmCommand(commandService.commandContext);
-    let result = await command.execute({ realmUrl: testRealmURL });
-    assert.strictEqual(result.realmUrl, testRealmURL);
+    let result = await command.execute({ realmIdentifier: testRealmURL });
+    assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
   test('throws error for an invalid realm URL', async function (assert) {
     let commandService = getService('command-service');
     let command = new ValidateRealmCommand(commandService.commandContext);
     try {
-      await command.execute({ realmUrl: 'https://invalid.example.com/realm/' });
+      await command.execute({
+        realmIdentifier: 'https://invalid.example.com/realm/',
+      });
       assert.ok(false, 'should have thrown');
     } catch (e: any) {
       assert.ok(

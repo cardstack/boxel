@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
-import type { Server } from 'http';
+import { join, basename } from 'path';
+import type { RealmHttpServer as Server } from '../server';
 import type { DirResult } from 'tmp';
 import { existsSync, readFileSync } from 'fs-extra';
 import {
@@ -19,6 +19,7 @@ import {
   setupMatrixRoom,
   createJWT,
   cardInfo,
+  fixtureDir,
   type RealmRequest,
   withRealmPath,
 } from './helpers';
@@ -72,6 +73,7 @@ module(basename(__filename), function () {
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -232,6 +234,44 @@ module(basename(__filename), function () {
           );
         });
 
+        // CS-11043. clearLocalSourceCaches() is the public surface the
+        // publish-realm handler invokes after the FS swap so that the
+        // pre-swap bytes living in #sourceCache / #transpiledModuleCache don't get
+        // served to the reindex job (which would then write stale
+        // isolated_html into boxel_index). Functionally equivalent to
+        // __testOnlyClearCaches minus the test-only transpile-counter
+        // reset.
+        test('clearLocalSourceCaches drops cached source bytes', async function (assert) {
+          let cacheTestPath = 'clear-local-caches.gts';
+          await testRealm.write(
+            cacheTestPath,
+            '// clear-local-caches initial content',
+          );
+
+          await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          let warmed = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            warmed.headers['x-boxel-cache'],
+            'hit',
+            'precondition: second fetch hits the source cache',
+          );
+
+          testRealm.clearLocalSourceCaches();
+
+          let afterClear = await request
+            .get(`/${cacheTestPath}`)
+            .set('Accept', 'application/vnd.card+source');
+          assert.strictEqual(
+            afterClear.headers['x-boxel-cache'],
+            'miss',
+            'fetch after clearLocalSourceCaches is a miss — the #sourceCache entry was dropped',
+          );
+        });
+
         test('serves a card-source GET request that results in redirect', async function (assert) {
           let response = await request
             .get('/person')
@@ -288,7 +328,7 @@ module(basename(__filename), function () {
           );
           assert.strictEqual(
             readFileSync(
-              join(__dirname, '../tests/cards', 'person-with-error.gts'),
+              join(fixtureDir('realistic'), 'person-with-error.gts'),
               {
                 encoding: 'utf8',
               },
@@ -337,7 +377,6 @@ module(basename(__filename), function () {
             'realm is public readable',
           );
           let body = response.text.trim();
-          let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
 
           // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
           body = stripScopedCSSGlimmerAttributes(
@@ -346,7 +385,7 @@ module(basename(__filename), function () {
 
           assert.codeEqual(
             body,
-            compiledCard('"<id>"', moduleAbsolutePath),
+            compiledCard('"<id>"', '/person.gts'),
             'module JS is correct',
           );
         });
@@ -366,6 +405,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read'],
@@ -417,6 +457,7 @@ module(basename(__filename), function () {
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read'],
@@ -492,6 +533,7 @@ module(basename(__filename), function () {
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -566,6 +608,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'realistic',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -609,6 +652,7 @@ module(basename(__filename), function () {
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1016,6 +1060,7 @@ module(basename(__filename), function () {
 
       module('public writable realm with size limit', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1052,6 +1097,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],
@@ -1130,6 +1176,7 @@ module(basename(__filename), function () {
     module('binary file POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             '*': ['read', 'write'],
@@ -1422,6 +1469,7 @@ module(basename(__filename), function () {
         'public writable realm with size limit for binary',
         function (hooks) {
           setupPermissionedRealmCached(hooks, {
+            fixture: 'simple',
             realmURL,
             permissions: {
               '*': ['read', 'write'],
@@ -1450,6 +1498,7 @@ module(basename(__filename), function () {
 
       module('permissioned realm for binary', function (hooks) {
         setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
           realmURL,
           permissions: {
             john: ['read', 'write'],

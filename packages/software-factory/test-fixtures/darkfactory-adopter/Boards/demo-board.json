@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "boardTitle": "DarkFactory Adoption Board",
+      "hideEmptyColumns": false
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Projects/demo-project"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "IssueTracker"
+      }
+    }
+  }
+}

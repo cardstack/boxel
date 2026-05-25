@@ -62,17 +62,34 @@ export function logger(
   logName: string,
   logDefinitions: LogDefinitions = (globalThis as any)._logDefinitions,
 ): LogLevel.Logger {
-  if (!logDefinitions) {
-    throw new Error(
-      `Missing logDefinitions. Make sure that 'makeLogDefinitions()' is called before any module scoped code. The best way to ensure this is to evaluate makeLogDefinitions() in the module scope in its own module that is imported for side effect from the entry point module.`,
-    );
-  }
   let log = LogLevel.getLogger(logName);
-  let level = getLevelForLog(logName, logDefinitions);
-  if (level) {
-    log.setLevel(level);
+  if (logDefinitions) {
+    let level = getLevelForLog(logName, logDefinitions);
+    if (level) {
+      log.setLevel(level);
+    }
   }
   return log;
+}
+
+// Re-apply levels to loggers that were created before `_logDefinitions` was
+// populated. Needed because bundlers (Vite/Rolldown) may evaluate shared
+// chunks containing module-scope `logger()` calls before the entry module
+// has a chance to install `_logDefinitions`.
+export function reapplyLogLevels(): void {
+  let logDefinitions = (globalThis as any)._logDefinitions as
+    | LogDefinitions
+    | undefined;
+  if (!logDefinitions) {
+    return;
+  }
+  let loggers = LogLevel.getLoggers();
+  for (let name of Object.keys(loggers)) {
+    let level = getLevelForLog(name, logDefinitions);
+    if (level) {
+      loggers[name].setLevel(level);
+    }
+  }
 }
 
 function getLevelForLog(

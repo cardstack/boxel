@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sequenceNumber": 2,
+      "runAt": "2026-05-06T20:13:01.114Z",
+      "status": "passed",
+      "completedAt": "2026-05-06T20:13:12.920Z",
+      "durationMs": 11775,
+      "cardResults": [
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/idea-yellow",
+          "error": ""
+        },
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/blocker-pink",
+          "error": ""
+        },
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/info-blue",
+          "error": ""
+        },
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/todo-green",
+          "error": ""
+        },
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/warning-orange",
+          "error": ""
+        },
+        {
+          "codeRef": {
+            "module": "../sticky-note",
+            "name": "StickyNote"
+          },
+          "instanceId": "http://localhost:4201/user/cs-11003-e2e-1/StickyNote/decision-purple",
+          "error": ""
+        }
+      ]
+    },
+    "relationships": {
+      "issue": {
+        "links": {
+          "self": "../Issues/sticky-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/instantiate-result",
+        "name": "InstantiateResult"
+      }
+    }
+  }
+}

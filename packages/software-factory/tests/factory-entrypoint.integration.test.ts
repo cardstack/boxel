@@ -54,19 +54,27 @@ function createTempProfileHome(options: {
   username: string;
   matrixUrl: string;
   realmServerUrl: string;
-  password: string;
 }): string {
   let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
   let boxelCliDir = join(tempHome, '.boxel-cli');
   mkdirSync(boxelCliDir, { recursive: true });
 
   let profileId = `@${options.username}:localhost`;
+  // CS-10725 swapped stored password for the Matrix access token —
+  // `getStoredMatrixAuth` now refuses any profile without a
+  // `matrixAccessToken` field. The mock matrix server in this test
+  // returns `'matrix-access-token'` from `/v3/login`; pre-populate the
+  // same value so the factory startup path skips the login and uses
+  // the stored token directly (same behavior as a real `boxel
+  // profile add` having already run on the user's machine).
   let config = {
     profiles: {
       [profileId]: {
         matrixUrl: options.matrixUrl,
         realmServerUrl: options.realmServerUrl,
-        password: options.password,
+        matrixAccessToken: 'matrix-access-token',
+        matrixUserId: profileId,
+        matrixDeviceId: 'device-id',
       },
     },
     activeProfile: profileId,
@@ -83,7 +91,7 @@ function createTempProfileHome(options: {
 module('factory-entrypoint integration', function () {
   test('factory:go --debug prints a structured JSON summary', async function (assert) {
     let canonicalTargetRealmUrl: string;
-    let targetRealmUrl: string;
+    let targetRealm: string;
     let createdCardPaths = new Set<string>();
     let server = createServer((request, response) => {
       if (request.url === '/software-factory/Wiki/sticky-note') {
@@ -98,12 +106,12 @@ module('factory-entrypoint integration', function () {
           JSON.stringify({
             access_token: 'matrix-access-token',
             device_id: 'device-id',
-            user_id: '@hassan:localhost',
+            user_id: '@testuser:localhost',
           }),
         );
       } else if (
         request.url ===
-          '/_matrix/client/v3/user/%40hassan%3Alocalhost/openid/request_token' &&
+          '/_matrix/client/v3/user/%40testuser%3Alocalhost/openid/request_token' &&
         request.method === 'POST'
       ) {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
@@ -143,14 +151,14 @@ module('factory-entrypoint integration', function () {
         );
       } else if (
         request.url ===
-          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+          '/_matrix/client/v3/user/%40testuser%3Alocalhost/account_data/app.boxel.realms' &&
         request.method === 'GET'
       ) {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(JSON.stringify({ realms: [] }));
       } else if (
         request.url ===
-          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+          '/_matrix/client/v3/user/%40testuser%3Alocalhost/account_data/app.boxel.realms' &&
         request.method === 'PUT'
       ) {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
@@ -177,7 +185,7 @@ module('factory-entrypoint integration', function () {
           }),
         );
       } else if (
-        request.url === '/hassan/personal/_search' &&
+        request.url === '/testuser/personal/_search' &&
         request.method === 'QUERY'
       ) {
         // Issue store search — return empty so the loop exits cleanly
@@ -185,7 +193,7 @@ module('factory-entrypoint integration', function () {
         response.writeHead(200, { 'content-type': SupportedMimeType.CardJson });
         response.end(JSON.stringify({ data: [] }));
       } else if (
-        request.url === '/hassan/personal/_mtimes' &&
+        request.url === '/testuser/personal/_mtimes' &&
         request.method === 'GET'
       ) {
         // Used by client.pull / client.sync to list remote state. The
@@ -195,7 +203,7 @@ module('factory-entrypoint integration', function () {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSONAPI });
         response.end(JSON.stringify({ data: { attributes: { mtimes: {} } } }));
       } else if (
-        request.url === '/hassan/personal/_atomic' &&
+        request.url?.startsWith('/testuser/personal/_atomic') &&
         request.method === 'POST'
       ) {
         // Used by client.sync to atomically push card writes. Parse the
@@ -217,7 +225,7 @@ module('factory-entrypoint integration', function () {
               if (op.op === 'add' || op.op === 'update') {
                 let href = op.href ?? '';
                 let path = href
-                  .replace(/^https?:\/\/[^/]+\/hassan\/personal\//, '')
+                  .replace(/^https?:\/\/[^/]+\/testuser\/personal\//, '')
                   .replace(/^\.\/?/, '')
                   .replace(/\.json$/, '');
                 createdCardPaths.add(path);
@@ -234,7 +242,7 @@ module('factory-entrypoint integration', function () {
         });
         return;
       } else if (
-        request.url === '/hassan/personal/_readiness-check' &&
+        request.url === '/testuser/personal/_readiness-check' &&
         request.method === 'GET'
       ) {
         response.writeHead(200, {
@@ -242,7 +250,7 @@ module('factory-entrypoint integration', function () {
         });
         response.end('');
       } else if (
-        request.url === '/hassan/personal/_session' &&
+        request.url === '/testuser/personal/_session' &&
         request.method === 'POST'
       ) {
         // Realm session for target realm auth
@@ -252,11 +260,11 @@ module('factory-entrypoint integration', function () {
         });
         response.end('');
       } else if (
-        request.url?.startsWith('/hassan/personal/') &&
+        request.url?.startsWith('/testuser/personal/') &&
         request.method === 'GET'
       ) {
         let cardPath = request.url
-          .replace('/hassan/personal/', '')
+          .replace('/testuser/personal/', '')
           .replace(/\.json$/, '');
         if (createdCardPaths.has(cardPath)) {
           response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
@@ -280,11 +288,11 @@ module('factory-entrypoint integration', function () {
           response.end('not found');
         }
       } else if (
-        request.url?.startsWith('/hassan/personal/') &&
+        request.url?.startsWith('/testuser/personal/') &&
         request.method === 'POST'
       ) {
         createdCardPaths.add(
-          request.url.replace('/hassan/personal/', '').replace(/\.json$/, ''),
+          request.url.replace('/testuser/personal/', '').replace(/\.json$/, ''),
         );
         // Card creation — accept it
         response.writeHead(204);
@@ -306,14 +314,13 @@ module('factory-entrypoint integration', function () {
 
     let origin = `http://127.0.0.1:${address.port}`;
     let briefUrl = `${origin}/software-factory/Wiki/sticky-note`;
-    targetRealmUrl = `${origin}/typed-by-user/personal/`;
-    canonicalTargetRealmUrl = `${origin}/hassan/personal/`;
+    targetRealm = `${origin}/typed-by-user/personal/`;
+    canonicalTargetRealmUrl = `${origin}/testuser/personal/`;
 
     let tempHome = createTempProfileHome({
-      username: 'hassan',
+      username: 'testuser',
       matrixUrl: `${origin}/`,
       realmServerUrl: `${origin}/`,
-      password: 'secret',
     });
 
     try {
@@ -325,8 +332,8 @@ module('factory-entrypoint integration', function () {
           '--',
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
           '--realm-server-url',
           `${origin}/`,
           '--debug',
@@ -359,7 +366,7 @@ module('factory-entrypoint integration', function () {
         'note',
       ]);
       assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
-      assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
+      assert.strictEqual(summary.targetRealm.ownerUsername, 'testuser');
       assert.strictEqual(
         summary.seedIssue.seedIssueId,
         'Issues/bootstrap-seed',
@@ -385,8 +392,8 @@ module('factory-entrypoint integration', function () {
         '--silent',
         'factory:go',
         '--',
-        '--target-realm-url',
-        'https://realms.example.test/hassan/personal/',
+        '--target-realm',
+        'https://realms.example.test/testuser/personal/',
       ],
       {
         cwd: packageRoot,
@@ -397,7 +404,7 @@ module('factory-entrypoint integration', function () {
     assert.strictEqual(result.status, 1);
     assert.true(/Missing required --brief-url/.test(result.stderr));
     assert.true(/Usage:/.test(result.stderr));
-    assert.true(/--target-realm-url <url>/.test(result.stderr));
+    assert.true(/--target-realm <realm>/.test(result.stderr));
   });
 
   test('factory:go package script prints usage with --help', function (assert) {
@@ -429,7 +436,7 @@ module('factory-entrypoint integration', function () {
 
     try {
       let briefUrl = `http://127.0.0.1:${address.port}/software-factory/Wiki/sticky-note`;
-      let targetRealmUrl = `http://127.0.0.1:${address.port}/hassan/personal/`;
+      let targetRealm = `http://127.0.0.1:${address.port}/testuser/personal/`;
       let result = await runCommand(
         'pnpm',
         [
@@ -438,8 +445,8 @@ module('factory-entrypoint integration', function () {
           '--',
           '--brief-url',
           briefUrl,
-          '--target-realm-url',
-          targetRealmUrl,
+          '--target-realm',
+          targetRealm,
         ],
         {
           cwd: packageRoot,

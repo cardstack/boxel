@@ -5,7 +5,7 @@ import type { ValidationStepRunner } from './validation-pipeline';
 /**
  * No-op validation step that always passes.
  * Used as a placeholder for unimplemented steps (parse, lint, evaluate, instantiate).
- * Each placeholder will be replaced by a real implementation via child tickets.
+ * Each placeholder will be replaced by a real implementation via child issues.
  */
 export class NoOpStepRunner implements ValidationStepRunner {
   readonly step: ValidationStep;
@@ -14,7 +14,7 @@ export class NoOpStepRunner implements ValidationStepRunner {
     this.step = step;
   }
 
-  async run(_targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(_targetRealm: string): Promise<ValidationStepResult> {
     return { step: this.step, passed: true, errors: [] };
   }
 

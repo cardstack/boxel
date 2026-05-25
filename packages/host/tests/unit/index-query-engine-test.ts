@@ -12,6 +12,7 @@ import {
   internalKeyFor,
   identifyCard,
   getFieldDefinitions,
+  rri,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Definition,
@@ -123,6 +124,7 @@ module('Unit | query', function (hooks) {
       @field date = contains(DateField);
     }
 
+    loader.shimModule(`${testRealmURL}address`, { Address });
     loader.shimModule(`${testRealmURL}person`, { Person });
     loader.shimModule(`${testRealmURL}fancy-person`, { FancyPerson });
     loader.shimModule(`${testRealmURL}cat`, { Cat });
@@ -193,17 +195,19 @@ module('Unit | query', function (hooks) {
       numberFieldEntry,
     };
     for (let [name, card] of Object.entries(testCards)) {
-      card.id = `${testRealmURL}${name}`;
+      card.id = rri(`${testRealmURL}${name}`);
       setCardAsSavedForTest(card);
     }
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
 
     async function buildDefinition(cardDef: typeof CardDef) {
+      let { fields, fieldDefs } = getFieldDefinitions(api, cardDef);
       return {
         codeRef: identifyCard(cardDef),
         displayName: cardDef.displayName,
-        fields: getFieldDefinitions(api, cardDef),
+        fields,
+        fieldDefs,
       } as Definition;
     }
 
@@ -212,6 +216,8 @@ module('Unit | query', function (hooks) {
       async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
         let key = internalKeyFor(codeRef, undefined);
         switch (key) {
+          case `${testRealmURL}address/Address`:
+            return await buildDefinition(Address as unknown as typeof CardDef);
           case `${testRealmURL}person/Person`:
             return await buildDefinition(Person);
           case `${testRealmURL}fancy-person/FancyPerson`:
@@ -235,17 +241,17 @@ module('Unit | query', function (hooks) {
         // no-op for tests
         return [];
       },
-      async clearRealmCache(_realmURL: string): Promise<void> {
+      async clearRealmDefinitions(_realmURL: string): Promise<void> {
         // no-op for tests
       },
-      async getModuleCacheEntry(): Promise<undefined> {
+      async getCachedDefinitions(): Promise<undefined> {
         return undefined;
       },
-      async getModuleCacheEntries(): Promise<Record<string, never>> {
+      async getCachedDefinitionsBatch(): Promise<Record<string, never>> {
         return {};
       },
       registerRealm() {},
-      async clearAllModules(): Promise<void> {
+      async clearAllDefinitions(): Promise<void> {
         // no-op for tests
       },
       forRealm() {

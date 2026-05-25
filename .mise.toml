@@ -1,6 +1,6 @@
 [tools]
 node = "24.13.1"
-pnpm = "10.30.0"
+"npm:pnpm" = "11.0.9"
 
 [env]
 _.source = "./mise-tasks/lib/env-vars.sh"

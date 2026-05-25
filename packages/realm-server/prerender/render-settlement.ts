@@ -169,6 +169,27 @@ function isPeakBetter(
 // diagnostics). `remote-prerenderer` only forwards `data.attributes`,
 // not the envelope, so the values have to live inside the response
 // body's meta rather than the HTTP envelope meta.
+// Optional metadata attached to the diagnostics block alongside the
+// always-present timing fields. Folded into a single options object
+// rather than trailing positional parameters so future signals
+// (e.g. fleet capacity, expansion telemetry) can be added without
+// reshuffling call sites.
+export interface RenderSettlementMeta {
+  affinitySnapshot?: RenderTimeoutDiagnostics['affinitySnapshot'];
+  // Worker-job priority of the request that produced this render.
+  // Stamped into `response.meta.diagnostics.priority` so the indexer
+  // persists it on `boxel_index.timing_diagnostics`. `0` means
+  // system-priority / undefined caller (default).
+  priority?: number;
+  // Whether this render landed on a reused / warm tab vs a freshly
+  // created one. `true` means PagePool returned a tab that was already
+  // bound to this affinity (warm cache, fast launch); `false` means a
+  // fresh tab was spawned or commandeered (cold). Useful for triage: a
+  // slow render with `tabReused=false` is a cold-start tax; with
+  // `tabReused=true` it's a real render-side stall.
+  tabReused?: boolean;
+}
+
 export function decorateRenderErrorsWithTimings(
   response: unknown,
   timings: {
@@ -177,7 +198,7 @@ export function decorateRenderErrorsWithTimings(
     waits: RenderTimeoutDiagnostics['waits'];
   },
   totalMs: number,
-  affinitySnapshot?: RenderTimeoutDiagnostics['affinitySnapshot'],
+  meta: RenderSettlementMeta = {},
 ): void {
   if (!response || typeof response !== 'object') {
     return;
@@ -201,8 +222,17 @@ export function decorateRenderErrorsWithTimings(
     let sub = r[key];
     if (sub && typeof sub === 'object') {
       lift((sub as { error?: unknown }).error);
+      // Card sub-responses also carry a success-path host diagnostics
+      // block — captured by render.meta and spread onto the card
+      // response as `diagnostics`. Lift the same way as error-path
+      // diagnostics so the computed-field counters reach the indexer's
+      // `boxel_index.timing_diagnostics` column.
+      if (key === 'card') {
+        lift(sub);
+      }
     }
   }
+  let { affinitySnapshot, priority, tabReused } = meta;
   let diagnostics: RenderTimeoutDiagnostics = {
     ...lifted,
     launchMs: timings.launchMs,
@@ -210,6 +240,8 @@ export function decorateRenderErrorsWithTimings(
     renderElapsedMs: timings.renderMs,
     totalElapsedMs: totalMs,
     ...(affinitySnapshot ? { affinitySnapshot } : {}),
+    ...(priority !== undefined ? { priority } : {}),
+    ...(tabReused !== undefined ? { tabReused } : {}),
   };
   let existingMeta = (r.meta as PrerenderResponseMeta | undefined) ?? {};
   r.meta = {

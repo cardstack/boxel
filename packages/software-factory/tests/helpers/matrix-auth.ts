@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { defaultSupportMetadataFile } from '../../src/runtime-metadata';
+import { defaultSupportMetadataFile } from '@cardstack/realm-test-harness';
 
 export interface SupportMetadata {
   matrixURL: string;

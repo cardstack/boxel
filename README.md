@@ -32,14 +32,13 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 ### Catalog Realms
 
-Two catalog realms run side by side. The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.com/cardstack/boxel-catalog)) is the source of truth for new development and the destination for community submissions. The **Legacy Catalog** (shipped from this monorepo) remains available during the deprecation window for content that hasn't been migrated upstream.
+The **Cardstack Catalog** (served from [cardstack/boxel-catalog](https://github.com/cardstack/boxel-catalog)) is the source of truth for new development and the destination for community submissions.
 
-| Realm                  | Source                                                                                  | URL path           | Purpose                                                                                                                          |
-| ---------------------- | --------------------------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Cardstack Catalog**  | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/`        | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`.     |
-| **Legacy Catalog**     | `packages/catalog-realm`                                                                | `/legacy-catalog/` | Historical catalog shipped from this repo. Kept visible in the workspace chooser while existing content migrates upstream.       |
+| Realm                 | Source                                                                                  | URL path    | Purpose                                                                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Cardstack Catalog** | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/catalog/` | Official catalog. New listings and community submissions land here via `pr-listing-create` PRs to `cardstack/boxel-catalog`. |
 
-Both catalogs appear in the workspace chooser by default; the Cardstack Catalog is sorted first, Legacy Catalog last. Both are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_CATALOG=true` skips setup and startup for both.
+The catalog appears in the workspace chooser by default; setting `SKIP_CATALOG=true` skips its setup and startup.
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
@@ -97,11 +96,11 @@ You can develop the host application locally backed by the staging or production
 ```
 scripts/start-host production
 …
-Build successful (27238ms) – Serving on http://localhost:4200/
+Build successful (27238ms) – Serving on https://localhost:4200/
 …
 ```
 
-Visit `http://localhost:4200` and log in with your staging or production credentials.
+Visit `https://localhost:4200` and log in with your staging or production credentials.
 
 ### ember-cli Hosted App
 
@@ -112,7 +111,7 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
-3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
+3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `https://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
 
 Alternatively, you can run everything with a single command from the repo root:
 
@@ -122,7 +121,7 @@ mise run dev-all
 
 This starts the host app first, waits for it to be ready, then starts the realm server and all supporting services.
 
-The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
+The app is available at https://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
 When you are done running the app you can stop the synapse server:
 
@@ -137,7 +136,7 @@ In order to run the realm server hosted app:
 1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `mise run dev` to serve the base and experiments realms
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the experiments realm's app is at `http://localhost:4201/experiments`.
+The recommended way to view a realm's app is the host vite dev server at `https://localhost:4200` — open it and navigate via the workspace chooser. Both the host (vite) on `:4200` and the realm-server on `:4201` terminate HTTPS+HTTP/2 using the same mkcert leaf (see "Local HTTPS dev access" below for the one-time cert setup), so the in-browser host's realm fetches multiplex per Chrome's HTTP/2 connection rules without any mixed-content concerns. Visiting `https://localhost:4201/<realm>` directly also works.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -158,7 +157,8 @@ This sets the following defaults (all individually overridable):
 | Variable                     | Normal | Turbo |
 | ---------------------------- | ------ | ----- |
 | `PRERENDER_COUNT`            | 1      | 3     |
-| `PRERENDER_PAGE_POOL_SIZE`   | 4      | 4     |
+| `PRERENDER_PAGE_POOL_MIN`    | 4      | 4     |
+| `PRERENDER_PAGE_POOL_MAX`    | 4      | 4     |
 | `WORKER_HIGH_PRIORITY_COUNT` | 0      | 4     |
 | `WORKER_ALL_PRIORITY_COUNT`  | 1      | 4     |
 
@@ -190,10 +190,10 @@ Here's what is spun up with `mise run dev`:
 
 | Port  | Description                                                                                   | `mise run dev` | `mise run services:realm-server-base` |
 | ----- | --------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
-| :4201 | `/base` base realm                                                                            | ✅             | ✅                                    |
+| :4201 | `/base` base realm (HTTPS+HTTP/2; see "Local HTTPS dev access" below)                         | ✅             | ✅                                    |
 | :4201 | `/skills` skills realm                                                                        | ✅             | 🚫                                    |
 | :4201 | `/experiments` experiments realm                                                              | ✅             | 🚫                                    |
-| :4202 | `/test` host test realm, `/node-test` node test realm                                         | ✅             | 🚫                                    |
+| :4202 | `/test` host test realm, `/node-test` node test realm (HTTPS+HTTP/2)                          | ✅             | 🚫                                    |
 | :4205 | `/test` realm for matrix client tests (playwright controlled)                                 | 🚫             | 🚫                                    |
 | :4206 | Boxel icons server                                                                            | ✅             | 🚫                                    |
 | :4210 | Development Worker Manager (spins up 1 worker by default)                                     | ✅             | 🚫                                    |
@@ -206,9 +206,104 @@ Here's what is spun up with `mise run dev`:
 | :5435 | Postgres DB                                                                                   | ✅             | 🚫                                    |
 | :8008 | Matrix synapse server                                                                         | ✅             | 🚫                                    |
 
+#### Local HTTPS dev access
+
+##### Why
+
+Heavy aggregator cards (Cohort, dashboards) fan out 80+ federated-search
+requests per render. Chrome — including the headless Chromium that
+drives the prerender — caps any single origin at 6 concurrent HTTP/1.1
+connections, so the 80+ requests serialize. A single cohort render
+takes ~4–5 minutes under that ceiling. HTTP/2 multiplexes them over one
+connection and the same render finishes in seconds. Browsers only do
+HTTP/2 over TLS, so the local realm-server terminates a leaf cert.
+
+##### Setup
+
+```
+mise run infra:ensure-dev-cert
+```
+
+That task:
+
+1. Requires [`mkcert`](https://github.com/FiloSottile/mkcert)
+   (`sudo apt install -y mkcert libnss3-tools` on Debian/Ubuntu;
+   `brew install mkcert nss` on macOS). If it's missing, the task
+   prints these instructions and exits non-zero — local dev now
+   speaks HTTPS only and has no HTTP fallback.
+2. Attempts `mkcert -install` once (one-time sudo prompt) so mkcert's
+   root CA lands in your system trust store. Your normal browser then
+   silently accepts the cert. If you decline the sudo prompt the cert
+   is still generated, indexing keeps working, and you can run
+   `mkcert -install` later when convenient.
+3. Generates `~/.local/share/boxel/dev-certs/{localhost.pem,
+localhost-key.pem}`. Idempotent — re-runs are a no-op until the
+   cert is within 7 days of expiry.
+
+After provisioning, `mise run dev` (and `mise run dev-all`) automatically
+brings the realm-server up on `https://localhost:4201` (and
+`https://localhost:4202` for the test-realms server). Node clients
+(worker, scripts, prerender Node-side) trust the cert via
+`NODE_EXTRA_CA_CERTS` (pointed at mkcert's root by `env-vars.sh`); the
+prerender Chromium uses `--ignore-certificate-errors` for belt-and-
+suspenders coverage.
+
+##### Migration after pulling this change
+
+The canonical realm URLs are now `https://localhost:4201/…` and
+`https://localhost:4202/…`, so every row that was written under the old
+`http://localhost:42XX/…` canonical needs its URLs rewritten in place
+— PK columns, FK columns, JSONB documents (`pristine_doc`, `search_doc`,
+`error_doc`, `deps`, `value`, `headers`, etc.), and rendered HTML /
+markdown payloads. The repo ships an auto-run migration that handles
+all of it:
+
+- `pnpm migrate` (which `mise run dev` runs via `--migrateDB`) picks up
+  `packages/postgres/migrations/1779100257124_canonical-url-http-to-https.js`
+  on the next boot.
+- That migration walks `information_schema.columns`, finds every
+  text/varchar/jsonb column on every public table (skipping `modules`,
+  which the realm-server truncates on startup anyway), and runs an
+  in-place `REPLACE` for the two canonicals. WHERE-filtered so it only
+  touches rows that still contain the old URL — idempotent, and a
+  no-op in production (where the canonical URL is never `localhost`).
+
+After the migration runs, the realm-server boots normally on
+`https://localhost:4201/`. The same-port HTTP→HTTPS dispatcher catches
+any lingering `http://localhost:4201/…` requests (e.g. you typed it
+into a browser, or a card still has a stale URL in a rendered HTML
+attribute) and 301-redirects to the canonical https origin.
+
+Personal realm files under `realms/localhost_4201/**/*.json` may still
+have `id`/`relationships` URLs spelled `http://localhost:4201/…`. The
+indexer re-derives canonical URLs from the realm mount root, so those
+files index cleanly under the new canonical and the redirect handles
+runtime fetches; cleaning up the on-disk strings is optional (a
+`sed -i 's|http://localhost:4201|https://localhost:4201|g'` across the
+realm dir does it in one shot).
+
+##### Verify
+
+```
+curl -kI --http2 https://localhost:4201/_alive
+```
+
+Look for `HTTP/2 200`. The `mise run dev` log also confirms with
+`Realm server listening on port 4201 (https/h2)`.
+
+##### CI / hermetic test harness
+
+CI runs the same `mise run infra:ensure-dev-cert` step out of its init
+action (see `.github/actions/init/action.yml`) — mkcert is installed
+via apt and the cert is provisioned before any test job starts. So CI
+realm-servers boot HTTPS+HTTP/2 on `https://localhost:4201/…` exactly
+like local dev. Test harnesses that launch their own Chromium pass
+`--ignore-certificate-errors` so they don't need the system trust
+store; Node clients pick up the cert via `NODE_EXTRA_CA_CERTS`.
+
 #### Using `mise run services:realm-server`
 
-You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
+You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. Visit `https://localhost:4200` (the vite host) to navigate the workspace — the host bundle there fetches realm data over the realm-server's https origin on `:4201`. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
 
 #### Indexing dashboard
 
@@ -221,7 +316,7 @@ In environment mode, this is at `http://worker.environment-name.localhost/_index
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
 - Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
-- Pooling: Each prerender server maintains up to PRERENDER_PAGE_POOL_SIZE pages (default 4). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
+- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively.
 - Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
@@ -246,11 +341,12 @@ Each additional server spawns its own headless Chrome on an OS-assigned port and
 Prerender server:
 
 - REALM_SECRET_SEED (required): Secret used to create session tokens for realms.
-- BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
+- BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to https://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
 - PRERENDER_COUNT (optional): Number of prerender server instances to start. Each gets its own headless Chrome. Default 1.
-- PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
-- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to PRERENDER_PAGE_POOL_SIZE (i.e. a realm can use all available tabs).
+- PRERENDER_PAGE_POOL_MIN (optional): Idle floor for the dynamic page pool. The pool boots at this size and contracts back to it after sustained idle. Default 4 in dev (set in `mise-tasks/lib/env-vars.sh`).
+- PRERENDER_PAGE_POOL_MAX (optional): Burst ceiling for the dynamic page pool. The pool expands up to this size under saturation. Default 4 in dev. Setting MIN === MAX disables expansion/contraction (fixed-size pool).
+- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to the effective pool max (`PRERENDER_PAGE_POOL_MAX` when set, otherwise the fixed `maxPages` pool size).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
@@ -503,7 +599,7 @@ To run the `packages/host/` workspace tests start the following servers:
 1. `mise run dev` from the repo root to serve _both_ the base realm and the realm that serves the test cards
 2. `pnpm start` in the `packages/host/` workspace to serve ember
 
-The tests are available at `http://localhost:4200/tests`
+The tests are available at `https://localhost:4200/tests`
 
 ### Realm Server Node tests
 
@@ -608,12 +704,12 @@ BOXEL_ENVIRONMENT=parallel mise run services:ai-bot
 
 In environment mode, services are available at:
 
-| Service       | Hostname                                  |
-| ------------- | ----------------------------------------- |
-| Host app      | `http://host.<slug>.localhost`            |
-| Realm server  | `http://realm-server.<slug>.localhost`    |
-| Matrix        | `http://matrix.<slug>.localhost`          |
-| Icons         | `http://icons.<slug>.localhost`           |
+| Service      | Hostname                               |
+| ------------ | -------------------------------------- |
+| Host app     | `http://host.<slug>.localhost`         |
+| Realm server | `http://realm-server.<slug>.localhost` |
+| Matrix       | `http://matrix.<slug>.localhost`       |
+| Icons        | `http://icons.<slug>.localhost`        |
 
 Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
 

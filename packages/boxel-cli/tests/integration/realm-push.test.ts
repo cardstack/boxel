@@ -13,6 +13,7 @@ import {
   setupTestProfile,
   uniqueRealmName,
 } from '../helpers/integration';
+import { TINY_PNG_BYTES, TINY_PDF_BYTES } from '../helpers/binary-fixtures';
 import type { ProfileManager } from '../../src/lib/profile-manager';
 
 let profileManager: ProfileManager;
@@ -29,6 +30,28 @@ function writeLocalFile(localDir: string, relPath: string, content: string) {
   let fullPath = path.join(localDir, relPath);
   fs.mkdirSync(path.dirname(fullPath), { recursive: true });
   fs.writeFileSync(fullPath, content);
+}
+
+function writeLocalBytes(localDir: string, relPath: string, bytes: Uint8Array) {
+  let fullPath = path.join(localDir, relPath);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, bytes);
+}
+
+async function fetchRemoteBytes(
+  realmUrl: string,
+  relPath: string,
+): Promise<Buffer> {
+  let url = buildFileUrl(realmUrl, relPath);
+  let response = await profileManager.authedRealmFetch(url, {
+    headers: { Accept: 'application/vnd.card+source' },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Fetching ${url} failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  return Buffer.from(await response.arrayBuffer());
 }
 
 interface SyncManifest {
@@ -361,6 +384,31 @@ describe('realm push (integration)', () => {
     expect(manifest.files['.boxel-sync.json']).toBeUndefined();
   });
 
+  it('respects .boxelignore patterns', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalFile(localDir, '.boxelignore', '*.ignore\nignore-dir/\n');
+    writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
+    writeLocalFile(localDir, 'test.ignore', 'should not be uploaded');
+    writeLocalFile(localDir, 'ignore-dir/ignored.json', '{"ignored":true}\n');
+
+    await pushCommand(localDir, realmUrl, { profileManager });
+
+    // Non-ignored file is uploaded
+    expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
+    // Files matching .boxelignore patterns are not uploaded
+    expect(await remoteFileExists(realmUrl, 'test.ignore')).toBe(false);
+    expect(await remoteFileExists(realmUrl, 'ignore-dir/ignored.json')).toBe(
+      false,
+    );
+    // The .boxelignore file itself is also not uploaded (dotfile rule)
+    expect(await remoteFileExists(realmUrl, '.boxelignore')).toBe(false);
+
+    let manifest = readManifest(localDir);
+    expect(Object.keys(manifest.files).sort()).toEqual(['card.gts']);
+  });
+
   it('pushes nested subdirectories recursively', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
@@ -399,8 +447,13 @@ describe('realm push (integration)', () => {
     await pushCommand(localDir, realmUrl, { profileManager });
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
-    let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
-    expect(remoteRealmJson).not.toContain('locally-edited-marker');
+    // The remote .realm.json may not exist at all on a freshly-created
+    // realm (CS-10053 stopped seeding one). Either way, the local file
+    // must not have been pushed.
+    if (await remoteFileExists(realmUrl, '.realm.json')) {
+      let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
+      expect(remoteRealmJson).not.toContain('locally-edited-marker');
+    }
 
     let manifest = readManifest(localDir);
     expect(manifest.files['.realm.json']).toBeUndefined();
@@ -670,6 +723,183 @@ describe('realm push (integration)', () => {
     let manifest = readManifest(localDir);
     expect(typeof manifest.files).toBe('object');
     expect(manifest.files['card.gts']).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  // --- Binary file uploads (CS-11075) ---
+
+  it('pushes a PNG file and reads it back byte-identical', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
+
+    await pushCommand(localDir, realmUrl, { profileManager });
+
+    let remote = await fetchRemoteBytes(realmUrl, 'image.png');
+    expect(remote.equals(Buffer.from(TINY_PNG_BYTES))).toBe(true);
+
+    let manifest = readManifest(localDir);
+    expect(manifest.files['image.png']).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('pushes a PDF file byte-identically', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalBytes(localDir, 'doc.pdf', TINY_PDF_BYTES);
+
+    await pushCommand(localDir, realmUrl, { profileManager });
+
+    let remote = await fetchRemoteBytes(realmUrl, 'doc.pdf');
+    expect(remote.equals(Buffer.from(TINY_PDF_BYTES))).toBe(true);
+  });
+
+  it('mixed batch carves binary out of /_atomic but lands every file', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalFile(localDir, 'card.gts', 'export const c = 1;\n');
+    writeLocalFile(localDir, 'data.json', '{"x":1}\n');
+    writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
+    writeLocalBytes(localDir, 'doc.pdf', TINY_PDF_BYTES);
+
+    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
+    let atomicCalls: typeof fetchSpy.mock.calls;
+    let octetCalls: typeof fetchSpy.mock.calls;
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+      atomicCalls = fetchSpy.mock.calls.filter(([input, init]) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        return url.endsWith('/_atomic') && init?.method === 'POST';
+      });
+      octetCalls = fetchSpy.mock.calls.filter(([, init]) => {
+        let contentType =
+          (init?.headers as Record<string, string> | undefined)?.[
+            'Content-Type'
+          ] ?? '';
+        return (
+          init?.method === 'POST' && contentType === 'application/octet-stream'
+        );
+      });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(atomicCalls.length).toBe(1);
+    // One octet-stream POST per binary file (image.png, doc.pdf).
+    expect(octetCalls.length).toBe(2);
+
+    // Every file landed byte-identical on the server
+    expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('c = 1');
+    expect(await fetchRemoteFile(realmUrl, 'data.json')).toContain('"x":1');
+    expect(
+      (await fetchRemoteBytes(realmUrl, 'image.png')).equals(
+        Buffer.from(TINY_PNG_BYTES),
+      ),
+    ).toBe(true);
+    expect(
+      (await fetchRemoteBytes(realmUrl, 'doc.pdf')).equals(
+        Buffer.from(TINY_PDF_BYTES),
+      ),
+    ).toBe(true);
+
+    // Manifest tracks all four files
+    let manifest = readManifest(localDir);
+    expect(Object.keys(manifest.files).sort()).toEqual([
+      'card.gts',
+      'data.json',
+      'doc.pdf',
+      'image.png',
+    ]);
+  });
+
+  it('records text successes in manifest when binary partially fails', async () => {
+    // Mixed batch where the per-file binary POST fails (stubbed 413)
+    // while the atomic text batch lands. The manifest must still
+    // record the text file that the server actually wrote — otherwise
+    // the next push sees it as missing-from-manifest and tries to
+    // re-add it, hitting a 409 against the existing remote.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    writeLocalFile(localDir, 'card.gts', 'export const c = 1;\n');
+    writeLocalBytes(localDir, 'image.png', TINY_PNG_BYTES);
+
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        let contentType =
+          (init?.headers as Record<string, string> | undefined)?.[
+            'Content-Type'
+          ] ?? '';
+        if (
+          init?.method === 'POST' &&
+          contentType === 'application/octet-stream' &&
+          url.endsWith('/image.png')
+        ) {
+          return new Response('Payload Too Large', {
+            status: 413,
+            statusText: 'Payload Too Large',
+          });
+        }
+        return realFetch(input, init);
+      });
+
+    // pushCommand exits 2 on any upload error; intercept so the test
+    // can observe state instead of being terminated.
+    let exitCode: number | undefined;
+    let exitSpy = vi.spyOn(process, 'exit').mockImplementation(((
+      code?: number,
+    ) => {
+      if (exitCode === undefined) exitCode = code;
+      return undefined as never;
+    }) as never);
+
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+    } finally {
+      fetchSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+    expect(exitCode).toBe(2);
+
+    // The text file landed
+    expect(await fetchRemoteFile(realmUrl, 'card.gts')).toContain('c = 1');
+
+    // The manifest records the text success even though the binary failed
+    let manifest = readManifest(localDir);
+    expect(manifest.files['card.gts']).toMatch(/^[0-9a-f]{32}$/);
+    expect(manifest.files['image.png']).toBeUndefined();
+  });
+
+  it('treats SVG as text — round-trips through /_atomic without corruption', async () => {
+    // SVG is XML, so isBinaryFilename returns false. Confirm it still
+    // rides the atomic batch path and comes back exactly.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+
+    let svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>';
+    writeLocalFile(localDir, 'icon.svg', svg);
+
+    let fetchSpy = vi.spyOn(profileManager, 'authedRealmFetch');
+    let octetCount: number;
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+      octetCount = fetchSpy.mock.calls.filter(([, init]) => {
+        let ct =
+          (init?.headers as Record<string, string> | undefined)?.[
+            'Content-Type'
+          ] ?? '';
+        return ct === 'application/octet-stream';
+      }).length;
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(octetCount).toBe(0);
+    expect(await fetchRemoteFile(realmUrl, 'icon.svg')).toBe(svg);
   });
 
   it('fails cleanly when an out-of-band create causes an atomic 409', async () => {

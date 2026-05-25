@@ -1,7 +1,14 @@
 import type { DBAdapter } from '../db';
 import type { RealmAction } from '../index';
 import type { RealmPermissions } from '../index';
-import { query, asExpressions, param, upsert } from '../expression';
+import {
+  asExpressions,
+  dbAdapterQuerier,
+  param,
+  query,
+  type Querier,
+  upsert,
+} from '../expression';
 import { getMatrixUsername } from '../matrix-client';
 
 async function insertPermission(
@@ -53,8 +60,10 @@ async function removePermissions(
 export async function removeRealmPermissions(
   dbAdapter: DBAdapter,
   realmURL: URL,
+  querier?: Querier,
 ) {
-  await query(dbAdapter, [
+  let q = querier ?? dbAdapterQuerier(dbAdapter);
+  await q([
     'DELETE from realm_user_permissions WHERE realm_url =',
     param(realmURL.href),
   ]);
@@ -147,7 +156,7 @@ export async function fetchUserPermissions(
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
       `AND realm_owner = true
-       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -160,13 +169,13 @@ export async function fetchUserPermissions(
     permissions = (await query(dbAdapter, [
       `SELECT realm_url, read, write, realm_owner FROM realm_user_permissions WHERE username =`,
       param(userId),
-      `AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)
+      `AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')
        UNION
        SELECT realm_url, true as read, false as write, false as realm_owner FROM realm_user_permissions WHERE username = '*' AND read = true
        AND realm_url NOT IN (SELECT realm_url FROM realm_user_permissions WHERE username =`,
       param(userId),
       `)
-       AND realm_url NOT IN (SELECT published_realm_url FROM published_realms)`,
+       AND realm_url NOT IN (SELECT url FROM realm_registry WHERE kind = 'published')`,
     ])) as {
       realm_url: string;
       read: boolean;
@@ -195,11 +204,15 @@ export async function fetchUserPermissions(
 }
 
 export async function fetchCatalogRealms(dbAdapter: DBAdapter) {
+  // Catalog realms are publicly-readable realms that aren't themselves
+  // published snapshots — published rows live in realm_registry with
+  // kind='published'.
   let results = (await query(dbAdapter, [
     `SELECT rup.realm_url
      FROM realm_user_permissions rup
-     LEFT JOIN published_realms pr ON rup.realm_url = pr.published_realm_url
-     WHERE rup.username = '*' AND rup.read = true AND pr.published_realm_url IS NULL`,
+     LEFT JOIN realm_registry rr
+       ON rup.realm_url = rr.url AND rr.kind = 'published'
+     WHERE rup.username = '*' AND rup.read = true AND rr.url IS NULL`,
   ])) as {
     realm_url: string;
   }[];
@@ -246,8 +259,9 @@ export async function fetchAllRealmsWithOwners(
 
   // Published realms may not have realm_user_permissions entries in older data.
   // Fall back to the published realm's owner (or source realm owner) when missing.
+  // Phase 4: read from realm_registry; aliases keep the loop accessors stable.
   const publishedRealms = (await query(dbAdapter, [
-    `SELECT published_realm_url, source_realm_url, owner_username FROM published_realms`,
+    `SELECT url AS published_realm_url, source_url AS source_realm_url, owner_username FROM realm_registry WHERE kind = 'published'`,
   ])) as {
     published_realm_url: string;
     source_realm_url: string;

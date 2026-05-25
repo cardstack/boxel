@@ -16,7 +16,7 @@
  *   Active Boxel CLI profile (`boxel profile add`)
  *
  * Usage:
- *   pnpm smoke:test-realm -- --target-realm-url <realm-url>
+ *   pnpm smoke:test-realm -- --target-realm <realm-url>
  */
 
 // This should be first
@@ -139,7 +139,7 @@ function parseArg(name: string): string | undefined {
 }
 
 async function main() {
-  let targetRealmUrl = parseArg('target-realm-url') ?? '';
+  let targetRealm = parseArg('target-realm') ?? '';
 
   let client = new BoxelCLIClient();
   let active = client.getActiveProfile();
@@ -150,31 +150,29 @@ async function main() {
     process.exit(1);
   }
 
-  if (!targetRealmUrl) {
+  if (!targetRealm) {
     let username = active.matrixId.replace(/^@/, '').replace(/:.*$/, '');
-    targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
-    log.info(
-      `No --target-realm-url specified, using default: ${targetRealmUrl}\n`,
-    );
+    targetRealm = `http://localhost:4201/${username}/smoke-test-realm/`;
+    log.info(`No --target-realm specified, using default: ${targetRealm}\n`);
   }
 
-  if (!targetRealmUrl.endsWith('/')) {
-    targetRealmUrl += '/';
+  if (!targetRealm.endsWith('/')) {
+    targetRealm += '/';
   }
 
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
-    new URL(targetRealmUrl).origin + '/',
+    new URL(targetRealm).origin + '/',
   ).href;
 
-  let realmServerUrl = new URL(targetRealmUrl).origin + '/';
-  let realmPath = new URL(targetRealmUrl).pathname
+  let realmServerUrl = new URL(targetRealm).origin + '/';
+  let realmPath = new URL(targetRealm).pathname
     .replace(/^\//, '')
     .replace(/\/$/, '');
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
 
   log.info('=== Factory Test Realm Smoke Test (QUnit) ===\n');
-  log.info(`Target realm: ${targetRealmUrl}`);
+  log.info(`Target realm: ${targetRealm}`);
   log.info(`Realm server: ${realmServerUrl}`);
   log.info(`Test results module: ${testResultsModuleUrl}`);
 
@@ -213,18 +211,14 @@ async function main() {
   );
 
   log.info('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await client.write(
-    targetRealmUrl,
-    'hello.gts',
-    HELLO_CARD_GTS,
-  );
+  let defResult = await client.write(targetRealm, 'hello.gts', HELLO_CARD_GTS);
   log.info(
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );
 
   log.info('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
   let specCardResult = await client.write(
-    targetRealmUrl,
+    targetRealm,
     'Spec/hello-card.json',
     JSON.stringify(HELLO_SPEC_CARD, null, 2),
   );
@@ -236,7 +230,7 @@ async function main() {
 
   log.info('  Writing hello.test.gts (QUnit passing test)...');
   let testResult = await client.write(
-    targetRealmUrl,
+    targetRealm,
     'hello.test.gts',
     HELLO_TEST_GTS,
   );
@@ -250,7 +244,7 @@ async function main() {
     '  Writing hello-fail.test.gts (QUnit deliberately failing test)...',
   );
   let failTestResult = await client.write(
-    targetRealmUrl,
+    targetRealm,
     'hello-fail.test.gts',
     HELLO_FAILING_TEST_GTS,
   );
@@ -296,7 +290,7 @@ async function main() {
     workspaceDir: '/tmp/boxel-factory-smoke',
   });
 
-  let validationResults = await pipeline.validate(targetRealmUrl);
+  let validationResults = await pipeline.validate(targetRealm);
 
   log.info(
     `  Pipeline result: ${validationResults.passed ? 'PASSED' : 'FAILED'} (${validationResults.steps.length} steps)`,

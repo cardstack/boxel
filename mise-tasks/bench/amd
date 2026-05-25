@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Wall-time benchmark for the loader's ES → AMD transpiler (CS-10977). Regenerates fixtures and runs the bench."
+
+set -eu
+
+cd "$(dirname "$0")/../.."
+
+pnpm --filter @cardstack/runtime-common bench:amd:prep
+pnpm --filter @cardstack/runtime-common bench:amd

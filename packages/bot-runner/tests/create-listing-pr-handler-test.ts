@@ -1,14 +1,11 @@
 import { module, test } from 'qunit';
-import { toBranchName } from '@cardstack/runtime-common';
 import type { GitHubClient } from '../lib/github';
 import {
   CreateListingPRHandler,
   type BotTriggerEventContent,
-} from '../lib/create-listing-pr-handler';
+} from '../lib/pr-listing/create-listing-pr-handler';
 
-function expectedFolderName(roomId: string, listingName: string): string {
-  return toBranchName(roomId, listingName).split('/')[0];
-}
+const BRANCH_PATTERN = /^[a-f0-9]{6}-/;
 
 module('create-listing-pr handler', () => {
   test('opens PR with expected params and summary body', async (assert) => {
@@ -61,8 +58,8 @@ module('create-listing-pr handler', () => {
       'returns PR title',
     );
     assert.true(
-      result?.branchName?.endsWith('/my-listing') ?? false,
-      'returns branch name used to open the PR',
+      /^[a-f0-9]{6}-my-listing$/.test(result?.branchName ?? ''),
+      `returns branch name used to open the PR: ${result?.branchName}`,
     );
     assert.true(
       result?.summary?.includes('## Summary') ?? false,
@@ -195,7 +192,7 @@ module('create-listing-pr handler', () => {
     assert.strictEqual(result, null, 'returns null when PR already exists');
   });
 
-  test('addContentsToCommit wraps files under the room-<base64> folder', async (assert) => {
+  test('addContentsToCommit wraps files under the {hash}-{slug} folder', async (assert) => {
     let writeCalls: { files: { path: string; content: string }[]; message: string }[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
@@ -207,13 +204,16 @@ module('create-listing-pr handler', () => {
       },
     };
 
-    let roomId = '!abc123:localhost';
-    let listingName = 'My Listing';
+    let branchName = 'a1b2c3-my-listing';
     let eventContent: BotTriggerEventContent = {
       type: 'pr-listing-create',
       realm: 'http://localhost:4201/test/',
       userId: '@alice:localhost',
-      input: { roomId, listingName },
+      input: {
+        roomId: '!abc123:localhost',
+        listingName: 'My Listing',
+        branchName,
+      },
     };
 
     let handler = new CreateListingPRHandler(githubClient);
@@ -233,23 +233,18 @@ module('create-listing-pr handler', () => {
     });
 
     assert.strictEqual(writeCalls.length, 1, 'writes once');
-    let folder = expectedFolderName(roomId, listingName);
     assert.deepEqual(
       writeCalls[0].files.map((f) => f.path).sort(),
       [
-        `${folder}/CardListing/abc.json`,
-        `${folder}/Recipe.gts`,
-        `${folder}/Spec/def.json`,
+        `${branchName}/CardListing/abc.json`,
+        `${branchName}/Recipe.gts`,
+        `${branchName}/Spec/def.json`,
       ],
-      'every file is prefixed with the wrapper folder, inner type-grouped layout preserved',
-    );
-    assert.true(
-      folder.startsWith('room-'),
-      'folder uses the branch room segment as prefix',
+      'every file is prefixed with the branch-name folder, inner layout preserved',
     );
   });
 
-  test('addContentsToCommit produces the same folder for the same branch (idempotency)', async (assert) => {
+  test('addContentsToCommit produces the same folder when branchName is persisted (idempotency)', async (assert) => {
     let writeCalls: { path: string }[][] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
@@ -265,7 +260,11 @@ module('create-listing-pr handler', () => {
       type: 'pr-listing-create',
       realm: 'http://localhost:4201/test/',
       userId: '@alice:localhost',
-      input: { roomId: '!abc123:localhost', listingName: 'My Listing' },
+      input: {
+        roomId: '!abc123:localhost',
+        listingName: 'My Listing',
+        branchName: 'a1b2c3-my-listing',
+      },
     };
 
     let handler = new CreateListingPRHandler(githubClient);
@@ -286,11 +285,11 @@ module('create-listing-pr handler', () => {
     assert.deepEqual(
       writeCalls[0],
       writeCalls[1],
-      'same branch + same files → same prefixed paths across runs',
+      'same persisted branchName → same prefixed paths across runs',
     );
   });
 
-  test('addContentsToCommit uses a different folder for a different room', async (assert) => {
+  test('addContentsToCommit folder matches the {hash}-{slug} pattern when branchName is not provided', async (assert) => {
     let folders: string[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async () => ({ number: 1, html_url: 'x' }),
@@ -314,22 +313,24 @@ module('create-listing-pr handler', () => {
       }),
     };
 
-    for (let roomId of ['!room-a:localhost', '!room-b:localhost']) {
-      await handler.addContentsToCommit(
-        {
-          type: 'pr-listing-create',
-          realm: 'http://localhost:4201/test/',
-          userId: '@alice:localhost',
-          input: { roomId, listingName: 'My Listing' },
-        },
-        runResult,
-      );
-    }
+    await handler.addContentsToCommit(
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: { roomId: '!room-a:localhost', listingName: 'My Listing' },
+      },
+      runResult,
+    );
 
-    assert.notStrictEqual(
-      folders[0],
-      folders[1],
-      'two different rooms with the same listing name produce distinct folders',
+    assert.strictEqual(folders.length, 1, 'wrote once');
+    assert.ok(
+      BRANCH_PATTERN.test(folders[0]),
+      `folder ${folders[0]} matches {hash6}-{slug}`,
+    );
+    assert.ok(
+      folders[0].endsWith('-my-listing'),
+      'folder ends with kebab-cased listing slug',
     );
   });
 

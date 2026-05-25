@@ -16,50 +16,8 @@
     "deploy:boxel-ui:preview-staging": "pnpm run build-common-deps && cd packages/boxel-ui/test-app && pnpm exec ember deploy s3-preview-staging --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
-    "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-http://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
+    "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types"
-  },
-  "pnpm": {
-    "allowedDeprecatedVersions": {
-      "babel-eslint": "10.1.0"
-    },
-    "overrides": {
-      "@types/eslint": "8.56.5",
-      "@embroider/util": "1.13.1",
-      "@glimmer/tracking>@glimmer/validator": "0.84.3",
-      "@glimmer/component": "^2.0.0",
-      "jsesc": "^3.0.0",
-      "ember-modifier": "^4.1.0",
-      "tracked-built-ins": "^4.1.2"
-    },
-    "peerDependencyRules": {
-      "allowedVersions": {
-        "mustache": "3",
-        "ember-qunit@5.1.2>ember-source": "*"
-      }
-    },
-    "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
-      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
-      "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
-      "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
-      "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
-      "@embroider/compat": "patches/@embroider__compat.patch",
-      "ember-eslint-parser": "patches/ember-eslint-parser.patch",
-      "openai": "patches/openai.patch",
-      "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch",
-      "@embroider/webpack": "patches/@embroider__webpack.patch",
-      "ember-source": "patches/ember-source.patch"
-    },
-    "onlyBuiltDependencies": [
-      "@percy/core",
-      "@vscode/vsce-sign",
-      "aws-sdk",
-      "esbuild",
-      "fsevents",
-      "keytar",
-      "puppeteer"
-    ]
   },
   "devDependencies": {
     "@actions/core": "catalog:",
@@ -88,9 +46,15 @@
     "@glint/ember-tsc": "catalog:"
   },
   "engines": {
-    "pnpm": "^10"
+    "pnpm": "^11"
   },
   "dependencies": {
     "matrix-js-sdk": "38.3.0"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.13.1"
+    }
   }
 }

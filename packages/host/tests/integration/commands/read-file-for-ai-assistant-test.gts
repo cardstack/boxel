@@ -62,7 +62,7 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
       commandService.commandContext,
     );
     let result = await command.execute({
-      fileUrl: `${testRealmURL}files/test.txt`,
+      fileIdentifier: `${testRealmURL}files/test.txt`,
     });
     assert.true(!!result.fileForAttachment.contentHash);
     assert.strictEqual(result.fileForAttachment.contentType, 'text/plain');

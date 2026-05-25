@@ -82,7 +82,7 @@ const SAMPLE_CONTEXT: AgentContext = {
     {
       name: 'search-realm',
       description: 'Search for cards in a realm by query string',
-      category: 'script' as const,
+      category: 'realm-api' as const,
       args: [
         {
           name: 'query',
@@ -102,12 +102,12 @@ const SAMPLE_CONTEXT: AgentContext = {
     {
       name: 'run-realm-tests',
       description: 'Run Playwright tests from the test realm',
-      category: 'script' as const,
+      category: 'realm-api' as const,
       args: [],
       outputFormat: 'text' as const,
     },
   ],
-  targetRealmUrl: 'http://localhost:4201/user/personal/',
+  targetRealm: 'http://localhost:4201/user/personal/',
 };
 
 const SAMPLE_PREVIOUS_ACTIONS: AgentAction[] = [

@@ -60,6 +60,7 @@ import {
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
+  waitForNewRoomSkillsLoaded,
 } from '../helpers';
 
 import {
@@ -397,7 +398,7 @@ module('Acceptance | Commands tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'http://localhost:4202/test/ai-command-example',
+                module: 'https://localhost:4202/test/ai-command-example',
                 name: 'AiCommandExample',
               },
             },
@@ -632,15 +633,26 @@ module('Acceptance | Commands tests', function (hooks) {
       },
     });
 
+    // Open the panel and explicitly enter the room we sent messages to. The
+    // bare data-test-open-ai-assistant click defers room selection to
+    // enterRoomInitially, which prefers a persisted roomId from sessionStorage
+    // and otherwise picks aiSessionRooms[0]. The beforeEach createAndJoinRoom
+    // also marks aibot as a member (mock createRoom auto-invites), so both
+    // rooms qualify — and a stale sessionStorage entry from a prior test
+    // (e.g. OpenAiAssistantRoomCommand racing schedule-meeting and persisting
+    // the beforeEach room) can land us in the wrong one. Be explicit instead.
     await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-room-settled]');
+    getService('ai-assistant-panel-service').enterRoom(roomId);
+    await waitFor(`[data-room-id="${roomId}"][data-room-settled]`);
 
-    // The aibot message is delivered via the mock-matrix listener which pushes
-    // it through a 100ms-debounced drain. data-room-settled only tracks
-    // loadAllTimelineEvents, so the second message can lag behind the settled
-    // marker. Wait for the apply button to actually be in the DOM before
-    // clicking, and dump diagnostics if it never shows up so future flakes
-    // are debuggable.
+    // Wait for the apply button to appear before clicking. If it never shows
+    // up, dump enough state to diagnose: which room is rendered (vs which one
+    // we sent messages to), what the matrix-service / panel-service state is,
+    // what the roomResource's matrixRoom looks like, and the full server-side
+    // event list. Past flakes have shown the apply button missing because
+    // processRoomTask returned early on a memberIds-without-aiBot read, and
+    // never re-ran because _events alone didn't change after _roomState was
+    // populated.
     let applySelector = '[data-test-message-idx="1"] [data-test-command-apply]';
     try {
       await waitFor(applySelector, { timeout: 10_000 });
@@ -651,10 +663,53 @@ module('Acceptance | Commands tests', function (hooks) {
       let applyButtons = findAll('[data-test-command-apply]').map((el) =>
         el.getAttribute('data-test-command-apply'),
       );
+      let roomElements = findAll('[data-room-id]').map((el) => ({
+        roomId: el.getAttribute('data-room-id'),
+        settled: el.getAttribute('data-room-settled'),
+        roomName: el.getAttribute('data-test-room-name'),
+      }));
+      let sessionPreparation = findAll(
+        '[data-test-session-preparation]',
+      ).length;
+      let matrixService = getService('matrix-service') as any;
+      let aiAssistantPanelService = getService(
+        'ai-assistant-panel-service',
+      ) as any;
+      let roomResource = matrixService.roomResources?.get?.(roomId);
+      let renderedRoomResource = matrixService.roomResources?.get?.(
+        matrixService.currentRoomId,
+      );
+      // Coerce every field to a JSON-native type up front (string/boolean/
+      // number/array). JSON.stringify silently drops Sets/Maps to "{}", which
+      // would throw away the diagnostic if a service field's underlying type
+      // ever changes.
+      let serviceState = {
+        currentRoomId: String(matrixService.currentRoomId ?? ''),
+        isLoadingTimeline: Boolean(matrixService.isLoadingTimeline),
+        isPreparingSession: Boolean(aiAssistantPanelService.isPreparingSession),
+        loadingRooms: Boolean(aiAssistantPanelService.loadingRooms),
+        aiSessionRoomIds: (aiAssistantPanelService.aiSessionRooms ?? []).map(
+          (r: any) => String(r.roomId ?? ''),
+        ),
+      };
+      let resourceState = (label: string, r: any) => ({
+        label,
+        present: Boolean(r),
+        roomId: String(r?.roomId ?? ''),
+        hasMatrixRoom: Boolean(r?.matrixRoom),
+        memberIds: Array.isArray(r?.matrixRoom?.memberIds)
+          ? r.matrixRoom.memberIds.map((m: any) => String(m))
+          : [],
+        hasRoomState: Boolean(r?.matrixRoom?.hasRoomState),
+        eventsCount: Number(r?.matrixRoom?.events?.length ?? 0),
+        messagesCount: Number(r?.messages?.length ?? 0),
+        isProcessing: Boolean(r?.isProcessing),
+      });
       let roomEventsSummary = getRoomEvents(roomId).map((e) => ({
         eventId: e.event_id,
         type: e.type,
         sender: e.sender,
+        stateKey: (e as any).state_key,
         msgtype: (e.content as any)?.msgtype,
         hasCommandRequests: Array.isArray(
           (e.content as any)?.[APP_BOXEL_COMMAND_REQUESTS_KEY],
@@ -664,9 +719,20 @@ module('Acceptance | Commands tests', function (hooks) {
         '[scripted-command-test] apply button never rendered. Diagnostic:',
         JSON.stringify(
           {
-            roomId,
+            testRoomId: roomId,
+            renderedRoomElements: roomElements,
             renderedMessageIdxs: messageIdxs,
             renderedApplyButtonStates: applyButtons,
+            sessionPreparationElements: sessionPreparation,
+            serviceState,
+            resourceForTestRoom: resourceState(
+              'roomResources.get(testRoomId)',
+              roomResource,
+            ),
+            resourceForCurrentRoom: resourceState(
+              'roomResources.get(currentRoomId)',
+              renderedRoomResource,
+            ),
             roomEvents: roomEventsSummary,
           },
           null,
@@ -954,6 +1020,13 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     roomId = getRoomIds().pop()!;
+    // The new room's default skills (env skill, which carries show-card) are
+    // loaded asynchronously by the room resource's processRoomTask. If we
+    // dispatch the bot message before loadSkills finishes, message-builder
+    // can't match show-card_566f to a known codeRef and the command resolves
+    // as invalid ("No command for the name X was found") instead of being
+    // auto-applied.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -983,9 +1056,45 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    try {
+      await waitFor(
+        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+      );
+    } catch (err) {
+      let applyButtons = findAll('[data-test-command-apply]').map((el) => ({
+        idx: el
+          .closest('[data-test-message-idx]')
+          ?.getAttribute('data-test-message-idx'),
+        state: el.getAttribute('data-test-command-apply'),
+      }));
+      let applyStates = findAll('[data-test-apply-state]').map((el) =>
+        el.getAttribute('data-test-apply-state'),
+      );
+      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
+        (el) => el.textContent?.trim() ?? '',
+      );
+      let roomData = getService('matrix-service').getRoomData(roomId);
+      let roomResource = getService('matrix-service').roomResources.get(roomId);
+      console.error(
+        '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
+        JSON.stringify(
+          {
+            roomId,
+            renderedApplyButtonStates: applyButtons,
+            renderedApplyStates: applyStates,
+            warnings,
+            enabledSkillCards:
+              roomData?.skillsConfig?.enabledSkillCards?.map(
+                (f) => f.sourceUrl,
+              ) ?? null,
+            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+      throw err;
+    }
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
@@ -1043,6 +1152,10 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     roomId = getRoomIds().pop()!;
+    // Same skill-load race as the sister "agentId matches" test — wait for
+    // default skills to be available so show-card_566f resolves to a known
+    // codeRef before the simulated bot message arrives.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1399,6 +1512,11 @@ module('Acceptance | Commands tests', function (hooks) {
 
     // simulate message
     let roomId = getRoomIds().pop()!;
+    // The JSON-schema validation failure we're asserting only runs once
+    // message-builder has resolved show-card_566f to its codeRef via the
+    // room's loaded skills. Without this wait we sometimes hit the upstream
+    // "No command for the name X was found" branch instead.
+    await waitForNewRoomSkillsLoaded(roomId);
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1428,11 +1546,40 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor(
       '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
     );
+    // The CI flake mode for this test is that the warning reads "No command
+    // for the name X was found" (skill not yet loaded) instead of the
+    // expected JSON-schema validation message. Log enough state to
+    // distinguish the skill-load race from a genuine validation regression
+    // before the qunit-dom assertion records the failure.
+    let expectedValidationText =
+      'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'';
+    let warningText =
+      document
+        .querySelector('[data-test-boxel-alert="warning"]')
+        ?.textContent?.trim() ?? '';
+    if (!warningText.includes(expectedValidationText)) {
+      let roomData = getService('matrix-service').getRoomData(roomId);
+      let roomResource = getService('matrix-service').roomResources.get(roomId);
+      console.error(
+        '[commands-test/json-schema-validation] warning text mismatch. Diagnostic:',
+        JSON.stringify(
+          {
+            roomId,
+            warningText,
+            enabledSkillCards:
+              roomData?.skillsConfig?.enabledSkillCards?.map(
+                (f) => f.sourceUrl,
+              ) ?? null,
+            roomResourceCommandCount: roomResource?.commands?.length ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+    }
     assert
       .dom('[data-test-boxel-alert="warning"]')
-      .containsText(
-        'Command "show-card_566f" validation failed: data/attributes must have required property \'cardId\'',
-      );
+      .containsText(expectedValidationText);
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 

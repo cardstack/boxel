@@ -1,77 +1,267 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
 import { Memoize } from 'typescript-memoize';
-import type { DefinitionLookup, RealmInfo } from '@cardstack/runtime-common';
+import http from 'http';
+import http2 from 'http2';
+import net from 'net';
+import { readFileSync } from 'fs';
+import type { DefinitionLookup, Realm } from '@cardstack/runtime-common';
 import {
-  Realm,
   logger,
   SupportedMimeType,
-  insertPermissions,
-  fetchRealmPermissions,
-  param,
-  query,
-  Deferred,
   type VirtualNetwork,
   type DBAdapter,
   type QueuePublisher,
-  DEFAULT_PERMISSIONS,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
-  PUBLISHED_DIRECTORY_NAME,
-  RealmPaths,
-  fetchSessionRoom,
-  userInitiatedPriority,
-  hasExtension,
-  executableExtensions,
 } from '@cardstack/runtime-common';
-import {
-  ensureDirSync,
-  writeJSONSync,
-  readdirSync,
-  existsSync,
-} from 'fs-extra';
-import { setupCloseHandler } from './node-realm';
+import { ensureDirSync } from 'fs-extra';
 import {
   httpLogging,
   ecsMetadata,
-  setContextResponse,
-  fetchRequestFromContext,
   methodOverrideSupport,
   proxyAsset,
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
-import convertAuthHeaderQueryParam from './middleware/convert-auth-header-qp';
-import { NodeAdapter } from './node-realm';
-import { resolve, join } from 'path';
-import merge from 'lodash/merge';
 
 import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
-import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { createSendEvent } from './handlers/send-event';
+import { createServeFromRealm } from './handlers/serve-from-realm';
+import { createServeIndex } from './handlers/serve-index';
+import { findOrMountRealm } from './lib/realm-routing';
 import type { Prerenderer } from '@cardstack/runtime-common';
-import { retrieveScopedCSS } from './lib/retrieve-scoped-css';
-import {
-  indexURLCandidates,
-  indexCandidateExpressions,
-} from './lib/index-url-utils';
-import {
-  retrieveHeadHTML,
-  retrieveIsolatedHTML,
-  injectHeadHTML,
-  injectIsolatedHTML,
-  ensureSingleTitle,
-} from './lib/index-html-injection';
-import { sanitizeHeadHTMLToString } from '@cardstack/runtime-common';
-import { JSDOM } from 'jsdom';
+import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
+
+const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
+const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
+
+export type RealmHttpServer =
+  | http.Server
+  | http2.Http2SecureServer
+  | net.Server;
+
+// Node's HTTP/2 compat layer reports Http2Stream.writable === false on
+// server-side streams whose request method is HEAD (the protocol forbids a
+// body, so the stream is marked non-writable up front). Koa's
+// `ctx.writable` getter delegates to `res.socket.writable`, so for HEAD
+// over h2 it sees `false` and `respond()` bails silently — the response
+// headers never get sent and the client hangs until its timeout.
+// Patching the prototype getter to recognise HEAD-over-h2 streams as
+// writable (when they are otherwise healthy) restores normal HEAD
+// semantics over h2 without disturbing GET/POST or HTTP/1.1. Exported so
+// tests that build their own Koa app pick up the same fix.
+let koaResponsePatchedForH2 = false;
+export function patchKoaResponseForH2Head() {
+  if (koaResponsePatchedForH2) return;
+  // Construct a throwaway Koa instance just to find the prototype — Koa's
+  // response prototype isn't exported directly.
+  let proto = Object.getPrototypeOf(new Koa().response) as object;
+  let descriptor = Object.getOwnPropertyDescriptor(proto, 'writable');
+  let origWritable = descriptor?.get;
+  if (!origWritable) return;
+  Object.defineProperty(proto, 'writable', {
+    configurable: true,
+    get(this: Koa.Response) {
+      let res = this.res as unknown as {
+        writableEnded?: boolean;
+        req?: { method?: string };
+        stream?: { destroyed?: boolean; closed?: boolean };
+      };
+      if (res?.writableEnded) return false;
+      let stream = res?.stream;
+      if (
+        res?.req?.method === 'HEAD' &&
+        stream &&
+        !stream.destroyed &&
+        !stream.closed
+      ) {
+        return true;
+      }
+      return origWritable!.call(this);
+    },
+  });
+  koaResponsePatchedForH2 = true;
+}
+
+// In TLS mode the realm-server binds a single net.Server that peeks each
+// connection's first byte and routes TLS handshakes (0x16) to the HTTP/2
+// secure server and plain-text HTTP to a tiny 308-redirect server. This
+// gives http://localhost:4201 → https://localhost:4201 the same-port
+// redirect UX without running two listeners on different ports.
+// Exported for tests in `tests/listener-dispatcher-test.ts` — the
+// production caller is `RealmServer.listen()` below.
+export function createListener(
+  log: ReturnType<typeof logger>,
+  app: { callback: Koa['callback'] },
+): { server: RealmHttpServer; proto: 'http' | 'https/h2' } {
+  // Env mode (Traefik in front): force plain HTTP regardless of
+  // whether the TLS env vars are set. They may have leaked in from a
+  // parent shell that ran env-vars.sh in standard mode before
+  // BOXEL_ENVIRONMENT was exported, which would otherwise make us
+  // terminate TLS while Traefik plain-HTTP-proxies to us — every
+  // request then fails with "HTTP/0.9 when not allowed" → 502.
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  let certFile = process.env[TLS_CERT_FILE_ENV];
+  let keyFile = process.env[TLS_KEY_FILE_ENV];
+  if (!certFile || !keyFile) {
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  // We only need the patch on the h2 path — but it's idempotent and
+  // cheap, so we apply it unconditionally once cert/key are present.
+  patchKoaResponseForH2Head();
+  let cert: Buffer;
+  let key: Buffer;
+  try {
+    cert = readFileSync(certFile);
+    key = readFileSync(keyFile);
+  } catch (e) {
+    log.warn(
+      `Unable to read TLS cert/key (%s, %s): %s — falling back to HTTP/1.1`,
+      certFile,
+      keyFile,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  let tlsServer: http2.Http2SecureServer;
+  try {
+    tlsServer = http2.createSecureServer(
+      { cert, key, allowHTTP1: true },
+      app.callback(),
+    );
+  } catch (e) {
+    log.warn(
+      `Unable to construct HTTPS/h2 server (malformed cert?): %s — falling back to HTTP/1.1`,
+      (e as Error).message,
+    );
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
+  let redirectServer = http.createServer(redirectToHttps);
+  // Track every accepted socket so shutdown can force-close them. Without
+  // this, `dispatcher.close()` waits for active HTTP/2 sessions and
+  // keep-alive HTTP/1 connections to end on their own — a single open
+  // browser tab can keep the realm-server from ever shutting down. Mirror
+  // the API surface (`closeAllConnections`) so main.ts's existing typeof
+  // guard picks this up without a special-case branch.
+  let activeSockets = new Set<net.Socket>();
+  let dispatcher = net.createServer({ pauseOnConnect: true }, (socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => activeSockets.delete(socket));
+    // Attach a per-socket error listener BEFORE doing any I/O. A peer that
+    // RSTs the connection mid-handshake (or in the half-open window before
+    // we route it) emits `'error'` on this raw socket; without a listener
+    // Node escalates that to an uncaught exception and the realm-server
+    // would crash. Logging + best-effort destroy is sufficient — the
+    // dispatcher is the realm-server's single inbound listener and must
+    // survive hostile or unlucky clients.
+    socket.on('error', (e) => {
+      log.warn(`dispatcher socket error: %s`, e.message);
+      socket.destroy();
+    });
+    socket.once('readable', () => {
+      let firstByte: Buffer | null;
+      try {
+        firstByte = socket.read(1);
+      } catch {
+        socket.destroy();
+        return;
+      }
+      if (firstByte == null) {
+        // Connection opened then closed without data — release the socket
+        // promptly instead of letting it idle in CLOSE_WAIT until the OS
+        // reaps it. Cheap defense against half-open-connection accumulators
+        // (port scanners, eager load balancers, etc.).
+        socket.destroy();
+        return;
+      }
+      socket.unshift(firstByte);
+      // 0x16 is the TLS ClientHello record type. Anything else is treated
+      // as plain HTTP (ASCII verb byte) and gets the redirect path.
+      if (firstByte[0] === 0x16) {
+        tlsServer.emit('connection', socket);
+      } else {
+        redirectServer.emit('connection', socket);
+      }
+      socket.resume();
+    });
+  });
+  // Server-level errors (e.g. `EADDRINUSE` at `listen()` time). Per-socket
+  // errors are handled inside the connection callback above.
+  dispatcher.on('error', (e) => {
+    log.warn(`dispatcher server error: %s`, e.message);
+  });
+  // Mirror http.Server's `closeAllConnections()` so shutdown can force-
+  // close in-flight TLS / HTTP/2 / keep-alive sockets without waiting for
+  // peers to close them. main.ts feature-detects this method.
+  (
+    dispatcher as net.Server & { closeAllConnections: () => void }
+  ).closeAllConnections = () => {
+    for (let s of activeSockets) {
+      try {
+        s.destroy();
+      } catch {
+        // best-effort
+      }
+    }
+    activeSockets.clear();
+  };
+  return { server: dispatcher, proto: 'https/h2' };
+}
+
+// Same-port 308 redirect for plain-text HTTP requests that land on the
+// HTTPS port. The dispatcher binds a single port so the inbound and
+// target ports agree; we just rewrite the scheme. Parses via URL so
+// bracketed IPv6 authorities (`[::1]:4201`) round-trip cleanly instead
+// of being mangled by string-level regex.
+//
+// 308 (vs 301): preserves the request method and body across the
+// redirect. Local scripts that POST to `http://localhost:4201/...`
+// (matrix registration/setup writes `/_server-session`, `/_user`,
+// webhook endpoints) need that — a 301 makes fetch downgrade the
+// follow-up to GET and drops the body, breaking those calls. 308 is
+// also semantically correct: this redirect is a permanent property of
+// the wire protocol, not a temporary handler decision.
+function redirectToHttps(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): void {
+  let hostHeader = typeof req.headers.host === 'string' ? req.headers.host : '';
+  let path = req.url ?? '/';
+  let authority: string;
+  try {
+    let parsed = new URL(`http://${hostHeader || hostFromSocket(req)}`);
+    // `url.host` preserves brackets around IPv6 literals and the port if
+    // present, which is exactly the form we want in the redirect target.
+    authority = parsed.host;
+  } catch {
+    authority = hostFromSocket(req);
+  }
+  let location = `https://${authority}${path}`;
+  res.writeHead(308, {
+    Location: location,
+    'Content-Type': 'text/plain; charset=utf-8',
+  });
+  res.end(`Redirecting to ${location}\n`);
+}
+
+// Best-effort fallback when the inbound request has no Host header
+// (HTTP/1.0 client). Uses the dispatcher's bound `localAddress:localPort`
+// so the redirect goes to the actual listener instead of guessing port
+// 443. Brackets IPv6 literals to match URL `host` formatting.
+function hostFromSocket(req: http.IncomingMessage): string {
+  let addr = req.socket.localAddress ?? 'localhost';
+  let port = req.socket.localPort;
+  let bracketed = addr.includes(':') ? `[${addr}]` : addr;
+  return port ? `${bracketed}:${port}` : bracketed;
+}
 
 export class RealmServer {
   private log = logger('realm-server');
-  private headLog = logger('realm-server:head');
-  private isolatedLog = logger('realm-server:isolated');
-  private scopedCSSLog = logger('realm-server:scoped-css');
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
@@ -87,12 +277,9 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
-  private promiseForIndexHTML: Promise<string> | undefined;
-  private indexHTMLHash: string | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-  private enableFileWatcher: boolean;
   private cardSizeLimitBytes: number;
   private fileSizeLimitBytes: number;
   private domainsForPublishedRealms:
@@ -102,10 +289,12 @@ export class RealmServer {
       }
     | undefined;
   private prerenderer: Prerenderer | undefined;
+  private reconciler: RealmRegistryReconciler;
 
   constructor({
     serverURL,
     realms,
+    reconciler,
     virtualNetwork,
     matrixClient,
     realmServerSecretSeed,
@@ -119,12 +308,12 @@ export class RealmServer {
     getIndexHTML,
     matrixRegistrationSecret,
     getRegistrationSecret,
-    enableFileWatcher,
     domainsForPublishedRealms,
     prerenderer,
   }: {
     serverURL: URL;
     realms: Realm[];
+    reconciler: RealmRegistryReconciler;
     virtualNetwork: VirtualNetwork;
     matrixClient: MatrixClient;
     realmServerSecretSeed: string;
@@ -174,14 +363,40 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
-    this.enableFileWatcher = enableFileWatcher ?? false;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
-    this.realms = [...realms];
+    // Pass-by-reference: handlers and the reconciler both mutate this
+    // array. Copying it would create two divergent views of mounted
+    // realms — a bug under multi-instance Phase 3 semantics. The legacy
+    // `[...realms]` copy is gone with that constraint.
+    this.realms = realms;
+    this.reconciler = reconciler;
     this.prerenderer = prerenderer;
   }
 
   @Memoize()
   get app() {
+    let { serveIndex, serveHostApp } = createServeIndex({
+      serverURL: this.serverURL,
+      assetsURL: this.assetsURL,
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
+      matrixClient: this.matrixClient,
+      getIndexHTML: this.getIndexHTML,
+      cardSizeLimitBytes: this.cardSizeLimitBytes,
+      fileSizeLimitBytes: this.fileSizeLimitBytes,
+    });
+    let serveFromRealm = createServeFromRealm({
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
+      virtualNetwork: this.virtualNetwork,
+    });
+    let sendEvent = createSendEvent({
+      matrixClient: this.matrixClient,
+      dbAdapter: this.dbAdapter,
+    });
+
     let app = new Koa<Koa.DefaultState, Koa.Context>()
       .use(httpLogging)
       .use(ecsMetadata)
@@ -189,8 +404,25 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Grafana-Device-Id, X-Grafana-Action',
+          // Without an explicit expose list, @koa/cors only emits the
+          // CORS-safelisted response headers (cache-control, content-*,
+          // expires, last-modified, pragma). ETag is not on that list,
+          // so cross-origin browser callers (the host SPA inside a
+          // prerender tab, or any in-DevTools fetch) get a response
+          // whose `headers.get('ETag')` is `null` even though the
+          // server emitted one — making the entire revalidation
+          // protocol invisible to JS.
+          exposeHeaders: 'ETag',
           allowMethods: 'GET,HEAD,PUT,POST,DELETE,PATCH,OPTIONS,QUERY',
+          // Cache the preflight response for 24 h. Without this @koa/cors
+          // omits Access-Control-Max-Age and Chrome falls back to its
+          // ~5 s default, which forces a fresh OPTIONS round-trip in front
+          // of nearly every cross-origin QUERY the host fires during a
+          // long indexing run. The doubled HTTP-arrival count translates
+          // directly to wall-clock since each preflight is a serial RTT
+          // blocking the QUERY behind it.
+          maxAge: 86400,
         }),
       )
       .use(async (ctx, next) => {
@@ -213,7 +445,6 @@ export class RealmServer {
         await next();
       })
       .use(convertAcceptHeaderQueryParam)
-      .use(convertAuthHeaderQueryParam)
       .use(methodOverrideSupport)
       .use(
         createRoutes({
@@ -225,19 +456,18 @@ export class RealmServer {
           realmSecretSeed: this.realmSecretSeed,
           grafanaSecret: this.grafanaSecret,
           virtualNetwork: this.virtualNetwork,
-          createRealm: this.createRealm,
-          serveHostApp: this.serveHostApp,
-          serveIndex: this.serveIndex,
-          serveFromRealm: this.serveFromRealm,
-          sendEvent: this.sendEvent,
+          serveHostApp,
+          serveIndex,
+          serveFromRealm,
+          sendEvent,
           queue: this.queue,
           realms: this.realms,
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
-          createAndMountRealm: this.createAndMountRealm,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
+          reconciler: this.reconciler,
         }),
       )
       .use(
@@ -247,8 +477,8 @@ export class RealmServer {
           },
         }),
       )
-      .use(this.serveIndex)
-      .use(this.serveFromRealm);
+      .use(serveIndex)
+      .use(serveFromRealm);
 
     app.on('error', (err, ctx) => {
       console.error(`Unhandled server error`, err);
@@ -261,35 +491,46 @@ export class RealmServer {
     return app;
   }
 
-  listen(port: number) {
-    let instance = this.app.listen(port);
+  listen(port: number): RealmHttpServer {
+    let { server: instance, proto } = createListener(this.log, this.app);
+    instance.listen(port);
     instance.on('listening', () => {
       let actualPort =
         (instance.address() as import('net').AddressInfo | null)?.port ?? port;
-      this.log.info(`Realm server listening on port %s\n`, actualPort);
+      this.log.info(
+        `Realm server listening on port %s (%s)\n`,
+        actualPort,
+        proto,
+      );
     });
     return instance;
   }
 
   async start() {
-    let loadedRealms = await this.loadRealms();
-    for (let loadedRealm of loadedRealms) {
-      const existingIndex = this.realms.findIndex(
-        (r) => r.url === loadedRealm.url,
-      );
-      if (existingIndex === -1) {
-        this.realms.push(loadedRealm);
-      } else {
-        this.realms[existingIndex] = loadedRealm;
-      }
-    }
-
-    // ideally we'd like to use a Promise.all to start these and the ordering
-    // will just fall out naturally from cross realm invalidation. Until we have
-    // that we should start the realms in order.
+    // Phase 3: two paths converge here.
+    //
+    // 1. Constructor-supplied realms — test helpers and any legacy boot
+    //    code path push realms directly into `this.realms` before
+    //    server.start() runs and expect this method to call
+    //    realm.start() on them (it used to do this implicitly via
+    //    loadRealms()). They are not in reconciler.knownByUrl, so the
+    //    reconcile pass below would skip them. Iterate first, in
+    //    insertion order — realms[] is empty in production main.ts, so
+    //    this is a no-op there.
+    // 2. Reconciler-driven boot — reconciler.reconcile() reads
+    //    realm_registry into knownByUrl and eager-mounts every pinned
+    //    row via mountFromRow (the main.ts factory), which constructs
+    //    a Realm, publishes into realms[] + virtualNetwork, then
+    //    awaits realm.start() so each pinned realm is fully indexed
+    //    before this method returns. Non-pinned rows are deferred to
+    //    findOrMountRealm() on first request.
+    //
+    // The reconciler's background poll loop (LISTEN realm_registry +
+    // 30s safety poll) starts in main.ts after this method returns.
     for (let realm of this.realms) {
       await realm.start();
     }
+    await this.reconciler.reconcile();
   }
 
   get testingOnlyRealms() {
@@ -302,959 +543,23 @@ export class RealmServer {
     }
   }
 
-  private serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
-    let acceptHeader = ctxt.header.accept ?? '';
-    let lowerAcceptHeader = acceptHeader.toLowerCase();
-    let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
-    let includesHtmlMimeType = lowerAcceptHeader.includes('text/html');
-
-    let requestURL = new URL(
-      `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
-    );
-
-    // Track published realm info from routing checks to avoid redundant
-    // DB queries in the ETag logic below.
-    let publishedRealmInfo: { lastPublishedAt: string | null } | null = null;
-    let publishedRealmInfoFetched = false;
-
-    if (includesHtmlMimeType) {
-      if (includesVndMimeType) {
-        publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
-        publishedRealmInfoFetched = true;
-
-        if (publishedRealmInfo) {
-          return next();
-        }
-      }
-    } else {
-      if (includesVndMimeType) {
-        return next();
-      }
-
-      if (hasExtension(requestURL.pathname)) {
-        return next();
-      }
-
-      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
-      publishedRealmInfoFetched = true;
-
-      if (!publishedRealmInfo) {
-        return next();
-      }
-
-      // For published realms with generic Accept headers (like */*), we need to
-      // distinguish card URLs from module URLs. Module imports (e.g., "./person")
-      // resolve to URLs without extensions and would incorrectly get HTML served.
-      // Only serve HTML if:
-      // 1. This is a directory index request (path ends with /), OR
-      // 2. The URL corresponds to an indexed card instance
-      let isIndexRequest = requestURL.pathname.endsWith('/');
-      if (!isIndexRequest) {
-        let cardURL = requestURL;
-        let isCardInstance = await this.isIndexedCardInstance(cardURL);
-        if (!isCardInstance) {
-          return next();
-        }
-      }
-    }
-
-    // If this is a /connect iframe request, is the origin a valid published realm?
-
-    let connectMatch = ctxt.request.path.match(/\/connect\/(.+)$/);
-
-    if (connectMatch) {
-      try {
-        let originParameter = new URL(decodeURIComponent(connectMatch[1])).href;
-
-        let publishedRealms = await query(this.dbAdapter, [
-          `SELECT published_realm_url FROM published_realms WHERE published_realm_url LIKE `,
-          param(`${originParameter}%`),
-        ]);
-
-        if (publishedRealms.length === 0) {
-          ctxt.status = 404;
-          ctxt.body = `Not Found: No published realm found for origin ${originParameter}`;
-
-          this.log.debug(
-            `Ignoring /connect request for origin ${originParameter}: no matching published realm`,
-          );
-
-          return;
-        }
-
-        ctxt.set(
-          'Content-Security-Policy',
-          `frame-ancestors ${originParameter}`,
-        );
-      } catch (error) {
-        ctxt.status = 400;
-        ctxt.body = 'Bad Request';
-
-        this.log.info(`Error processing /connect request: ${error}`);
-
-        return;
-      }
-    }
-
-    ctxt.type = 'html';
-
-    let cardURL = requestURL;
-    let isIndexRequest = requestURL.pathname.endsWith('/');
-    if (isIndexRequest) {
-      cardURL = new URL('index', requestURL);
-    }
-
-    // Retrieve index HTML early so the shell hash is available for ETag.
-    // This is memoized in production, so it's cheap after the first call.
-    let indexHTML = await this.retrieveIndexHTML();
-
-    // For published realms, support HTTP caching via ETag.
-    // The ETag includes both last_published_at and a hash of the host app
-    // shell, so a deploy that changes index.html invalidates cached responses.
-    if (!publishedRealmInfoFetched) {
-      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
-    }
-    let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
-    let etag =
-      lastPublishedAt && this.indexHTMLHash
-        ? `"${lastPublishedAt}-${this.indexHTMLHash}"`
-        : null;
-
-    if (etag) {
-      let ifNoneMatch = ctxt.get('If-None-Match');
-      if (
-        ifNoneMatch === '*' ||
-        ifNoneMatch
-          .split(',')
-          .some((t) => t.trim().replace(/^W\//, '') === etag)
-      ) {
-        ctxt.status = 304;
-        ctxt.set('ETag', etag);
-        ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
-        ctxt.vary('Accept');
-        return;
-      }
-    }
-    let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
-
-    if (!hasPublicPermissions) {
-      ctxt.body = injectHeadHTML(
-        indexHTML,
-        `<title>Boxel</title>\n${this.defaultIconLinks().join('\n')}`,
-      );
-      return;
-    }
-
-    this.headLog.debug(`Fetching head HTML for ${cardURL.href}`);
-    this.isolatedLog.debug(`Fetching isolated HTML for ${cardURL.href}`);
-    this.scopedCSSLog.debug(`Fetching scoped CSS for ${cardURL.href}`);
-
-    let [headHTML, isolatedHTML, scopedCSS] = await Promise.all([
-      retrieveHeadHTML({
-        cardURL,
-        dbAdapter: this.dbAdapter,
-        log: this.headLog,
-      }),
-      retrieveIsolatedHTML({
-        cardURL,
-        dbAdapter: this.dbAdapter,
-        log: this.isolatedLog,
-      }),
-      retrieveScopedCSS({
-        cardURL,
-        dbAdapter: this.dbAdapter,
-        log: this.scopedCSSLog,
-      }),
-    ]);
-
-    let doc = new JSDOM().window.document;
-    if (headHTML != null) {
-      let sanitized = sanitizeHeadHTMLToString(headHTML, doc);
-      if (sanitized !== null) {
-        headHTML = sanitized;
-      } else {
-        headHTML = null;
-      }
-    }
-
-    if (headHTML != null) {
-      this.headLog.debug(
-        `Injecting head HTML for ${cardURL.href} (length ${headHTML.length})\n${this.truncateLogLines(
-          headHTML,
-        )}`,
-      );
-    } else {
-      this.headLog.debug(
-        `No head HTML found for ${cardURL.href}, serving base index.html`,
-      );
-    }
-
-    if (scopedCSS != null) {
-      this.scopedCSSLog.debug(
-        `Using scoped CSS for ${cardURL.href} (length ${scopedCSS.length})`,
-      );
-    } else {
-      this.scopedCSSLog.debug(
-        `No scoped CSS returned from database for ${cardURL.href}`,
-      );
-    }
-
-    let responseHTML = indexHTML;
-    let headFragments: string[] = [];
-
-    if (headHTML != null) {
-      headFragments.push(ensureSingleTitle(headHTML));
-    } else {
-      headFragments.push('<title>Boxel</title>');
-    }
-
-    if (scopedCSS != null) {
-      this.scopedCSSLog.debug(`Injecting scoped CSS for ${cardURL.href}`);
-      headFragments.push(
-        `<style data-boxel-scoped-css>\n${scopedCSS}\n</style>`,
-      );
-    }
-
-    let hasFavicon = false;
-    let hasAppleTouchIcon = false;
-    if (headHTML != null) {
-      let fragment = doc.createRange().createContextualFragment(headHTML);
-      hasFavicon = fragment.querySelector('link[rel~="icon"]') != null;
-      hasAppleTouchIcon =
-        fragment.querySelector('link[rel~="apple-touch-icon"]') != null;
-    }
-    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
-    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
-    if (!hasFavicon) {
-      headFragments.push(`<link href="${faviconURL}" rel="icon" />`);
-    }
-    if (!hasAppleTouchIcon) {
-      headFragments.push(
-        `<link href="${webclipURL}" rel="apple-touch-icon" />`,
-      );
-    }
-
-    if (headFragments.length > 0) {
-      responseHTML = injectHeadHTML(responseHTML, headFragments.join('\n'));
-    }
-
-    if (isolatedHTML != null) {
-      this.isolatedLog.debug(
-        `Injecting isolated HTML for ${cardURL.href} (length ${isolatedHTML.length})\n${this.truncateLogLines(
-          isolatedHTML,
-        )}`,
-      );
-      responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
-    }
-
-    if (etag) {
-      ctxt.set('ETag', etag);
-      ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
-      ctxt.vary('Accept');
-    }
-
-    ctxt.body = responseHTML;
-    return;
-  };
-
-  private serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {
-    let acceptHeader = (ctxt.header.accept ?? '').toLowerCase();
-    let isHead = ctxt.method === 'HEAD';
-    if (!isHead && !acceptHeader.includes('text/html')) {
-      return next();
-    }
-
-    ctxt.type = 'html';
-    ctxt.body = injectHeadHTML(
-      await this.retrieveIndexHTML(),
-      `<title>Boxel</title>\n${this.defaultIconLinks().join('\n')}`,
-    );
-  };
-
-  private findRealmForRequestURL(requestURL: URL): Realm | undefined {
-    return this.realms.find((candidate) => {
-      let realmURL = new URL(candidate.url);
-      realmURL.protocol = requestURL.protocol;
-      return new RealmPaths(realmURL).inRealm(requestURL);
+  // Test-only accessor for the request-path realm resolver. Exposed so
+  // lazy-mount integration tests can drive findOrMountRealm directly
+  // without spinning up an HTTP listener + mocked Koa context.
+  testingOnlyFindOrMountRealm(requestURL: URL): Promise<Realm | undefined> {
+    return findOrMountRealm(requestURL, {
+      realms: this.realms,
+      reconciler: this.reconciler,
+      dbAdapter: this.dbAdapter,
     });
   }
 
-  private async getPublishedRealmInfo(
-    requestURL: URL,
-  ): Promise<{ lastPublishedAt: string | null } | null> {
-    let realm = this.findRealmForRequestURL(requestURL);
-    if (!realm) {
-      return null;
-    }
-
-    let rows = await query(this.dbAdapter, [
-      `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
-      param(realm.url),
-    ]);
-
-    if (rows.length === 0) {
-      return null;
-    }
-
-    return {
-      lastPublishedAt: (rows[0].last_published_at as string) ?? null,
-    };
+  // Test-only synchronous reconcile pass. The production reconciler
+  // wakes on NOTIFY realm_registry, but tests need a deterministic
+  // way to drive the post-DELETE unmount path without polling.
+  testingOnlyReconcile(): Promise<void> {
+    return this.reconciler.reconcile();
   }
-
-  // Check if the URL corresponds to an indexed card instance.
-  // This is used to distinguish card URLs from module URLs when deciding
-  // whether to serve HTML for published realms.
-  //
-  // IMPORTANT: Card instances have their file_alias set to the URL without
-  // the .json extension. This means an instance at /foo/bar.json has
-  // file_alias /foo/bar. When a module request comes in for /foo/bar (no
-  // extension), we must check if it's actually a module before assuming it's
-  // an instance. Modules take precedence over instance aliases.
-  private async isIndexedCardInstance(cardURL: URL): Promise<boolean> {
-    let candidates = indexURLCandidates(cardURL);
-    if (candidates.length === 0) {
-      return false;
-    }
-
-    // First check if there's a module at this URL - modules take precedence
-    // over instance aliases. This handles the case where:
-    // - Module: /foo/bar.gts (file_alias: /foo/bar)
-    // - Instance: /foo/bar.json (file_alias: /foo/bar)
-    // A request for /foo/bar should serve the module, not HTML for the instance.
-    // Prefer the modules table here because copied/published realms do not
-    // carry module rows in boxel_index.
-    let moduleRows = await query(this.dbAdapter, [
-      `
-        SELECT 1
-        FROM modules
-        WHERE
-      `,
-      ...indexCandidateExpressions(candidates),
-      `
-        LIMIT 1
-      `,
-    ]);
-
-    if (moduleRows.length > 0) {
-      return false;
-    }
-
-    let rows = await query(this.dbAdapter, [
-      `
-        SELECT 1
-        FROM boxel_index
-        WHERE type = 'instance'
-          AND is_deleted IS NOT TRUE
-          AND
-        `,
-      ...indexCandidateExpressions(candidates),
-      `
-        LIMIT 1
-      `,
-    ]);
-
-    if (rows.length === 0) {
-      return false;
-    }
-
-    // During publish/copy index races, module rows can lag behind source files.
-    // Only do filesystem probing after we've identified an instance candidate
-    // to avoid extra IO on the hot request path.
-    if (this.hasExtensionlessSourceModule(cardURL)) {
-      return false;
-    }
-
-    return true;
-  }
-
-  private hasExtensionlessSourceModule(cardURL: URL): boolean {
-    let realm = this.findRealmForRequestURL(cardURL);
-    if (!realm?.dir) {
-      return false;
-    }
-
-    let localPath: string;
-    try {
-      localPath = realm.paths.local(cardURL);
-    } catch {
-      return false;
-    }
-
-    if (!localPath || hasExtension(localPath)) {
-      return false;
-    }
-
-    for (let extension of executableExtensions) {
-      if (existsSync(join(realm.dir, `${localPath}${extension}`))) {
-        return true;
-      }
-      if (existsSync(join(realm.dir, localPath, `index${extension}`))) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  private async hasPublicPermissions(cardURL: URL): Promise<boolean> {
-    let realm = this.findRealmForRequestURL(cardURL);
-
-    if (!realm) {
-      return false;
-    }
-
-    let permissions = await fetchRealmPermissions(
-      this.dbAdapter,
-      new URL(realm.url),
-    );
-
-    return permissions['*']?.includes('read') ?? false;
-  }
-
-  private async retrieveIndexHTML(): Promise<string> {
-    // Cache index.html in production only
-    let isDev = this.assetsURL.hostname === 'localhost';
-
-    if (!isDev && this.promiseForIndexHTML) {
-      return this.promiseForIndexHTML;
-    }
-
-    let deferred = new Deferred<string>();
-
-    if (!isDev) {
-      this.promiseForIndexHTML = deferred.promise;
-    }
-
-    let rewriteRealmURL = (url?: string) => {
-      if (!url) {
-        return url;
-      }
-
-      let parsed = new URL(url);
-      return new URL(
-        `${parsed.pathname}${parsed.search}${parsed.hash}`,
-        this.serverURL,
-      ).href;
-    };
-
-    let indexHTML = (await this.getIndexHTML()).replace(
-      /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
-      (_match, g1, g2, g3) => {
-        let config = JSON.parse(decodeURIComponent(g2));
-
-        if (config.publishedRealmBoxelSpaceDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSpaceDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSpaceDomain = this.serverURL.host;
-        }
-
-        if (config.publishedRealmBoxelSiteDomain === 'localhost:4201') {
-          // if this is the default, this needs to be the realm server’s host
-          // to work in Matrix tests, since publishedRealmBoxelSiteDomain is currently
-          // the default domain for publishing a realm
-          config.publishedRealmBoxelSiteDomain = this.serverURL.host;
-        }
-
-        config = merge({}, config, {
-          hostsOwnAssets: false,
-          assetsURL: this.assetsURL.href,
-          matrixURL: this.matrixClient.matrixURL.href.replace(/\/$/, ''),
-          matrixServerName:
-            process.env.MATRIX_SERVER_NAME ||
-            this.matrixClient.matrixURL.hostname,
-          realmServerURL: this.serverURL.href,
-          resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
-          resolvedCatalogRealmURL: rewriteRealmURL(
-            config.resolvedCatalogRealmURL,
-          ),
-          resolvedLegacyCatalogRealmURL: rewriteRealmURL(
-            config.resolvedLegacyCatalogRealmURL,
-          ),
-          resolvedSkillsRealmURL: rewriteRealmURL(
-            config.resolvedSkillsRealmURL,
-          ),
-          resolvedOpenRouterRealmURL: rewriteRealmURL(
-            config.resolvedOpenRouterRealmURL,
-          ),
-          defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
-          cardSizeLimitBytes: this.cardSizeLimitBytes,
-          fileSizeLimitBytes: this.fileSizeLimitBytes,
-          publishedRealmDomainOverrides:
-            process.env.PUBLISHED_REALM_DOMAIN_OVERRIDES ??
-            config.publishedRealmDomainOverrides,
-        });
-        return `${g1}${encodeURIComponent(JSON.stringify(config))}${g3}`;
-      },
-    );
-
-    indexHTML = indexHTML
-      .replace(/(src|href)="\//g, `$1="${this.assetsURL.href}`)
-      // This is imported within a script tag vs being in an attribute
-      .replace(
-        '/assets/content-tag/standalone.js',
-        new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
-      );
-
-    // Strip any static favicon/apple-touch-icon links from the base HTML
-    // since these are now dynamically injected between the head markers
-    indexHTML = indexHTML
-      .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
-      .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
-
-    // Recompute the hash in dev mode (where index.html is not cached) so
-    // that changes to the shell are reflected in the ETag.
-    if (!this.indexHTMLHash || isDev) {
-      let { createHash } = await import('crypto');
-      this.indexHTMLHash = createHash('md5')
-        .update(indexHTML)
-        .digest('hex')
-        .slice(0, 8);
-    }
-
-    deferred.fulfill(indexHTML);
-    return indexHTML;
-  }
-
-  private defaultIconLinks(): string[] {
-    let faviconURL = new URL('boxel-favicon.png', this.assetsURL).href;
-    let webclipURL = new URL('boxel-webclip.png', this.assetsURL).href;
-    return [
-      `<link href="${faviconURL}" rel="icon" />`,
-      `<link href="${webclipURL}" rel="apple-touch-icon" />`,
-    ];
-  }
-
-  private truncateLogLines(value: string, maxLines = 3): string {
-    let lines = value.split(/\r?\n/);
-    if (lines.length <= maxLines) {
-      return value;
-    }
-    let truncated = lines.slice(0, maxLines);
-    truncated[maxLines - 1] = `${truncated[maxLines - 1]} ...`;
-    return truncated.join('\n');
-  }
-
-  private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    if (ctxt.request.path === '/_boom') {
-      throw new Error('boom');
-    }
-    let request = await fetchRequestFromContext(ctxt);
-    let realmResponse = await this.virtualNetwork.handle(
-      request,
-      (mappedRequest) => {
-        // Setup this handler only after the request has been mapped because
-        // the *mapped request* is the one that gets closed, not the original one
-        setupCloseHandler(ctxt.res, mappedRequest);
-      },
-    );
-
-    await setContextResponse(ctxt, realmResponse);
-  };
-
-  private createRealm = async ({
-    ownerUserId,
-    endpoint,
-    name,
-    backgroundURL,
-    iconURL,
-  }: {
-    ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
-    endpoint: string;
-    name: string;
-    backgroundURL?: string;
-    iconURL?: string;
-  }): Promise<{ realm: Realm; info: Partial<RealmInfo> }> => {
-    let realmAtServerRoot = this.realms.find((r) => {
-      let realmUrl = new URL(r.url);
-
-      return (
-        realmUrl.href.replace(/\/$/, '') === realmUrl.origin &&
-        realmUrl.hostname === this.serverURL.hostname
-      );
-    });
-
-    if (realmAtServerRoot) {
-      throw errorWithStatus(
-        400,
-        `Cannot create a realm: a realm is already mounted at the origin of this server: ${realmAtServerRoot.url}`,
-      );
-    }
-    if (!endpoint.match(/^[a-z0-9-]+$/)) {
-      throw errorWithStatus(
-        400,
-        `realm endpoint '${endpoint}' contains invalid characters`,
-      );
-    }
-
-    let ownerUsername = getMatrixUsername(ownerUserId);
-    let url = new URL(
-      `${this.serverURL.pathname.replace(
-        /\/$/,
-        '',
-      )}/${ownerUsername}/${endpoint}/`,
-      this.serverURL,
-    ).href;
-
-    let existingRealmURLs = this.realms.map((r) => r.url);
-    if (existingRealmURLs.includes(url)) {
-      throw errorWithStatus(
-        400,
-        `realm '${url}' already exists on this server`,
-      );
-    }
-
-    let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
-    ensureDirSync(realmPath);
-
-    await insertPermissions(this.dbAdapter, new URL(url), {
-      [ownerUserId]: DEFAULT_PERMISSIONS,
-    });
-
-    let info = {
-      name,
-      ...(iconURL ? { iconURL } : {}),
-      ...(backgroundURL ? { backgroundURL } : {}),
-      publishable: true,
-    };
-    writeJSONSync(join(realmPath, '.realm.json'), {
-      publishable: true,
-    });
-    writeJSONSync(join(realmPath, 'realm.json'), {
-      data: {
-        type: 'card',
-        attributes: {
-          cardInfo: { name },
-          ...(iconURL ? { iconURL } : {}),
-          ...(backgroundURL ? { backgroundURL } : {}),
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/realm-config',
-            name: 'RealmConfig',
-          },
-        },
-      },
-    });
-    writeJSONSync(join(realmPath, 'index.json'), {
-      data: {
-        type: 'card',
-        meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/cards-grid',
-            name: 'CardsGrid',
-          },
-        },
-      },
-    });
-
-    let realm = this.createAndMountRealm(
-      realmPath,
-      url,
-      undefined,
-      undefined,
-      userInitiatedPriority,
-    );
-    let actualRealmURL = this.virtualNetwork.mapURL(url, 'virtual-to-real');
-    if (actualRealmURL && actualRealmURL.href !== url) {
-      this.virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
-    }
-
-    return {
-      realm,
-      info,
-    };
-  };
-
-  private createAndMountRealm = (
-    path: string,
-    url: string,
-    copiedFromRealm?: URL,
-    enableFileWatcher?: boolean,
-    fromScratchIndexPriority?: number,
-  ) => {
-    let adapter = new NodeAdapter(
-      resolve(path),
-      enableFileWatcher ?? this.enableFileWatcher,
-    );
-    const realmOptions: {
-      copiedFromRealm?: URL;
-      fromScratchIndexPriority?: number;
-    } = {};
-    if (copiedFromRealm) {
-      realmOptions.copiedFromRealm = copiedFromRealm;
-    }
-    if (fromScratchIndexPriority !== undefined) {
-      realmOptions.fromScratchIndexPriority = fromScratchIndexPriority;
-    }
-    let realm = new Realm(
-      {
-        url,
-        adapter,
-        secretSeed: this.realmSecretSeed,
-        virtualNetwork: this.virtualNetwork,
-        dbAdapter: this.dbAdapter,
-        queue: this.queue,
-        matrixClient: this.matrixClient,
-        realmServerURL: this.serverURL.href,
-        definitionLookup: this.definitionLookup,
-        cardSizeLimitBytes: this.cardSizeLimitBytes,
-        fileSizeLimitBytes: this.fileSizeLimitBytes,
-      },
-      Object.keys(realmOptions).length ? realmOptions : undefined,
-    );
-    this.realms.push(realm);
-    this.virtualNetwork.mount(realm.handle);
-    return realm;
-  };
-
-  // TODO consider refactoring this into main.ts after createRealm() becomes
-  // private and realm creation happens as part of user creation. Then the
-  // testing would likely move to the matrix client. Currently testing this
-  // method is only possible by having this function in the RealmServer which is
-  // within our testing boundary. main.ts is outside of our testing boundary.
-  // The only real way to test thru main.ts is with a full stack, a la matrix
-  // client tests.
-  private async loadRealms() {
-    let realms: Realm[] = [];
-
-    for (let maybeUsername of readdirSync(this.realmsRootPath, {
-      withFileTypes: true,
-    })) {
-      if (!maybeUsername.isDirectory()) {
-        continue;
-      }
-      let owner = maybeUsername.name;
-
-      // Skip published realms, loaded later
-      if (owner === PUBLISHED_DIRECTORY_NAME) {
-        continue;
-      }
-
-      for (let maybeRealm of readdirSync(join(this.realmsRootPath, owner), {
-        withFileTypes: true,
-      })) {
-        if (!maybeRealm.isDirectory()) {
-          continue;
-        }
-        let realmName = maybeRealm.name;
-        let realmPath = join(this.realmsRootPath, owner, realmName);
-        let maybeRealmContents = readdirSync(realmPath);
-        if (
-          maybeRealmContents.includes('.realm.json') ||
-          maybeRealmContents.includes('realm.json')
-        ) {
-          let url = new URL(
-            `${this.serverURL.pathname.replace(
-              /\/$/,
-              '',
-            )}/${owner}/${realmName}/`,
-            this.serverURL,
-          ).href;
-          let existingRealm = this.realms.find((realm) => realm.url === url);
-          if (existingRealm) {
-            realms.push(existingRealm);
-            continue;
-          }
-          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-          let realm = new Realm({
-            url,
-            adapter,
-            secretSeed: this.realmSecretSeed,
-            virtualNetwork: this.virtualNetwork,
-            dbAdapter: this.dbAdapter,
-            queue: this.queue,
-            matrixClient: this.matrixClient,
-            realmServerURL: this.serverURL.href,
-            definitionLookup: this.definitionLookup,
-            cardSizeLimitBytes: this.cardSizeLimitBytes,
-            fileSizeLimitBytes: this.fileSizeLimitBytes,
-          });
-          this.virtualNetwork.mount(realm.handle);
-          realms.push(realm);
-        }
-      }
-    }
-
-    let publishedRealms = await this.findPublishedRealms();
-    return [...realms, ...publishedRealms];
-  }
-
-  private async findPublishedRealms() {
-    let realms = [];
-    try {
-      this.log.info('Loading published realms…');
-
-      let publishedRealms = (
-        await query(this.dbAdapter, [
-          `SELECT * FROM published_realms ORDER BY published_realm_url`,
-        ])
-      ).map((row) => ({
-        id: row.id as string,
-        owner_username: row.owner_username as string,
-        source_realm_url: row.source_realm_url as string,
-        published_realm_url: row.published_realm_url as string,
-      }));
-
-      this.log.info(
-        `Found ${publishedRealms.length} published realms in database`,
-      );
-
-      let publishedRealmsByUrl = new Map(
-        publishedRealms.map((r) => [r.published_realm_url, r]),
-      );
-
-      let publishedDir = join(this.realmsRootPath, PUBLISHED_DIRECTORY_NAME);
-
-      if (!existsSync(publishedDir)) {
-        if (publishedRealms.length > 0) {
-          this.log.warn(
-            `Found ${publishedRealms.length} published realms in database but ${PUBLISHED_DIRECTORY_NAME} directory does not exist at ${publishedDir}`,
-          );
-        }
-
-        this.log.info(
-          `No ${PUBLISHED_DIRECTORY_NAME} directory found, skipping published realms`,
-        );
-        return [];
-      }
-
-      this.log.info(
-        `Scanning ${PUBLISHED_DIRECTORY_NAME} directory: ${publishedDir}`,
-      );
-
-      let foundDirectories = new Set<string>();
-      let publishedDirContents = readdirSync(publishedDir, {
-        withFileTypes: true,
-      });
-
-      this.log.info(
-        `Found ${publishedDirContents.length} items in ${PUBLISHED_DIRECTORY_NAME} directory`,
-      );
-
-      for (let maybeRealmDir of publishedDirContents) {
-        if (!maybeRealmDir.isDirectory()) {
-          continue;
-        }
-
-        let realmDirName = maybeRealmDir.name;
-        let realmPath = join(publishedDir, realmDirName);
-
-        try {
-          let maybeRealmContents = readdirSync(realmPath);
-
-          if (
-            !maybeRealmContents.includes('.realm.json') &&
-            !maybeRealmContents.includes('realm.json')
-          ) {
-            this.log.warn(
-              `Directory ${realmPath} exists but does not contain .realm.json or realm.json, skipping`,
-            );
-            continue;
-          }
-
-          let matchingPublishedRealm = publishedRealms.find(
-            (publishedRealmRow) => publishedRealmRow.id === realmDirName,
-          );
-
-          if (!matchingPublishedRealm) {
-            this.log.warn(
-              `Found directory ${realmPath} but no matching entry in published_realms table, skipping`,
-            );
-            continue;
-          }
-
-          let publishedRealmUrl = matchingPublishedRealm.published_realm_url;
-
-          foundDirectories.add(publishedRealmUrl);
-
-          let publishedRealmRow = publishedRealmsByUrl.get(publishedRealmUrl);
-
-          if (!publishedRealmRow) {
-            this.log.warn(
-              `Found published realm directory at ${realmPath} but no corresponding entry in published_realms table for URL ${publishedRealmUrl}`,
-            );
-            continue;
-          }
-
-          let existingRealm = this.realms.find(
-            (realm) => realm.url === publishedRealmUrl,
-          );
-          if (existingRealm) {
-            realms.push(existingRealm);
-            continue;
-          }
-
-          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
-
-          let realm = new Realm({
-            url: publishedRealmUrl,
-            adapter,
-            secretSeed: this.realmSecretSeed,
-            virtualNetwork: this.virtualNetwork,
-            dbAdapter: this.dbAdapter,
-            queue: this.queue,
-            matrixClient: this.matrixClient,
-            realmServerURL: this.serverURL.href,
-            definitionLookup: this.definitionLookup,
-            cardSizeLimitBytes: this.cardSizeLimitBytes,
-            fileSizeLimitBytes: this.fileSizeLimitBytes,
-          });
-
-          this.virtualNetwork.mount(realm.handle);
-          realms.push(realm);
-
-          this.log.info(
-            `Loaded published realm: ${publishedRealmUrl} from ${realmPath}`,
-          );
-        } catch (dirError) {
-          this.log.warn(
-            `Error processing published realm directory ${realmPath}: ${dirError}`,
-          );
-        }
-      }
-
-      for (let publishedRealm of publishedRealms) {
-        if (!foundDirectories.has(publishedRealm.published_realm_url)) {
-          this.log.warn(
-            `Published realm ${publishedRealm.published_realm_url} exists in database but no corresponding directory found in ${publishedDir}`,
-          );
-        }
-      }
-
-      this.log.info(
-        `Finished loading published realms. Loaded ${realms.filter((r) => r.url.includes(PUBLISHED_DIRECTORY_NAME) || foundDirectories.has(r.url)).length} published realms.`,
-      );
-    } catch (error) {
-      this.log.error(`Error loading published realms: ${error}`);
-      if (error instanceof Error) {
-        this.log.error(`Stack trace: ${error.stack}`);
-      }
-    }
-
-    return realms;
-  }
-
-  private sendEvent = async (
-    user: string,
-    eventType: string,
-    data?: Record<string, any>,
-  ) => {
-    if (!this.matrixClient.isLoggedIn()) {
-      await this.matrixClient.login();
-    }
-    let roomId = await fetchSessionRoom(this.dbAdapter, user);
-    if (!roomId) {
-      console.error(
-        `Failed to send event: ${eventType}, cannot find session room for user: ${user}`,
-      );
-    }
-
-    await this.matrixClient.sendEvent(roomId!, 'm.room.message', {
-      body: JSON.stringify({ eventType, data }),
-      msgtype: APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
-    });
-  };
 
   // we use a function to get the matrix registration secret because matrix
   // client tests leverage a synapse instance that changes multiple times per
@@ -1301,13 +606,4 @@ function detectRealmCollision(realms: Realm[]): void {
       )}`,
     );
   }
-}
-
-function errorWithStatus(
-  status: number,
-  message: string,
-): Error & { status: number } {
-  let error = new Error(message);
-  (error as Error & { status: number }).status = status;
-  return error as Error & { status: number };
 }

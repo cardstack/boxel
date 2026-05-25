@@ -24,6 +24,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import { logger } from './logger';
 import { validateRealmRelativePath } from './realm-relative-path';
+import { isTransientIndexNotFound, retryWithPoll } from './retry-with-poll';
 import { readCard } from './workspace-fs';
 
 let log = logger('instantiate-execution');
@@ -73,7 +74,7 @@ export type InstantiateCardFn = (
 ) => Promise<InstantiateModuleResult>;
 
 export interface DiscoverRealmSpecsOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   client: BoxelCLIClient;
   /** Injected for testing — defaults to a client.search over Spec cards. */
   searchSpecsFn?: (
@@ -82,7 +83,7 @@ export interface DiscoverRealmSpecsOptions {
 }
 
 export interface InstantiateRealmSpecsOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   /**
@@ -105,7 +106,7 @@ export interface InstantiateRealmSpecsOutput {
 // ---------------------------------------------------------------------------
 
 export interface RunInstantiateInMemoryOptions {
-  targetRealmUrl: string;
+  targetRealm: string;
   realmServerUrl: string;
   client: BoxelCLIClient;
   /**
@@ -169,7 +170,15 @@ export async function discoverRealmSpecs(
   let searchSpecsFn =
     options.searchSpecsFn ??
     ((realmUrl: string) => defaultSearchSpecs(options.client, realmUrl));
-  return searchSpecsFn(options.targetRealmUrl);
+
+  // Realm-side source POST indexing is async, so a newly-uploaded Spec
+  // card may not be in the search index by the time we get here. Bounded-
+  // poll until even one spec shows up so an agent or test that just
+  // pushed Spec files isn't penalized for indexing latency.
+  return retryWithPoll(
+    () => searchSpecsFn(options.targetRealm),
+    (r) => !r.error && r.specs.length === 0,
+  );
 }
 
 /**
@@ -198,11 +207,11 @@ export async function instantiateRealmSpecs(
 
   let startedAt = Date.now();
   let records: InstanceInstantiationRecord[] = [];
-  let normalizedRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let normalizedRealmUrl = ensureTrailingSlash(options.targetRealm);
 
   for (let spec of specs) {
     let exampleInstances = await collectExampleInstances(
-      options.targetRealmUrl,
+      options.targetRealm,
       options.workspaceDir,
       spec,
     );
@@ -233,7 +242,7 @@ export async function instantiateRealmSpecs(
         instantiateCardFn(
           spec.moduleUrl,
           spec.cardName,
-          options.targetRealmUrl,
+          options.targetRealm,
           example.data || undefined,
         ),
       ),
@@ -314,7 +323,7 @@ export async function runInstantiateInMemory(
   if (options.path != null) {
     return runSingleInstance(
       options.path,
-      options.targetRealmUrl,
+      options.targetRealm,
       options.workspaceDir,
       instantiateCardFn,
     );
@@ -323,7 +332,7 @@ export async function runInstantiateInMemory(
   let specsResult: { specs: SpecInfo[]; error?: string };
   try {
     specsResult = await discoverRealmSpecs({
-      targetRealmUrl: options.targetRealmUrl,
+      targetRealm: options.targetRealm,
       client: options.client,
     });
   } catch (err) {
@@ -350,7 +359,7 @@ export async function runInstantiateInMemory(
   try {
     let { records, durationMs } = await instantiateRealmSpecs(
       {
-        targetRealmUrl: options.targetRealmUrl,
+        targetRealm: options.targetRealm,
         realmServerUrl: options.realmServerUrl,
         client: options.client,
         workspaceDir: options.workspaceDir,
@@ -381,7 +390,7 @@ export async function runInstantiateInMemory(
 
 async function runSingleInstance(
   path: string,
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   instantiateCardFn: InstantiateCardFn,
 ): Promise<RunInstantiateResult> {
@@ -395,11 +404,7 @@ async function runSingleInstance(
     );
   }
 
-  let prepared = await prepareExampleInstance(
-    targetRealmUrl,
-    workspaceDir,
-    path,
-  );
+  let prepared = await prepareExampleInstance(targetRealm, workspaceDir, path);
   if ('error' in prepared) {
     return emptyErrorResult(prepared.error);
   }
@@ -410,7 +415,7 @@ async function runSingleInstance(
     outcome = await instantiateCardFn(
       prepared.codeRef.module,
       prepared.codeRef.name,
-      targetRealmUrl,
+      targetRealm,
       prepared.data,
     );
   } catch (err) {
@@ -439,7 +444,7 @@ async function runSingleInstance(
  * codeRef. Mirrors the per-example prep inside `instantiateRealmSpecs`.
  */
 async function prepareExampleInstance(
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   exampleUrl: string,
 ): Promise<
@@ -498,7 +503,7 @@ async function prepareExampleInstance(
   // step produced when exampleUrls were always extensionless).
   let exampleCardUrl = new URL(
     exampleUrl.replace(/\.json$/, ''),
-    ensureTrailingSlash(targetRealmUrl),
+    ensureTrailingSlash(targetRealm),
   ).href;
 
   // `isSingleCardDocument` has already confirmed `adoptsFrom` is a
@@ -513,6 +518,29 @@ async function prepareExampleInstance(
   }
 
   let moduleUrl = rri(new URL(adoptsFrom.module, exampleCardUrl).href);
+
+  // The prerender refuses cross-origin module loads. The most common way
+  // an agent triggers this is by passing a `Spec/...json` path: Specs
+  // adopt from `https://cardstack.com/base/spec`, which lives in a
+  // different origin than any user realm. Catch it here with a clearer
+  // error than the prerender's "moduleUrl origin … does not match
+  // realmUrl origin …" so the agent knows what to do instead.
+  let moduleOrigin = new URL(moduleUrl).origin;
+  let targetRealmOrigin = new URL(targetRealm).origin;
+  if (moduleOrigin !== targetRealmOrigin) {
+    return {
+      error:
+        `Example "${exampleUrl}" adopts from a module at ${moduleUrl} ` +
+        `(origin ${moduleOrigin}), but instantiation is scoped to the ` +
+        `target realm at ${targetRealmOrigin}. This typically means you ` +
+        `passed a Spec card path — Specs adopt from the base realm and ` +
+        `cannot be instantiated cross-origin. To validate Specs, call ` +
+        `run_instantiate WITHOUT a "path"; it discovers Specs in the ` +
+        `target realm and exercises their linkedExamples against the ` +
+        `card classes you wrote.`,
+    };
+  }
+
   document.data.meta!.adoptsFrom = { module: moduleUrl, name: adoptsFrom.name };
   document.data.id = exampleCardUrl;
 
@@ -524,14 +552,14 @@ async function prepareExampleInstance(
 }
 
 async function collectExampleInstances(
-  targetRealmUrl: string,
+  targetRealm: string,
   workspaceDir: string,
   spec: SpecInfo,
 ): Promise<{ url: string; data: string }[]> {
   let exampleInstances: { url: string; data: string }[] = [];
   for (let exampleUrl of spec.exampleUrls) {
     let prepared = await prepareExampleInstance(
-      targetRealmUrl,
+      targetRealm,
       workspaceDir,
       exampleUrl,
     );
@@ -719,10 +747,38 @@ async function defaultInstantiateCard(
   realmUrl: string,
   instanceData?: string,
 ): Promise<InstantiateModuleResult> {
+  // Source POSTs return before realm indexing settles, so a load attempt
+  // immediately after a write can transiently fail with "module URL not
+  // found" until the in-memory module map is populated. Bound-poll past
+  // that race; isTransientIndexNotFound stops matching the moment
+  // indexing resolves either way (success or error_doc), so retries
+  // never persist past a real indexer failure.
+  return retryWithPoll(
+    () =>
+      attemptInstantiateCard(
+        client,
+        realmServerUrl,
+        moduleUrl,
+        cardName,
+        realmUrl,
+        instanceData,
+      ),
+    (r) => !r.passed && isTransientIndexNotFound(r.error),
+  );
+}
+
+async function attemptInstantiateCard(
+  client: BoxelCLIClient,
+  realmServerUrl: string,
+  moduleUrl: string,
+  cardName: string,
+  realmUrl: string,
+  instanceData?: string,
+): Promise<InstantiateModuleResult> {
   let commandInput: Record<string, unknown> = {
-    moduleUrl,
+    moduleIdentifier: moduleUrl,
     cardName,
-    realmUrl,
+    realmIdentifier: realmUrl,
   };
   if (instanceData) {
     commandInput.instanceData = instanceData;

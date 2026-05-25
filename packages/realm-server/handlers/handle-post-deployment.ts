@@ -12,11 +12,12 @@ import {
   compareCurrentBoxelUIChecksum,
   writeCurrentBoxelUIChecksum,
 } from '../lib/boxel-ui-change-checker';
+import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls';
 
 export default function handlePostDeployment({
   assetsURL,
+  dbAdapter,
   definitionLookup,
-  realms,
   queue,
   realmServerSecretSeed,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -26,7 +27,7 @@ export default function handlePostDeployment({
       return;
     }
 
-    await definitionLookup.clearAllModules();
+    await definitionLookup.clearAllDefinitions();
 
     let boxelUiChangeCheckerResult =
       await compareCurrentBoxelUIChecksum(assetsURL);
@@ -35,13 +36,15 @@ export default function handlePostDeployment({
       boxelUiChangeCheckerResult.currentChecksum !==
       boxelUiChangeCheckerResult.previousChecksum
     ) {
+      let realmUrls = await getFullReindexRealmUrls(dbAdapter);
+
       await queue.publish<void>({
         jobType: `full-reindex`,
         concurrencyGroup: `full-reindex-group`,
         timeout: 6 * 60,
         priority: systemInitiatedPriority,
         args: {
-          realmUrls: realms.map((r) => r.url),
+          realmUrls,
         },
       });
 

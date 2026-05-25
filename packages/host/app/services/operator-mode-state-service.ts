@@ -11,9 +11,13 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import type { CodeRef } from '@cardstack/runtime-common';
+import type {
+  CodeRef,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import {
   cardIdToURL,
+  rri,
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
@@ -53,7 +57,10 @@ import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
 import { removeFileExtension } from '../utils/card-search/types';
 
-import { ModuleInspectorSelections } from '../utils/local-storage-keys';
+import {
+  AiAssistantOpen,
+  ModuleInspectorSelections,
+} from '../utils/local-storage-keys';
 
 import { normalizeDirPath } from '../utils/normalized-dir-path';
 
@@ -73,7 +80,7 @@ import type IndexController from '../controllers';
 export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
-  openCardIds?: string[];
+  openCardIds?: RealmResourceIdentifier[];
   declarationKind: 'card' | 'field';
 }
 
@@ -105,6 +112,11 @@ interface CardItem {
   useBaseTemplate?: boolean;
 }
 
+interface SerializedExpandedStackItem {
+  id: string;
+  stackIndex: number;
+}
+
 export type FileView = 'inspector' | 'browser';
 
 type SerializedItem = CardItem;
@@ -123,6 +135,7 @@ export type SerializedState = {
   moduleInspector?: ModuleInspectorView;
   cardPreviewFormat?: Format;
   workspaceChooserOpened?: boolean;
+  expandedStackItem?: SerializedExpandedStackItem;
 };
 
 interface OpenFileSubscriber {
@@ -132,6 +145,15 @@ interface OpenFileSubscriber {
 export type ModuleInspectorView = 'schema' | 'spec' | 'preview';
 export const DEFAULT_MODULE_INSPECTOR_VIEW: ModuleInspectorView = 'schema';
 
+// Read the user's persisted AI Assistant open/closed preference. Defaults to
+// `true` for first-ever visits; URL state still takes precedence over this.
+function readPersistedAiAssistantOpen(): boolean {
+  let raw = window.localStorage.getItem(AiAssistantOpen);
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return true;
+}
+
 export default class OperatorModeStateService extends Service {
   @tracked private _state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray<Stack>([]),
@@ -140,7 +162,7 @@ export default class OperatorModeStateService extends Service {
     hostModePrimaryCard: null,
     hostModeStack: [],
     openDirs: new TrackedMap<string, string[]>(),
-    aiAssistantOpen: true,
+    aiAssistantOpen: readPersistedAiAssistantOpen(),
     newFileDropdownOpen: false,
     cardPreviewFormat: 'isolated' as Format,
     workspaceChooserOpened: false,
@@ -153,6 +175,52 @@ export default class OperatorModeStateService extends Service {
 
   @tracked profileSettingsOpen = false;
   @tracked createListingModalPayload?: CreateListingModalPayload;
+
+  // Per-card expanded-mode intent. Keyed by stack-item instance id so the
+  // user's expand intent survives bury/pop cycles within a stack:
+  // when a card is pushed deeper, stack-item reads isTopCard=false
+  // and renders normally; when it pops back to the top, the stored
+  // intent re-applies and the card re-expands.
+  private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
+  isStackItemExpanded(itemKey: string): boolean {
+    return this.expandedStackItems.get(itemKey) ?? false;
+  }
+  setStackItemExpanded(itemKey: string, value: boolean) {
+    if (value) {
+      // Only one card can be expanded at a time — clear all others so
+      // the same card open in two stacks can't leave both expanded.
+      this.expandedStackItems.clear();
+      this.expandedStackItems.set(itemKey, true);
+    } else {
+      this.expandedStackItems.delete(itemKey);
+    }
+    this.schedulePersist();
+  }
+  // True when at least one stack's TOP card has expand intent — used
+  // to drive the bar's glass-morphism + .has-expanded-card class. Only
+  // top cards count: when a card with expand intent gets buried under
+  // a new stack item, the intent is retained (so it auto-re-expands
+  // on return) but the bar should drop its frost so the new top card
+  // stacks normally without a frosted scrim. Same per-level: A
+  // expanded → push B → A buried + intent kept, frost off → B top
+  // (no intent yet) → expand B → frost on → push C → B buried +
+  // intent kept, frost off; close C → B top again, intent fires,
+  // frost back on; close B → A top again, intent fires, frost on.
+  get hasAnyStackItemExpanded(): boolean {
+    if (this.expandedStackItems.size === 0) return false;
+    return this._state.stacks.some((stack) => {
+      const top = stack[stack.length - 1];
+      return top && this.expandedStackItems.has(top.instanceId);
+    });
+  }
+
+  // Slot in submode-layout's top bar where an EXPANDED stack item's
+  // CardHeader portals itself. Captured by submode-layout via
+  // captureElement modifier on insert. Stack-item reads this and uses
+  // {{#in-element}} to project its header pill into the bar when
+  // isExpanded — replacing the inline card header for the expanded
+  // mode only. When collapsed, the inline header reappears.
+  @tracked expandedCardHeaderElement: HTMLElement | null = null;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -213,11 +281,13 @@ export default class OperatorModeStateService extends Service {
 
   openAiAssistant = () => {
     this._state.aiAssistantOpen = true;
+    window.localStorage.setItem(AiAssistantOpen, 'true');
     this.schedulePersist();
   };
 
   closeAiAssistant = () => {
     this._state.aiAssistantOpen = false;
+    window.localStorage.setItem(AiAssistantOpen, 'false');
     this.schedulePersist();
   };
 
@@ -248,7 +318,7 @@ export default class OperatorModeStateService extends Service {
       hostModePrimaryCard: null,
       hostModeStack: new TrackedArray([]),
       openDirs: new TrackedMap<string, string[]>(),
-      aiAssistantOpen: false,
+      aiAssistantOpen: readPersistedAiAssistantOpen(),
       moduleInspector: DEFAULT_MODULE_INSPECTOR_VIEW,
       newFileDropdownOpen: false,
       cardPreviewFormat: 'isolated' as Format,
@@ -260,6 +330,7 @@ export default class OperatorModeStateService extends Service {
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
     this.createListingModalPayload = undefined;
+    this.expandedStackItems.clear();
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
@@ -281,6 +352,11 @@ export default class OperatorModeStateService extends Service {
       // this card to the top instead?)
       return;
     }
+    // Note: expand intent is retained on the buried card so that
+    // when the topping card closes and the previously-expanded card
+    // returns to top, it auto-re-expands. The visual collapse is
+    // already handled by isExpanded = isTopCard && isExpandedIntent
+    // — a buried card never renders as expanded.
     this._state.stacks[stackIndex].push(item);
     if (item.id) {
       this.recentCardsService.add(item.id);
@@ -331,7 +407,7 @@ export default class OperatorModeStateService extends Service {
       this.trimItemsFromStack(item);
     }
     let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
+    let cardPath = realmPaths.local(rri(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
   }
@@ -452,6 +528,38 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
+  // Mutate a stack item's format in place (and any related transient
+  // fields) instead of replacing the item. The StackItem class marks
+  // format/request/useBaseTemplate as @tracked, so consumers re-render
+  // reactively. Crucially, the item's IDENTITY is preserved — Glimmer's
+  // {{#each}} keeps the same stack-item component instance, so the
+  // CardRenderer (and the user's CardDef component beneath it) are NOT
+  // remounted on a format swap. CardDefs whose `static isolated ===
+  // static edit` keep DOM state, scroll position, and view-transition
+  // continuity across the toggle.
+  setItemFormat(
+    item: StackItem,
+    format: Format,
+    opts?: { request?: Deferred<string>; useBaseTemplate?: boolean },
+  ): void {
+    if (item.type === 'file') {
+      return;
+    }
+    let formatChanged = item.format !== format;
+    item.format = format;
+    if (opts && 'request' in opts) item.request = opts.request;
+    if (opts && 'useBaseTemplate' in opts)
+      item.useBaseTemplate = opts.useBaseTemplate;
+    // A format flip is a deliberate user action ("edit this one") —
+    // mark it as the most recently interacted item so subsequent
+    // keyboard shortcuts target this card, not whatever happened to
+    // be opened most recently.
+    if (formatChanged) {
+      item.markInteracted();
+    }
+    this.schedulePersist();
+  }
+
   editCardOnStack(
     stackIndex: number,
     card: CardDef,
@@ -461,14 +569,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'edit',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'edit', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   viewCardOnStack(
@@ -480,14 +584,10 @@ export default class OperatorModeStateService extends Service {
     if (item.type === 'file') {
       return;
     }
-    this.replaceItemInStack(
-      item,
-      item.clone({
-        request: new Deferred(),
-        format: 'isolated',
-        useBaseTemplate: opts?.useBaseTemplate,
-      }),
-    );
+    this.setItemFormat(item, 'isolated', {
+      request: new Deferred(),
+      useBaseTemplate: opts?.useBaseTemplate,
+    });
   }
 
   clearStackAndAdd(stackIndex: number, newItem: StackItem) {
@@ -551,8 +651,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      const url = cardIdToURL(itemId);
-      return this.realm.realmOfURL(url)?.href ?? this.realmURL;
+      return this.realm.realmOf(rri(itemId)) ?? this.realmURL;
     } catch (error) {
       return this.realmURL;
     }
@@ -588,15 +687,15 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  getOpenCardIds(): string[] {
+  getOpenCardIds(): RealmResourceIdentifier[] {
     if (this._state.submode === Submodes.Code) {
-      let openCardsInCodeMode = [];
+      let openCardsInCodeMode: RealmResourceIdentifier[] = [];
       if (this.playgroundPanelSelection) {
         openCardsInCodeMode.push(this.playgroundPanelSelection.cardId);
       }
       // Alternatively we may simply be looking at a card in code mode
       if (this.isViewingCardInCodeMode) {
-        let cardId = this.codePathString!.replace(/\.json$/, '');
+        let cardId = rri(this.codePathString!.replace(/\.json$/, ''));
         if (!openCardsInCodeMode.includes(cardId)) {
           openCardsInCodeMode.push(cardId);
         }
@@ -607,7 +706,7 @@ export default class OperatorModeStateService extends Service {
       return this.topMostStackItems()
         .filter((stackItem: StackItem) => stackItem)
         .map((stackItem: StackItem) => stackItem.id)
-        .filter(Boolean) as string[];
+        .filter(Boolean) as RealmResourceIdentifier[];
     }
   }
 
@@ -682,7 +781,7 @@ export default class OperatorModeStateService extends Service {
     if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this._state.codeSelection = codeRef.name;
-      await this.updateCodePath(new URL(codeRef.module));
+      await this.updateCodePath(codeRef.module);
     } else if (
       codeRef &&
       'type' in codeRef &&
@@ -692,7 +791,7 @@ export default class OperatorModeStateService extends Service {
     ) {
       this._state.fieldSelection = codeRef.field;
       this._state.codeSelection = codeRef.card.name;
-      await this.updateCodePath(new URL(codeRef.card.module));
+      await this.updateCodePath(codeRef.card.module);
     } else if (localName && onLocalSelection) {
       //in the same module
       this._state.codeSelection = localName;
@@ -721,8 +820,10 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  get codePathString() {
-    return this._state.codePath?.toString();
+  get codePathString(): RealmResourceIdentifier | undefined {
+    return this._state.codePath?.toString() as
+      | RealmResourceIdentifier
+      | undefined;
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
@@ -731,10 +832,12 @@ export default class OperatorModeStateService extends Service {
   };
 
   async updateCodePath(
-    codePath: URL | null,
+    codePath: RealmResourceIdentifier | URL | null,
     moduleInspectorView?: ModuleInspectorView,
   ) {
-    let canonicalCodePath = await this.determineCanonicalCodePath(codePath);
+    let codePathURL =
+      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+    let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
@@ -954,6 +1057,11 @@ export default class OperatorModeStateService extends Service {
       state.stacks.push(serializedStack);
     }
 
+    let expandedStackItem = this.serializedExpandedStackItem;
+    if (expandedStackItem) {
+      state.expandedStackItem = expandedStackItem;
+    }
+
     return state;
   }
 
@@ -985,6 +1093,8 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   deserialize(rawState: SerializedState): OperatorModeState {
+    this.expandedStackItems.clear();
+
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -1006,7 +1116,8 @@ export default class OperatorModeStateService extends Service {
       openDirs,
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
-      aiAssistantOpen: rawState.aiAssistantOpen ?? false,
+      aiAssistantOpen:
+        rawState.aiAssistantOpen ?? readPersistedAiAssistantOpen(),
       moduleInspector:
         rawState.moduleInspector ?? DEFAULT_MODULE_INSPECTOR_VIEW,
       cardPreviewFormat: rawState.cardPreviewFormat ?? 'isolated',
@@ -1039,7 +1150,35 @@ export default class OperatorModeStateService extends Service {
       stackIndex++;
     }
 
+    let expandedStackItem = rawState.expandedStackItem;
+    if (expandedStackItem) {
+      let stack = newState.stacks[expandedStackItem.stackIndex];
+      let item = stack?.find(
+        (candidate) => candidate.id === expandedStackItem.id,
+      );
+      if (item) {
+        this.expandedStackItems.set(item.instanceId, true);
+      }
+    }
+
     return newState;
+  }
+
+  private get serializedExpandedStackItem():
+    | SerializedExpandedStackItem
+    | undefined {
+    for (let [stackIndex, stack] of this._state.stacks.entries()) {
+      for (let item of stack) {
+        if (item.id && this.expandedStackItems.has(item.instanceId)) {
+          return {
+            id: item.id,
+            stackIndex,
+          };
+        }
+      }
+    }
+
+    return undefined;
   }
 
   get openDirs() {
@@ -1255,7 +1394,7 @@ export default class OperatorModeStateService extends Service {
     if (!realmUrl.endsWith('/')) {
       realmUrl = realmUrl + '/';
     }
-    let id = `${realmUrl}index`;
+    let id = rri(`${realmUrl}index`);
     let stackItem = new StackItem({
       id,
       format: 'isolated',
@@ -1271,7 +1410,7 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        : id,
     );
     this.updateSubmode(Submodes.Interact);
 
@@ -1323,20 +1462,24 @@ export default class OperatorModeStateService extends Service {
   }
 
   async getSummaryForAIBot(
-    openCardIdsSet: Set<string> = new Set([...this.getOpenCardIds()]),
+    openCardIdsSet: Set<RealmResourceIdentifier> = new Set([
+      ...this.getOpenCardIds(),
+    ]),
   ): Promise<BoxelContext> {
     let codeMode: BoxelContext['codeMode'] = undefined;
     if (this._state.workspaceChooserOpened) {
-      let userWorkspaces = this.realmServer.userRealmURLs.map((url) => ({
+      let userWorkspaces = this.realmServer.userRealmIdentifiers.map((url) => ({
         url,
         name: this.realm.info(url).name,
         type: 'user-workspace' as const,
       }));
-      let catalogWorkspaces = this.realmServer.catalogRealmURLs.map((url) => ({
-        url,
-        name: this.realm.info(url).name,
-        type: 'catalog-workspace' as const,
-      }));
+      let catalogWorkspaces = this.realmServer.catalogRealmIdentifiers.map(
+        (url) => ({
+          url,
+          name: this.realm.info(url).name,
+          type: 'catalog-workspace' as const,
+        }),
+      );
       let result: BoxelContext = {
         agentId: this.matrixService.agentId,
         submode: 'workspace-chooser',
@@ -1369,7 +1512,7 @@ export default class OperatorModeStateService extends Service {
       if (this.isViewingCardInCodeMode) {
         codeMode.moduleInspectorPanel = 'preview';
         codeMode.previewPanelSelection = {
-          cardId: this.codePathString!.replace(/\.json$/, ''),
+          cardId: rri(this.codePathString!.replace(/\.json$/, '')),
           format: this.currentViewingFormat ?? 'isolated',
         };
       } else {
@@ -1417,7 +1560,9 @@ export default class OperatorModeStateService extends Service {
     return result;
   }
 
-  private makeRemoteIdsList(ids: (string | undefined)[]) {
+  private makeRemoteIdsList(
+    ids: (RealmResourceIdentifier | undefined)[],
+  ): RealmResourceIdentifier[] {
     return ids
       .map((id) => {
         if (!id) {
@@ -1437,7 +1582,7 @@ export default class OperatorModeStateService extends Service {
         }
         return id;
       })
-      .filter(Boolean) as string[];
+      .filter(Boolean) as RealmResourceIdentifier[];
   }
 }
 

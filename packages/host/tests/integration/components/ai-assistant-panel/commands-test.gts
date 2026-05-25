@@ -1382,7 +1382,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
           name: 'read-file-for-ai-assistant_a831',
           arguments: JSON.stringify({
             attributes: {
-              fileUrl: `${testRealmURL}hello.txt`,
+              fileIdentifier: `${testRealmURL}hello.txt`,
             },
           }),
         },
@@ -1529,6 +1529,115 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         .sourceUrl,
       'http://test-realm/test/Pet/mango',
       'command result event contains file whose url was reference in the input of the command as an attached file',
+    );
+  });
+
+  // Regression coverage for CS-11045 (host side).
+  // The host's MessageCommand.eventId is captured from the bot message's
+  // effectiveEventId at construction time and never refreshes. When a tool_call
+  // first appears on a later m.replace event, the bot message's "current"
+  // event_id (in room.events) is the m.replace's event_id — but
+  // MessageCommand.eventId is the parent/original. Emitting a commandResult
+  // bound to the parent id can disagree with what ai-bot's `getRoomEvents`
+  // reads via /messages, so the host should source the linkage event_id from
+  // current room state at execute time.
+  test('CS-11045: commandResult event_id is sourced from current room state, not a streaming snapshot', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    let commandRequestId = 'cs-11045-cmd-request-id';
+
+    // Streaming event #1: original bot message, no commandRequests yet.
+    let streamingEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+
+    // Streaming event #2: m.replace adding the tool_call. After this,
+    // room.events has both events. The latest event with the matching
+    // commandRequestId is the m.replace event (replacedEventId).
+    // MessageCommand.eventId, however, is streamingEventId because
+    // getEffectiveEventId resolves replace events to their parent and
+    // updateMessage refreshes content but not eventId. Without Phase B the
+    // host emits commandResult.m.relates_to.event_id = streamingEventId; with
+    // Phase B it emits replacedEventId — what room.events currently shows for
+    // the bot message that owns this tool_call.
+    let replacedEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: commandRequestId,
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes: { firstName: 'Evie' } },
+            },
+          }),
+        },
+      ],
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: streamingEventId,
+      },
+    });
+
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+
+    // The host's MessageCommand must reach 'applied' state once the
+    // commandResult is dispatched. _messageCache is keyed by the bot
+    // message's effective/parent id (streamingEventId), but the dispatched
+    // commandResult.m.relates_to.event_id is the latest m.replace
+    // (replacedEventId). updateMessageCommandResult in resources/room.ts has
+    // to derive the cache key from the located bot-message event so the
+    // m.replace id Y still resolves back to the parent X — otherwise the
+    // status flip is silently lost and the UI stays re-applicable.
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(
+        'MessageCommand status should flip to applied even though commandResult.m.relates_to.event_id is the m.replace id, not the streaming id the cache is keyed by',
+      );
+
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+
+    assert.strictEqual(
+      commandResultEvents.length,
+      1,
+      'exactly one commandResult should be dispatched',
+    );
+    assert.strictEqual(
+      commandResultEvents[0].content['m.relates_to']?.event_id,
+      replacedEventId,
+      'commandResult.m.relates_to.event_id should be the bot message event_id currently in room.events that owns the commandRequest, not a stale snapshot of the streaming/original id',
+    );
+    assert.notStrictEqual(
+      commandResultEvents[0].content['m.relates_to']?.event_id,
+      streamingEventId,
+      'commandResult should not reference the original/streaming event_id once a later event in room.events owns the commandRequest',
     );
   });
 });

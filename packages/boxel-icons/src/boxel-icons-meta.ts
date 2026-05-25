@@ -15,6 +15,8 @@ import Accessible from './icons/accessible.gts';
 import AccessibleOff from './icons/accessible-off.gts';
 import AccessPoint from './icons/access-point.gts';
 import AccessPointOff from './icons/access-point-off.gts';
+import Acorn from './icons/acorn.gts';
+import Acrobatic from './icons/acrobatic.gts';
 import Activity from './icons/activity.gts';
 import ActivityHeartbeat from './icons/activity-heartbeat.gts';
 import Ad from './icons/ad.gts';
@@ -51,6 +53,9 @@ import AdOff from './icons/ad-off.gts';
 import AerialLift from './icons/aerial-lift.gts';
 import Affiliate from './icons/affiliate.gts';
 import Ai from './icons/ai.gts';
+import AiAgent from './icons/ai-agent.gts';
+import AiAgents from './icons/ai-agents.gts';
+import AiGateway from './icons/ai-gateway.gts';
 import AirBalloon from './icons/air-balloon.gts';
 import AirConditioning from './icons/air-conditioning.gts';
 import AirConditioningDisabled from './icons/air-conditioning-disabled.gts';
@@ -171,6 +176,7 @@ import ApertureOff from './icons/aperture-off.gts';
 import Api from './icons/api.gts';
 import ApiApp from './icons/api-app.gts';
 import ApiAppOff from './icons/api-app-off.gts';
+import ApiBook from './icons/api-book.gts';
 import ApiOff from './icons/api-off.gts';
 import Apple from './icons/apple.gts';
 import AppleCore from './icons/apple-core.gts';
@@ -746,6 +752,7 @@ import BorderTop from './icons/border-top.gts';
 import BorderTopPlus from './icons/border-top-plus.gts';
 import BorderVertical from './icons/border-vertical.gts';
 import Bot from './icons/bot.gts';
+import BotId from './icons/bot-id.gts';
 import BotMessageSquare from './icons/bot-message-square.gts';
 import BotOff from './icons/bot-off.gts';
 import Bottle from './icons/bottle.gts';
@@ -839,6 +846,7 @@ import BrandAppstore from './icons/brand-appstore.gts';
 import BrandArc from './icons/brand-arc.gts';
 import BrandAsana from './icons/brand-asana.gts';
 import BrandAstro from './icons/brand-astro.gts';
+import BrandAudible from './icons/brand-audible.gts';
 import BrandAuth0 from './icons/brand-auth0.gts';
 import BrandAws from './icons/brand-aws.gts';
 import BrandAzure from './icons/brand-azure.gts';
@@ -969,10 +977,12 @@ import BrandHexo from './icons/brand-hexo.gts';
 import BrandHipchat from './icons/brand-hipchat.gts';
 import BrandHtml5 from './icons/brand-html5.gts';
 import BrandInertia from './icons/brand-inertia.gts';
+import BrandInfakt from './icons/brand-infakt.gts';
 import BrandInstagram from './icons/brand-instagram.gts';
 import BrandIntercom from './icons/brand-intercom.gts';
 import BrandItch from './icons/brand-itch.gts';
 import BrandJavascript from './icons/brand-javascript.gts';
+import BrandJira from './icons/brand-jira.gts';
 import BrandJuejin from './icons/brand-juejin.gts';
 import BrandKakoTalk from './icons/brand-kako-talk.gts';
 import BrandKbin from './icons/brand-kbin.gts';
@@ -1085,6 +1095,7 @@ import BrandSpotify from './icons/brand-spotify.gts';
 import BrandStackoverflow from './icons/brand-stackoverflow.gts';
 import BrandStackshare from './icons/brand-stackshare.gts';
 import BrandSteam from './icons/brand-steam.gts';
+import BrandStellar from './icons/brand-stellar.gts';
 import BrandStocktwits from './icons/brand-stocktwits.gts';
 import BrandStorj from './icons/brand-storj.gts';
 import BrandStorybook from './icons/brand-storybook.gts';
@@ -1132,6 +1143,7 @@ import BrandUnity from './icons/brand-unity.gts';
 import BrandUnsplash from './icons/brand-unsplash.gts';
 import BrandUpwork from './icons/brand-upwork.gts';
 import BrandValorant from './icons/brand-valorant.gts';
+import BrandVechain from './icons/brand-vechain.gts';
 import BrandVercel from './icons/brand-vercel.gts';
 import BrandVimeo from './icons/brand-vimeo.gts';
 import BrandVinted from './icons/brand-vinted.gts';
@@ -1237,6 +1249,7 @@ import BuildingCircus from './icons/building-circus.gts';
 import BuildingCog from './icons/building-cog.gts';
 import BuildingCommunity from './icons/building-community.gts';
 import BuildingCottage from './icons/building-cottage.gts';
+import BuildingEiffelTower from './icons/building-eiffel-tower.gts';
 import BuildingEstate from './icons/building-estate.gts';
 import BuildingFactory from './icons/building-factory.gts';
 import BuildingFactory2 from './icons/building-factory-2.gts';
@@ -1350,6 +1363,7 @@ import CameraUp from './icons/camera-up.gts';
 import CameraX from './icons/camera-x.gts';
 import Camper from './icons/camper.gts';
 import Campfire from './icons/campfire.gts';
+import Canary from './icons/canary.gts';
 import Cancel from './icons/cancel.gts';
 import Candle from './icons/candle.gts';
 import CandleHolder from './icons/candle-holder.gts';
@@ -1383,6 +1397,7 @@ import CarCrash from './icons/car-crash.gts';
 import Cardboards from './icons/cardboards.gts';
 import CardboardsOff from './icons/cardboards-off.gts';
 import CardCredit from './icons/card-credit.gts';
+import CarDoor from './icons/car-door.gts';
 import Cards from './icons/cards.gts';
 import CardSd from './icons/card-sd.gts';
 import CardSim from './icons/card-sim.gts';
@@ -1399,11 +1414,14 @@ import CarFan3 from './icons/car-fan-3.gts';
 import CarFanAuto from './icons/car-fan-auto.gts';
 import CarFront from './icons/car-front.gts';
 import CarGarage from './icons/car-garage.gts';
+import CarLifter from './icons/car-lifter.gts';
 import CarOff from './icons/car-off.gts';
+import CarOffRoad from './icons/car-off-road.gts';
 import CarouselHorizontal from './icons/carousel-horizontal.gts';
 import CarouselVertical from './icons/carousel-vertical.gts';
 import Carrot from './icons/carrot.gts';
 import CarrotOff from './icons/carrot-off.gts';
+import CarSuspension from './icons/car-suspension.gts';
 import CarSuv from './icons/car-suv.gts';
 import CarTaxiFront from './icons/car-taxi-front.gts';
 import Carton from './icons/carton.gts';
@@ -1573,6 +1591,7 @@ import ChevronUp from './icons/chevron-up.gts';
 import ChevronUpLeft from './icons/chevron-up-left.gts';
 import ChevronUpRight from './icons/chevron-up-right.gts';
 import Chisel from './icons/chisel.gts';
+import Chocolate from './icons/chocolate.gts';
 import ChristmasBall from './icons/christmas-ball.gts';
 import ChristmasTree from './icons/christmas-tree.gts';
 import ChristmasTreeOff from './icons/christmas-tree-off.gts';
@@ -1731,6 +1750,10 @@ import CircleNumber7 from './icons/circle-number-7.gts';
 import CircleNumber8 from './icons/circle-number-8.gts';
 import CircleNumber9 from './icons/circle-number-9.gts';
 import CircleOff from './icons/circle-off.gts';
+import CircleOpenArrowDown from './icons/circle-open-arrow-down.gts';
+import CircleOpenArrowLeft from './icons/circle-open-arrow-left.gts';
+import CircleOpenArrowRight from './icons/circle-open-arrow-right.gts';
+import CircleOpenArrowUp from './icons/circle-open-arrow-up.gts';
 import CircleParking from './icons/circle-parking.gts';
 import CircleParkingOff from './icons/circle-parking-off.gts';
 import CirclePause from './icons/circle-pause.gts';
@@ -1739,6 +1762,7 @@ import CirclePercentage from './icons/circle-percentage.gts';
 import CirclePlay from './icons/circle-play.gts';
 import CirclePlus from './icons/circle-plus.gts';
 import CirclePlus2 from './icons/circle-plus-2.gts';
+import CirclePlusMinus from './icons/circle-plus-minus.gts';
 import CirclePower from './icons/circle-power.gts';
 import CircleRectangle from './icons/circle-rectangle.gts';
 import CircleRectangleOff from './icons/circle-rectangle-off.gts';
@@ -1776,6 +1800,8 @@ import Citrus from './icons/citrus.gts';
 import Clapperboard from './icons/clapperboard.gts';
 import ClearAll from './icons/clear-all.gts';
 import ClearFormatting from './icons/clear-formatting.gts';
+import Clef from './icons/clef.gts';
+import ClefStaff from './icons/clef-staff.gts';
 import Click from './icons/click.gts';
 import CliffJumping from './icons/cliff-jumping.gts';
 import Clipboard from './icons/clipboard.gts';
@@ -1904,7 +1930,9 @@ import CoatHanger from './icons/coat-hanger.gts';
 import Cocktail from './icons/cocktail.gts';
 import Coconut from './icons/coconut.gts';
 import Code from './icons/code.gts';
+import CodeAi from './icons/code-ai.gts';
 import CodeAsterisk from './icons/code-asterisk.gts';
+import Codeblock from './icons/codeblock.gts';
 import CodeCircle from './icons/code-circle.gts';
 import CodeCircle2 from './icons/code-circle-2.gts';
 import CodeDots from './icons/code-dots.gts';
@@ -1969,6 +1997,7 @@ import Confetti from './icons/confetti.gts';
 import ConfettiOff from './icons/confetti-off.gts';
 import Confucius from './icons/confucius.gts';
 import CongruentTo from './icons/congruent-to.gts';
+import Connection from './icons/connection.gts';
 import Construction from './icons/construction.gts';
 import Contact from './icons/contact.gts';
 import ContactRound from './icons/contact-round.gts';
@@ -2033,9 +2062,11 @@ import CreativeCommonsOff from './icons/creative-commons-off.gts';
 import CreativeCommonsSa from './icons/creative-commons-sa.gts';
 import CreativeCommonsZero from './icons/creative-commons-zero.gts';
 import CreditCard from './icons/credit-card.gts';
+import CreditCardHand from './icons/credit-card-hand.gts';
 import CreditCardOff from './icons/credit-card-off.gts';
 import CreditCardPay from './icons/credit-card-pay.gts';
 import CreditCardRefund from './icons/credit-card-refund.gts';
+import Credits from './icons/credits.gts';
 import Cricket from './icons/cricket.gts';
 import CricketBall from './icons/cricket-ball.gts';
 import CricketWicket from './icons/cricket-wicket.gts';
@@ -2106,6 +2137,7 @@ import CurrencyForint from './icons/currency-forint.gts';
 import CurrencyFrank from './icons/currency-frank.gts';
 import CurrencyGuarani from './icons/currency-guarani.gts';
 import CurrencyHryvnia from './icons/currency-hryvnia.gts';
+import CurrencyHusd from './icons/currency-husd.gts';
 import CurrencyIranianRial from './icons/currency-iranian-rial.gts';
 import CurrencyKip from './icons/currency-kip.gts';
 import CurrencyKroneCzech from './icons/currency-krone-czech.gts';
@@ -2140,12 +2172,14 @@ import CurrencySom from './icons/currency-som.gts';
 import CurrencySquare from './icons/currency-square.gts';
 import CurrencyTaka from './icons/currency-taka.gts';
 import CurrencyTenge from './icons/currency-tenge.gts';
+import CurrencyTether from './icons/currency-tether.gts';
 import CurrencyTugrik from './icons/currency-tugrik.gts';
 import CurrencyWon from './icons/currency-won.gts';
 import CurrencyXrp from './icons/currency-xrp.gts';
 import CurrencyYen from './icons/currency-yen.gts';
 import CurrencyYenOff from './icons/currency-yen-off.gts';
 import CurrencyYuan from './icons/currency-yuan.gts';
+import CurrencyZcash from './icons/currency-zcash.gts';
 import CurrencyZloty from './icons/currency-zloty.gts';
 import CurrentLocation from './icons/current-location.gts';
 import CurrentLocationOff from './icons/current-location-off.gts';
@@ -2191,6 +2225,8 @@ import DeskLamp from './icons/desk-lamp.gts';
 import Dessert from './icons/dessert.gts';
 import Details from './icons/details.gts';
 import DetailsOff from './icons/details-off.gts';
+import Device3dCamera from './icons/device-3d-camera.gts';
+import Device3dLens from './icons/device-3d-lens.gts';
 import DeviceAirpods from './icons/device-airpods.gts';
 import DeviceAirpodsCase from './icons/device-airpods-case.gts';
 import DeviceAirtag from './icons/device-airtag.gts';
@@ -2200,6 +2236,7 @@ import DeviceCameraPhone from './icons/device-camera-phone.gts';
 import DeviceCctv from './icons/device-cctv.gts';
 import DeviceCctvOff from './icons/device-cctv-off.gts';
 import DeviceComputerCamera from './icons/device-computer-camera.gts';
+import DeviceComputerCamera2 from './icons/device-computer-camera-2.gts';
 import DeviceComputerCameraOff from './icons/device-computer-camera-off.gts';
 import DeviceDesktop from './icons/device-desktop.gts';
 import DeviceDesktopAnalytics from './icons/device-desktop-analytics.gts';
@@ -2330,6 +2367,7 @@ import DevicesCancel from './icons/devices-cancel.gts';
 import DevicesCheck from './icons/devices-check.gts';
 import DevicesCode from './icons/devices-code.gts';
 import DevicesCog from './icons/devices-cog.gts';
+import DeviceScreen from './icons/device-screen.gts';
 import DeviceSdCard from './icons/device-sd-card.gts';
 import DevicesDollar from './icons/devices-dollar.gts';
 import DevicesDown from './icons/devices-down.gts';
@@ -2463,6 +2501,7 @@ import DoorbellIntercom from './icons/doorbell-intercom.gts';
 import DoorClosed from './icons/door-closed.gts';
 import DoorEnter from './icons/door-enter.gts';
 import DoorExit from './icons/door-exit.gts';
+import DoorHanger from './icons/door-hanger.gts';
 import DoorOff from './icons/door-off.gts';
 import DoorOpen from './icons/door-open.gts';
 import Dot from './icons/dot.gts';
@@ -2514,6 +2553,7 @@ import Dumbbell from './icons/dumbbell.gts';
 import Dumpling from './icons/dumpling.gts';
 import Ear from './icons/ear.gts';
 import EarOff from './icons/ear-off.gts';
+import EarphoneBluetooth from './icons/earphone-bluetooth.gts';
 import EarScan from './icons/ear-scan.gts';
 import Earth from './icons/earth.gts';
 import EarthLock from './icons/earth-lock.gts';
@@ -2540,6 +2580,7 @@ import Elevator from './icons/elevator.gts';
 import ElevatorOff from './icons/elevator-off.gts';
 import Ellipsis from './icons/ellipsis.gts';
 import EllipsisVertical from './icons/ellipsis-vertical.gts';
+import EmailStamp from './icons/email-stamp.gts';
 import EmergencyBed from './icons/emergency-bed.gts';
 import Empathize from './icons/empathize.gts';
 import EmpathizeOff from './icons/empathize-off.gts';
@@ -2568,6 +2609,7 @@ import ExchangeOff from './icons/exchange-off.gts';
 import ExclamationCircle from './icons/exclamation-circle.gts';
 import ExclamationMark from './icons/exclamation-mark.gts';
 import ExclamationMarkOff from './icons/exclamation-mark-off.gts';
+import ExerciseBall from './icons/exercise-ball.gts';
 import Expand from './icons/expand.gts';
 import Explicit from './icons/explicit.gts';
 import ExplicitOff from './icons/explicit-off.gts';
@@ -2832,6 +2874,8 @@ import FireExtinguisher from './icons/fire-extinguisher.gts';
 import FireHydrant from './icons/fire-hydrant.gts';
 import FireHydrantOff from './icons/fire-hydrant-off.gts';
 import Firetruck from './icons/firetruck.gts';
+import FirewallCheck from './icons/firewall-check.gts';
+import FirewallFlame from './icons/firewall-flame.gts';
 import FirstAidKit from './icons/first-aid-kit.gts';
 import FirstAidKitOff from './icons/first-aid-kit-off.gts';
 import Fish from './icons/fish.gts';
@@ -2893,6 +2937,7 @@ import FloatCenter from './icons/float-center.gts';
 import FloatLeft from './icons/float-left.gts';
 import FloatNone from './icons/float-none.gts';
 import FloatRight from './icons/float-right.gts';
+import Flood from './icons/flood.gts';
 import FloorPlan from './icons/floor-plan.gts';
 import FloppyDisk from './icons/floppy-disk.gts';
 import FloppyDisk2 from './icons/floppy-disk-2.gts';
@@ -2960,6 +3005,7 @@ import FolderX from './icons/folder-x.gts';
 import FoldHorizontal from './icons/fold-horizontal.gts';
 import FoldUp from './icons/fold-up.gts';
 import FoldVertical from './icons/fold-vertical.gts';
+import Foodsteps from './icons/foodsteps.gts';
 import Football from './icons/football.gts';
 import FootballGoal from './icons/football-goal.gts';
 import FootballHelmet from './icons/football-helmet.gts';
@@ -3059,6 +3105,7 @@ import GitMerge from './icons/git-merge.gts';
 import GitPullRequest from './icons/git-pull-request.gts';
 import GitPullRequestArrow from './icons/git-pull-request-arrow.gts';
 import GitPullRequestClosed from './icons/git-pull-request-closed.gts';
+import GitPullRequestConflict from './icons/git-pull-request-conflict.gts';
 import GitPullRequestCreate from './icons/git-pull-request-create.gts';
 import GitPullRequestCreateArrow from './icons/git-pull-request-create-arrow.gts';
 import GitPullRequestDraft from './icons/git-pull-request-draft.gts';
@@ -3128,6 +3175,7 @@ import H6 from './icons/h-6.gts';
 import Hairdryer from './icons/hairdryer.gts';
 import Ham from './icons/ham.gts';
 import Hammer from './icons/hammer.gts';
+import HammerDrill from './icons/hammer-drill.gts';
 import HammerOff from './icons/hammer-off.gts';
 import Hand from './icons/hand.gts';
 import HandClick from './icons/hand-click.gts';
@@ -3322,6 +3370,7 @@ import HomeHand from './icons/home-hand.gts';
 import HomeHeart from './icons/home-heart.gts';
 import HomeInfinity from './icons/home-infinity.gts';
 import HomeLink from './icons/home-link.gts';
+import HomeLock from './icons/home-lock.gts';
 import HomeMinus from './icons/home-minus.gts';
 import HomeMove from './icons/home-move.gts';
 import HomeOff from './icons/home-off.gts';
@@ -3384,6 +3433,8 @@ import HttpQue from './icons/http-que.gts';
 import HttpQueOff from './icons/http-que-off.gts';
 import HttpTrace from './icons/http-trace.gts';
 import HttpTraceOff from './icons/http-trace-off.gts';
+import HulaHoop from './icons/hula-hoop.gts';
+import Iceberg from './icons/iceberg.gts';
 import IceCream from './icons/ice-cream.gts';
 import IceCream2 from './icons/ice-cream-2.gts';
 import IceCreamBowl from './icons/ice-cream-bowl.gts';
@@ -3404,6 +3455,7 @@ import Igloo from './icons/igloo.gts';
 import Ikosaedr from './icons/ikosaedr.gts';
 import Image from './icons/image.gts';
 import ImageDown from './icons/image-down.gts';
+import ImageGeneration from './icons/image-generation.gts';
 import ImageInPicture from './icons/image-in-picture.gts';
 import ImageMinus from './icons/image-minus.gts';
 import ImageOff from './icons/image-off.gts';
@@ -3420,6 +3472,7 @@ import IndianRupee from './icons/indian-rupee.gts';
 import IndianRupeeCircle from './icons/indian-rupee-circle.gts';
 import IndianRupeeSquare from './icons/indian-rupee-square.gts';
 import Infinity from './icons/infinity.gts';
+import Infinity2 from './icons/infinity-2.gts';
 import InfinityOff from './icons/infinity-off.gts';
 import Info from './icons/info.gts';
 import InfoCircle from './icons/info-circle.gts';
@@ -3470,6 +3523,7 @@ import JapaneseYenCircle from './icons/japanese-yen-circle.gts';
 import JapaneseYenSquare from './icons/japanese-yen-square.gts';
 import Jar from './icons/jar.gts';
 import Jetpack from './icons/jetpack.gts';
+import Jetski from './icons/jetski.gts';
 import JewishStar from './icons/jewish-star.gts';
 import JoinBevel from './icons/join-bevel.gts';
 import JoinRound from './icons/join-round.gts';
@@ -3536,6 +3590,7 @@ import LaurelWreath from './icons/laurel-wreath.gts';
 import LaurelWreath1 from './icons/laurel-wreath-1.gts';
 import LaurelWreath2 from './icons/laurel-wreath-2.gts';
 import LaurelWreath3 from './icons/laurel-wreath-3.gts';
+import LawnMower from './icons/lawn-mower.gts';
 import Layers from './icons/layers.gts';
 import Layers2 from './icons/layers-2.gts';
 import Layers3 from './icons/layers-3.gts';
@@ -3596,6 +3651,7 @@ import LayoutSidebarRightInactive from './icons/layout-sidebar-right-inactive.gt
 import LayoutTemplate from './icons/layout-template.gts';
 import Leaf from './icons/leaf.gts';
 import Leaf2 from './icons/leaf-2.gts';
+import LeafMaple from './icons/leaf-maple.gts';
 import LeafOff from './icons/leaf-off.gts';
 import LeafyGreen from './icons/leafy-green.gts';
 import Lectern from './icons/lectern.gts';
@@ -3718,6 +3774,7 @@ import LoadBalancer from './icons/load-balancer.gts';
 import Loader from './icons/loader.gts';
 import Loader2 from './icons/loader-2.gts';
 import Loader3 from './icons/loader-3.gts';
+import Loader4 from './icons/loader-4.gts';
 import LoaderCircle from './icons/loader-circle.gts';
 import LoaderPinwheel from './icons/loader-pinwheel.gts';
 import LoaderQuarter from './icons/loader-quarter.gts';
@@ -3856,6 +3913,7 @@ import MapDown from './icons/map-down.gts';
 import MapEast from './icons/map-east.gts';
 import MapExclamation from './icons/map-exclamation.gts';
 import MapHeart from './icons/map-heart.gts';
+import MapLock from './icons/map-lock.gts';
 import MapMinus from './icons/map-minus.gts';
 import MapNorth from './icons/map-north.gts';
 import MapOff from './icons/map-off.gts';
@@ -3894,6 +3952,7 @@ import MapQuestion from './icons/map-question.gts';
 import MapRoute from './icons/map-route.gts';
 import MapSearch from './icons/map-search.gts';
 import MapShare from './icons/map-share.gts';
+import MapShield from './icons/map-shield.gts';
 import MapSouth from './icons/map-south.gts';
 import MapStar from './icons/map-star.gts';
 import MapUp from './icons/map-up.gts';
@@ -3978,6 +4037,7 @@ import Menu4 from './icons/menu-4.gts';
 import MenuDeep from './icons/menu-deep.gts';
 import MenuOrder from './icons/menu-order.gts';
 import Merge from './icons/merge.gts';
+import Mesh from './icons/mesh.gts';
 import Message from './icons/message.gts';
 import Message2 from './icons/message-2.gts';
 import Message2Bolt from './icons/message-2-bolt.gts';
@@ -4084,6 +4144,7 @@ import MichelinStarGreen from './icons/michelin-star-green.gts';
 import Mickey from './icons/mickey.gts';
 import MicOff from './icons/mic-off.gts';
 import Microchip from './icons/microchip.gts';
+import Microfrontends from './icons/microfrontends.gts';
 import Microphone from './icons/microphone.gts';
 import Microphone2 from './icons/microphone-2.gts';
 import Microphone2Off from './icons/microphone-2-off.gts';
@@ -4093,6 +4154,7 @@ import MicroscopeOff from './icons/microscope-off.gts';
 import Microwave from './icons/microwave.gts';
 import MicrowaveOff from './icons/microwave-off.gts';
 import MicVocal from './icons/mic-vocal.gts';
+import Middleware from './icons/middleware.gts';
 import Milestone from './icons/milestone.gts';
 import MilitaryAward from './icons/military-award.gts';
 import MilitaryRank from './icons/military-rank.gts';
@@ -4187,6 +4249,7 @@ import MoonStar from './icons/moon-star.gts';
 import MoonStars from './icons/moon-stars.gts';
 import Moped from './icons/moped.gts';
 import MortarPestle from './icons/mortar-pestle.gts';
+import Mosque from './icons/mosque.gts';
 import Motorbike from './icons/motorbike.gts';
 import MotorRacingHelmet from './icons/motor-racing-helmet.gts';
 import Mountain from './icons/mountain.gts';
@@ -4293,7 +4356,9 @@ import NfcOff from './icons/nfc-off.gts';
 import NoCopyright from './icons/no-copyright.gts';
 import NoCreativeCommons from './icons/no-creative-commons.gts';
 import NoDerivatives from './icons/no-derivatives.gts';
+import NoiseReduction from './icons/noise-reduction.gts';
 import NorthStar from './icons/north-star.gts';
+import Notdef from './icons/notdef.gts';
 import Note from './icons/note.gts';
 import Notebook from './icons/notebook.gts';
 import NotebookOff from './icons/notebook-off.gts';
@@ -4443,6 +4508,7 @@ import Old from './icons/old.gts';
 import Olive from './icons/olive.gts';
 import Olympics from './icons/olympics.gts';
 import OlympicsOff from './icons/olympics-off.gts';
+import OlympicTorch from './icons/olympic-torch.gts';
 import Om from './icons/om.gts';
 import Omega from './icons/omega.gts';
 import Onion from './icons/onion.gts';
@@ -4555,6 +4621,7 @@ import PencilShare from './icons/pencil-share.gts';
 import PencilStar from './icons/pencil-star.gts';
 import PencilUp from './icons/pencil-up.gts';
 import PencilX from './icons/pencil-x.gts';
+import Pendulum from './icons/pendulum.gts';
 import Penguin from './icons/penguin.gts';
 import PenLine from './icons/pen-line.gts';
 import Pennant from './icons/pennant.gts';
@@ -4621,6 +4688,7 @@ import PhoneSpark from './icons/phone-spark.gts';
 import PhoneX from './icons/phone-x.gts';
 import Photo from './icons/photo.gts';
 import PhotoAi from './icons/photo-ai.gts';
+import PhotoAlt from './icons/photo-alt.gts';
 import PhotoBitcoin from './icons/photo-bitcoin.gts';
 import PhotoBolt from './icons/photo-bolt.gts';
 import PhotoCancel from './icons/photo-cancel.gts';
@@ -4691,6 +4759,7 @@ import PinnedOff from './icons/pinned-off.gts';
 import PinOff from './icons/pin-off.gts';
 import PinSafety from './icons/pin-safety.gts';
 import PinSafetyOpen from './icons/pin-safety-open.gts';
+import Pipeline from './icons/pipeline.gts';
 import Pipette from './icons/pipette.gts';
 import Pizza from './icons/pizza.gts';
 import PizzaOff from './icons/pizza-off.gts';
@@ -4755,6 +4824,7 @@ import PlugConnectedX from './icons/plug-connected-x.gts';
 import PlugOff from './icons/plug-off.gts';
 import PlugX from './icons/plug-x.gts';
 import PlugZap from './icons/plug-zap.gts';
+import Plunger from './icons/plunger.gts';
 import Plus from './icons/plus.gts';
 import PlusEqual from './icons/plus-equal.gts';
 import PlusMinus from './icons/plus-minus.gts';
@@ -4766,11 +4836,14 @@ import Podium from './icons/podium.gts';
 import PodiumOff from './icons/podium-off.gts';
 import Point from './icons/point.gts';
 import Pointer from './icons/pointer.gts';
+import Pointer2 from './icons/pointer-2.gts';
 import PointerBolt from './icons/pointer-bolt.gts';
 import PointerCancel from './icons/pointer-cancel.gts';
 import PointerCheck from './icons/pointer-check.gts';
 import PointerCode from './icons/pointer-code.gts';
 import PointerCog from './icons/pointer-cog.gts';
+import PointerCollaboration from './icons/pointer-collaboration.gts';
+import PointerCollaboration2 from './icons/pointer-collaboration-2.gts';
 import PointerDollar from './icons/pointer-dollar.gts';
 import PointerDown from './icons/pointer-down.gts';
 import PointerExclamation from './icons/pointer-exclamation.gts';
@@ -4846,8 +4919,11 @@ import Qrcode from './icons/qrcode.gts';
 import QrCode from './icons/qr-code.gts';
 import QrcodeOff from './icons/qrcode-off.gts';
 import QuestionMark from './icons/question-mark.gts';
+import QueuePopIn from './icons/queue-pop-in.gts';
+import QueuePopOut from './icons/queue-pop-out.gts';
 import Quote from './icons/quote.gts';
 import QuoteOff from './icons/quote-off.gts';
+import QuoteOpen from './icons/quote-open.gts';
 import Quotes from './icons/quotes.gts';
 import Rabbit from './icons/rabbit.gts';
 import Radar from './icons/radar.gts';
@@ -5021,6 +5097,7 @@ import RotateCw from './icons/rotate-cw.gts';
 import RotateCwSquare from './icons/rotate-cw-square.gts';
 import RotateDot from './icons/rotate-dot.gts';
 import RotateRectangle from './icons/rotate-rectangle.gts';
+import Roulette from './icons/roulette.gts';
 import Route from './icons/route.gts';
 import Route2 from './icons/route-2.gts';
 import RouteAltLeft from './icons/route-alt-left.gts';
@@ -5077,13 +5154,17 @@ import ScaleOutlineOff from './icons/scale-outline-off.gts';
 import Scaling from './icons/scaling.gts';
 import Scan from './icons/scan.gts';
 import ScanBarcode from './icons/scan-barcode.gts';
+import ScanCube from './icons/scan-cube.gts';
 import ScanEye from './icons/scan-eye.gts';
 import ScanFace from './icons/scan-face.gts';
+import ScanLetterA from './icons/scan-letter-a.gts';
+import ScanLetterT from './icons/scan-letter-t.gts';
 import ScanLine from './icons/scan-line.gts';
 import ScanPosition from './icons/scan-position.gts';
 import ScanQrCode from './icons/scan-qr-code.gts';
 import ScanSearch from './icons/scan-search.gts';
 import ScanText from './icons/scan-text.gts';
+import ScanTraces from './icons/scan-traces.gts';
 import Scarf from './icons/scarf.gts';
 import Schema from './icons/schema.gts';
 import SchemaOff from './icons/schema-off.gts';
@@ -5123,6 +5204,7 @@ import Section from './icons/section.gts';
 import SectionSign from './icons/section-sign.gts';
 import Seedling from './icons/seedling.gts';
 import SeedlingOff from './icons/seedling-off.gts';
+import Segway from './icons/segway.gts';
 import Select from './icons/select.gts';
 import SelectAll from './icons/select-all.gts';
 import Selector from './icons/selector.gts';
@@ -5140,6 +5222,7 @@ import Server2 from './icons/server-2.gts';
 import ServerBolt from './icons/server-bolt.gts';
 import ServerCog from './icons/server-cog.gts';
 import ServerCrash from './icons/server-crash.gts';
+import Serverless from './icons/serverless.gts';
 import ServerOff from './icons/server-off.gts';
 import ServerSpark from './icons/server-spark.gts';
 import Servicemark from './icons/servicemark.gts';
@@ -5299,6 +5382,7 @@ import SitemapOff from './icons/sitemap-off.gts';
 import Skateboard from './icons/skateboard.gts';
 import Skateboarding from './icons/skateboarding.gts';
 import SkateboardOff from './icons/skateboard-off.gts';
+import Sketching from './icons/sketching.gts';
 import SkewX from './icons/skew-x.gts';
 import SkewY from './icons/skew-y.gts';
 import SkiJumping from './icons/ski-jumping.gts';
@@ -5377,6 +5461,8 @@ import SpacingHorizontal from './icons/spacing-horizontal.gts';
 import SpacingVertical from './icons/spacing-vertical.gts';
 import Spade from './icons/spade.gts';
 import Sparkle from './icons/sparkle.gts';
+import Sparkle2 from './icons/sparkle-2.gts';
+import SparkleHighlight from './icons/sparkle-highlight.gts';
 import Sparkles from './icons/sparkles.gts';
 import Sparkles2 from './icons/sparkles-2.gts';
 import Speaker from './icons/speaker.gts';
@@ -5386,6 +5472,7 @@ import Speedboat from './icons/speedboat.gts';
 import SpellCheck from './icons/spell-check.gts';
 import SpellCheck2 from './icons/spell-check-2.gts';
 import Sphere from './icons/sphere.gts';
+import Sphere2 from './icons/sphere-2.gts';
 import SphereOff from './icons/sphere-off.gts';
 import SpherePlus from './icons/sphere-plus.gts';
 import Spider from './icons/spider.gts';
@@ -5637,6 +5724,9 @@ import Stretching2 from './icons/stretching-2.gts';
 import StretchVertical from './icons/stretch-vertical.gts';
 import Strikethrough from './icons/strikethrough.gts';
 import StrikethroughSquare from './icons/strikethrough-square.gts';
+import StrokeCurved from './icons/stroke-curved.gts';
+import StrokeDynamic from './icons/stroke-dynamic.gts';
+import StrokeStraight from './icons/stroke-straight.gts';
 import Stroller from './icons/stroller.gts';
 import STurnDown from './icons/s-turn-down.gts';
 import STurnLeft from './icons/s-turn-left.gts';
@@ -5738,6 +5828,7 @@ import TagPlus from './icons/tag-plus.gts';
 import Tags from './icons/tags.gts';
 import TagsOff from './icons/tags-off.gts';
 import TagStarred from './icons/tag-starred.gts';
+import TaiwanDollar from './icons/taiwan-dollar.gts';
 import Tally1 from './icons/tally-1.gts';
 import Tally2 from './icons/tally-2.gts';
 import Tally3 from './icons/tally-3.gts';
@@ -5751,6 +5842,7 @@ import Tallymarks from './icons/tallymarks.gts';
 import Tangent from './icons/tangent.gts';
 import Tank from './icons/tank.gts';
 import Target from './icons/target.gts';
+import Target2 from './icons/target-2.gts';
 import TargetArrow from './icons/target-arrow.gts';
 import TargetOff from './icons/target-off.gts';
 import Tax from './icons/tax.gts';
@@ -5799,6 +5891,7 @@ import TextQuote from './icons/text-quote.gts';
 import TextRecognition from './icons/text-recognition.gts';
 import TextResize from './icons/text-resize.gts';
 import TextScan2 from './icons/text-scan-2.gts';
+import TextScanAi from './icons/text-scan-ai.gts';
 import TextSearch from './icons/text-search.gts';
 import TextSelect from './icons/text-select.gts';
 import TextSize from './icons/text-size.gts';
@@ -6012,6 +6105,7 @@ import UnfoldHorizontal from './icons/unfold-horizontal.gts';
 import UnfoldVertical from './icons/unfold-vertical.gts';
 import Ungroup from './icons/ungroup.gts';
 import UnicornHead from './icons/unicorn-head.gts';
+import Unicycle from './icons/unicycle.gts';
 import Universe from './icons/universe.gts';
 import University from './icons/university.gts';
 import Unlink from './icons/unlink.gts';
@@ -6034,6 +6128,7 @@ import UserEdit from './icons/user-edit.gts';
 import UserExclamation from './icons/user-exclamation.gts';
 import UserHeart from './icons/user-heart.gts';
 import UserHexagon from './icons/user-hexagon.gts';
+import UserKey from './icons/user-key.gts';
 import UserMinus from './icons/user-minus.gts';
 import UserOff from './icons/user-off.gts';
 import UserPause from './icons/user-pause.gts';
@@ -6116,8 +6211,10 @@ import ViewportNarrow from './icons/viewport-narrow.gts';
 import ViewportShort from './icons/viewport-short.gts';
 import ViewportTall from './icons/viewport-tall.gts';
 import ViewportWide from './icons/viewport-wide.gts';
+import Vignette from './icons/vignette.gts';
 import Vinyl from './icons/vinyl.gts';
 import Vip from './icons/vip.gts';
+import Vip2 from './icons/vip-2.gts';
 import VipOff from './icons/vip-off.gts';
 import Virus from './icons/virus.gts';
 import VirusOff from './icons/virus-off.gts';
@@ -6259,6 +6356,7 @@ import WorldExclamation from './icons/world-exclamation.gts';
 import WorldHeart from './icons/world-heart.gts';
 import WorldLatitude from './icons/world-latitude.gts';
 import WorldLongitude from './icons/world-longitude.gts';
+import WorldMap from './icons/world-map.gts';
 import WorldMinus from './icons/world-minus.gts';
 import WorldOff from './icons/world-off.gts';
 import WorldPause from './icons/world-pause.gts';
@@ -6286,6 +6384,7 @@ import XboxB from './icons/xbox-b.gts';
 import XboxX from './icons/xbox-x.gts';
 import XboxY from './icons/xbox-y.gts';
 import Xd from './icons/xd.gts';
+import XMark from './icons/x-mark.gts';
 import XPowerY from './icons/x-power-y.gts';
 import Xxx from './icons/xxx.gts';
 import YarnBall from './icons/yarn-ball.gts';
@@ -6296,6 +6395,7 @@ import Zap from './icons/zap.gts';
 import ZapOff from './icons/zap-off.gts';
 import Zeppelin from './icons/zeppelin.gts';
 import ZeppelinOff from './icons/zeppelin-off.gts';
+import ZeroConfig from './icons/zero-config.gts';
 import Zip from './icons/zip.gts';
 import ZodiacAquarius from './icons/zodiac-aquarius.gts';
 import ZodiacAries from './icons/zodiac-aries.gts';
@@ -6341,6 +6441,8 @@ export const ALL_ICON_COMPONENTS = [
   AccessibleOff,
   AccessPoint,
   AccessPointOff,
+  Acorn,
+  Acrobatic,
   Activity,
   ActivityHeartbeat,
   Ad,
@@ -6377,6 +6479,9 @@ export const ALL_ICON_COMPONENTS = [
   AerialLift,
   Affiliate,
   Ai,
+  AiAgent,
+  AiAgents,
+  AiGateway,
   AirBalloon,
   AirConditioning,
   AirConditioningDisabled,
@@ -6497,6 +6602,7 @@ export const ALL_ICON_COMPONENTS = [
   Api,
   ApiApp,
   ApiAppOff,
+  ApiBook,
   ApiOff,
   Apple,
   AppleCore,
@@ -7072,6 +7178,7 @@ export const ALL_ICON_COMPONENTS = [
   BorderTopPlus,
   BorderVertical,
   Bot,
+  BotId,
   BotMessageSquare,
   BotOff,
   Bottle,
@@ -7165,6 +7272,7 @@ export const ALL_ICON_COMPONENTS = [
   BrandArc,
   BrandAsana,
   BrandAstro,
+  BrandAudible,
   BrandAuth0,
   BrandAws,
   BrandAzure,
@@ -7295,10 +7403,12 @@ export const ALL_ICON_COMPONENTS = [
   BrandHipchat,
   BrandHtml5,
   BrandInertia,
+  BrandInfakt,
   BrandInstagram,
   BrandIntercom,
   BrandItch,
   BrandJavascript,
+  BrandJira,
   BrandJuejin,
   BrandKakoTalk,
   BrandKbin,
@@ -7411,6 +7521,7 @@ export const ALL_ICON_COMPONENTS = [
   BrandStackoverflow,
   BrandStackshare,
   BrandSteam,
+  BrandStellar,
   BrandStocktwits,
   BrandStorj,
   BrandStorybook,
@@ -7458,6 +7569,7 @@ export const ALL_ICON_COMPONENTS = [
   BrandUnsplash,
   BrandUpwork,
   BrandValorant,
+  BrandVechain,
   BrandVercel,
   BrandVimeo,
   BrandVinted,
@@ -7563,6 +7675,7 @@ export const ALL_ICON_COMPONENTS = [
   BuildingCog,
   BuildingCommunity,
   BuildingCottage,
+  BuildingEiffelTower,
   BuildingEstate,
   BuildingFactory,
   BuildingFactory2,
@@ -7676,6 +7789,7 @@ export const ALL_ICON_COMPONENTS = [
   CameraX,
   Camper,
   Campfire,
+  Canary,
   Cancel,
   Candle,
   CandleHolder,
@@ -7709,6 +7823,7 @@ export const ALL_ICON_COMPONENTS = [
   Cardboards,
   CardboardsOff,
   CardCredit,
+  CarDoor,
   Cards,
   CardSd,
   CardSim,
@@ -7725,11 +7840,14 @@ export const ALL_ICON_COMPONENTS = [
   CarFanAuto,
   CarFront,
   CarGarage,
+  CarLifter,
   CarOff,
+  CarOffRoad,
   CarouselHorizontal,
   CarouselVertical,
   Carrot,
   CarrotOff,
+  CarSuspension,
   CarSuv,
   CarTaxiFront,
   Carton,
@@ -7899,6 +8017,7 @@ export const ALL_ICON_COMPONENTS = [
   ChevronUpLeft,
   ChevronUpRight,
   Chisel,
+  Chocolate,
   ChristmasBall,
   ChristmasTree,
   ChristmasTreeOff,
@@ -8057,6 +8176,10 @@ export const ALL_ICON_COMPONENTS = [
   CircleNumber8,
   CircleNumber9,
   CircleOff,
+  CircleOpenArrowDown,
+  CircleOpenArrowLeft,
+  CircleOpenArrowRight,
+  CircleOpenArrowUp,
   CircleParking,
   CircleParkingOff,
   CirclePause,
@@ -8065,6 +8188,7 @@ export const ALL_ICON_COMPONENTS = [
   CirclePlay,
   CirclePlus,
   CirclePlus2,
+  CirclePlusMinus,
   CirclePower,
   CircleRectangle,
   CircleRectangleOff,
@@ -8102,6 +8226,8 @@ export const ALL_ICON_COMPONENTS = [
   Clapperboard,
   ClearAll,
   ClearFormatting,
+  Clef,
+  ClefStaff,
   Click,
   CliffJumping,
   Clipboard,
@@ -8230,7 +8356,9 @@ export const ALL_ICON_COMPONENTS = [
   Cocktail,
   Coconut,
   Code,
+  CodeAi,
   CodeAsterisk,
+  Codeblock,
   CodeCircle,
   CodeCircle2,
   CodeDots,
@@ -8295,6 +8423,7 @@ export const ALL_ICON_COMPONENTS = [
   ConfettiOff,
   Confucius,
   CongruentTo,
+  Connection,
   Construction,
   Contact,
   ContactRound,
@@ -8359,9 +8488,11 @@ export const ALL_ICON_COMPONENTS = [
   CreativeCommonsSa,
   CreativeCommonsZero,
   CreditCard,
+  CreditCardHand,
   CreditCardOff,
   CreditCardPay,
   CreditCardRefund,
+  Credits,
   Cricket,
   CricketBall,
   CricketWicket,
@@ -8432,6 +8563,7 @@ export const ALL_ICON_COMPONENTS = [
   CurrencyFrank,
   CurrencyGuarani,
   CurrencyHryvnia,
+  CurrencyHusd,
   CurrencyIranianRial,
   CurrencyKip,
   CurrencyKroneCzech,
@@ -8466,12 +8598,14 @@ export const ALL_ICON_COMPONENTS = [
   CurrencySquare,
   CurrencyTaka,
   CurrencyTenge,
+  CurrencyTether,
   CurrencyTugrik,
   CurrencyWon,
   CurrencyXrp,
   CurrencyYen,
   CurrencyYenOff,
   CurrencyYuan,
+  CurrencyZcash,
   CurrencyZloty,
   CurrentLocation,
   CurrentLocationOff,
@@ -8517,6 +8651,8 @@ export const ALL_ICON_COMPONENTS = [
   Dessert,
   Details,
   DetailsOff,
+  Device3dCamera,
+  Device3dLens,
   DeviceAirpods,
   DeviceAirpodsCase,
   DeviceAirtag,
@@ -8526,6 +8662,7 @@ export const ALL_ICON_COMPONENTS = [
   DeviceCctv,
   DeviceCctvOff,
   DeviceComputerCamera,
+  DeviceComputerCamera2,
   DeviceComputerCameraOff,
   DeviceDesktop,
   DeviceDesktopAnalytics,
@@ -8656,6 +8793,7 @@ export const ALL_ICON_COMPONENTS = [
   DevicesCheck,
   DevicesCode,
   DevicesCog,
+  DeviceScreen,
   DeviceSdCard,
   DevicesDollar,
   DevicesDown,
@@ -8789,6 +8927,7 @@ export const ALL_ICON_COMPONENTS = [
   DoorClosed,
   DoorEnter,
   DoorExit,
+  DoorHanger,
   DoorOff,
   DoorOpen,
   Dot,
@@ -8840,6 +8979,7 @@ export const ALL_ICON_COMPONENTS = [
   Dumpling,
   Ear,
   EarOff,
+  EarphoneBluetooth,
   EarScan,
   Earth,
   EarthLock,
@@ -8866,6 +9006,7 @@ export const ALL_ICON_COMPONENTS = [
   ElevatorOff,
   Ellipsis,
   EllipsisVertical,
+  EmailStamp,
   EmergencyBed,
   Empathize,
   EmpathizeOff,
@@ -8894,6 +9035,7 @@ export const ALL_ICON_COMPONENTS = [
   ExclamationCircle,
   ExclamationMark,
   ExclamationMarkOff,
+  ExerciseBall,
   Expand,
   Explicit,
   ExplicitOff,
@@ -9158,6 +9300,8 @@ export const ALL_ICON_COMPONENTS = [
   FireHydrant,
   FireHydrantOff,
   Firetruck,
+  FirewallCheck,
+  FirewallFlame,
   FirstAidKit,
   FirstAidKitOff,
   Fish,
@@ -9219,6 +9363,7 @@ export const ALL_ICON_COMPONENTS = [
   FloatLeft,
   FloatNone,
   FloatRight,
+  Flood,
   FloorPlan,
   FloppyDisk,
   FloppyDisk2,
@@ -9286,6 +9431,7 @@ export const ALL_ICON_COMPONENTS = [
   FoldHorizontal,
   FoldUp,
   FoldVertical,
+  Foodsteps,
   Football,
   FootballGoal,
   FootballHelmet,
@@ -9385,6 +9531,7 @@ export const ALL_ICON_COMPONENTS = [
   GitPullRequest,
   GitPullRequestArrow,
   GitPullRequestClosed,
+  GitPullRequestConflict,
   GitPullRequestCreate,
   GitPullRequestCreateArrow,
   GitPullRequestDraft,
@@ -9454,6 +9601,7 @@ export const ALL_ICON_COMPONENTS = [
   Hairdryer,
   Ham,
   Hammer,
+  HammerDrill,
   HammerOff,
   Hand,
   HandClick,
@@ -9648,6 +9796,7 @@ export const ALL_ICON_COMPONENTS = [
   HomeHeart,
   HomeInfinity,
   HomeLink,
+  HomeLock,
   HomeMinus,
   HomeMove,
   HomeOff,
@@ -9710,6 +9859,8 @@ export const ALL_ICON_COMPONENTS = [
   HttpQueOff,
   HttpTrace,
   HttpTraceOff,
+  HulaHoop,
+  Iceberg,
   IceCream,
   IceCream2,
   IceCreamBowl,
@@ -9730,6 +9881,7 @@ export const ALL_ICON_COMPONENTS = [
   Ikosaedr,
   Image,
   ImageDown,
+  ImageGeneration,
   ImageInPicture,
   ImageMinus,
   ImageOff,
@@ -9746,6 +9898,7 @@ export const ALL_ICON_COMPONENTS = [
   IndianRupeeCircle,
   IndianRupeeSquare,
   Infinity,
+  Infinity2,
   InfinityOff,
   Info,
   InfoCircle,
@@ -9796,6 +9949,7 @@ export const ALL_ICON_COMPONENTS = [
   JapaneseYenSquare,
   Jar,
   Jetpack,
+  Jetski,
   JewishStar,
   JoinBevel,
   JoinRound,
@@ -9862,6 +10016,7 @@ export const ALL_ICON_COMPONENTS = [
   LaurelWreath1,
   LaurelWreath2,
   LaurelWreath3,
+  LawnMower,
   Layers,
   Layers2,
   Layers3,
@@ -9922,6 +10077,7 @@ export const ALL_ICON_COMPONENTS = [
   LayoutTemplate,
   Leaf,
   Leaf2,
+  LeafMaple,
   LeafOff,
   LeafyGreen,
   Lectern,
@@ -10044,6 +10200,7 @@ export const ALL_ICON_COMPONENTS = [
   Loader,
   Loader2,
   Loader3,
+  Loader4,
   LoaderCircle,
   LoaderPinwheel,
   LoaderQuarter,
@@ -10182,6 +10339,7 @@ export const ALL_ICON_COMPONENTS = [
   MapEast,
   MapExclamation,
   MapHeart,
+  MapLock,
   MapMinus,
   MapNorth,
   MapOff,
@@ -10220,6 +10378,7 @@ export const ALL_ICON_COMPONENTS = [
   MapRoute,
   MapSearch,
   MapShare,
+  MapShield,
   MapSouth,
   MapStar,
   MapUp,
@@ -10304,6 +10463,7 @@ export const ALL_ICON_COMPONENTS = [
   MenuDeep,
   MenuOrder,
   Merge,
+  Mesh,
   Message,
   Message2,
   Message2Bolt,
@@ -10410,6 +10570,7 @@ export const ALL_ICON_COMPONENTS = [
   Mickey,
   MicOff,
   Microchip,
+  Microfrontends,
   Microphone,
   Microphone2,
   Microphone2Off,
@@ -10419,6 +10580,7 @@ export const ALL_ICON_COMPONENTS = [
   Microwave,
   MicrowaveOff,
   MicVocal,
+  Middleware,
   Milestone,
   MilitaryAward,
   MilitaryRank,
@@ -10513,6 +10675,7 @@ export const ALL_ICON_COMPONENTS = [
   MoonStars,
   Moped,
   MortarPestle,
+  Mosque,
   Motorbike,
   MotorRacingHelmet,
   Mountain,
@@ -10619,7 +10782,9 @@ export const ALL_ICON_COMPONENTS = [
   NoCopyright,
   NoCreativeCommons,
   NoDerivatives,
+  NoiseReduction,
   NorthStar,
+  Notdef,
   Note,
   Notebook,
   NotebookOff,
@@ -10769,6 +10934,7 @@ export const ALL_ICON_COMPONENTS = [
   Olive,
   Olympics,
   OlympicsOff,
+  OlympicTorch,
   Om,
   Omega,
   Onion,
@@ -10881,6 +11047,7 @@ export const ALL_ICON_COMPONENTS = [
   PencilStar,
   PencilUp,
   PencilX,
+  Pendulum,
   Penguin,
   PenLine,
   Pennant,
@@ -10947,6 +11114,7 @@ export const ALL_ICON_COMPONENTS = [
   PhoneX,
   Photo,
   PhotoAi,
+  PhotoAlt,
   PhotoBitcoin,
   PhotoBolt,
   PhotoCancel,
@@ -11017,6 +11185,7 @@ export const ALL_ICON_COMPONENTS = [
   PinOff,
   PinSafety,
   PinSafetyOpen,
+  Pipeline,
   Pipette,
   Pizza,
   PizzaOff,
@@ -11081,6 +11250,7 @@ export const ALL_ICON_COMPONENTS = [
   PlugOff,
   PlugX,
   PlugZap,
+  Plunger,
   Plus,
   PlusEqual,
   PlusMinus,
@@ -11092,11 +11262,14 @@ export const ALL_ICON_COMPONENTS = [
   PodiumOff,
   Point,
   Pointer,
+  Pointer2,
   PointerBolt,
   PointerCancel,
   PointerCheck,
   PointerCode,
   PointerCog,
+  PointerCollaboration,
+  PointerCollaboration2,
   PointerDollar,
   PointerDown,
   PointerExclamation,
@@ -11172,8 +11345,11 @@ export const ALL_ICON_COMPONENTS = [
   QrCode,
   QrcodeOff,
   QuestionMark,
+  QueuePopIn,
+  QueuePopOut,
   Quote,
   QuoteOff,
+  QuoteOpen,
   Quotes,
   Rabbit,
   Radar,
@@ -11347,6 +11523,7 @@ export const ALL_ICON_COMPONENTS = [
   RotateCwSquare,
   RotateDot,
   RotateRectangle,
+  Roulette,
   Route,
   Route2,
   RouteAltLeft,
@@ -11403,13 +11580,17 @@ export const ALL_ICON_COMPONENTS = [
   Scaling,
   Scan,
   ScanBarcode,
+  ScanCube,
   ScanEye,
   ScanFace,
+  ScanLetterA,
+  ScanLetterT,
   ScanLine,
   ScanPosition,
   ScanQrCode,
   ScanSearch,
   ScanText,
+  ScanTraces,
   Scarf,
   Schema,
   SchemaOff,
@@ -11449,6 +11630,7 @@ export const ALL_ICON_COMPONENTS = [
   SectionSign,
   Seedling,
   SeedlingOff,
+  Segway,
   Select,
   SelectAll,
   Selector,
@@ -11466,6 +11648,7 @@ export const ALL_ICON_COMPONENTS = [
   ServerBolt,
   ServerCog,
   ServerCrash,
+  Serverless,
   ServerOff,
   ServerSpark,
   Servicemark,
@@ -11625,6 +11808,7 @@ export const ALL_ICON_COMPONENTS = [
   Skateboard,
   Skateboarding,
   SkateboardOff,
+  Sketching,
   SkewX,
   SkewY,
   SkiJumping,
@@ -11703,6 +11887,8 @@ export const ALL_ICON_COMPONENTS = [
   SpacingVertical,
   Spade,
   Sparkle,
+  Sparkle2,
+  SparkleHighlight,
   Sparkles,
   Sparkles2,
   Speaker,
@@ -11712,6 +11898,7 @@ export const ALL_ICON_COMPONENTS = [
   SpellCheck,
   SpellCheck2,
   Sphere,
+  Sphere2,
   SphereOff,
   SpherePlus,
   Spider,
@@ -11963,6 +12150,9 @@ export const ALL_ICON_COMPONENTS = [
   StretchVertical,
   Strikethrough,
   StrikethroughSquare,
+  StrokeCurved,
+  StrokeDynamic,
+  StrokeStraight,
   Stroller,
   STurnDown,
   STurnLeft,
@@ -12064,6 +12254,7 @@ export const ALL_ICON_COMPONENTS = [
   Tags,
   TagsOff,
   TagStarred,
+  TaiwanDollar,
   Tally1,
   Tally2,
   Tally3,
@@ -12077,6 +12268,7 @@ export const ALL_ICON_COMPONENTS = [
   Tangent,
   Tank,
   Target,
+  Target2,
   TargetArrow,
   TargetOff,
   Tax,
@@ -12125,6 +12317,7 @@ export const ALL_ICON_COMPONENTS = [
   TextRecognition,
   TextResize,
   TextScan2,
+  TextScanAi,
   TextSearch,
   TextSelect,
   TextSize,
@@ -12338,6 +12531,7 @@ export const ALL_ICON_COMPONENTS = [
   UnfoldVertical,
   Ungroup,
   UnicornHead,
+  Unicycle,
   Universe,
   University,
   Unlink,
@@ -12360,6 +12554,7 @@ export const ALL_ICON_COMPONENTS = [
   UserExclamation,
   UserHeart,
   UserHexagon,
+  UserKey,
   UserMinus,
   UserOff,
   UserPause,
@@ -12442,8 +12637,10 @@ export const ALL_ICON_COMPONENTS = [
   ViewportShort,
   ViewportTall,
   ViewportWide,
+  Vignette,
   Vinyl,
   Vip,
+  Vip2,
   VipOff,
   Virus,
   VirusOff,
@@ -12585,6 +12782,7 @@ export const ALL_ICON_COMPONENTS = [
   WorldHeart,
   WorldLatitude,
   WorldLongitude,
+  WorldMap,
   WorldMinus,
   WorldOff,
   WorldPause,
@@ -12612,6 +12810,7 @@ export const ALL_ICON_COMPONENTS = [
   XboxX,
   XboxY,
   Xd,
+  XMark,
   XPowerY,
   Xxx,
   YarnBall,
@@ -12622,6 +12821,7 @@ export const ALL_ICON_COMPONENTS = [
   ZapOff,
   Zeppelin,
   ZeppelinOff,
+  ZeroConfig,
   Zip,
   ZodiacAquarius,
   ZodiacAries,
@@ -12668,6 +12868,8 @@ export {
   AccessibleOff,
   AccessPoint,
   AccessPointOff,
+  Acorn,
+  Acrobatic,
   Activity,
   ActivityHeartbeat,
   Ad,
@@ -12704,6 +12906,9 @@ export {
   AerialLift,
   Affiliate,
   Ai,
+  AiAgent,
+  AiAgents,
+  AiGateway,
   AirBalloon,
   AirConditioning,
   AirConditioningDisabled,
@@ -12824,6 +13029,7 @@ export {
   Api,
   ApiApp,
   ApiAppOff,
+  ApiBook,
   ApiOff,
   Apple,
   AppleCore,
@@ -13399,6 +13605,7 @@ export {
   BorderTopPlus,
   BorderVertical,
   Bot,
+  BotId,
   BotMessageSquare,
   BotOff,
   Bottle,
@@ -13492,6 +13699,7 @@ export {
   BrandArc,
   BrandAsana,
   BrandAstro,
+  BrandAudible,
   BrandAuth0,
   BrandAws,
   BrandAzure,
@@ -13622,10 +13830,12 @@ export {
   BrandHipchat,
   BrandHtml5,
   BrandInertia,
+  BrandInfakt,
   BrandInstagram,
   BrandIntercom,
   BrandItch,
   BrandJavascript,
+  BrandJira,
   BrandJuejin,
   BrandKakoTalk,
   BrandKbin,
@@ -13738,6 +13948,7 @@ export {
   BrandStackoverflow,
   BrandStackshare,
   BrandSteam,
+  BrandStellar,
   BrandStocktwits,
   BrandStorj,
   BrandStorybook,
@@ -13785,6 +13996,7 @@ export {
   BrandUnsplash,
   BrandUpwork,
   BrandValorant,
+  BrandVechain,
   BrandVercel,
   BrandVimeo,
   BrandVinted,
@@ -13890,6 +14102,7 @@ export {
   BuildingCog,
   BuildingCommunity,
   BuildingCottage,
+  BuildingEiffelTower,
   BuildingEstate,
   BuildingFactory,
   BuildingFactory2,
@@ -14003,6 +14216,7 @@ export {
   CameraX,
   Camper,
   Campfire,
+  Canary,
   Cancel,
   Candle,
   CandleHolder,
@@ -14036,6 +14250,7 @@ export {
   Cardboards,
   CardboardsOff,
   CardCredit,
+  CarDoor,
   Cards,
   CardSd,
   CardSim,
@@ -14052,11 +14267,14 @@ export {
   CarFanAuto,
   CarFront,
   CarGarage,
+  CarLifter,
   CarOff,
+  CarOffRoad,
   CarouselHorizontal,
   CarouselVertical,
   Carrot,
   CarrotOff,
+  CarSuspension,
   CarSuv,
   CarTaxiFront,
   Carton,
@@ -14226,6 +14444,7 @@ export {
   ChevronUpLeft,
   ChevronUpRight,
   Chisel,
+  Chocolate,
   ChristmasBall,
   ChristmasTree,
   ChristmasTreeOff,
@@ -14384,6 +14603,10 @@ export {
   CircleNumber8,
   CircleNumber9,
   CircleOff,
+  CircleOpenArrowDown,
+  CircleOpenArrowLeft,
+  CircleOpenArrowRight,
+  CircleOpenArrowUp,
   CircleParking,
   CircleParkingOff,
   CirclePause,
@@ -14392,6 +14615,7 @@ export {
   CirclePlay,
   CirclePlus,
   CirclePlus2,
+  CirclePlusMinus,
   CirclePower,
   CircleRectangle,
   CircleRectangleOff,
@@ -14429,6 +14653,8 @@ export {
   Clapperboard,
   ClearAll,
   ClearFormatting,
+  Clef,
+  ClefStaff,
   Click,
   CliffJumping,
   Clipboard,
@@ -14557,7 +14783,9 @@ export {
   Cocktail,
   Coconut,
   Code,
+  CodeAi,
   CodeAsterisk,
+  Codeblock,
   CodeCircle,
   CodeCircle2,
   CodeDots,
@@ -14622,6 +14850,7 @@ export {
   ConfettiOff,
   Confucius,
   CongruentTo,
+  Connection,
   Construction,
   Contact,
   ContactRound,
@@ -14686,9 +14915,11 @@ export {
   CreativeCommonsSa,
   CreativeCommonsZero,
   CreditCard,
+  CreditCardHand,
   CreditCardOff,
   CreditCardPay,
   CreditCardRefund,
+  Credits,
   Cricket,
   CricketBall,
   CricketWicket,
@@ -14759,6 +14990,7 @@ export {
   CurrencyFrank,
   CurrencyGuarani,
   CurrencyHryvnia,
+  CurrencyHusd,
   CurrencyIranianRial,
   CurrencyKip,
   CurrencyKroneCzech,
@@ -14793,12 +15025,14 @@ export {
   CurrencySquare,
   CurrencyTaka,
   CurrencyTenge,
+  CurrencyTether,
   CurrencyTugrik,
   CurrencyWon,
   CurrencyXrp,
   CurrencyYen,
   CurrencyYenOff,
   CurrencyYuan,
+  CurrencyZcash,
   CurrencyZloty,
   CurrentLocation,
   CurrentLocationOff,
@@ -14844,6 +15078,8 @@ export {
   Dessert,
   Details,
   DetailsOff,
+  Device3dCamera,
+  Device3dLens,
   DeviceAirpods,
   DeviceAirpodsCase,
   DeviceAirtag,
@@ -14853,6 +15089,7 @@ export {
   DeviceCctv,
   DeviceCctvOff,
   DeviceComputerCamera,
+  DeviceComputerCamera2,
   DeviceComputerCameraOff,
   DeviceDesktop,
   DeviceDesktopAnalytics,
@@ -14983,6 +15220,7 @@ export {
   DevicesCheck,
   DevicesCode,
   DevicesCog,
+  DeviceScreen,
   DeviceSdCard,
   DevicesDollar,
   DevicesDown,
@@ -15116,6 +15354,7 @@ export {
   DoorClosed,
   DoorEnter,
   DoorExit,
+  DoorHanger,
   DoorOff,
   DoorOpen,
   Dot,
@@ -15167,6 +15406,7 @@ export {
   Dumpling,
   Ear,
   EarOff,
+  EarphoneBluetooth,
   EarScan,
   Earth,
   EarthLock,
@@ -15193,6 +15433,7 @@ export {
   ElevatorOff,
   Ellipsis,
   EllipsisVertical,
+  EmailStamp,
   EmergencyBed,
   Empathize,
   EmpathizeOff,
@@ -15221,6 +15462,7 @@ export {
   ExclamationCircle,
   ExclamationMark,
   ExclamationMarkOff,
+  ExerciseBall,
   Expand,
   Explicit,
   ExplicitOff,
@@ -15485,6 +15727,8 @@ export {
   FireHydrant,
   FireHydrantOff,
   Firetruck,
+  FirewallCheck,
+  FirewallFlame,
   FirstAidKit,
   FirstAidKitOff,
   Fish,
@@ -15546,6 +15790,7 @@ export {
   FloatLeft,
   FloatNone,
   FloatRight,
+  Flood,
   FloorPlan,
   FloppyDisk,
   FloppyDisk2,
@@ -15613,6 +15858,7 @@ export {
   FoldHorizontal,
   FoldUp,
   FoldVertical,
+  Foodsteps,
   Football,
   FootballGoal,
   FootballHelmet,
@@ -15712,6 +15958,7 @@ export {
   GitPullRequest,
   GitPullRequestArrow,
   GitPullRequestClosed,
+  GitPullRequestConflict,
   GitPullRequestCreate,
   GitPullRequestCreateArrow,
   GitPullRequestDraft,
@@ -15781,6 +16028,7 @@ export {
   Hairdryer,
   Ham,
   Hammer,
+  HammerDrill,
   HammerOff,
   Hand,
   HandClick,
@@ -15975,6 +16223,7 @@ export {
   HomeHeart,
   HomeInfinity,
   HomeLink,
+  HomeLock,
   HomeMinus,
   HomeMove,
   HomeOff,
@@ -16037,6 +16286,8 @@ export {
   HttpQueOff,
   HttpTrace,
   HttpTraceOff,
+  HulaHoop,
+  Iceberg,
   IceCream,
   IceCream2,
   IceCreamBowl,
@@ -16057,6 +16308,7 @@ export {
   Ikosaedr,
   Image,
   ImageDown,
+  ImageGeneration,
   ImageInPicture,
   ImageMinus,
   ImageOff,
@@ -16073,6 +16325,7 @@ export {
   IndianRupeeCircle,
   IndianRupeeSquare,
   Infinity,
+  Infinity2,
   InfinityOff,
   Info,
   InfoCircle,
@@ -16123,6 +16376,7 @@ export {
   JapaneseYenSquare,
   Jar,
   Jetpack,
+  Jetski,
   JewishStar,
   JoinBevel,
   JoinRound,
@@ -16189,6 +16443,7 @@ export {
   LaurelWreath1,
   LaurelWreath2,
   LaurelWreath3,
+  LawnMower,
   Layers,
   Layers2,
   Layers3,
@@ -16249,6 +16504,7 @@ export {
   LayoutTemplate,
   Leaf,
   Leaf2,
+  LeafMaple,
   LeafOff,
   LeafyGreen,
   Lectern,
@@ -16371,6 +16627,7 @@ export {
   Loader,
   Loader2,
   Loader3,
+  Loader4,
   LoaderCircle,
   LoaderPinwheel,
   LoaderQuarter,
@@ -16509,6 +16766,7 @@ export {
   MapEast,
   MapExclamation,
   MapHeart,
+  MapLock,
   MapMinus,
   MapNorth,
   MapOff,
@@ -16547,6 +16805,7 @@ export {
   MapRoute,
   MapSearch,
   MapShare,
+  MapShield,
   MapSouth,
   MapStar,
   MapUp,
@@ -16631,6 +16890,7 @@ export {
   MenuDeep,
   MenuOrder,
   Merge,
+  Mesh,
   Message,
   Message2,
   Message2Bolt,
@@ -16737,6 +16997,7 @@ export {
   Mickey,
   MicOff,
   Microchip,
+  Microfrontends,
   Microphone,
   Microphone2,
   Microphone2Off,
@@ -16746,6 +17007,7 @@ export {
   Microwave,
   MicrowaveOff,
   MicVocal,
+  Middleware,
   Milestone,
   MilitaryAward,
   MilitaryRank,
@@ -16840,6 +17102,7 @@ export {
   MoonStars,
   Moped,
   MortarPestle,
+  Mosque,
   Motorbike,
   MotorRacingHelmet,
   Mountain,
@@ -16946,7 +17209,9 @@ export {
   NoCopyright,
   NoCreativeCommons,
   NoDerivatives,
+  NoiseReduction,
   NorthStar,
+  Notdef,
   Note,
   Notebook,
   NotebookOff,
@@ -17096,6 +17361,7 @@ export {
   Olive,
   Olympics,
   OlympicsOff,
+  OlympicTorch,
   Om,
   Omega,
   Onion,
@@ -17208,6 +17474,7 @@ export {
   PencilStar,
   PencilUp,
   PencilX,
+  Pendulum,
   Penguin,
   PenLine,
   Pennant,
@@ -17274,6 +17541,7 @@ export {
   PhoneX,
   Photo,
   PhotoAi,
+  PhotoAlt,
   PhotoBitcoin,
   PhotoBolt,
   PhotoCancel,
@@ -17344,6 +17612,7 @@ export {
   PinOff,
   PinSafety,
   PinSafetyOpen,
+  Pipeline,
   Pipette,
   Pizza,
   PizzaOff,
@@ -17408,6 +17677,7 @@ export {
   PlugOff,
   PlugX,
   PlugZap,
+  Plunger,
   Plus,
   PlusEqual,
   PlusMinus,
@@ -17419,11 +17689,14 @@ export {
   PodiumOff,
   Point,
   Pointer,
+  Pointer2,
   PointerBolt,
   PointerCancel,
   PointerCheck,
   PointerCode,
   PointerCog,
+  PointerCollaboration,
+  PointerCollaboration2,
   PointerDollar,
   PointerDown,
   PointerExclamation,
@@ -17499,8 +17772,11 @@ export {
   QrCode,
   QrcodeOff,
   QuestionMark,
+  QueuePopIn,
+  QueuePopOut,
   Quote,
   QuoteOff,
+  QuoteOpen,
   Quotes,
   Rabbit,
   Radar,
@@ -17674,6 +17950,7 @@ export {
   RotateCwSquare,
   RotateDot,
   RotateRectangle,
+  Roulette,
   Route,
   Route2,
   RouteAltLeft,
@@ -17730,13 +18007,17 @@ export {
   Scaling,
   Scan,
   ScanBarcode,
+  ScanCube,
   ScanEye,
   ScanFace,
+  ScanLetterA,
+  ScanLetterT,
   ScanLine,
   ScanPosition,
   ScanQrCode,
   ScanSearch,
   ScanText,
+  ScanTraces,
   Scarf,
   Schema,
   SchemaOff,
@@ -17776,6 +18057,7 @@ export {
   SectionSign,
   Seedling,
   SeedlingOff,
+  Segway,
   Select,
   SelectAll,
   Selector,
@@ -17793,6 +18075,7 @@ export {
   ServerBolt,
   ServerCog,
   ServerCrash,
+  Serverless,
   ServerOff,
   ServerSpark,
   Servicemark,
@@ -17952,6 +18235,7 @@ export {
   Skateboard,
   Skateboarding,
   SkateboardOff,
+  Sketching,
   SkewX,
   SkewY,
   SkiJumping,
@@ -18030,6 +18314,8 @@ export {
   SpacingVertical,
   Spade,
   Sparkle,
+  Sparkle2,
+  SparkleHighlight,
   Sparkles,
   Sparkles2,
   Speaker,
@@ -18039,6 +18325,7 @@ export {
   SpellCheck,
   SpellCheck2,
   Sphere,
+  Sphere2,
   SphereOff,
   SpherePlus,
   Spider,
@@ -18290,6 +18577,9 @@ export {
   StretchVertical,
   Strikethrough,
   StrikethroughSquare,
+  StrokeCurved,
+  StrokeDynamic,
+  StrokeStraight,
   Stroller,
   STurnDown,
   STurnLeft,
@@ -18391,6 +18681,7 @@ export {
   Tags,
   TagsOff,
   TagStarred,
+  TaiwanDollar,
   Tally1,
   Tally2,
   Tally3,
@@ -18404,6 +18695,7 @@ export {
   Tangent,
   Tank,
   Target,
+  Target2,
   TargetArrow,
   TargetOff,
   Tax,
@@ -18452,6 +18744,7 @@ export {
   TextRecognition,
   TextResize,
   TextScan2,
+  TextScanAi,
   TextSearch,
   TextSelect,
   TextSize,
@@ -18665,6 +18958,7 @@ export {
   UnfoldVertical,
   Ungroup,
   UnicornHead,
+  Unicycle,
   Universe,
   University,
   Unlink,
@@ -18687,6 +18981,7 @@ export {
   UserExclamation,
   UserHeart,
   UserHexagon,
+  UserKey,
   UserMinus,
   UserOff,
   UserPause,
@@ -18769,8 +19064,10 @@ export {
   ViewportShort,
   ViewportTall,
   ViewportWide,
+  Vignette,
   Vinyl,
   Vip,
+  Vip2,
   VipOff,
   Virus,
   VirusOff,
@@ -18912,6 +19209,7 @@ export {
   WorldHeart,
   WorldLatitude,
   WorldLongitude,
+  WorldMap,
   WorldMinus,
   WorldOff,
   WorldPause,
@@ -18939,6 +19237,7 @@ export {
   XboxX,
   XboxY,
   Xd,
+  XMark,
   XPowerY,
   Xxx,
   YarnBall,
@@ -18949,6 +19248,7 @@ export {
   ZapOff,
   Zeppelin,
   ZeppelinOff,
+  ZeroConfig,
   Zip,
   ZodiacAquarius,
   ZodiacAries,

@@ -15,17 +15,18 @@ Both use cases read from the same data. The difference is the query you start wi
 
 ## Where the diagnostics live
 
-Three places, all correlated:
+Four places, all correlated:
 
-1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
-2. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
-3. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
+1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
+2. **`modules.timing_diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
+3. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows on `boxel_index`. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
+4. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same `requestId` lands on both `boxel_index.timing_diagnostics->>'requestId'` and `modules.timing_diagnostics->>'requestId'`, so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
 
 For UI triage you'll typically read the JSON error response (which surfaces `error_doc.diagnostics` as `meta.diagnostics`). For operator / SQL triage — especially slow non-failing reindexes — query the `timing_diagnostics` column directly.
 
 ## How to actually run these queries
 
-The SQL examples below are environment-agnostic — they work the same against local dev, staging, or prod. What changes is *how you reach the database*:
+The SQL examples below are environment-agnostic — they work the same against local dev, staging, or prod. What changes is _how you reach the database_:
 
 - **Local dev**: `psql "$DATABASE_URL"` (or whatever your local boxel server uses) directly.
 - **Staging / prod**: the RDS instances are private to the cardstack VPC. Use the `aws-access` skill — it covers (a) provisioning a Claude-usable AWS session via `mise run claude-aws <env> <token>`, (b) the SSM port-forward tunnel through the realm-server ECS task to RDS, and (c) connecting via psql as the read-only `claude_readonly_user` (member of `readonly_role`). This skill assumes you've already got that connection working; it doesn't re-document the AWS plumbing.
@@ -43,6 +44,27 @@ Every slow or timed-out render falls into one of:
 
 If you pick the wrong category you waste a day. The diagnostic fields in the [Classify in one pass](#classify-in-one-pass) table below pick it for you.
 
+## Prerender priorities
+
+Every prerender request — visit, module, run-command — carries a numeric `priority` that flows from the originating worker job all the way to the per-tab queue, the per-affinity file-admission semaphore, and the per-server render semaphore. Two priorities are in production today:
+
+- **`0` — `systemInitiatedPriority`**. Background indexing work: scheduled full-reindex sweeps, `_full-reindex` runs, the worker's continuous reindex queue. The default for any code path that doesn't explicitly opt in.
+- **`10` — `userInitiatedPriority`**. Anything a user kicked off: the `_reindex` endpoint, ad-hoc card publishes, manual UI-driven reindex actions.
+
+Higher priority dequeues first; FIFO is preserved within a priority bucket. There is **no preemption** — an in-flight low-priority render runs to completion. The next free slot goes to the highest-priority queued waiter.
+
+Why this matters for triage:
+
+1. **Reading a stuck render**: a `priority=10` row is a user request. If it's stuck on `waits.tabQueueMs` or `waits.semaphoreMs`, that's the UX-visible saturation event the priority routing was designed to mitigate. A `priority=0` row stuck on the same wait is background work — operationally less urgent and often expected during a deliberate reindex burst.
+
+2. **Distinguishing capacity issues from priority misrouting**: a `priority=10` row that waited >1s in `tabQueueMs` while the affinity's `prerender-queue-snapshot` shows `priorities=tab:10:N` (queued behind other priority-10 work) is a **capacity** problem — the user-priority workload exceeded the fleet. A `priority=10` row queued behind `priorities=tab:0:N` (queued behind background work, with manager-side priority routing live in the build) is a **routing** failure — the manager picked the wrong server, or the file render the row was queued behind isn't releasing. These need different fixes.
+
+3. **Confirming priority routing actually fired**: if a known-user `_reindex` shows up in `timing_diagnostics` with `priority=0`, the producer-side threading (job → IndexRunner → `prerenderVisit`) regressed somewhere. Most-likely place is a new task type that didn't pick up `jobInfo.priority`.
+
+4. **Sharpening the deadlock fingerprint**: `affinitySnapshot.sameAffinityActivity[*].priority` lets you tell a self-referential prerender deadlock apart from priority-driven queuing. Same-priority queued module sub-render on a stuck same-priority file render → deadlock. Higher-priority queued sibling → priority routing working as intended.
+
+The priority value lives on the `timing_diagnostics.priority` field and on every `sameAffinityActivity` entry. The periodic `prerender-queue-snapshot` log line carries per-affinity priority breakdowns. See [Classify in one pass](#classify-in-one-pass) and the field-by-field section below for the exact triage rules.
+
 ## Mode A — a render timed out
 
 Pull the diagnostic JSON for the erroring row:
@@ -56,7 +78,7 @@ WHERE url = '<errored-card-url>'
 
 (Or read `error_doc.diagnostics` from the JSON:API error response — same shape.)
 
-Walk the fields per [Classify in one pass](#classify-in-one-pass). The *first* positive signal wins; stop there.
+Walk the fields per [Classify in one pass](#classify-in-one-pass). The _first_ positive signal wins; stop there.
 
 ## Mode B — an incremental reindex was slow
 
@@ -77,7 +99,7 @@ SELECT
   max((timing_diagnostics->>'renderElapsedMs')::int)
                                         AS slowest_ms
 FROM boxel_index
-WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
   AND timing_diagnostics->>'invalidationId' IS NOT NULL
 GROUP BY 1
 ORDER BY last_indexed_at DESC
@@ -104,7 +126,7 @@ SELECT
   to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000)
                                                       AS indexed_at
 FROM boxel_index
-WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
   AND timing_diagnostics->>'invalidationId' = '<uuid>'
 ORDER BY render_ms DESC NULLS LAST;
 ```
@@ -114,7 +136,7 @@ ORDER BY render_ms DESC NULLS LAST;
 - One row dominates (e.g. a dashboard card) and the rest are cheap. The big row is the real target — investigate its `queryLoadsInFlight` / `recentModuleEvaluations` / `cardDocLoadsInFlight`.
 - All rows share a large `launchMs`. Capacity contention during the reindex, not the cards' fault.
 - The first row in the batch (min `indexedAt`) has a large `renderElapsedMs` but the rest are cheap — this is the cold-loader tax paid by whichever card was rendered first after `clearCache: true` fired. Expected on any executable invalidation; only worth chasing if the cold cost is disproportionate to the dep closure.
-- The `deps` / `types` columns on the same rows tell you *why* each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
+- The `deps` / `types` columns on the same rows tell you _why_ each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
 
 **Other useful queries:**
 
@@ -128,7 +150,7 @@ SELECT
   timing_diagnostics->>'invalidationId'                           AS group,
   has_error
 FROM boxel_index
-WHERE realm_url = 'http://localhost:4201/user/your-realm/'
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
 ORDER BY render_ms DESC NULLS LAST
 LIMIT 20;
 
@@ -145,16 +167,35 @@ WHERE timing_diagnostics->>'renderElapsedMs' IS NOT NULL
 GROUP BY 1
 ORDER BY p95_ms DESC NULLS LAST
 LIMIT 20;
+
+-- Rows where the render.meta computed-field traversal dominates the
+-- render budget. `computedCalls` + the host-side `searchDocMs` /
+-- `serializeMs` are emitted by the host route per row. Use these to
+-- find aggregate-style cards that are eating their render budget on
+-- compute work rather than data loads or template stalls.
+SELECT
+  url,
+  to_timestamp((timing_diagnostics->>'indexedAt')::bigint / 1000) AS indexed_at,
+  (timing_diagnostics->>'computedCalls')::int                     AS calls,
+  (timing_diagnostics->>'computedCacheHits')::int                 AS cache_hits,
+  (timing_diagnostics->>'serializeMs')::numeric                   AS serialize_ms,
+  (timing_diagnostics->>'searchDocMs')::numeric                   AS search_doc_ms,
+  (timing_diagnostics->>'renderElapsedMs')::int                   AS render_ms
+FROM boxel_index
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
+  AND timing_diagnostics->>'computedCalls' IS NOT NULL
+ORDER BY (timing_diagnostics->>'computedCalls')::int DESC NULLS LAST
+LIMIT 20;
 ```
 
 ## Mode C — a worker job is stuck or got rejected
 
-Mode A and Mode B both assume `boxel_index` has up-to-date `timing_diagnostics` for the rows you're investigating. That assumption breaks when an indexing job is *in progress* or got rejected mid-flight: nothing has been committed to `boxel_index` yet (the indexer writes to a staging table and only swaps on success — see [Reading partial progress from `boxel_index_working`](#5-reading-partial-progress-from-boxel_index_working) below), so the diagnostics column there is stale or null for the affected rows.
+Mode A and Mode B both assume `boxel_index` has up-to-date `timing_diagnostics` for the rows you're investigating. That assumption breaks when an indexing job is _in progress_ or got rejected mid-flight: nothing has been committed to `boxel_index` yet (the indexer writes to a staging table and only swaps on success — see [Reading partial progress from `boxel_index_working`](#5-reading-partial-progress-from-boxel_index_working) below), so the diagnostics column there is stale or null for the affected rows.
 
-For this mode the diagnostic stance flips from "what timed out" (Mode A) or "what was slow" (Mode B) to **"what hasn't happened yet"**. You're reconstructing the work the job *would have done* from three sources together:
+For this mode the diagnostic stance flips from "what timed out" (Mode A) or "what was slow" (Mode B) to **"what hasn't happened yet"**. You're reconstructing the work the job _would have done_ from three sources together:
 
-1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is *not yet* in `boxel_index` (or has a higher `realm_version`) was already processed by the stuck job.
-2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what *would* have been invalidated by a from-scratch run, *before* any `boxel_index_working` rows existed.
+1. **`boxel_index_working`** — the staging table the indexer writes to as it makes progress. On success its rows for the touched URLs are copied into `boxel_index` (`Batch.applyBatchUpdates` in `packages/runtime-common/index-writer.ts`). On failure (worker crash, job timeout, manual cancel) the working rows are left behind, which is exactly the bisection signal you want: any row in `boxel_index_working` that is _not yet_ in `boxel_index` (or has a higher `realm_version`) was already processed by the stuck job.
+2. **EFS file mtimes** — reachable via the `aws-access` skill's "Browsing the EFS filesystem" path (the `boxel-claude-fs-readonly-<env>` Fargate task). Combined with `boxel_index.last_modified` (the indexer's view of when each file was last processed) this lets you reconstruct what _would_ have been invalidated by a from-scratch run, _before_ any `boxel_index_working` rows existed.
 3. **Worker logs** in CloudWatch (`ecs-boxel-worker-<env>`) — confirms the job's start, the file it was on at the freeze point, and any partial completion lines.
 
 ### 1. Recognising the situation
@@ -197,7 +238,7 @@ WHERE job_id = <job-id>
 ORDER BY created_at DESC;
 ```
 
-(See `packages/runtime-common/realm-index-updater.ts::publishFullIndex` and `update`, `packages/runtime-common/jobs/reindex-realm.ts`, and `packages/postgres/pg-queue.ts` for how these tables are populated and what `unfulfilled` / `resolved` / `rejected` mean. The full-reindex path (`enqueueReindexRealmJob` with `clearLastModified: true`) intentionally nulls `boxel_index.last_modified` *before* enqueuing — relevant to step 3 below.)
+(See `packages/runtime-common/realm-index-updater.ts::publishFullIndex` and `update`, `packages/runtime-common/jobs/reindex-realm.ts`, and `packages/postgres/pg-queue.ts` for how these tables are populated and what `unfulfilled` / `resolved` / `rejected` mean. The full-reindex path (`enqueueReindexRealmJob` with `clearLastModified: true`) intentionally nulls `boxel_index.last_modified` _before_ enqueuing — relevant to step 3 below.)
 
 ### 2. Distinguishing from-scratch vs incremental
 
@@ -253,7 +294,7 @@ The from-scratch path lives in `IndexRunner.fromScratch` (`packages/runtime-comm
    invalidationList.push(...deletedUrls);
    ```
 
-   Reproduce that comparison by hand. To find rows in the index that *would have* been seeded:
+   Reproduce that comparison by hand. To find rows in the index that _would have_ been seeded:
 
    ```sql
    -- "Stale" rows in boxel_index — anything where the indexer's view of
@@ -305,7 +346,7 @@ The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls
 
 1. For each seed URL, collect concrete-URL matches across `boxel_index_working` (current batch) and `boxel_index` (production) — `urlsMatchingSeed` (lines 776-819).
 2. For each matched URL, call `calculateInvalidations(alias)` (line 1066) which finds rows that reference the alias in their `deps` jsonb array, then recurses into those rows' aliases. Recursion is bounded by a `visited` set per `invalidate()` call — there are no fixed iteration counts, the walk continues until `visited` saturates.
-3. The single SQL building block is `itemsThatReference(resolvedPath)` (line 978), which on Postgres uses jsonb containment. **Where to read from depends on the question**: at runtime the indexer queries `boxel_index_working` so mid-batch tombstones and rewrites are visible to subsequent fan-out iterations. For *post-mortem* reconstruction of a stuck job, prefer `boxel_index` (committed state) — that gives you the state the runner *started* with, before its own writes confused the picture. If the job partially advanced, probe both tables side-by-side to see what was already redrawn vs. what was still untouched.
+3. The single SQL building block is `itemsThatReference(resolvedPath)` (line 978), which on Postgres uses jsonb containment. **Where to read from depends on the question**: at runtime the indexer queries `boxel_index_working` so mid-batch tombstones and rewrites are visible to subsequent fan-out iterations. For _post-mortem_ reconstruction of a stuck job, prefer `boxel_index` (committed state) — that gives you the state the runner _started_ with, before its own writes confused the picture. If the job partially advanced, probe both tables side-by-side to see what was already redrawn vs. what was still untouched.
 
    ```sql
    -- One iteration of consumer fan-out, against the committed state
@@ -332,9 +373,9 @@ The fan-out is **iterative**, not a single recursive CTE. `Batch.invalidate(urls
 
    When the seed has a `@cardstack/...` "registered prefix" form (catalog modules, etc.), the runtime also probes the unresolved form — `@>` against `["<unresolved-prefix>/..."]`. Reproduce by-hand only if your seed URL is one of those (look for `unresolveCardReference` in `card-reference-resolver.ts`).
 
-4. The `invalidationTraversalAlias` rule (line 1095) decides what gets fed into the *next* iteration:
+4. The `invalidationTraversalAlias` rule (line 1095) decides what gets fed into the _next_ iteration:
    - For `type = 'instance'` rows: the row's own `url` (the `.json` URL).
-   - For executable file rows (`.gts` / `.ts` / `.js` / `.gjs`) with a `file_alias`: the `file_alias` (path with extension trimmed). Executable consumers see the *aliased* URL in `deps`, not the source file with extension.
+   - For executable file rows (`.gts` / `.ts` / `.js` / `.gjs`) with a `file_alias`: the `file_alias` (path with extension trimmed). Executable consumers see the _aliased_ URL in `deps`, not the source file with extension.
    - Otherwise (non-executable file rows): the row's `url`.
 
 5. After the loop converges (no new URLs added to `visited`), `tombstoneEntries(invalidations)` (line 684) inserts a `is_deleted = true` row for every invalidated URL into `boxel_index_working` with `realm_version = <next-version>`, stamped with the batch's current `invalidationId`. **This is the first DB-side write of the batch.** If the worker died before this, `boxel_index_working` will not yet contain partial-progress rows for the new realm version (step 6 will be empty).
@@ -428,11 +469,11 @@ ORDER BY last_write DESC
 LIMIT 10;
 ```
 
-The bottom row of the per-`invalidationId` query (max `indexedAt`) is **the most recently completed file**; the file the worker stalled on is most likely the *next* one in the planned visit order (which is sorted in `index-runner.ts::sortInvalidations` — `.json` files visited after their non-`.json` counterparts; otherwise lexical by href). Combine three signals to pin it down:
+The bottom row of the per-`invalidationId` query (max `indexedAt`) is **the most recently completed file**; the file the worker stalled on is most likely the _next_ one in the planned visit order (which is sorted in `index-runner.ts::sortInvalidations` — `.json` files visited after their non-`.json` counterparts; otherwise lexical by href). Combine three signals to pin it down:
 
 1. The bottom row's `url` is the last-completed file.
-2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts line 108, `index-runner` logger, debug level) names the file the visit *started* on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
-3. The bottom row's `currentlyEvaluatingModule` / `recentModuleEvaluations[0].url` / `inFlightModuleImports[]` say *which* module inside that visit was the stall point — same field semantics as Mode A.
+2. The worker log's last `begin fused visit of file <url>` line for the job (visit-file.ts line 108, `index-runner` logger, debug level) names the file the visit _started_ on. If there's no matching `completed fused visit of file <url>` line, that's where the worker froze.
+3. The bottom row's `currentlyEvaluatingModule` / `recentModuleEvaluations[0].url` / `inFlightModuleImports[]` say _which_ module inside that visit was the stall point — same field semantics as Mode A.
 
 To read which row would have been visited next from the working table (rows already invalidated but not yet written-with-content — these are the tombstones inserted by `Batch.invalidate`):
 
@@ -455,12 +496,12 @@ If `boxel_index_working` has **zero rows** for this batch's `invalidationId`, th
 
 The worker logs to `ecs-boxel-worker-<env>` (see the `aws-access` skill's CloudWatch table). The relevant logger names:
 
-| Logger | Defined at | Lines you care about |
-|---|---|---|
-| `worker` | `packages/runtime-common/worker.ts:80`, `packages/realm-server/worker.ts:22` | `starting from-scratch indexing for job: <args>` and `starting incremental indexing for job: <args>` (debug). Includes the full job args — use this to recover the seed for incrementals. |
-| `realm-index-updater` | `packages/runtime-common/realm-index-updater.ts:29` | `Realm <url> is starting indexing` (info), `Realm <url> has completed indexing in <s>s: <stats>` (info). Always on at `*=info`; coarse but covers job lifecycle. |
-| `index-runner` | `packages/runtime-common/index-runner.ts:48` | `starting from scratch indexing` / `starting from incremental indexing for <urls>` (debug), `discovering invalidations in dir <url>` (debug), `begin fused visit of file <url>` / `completed fused visit of file <url>` per file (debug, both in `visit-file.ts`), `completed from scratch indexing in <ms>ms` / `completed incremental indexing for <urls> in <ms>ms` (debug). **This is the per-file progress channel.** |
-| `index-perf` | `packages/runtime-common/index-runner.ts:50`, `packages/runtime-common/index-writer.ts:173` | Per-stage perf timings (debug): `time to get file system mtimes <ms>`, `time to invalidate <url> <ms>`, `completed getting index mtimes in <ms>`, `completed invalidations in <ms>`, `completed index visit in <ms>`, `completed index finalization in <ms>`, `inserted invalidated rows for <urls> in <ms>`, `time to determine items that reference <path> <ms>`. Useful to confirm *which* phase a stuck job is in. |
+| Logger                | Defined at                                                                                  | Lines you care about                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `worker`              | `packages/runtime-common/worker.ts:80`, `packages/realm-server/worker.ts:22`                | `starting from-scratch indexing for job: <args>` and `starting incremental indexing for job: <args>` (debug). Includes the full job args — use this to recover the seed for incrementals.                                                                                                                                                                                                                                  |
+| `realm-index-updater` | `packages/runtime-common/realm-index-updater.ts:29`                                         | `Realm <url> is starting indexing` (info), `Realm <url> has completed indexing in <s>s: <stats>` (info). Always on at `*=info`; coarse but covers job lifecycle.                                                                                                                                                                                                                                                           |
+| `index-runner`        | `packages/runtime-common/index-runner.ts:48`                                                | `starting from scratch indexing` / `starting from incremental indexing for <urls>` (debug), `discovering invalidations in dir <url>` (debug), `begin fused visit of file <url>` / `completed fused visit of file <url>` per file (debug, both in `visit-file.ts`), `completed from scratch indexing in <ms>ms` / `completed incremental indexing for <urls> in <ms>ms` (debug). **This is the per-file progress channel.** |
+| `index-perf`          | `packages/runtime-common/index-runner.ts:50`, `packages/runtime-common/index-writer.ts:173` | Per-stage perf timings (debug): `time to get file system mtimes <ms>`, `time to invalidate <url> <ms>`, `completed getting index mtimes in <ms>`, `completed invalidations in <ms>`, `completed index visit in <ms>`, `completed index finalization in <ms>`, `inserted invalidated rows for <urls> in <ms>`, `time to determine items that reference <path> <ms>`. Useful to confirm _which_ phase a stuck job is in.     |
 
 `LOG_LEVELS` is read once at process start in `packages/realm-server/setup-logger.ts:4`:
 
@@ -481,9 +522,10 @@ In the deployed environments this is an environment variable on the worker ECS t
 - **Staging / production**: `LOG_LEVELS` is held in AWS SSM Parameter Store at `/<env>/boxel/LOG_LEVELS` (e.g. `/staging/boxel/LOG_LEVELS`, `/production/boxel/LOG_LEVELS`). The worker ECS task definition references it via `valueFrom`, so the value is injected as the container's `LOG_LEVELS` env var at task start. To adjust levels:
   1. Update the SSM parameter value (AWS Console → Systems Manager → Parameter Store, or `aws ssm put-parameter --name /<env>/boxel/LOG_LEVELS --value '<new-levels>' --overwrite` if you have write access — Claude does not).
   2. Force a new deployment of `boxel-worker-<env>` from the ECS console (Services → boxel-worker-<env> → Update → "Force new deployment"). The new task picks up the updated SSM value at boot.
-  3. The realm-server task reads `LOG_LEVELS` for *its own* logging; in deployed envs the worker is a separate task and only its `LOG_LEVELS` matters for indexing-job logs. If you also want indexing logs that the realm-server emits during invalidation discovery (e.g. for jobs the realm-server queues directly), redeploy `boxel-realm-server-<env>` too.
+  3. The realm-server task reads `LOG_LEVELS` for _its own_ logging; in deployed envs the worker is a separate task and only its `LOG_LEVELS` matters for indexing-job logs. If you also want indexing logs that the realm-server emits during invalidation discovery (e.g. for jobs the realm-server queues directly), redeploy `boxel-realm-server-<env>` too.
 
-  Levels apply to subsequently-launched worker processes; a job already in flight keeps the levels it was launched with. So for triage of a *future* job, update SSM and redeploy first, then trigger the reindex.
+  Levels apply to subsequently-launched worker processes; a job already in flight keeps the levels it was launched with. So for triage of a _future_ job, update SSM and redeploy first, then trigger the reindex.
+
 - **Locally**: prepend the env var, e.g. `LOG_LEVELS='*=info,index-runner=debug,index-perf=debug' pnpm start-all` — same as the `prerenderer-reproduce=debug` pattern in the [Reproducing a render interactively](#reproducing-a-render-interactively) section.
 
 Sample CloudWatch greps, using `cw` from the `aws-access` skill (substitute `claude-staging` / `claude-prod` and the matching log group):
@@ -517,7 +559,7 @@ A short rubric for the most common shapes:
 
 - **High confidence the stall is at file X**: the bottom row of `boxel_index_working` (max `indexedAt` for the batch's `invalidationId`) is X **AND** the worker's last `begin fused visit of file X` line has no matching `completed fused visit of file X` line **AND** the bottom row's `recentModuleEvaluations[0].url` (or `currentlyEvaluatingModule` / `inFlightModuleImports[0]`) is a module under X. Treat the row's `timing_diagnostics` as a Mode A capture and walk the [Classify in one pass](#classify-in-one-pass) table.
 - **Medium confidence**: only two of the three signals agree. Most often the worker log is the dropout — debug-level logging wasn't on. Promote `index-runner` to debug and trigger a follow-up reindex to validate.
-- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what *should* have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
+- **Low confidence — the runner stalled before any per-file work**: `boxel_index_working` has no rows for this batch's `invalidationId` (no row stamped with the batch UUID, no `is_deleted = TRUE` tombstones at the batch's `realm_version`). The worker is still in **invalidation discovery** — either the mtime walk (no `discovering invalidations in dir` line yet) or the consumer fan-out (the `discovering` line is there but no per-file visit-start lines). Look at the worker's `index-perf` `time to get file system mtimes` / `time to invalidate` lines — if those are missing too, you're stuck in the realm-server fetch (`reader.mtimes()` → `_mtimes` HTTP call) or in `Batch.invalidate`'s own jsonb-containment SQL (`itemsThatReference`). Then go look at what _should_ have been in the seed but wasn't — cross-check the EFS file listing against the realm's `boxel_index.last_modified` per step 3.
 - **Confirm a "rejected" job actually failed cleanly**: `jobs.status = 'rejected'` should pair with the matching reservation's `completed_at IS NOT NULL`. If `completed_at IS NULL`, the worker bailed before its finalize transaction (see `pg-queue.ts` lines 619-696); the reservation's `locked_until` will eventually expire and another worker can claim it.
 
   The actual error is in **`jobs.result`** (jsonb). When the worker's `await job.run(...)` throws, `pg-queue.ts:627-628` does `result = serializableError(err); newStatus = 'rejected';` and the finalize UPDATE writes both into the row. Read it directly:
@@ -536,9 +578,70 @@ A short rubric for the most common shapes:
 
 ### 9. What this mode can't tell you
 
-- If the worker died *before* any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_working` will have no rows for this batch's `invalidationId`. The `Batch` object mints the `invalidationId` in its constructor, but it only lands on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct *which* file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
-- The `timing_diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the *next* render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
+- If the worker died _before_ any DB write — crashed during `discoverInvalidations`, OOM-killed during the mtime walk, or threw inside `Batch.invalidate`'s own SQL — `boxel_index_working` will have no rows for this batch's `invalidationId`. The `Batch` object mints the `invalidationId` in its constructor, but it only lands on disk when the first `updateEntry` or `tombstoneEntries` call runs. Until then the only diagnostic signals are the worker log and the EFS state. Mode C cannot reconstruct _which_ file the worker was processing in that case — you need either `index-runner=debug` log output or a Sentry trace.
+- The `timing_diagnostics` for partial-progress rows is the **per-render** capture for that row's prerender call. It won't tell you why the _next_ render froze. If the bottom-row's diagnostic is clean (low `renderElapsedMs`, no in-flight loads), the stall is between renders — usually `Batch.invalidate` recursion against a tightly-cycled module graph, or DB contention on the `boxel_index_working` upsert. The `index-perf` `time to determine items that reference …` lines are the only fingerprints of that loop.
 - A `boxel_index` row's `timing_diagnostics` reflects the **last successful** indexing pass, not the in-flight one. Don't confuse a stale `boxel_index` `indexedAt` with the stuck job — always cross-reference against the matching `boxel_index_working` row (same `(url, realm_url)`) before drawing conclusions.
+
+## Mode D — a module render was slow or hung
+
+Module renders (`prerenderModule`, used by `getDefinition` to convert filter JSON into SQL on `_federated-search`, plus everywhere else a card definition is needed without a card render) go through the same prerender pipeline as card renders, but they land in the `modules` table — not `boxel_index`. The `timing_diagnostics` JSONB column on `modules` carries the same `RenderTimeoutDiagnostics`-with-`requestId` shape, so the field-by-field reading and the [Classify in one pass](#classify-in-one-pass) table apply unchanged. Only the lookup queries differ.
+
+**When to use this mode:** a card render hung waiting on `getDefinition` (Mode A captured `cardDocLoadsInFlight = 0`, `queryLoadsInFlight = 0`, but the realm-server's reply to `_federated-search` itself was slow); an investigation needs to attribute time across both card renders and the module renders they triggered; or you want to find the slowest module renders fleet-wide. Same payload shape, queryable via SQL.
+
+**Step 1 — slowest module renders in a realm.**
+
+```sql
+SELECT m.url,
+       (m.timing_diagnostics->>'renderElapsedMs')::int AS render_ms,
+       m.timing_diagnostics->>'renderStage'            AS stage,
+       m.timing_diagnostics->>'requestId'              AS request_id,
+       to_timestamp(m.created_at::bigint / 1000)       AS created_at,
+       m.error_doc IS NOT NULL                         AS has_error
+FROM modules m
+WHERE m.resolved_realm_url = '<realm-url>'
+  AND m.timing_diagnostics IS NOT NULL
+ORDER BY render_ms DESC NULLS LAST
+LIMIT 20;
+```
+
+**Step 2 — find module renders correlated with a known time window.** Useful when a card render timed out at wall-clock T and you want to know whether a slow module render was happening at the same moment.
+
+```sql
+SELECT m.url,
+       (m.timing_diagnostics->>'renderElapsedMs')::int AS render_ms,
+       m.timing_diagnostics->>'requestId'              AS request_id,
+       to_timestamp(m.created_at::bigint / 1000)       AS created_at
+FROM modules m
+WHERE m.resolved_realm_url = '<realm-url>'
+  AND (m.timing_diagnostics->>'renderElapsedMs')::int > 5000
+  AND m.created_at BETWEEN <window_start_ms> AND <window_end_ms>
+ORDER BY render_ms DESC;
+```
+
+`window_start_ms` and `window_end_ms` are epoch milliseconds bracketing the suspect period (e.g. the 90s before and including the hung card render's `indexedAt`).
+
+**Step 3 — join card hang to its triggering module render via `requestId`.** When the realm-server's `getDefinition` round-trip is in scope of a single card render, the `requestId` propagates from card → manager → module-extract round-trip, so both rows carry the same value.
+
+```sql
+-- Full diagnostic picture for one requestId — card + module(s) that
+-- the same investigation should walk together.
+SELECT 'card'   AS kind, url, jsonb_pretty(timing_diagnostics) AS diagnostics
+FROM boxel_index
+WHERE timing_diagnostics->>'requestId' = '<request-id>'
+UNION ALL
+SELECT 'module' AS kind, url, jsonb_pretty(timing_diagnostics) AS diagnostics
+FROM modules
+WHERE timing_diagnostics->>'requestId' = '<request-id>';
+```
+
+(In practice the card-side `requestId` is the original outer call. Internal sub-prerenders fired by `CachingDefinitionLookup` typically mint their own `requestId` per `_prerender-module` call, so the time-window join in step 2 is usually the one that catches them. The `requestId` join here works for the rarer in-line case.)
+
+**Step 4 — classify the module render with the same rubric.** Once you have a slow module's `timing_diagnostics`, walk it through the [Classify in one pass](#classify-in-one-pass) table the same way you would a card render. The interpretation is identical: `waiting-stability + queryLoadsInFlight=N` is a data stall on a `_search` (rare for module renders but possible for query-field driven module-extract paths), `model:start + inFlightModuleImports>0` is the loader stall, etc. The only field that's not present on module rows is `invalidationId` (modules don't go through `Batch.invalidate`), so any Mode B-style cross-row grouping has to use `requestId` or `created_at` windows instead.
+
+### What Mode D can't tell you
+
+- **No partial-progress equivalent.** `modules` has no working-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
+- **No invalidationId, so no Mode B fan-out.** Module renders are independent units; they don't belong to a "batch" that you can group by. If you need to attribute a slow `getDefinition` storm across many concurrent searches, you're stuck doing it via `created_at` time windows + the `#inFlight` dedupe behavior in `CachingDefinitionLookup` — i.e. one slow row may have been the bottleneck for many in-flight callers, but the `modules` table doesn't record those waiters.
 
 ## Field-by-field reading
 
@@ -549,12 +652,31 @@ A short rubric for the most common shapes:
   "requestId": "b14e…",          // single ID across client/manager/prerender-server
   "invalidationId": "a3e1…",     // single ID across every row written by the same Batch.invalidate()
   "indexedAt": 1776964391615,    // wall-clock ms when IndexWriter.updateEntry ran
+  "priority": 10,                // worker-job priority that produced this render.
+                                 // 0 = system-initiated background (default); 10 =
+                                 // userInitiatedPriority. Read in post-mortems alongside
+                                 // `tabQueueMs` to tell whether priority routing put a
+                                 // high-priority render at the head of the queue. May be
+                                 // absent on older rows that predate the threading.
+  "tabReused": false,            // did this render land on a warm same-affinity tab (true)
+                                 // or a freshly spawned / commandeered tab (false)?
+                                 // Triage signal: a slow render with `tabReused: false`
+                                 // is the cold-start tax — look at `tabStartupMs` and the
+                                 // `prerender-queue-snapshot` for that affinity. With
+                                 // `tabReused: true` it's a real render-side stall, walk
+                                 // [Classify in one pass](#classify-in-one-pass) instead.
   "launchMs": 18720,             // waiting-in-page-pool time (server-side)
   "waits": {
     "semaphoreMs": 18500,        //   └ of that, waiting on the global render semaphore
     "admissionMs": 0,            //   └ waiting on the per-affinity file-admission cap (= affinity tab max − 1)
     "tabQueueMs": 200,           //   └ waiting behind a same-affinity tab already rendering
-    "tabStartupMs": 20           //   └ warming a fresh tab / standby
+    "tabStartupMs": 20           //   └ warming a fresh tab / standby. Per-caller — only non-zero when
+                                 //     `#selectEntryForAffinity` itself awaited `#ensureStandbyPool`
+                                 //     because warm-tab / orphan / commandeer / cross-affinity paths
+                                 //     all missed. A `tabReused: true` row should have `tabStartupMs ≈ 0`;
+                                 //     a non-trivial value on a reused-tab row is a regression and
+                                 //     means the dedup'd `#ensuringStandbys` promise is leaking through
+                                 //     to callers that didn't need a fresh standby (the CS-11139 shape).
   },
   "renderElapsedMs": 71280,      // time inside withTimeout()
   "totalElapsedMs": 90000,       // launch + render (matches the timeout on errored rows)
@@ -604,9 +726,20 @@ A short rubric for the most common shapes:
                                  // regression signal — see the
                                  // "Classify in one pass" table row
                                  // below.
-      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000 },
-      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500 }
+      { "url": "…/customer.gts", "kind": "module", "queue": "module", "state": "running", "ageMs": 68000, "priority": 0 },
+      { "url": "…/order.gts",    "kind": "module", "queue": "module", "state": "running", "ageMs": 66500, "priority": 10 }
     ]
+    // Each `sameAffinityActivity` entry carries the worker-job
+    // `priority` of the call that produced it. On a stuck-render
+    // post-mortem this disambiguates two regression shapes that look
+    // identical without priority:
+    //   • Same-priority pending entries on a `waiting-stability` stall →
+    //     classic self-referential prerender deadlock (the row in
+    //     "Classify in one pass" below).
+    //   • Higher-priority pending entries → priority routing is working
+    //     as intended, this render is queued behind legitimately-
+    //     prioritized work. Investigate the queued entry, not the queue
+    //     mechanism.
   },
   "recentQueryLoads": [          // top-N slowest completed query loads
     {
@@ -621,7 +754,30 @@ A short rubric for the most common shapes:
   ],
   "docsInFlight": 3,             // legacy count, kept for rollback safety
   "capturedDom": "<section data-prerender>…</section>",
-  "blockedTimerSummary": "Timers blocked during prerender: …"
+  "blockedTimerSummary": "Timers blocked during prerender: …",
+  "computedCalls": 187,          // distinct `computeVia` invocations during this row's
+                                 // render.meta traversal (serializeCard + searchDoc combined).
+                                 // Host-emitted; pass-scoped memo elides repeated reads of
+                                 // the same `(instance, fieldName)` so this number reflects
+                                 // distinct compute work, not total field-access pressure.
+                                 // Absent on rows produced by host builds before CS-11208.
+  "computedCacheHits": 374,      // repeated reads of the same `(instance, fieldName)`
+                                 // that hit the pass-scoped memo. `computedCalls +
+                                 // computedCacheHits` is the total computed-read pressure
+                                 // of the render.meta pass; the ratio tells you how much
+                                 // duplicate work the memo elided. A high `cacheHits`
+                                 // count relative to `calls` is normal for cards that
+                                 // serialize + searchDoc the same field (every contains /
+                                 // contains-many / links-to field does this).
+  "serializeMs": 42.1,           // host-side wall-clock of `serializeCard(instance, {
+                                 // includeComputeds: true })` for this card.
+  "searchDocMs": 18.3            // host-side wall-clock of `searchDoc(instance)` for
+                                 // this card. Sum with `serializeMs` to get the host's
+                                 // contribution to `renderElapsedMs`. Pairs with
+                                 // `computedCalls` so you can normalize: a card with
+                                 // `computedCalls=500, searchDocMs=80` is ~6 calls/ms
+                                 // — a sign of a hot compute that may be worth a
+                                 // dependency-aware skip.
 }
 ```
 
@@ -631,34 +787,37 @@ All ms values are server-observed walltime.
 
 - `launchMs` + `renderElapsedMs` ≈ `totalElapsedMs`. A small mismatch (< 100 ms) is capture overhead; a large mismatch means the render-runner retried with `clearCache: true` (you're looking at the final attempt's timings).
 - `waits.semaphoreMs` + `waits.tabQueueMs` + `waits.tabStartupMs` ≤ `launchMs`. `launchMs` is measured around the full `PagePool.getPage` call; the three sub-waits cover the three awaits (semaphore acquire, affinity-entry selection, standby warmup) but not the synchronous bookkeeping between them (affinity reassignment, LRU touch, standby top-up kickoff). For a healthy fleet the residual is < 5 ms; a large residual is unusual and worth inspecting `PagePool` directly.
-- `renderElapsedMs` is wall time *inside* `withTimeout()` — includes host fetches, store settle, and the actual render pass. It hits the configured `RENDER_TIMEOUT_MS` on a timeout.
+- `renderElapsedMs` is wall time _inside_ `withTimeout()` — includes host fetches, store settle, and the actual render pass. It hits the configured `RENDER_TIMEOUT_MS` on a timeout.
 - `stageAgeMs` is host-observed — it's computed as `Date.now() - stageSetAt` at the moment the post-timeout capture ran, so there can be a small read-delay offset vs. `renderElapsedMs`. For triage, `stageAgeMs` represents "how long the render has been stuck in its current stage".
 - `recentModuleEvaluations[*].ms` are per-module evaluation times measured inside `Loader.evaluate()` via `performance.now()`; they're wall time for the synchronous body of the module (Glimmer compile + top-level init). Sum them to estimate the sync-compile budget eaten by module evaluation on this page.
 - `queryLoadsInFlight[*].ageMs` is the wall time since that specific search/query-field load started — i.e. how long it's been hanging.
 - `recentQueryLoads[*].ms` is the wall time a completed query-field/search load ultimately took. The store keeps a bounded top-N so even queries that resolved just before the timer fired stay visible. Compare with `renderElapsedMs` to see which fraction of the render budget went to query work.
 - `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` mirror the query version for linked-field (card doc) / file-meta loads. One URL with a very large `ageMs` = one slow linksTo target; many URLs with small `ageMs` = fan-out.
 - `recentCardDocLoads[*].ms` / `recentFileMetaLoads[*].ms` are the completed-load histories; same usage as `recentQueryLoads`.
+- `computedCalls` + `computedCacheHits` together represent total compute pressure on the render.meta pass. The split tells you how much duplicate work the pass-scoped memo absorbed — a 1:0 ratio means every field was read once, a 1:5 ratio means the cards re-read each computed five extra times (typical for cards where many sibling fields share a computed input). `searchDocMs` + `serializeMs` are the host's contribution to `renderElapsedMs`; comparing `computedCalls / (searchDocMs + serializeMs)` across cards finds the slow-per-call computes that are worth profiling.
 
 Keep the field names in lock-step with the type in `packages/runtime-common/index.ts`.
 
 ### Classify in one pass
 
-Walk the fields top-down. The *first* positive signal wins; stop there.
+Walk the fields top-down. The _first_ positive signal wins; stop there.
 
-| Signal | Category | What to look at next |
-|---|---|---|
-| `waits.semaphoreMs` ≈ `totalElapsedMs` | **Launch stall (capacity)** | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host. |
-| `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small) | **Per-affinity admission stall** | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section). |
-| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small) | **Same-affinity contention** | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up). |
-| `launchMs` small **and** `renderStage` is `null`/`model:start` | **Very early render stall** — transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors. |
-| `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating` | **Backend stall during model build** | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`. |
-| `inFlightModuleImports.length > 0` | **Loader stall** | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL. |
-| `queryLoadsInFlight.length > 0` with `fieldName` set | **Query-field stall** | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side. |
-| `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields) | **Data stall** | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget. |
-| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken** | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. |
-| `renderStage` = `waiting-stability` with empty in-flight arrays | **Render stall** | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop. |
-| `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out. |
-| `blockedTimerSummary` populated | Supplementary. Tells you which timer-driven code is fighting the render. Not a root cause on its own. |
+| Signal                                                                                                                                                                                                                                                | Category                                                                     | What to look at next                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `waits.semaphoreMs` ≈ `totalElapsedMs`                                                                                                                                                                                                                | **Launch stall (capacity)**                                                  | Fleet-wide: `prerender-queue-snapshot` lines on every prerender server around that timestamp. Is `totalPending` piled up? Add capacity, don't touch host.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `waits.admissionMs` ≈ `totalElapsedMs` (and semaphoreMs small)                                                                                                                                                                                        | **Per-affinity admission stall**                                             | This realm hit its own file-admission cap — the server had capacity but wasn't letting this realm use it. The signal means ≥ cap concurrent file renders on one affinity. Default cap = `affinityTabMax − 1` (4 on the standard 5-tab deployment), so a single realm fanning out to ≥ 4 concurrent renders (typical catalog-sized reindex) already produces this. Grep the queue-snapshot log for `admission=pending=N/cap=N` on the same affinity to confirm waiters were piling up. If the cap looks too tight for the workload and cross-realm fairness isn't the concern, `PRERENDER_AFFINITY_FILE_CONCURRENCY` is the knob (see the tuning-knobs section).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `waits.tabQueueMs` ≈ `totalElapsedMs` (and semaphoreMs / admissionMs small)                                                                                                                                                                           | **Same-affinity contention**                                                 | Same realm's batch is serialized on one tab. Check whether `PRERENDER_AFFINITY_TAB_MAX` is 1 for this fleet, or whether a rogue user request is sharing the tab (see CS-10873 for the cancel-on-abort follow-up).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `launchMs` small **and** `renderStage` is `null`/`model:start`                                                                                                                                                                                        | **Very early render stall**                                                  | Transition hadn't yet rendered anything. Usually means the route threw before setting a real stage. Look at `capturedDom` (`<data-prerender-error>` is common) and console errors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `renderStage` ∈ `buildModel:fetching-source` / `buildModel:deriving-type` / `buildModel:hydrating`                                                                                                                                                    | **Backend stall during model build**                                         | Usually a slow realm server or cross-realm fetch. Check realm-server logs for the same requestId; check the fetch target from `capturedDom` / `cardDocsInFlight`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `inFlightModuleImports.length > 0`                                                                                                                                                                                                                    | **Loader stall**                                                             | Each URL is a `.gts` / `.ts` we'd already started a `fetchModule(...)` for. Confirm the realm serves those URLs and that there's no import cycle. Often resolves with `clearCache: true` on retry (already in place) — if that's failing check for 500s on the module URL.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `queryLoadsInFlight.length > 0` with `fieldName` set                                                                                                                                                                                                  | **Query-field stall**                                                        | This is the CS-10820 field-driven hot path. Look at the `query`/`realms` fields — is the search hitting a remote realm server that's slow? Check `_federated-search` latency for that realm on the realm-server side.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `cardDocsInFlight.length > 0` or `fileMetaDocsInFlight.length > 0` (no query fields)                                                                                                                                                                  | **Data stall**                                                               | Usually linksTo targets that the template pulled on. Prefer `cardDocLoadsInFlight[*].ageMs` / `fileMetaDocLoadsInFlight[*].ageMs` — they tell you which individual URL is the slow one vs. a fan-out. If it's a card from a different realm, that realm may be slow or misconfigured. Also check `recentCardDocLoads` for loads that completed just before the timer fired but still dominated the budget.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `renderStage` = `waiting-stability` **AND** `queryLoadsInFlight` has a `search-resource:*` entry **AND** `affinitySnapshot.sameAffinityActivity` contains `{ queue: 'module', state: 'queued' }` entries **on the same affinity as the stuck render** | **Self-referential prerender deadlock — admission invariant broken**         | A search that can't resolve a `_cardType` filter without a card definition causes `CachingDefinitionLookup` to fire a same-affinity `prerenderModule` to extract it. The queue-split + admission cap in PagePool is supposed to reserve at least one tab per affinity for `module` / `command` work precisely to prevent this sub-prerender from queuing behind the render that needs it. **Seeing this fingerprint means the invariant didn't hold**: check `PRERENDER_AFFINITY_TAB_MAX >= 2` (PagePool logs a warning at startup if not), verify the admission semaphore is acquired on `'file'` calls (`PagePool.#acquireFileAdmission`), and confirm `disposeAffinity` isn't dropping the admission semaphore mid-flight. The `priority` field on each `sameAffinityActivity` entry sharpens triage: a stuck `priority=10` file render with a queued `priority=10` module sibling on the same affinity is the actual deadlock signature; a `priority=10` file render queued behind `priority>=10` module work that's running on a different tab is just legitimate priority routing — investigate the queued module entry, not the queue mechanism. |
+| `tabReused: false` AND `tabStartupMs` ≈ `launchMs`                                                                                                                                                                                                    | **Cold-start tax**                                                           | This render paid for spawning a fresh tab + warming a BrowserContext rather than reusing an existing same-affinity tab. Common causes: first request on the affinity after a deploy / restart; affinity was evicted by LRU pressure; `disposeAffinity` ran for an unrelated reason. Look at `prerender-queue-snapshot` from the same minute — if many other affinities are also fresh-tab-spawning, the LRU cap (`PRERENDER_SHARED_CONTEXT_CAP`) may be too tight relative to the active affinity count. May be absent on older rows that predate the field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `renderStage` = `waiting-stability` with empty in-flight arrays                                                                                                                                                                                       | **Render stall**                                                             | Nothing is loading but settlement never finishes. Classic Glimmer tracking loop — template is invalidating itself. `capturedDom` usually shows the partially-rendered component. `blockedTimerSummary` will list swallowed timers that may hint at a scheduling loop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `currentlyEvaluatingModule` non-null, or `stageAgeMs` large with empty in-flight arrays                                                                                                                                                               | **Synchronous browser stall (typically Glimmer compile during module eval)** | `recentModuleEvaluations` shows the worst offenders. A single URL with `ms > 5000` usually means "this module has a giant template that takes forever to compile". Many small entries (say 50+ at 100–500 ms each) summing into the stall budget mean card fan-out where each dependent card contributes a compile. Split the module, lazy-load the template, or reduce the component fan-out.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `blockedTimerSummary` populated                                                                                                                                                                                                                       | **Supplementary**                                                            | Tells you which timer-driven code is fighting the render. Not a root cause on its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `computedCalls` large (e.g. > 1000) AND `searchDocMs + serializeMs` ≈ `renderElapsedMs`                                                                                                                                                               | **Computed-field hot path**                                                  | The render.meta traversal itself is the bottleneck, not data loads or browser stalls. Look at `computedCalls / (searchDocMs + serializeMs)` — > ~5 calls/ms is fast, < ~1 call/ms means a few slow `computeVia` functions dominate. Inspect the card class for aggregate computeds that scan a `linksToMany` relation on every read (Portfolio-over-Policies style) and consider hoisting the scan into a shared rollup or adding `computeDeps` so the field can be skipped when its inputs don't change. The pass-scoped memo already eliminates duplicate reads in one traversal (visible in `computedCacheHits`); further wins require structural changes to the card.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ### Special cases
 
@@ -686,7 +845,7 @@ Chrome's DevTools console surfaces the throw as `Uncaught (in promise) ...`, but
 - A `@field` getter that accesses `undefined.property` because an upstream link didn't materialize.
 - A template-level `{{#if (someHelper ...)}}` where `someHelper` was renamed or removed.
 
-**False-positive profile.** The detector has four gates that all have to hold simultaneously: `isReady=true`, `model.status='ready'`, DOM attribute === `loading` specifically, and the state persists across a backoff-poll grace window (a microtask drain followed by macrotask hops at 50ms → 200 → 500 → 1000 → 2000, re-checking after each — total ~3.75s of cumulative slack so Backburner's flush has real wallclock time to land even under heavy parallel CI load). The fast path exits at the first hop; only renders that stay desynced through the full series are declared failures. In-flight loads are filtered upstream by `#waitForRenderLoadStability` — by the time the detector runs the loader is quiescent. The one residual scenario is a card whose template runs a multi-second *synchronous* getter that starves the microtask queue beyond the full grace budget; when the getter finishes, the microtask queue drains, the binding flips to `ready`, and on the next hop the detector exits cleanly. So in practice false-positives require Backburner, Glimmer, and the entire JS thread to all be blocked for >3.75s — a state the route can't be in while logically `ready`.
+**False-positive profile.** The detector has four gates that all have to hold simultaneously: `isReady=true`, `model.status='ready'`, DOM attribute === `loading` specifically, and the state persists across a backoff-poll grace window (a microtask drain followed by macrotask hops at 50ms → 200 → 500 → 1000 → 2000, re-checking after each — total ~3.75s of cumulative slack so Backburner's flush has real wallclock time to land even under heavy parallel CI load). The fast path exits at the first hop; only renders that stay desynced through the full series are declared failures. In-flight loads are filtered upstream by `#waitForRenderLoadStability` — by the time the detector runs the loader is quiescent. The one residual scenario is a card whose template runs a multi-second _synchronous_ getter that starves the microtask queue beyond the full grace budget; when the getter finishes, the microtask queue drains, the binding flips to `ready`, and on the next hop the detector exits cleanly. So in practice false-positives require Backburner, Glimmer, and the entire JS thread to all be blocked for >3.75s — a state the route can't be in while logically `ready`.
 
 **Mitigation if you suspect a false-positive.** Two runtime knobs are exposed via `globalThis`: `__boxelDomDesyncMicrotaskYields` (default 5 microtask yields per hop) and `__boxelDomDesyncSettleHopsMs` (default `[50, 200, 500, 1000, 2000]` — the macrotask backoff series). Stretch either if a specific card family legitimately needs more flush time. The detector module (`packages/host/app/utils/render-desync-detector.ts`) has the full chart and explains why it deliberately avoids `requestAnimationFrame` (RAF + Ember autotrack has a long tail of subtle breakages — microtask + macrotask yields align with how Backburner sequences its own flushes).
 
@@ -708,8 +867,14 @@ grep "requestId=b14e" realm-server.log
 The periodic `prerender-queue-snapshot` line does NOT carry requestId (it's a fleet snapshot):
 
 ```
-prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0) user:u-123(tabs=1, pending=0, max=0)
+prerender-queue-snapshot totalTabs=5 totalPending=7 affinities=3 | realm:acme(tabs=2, pending=5, max=5, busy=file:1/module:1/command:0, priorities=tab:10:1,0:3|adm:0:1) realm:lib(tabs=2, pending=2, max=1, busy=file:1/module:0/command:0, priorities=tab:0:2) user:u-123(tabs=1, pending=0, max=0)
 ```
+
+Each affinity with queued waiters gets a `priorities=` segment (skipped when no waiters are queued, even if a render is in flight, to keep the log compact). Format: `<source>:<priority>:<count>` pairs, comma-separated within a source, sources separated by `|`. `tab:` is the per-tab queue's _queued_ waiters; `adm:` is the per-affinity file-admission semaphore's _queued_ waiters. Priorities listed highest-first, matching dequeue order — so `tab:10:1,0:3` means "1 priority-10 waiter at the head of the queue, 3 priority-0 waiters behind it."
+
+The `pending=` count on the same line includes the in-flight render holding the tab (legacy `pendingCount = held + queued` semantics), but `priorities=` counts queued waiters only. So `pending=4` with `priorities=tab:10:1,0:2` is consistent: 1 in-flight render + 1 priority-10 waiter + 2 priority-0 waiters = 4. Don't expect the priority counts to sum to `pending`.
+
+Read with `priority` on the per-render `timing_diagnostics`: a priority-10 row stuck on `waits.tabQueueMs` while the snapshot for its affinity shows `priorities=tab:10:N` is the smoking gun for an over-saturated user-priority workload (capacity issue, not priority misrouting). A priority-10 row stuck behind `priorities=tab:0:N` (with manager-side priority routing live in the build) is a priority-routing failure — manager picked the wrong server, or the file render the row was queued behind isn't releasing. Investigate the manager log for `requestId=…` to see where the manager-side scoring went.
 
 Read this alongside a timeout when `waits.semaphoreMs` is large. A snapshot with `totalPending >> totalTabs` near the timestamp confirms saturation.
 
@@ -732,7 +897,7 @@ In practice steps 1-5 catch ~90% of timeouts.
 3. **Are `launch_ms` and `waits.semaphoreMs` large across all rows?** If yes, capacity contention during the reindex, not the cards' fault.
 4. **Is only the first-indexed row (min `indexedAt`) slow and the rest fast?** That's the cold-loader tax paid by the first render after a `.gts` invalidation (`clearCache: true` fired once for the batch). Expected on any executable invalidation — only worth chasing if the cold cost is disproportionate to the module graph.
 5. **Is the sum of `render_ms` wildly larger than the card count × a reasonable per-card budget?** Look for `queryLoadsInFlight` / `recentQueryLoads` entries that repeat across rows — that's a query-field that multiple dependents all wait on.
-6. **Is the fan-out bigger than you expected?** The `types` and `deps` columns on the same rows tell you *why* each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
+6. **Is the fan-out bigger than you expected?** The `types` and `deps` columns on the same rows tell you _why_ each row was invalidated — useful for discovering unintentionally-heavy transitive deps (e.g. a dashboard re-renders because one of its metrics modules has a runtime reference to the changed module).
 
 ## When the diagnostics disagree with each other
 
@@ -747,21 +912,187 @@ If `renderStage` says `buildModel:fetching-source` but `cardDocsInFlight` is emp
 
 ## Reproducing a render interactively
 
-Sometimes the written diagnostics aren't enough — you want to replay the exact render the indexer saw in a real browser (Chrome MCP, Puppeteer, or your own tab) to step through it, watch network, edit source and reload, etc. Every ingredient is already in the system; you just have to wire them up.
+Sometimes the written diagnostics aren't enough — you want to replay the exact render the indexer saw in a real browser (Chrome MCP, Puppeteer, or your own tab) to step through it, watch network, edit source and reload, etc.
 
-Two separate tokens are involved; keep them straight up front:
+There are two paths, depending on what you have access to:
 
-- **User JWT** — a *realm-scoped* token you mint yourself, used to call the authenticated reindex endpoint (`POST <realm-url>_full-reindex` or `_reindex`). Without this you can't trigger the reindex, which means you don't get the artifacts below. This is the only reason you'll do the Matrix dance by hand.
-- **Indexer `boxel-session` value** — the full `boxel-session` localStorage value the indexer's prerender tab uses. You never construct this yourself; you read it verbatim out of the `prerenderer-reproduce` log for the card you want to replay, and paste it into `localStorage['boxel-session']` so the prerender tab authenticates as the indexer did. Format: a JSON-stringified map `{ <realmUrl>: <realm-scoped-JWT>, … }`, one entry per realm the indexer has auth for — the host reads it with `JSON.parse(...)` and picks the right JWT per cross-realm fetch. **Copy the whole string from the log**, not just one of the inner JWTs.
+- **Path A — direct token mint via `mise run claude-prerender-token`** (preferred for staging/prod when you have the realm secret seed). Skip the Matrix login and reindex steps; the script mints the same shape of token the indexer mints, then you drive Chrome MCP straight at the `/render` route. Works for any card on a server you have the seed for, without changing server config or triggering a reindex.
+- **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the indexer's exact historical session). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL + session value verbatim from the log line.
 
-So the end-to-end flow is: mint user JWT → call `_full-reindex` with it → indexer runs → log emits render URLs + session values → paste into browser. Mint-your-own-JWT and read-value-from-log are *both* needed; they're not alternatives.
+Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the indexer's exact multi-realm session at a point in time — the right choice when you suspect cross-realm fetch auth or want to replay a render that already happened. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
 
-### The `prerenderer-reproduce` log channel
+### Path A — direct token mint (the common case)
+
+The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `ts-node --transpileOnly` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
+
+**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
+
+#### Hard rule: Claude never sees the seed
+
+- Do NOT ask the user for the seed.
+- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel.
+- Do NOT call `aws ssm get-parameter` against `REALM_SECRET_SEED` — Claude's `boxel-claude-readonly` role rejects it anyway, but don't try.
+
+The user fetches the seed however they like (SSM, dev-env, prompt) and runs the script in their own shell. Claude consumes only the artifact below.
+
+Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissions. A 1-day JWT for one user is a bounded leak; the seed is unbounded.
+
+#### The artifact Claude reads
+
+`/tmp/claude-prerender.json` (chmod 600), written by the script:
+
+```json
+{
+  "mintedAt": "<iso>",
+  "expiresAt": "<iso>", // 1d from mintedAt
+  "user": "@ctse:stack.cards",
+  "realmUrl": "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
+  "jwt": "eyJ...",
+  "session": "{\"<realmUrl>\":\"eyJ...\"}"
+}
+```
+
+The host URL isn't in the artifact — Claude derives it from the realm URL when building the `/render` URL (recipe below). Matrix isn't involved in this flow at all; the realm-server's `checkPermission` just verifies the HS256 signature against the seed and looks up the user's row in `realm_user_permissions`.
+
+Before using it, Claude must check:
+
+- `expiresAt` is in the future
+- `mintedAt` is recent enough that this is for the _current_ investigation (not a leftover artifact)
+- `realmUrl` matches the realm of the card you're rendering — different realm = ask for re-mint
+
+If any check fails, ask the user to re-run. Do not reuse stale artifacts.
+
+#### Building the `/render` URL (Claude's responsibility)
+
+Once Claude has the artifact, it constructs the URL the prerender uses, mirroring `packages/realm-server/prerender/render-runner.ts:832`:
+
+```
+<hostUrl>/render/<encodeURIComponent(cardUrl)>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
+```
+
+Slot-by-slot:
+
+- **`<hostUrl>`** — derive from the artifact's `realmUrl` host. The boxel-host-app URL (NOT matrix — matrix isn't involved in this flow). Recognised patterns, mirroring the deployed-env Caddy config + local dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`:
+
+  | Realm host                              | Host-app URL                                            |
+  | --------------------------------------- | ------------------------------------------------------- |
+  | `realms-staging.stack.cards`            | `https://boxel-host-staging.stack.cards`                |
+  | `realms.stack.cards`                    | `https://boxel-host.stack.cards`                        |
+  | `realm-server.<slug>.localhost`         | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
+  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                |
+
+  If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
+
+- **`<encodeURIComponent(cardUrl)>`** — the card's full file URL **including `.json`** (the indexer renders against the .json file, not the bare card-id). `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo.json` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json`. Omitting `.json` lands you on the host's login page because the route doesn't match.
+- **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
+- **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
+  - `{"cardRender":true}` → `%7B%22cardRender%22%3Atrue%7D` (the indexer's card-render pass — what you want for a card desync repro)
+  - `{}` → `%7B%7D` (no special pass)
+  - `{"cardRender":true,"clearCache":true}` (drops the loader cache before the render — helpful when stale modules might be the cause)
+- **`<format>`** — `isolated` (matches the indexer for card-render), `embedded`, `fitted`, or `atom`. Default to `isolated`.
+- **`/0`** — recursion-depth segment. Always `0` for card render.
+
+All six dynamic segments must be present and correctly encoded. If any is missing or malformed, the route doesn't match and the host falls through to its login page — easy to diagnose because you'll see a login form instead of a prerender container.
+
+Worked example for the demo card:
+
+```
+https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
+```
+
+#### Chrome MCP recipe (Path A specific — order matters)
+
+`localStorage['boxel-session']` must be set BEFORE navigating to `/render`. The render route reads it on initial load; if the session isn't there yet, the auth resolves as anonymous and the route 401s before any of the diagnostic surface is reachable.
+
+```
+1. mcp__chrome-devtools__new_page → <hostUrl>/   (lands on the login page or homepage —
+                                                  doesn't matter, we just need a same-origin
+                                                  document to set localStorage on)
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session-from-artifact>)
+                                           where <session-from-artifact> is the artifact's
+                                           `session` field verbatim — a JSON-stringified map,
+                                           NOT a bare JWT.
+3. mcp__chrome-devtools__navigate_page → <render-url built above>
+4. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]')?.dataset.prerenderStatus
+                                           polls 'loading' → 'ready' / 'error' / 'unusable'.
+5. Once stable, evaluate __boxelRenderDiagnostics?.() to grab the live diagnostic blob,
+   and inspect the console / DOM for the unminified throw.
+```
+
+If step 4 returns `null` (no `[data-prerender]` element at all) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
+
+- The `permissions` array in the JWT doesn't match the user's DB row exactly (see "How auth actually clears" below — re-mint with `--permissions` matching the DB).
+- The card URL in the render URL is missing `.json`.
+- localStorage wasn't set before navigation (set it, then reload — don't expect the host to pick it up mid-request).
+
+#### How auth actually clears the realm-server
+
+The realm-server's `checkPermission` (`packages/runtime-common/realm.ts:2249`) does two things in order:
+
+1. **Verify the JWT signature** against `REALM_SECRET_SEED`. Anyone with the seed can mint a valid signature — that's the diagnostic gate.
+2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`).
+3. **Compare the JWT's `permissions` array against the DB's permissions array, sorted, byte-for-byte equal** (`packages/runtime-common/realm.ts:2306-2316`). This is the gotcha. The check is `JSON.stringify(token.permissions.sort()) === JSON.stringify(userPermissions.sort())`. So a JWT claiming `['read','realm-owner']` for a user whose DB row is `read=t,write=t,realm_owner=t` (which translates to `['read','write','realm-owner']`) is rejected with `PermissionMismatch` (401). Sub-set isn't enough; the arrays must be equal.
+
+Practical implications:
+
+- The `user` claim has to be a real Matrix ID — a made-up user passes signature verification but fails the lookup → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row.
+- The `permissions` claim has to mirror the DB exactly. The script defaults to `['read','write','realm-owner']` because that's the standard realm-owner shape, but if the user has a non-default permission set on this realm (read-only collaborator, write-without-owner, etc.) you'll hit `PermissionMismatch`. The fix is `--permissions <list>` matching the DB row.
+- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm_server:<matrix-domain>` (the realm-server bot — `REALM_SERVER_MATRIX_USERNAME=realm_server` in `packages/realm-server/scripts/start-staging.sh`/`start-production.sh`).
+
+When the `instance-error` body says `User permissions in the JWT payload do not match the server's permissions`, it's specifically this check failing. Query the DB to see what the row actually is:
+
+```sql
+SELECT username, read, write, realm_owner
+FROM realm_user_permissions
+WHERE realm_url = '<realm-url>' AND username = '<user-from-artifact>';
+```
+
+Then re-mint with `--permissions read,write,realm-owner` (or whatever the columns are). Booleans translate one-to-one to array entries; column `realm_owner` becomes `realm-owner` (note the dash).
+
+For local dev: matrix `server_name` is `localhost` (`packages/matrix/docker/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
+
+- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `https://localhost:4201/...`, host-app at `https://localhost:4200`.
+- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host-app at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`).
+
+Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. The host-app URL Claude needs to build the `/render` URL is derived from the realm URL per the table in the URL recipe section above. If you've configured a non-default matrix `server_name`, pass `--user` to the script explicitly.
+
+**Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
+
+#### Cross-realm linksTo (when the simple flow isn't enough)
+
+The default session map has only the target realm. If the card pulls private cross-realm `linksTo`, the host's loader will 401 those fetches.
+
+For now this isn't auto-handled; if you hit a cross-realm 401, the user can extend the session map themselves by minting tokens for the additional realms (same secret signs them all) and merging the maps. The DB has the answer for which realms a user owns — query `realm_user_permissions` excluding published realms:
+
+```sql
+SELECT rup.realm_url
+FROM realm_user_permissions rup
+LEFT JOIN published_realms pr ON pr.published_realm_url = rup.realm_url
+WHERE rup.username = '@ctse:stack.cards'
+  AND rup.read = TRUE
+  AND pr.published_realm_url IS NULL
+ORDER BY rup.realm_url;
+```
+
+This matches the indexer's `fetchUserPermissions` (`packages/runtime-common/db-queries/realm-permission-queries.ts:127`) → `buildCreatePrerenderAuth` chain. Auto-discovery is a follow-up — for now, ask the user if cross-realm support is needed for a specific repro.
+
+#### When this is the right path
+
+- A specific card is failing in indexing on staging/prod and you want unminified Chrome stack frames + a `__boxelRenderDiagnostics()` snapshot.
+- You're iterating on a card template locally and want to skip the reindex step entirely.
+- You want to compare a render under different `RenderRouteOptions` (e.g. with vs without `clearCache`).
+
+When this is **not** the right path:
+
+- You need the indexer's exact session at the moment of a _historical_ render (cross-realm auth that's since changed, etc.) — use Path B.
+- You're triaging a stall during the indexer's own pass and want diagnostics on the _real_ indexer's tab — Path A reproduces in a fresh tab; the indexer's tab is its own thing.
+
+### Path B — the `prerenderer-reproduce` log channel
 
 `packages/realm-server/prerender/render-runner.ts` defines a dedicated logger `prerenderer-reproduce` that emits a line **per card render** with a ready-to-use URL and the exact `boxel-session` value the indexer used (a JSON-stringified map from realm URL to realm-scoped JWT):
 
 ```
-manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = {"http://localhost:4201/user/my-realm/":"eyJ…","https://cardstack.com/base/":"eyJ…", …}
+manually visit prerendered url <card-id> at: <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0 with boxel-session = {"https://localhost:4201/user/my-realm/":"eyJ…","https://cardstack.com/base/":"eyJ…", …}
 ```
 
 This channel is **off** by default. Turn it on by adding `prerenderer-reproduce=debug` to `LOG_LEVELS` when starting the realm server. Example:
@@ -802,15 +1133,15 @@ The per-realm reindex endpoints (`POST <realm>_reindex`, `POST <realm>_full-rein
      -d '{ "user": "@user:server", "realms": ["<realm-url>/"] }'
    ```
 
-   The response carries a map of `{ <realm-url>: <realm-JWT> }`. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's *not* the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
+   The response carries a map of `{ <realm-url>: <realm-JWT> }`. **That** is the token you pass on `Authorization` when calling the reindex endpoint in the next section. It's _not_ the token the prerender tab uses — that one comes from the `prerenderer-reproduce` log.
 
 Three different JWTs float around in this area, so always be explicit about which one you mean:
 
-| Token | Who mints it | Used for |
-|---|---|---|
-| Realm-server-level JWT | `/_realm-auth` top-level, signed by server secret seed | Server admin endpoints (publish, etc.); *not* accepted by card endpoints |
-| Realm-scoped JWT (this section) | Same `/_realm-auth` call, one per realm in the response map | Authenticating as a user to a specific realm — including `POST <realm>_full-reindex` |
-| Indexer `boxel-session` value (from `prerenderer-reproduce`) | Minted internally by the indexer — a JSON-stringified `{ <realmUrl>: <realm-scoped-JWT> }` map, one entry per realm the indexer has auth for | Pasted verbatim into `localStorage['boxel-session']` on the prerender tab |
+| Token                                                        | Who mints it                                                                                                                                 | Used for                                                                             |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Realm-server-level JWT                                       | `/_realm-auth` top-level, signed by server secret seed                                                                                       | Server admin endpoints (publish, etc.); _not_ accepted by card endpoints             |
+| Realm-scoped JWT (this section)                              | Same `/_realm-auth` call, one per realm in the response map                                                                                  | Authenticating as a user to a specific realm — including `POST <realm>_full-reindex` |
+| Indexer `boxel-session` value (from `prerenderer-reproduce`) | Minted internally by the indexer — a JSON-stringified `{ <realmUrl>: <realm-scoped-JWT> }` map, one entry per realm the indexer has auth for | Pasted verbatim into `localStorage['boxel-session']` on the prerender tab            |
 
 Mix them up and you get 401s with no obvious reason.
 
@@ -822,7 +1153,7 @@ The render URL format is what the indexer uses and what `prerenderer-reproduce` 
 <boxel-host>/render/<encoded-card-id>/<nonce>/<encoded-options>/html/isolated/0
 ```
 
-- `<boxel-host>` — `HOST_URL` / whichever host the realm server points its prerender at (usually `http://localhost:4200` locally).
+- `<boxel-host>` — `HOST_URL` / whichever host the realm server points its prerender at (usually `https://localhost:4200` locally).
 - `<encoded-card-id>` — `encodeURIComponent(url)`; e.g. `http%3A%2F%2Flocalhost%3A4201%2Fuser%2Fmyrealm%2FProduct%2F1.json`.
 - `<nonce>` — monotonically-incremented per prerender call; `1` is fine for manual replays.
 - `<encoded-options>` — `encodeURIComponent(JSON.stringify(renderOptions))`; `%7B%7D` (`{}`) works.
@@ -886,14 +1217,14 @@ Both return `204 No Content` and enqueue `userInitiatedPriority` jobs. The calle
 
 ```sh
 # Single realm
-curl -H "Authorization: $GRAFANA_SECRET" \
+curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET" \
   "$REALM_SERVER/_grafana-reindex?realm=<realm-path-without-leading-or-trailing-slash>"
 
 # Full server (enqueues one full-reindex job covering every realm on this server)
-curl -H "Authorization: $GRAFANA_SECRET" "$REALM_SERVER/_grafana-full-reindex"
+curl -X POST -H "Authorization: Bearer $GRAFANA_SECRET" "$REALM_SERVER/_grafana-full-reindex"
 ```
 
-`GET` (because grafana-driven), takes the secret as a bare `Authorization` header with no `Bearer` prefix. Clears module caches before enqueuing. Use when you don't have a user account on the realm but do have access to the server's grafana secret.
+`POST` with `Authorization: Bearer <secret>`. Clears module caches before enqueuing. Use when you don't have a user account on the realm but do have access to the server's grafana secret.
 
 A single card (not a whole realm) re-renders the moment you save its backing file, so "reindex one card" usually means "save the file, then watch the next log lines and DB rows for that card" — no endpoint call needed.
 
@@ -918,7 +1249,7 @@ curl -X POST \
   -H "Accept: application/json" \
   -H "Content-Type: application/json" \
   -d '{}' \
-  "http://localhost:4201/user/<realm>/_full-reindex"
+  "https://localhost:4201/user/<realm>/_full-reindex"
 
 # Terminal 1 — grep for the indexer's reproduce line for the card you're chasing
 grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
@@ -934,17 +1265,17 @@ grep 'manually visit prerendered url .*<card-id>' realm-server.log | tail -1
 
 Two different tokens do two different jobs: the user-minted realm-scoped JWT got you the reindex, the indexer's full session map gets the browser tab past its auth checks for every realm the render touches.
 
-If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -H "Authorization: $GRAFANA_SECRET" http://localhost:4201/_grafana-full-reindex` instead (grafana endpoint is a GET, no MIME gotcha). In dev the per-realm JWT path is almost always easier.
+If `GRAFANA_SECRET` is configured on your server, you can skip the user-JWT step and use `curl -k -X POST -H "Authorization: Bearer $GRAFANA_SECRET" https://localhost:4201/_grafana-full-reindex` instead (no MIME gotcha on the grafana endpoints). In dev the per-realm JWT path is almost always easier.
 
 ## Prerender capacity tuning knobs
 
 Three env vars control the per-prerender-server shape. They're resolved once at `PagePool` construction; changes require a process restart.
 
-| Env var | Default | What it controls | When to change it |
-|---|---|---|---|
-| `PRERENDER_PAGE_POOL_SIZE` | `5` | Total simultaneous Chrome tabs the pool can manage. Also the `capacity` the server reports to the manager on each heartbeat, which drives warm-vacancy routing. | Fleet capacity. Raise when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. |
-| `PRERENDER_AFFINITY_TAB_MAX` | `5` (clamped to `PRERENDER_PAGE_POOL_SIZE`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool. | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level. |
-| `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling) | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob. | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant. |
+| Env var                               | Default                                                                                                 | What it controls                                                                                                                                                                                                                                | When to change it                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PRERENDER_PAGE_POOL_MIN` / `_MAX`    | unset → fixed pool of `options.maxPages` (5)                                                            | Dynamic-pool envelope. The pool boots at MIN, expands up to MAX under saturation, contracts back to MIN after sustained idle. The live capacity is what the server reports to the manager on each heartbeat, which drives warm-vacancy routing. | Fleet capacity. Raise MAX when `waits.semaphoreMs` dominates `launchMs` across rows from all realms (server-wide saturation); lower MAX if you need to reduce memory footprint and you can confirm from snapshots that pending rarely approaches `totalTabs`. Setting MIN === MAX disables expansion/contraction. |
+| `PRERENDER_AFFINITY_TAB_MAX`          | `5` (clamped to the effective pool max: `PRERENDER_PAGE_POOL_MAX` when set, otherwise fixed `maxPages`) | Max tabs a single affinity (realm or user) can simultaneously hold from the pool.                                                                                                                                                               | Rarely. Must be ≥ 2 for the self-referential prerender deadlock to be prevented — PagePool logs a warning at startup when it isn't. Lower only if you want to force multi-realm fairness at the tab-routing level.                                                                                                |
+| `PRERENDER_AFFINITY_FILE_CONCURRENCY` | unset → `max(1, PRERENDER_AFFINITY_TAB_MAX − 1)` (the deadlock-safety ceiling)                          | Cap on concurrent `file` renders within a single affinity. Module and command calls bypass admission; they're never capped by this knob.                                                                                                        | Cross-realm fairness. When one realm's fan-out (e.g. a catalog reindex) is stealing render budget from every other realm, lower this below the ceiling to reserve tabs for other affinities. The effective cap is always `min(env, ceiling)` so this can't accidentally break the deadlock-safety invariant.      |
 
 **Default invariant**: when `PRERENDER_AFFINITY_FILE_CONCURRENCY` is unset, the effective file-admission cap equals the deadlock-safety ceiling — same behavior as before the knob existed. Changing the knob is an explicit operator decision driven by `admissionMs` telemetry; don't adjust it without data.
 

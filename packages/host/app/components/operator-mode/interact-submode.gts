@@ -10,18 +10,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import {
-  cn,
-  eq,
-  gte,
-  MenuItem,
-  MenuDivider,
-} from '@cardstack/boxel-ui/helpers';
+import { cn, gt, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
 import { IconCode, IconSearch, type Icon } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -33,13 +28,14 @@ import {
   Deferred,
   cardTypeDisplayName,
   cardTypeIcon,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
   isResolvedCodeRef,
   CardError,
   loadCardDef,
   localId as localIdSymbol,
+  rri,
   specRef,
   type getCard,
   type getCards,
@@ -47,6 +43,7 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   type LocalPath,
+  type RealmResourceIdentifier,
   type ResolvedCodeRef,
   type Filter,
 } from '@cardstack/runtime-common';
@@ -60,6 +57,8 @@ import {
 } from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
+
+import { idFromCardOrURL } from '@cardstack/host/utils/id-from-card-or-url';
 
 import type {
   CardContext,
@@ -121,6 +120,14 @@ interface CardToDelete {
   title: string;
 }
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  let tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return false;
+}
+
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
@@ -143,6 +150,68 @@ export default class InteractSubmode extends Component {
     | ReturnType<getCardCollection>
     | undefined;
 
+  @action private handleEscape(event: KeyboardEvent) {
+    // A modal owns Escape regardless of where focus is.
+    if (document.body.classList.contains('has-modal')) return;
+
+    if (isInteractiveTarget(event.target)) {
+      let el = event.target as HTMLElement;
+      // Field inside a stack card: peel the focus off first so a
+      // second Escape can fall through to exit edit / close.
+      if (el.closest('[data-stack-card]')) {
+        event.preventDefault();
+        el.blur();
+        return;
+      }
+      // Field outside any stack card (search sheet, AI assistant, etc.):
+      // defer to that field's own Escape handler.
+      return;
+    }
+
+    let item = this.mostRecentlyInteractedStackItem;
+    if (!item) return;
+
+    // In edit mode, Escape exits to view mode (one level of "undo open").
+    // In view mode, Escape closes the item.
+    if (item.format === 'edit' && item.type !== 'file') {
+      event.preventDefault();
+      this.operatorModeStateService.setItemFormat(item, 'isolated', {
+        request: new Deferred(),
+      });
+      return;
+    }
+    event.preventDefault();
+    this.close(item);
+  }
+
+  @action private handleToggleEdit(event: KeyboardEvent) {
+    // Ctrl+E works even when focus is in an input — that's the whole
+    // point of the shortcut: flip in/out of edit without first having
+    // to click somewhere else. Modals still own the keyboard, though.
+    if (document.body.classList.contains('has-modal')) return;
+    let item = this.mostRecentlyInteractedStackItem;
+    // Files have no edit format; nothing to toggle.
+    if (!item || item.type === 'file') return;
+    event.preventDefault();
+    let nextFormat: Format = item.format === 'edit' ? 'isolated' : 'edit';
+    this.operatorModeStateService.setItemFormat(item, nextFormat, {
+      request: new Deferred(),
+    });
+  }
+
+  // The card the user is currently working with — i.e. the one a
+  // keyboard shortcut should act on. "Last opened" alone is too coarse:
+  // open A, open B, then click edit on A → A is the active card even
+  // though B was opened more recently. Format changes count as
+  // interactions (see StackItem.markInteracted), so this picks A.
+  private get mostRecentlyInteractedStackItem(): StackItem | undefined {
+    let topItems = this.operatorModeStateService.topMostStackItems();
+    if (topItems.length === 0) return undefined;
+    return topItems.reduce((a, b) =>
+      b.lastInteractedAt > a.lastInteractedAt ? b : a,
+    );
+  }
+
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
   }
@@ -154,11 +223,10 @@ export default class InteractSubmode extends Component {
   private createCard = async (
     stackIndex: number,
     ref: CodeRef,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: {
       realmURL?: URL;
       localDir?: LocalPath;
-      closeAfterCreating?: boolean;
       doc?: LooseSingleCardDocument; // fill in card data with values
       cardModeAfterCreation?: Format;
     },
@@ -171,7 +239,7 @@ export default class InteractSubmode extends Component {
       });
     } else {
       let CardKlass = await loadCardDef(
-        codeRefWithAbsoluteURL(ref, relativeTo),
+        codeRefWithAbsoluteIdentifier(ref, relativeTo),
         {
           loader: this.loaderService.loader,
         },
@@ -188,7 +256,6 @@ export default class InteractSubmode extends Component {
       id: localId,
       format: opts?.cardModeAfterCreation ?? 'edit',
       request: new Deferred(),
-      closeAfterSaving: opts?.closeAfterCreating,
       stackIndex,
       type: 'card',
     });
@@ -238,12 +305,7 @@ export default class InteractSubmode extends Component {
         return;
       }
     }
-    let cardId =
-      typeof cardOrURL === 'string'
-        ? cardOrURL
-        : cardOrURL instanceof URL
-          ? cardOrURL.href
-          : cardOrURL.id;
+    let cardId = idFromCardOrURL(cardOrURL);
     if (!cardId) {
       return;
     }
@@ -545,6 +607,7 @@ export default class InteractSubmode extends Component {
   // (there is a single stack with at least one card in it)
   private get canCreateNeighborStack() {
     return (
+      !this.operatorModeStateService.hasAnyStackItemExpanded &&
       this.allStackItems.length > 0 &&
       this.stacks.length === 1 &&
       !this.operatorModeStateService.workspaceChooserOpened
@@ -554,7 +617,6 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = new URL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 
@@ -565,10 +627,10 @@ export default class InteractSubmode extends Component {
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
           let newItem = new StackItem({
-            id: url.href,
+            id: cardId,
             format: 'isolated',
             stackIndex: 0,
-            type: this.getStackItemType(url, url.href),
+            type: this.getStackItemType(cardId, cardId),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -589,7 +651,7 @@ export default class InteractSubmode extends Component {
           searchSheetTrigger ===
           SearchSheetTriggers.DropCardToRightNeighborStackButton
         ) {
-          await this.viewCard(this.stacks.length, url, 'isolated');
+          await this.viewCard(this.stacks.length, cardId, 'isolated');
         } else {
           // In case, that the search was accessed directly without clicking right and left buttons,
           // the rightmost stack will be REPLACED by the selection
@@ -601,17 +663,17 @@ export default class InteractSubmode extends Component {
             numberOfStacks === 0 ||
             this.operatorModeStateService.stackIsEmpty(stackIndex)
           ) {
-            await this.viewCard(0, url, 'isolated');
+            await this.viewCard(0, cardId, 'isolated');
           } else {
             stack = this.operatorModeStateService.rightMostStack();
             if (stack) {
               let bottomMostItem = stack[0];
               if (bottomMostItem) {
                 let stackItem = new StackItem({
-                  id: url.href,
+                  id: cardId,
                   format: 'isolated',
                   stackIndex,
-                  type: this.getStackItemType(url, url.href),
+                  type: this.getStackItemType(cardId, cardId),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
@@ -754,7 +816,7 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
+    await this.createCard(this.rightMostStackIndex, spec.ref, rri(specId), {
       realmURL: this.operatorModeStateService.getWritableRealmURL(),
     });
   });
@@ -783,7 +845,18 @@ export default class InteractSubmode extends Component {
       data-test-interact-submode
       as |search|
     >
-      <div class='interact-submode' style={{this.backgroundImageStyle}}>
+      <div
+        class={{cn
+          'interact-submode'
+          has-expanded-card=this.operatorModeStateService.hasAnyStackItemExpanded
+        }}
+        style={{this.backgroundImageStyle}}
+        {{onKeyMod 'Escape' this.handleEscape}}
+        {{! Ctrl+E (not Cmd+E — taken by browsers' "Use Selection for Find").
+           Lowercase 'e' matches event.key, so Dvorak/AZERTY users get the
+           shortcut on whatever key produces 'e' on their layout. }}
+        {{onKeyMod 'ctrl+e' this.handleToggleEdit}}
+      >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'
@@ -795,7 +868,7 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <div class='stacks'>
+        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
               (get
@@ -807,9 +880,8 @@ export default class InteractSubmode extends Component {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class={{cn
+                  'stack'
                   stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                  stack-medium-padding-top=(eq stack.length 2)
-                  stack-small-padding-top=(gte stack.length 3)
                 }}
                 style={{if
                   backgroundImageURLSpecificToThisStack
@@ -896,12 +968,6 @@ export default class InteractSubmode extends Component {
         justify-content: center;
         align-items: center;
       }
-      .stacks > :deep(.operator-mode-stack:first-child) {
-        padding-left: var(--boxel-sp-lg);
-      }
-      .stacks > :deep(.operator-mode-stack:last-child) {
-        padding-right: var(--boxel-sp-lg);
-      }
       .stack-with-bg-image:before {
         content: ' ';
         height: 100%;
@@ -915,17 +981,34 @@ export default class InteractSubmode extends Component {
       .stack-with-bg-image:first-child:before {
         display: none;
       }
-      .stack-medium-padding-top {
-        padding-top: calc(var(--stack-padding-top) / 2);
-      }
-      .stack-small-padding-top {
-        padding-top: var(--operator-mode-spacing);
-      }
       .neighbor-stack-trigger {
         flex: 0;
         flex-basis: var(--container-button-size);
         position: absolute;
         z-index: var(--boxel-layer-floating-button);
+      }
+      /* Glass-morphism effect on the background */
+      .interact-submode.has-expanded-card {
+        background-color: var(--boxel-light-hover-35);
+        backdrop-filter: blur(10px) saturate(160%);
+        -webkit-backdrop-filter: blur(10px) saturate(160%);
+      }
+      .interact-submode:not(.has-expanded-card)
+        .stacks.is-multi-stack
+        .stack:first-of-type {
+        padding-right: var(--operator-mode-spacing);
+      }
+      .interact-submode:not(.has-expanded-card)
+        .stacks.is-multi-stack
+        .stack:last-of-type {
+        padding-left: var(--operator-mode-spacing);
+      }
+      /* In a multi-stack layout, collapse the stack that doesn't hold
+         the expanded card so the expanded card fills the full width. */
+      .interact-submode.has-expanded-card
+        .stacks
+        > :deep(.operator-mode-stack:not(:has(.item.expanded))) {
+        display: none;
       }
       .stack-trigger-right {
         right: 2px;

@@ -1,0 +1,1152 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxeljobqueue1"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:indexing"
+        ],
+        "title": "Indexing",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "All jobs waiting for a worker (status='unfulfilled', no active reservation). Counts every job_type — for indexing-only see the Indexing dashboard.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 50
+                },
+                {
+                  "color": "red",
+                  "value": 200
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS pending\n  FROM jobs j\n  LEFT JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.status = 'unfulfilled'\n   AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Pending",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "All jobs currently held by a worker. Counts every job_type — workers acquire a job_reservations row with locked_until > NOW().",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS in_flight\n  FROM jobs j\n  JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.finished_at IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "In-flight",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Age of the oldest job sitting unworked (any job_type). Yellow at 1 minute, red at 5 minutes — sustained age usually means workers are saturated or stuck.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 60
+                },
+                {
+                  "color": "red",
+                  "value": 300
+                }
+              ]
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 12,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT EXTRACT(EPOCH FROM (NOW() - MIN(j.created_at))) AS oldest_pending_seconds\n  FROM jobs j\n  LEFT JOIN job_reservations jr ON j.id = jr.job_id\n    AND jr.completed_at IS NULL AND jr.locked_until > NOW()\n WHERE j.status = 'unfulfilled'\n   AND jr.id IS NULL;",
+            "refId": "A"
+          }
+        ],
+        "title": "Oldest pending",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Jobs that finished with status='rejected' in the last hour. Quick health check for the queue — a non-zero number is worth opening the Finished Jobs table to see what failed.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS failures\n  FROM jobs\n WHERE finished_at > NOW() - INTERVAL '1 hour'\n   AND status = 'rejected';",
+            "refId": "A"
+          }
+        ],
+        "title": "Failures (1h)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Jobs per minute by completion status. Resolved = success, rejected = failure. Bucketed by 1m; legend shows the visible-window mean and most-recent value.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 30,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Resolved/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#37eb77"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Rejected/min"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "#ff5050"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 14,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       COUNT(*) FILTER (WHERE status = 'resolved')::int AS \"Resolved/min\",\n       COUNT(*) FILTER (WHERE status = 'rejected')::int AS \"Rejected/min\"\n  FROM jobs\n WHERE finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Throughput",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Resolved jobs per minute, broken down by job_type. New job_types appear automatically.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 30,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        },
+        "id": 15,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       job_type AS metric,\n       COUNT(*)::int AS value\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1, job_type\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Throughput by job_type",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Average time between a job's creation and its first reservation by a worker, bucketed by 1m and broken down by job_type. Captures pickup latency only — execution time isn't included.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 30,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byType",
+                "options": "number"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        },
+        "id": 16,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "WITH first_reservation AS (\n  SELECT DISTINCT ON (jr.job_id) jr.job_id, jr.created_at\n    FROM job_reservations jr\n   ORDER BY jr.job_id, jr.created_at ASC\n)\nSELECT $__timeGroupAlias(j.created_at, '1m', 0),\n       j.job_type AS metric,\n       AVG(EXTRACT(EPOCH FROM (fr.created_at - j.created_at)))::float AS value\n  FROM jobs j\n  JOIN first_reservation fr ON fr.job_id = j.id\n WHERE j.finished_at IS NOT NULL\n   AND $__timeFilter(j.created_at)\n GROUP BY 1, j.job_type\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Queue wait by job_type (avg seconds)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job_id"
+              },
+              "properties": [
+                {
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete job ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "job_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Delete waiting job ${__value.raw}? This marks it as completed without running it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 20
+        },
+        "id": 2,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  j.id, \n  j.priority, \n  j.job_type, \n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n j.id as job_id\n\nFROM \n  jobs j\n  \nLEFT JOIN \n  job_reservations jr ON j.id = jr.job_id\n\nWHERE\njr.job_id IS NULL AND j.status = 'unfulfilled' \n  \nORDER BY \n  j.created_at ASC\nLIMIT 500;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Waiting Jobs",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "actions",
+                  "value": [
+                    {
+                      "type": "fetch",
+                      "title": "Delete reservation ${__value.raw}",
+                      "fetch": {
+                        "method": "POST",
+                        "url": "${realm_server}_grafana-complete-job",
+                        "queryParams": [
+                          [
+                            "reservation_id",
+                            "${__value.raw}"
+                          ]
+                        ],
+                        "headers": [
+                          [
+                            "Authorization",
+                            "Bearer ${grafana_secret}"
+                          ]
+                        ],
+                        "body": ""
+                      },
+                      "confirmation": "Cancel running reservation ${__value.raw}? The worker will stop processing it.",
+                      "oneClick": false
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "from": 0,
+                        "result": {
+                          "color": "red",
+                          "index": 0,
+                          "text": "Delete"
+                        },
+                        "to": 9999999999999
+                      },
+                      "type": "range"
+                    }
+                  ]
+                },
+                {
+                  "id": "displayName",
+                  "value": "Action"
+                },
+                {
+                  "id": "custom.filterable",
+                  "value": false
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 11,
+          "w": 24,
+          "x": 0,
+          "y": 29
+        },
+        "id": 1,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  j.id,\n  COALESCE(jrc.attempt, 0) AS attempt, \n  j.priority, \n  j.job_type, \n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n\n    jr.created_at AS started_at, \n\n\n  -- Run time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL THEN\n        CASE \n          WHEN j.finished_at IS NOT NULL \n            THEN EXTRACT(EPOCH FROM (j.finished_at - jr.created_at))\n          ELSE \n            EXTRACT(EPOCH FROM (NOW() - jr.created_at))\n        END\n      ELSE NULL\n    END\n    AS run_seconds\n, jr.worker_id,\n jr.id as reservation_id \n\nFROM \n  jobs j\nJOIN \n  job_reservations jr ON j.id = jr.job_id AND jr.completed_at IS NULL AND jr.locked_until > NOW()\nLEFT JOIN \n  (SELECT job_id, COUNT(*) AS attempt FROM job_reservations GROUP BY job_id) jrc ON j.id = jrc.job_id\nWHERE j.finished_at IS NULL\nORDER BY \n  jr.created_at DESC\nLIMIT 500;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Running Jobs",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "red",
+                  "value": 80
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-job_id=${__data.fields.id}.${__data.fields.reservation_id}&orgId=1&viewPanel=3"
+                    }
+                  ]
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "options": {
+                        "pattern": "^(.{6}).*$",
+                        "result": {
+                          "index": 0,
+                          "text": "View logs ($1)"
+                        }
+                      },
+                      "type": "regex"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "reservation_id"
+              },
+              "properties": [
+                {
+                  "id": "custom.hidden",
+                  "value": true
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 18,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "id": 3,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  j.id, \n jr.id as reservation_id, \n  ROW_NUMBER() OVER (PARTITION BY j.id ORDER BY jr.created_at) AS attempt, \n  j.priority, \n  j.job_type, \n  CASE \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/.+' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://[^/]+/', '') \n    WHEN j.concurrency_group ~ '^indexing:https://[^/]+/?$' THEN REGEXP_REPLACE(j.concurrency_group, '^indexing:https://', '') \n    ELSE j.concurrency_group \n  END AS concurrency_group, \n  j.status AS status, \n  j.created_at AS created_at, \n\n\n  -- Wait time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL \n        THEN EXTRACT(EPOCH FROM (jr.created_at - j.created_at))\n      ELSE \n        EXTRACT(EPOCH FROM (NOW() - j.created_at))\n    END\n    AS wait_seconds,\n\n    jr.created_at AS started_at, \n\n\n  -- Run time in seconds\n    CASE \n      WHEN jr.created_at IS NOT NULL THEN\n        CASE \n          WHEN j.finished_at IS NOT NULL \n            THEN EXTRACT(EPOCH FROM (j.finished_at - jr.created_at))\n          ELSE \n            EXTRACT(EPOCH FROM (NOW() - jr.created_at))\n        END\n      ELSE NULL\n    END\n    AS run_seconds,\n    j.finished_at AS finished_at, \n jr.worker_id\n\nFROM \n  jobs j\nLEFT JOIN \n  job_reservations jr ON j.id = jr.job_id\nWHERE j.finished_at IS NOT NULL\nORDER BY \n  j.finished_at DESC\nLIMIT 500;",
+            "refId": "A",
+            "sql": {
+              "columns": [
+                {
+                  "parameters": [],
+                  "type": "function"
+                }
+              ],
+              "groupBy": [
+                {
+                  "property": {
+                    "type": "string"
+                  },
+                  "type": "groupBy"
+                }
+              ],
+              "limit": 50
+            }
+          }
+        ],
+        "title": "Finished Jobs (limit 500)",
+        "type": "table"
+      }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 42,
+    "tags": [
+      "workflow:queue"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": false,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-2d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Job Queue",
+    "weekStart": ""
+  }
+}

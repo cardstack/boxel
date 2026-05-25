@@ -7,6 +7,7 @@ import type { InstantiateValidationDetails } from '../src/validators/instantiate
 import {
   seedTagsCardWithBrokenExampleAndSpec,
   seedValidCardWithSpec,
+  overwriteTagsExampleWithBadShape,
 } from './helpers/instantiate-test-fixtures';
 import { buildTestClient } from './helpers/test-client';
 import { createTestWorkspace } from './helpers/workspace-fixture';
@@ -109,6 +110,7 @@ test.describe('instantiate-validation e2e', () => {
 
       let workspace = createTestWorkspace();
       await client.pull(realmUrl, workspace.dir);
+      overwriteTagsExampleWithBadShape(workspace.dir);
 
       let step = new InstantiateValidationStep({
         client,

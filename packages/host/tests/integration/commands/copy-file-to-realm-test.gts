@@ -59,18 +59,18 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
     );
 
     let result = await copyFileCommand.execute({
-      sourceFileUrl: `${testRealmURL}hello.txt`,
+      sourceFileIdentifier: `${testRealmURL}hello.txt`,
       targetRealm: testRealm2URL,
     });
 
-    assert.ok(result.newFileUrl, 'new file URL is returned');
+    assert.ok(result.newFileIdentifier, 'new file URL is returned');
     assert.true(
-      result.newFileUrl.startsWith(testRealm2URL),
+      result.newFileIdentifier.startsWith(testRealm2URL),
       'new file is in target realm',
     );
 
     let cardService = getService('card-service');
-    let copied = await cardService.getSource(new URL(result.newFileUrl));
+    let copied = await cardService.getSource(new URL(result.newFileIdentifier));
     assert.strictEqual(copied.status, 200, 'copied file exists');
     assert.strictEqual(copied.content, 'Hello World!', 'content matches');
   });
@@ -83,29 +83,29 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
 
     // First, copy hello.txt to test2 realm so there is a conflict on the second copy
     await copyFileCommand.execute({
-      sourceFileUrl: `${testRealmURL}hello.txt`,
+      sourceFileIdentifier: `${testRealmURL}hello.txt`,
       targetRealm: testRealm2URL,
     });
 
     // Copy again - should get a non-conflicting name
     let result = await copyFileCommand.execute({
-      sourceFileUrl: `${testRealmURL}hello.txt`,
+      sourceFileIdentifier: `${testRealmURL}hello.txt`,
       targetRealm: testRealm2URL,
     });
 
-    assert.ok(result.newFileUrl, 'new file URL is returned');
+    assert.ok(result.newFileIdentifier, 'new file URL is returned');
     assert.true(
-      result.newFileUrl.startsWith(testRealm2URL),
+      result.newFileIdentifier.startsWith(testRealm2URL),
       'new file is in target realm',
     );
     assert.notStrictEqual(
-      result.newFileUrl,
+      result.newFileIdentifier,
       `${testRealm2URL}hello.txt`,
       'file URL is different from the original (conflict resolved)',
     );
 
     let cardService = getService('card-service');
-    let copied = await cardService.getSource(new URL(result.newFileUrl));
+    let copied = await cardService.getSource(new URL(result.newFileIdentifier));
     assert.strictEqual(copied.status, 200, 'copied file exists');
     assert.strictEqual(copied.content, 'Hello World!', 'content matches');
   });
@@ -124,15 +124,15 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
     );
 
     let result = await copyFileCommand.execute({
-      sourceFileUrl: `${testRealmURL}hello.txt`,
+      sourceFileIdentifier: `${testRealmURL}hello.txt`,
       targetRealm: testRealm2URL,
     });
 
-    assert.ok(result.newFileUrl, 'new file URL is returned');
+    assert.ok(result.newFileIdentifier, 'new file URL is returned');
 
     let showFileCommand = new ShowFileCommand(commandService.commandContext);
     await showFileCommand.execute({
-      fileUrl: result.newFileUrl,
+      fileIdentifier: result.newFileIdentifier,
     });
 
     assert.strictEqual(
@@ -142,7 +142,7 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
     );
     assert.strictEqual(
       operatorModeStateService.state?.codePath?.href,
-      result.newFileUrl,
+      result.newFileIdentifier,
       'code path is set to the copied file URL',
     );
   });
@@ -159,7 +159,7 @@ module('Integration | commands | copy-file-to-realm', function (hooks) {
 
     try {
       await copyFileCommand.execute({
-        sourceFileUrl: `${testRealmURL}hello.txt`,
+        sourceFileIdentifier: `${testRealmURL}hello.txt`,
         targetRealm: testRealm2URL,
       });
       assert.ok(false, 'should have thrown an error');

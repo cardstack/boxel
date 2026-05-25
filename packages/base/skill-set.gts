@@ -6,6 +6,7 @@ import EditIcon from '@cardstack/boxel-icons/edit';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 import { gt } from '@cardstack/boxel-ui/helpers';
+import { rri } from '@cardstack/runtime-common';
 
 import {
   SkillPlus,
@@ -444,7 +445,7 @@ export class SkillSet extends SkillPlus {
       if (this.args.viewCard) {
         event.preventDefault();
         event.stopPropagation();
-        this.args.viewCard(new URL(cardUrl), 'isolated');
+        this.args.viewCard(rri(cardUrl), 'isolated');
       }
     };
 

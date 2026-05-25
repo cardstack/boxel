@@ -9,6 +9,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   isCardInstance,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -26,6 +27,11 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 interface Signature {
   Args: {
     format: Format;
+    // When the chooser picks 'form' (auto-generated standard view), the
+    // parent translates it to format='edit' + codeRef=baseCardRef so
+    // CardRenderer's getComponent falls back to CardDef's base template
+    // instead of the subclass's custom edit template.
+    codeRef?: ResolvedCodeRef;
     card: CardDef | FieldDef | FileDef;
     isFieldDef?: boolean;
     isFileDef?: boolean;
@@ -61,7 +67,12 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           @moreOptionsMenuItems={{@contextMenuItems}}
         />
       {{/unless}}
-      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer
+        class='preview'
+        @card={{@card}}
+        @format={{@format}}
+        @codeRef={{@codeRef}}
+      />
     </CardContainer>
   {{else if (eq @format 'embedded')}}
     <CardContainer

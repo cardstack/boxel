@@ -42,6 +42,7 @@ export interface UrlSection {
   sid: string;
   type: 'url';
   card: CardDef;
+  realmUrl: string;
   realmInfo: RealmSectionInfo;
 }
 
@@ -140,6 +141,7 @@ export function buildUrlSection(
     sid: `url:${card.id}`,
     type: 'url',
     card,
+    realmUrl,
     realmInfo: resolveRealmInfo(realmUrl, realm),
   };
 }

@@ -252,7 +252,7 @@ let sourceRealmPath = resolve(
     ? args['realm-path']
     : (args._[0] ?? 'realms/software-factory-demo'),
 );
-let sourceRealmUrl = ensureTrailingSlash(
+let sourceRealm = ensureTrailingSlash(
   typeof args['realm-url'] === 'string'
     ? args['realm-url']
     : readWorkspaceUrl(sourceRealmPath),
@@ -318,9 +318,9 @@ let reportFile = join(tmpdir(), `${endpoint}-playwright-report.json`);
 let playwrightConfig = resolve(process.cwd(), 'playwright.realm.config.ts');
 let playwrightEnv: NodeJS.ProcessEnv = {
   BOXEL_SOURCE_REALM_PATH: sourceRealmPath,
-  BOXEL_SOURCE_REALM_URL: sourceRealmUrl,
+  BOXEL_SOURCE_REALM: sourceRealm,
   BOXEL_TEST_REALM_PATH: scratchPath,
-  BOXEL_TEST_REALM_URL: scratchRealmUrl,
+  BOXEL_TEST_REALM: scratchRealmUrl,
   PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
 };
 let relativeSpecFiles = specFiles.map((filePath) =>
@@ -351,7 +351,7 @@ let failures = summarizeFailures(report);
 
 let summary = {
   sourceRealmPath,
-  sourceRealmUrl,
+  sourceRealm,
   scratchPath,
   scratchRealmUrl,
   specFiles: specFiles.map((filePath) => relative(process.cwd(), filePath)),

@@ -69,7 +69,7 @@ module('Integration | commands | can-read-realm', function (hooks) {
     let commandService = getService('command-service');
     let command = new CanReadRealmCommand(commandService.commandContext);
     let result = await command.execute({
-      realmUrl: 'https://example.com/readable/',
+      realmIdentifier: 'https://example.com/readable/',
     });
     assert.true(result.canRead);
   });
@@ -79,7 +79,7 @@ module('Integration | commands | can-read-realm', function (hooks) {
     let commandService = getService('command-service');
     let command = new CanReadRealmCommand(commandService.commandContext);
     let result = await command.execute({
-      realmUrl: 'https://example.com/private/',
+      realmIdentifier: 'https://example.com/private/',
     });
     assert.false(result.canRead);
   });

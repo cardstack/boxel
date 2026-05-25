@@ -1,10 +1,12 @@
 import {
-  cardIdToURL,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   isResolvedCodeRef,
   loadCardDef,
   generateInstallFolderName,
+  rri,
 } from '@cardstack/runtime-common';
+
+import type { Listing } from '@cardstack/runtime-common';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
@@ -16,8 +18,6 @@ import HostBaseCommand from '../lib/host-base-command';
 import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 import ValidateRealmCommand from './validate-realm';
-
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
@@ -39,9 +39,9 @@ export default class ListingUseCommand extends HostBaseCommand<
 
     const listing = listingInput as Listing;
 
-    let { realmUrl } = await new ValidateRealmCommand(
+    let { realmIdentifier } = await new ValidateRealmCommand(
       this.commandContext,
-    ).execute({ realmUrl: realm });
+    ).execute({ realmIdentifier: realm });
 
     const specsToCopy = listing.specs ?? [];
     const specsWithoutFields = specsToCopy.filter(
@@ -54,8 +54,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       if (spec.isComponent) {
         return;
       }
-      let url = cardIdToURL(spec.id);
-      let ref = codeRefWithAbsoluteURL(spec.ref, url);
+      let ref = codeRefWithAbsoluteIdentifier(spec.ref, rri(spec.id));
       if (!isResolvedCodeRef(ref)) {
         throw new Error('ref is not a resolved code ref');
       }
@@ -65,7 +64,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       let card = new Klass({}) as CardAPI.CardDef;
       await new SaveCardCommand(this.commandContext).execute({
         card,
-        realm: realmUrl,
+        realm: realmIdentifier,
         localDir,
       });
     }
@@ -77,7 +76,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       for (const card of sourceCards) {
         await new CopyCardToRealmCommand(this.commandContext).execute({
           sourceCard: card,
-          targetRealm: realmUrl,
+          targetRealm: realmIdentifier,
           localDir,
         });
       }
@@ -88,7 +87,7 @@ export default class ListingUseCommand extends HostBaseCommand<
         listing.skills.map((skill: Skill) =>
           new CopyCardToRealmCommand(this.commandContext).execute({
             sourceCard: skill,
-            targetRealm: realmUrl,
+            targetRealm: realmIdentifier,
             localDir,
           }),
         ),

@@ -142,7 +142,7 @@ test.describe('runParseInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
       });
@@ -205,7 +205,7 @@ test.describe('runParseInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
       });
@@ -251,7 +251,7 @@ test.describe('runParseInMemory e2e', () => {
       await client.pull(realmUrl, workspace.dir);
 
       let result = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
       });
@@ -279,7 +279,7 @@ test.describe('runParseInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runParseInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       client: thrower,
       workspaceDir: createTestWorkspace().dir,
     });
@@ -338,7 +338,7 @@ test.describe('runParseInMemory e2e', () => {
       // Parse just the clean file — even though broken-card.gts is dirty,
       // scoping should mean a pass.
       let cleanOnly = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
         path: 'parse-test-card.gts',
@@ -350,7 +350,7 @@ test.describe('runParseInMemory e2e', () => {
 
       // Parse just the broken file — should fail and mention only that file.
       let brokenOnly = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
         path: 'broken-card.gts',
@@ -436,7 +436,7 @@ test.describe('runParseInMemory e2e', () => {
 
       // Valid JSON → passed.
       let validOnly = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
         path: 'ParseTestCard/example-1.json',
@@ -450,7 +450,7 @@ test.describe('runParseInMemory e2e', () => {
 
       // Structurally-broken JSON (missing adoptsFrom) → failed.
       let brokenOnly = await runParseInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         client,
         workspaceDir: workspace.dir,
         path: 'ParseTestCard/broken-example.json',
@@ -487,7 +487,7 @@ test.describe('runParseInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runParseInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       client: stubClient,
       workspaceDir: createTestWorkspace().dir,
       path: 'notes.md',
@@ -517,7 +517,7 @@ test.describe('runParseInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runParseInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       client: stubClient,
       workspaceDir: createTestWorkspace().dir,
       path: 'ParseTestCard/example-1',

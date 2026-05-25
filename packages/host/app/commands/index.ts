@@ -30,16 +30,16 @@ import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GenerateThumbnailCommandModule from './generate-thumbnail';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
-import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
+import * as GetAvailableRealmIdentifiersCommandModule from './get-available-realm-identifiers';
 import * as GetCardCommandModule from './get-card';
 import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
-import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
+import * as GetCatalogRealmIdentifiersCommandModule from './get-catalog-realm-identifiers';
 import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
-import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
+import * as GetRealmOfResourceIdentifierCommandModule from './get-realm-of-resource-identifier';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InstantiateCardCommandModule from './instantiate-card';
-import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
+import * as InvalidateRealmIdentifiersCommandModule from './invalidate-realm-identifiers';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
@@ -69,8 +69,10 @@ import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
+import * as RetrySubmissionWorkflowCommandModule from './retry-submission-workflow';
 import * as SanitizeModuleListCommandModule from './sanitize-module-list';
 import * as SaveCardCommandModule from './save-card';
+import * as ScreenshotCardCommandModule from './screenshot-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
@@ -191,8 +193,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     InviteUserToRoomCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/invalidate-realm-urls',
-    InvalidateRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/invalidate-realm-identifiers',
+    InvalidateRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -323,6 +325,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CreateSubmissionWorkflowCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/retry-submission-workflow',
+    RetrySubmissionWorkflowCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
     OpenWorkspaceCommandModule,
   );
@@ -415,6 +421,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GenerateThumbnailCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/screenshot-card',
+    ScreenshotCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-card',
     GetCardCommandModule,
   );
@@ -427,12 +437,12 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetAllRealmMetasCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-available-realm-urls',
-    GetAvailableRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/get-available-realm-identifiers',
+    GetAvailableRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
-    GetCatalogRealmUrlsCommandModule,
+    '@cardstack/boxel-host/commands/get-catalog-realm-identifiers',
+    GetCatalogRealmIdentifiersCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/can-read-realm',
@@ -443,8 +453,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetDefaultWritableRealmCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/get-realm-of-url',
-    GetRealmOfUrlCommandModule,
+    '@cardstack/boxel-host/commands/get-realm-of-resource-identifier',
+    GetRealmOfResourceIdentifierCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/sanitize-module-list',
@@ -502,17 +512,18 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GenerateThumbnailCommandModule.default,
+  ScreenshotCardCommandModule.default,
   GetAllRealmMetasCommandModule.default,
-  GetAvailableRealmUrlsCommandModule.default,
+  GetAvailableRealmIdentifiersCommandModule.default,
   GetDefaultWritableRealmCommandModule.default,
-  GetCatalogRealmUrlsCommandModule.default,
+  GetCatalogRealmIdentifiersCommandModule.default,
   GetCardCommandModule.default,
-  GetRealmOfUrlCommandModule.default,
+  GetRealmOfResourceIdentifierCommandModule.default,
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
-  InvalidateRealmUrlsCommandModule.default,
+  InvalidateRealmIdentifiersCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,
@@ -528,6 +539,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OpenCreateListingModalCommandModule.default,
   CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowCommandModule.default,
+  RetrySubmissionWorkflowCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "articleTitle": "Sticky Note — Visual Design",
+      "articleType": "reference",
+      "content": "# Sticky Note — Visual Design\n\nGuidance for making the card actually look like a sticky note.\n\n## Color Palette\n\nUse paper-like, slightly muted colors. The card should evoke a physical Post-it note.\n\n| Name   | Background  | Accent / shadow |\n| ------ | ----------- | --------------- |\n| yellow | `#fff6a8`   | `#e6d268`       |\n| pink   | `#fdc4d6`   | `#e893ad`       |\n| blue   | `#bde0fe`   | `#7eb8ed`       |\n| green  | `#c9f5d0`   | `#7fc991`       |\n| orange | `#ffd6a5`   | `#eaa760`       |\n| purple | `#e1c8f5`   | `#b48be0`       |\n\nDefault color is `yellow`.\n\n## Layout\n\n- **isolated** — large square card (~360px on a side), title (if any) bold near the top, body wraps below in a hand-written-feeling sans-serif. Add a subtle `box-shadow` and a slight `transform: rotate(-1deg)` to suggest a physical note.\n- **embedded** — fixed aspect square preview (200×200) showing color and the first line of body text.\n- **fitted** — fills available space, no rotation (so it composes cleanly into a grid), shows up to ~3 lines of body text with ellipsis.\n\n## Typography\n\nA system sans-serif is fine (`-apple-system, Segoe UI, sans-serif`). Body should be at least 14px in `fitted` and 18px in `isolated`.\n\n## Accessibility\n\nEnsure foreground text remains readable on every background color — always render body text in dark gray (`#222`) rather than pure black, and never rely on color alone to communicate meaning.",
+      "tags": [
+        "sticky-note",
+        "visual-design",
+        "ui"
+      ],
+      "updatedAt": "2026-05-06T00:00:00Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://test-harness.test/software-factory/darkfactory",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

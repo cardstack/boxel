@@ -22,7 +22,7 @@ export default class GetDefaultWritableRealmCommand extends HostBaseCommand<
     let commandModule = await this.loadCommandModule();
     const { GetDefaultWritableRealmResult } = commandModule;
     return new GetDefaultWritableRealmResult({
-      realmUrl: this.realm.defaultWritableRealm?.path ?? '',
+      realmIdentifier: this.realm.defaultWritableRealm?.path ?? '',
     });
   }
 }

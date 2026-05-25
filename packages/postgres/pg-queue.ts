@@ -40,7 +40,7 @@ import * as Sentry from '@sentry/node';
 const log = logger('queue');
 const MAX_JOB_TIMEOUT_SEC = FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
-interface JobsTable {
+export interface JobsTable {
   id: number;
   job_type: string;
   concurrency_group: string | null;
@@ -53,13 +53,18 @@ interface JobsTable {
   result: PgPrimitive;
 }
 
-interface JobReservationsTable {
+export interface JobReservationsTable {
   id: number;
   job_id: number;
   created_at: Date;
   locked_until: Date;
   completed_at: Date;
   worker_id: string;
+  // NULL while the reservation is open. On close: 'completed' for a
+  // genuine attempt (worker ran the job to a verdict), 'interrupted' for
+  // an operational interruption (child crash, manager SIGTERM, scale-in),
+  // 'timeout-expired' for the pg-pid reaper path.
+  completion_reason: 'completed' | 'interrupted' | 'timeout-expired' | null;
 }
 
 interface CoalesceCandidateRow extends Pick<
@@ -79,7 +84,7 @@ async function acquireConcurrencyGroupLock(
 }
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
-class WorkLoop {
+export class WorkLoop {
   private internalWaker: Deferred<void> | undefined;
   private timeout: NodeJS.Timeout | undefined;
   private _shuttingDown = false;
@@ -219,34 +224,62 @@ export class PgQueuePublisher implements QueuePublisher {
     }
   }
 
-  private async findPendingCandidates(
+  private async findCoalesceCandidates(
     queryFn: (expression: Expression) => Promise<unknown>,
     concurrencyGroup: string | null,
-  ): Promise<QueueCoalesceCandidate[]> {
+  ): Promise<{
+    pending: QueueCoalesceCandidate[];
+    inFlight: QueueCoalesceCandidate[];
+  }> {
+    // Pending candidates are locked FOR UPDATE so a concurrent publisher
+    // can't merge into the same row. In-flight rows are read in the same
+    // snapshot but not locked: the worker is the only writer that should
+    // commit a status change on them, and our advisory lock prevents
+    // another publisher from racing us on this concurrency group.
     let rows = (await queryFn([
-      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args
+      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args,
+              EXISTS (
+                SELECT 1 FROM job_reservations r
+                WHERE r.job_id = j.id
+                  AND r.locked_until > NOW()
+                  AND r.completed_at IS NULL
+              ) as in_flight
        FROM jobs j
        WHERE j.status='unfulfilled'
          AND j.concurrency_group IS NOT DISTINCT FROM`,
       param(concurrencyGroup),
-      `AND NOT EXISTS (
-          SELECT 1
-          FROM job_reservations r
-          WHERE r.job_id = j.id
-            AND r.locked_until > NOW()
-            AND r.completed_at IS NULL
-       )
-       ORDER BY j.created_at, j.id
-       FOR UPDATE`,
-    ])) as CoalesceCandidateRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      jobType: row.job_type,
-      concurrencyGroup: row.concurrency_group,
-      timeout: row.timeout,
-      priority: row.priority,
-      args: row.args,
-    }));
+      `ORDER BY j.created_at, j.id`,
+    ])) as (CoalesceCandidateRow & { in_flight: boolean })[];
+
+    let pendingIds: number[] = [];
+    let pending: QueueCoalesceCandidate[] = [];
+    let inFlight: QueueCoalesceCandidate[] = [];
+    for (let row of rows) {
+      let candidate: QueueCoalesceCandidate = {
+        id: row.id,
+        jobType: row.job_type,
+        concurrencyGroup: row.concurrency_group,
+        timeout: row.timeout,
+        priority: row.priority,
+        args: row.args,
+      };
+      if (row.in_flight) {
+        inFlight.push(candidate);
+      } else {
+        pending.push(candidate);
+        pendingIds.push(row.id);
+      }
+    }
+
+    if (pendingIds.length > 0) {
+      await queryFn([
+        `SELECT id FROM jobs WHERE`,
+        ...any(pendingIds.map((id) => [`id=`, param(id)])),
+        `FOR UPDATE`,
+      ] as Expression);
+    }
+
+    return { pending, inFlight };
   }
 
   private async insertJob(
@@ -353,11 +386,15 @@ export class PgQueuePublisher implements QueuePublisher {
           await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
           await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
 
-          let candidates = await this.findPendingCandidates(
+          let { pending, inFlight } = await this.findCoalesceCandidates(
             queryFn,
             incoming.concurrencyGroup,
           );
-          let decision = coalesce({ incoming, candidates });
+          let decision = coalesce({
+            incoming,
+            candidates: pending,
+            inFlightCandidates: inFlight,
+          });
           let jobId: number;
 
           if (decision.type === 'insert') {
@@ -365,24 +402,42 @@ export class PgQueuePublisher implements QueuePublisher {
             jobId = await this.insertJob(queryFn, insertJob);
           } else {
             jobId = decision.jobId;
-            let isStillPending = await this.jobIsPendingAndUnreserved(
-              queryFn,
-              jobId,
-            );
-            if (!isStillPending) {
-              await queryFn(['ROLLBACK']);
-              continue;
-            }
-
-            if (decision.update) {
-              let wasUpdated = await this.updateJobForCoalesce(
+            let isInFlightTarget = inFlight.some((c) => c.id === jobId);
+            if (isInFlightTarget) {
+              // Attaching as a late waiter on an already-claimed job. The
+              // worker holds the args in memory and won't see DB writes,
+              // so the join must not request an `update`. The waiter is
+              // wired up in `publish()` via `addWaiter(jobId, ...)`.
+              if (decision.update !== undefined) {
+                throw new Error(
+                  `coalesce returned a join with update for in-flight job ${jobId}; updates cannot reach a running worker`,
+                );
+              }
+              log.debug(
+                `attaching late waiter to in-flight job %s (concurrency group %s)`,
+                jobId,
+                incoming.concurrencyGroup,
+              );
+            } else {
+              let isStillPending = await this.jobIsPendingAndUnreserved(
                 queryFn,
                 jobId,
-                decision.update,
               );
-              if (!wasUpdated) {
+              if (!isStillPending) {
                 await queryFn(['ROLLBACK']);
                 continue;
+              }
+
+              if (decision.update) {
+                let wasUpdated = await this.updateJobForCoalesce(
+                  queryFn,
+                  jobId,
+                  decision.update,
+                );
+                if (!wasUpdated) {
+                  await queryFn(['ROLLBACK']);
+                  continue;
+                }
               }
             }
           }
@@ -433,11 +488,21 @@ export class PgQueuePublisher implements QueuePublisher {
   }
 }
 
+// Cap on how many times a job can be reserved before we abandon it. Once a
+// job has had this many reservation rows, the next claim attempt marks the
+// job rejected instead of starting a new attempt. Two attempts means the
+// job got an initial run and one full retry; if both reservations end with
+// the job still 'unfulfilled', the symptom is almost always a deterministic
+// crash in the worker — looping forever just burns wall-clock waiting on
+// 7200s leases.
+const MAX_RESERVATION_COUNT_PER_JOB = 2;
+
 export class PgQueueRunner implements QueueRunner {
   #isDestroyed = false;
   #pgClient: PgAdapter;
   #workerId: string;
   #maxTimeoutSec: number;
+  #maxReservationCount: number;
   #pollInterval = 10000;
   #handlers: Map<string, Function> = new Map();
   #jobRunner: WorkLoop | undefined;
@@ -447,16 +512,19 @@ export class PgQueueRunner implements QueueRunner {
     adapter,
     workerId,
     maxTimeoutSec = MAX_JOB_TIMEOUT_SEC,
+    maxReservationCount = MAX_RESERVATION_COUNT_PER_JOB,
     priority = 0,
   }: {
     adapter: PgAdapter;
     workerId: string;
     priority?: number;
     maxTimeoutSec?: number;
+    maxReservationCount?: number;
   }) {
     this.#pgClient = adapter;
     this.#workerId = workerId;
     this.#maxTimeoutSec = maxTimeoutSec;
+    this.#maxReservationCount = maxReservationCount;
     this.#priority = priority;
   }
 
@@ -569,6 +637,49 @@ export class PgQueueRunner implements QueueRunner {
             continue;
           }
 
+          // Abandon the job after #maxReservationCount genuine attempts.
+          // Count only reservations that closed with a real verdict
+          // (`completion_reason = 'completed'`) plus still-open ones
+          // (NULL). Reservations closed as `'interrupted'` or
+          // `'timeout-expired'` (deploy, autoscaler, child crash, dropped
+          // PG connection) don't count — the worker never had an
+          // uninterrupted shot at the job, so re-trying isn't a failed
+          // attempt.
+          let priorReservations = (await query([
+            `SELECT COUNT(*)::int as count FROM job_reservations
+             WHERE job_id =`,
+            param(jobToRun.id),
+            `AND (completion_reason IS NULL OR completion_reason = 'completed')`,
+          ])) as unknown as { count: number }[];
+          if (priorReservations[0].count >= this.#maxReservationCount) {
+            await query([
+              `UPDATE jobs SET `,
+              ...separatedByCommas([
+                [
+                  `result =`,
+                  param({
+                    status: 500,
+                    message: `Job abandoned after ${priorReservations[0].count} failed attempts (max=${this.#maxReservationCount})`,
+                  }),
+                ],
+                [`status = 'rejected'`],
+                [`finished_at = NOW()`],
+              ]),
+              `WHERE id =`,
+              param(jobToRun.id),
+            ] as Expression);
+            await query([`NOTIFY jobs_finished`]);
+            await query(['COMMIT']);
+            log.info(
+              `%s: abandoned job %s after %s prior reservations (max=%s)`,
+              this.#workerId,
+              jobToRun.id,
+              priorReservations[0].count,
+              this.#maxReservationCount,
+            );
+            continue;
+          }
+
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',
             ...separatedByCommas([
@@ -599,6 +710,7 @@ export class PgQueueRunner implements QueueRunner {
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
+                priority: jobToRun.priority,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves
@@ -618,12 +730,32 @@ export class PgQueueRunner implements QueueRunner {
             newStatus = 'resolved';
           } catch (err: any) {
             Sentry.captureException(err);
-            console.error(
-              `Error running job ${jobToRun.id}: jobType=${
-                jobToRun.job_type
-              } args=${JSON.stringify(jobToRun.args)}`,
-              err,
-            );
+            // ECONNREFUSED typically means the upstream's port wasn't bound
+            // when the job tried to reach it — common during boot, where
+            // workers can come up before their upstream service. Log a
+            // single line so a transient startup race doesn't bury genuine
+            // job failures in stack-trace noise; Sentry still captures the
+            // full error for deployed-environment visibility.
+            let cause = err?.cause;
+            if (
+              err?.code === 'ECONNREFUSED' ||
+              cause?.code === 'ECONNREFUSED'
+            ) {
+              let target =
+                cause?.address && cause?.port
+                  ? `${cause.address}:${cause.port}`
+                  : 'upstream';
+              console.warn(
+                `job ${jobToRun.id} (${jobToRun.job_type}) failed: ECONNREFUSED to ${target}`,
+              );
+            } else {
+              console.error(
+                `Error running job ${jobToRun.id}: jobType=${
+                  jobToRun.job_type
+                } args=${JSON.stringify(jobToRun.args)}`,
+                err,
+              );
+            }
             result = serializableError(err);
             newStatus = 'rejected';
           }
@@ -687,7 +819,9 @@ export class PgQueueRunner implements QueueRunner {
             param(jobToRun.id),
           ]);
           await query([
-            `UPDATE job_reservations SET completed_at = now() WHERE id = `,
+            `UPDATE job_reservations
+             SET completed_at = now(), completion_reason = 'completed'
+             WHERE id = `,
             param(jobReservationId),
           ]);
           // NOTIFY takes effect when the transaction actually commits. If it

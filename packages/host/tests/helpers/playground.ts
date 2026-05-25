@@ -1,4 +1,4 @@
-import { click } from '@ember/test-helpers';
+import { click, settled } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -66,6 +66,11 @@ export const openFileInPlayground = async (
     await selectDeclaration(opts.declaration);
   }
   await togglePlaygroundPanel();
+  // Drain Spec-search subscriptions and any background card-loads kicked off
+  // by the playground panel mount before the test asserts; these don't all
+  // register test waiters, and an in-flight fetch that resolves after a later
+  // navigation can surface as an unowned "A network error occurred." rejection.
+  await settled();
 };
 
 export const selectDeclaration = async (name: string) =>

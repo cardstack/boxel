@@ -9,7 +9,7 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   baseRealm,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   getClass,
   inferContentType,
   SupportedMimeType,
@@ -364,7 +364,7 @@ export default class FileDefManagerImpl
     const mappings = await basicMappings(this.loaderService.loader);
 
     for (let commandDef of commandDefinitions) {
-      let absoluteCodeRef = codeRefWithAbsoluteURL(
+      let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
         commandDef.codeRef,
         commandDef[relativeTo],
       ) as ResolvedCodeRef;

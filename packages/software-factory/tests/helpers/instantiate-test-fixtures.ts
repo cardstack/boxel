@@ -5,6 +5,10 @@
  * tool). Keeping the card modules, examples, and specs in one place ensures
  * the two surfaces are exercised against identical inputs.
  */
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join } from 'node:path';
+
 import type { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { expect } from '@playwright/test';
 
@@ -96,6 +100,36 @@ export function brokenTagsExampleJson(): string {
   );
 }
 
+/**
+ * A well-formed `TagsCard` example with an empty tags array. Seeded to
+ * the realm so the indexer's `linkedExamples` walk on the Spec succeeds
+ * cleanly and the Spec actually surfaces in `_federated-search`. The
+ * test then overwrites the *workspace* copy with `brokenTagsExampleJson`
+ * before the validation step reads it — the bad shape never reaches
+ * realm-side indexing.
+ */
+export function validTagsExampleJson(): string {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'Tags Card Placeholder',
+          tags: [],
+        },
+        meta: {
+          adoptsFrom: {
+            module: '../tags-card',
+            name: 'TagsCard',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
 export function validCardSpecJson(): string {
   return JSON.stringify(
     {
@@ -151,24 +185,92 @@ export function tagsCardSpecJson(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Write a file + await the realm's index to pick it up. Returns once the
- * file is visible to subsequent searches.
+ * Stage the given files in a fresh temp dir and push them to the realm
+ * with `client.sync(..., { preferLocal: true, waitForIndex: true })`.
+ * The `_atomic` upload appends `?waitForIndex=true`, so the realm-server
+ * returns only after the indexer has processed every uploaded file.
+ *
+ * Why this shape instead of per-file `client.write` + a search-poll
+ * gate: realm-side source POST indexing is async, so writing files
+ * one-by-one and waiting for the realm to ack with GET (or for the
+ * downstream `_federated-search` to surface them) is a polling race —
+ * which is exactly the flake this skill was filed to address. CI
+ * evidence on PR #4782 (run 25768256725) showed even a 90s poll
+ * sometimes never sees the Spec surface in search. The `_atomic`
+ * waitForIndex query param is the realm-server's first-class hook for
+ * read-after-write consistency in tests; using it here trades a
+ * one-shot push latency for a deterministic "indexer is settled"
+ * boundary.
  */
-async function writeAndAwaitIndex(
+async function seedFilesAndWaitForIndex(
   client: BoxelCLIClient,
   realmUrl: string,
-  path: string,
-  content: string,
+  files: { path: string; content: string }[],
 ): Promise<void> {
-  let writeResult = await client.write(realmUrl, path, content);
-  expect(writeResult.ok, `write ${path} failed: ${writeResult.error}`).toBe(
-    true,
-  );
-  let indexed = await client.waitForFile(realmUrl, path, {
-    pollMs: 300,
-    timeoutMs: 30_000,
-  });
-  expect(indexed, `waiting for ${path} to be indexed timed out`).toBe(true);
+  for (let { path } of files) {
+    if (isAbsolute(path) || path.split('/').includes('..')) {
+      throw new Error(
+        `seedFilesAndWaitForIndex path must be a realm-relative path under the staging dir; got ${JSON.stringify(path)}`,
+      );
+    }
+  }
+
+  // Retry the sync once on failure. The realm-server's /_atomic
+  // endpoint can return 500 ("Write Error") for transient causes —
+  // for example a concurrent indexing pass or a worker-side
+  // fileSerialization that doesn't recur on retry — and a one-shot
+  // retry with a short backoff lets the helper recover instead of
+  // surfacing the failure as a confusing test flake.
+  //
+  // Each attempt uses a fresh staging dir: `RealmSyncer` writes
+  // `.boxel-sync.json` even when the batch failed, recording hashes
+  // for the staged files. A retry against the same dir would see
+  // those hashes match the (unchanged) local files, classify the
+  // entries as "unchanged locally / deleted remotely" (since the
+  // failed batch never actually wrote them), and with `preferLocal:
+  // true` resolve as a noop — silently skipping the upload while
+  // reporting success. Fresh dir = no stale manifest = honest
+  // re-upload on attempt 2.
+  const maxAttempts = 2;
+  let syncResult: Awaited<ReturnType<typeof client.sync>> | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let stagingDir = mkdtempSync(join(tmpdir(), 'sf-instantiate-seed-'));
+    try {
+      for (let { path, content } of files) {
+        let absolute = join(stagingDir, path);
+        mkdirSync(dirname(absolute), { recursive: true });
+        writeFileSync(absolute, content);
+      }
+      syncResult = await client.sync(realmUrl, stagingDir, {
+        preferLocal: true,
+        waitForIndex: true,
+      });
+    } finally {
+      rmSync(stagingDir, { recursive: true, force: true });
+    }
+    if (!syncResult.hasError) {
+      if (attempt > 1) {
+        console.log(
+          `seedFilesAndWaitForIndex: sync succeeded on attempt ${attempt}/${maxAttempts} for ${realmUrl}`,
+        );
+      }
+      break;
+    }
+    console.log(
+      `seedFilesAndWaitForIndex: sync attempt ${attempt}/${maxAttempts} for ${realmUrl} failed: ${
+        syncResult.error ?? '(no error message)'
+      }`,
+    );
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
+  expect(
+    syncResult!.hasError,
+    `seed sync to ${realmUrl} reported an error after ${maxAttempts} attempt(s): ${
+      syncResult!.error ?? '(no error message)'
+    }`,
+  ).toBe(false);
 }
 
 /**
@@ -179,53 +281,51 @@ export async function seedValidCardWithSpec(
   client: BoxelCLIClient,
   realmUrl: string,
 ): Promise<void> {
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'instantiate-test-card.gts',
-    VALID_MODULE_GTS,
-  );
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'ValidCard/example-1.json',
-    validExampleJson(),
-  );
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'Spec/valid-card-spec.json',
-    validCardSpecJson(),
-  );
+  await seedFilesAndWaitForIndex(client, realmUrl, [
+    { path: 'instantiate-test-card.gts', content: VALID_MODULE_GTS },
+    { path: 'ValidCard/example-1.json', content: validExampleJson() },
+    { path: 'Spec/valid-card-spec.json', content: validCardSpecJson() },
+  ]);
 }
 
 /**
- * Seed `tags-card.gts` + the Spec (written first so it's indexed cleanly)
- * + the broken example. Instantiating the example surfaces a field-shape
- * error.
+ * Seed `tags-card.gts`, a well-formed `TagsCard/bad-example.json`, and
+ * a Spec linking to that file. The realm-side example is intentionally
+ * the WELL-FORMED placeholder (`validTagsExampleJson`) — the test
+ * substitutes the broken shape into the workspace copy after
+ * `client.pull` via `overwriteTagsExampleWithBadShape`.
+ *
+ * Why this two-step shape: the realm indexer drops a Spec from
+ * `_federated-search` whenever its `linkedExamples` `loadLinks` walk
+ * can't resolve a target — either the file is missing entirely or the
+ * card is in error_doc state. Writing the broken `containsMany` shape
+ * straight to the realm puts the example in error_doc and silently
+ * disqualifies the Spec from search, which is the original flake this
+ * skill chased. The validation pipeline reads example JSON from the
+ * workspace path (not the realm index), so the bad shape only needs
+ * to live in the workspace at the moment the step reads it.
  */
 export async function seedTagsCardWithBrokenExampleAndSpec(
   client: BoxelCLIClient,
   realmUrl: string,
 ): Promise<void> {
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'tags-card.gts',
-    TAGS_CARD_MODULE_GTS,
-  );
-  // Write the Spec BEFORE the bad example so it's indexed before the
-  // example potentially stalls the indexer.
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'Spec/tags-card-spec.json',
-    tagsCardSpecJson(),
-  );
-  await writeAndAwaitIndex(
-    client,
-    realmUrl,
-    'TagsCard/bad-example.json',
-    brokenTagsExampleJson(),
-  );
+  await seedFilesAndWaitForIndex(client, realmUrl, [
+    { path: 'tags-card.gts', content: TAGS_CARD_MODULE_GTS },
+    { path: 'TagsCard/bad-example.json', content: validTagsExampleJson() },
+    { path: 'Spec/tags-card-spec.json', content: tagsCardSpecJson() },
+  ]);
+}
+
+/**
+ * Overwrite the workspace copy of `TagsCard/bad-example.json` with the
+ * broken-shape data the test actually wants to exercise. Call after
+ * `client.pull` (so the pull doesn't immediately overwrite this) and
+ * before constructing the validation step / running runInstantiate. See
+ * `seedTagsCardWithBrokenExampleAndSpec` for why the realm-side copy
+ * stays well-formed.
+ */
+export function overwriteTagsExampleWithBadShape(workspaceDir: string): void {
+  let absolute = join(workspaceDir, 'TagsCard', 'bad-example.json');
+  mkdirSync(dirname(absolute), { recursive: true });
+  writeFileSync(absolute, brokenTagsExampleJson());
 }

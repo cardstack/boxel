@@ -15,6 +15,7 @@ function makeDBAdapter(
 ): DBAdapter {
   return {
     kind: 'pg',
+    notify: async () => {},
     isClosed: false,
     execute: async (sql: string, opts?: ExecuteOptions) => {
       assertion?.(sql, opts);
@@ -22,6 +23,8 @@ function makeDBAdapter(
     },
     close: async () => {},
     getColumnNames: async () => [],
+    withWriteLock: async (_url, fn) => fn(undefined),
+    withUserCostLock: async (_userId, fn) => fn(),
   };
 }
 

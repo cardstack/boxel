@@ -11,6 +11,15 @@ listeners:
     resources:
       - names: [client, federation]
         compress: false
+  # Prometheus metrics listener — scraped by the local observability stack
+  # (packages/observability/prometheus/prometheus.yml). Only configured for
+  # the dev template because tests spawn many synapse containers and don't
+  # need metrics; production parity is a separate ECS-side decision.
+  - port: 9001
+    bind_addresses: ["::"]
+    type: metrics
+
+enable_metrics: true
 
 database:
   name: "sqlite3"
@@ -92,7 +101,7 @@ email:
   app_name: "Boxel"
   enable_notifs: true
   notif_for_new_users: false
-  client_base_url: "http://localhost:4200"
+  client_base_url: "https://localhost:4200"
   validation_token_lifetime: "1h"
   subjects:
     email_validation: "%(app)s Email Validation"

@@ -55,6 +55,8 @@ export default class ForgotPassword extends Component<Signature> {
         <BoxelInput
           data-test-email-field
           type='text'
+          name='email'
+          autocomplete='email'
           @errorMessage={{this.emailError}}
           @state={{this.emailInputState}}
           @value={{this.email}}
@@ -104,6 +106,8 @@ export default class ForgotPassword extends Component<Signature> {
         <BoxelInput
           data-test-password-field
           type='password'
+          name='password'
+          autocomplete='new-password'
           @errorMessage={{this.passwordError}}
           @state={{this.passwordInputState}}
           @value={{this.password}}
@@ -120,6 +124,8 @@ export default class ForgotPassword extends Component<Signature> {
         <BoxelInput
           data-test-confirm-password-field
           type='password'
+          name='confirm-password'
+          autocomplete='new-password'
           @errorMessage={{this.confirmPasswordError}}
           @state={{this.confirmPasswordInputState}}
           @value={{this.confirmPassword}}

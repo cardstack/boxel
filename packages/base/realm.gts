@@ -17,7 +17,7 @@ import type { GetAllRealmMetasResult } from './command';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 
 type RealmMeta = {
-  url: string;
+  realmIdentifier: string;
   canWrite: boolean;
   info: {
     name?: string;
@@ -44,7 +44,7 @@ class EditComponent extends Component<typeof RealmField> {
     if (!this.args.model) {
       return undefined;
     }
-    return this.writableRealms.find((realm) => realm.url === this.args.model);
+    return this.writableRealms.find((realm) => realm.realmIdentifier === this.args.model);
   }
 
   get selectedRealmLabel(): string {
@@ -55,9 +55,9 @@ class EditComponent extends Component<typeof RealmField> {
     return this.writableRealms.map(
       (realm) =>
         new MenuItem({
-          label: realm.info.name ?? realm.url,
+          label: realm.info.name ?? realm.realmIdentifier,
           action: () => this.selectRealm(realm),
-          checked: realm.url === this.args.model,
+          checked: realm.realmIdentifier === this.args.model,
           iconURL: realm.info.iconURL ?? undefined,
         }),
     );
@@ -65,7 +65,7 @@ class EditComponent extends Component<typeof RealmField> {
 
   @action
   selectRealm(realm: RealmMeta) {
-    this.args.set(realm.url);
+    this.args.set(realm.realmIdentifier);
   }
 
   <template>

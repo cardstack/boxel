@@ -7,7 +7,7 @@ import type {
   Realm,
   Loader,
 } from '@cardstack/runtime-common';
-import { baseRealm, rri } from '@cardstack/runtime-common';
+import { baseRealm, baseRRI, rri } from '@cardstack/runtime-common';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -500,6 +500,25 @@ export function setupOperatorModeTests(
                 adoptsFrom: {
                   module: rri('../spec-card-linker.gts'),
                   name: 'SpecCardLinker',
+                },
+              },
+            },
+          } as LooseSingleCardDocument,
+          'fields/biginteger-field.json': {
+            data: {
+              attributes: {
+                cardTitle: 'Bigint Field',
+                cardDescription: 'A field that captures big int values',
+                specType: 'field',
+                ref: {
+                  module: baseRRI('big-integer'),
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: baseRRI('spec'),
+                  name: 'Spec',
                 },
               },
             },

@@ -12,7 +12,12 @@ import {
   type ResolvedCodeRef,
   type TimingDiagnostics,
 } from '../index';
-import { CardError, isCardError, serializableError } from '../error';
+import {
+  CardError,
+  coerceErrorMessage,
+  isCardError,
+  serializableError,
+} from '../error';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import {
@@ -78,6 +83,7 @@ export async function performFileIndexing({
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;
 
+  let missingMessageFallback = `File extract error for ${fileURL} produced no error message (upstream entry-construction site dropped the underlying extract error text)`;
   let normalizeToErrorEntry = (
     entry: ErrorEntry | undefined,
     err: unknown,
@@ -87,6 +93,10 @@ export async function performFileIndexing({
       normalizedError.additionalErrors =
         normalizedError.additionalErrors ?? null;
       normalizedError.status = normalizedError.status ?? 500;
+      normalizedError.message = coerceErrorMessage(
+        normalizedError,
+        coerceErrorMessage(err, missingMessageFallback),
+      );
       return {
         ...entry,
         type: 'file-error',
@@ -99,10 +109,15 @@ export async function performFileIndexing({
       });
     }
     if (isCardError(err)) {
-      return { type: 'file-error', error: serializableError(err) };
+      let serialized = serializableError(err);
+      serialized.message = coerceErrorMessage(
+        serialized,
+        missingMessageFallback,
+      );
+      return { type: 'file-error', error: serialized };
     }
     let fallback = new CardError(
-      (err as Error)?.message ?? 'unknown file extract error',
+      coerceErrorMessage(err, missingMessageFallback),
       { status: 500 },
     );
     fallback.stack = (err as Error)?.stack;
@@ -151,9 +166,16 @@ export async function performFileIndexing({
   let dependencyError =
     await dependencyResolver.indexBackedDependencyErrorForEntry(deps, entryURL);
   if (dependencyError) {
+    let normalizedDependencyError = {
+      ...dependencyError,
+      message: coerceErrorMessage(
+        dependencyError,
+        `File indexing failed because a dependency of ${fileURL} is in error state`,
+      ),
+    };
     await updateEntry(entryURL, {
       type: 'file-error',
-      error: dependencyError,
+      error: normalizedDependencyError,
       searchData: {
         url: fileURL,
         sourceUrl: fileURL,
@@ -194,7 +216,7 @@ export async function performFileIndexing({
       ...(extractResult.searchDoc ?? {}),
     },
     types: fileTypes,
-    displayNames: [],
+    displayNames: extractResult.displayNames ?? [],
     isolatedHtml: renderResult?.isolatedHTML ?? undefined,
     headHtml: renderResult?.headHTML ?? undefined,
     atomHtml: renderResult?.atomHTML ?? undefined,

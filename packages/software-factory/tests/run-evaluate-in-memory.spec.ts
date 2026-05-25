@@ -66,7 +66,7 @@ test.describe('runEvaluateInMemory e2e', () => {
       // The fixture realm ships with a clean hello.gts, home.gts, and a
       // hello.test.gts (which must be excluded from evaluation).
       let result = await runEvaluateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
       });
@@ -119,7 +119,7 @@ test.describe('runEvaluateInMemory e2e', () => {
       expect(indexed).toBe(true);
 
       let result = await runEvaluateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
       });
@@ -179,7 +179,7 @@ test.describe('runEvaluateInMemory e2e', () => {
       }
 
       let result = await runEvaluateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
       });
@@ -203,7 +203,7 @@ test.describe('runEvaluateInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: thrower,
     });
@@ -262,7 +262,7 @@ test.describe('runEvaluateInMemory e2e', () => {
 
       // Evaluate only the clean file — should pass.
       let cleanOnly = await runEvaluateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         path: 'valid-card.gts',
@@ -275,7 +275,7 @@ test.describe('runEvaluateInMemory e2e', () => {
 
       // Evaluate only the broken file — should fail and mention only that file.
       let brokenOnly = await runEvaluateInMemory({
-        targetRealmUrl: realmUrl,
+        targetRealm: realmUrl,
         realmServerUrl,
         client,
         path: 'broken-module.gts',
@@ -313,7 +313,7 @@ test.describe('runEvaluateInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: stubClient,
       path: 'Spec/sticky-note.json',
@@ -338,7 +338,7 @@ test.describe('runEvaluateInMemory e2e', () => {
     } as unknown as BoxelCLIClient;
 
     let result = await runEvaluateInMemory({
-      targetRealmUrl: 'http://localhost:1/',
+      targetRealm: 'http://localhost:1/',
       realmServerUrl: 'http://localhost:1/',
       client: stubClient,
       path: 'hello.test.gts',

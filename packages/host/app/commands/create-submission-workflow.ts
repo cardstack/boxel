@@ -1,7 +1,9 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, rri } from '@cardstack/runtime-common';
+import { isCardInstance, rri, toBranchName } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import type { Listing } from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -15,7 +17,6 @@ import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
@@ -37,7 +38,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   requireInputFields = ['realm', 'listingId'];
 
   get submissionsRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/submissions/'),
     );
   }
@@ -59,10 +60,8 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
     let submittedBy = this.matrixService.userId ?? undefined;
 
     // Save the workflow card in the user's realm (where the listing lives)
-    let workflowRealm =
-      this.realm.realmOfURL(new URL(listingId))?.href ?? realm;
+    let workflowRealm = this.realm.realmOf(rri(listingId)) ?? realm;
 
-    // Step 1: Create the SubmissionWorkflowCard with listing linked
     let catalogRealm = this.catalogRealm;
     if (!catalogRealm) {
       throw new Error(
@@ -70,56 +69,9 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
       );
     }
 
-    let workflowDoc: LooseSingleCardDocument = {
-      data: {
-        type: 'card',
-        attributes: {
-          title: `Submit ${listingName ?? 'Listing'}`,
-          submittedBy: submittedBy ?? null,
-          catalogRealmUrl: catalogRealm,
-        },
-        relationships: {
-          listing: {
-            links: {
-              self: listingId,
-            },
-          },
-          prCard: {
-            links: {
-              self: null,
-            },
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: rri(
-              `${catalogRealm}submission-workflow-card/submission-workflow-card`,
-            ),
-            name: 'SubmissionWorkflowCard',
-          },
-        },
-      },
-    };
-
-    let workflowCard = await this.store.add(workflowDoc, {
-      realm: workflowRealm,
-    });
-
-    if (!isCardInstance(workflowCard)) {
-      throw new Error('Failed to create submission workflow card');
-    }
-
-    let workflowCardId = workflowCard.id;
-    if (!workflowCardId) {
-      throw new Error('Submission workflow card was created but has no ID');
-    }
-
-    // Step 2: Open the workflow card in interact mode immediately
-    await new OpenInInteractModeCommand(this.commandContext).execute({
-      cardId: workflowCardId,
-    });
-
-    // Step 3: Create Matrix room and send bot trigger for async PR creation
+    // Create the Matrix room first so its id can be persisted on the workflow
+    // card — the retry flow reads roomId off the card to re-emit the bot
+    // trigger event without losing the original conversation.
     let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
     let createRoomResult = await useAiAssistantCommand.execute({
       roomId: 'new',
@@ -128,10 +80,72 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
     });
     let roomId = createRoomResult.roomId;
 
-    let submissionBotId = this.matrixService.submissionBotUserId;
-    if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
-      await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
+    // Branch name is generated once and persisted on the workflow card so
+    // retries reuse the same GitHub branch.
+    let branchName = toBranchName(listingName ?? 'UntitledListing');
+
+    // Cleanup window covers everything between "room exists" and "workflow
+    // card persisted with roomId baked in". Once the card exists, leaving
+    // the room would orphan the card's roomId reference, so cleanup stops.
+    let workflowCardId: string;
+    try {
+      let submissionBotId = this.matrixService.submissionBotUserId;
+      if (!(await this.matrixService.isUserInRoom(roomId, submissionBotId))) {
+        await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
+      }
+
+      let workflowDoc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: {
+            title: `Submit ${listingName ?? 'Listing'}`,
+            submittedBy: submittedBy ?? null,
+            catalogRealmUrl: catalogRealm,
+            roomId,
+            branchName,
+          },
+          relationships: {
+            listing: { links: { self: listingId } },
+            prCard: { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri(
+                `${catalogRealm}submission-workflow-card/submission-workflow-card`,
+              ),
+              name: 'SubmissionWorkflowCard',
+            },
+          },
+        },
+      };
+
+      let workflowCard = await this.store.add(workflowDoc, {
+        realm: workflowRealm,
+      });
+
+      if (!isCardInstance(workflowCard)) {
+        throw new Error('Failed to create submission workflow card');
+      }
+      if (!workflowCard.id) {
+        throw new Error('Submission workflow card was created but has no ID');
+      }
+      workflowCardId = workflowCard.id;
+    } catch (err) {
+      try {
+        await this.matrixService.leave(roomId);
+        await this.matrixService.forget(roomId);
+      } catch (cleanupError) {
+        console.warn(
+          `create-submission-workflow: failed to clean up orphaned room ${roomId}`,
+          cleanupError,
+        );
+      }
+      throw err;
     }
+
+    await new OpenInInteractModeCommand(this.commandContext).execute({
+      cardId: workflowCardId,
+    });
 
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
@@ -142,6 +156,8 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         realm,
         listingId,
         workflowCardUrl: workflowCardId,
+        workflowCardRealm: workflowRealm,
+        branchName,
         ...(listingName ? { listingName } : {}),
         ...(listingSummary ? { listingSummary } : {}),
         ...(submittedBy ? { submittedBy } : {}),
@@ -150,7 +166,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   }
 
   private get catalogRealm(): string | undefined {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
+    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
       realm.endsWith('/catalog/'),
     );
   }

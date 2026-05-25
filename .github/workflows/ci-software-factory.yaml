@@ -19,6 +19,11 @@ on:
       - "packages/software-factory/**"
       - "package.json"
       - "pnpm-lock.yaml"
+      # CI boot path: see comment on the equivalent block in ci.yaml.
+      - ".mise.toml"
+      - ".github/actions/**"
+      - "mise-tasks/**"
+      - "packages/observability/scripts/**"
   workflow_dispatch:
 
 concurrency:
@@ -75,10 +80,17 @@ jobs:
         if: ${{ matrix.shard.index == 1 }}
         run: pnpm test:node
         working-directory: packages/software-factory
-      - name: Serve test assets (icons + host dist)
+      - name: Serve boxel-icons
         run: |
-          mise run ci:serve-test-assets &
-          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
+          # SF Playwright tests use the realm-test-harness, which spins up
+          # vite / realm-server on its own dynamic ports — it is hermetic
+          # by design (see packages/software-factory/docs/testing-strategy.md).
+          # The only external service it expects is the icons server on
+          # ICONS_URL (defaults to http://localhost:4206/). Do not start
+          # host-dist on port 4200 here — it collides with the harness
+          # and masks regressions in the harness's host bring-up code.
+          mise run services:icons &
+          timeout 60 bash -c 'until curl -sf http://localhost:4206 > /dev/null; do sleep 1; done'
       - name: Run Playwright tests
         run: pnpm test:playwright:shard ${{ matrix.shard.index }}/${{ matrix.shard.total }}
         working-directory: packages/software-factory

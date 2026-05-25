@@ -51,6 +51,11 @@ class RealmSyncer extends RealmSyncBase {
   remoteDeletedFiles: string[] = [];
   localDeletedFiles: string[] = [];
   skippedConflicts: string[] = [];
+  // Top-level message from a failed /_atomic batch (e.g. "Atomic upload
+  // failed: 500 Internal Server Error"). Surfaced in `SyncResult.error`
+  // so callers don't have to scrape stderr to learn why the batch
+  // failed.
+  uploadFatalMessage?: string;
 
   constructor(
     private syncOptions: BiSyncOptions,
@@ -314,14 +319,33 @@ class RealmSyncer extends RealmSyncBase {
       }
 
       const result = await this.uploadFilesAtomic(filesToUpload, addPaths);
+      // Record every file the server actually wrote, even when other
+      // files in the same batch failed — see push.ts for the symmetric
+      // reasoning.
+      this.pushedFiles.push(...result.succeeded);
       if (result.error) {
         this.hasError = true;
-        console.error(result.error.message);
+        // Fold the per-file titles into the surfaced message so
+        // SyncResult.error carries the server's JSON:API error
+        // payload (e.g. "Write Error"), not just the HTTP status
+        // line. Distinct titles only — repeated identical titles
+        // (the common case for a top-level write failure) would
+        // otherwise produce noisy duplicates. The summary line is
+        // re-echoed by registerSyncCommand at the end of the run
+        // via `Error: ${result.error}`, so we no longer also emit
+        // the standalone status line inline — that would duplicate
+        // it in CLI output. The per-file loop stays because it
+        // carries path-level detail the summary aggregates away.
+        let titles = Array.from(
+          new Set(result.error.perFile.map((e) => e.title)),
+        );
+        this.uploadFatalMessage =
+          titles.length > 0
+            ? `${result.error.message} (${titles.join('; ')})`
+            : result.error.message;
         for (const entry of result.error.perFile) {
           console.error(`  ${entry.path}: ${entry.title}`);
         }
-      } else {
-        this.pushedFiles.push(...result.succeeded);
       }
     }
 
@@ -371,8 +395,12 @@ class RealmSyncer extends RealmSyncBase {
       );
     }
 
-    // Phase 6: Update manifest
-    if (!this.options.dryRun && !this.hasError) {
+    // Phase 6: Update manifest. Persist even on partial failure — we
+    // only record hashes for files the server actually wrote
+    // (pushedFiles + pulledFiles), so the manifest stays consistent
+    // with the realm and the next sync won't re-attempt successful
+    // files.
+    if (!this.options.dryRun) {
       // Build updated hashes from prior manifest + current local files + executed ops.
       // Start with the previous manifest so that files deleted locally but not
       // propagated (no --delete) retain their entries and aren't re-pulled next sync.
@@ -489,6 +517,12 @@ export interface SyncCommandOptions {
   preferNewest?: boolean;
   delete?: boolean;
   dryRun?: boolean;
+  /**
+   * Append `?waitForIndex=true` to the `_atomic` upload so the
+   * realm-server returns only after the indexer has processed the
+   * batch. See `SyncOptions.waitForIndex` for the rationale.
+   */
+  waitForIndex?: boolean;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -514,8 +548,8 @@ export interface SyncResult {
   error?: string;
 }
 
-export function registerSyncCommand(realm: Command): void {
-  realm
+export function registerSyncCommand(realm: Command): Command {
+  const syncCmd = realm
     .command('sync')
     .description(
       'Bidirectional sync between a local directory and a Boxel realm',
@@ -572,6 +606,7 @@ export function registerSyncCommand(realm: Command): void {
         console.log('Sync completed successfully');
       },
     );
+  return syncCmd;
 }
 
 /**
@@ -629,6 +664,7 @@ export async function sync(
         preferNewest: options.preferNewest,
         deleteSync: options.delete,
         dryRun: options.dryRun,
+        waitForIndex: options.waitForIndex,
       },
       authenticator,
     );
@@ -665,7 +701,11 @@ function buildSyncErrorMessage(syncer: RealmSyncer): string {
     `${syncer.skippedConflicts.length} conflicts skipped`,
   ].join(', ');
 
-  return `Sync completed with errors. ${summary}.`;
+  let base = `Sync completed with errors. ${summary}.`;
+  if (syncer.uploadFatalMessage) {
+    return `${base} ${syncer.uploadFatalMessage}`;
+  }
+  return base;
 }
 function emptyResult(partial: Pick<SyncResult, 'error'>): SyncResult {
   return {

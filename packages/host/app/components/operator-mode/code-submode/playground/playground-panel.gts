@@ -18,7 +18,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, toMenuItems } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, or, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import { Folder, IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -26,9 +26,13 @@ import {
   cardTypeDisplayName,
   getMenuItems,
   isSpecCard,
+  rri,
   type Permissions,
   PermissionsContextName,
   type RealmIdentifier,
+  cardDefFormats,
+  fieldDefFormats,
+  fileDefFormats,
 } from '@cardstack/runtime-common';
 
 import {
@@ -147,14 +151,29 @@ export default class PlaygroundPanel extends Component<Signature> {
     return moduleId;
   });
 
-  private fieldFormats: Format[] = [
-    'embedded',
-    'fitted',
-    'atom',
-    'edit',
-    'markdown',
-  ];
-  private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
+  private get availableFormats(): Format[] | undefined {
+    if (this.args.isFileDef) {
+      return fileDefFormats;
+    }
+    if (this.args.isFieldDef) {
+      return fieldDefFormats;
+    }
+    const ctor = this.card?.constructor as typeof CardDef | undefined;
+    if (!ctor) return undefined;
+    const cardAvailableFormats: Format[] = [];
+    for (const f of cardDefFormats) {
+      cardAvailableFormats.push(f);
+      /* Insert 'form' (toggle standard view) right after 'edit' whenever
+     the card defines its own custom edit template — even if that
+     custom edit is the SAME component as isolated (e.g. Polymorph).
+     The trigger is `hasCustomEditTemplate` (= edit !== CardDef.edit),
+     not whether edit === isolated. If no custom edit, omit form. */
+      if (f === 'edit' && ctor.hasCustomEditTemplate) {
+        cardAvailableFormats.push('form');
+      }
+    }
+    return cardAvailableFormats;
+  }
   #creationError = false;
   #currentModuleId: string | undefined;
 
@@ -341,7 +360,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.fileSearchResults = this.getCards(
       this,
       () => this.fileMetaQuery,
-      () => this.realmServer.availableRealmURLs,
+      () => this.realmServer.availableRealmIdentifiers,
       { isLive: true },
     );
   };
@@ -432,8 +451,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      let cardURL = new URL(selectedCardId);
-      return this.realm.realmOfURL(cardURL)?.href;
+      return this.realm.realmOf(rri(selectedCardId));
     } catch {
       return undefined;
     }
@@ -652,6 +670,19 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
   }
 
+  // 'form' is a synthetic chooser option for "auto-generated standard
+  // view" — same mechanism as interact mode's "Toggle Standard View".
+  // The renderer doesn't know about 'form', so we render it as 'edit'
+  // and pin @codeRef to baseCardRef, which makes getComponent fall back
+  // to CardDef's auto-generated template instead of the subclass's
+  // custom edit template. Chooser-facing logic still uses `this.format`.
+  private get effectiveFormat(): Format {
+    return this.format === 'form' ? 'edit' : this.format;
+  }
+  private get effectiveCodeRef(): ResolvedCodeRef | undefined {
+    return this.format === 'form' ? baseCardRef : undefined;
+  }
+
   private persistSelections = (
     selectedCardId: string,
     selectedFormat = this.format,
@@ -672,7 +703,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
     this.playgroundPanelService.persistSelections(
       this.moduleId,
-      trimJsonExtension(selectedCardId),
+      rri(trimJsonExtension(selectedCardId)),
       selectedFormat,
       index, // `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       // based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
@@ -966,7 +997,7 @@ export default class PlaygroundPanel extends Component<Signature> {
             <PrerenderedCardSearch
               @query={{this.expandedQuery}}
               @format='fitted'
-              @realms={{this.realmServer.availableRealmURLs}}
+              @realms={{this.realmServer.availableRealmIdentifiers}}
             >
               <:response as |maybeCards|>
                 {{! TODO: remove side-effects for instance chooser in CS-8746 }}
@@ -1066,7 +1097,8 @@ export default class PlaygroundPanel extends Component<Signature> {
                   {{/if}}
                   <PlaygroundPreview
                     @card={{card}}
-                    @format={{this.format}}
+                    @format={{this.effectiveFormat}}
+                    @codeRef={{this.effectiveCodeRef}}
                     @realmInfo={{this.realmInfo}}
                     @contextMenuItems={{unless
                       @isFileDef
@@ -1076,8 +1108,11 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @isFileDef
                       (if this.setEditMode (fn this.setFormat 'edit'))
                     }}
+                    {{! Form is edit-with-base-template — treat it as
+                        editing for header (green bar + X button to
+                        return to default format). }}
                     @onFinishEditing={{if
-                      (eq this.format 'edit')
+                      (or (eq this.format 'edit') (eq this.format 'form'))
                       (fn this.setFormat this.defaultFormat)
                     }}
                     @isFieldDef={{@isFieldDef}}
@@ -1086,17 +1121,16 @@ export default class PlaygroundPanel extends Component<Signature> {
                 </div>
                 <section class='instance-chooser-container'>
                   <InstanceChooser />
-                  <FormatChooser
-                    class='format-chooser'
-                    @formats={{if
-                      @isFileDef
-                      this.fileDefFormats
-                      (if @isFieldDef this.fieldFormats)
-                    }}
-                    @format={{this.format}}
-                    @setFormat={{this.setFormat}}
-                    data-test-playground-format-chooser
-                  />
+                  <div
+                    class='format-chooser-container pill-format-chooser-wrap'
+                  >
+                    <FormatChooser
+                      @formats={{this.availableFormats}}
+                      @format={{this.format}}
+                      @setFormat={{this.setFormat}}
+                      data-test-playground-format-chooser
+                    />
+                  </div>
                 </section>
               {{else if this.createNewIsRunning}}
                 <div class='loading'>
@@ -1105,7 +1139,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               {{else if this.maybeGenerateFieldSpec}}
                 <SpecSearch
                   @query={{this.specQuery}}
-                  @realms={{this.realmServer.availableRealmURLs}}
+                  @realms={{this.realmServer.availableRealmIdentifiers}}
                   @createNewCard={{this.createNew}}
                 />
               {{else if @isFileDef}}
@@ -1168,9 +1202,19 @@ export default class PlaygroundPanel extends Component<Signature> {
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
       }
-      .format-chooser {
+      .format-chooser-container {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
+      }
+      /* Centers the pill chooser inside the existing dark format-
+         chooser bar — keeps the rounded box / instance chooser
+         layout above unchanged, only the picker swaps. */
+      .pill-format-chooser-wrap {
+        background-color: var(--boxel-dark);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 0;
       }
       .error-container {
         flex-grow: 1;

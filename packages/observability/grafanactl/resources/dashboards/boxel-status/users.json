@@ -1,0 +1,1024 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxelusers0001"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": true,
+        "keepTime": true,
+        "tags": [
+          "forensics"
+        ],
+        "title": "Logs",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "entity:realm"
+        ],
+        "title": "Realms",
+        "type": "dashboards"
+      }
+    ],
+    "panels": [
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Account creation timestamp from the boxel users table.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            },
+            "unit": "dateTimeAsIso"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 0
+        },
+        "id": 1,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT created_at FROM users WHERE matrix_user_id = ${matrix_user_id:sqlstring} LIMIT 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Account Created",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Number of realms this user has at least one permission on.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 0
+        },
+        "id": 2,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*) AS realms FROM realm_user_permissions WHERE username = ${matrix_user_id:sqlstring};",
+            "refId": "A"
+          }
+        ],
+        "title": "Realms Accessible",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Stripe customer ID for billing \u2014 '\u2014' if none.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 0
+        },
+        "id": 3,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "auto",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COALESCE(stripe_customer_id, '\u2014') AS stripe_customer FROM users WHERE matrix_user_id = ${matrix_user_id:sqlstring} LIMIT 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Stripe Customer",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator actions: grant extra credit to the selected user. Live balance + last grant are fetched from credits_ledger every refresh; the custom-amount button disables when the entered amount is non-positive. Each click POSTs with `Authorization: Bearer ${grafana_secret}` (substituted from SSM at apply time, CS-10929).",
+        "fieldConfig": {
+          "defaults": {},
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "id": 4,
+        "options": {
+          "buttonGroup": {
+            "orientation": "center",
+            "size": "md"
+          },
+          "confirmModal": {
+            "body": "Please confirm the action.",
+            "cancel": "Cancel",
+            "columns": {
+              "include": [
+                "name",
+                "newValue"
+              ],
+              "name": "Field",
+              "newValue": "Value",
+              "oldValue": "Previous"
+            },
+            "confirm": "Confirm",
+            "elementDisplayMode": "modified",
+            "title": "Confirm operator action"
+          },
+          "elements": [
+            {
+              "id": "user_id",
+              "type": "disabled",
+              "title": "User",
+              "tooltip": "Set via the \"User ID\" variable picker above.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "user_id",
+              "queryField": {
+                "refId": "A",
+                "value": "user_id"
+              }
+            },
+            {
+              "id": "remaining_plan_allowance",
+              "type": "disabled",
+              "title": "Remaining plan allowance",
+              "tooltip": "Plan-allowance credits left in the active subscription cycle (plan_allowance + plan_allowance_used, summed). Excludes extra credit.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "remaining_plan_allowance",
+              "queryField": {
+                "refId": "A",
+                "value": "remaining_plan_allowance"
+              }
+            },
+            {
+              "id": "remaining_extra_credit",
+              "type": "disabled",
+              "title": "Remaining extra credit",
+              "tooltip": "Extra credit currently available (extra_credit + extra_credit_used, summed across all time).",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "remaining_extra_credit",
+              "queryField": {
+                "refId": "A",
+                "value": "remaining_extra_credit"
+              }
+            },
+            {
+              "id": "last_extra_credit_grant",
+              "type": "disabled",
+              "title": "Last extra-credit grant",
+              "tooltip": "Most recent extra_credit row in credits_ledger for this user.",
+              "labelWidth": 22,
+              "section": "current",
+              "fieldName": "last_extra_credit_grant",
+              "queryField": {
+                "refId": "A",
+                "value": "last_extra_credit_grant"
+              }
+            },
+            {
+              "id": "custom_amount",
+              "type": "number",
+              "title": "Custom amount",
+              "tooltip": "Used by the \"Add custom amount\" button below. Disabled while \u2264 0.",
+              "labelWidth": 22,
+              "min": 1,
+              "max": 1000000,
+              "step": 1,
+              "value": 5000,
+              "section": "actions"
+            },
+            {
+              "id": "btn_add_1k",
+              "type": "button",
+              "title": "Add 1,000 credits",
+              "buttonLabel": "+1,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=1000.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 1,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '1000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+1,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            },
+            {
+              "id": "btn_add_10k",
+              "type": "button",
+              "title": "Add 10,000 credits",
+              "buttonLabel": "+10,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=10000.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "primary",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 10,000 credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '10000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+10,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            },
+            {
+              "id": "btn_add_100k",
+              "type": "button",
+              "title": "Add 100,000 credits",
+              "buttonLabel": "+100,000",
+              "tooltip": "POST /_grafana-add-credit?user=${matrix_user_id}&credit=100000. Largest preset \u2014 confirm before clicking.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "destructive",
+              "value": "",
+              "customCode": "if (!window.confirm('Add 100,000 credits to ' + ${matrix_user_id:doublequote} + '?\\n\\nThis is the largest preset \u2014 make sure this is intentional.')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: '100000' });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+100,000 credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            },
+            {
+              "id": "btn_add_custom",
+              "type": "button",
+              "title": "Add custom amount",
+              "buttonLabel": "Add custom amount",
+              "tooltip": "POST /_grafana-add-credit with the value of \"Custom amount\". Disabled while the amount is \u2264 0.",
+              "labelWidth": 22,
+              "section": "actions",
+              "show": "form",
+              "size": "md",
+              "variant": "secondary",
+              "value": "",
+              "disableIf": "return Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0) <= 0;",
+              "customCode": "const amount = Number((context.panel.elements.find(function(e){return e.id==='custom_amount';})||{}).value || 0);\nif (amount <= 0) {\n  context.grafana.notifyWarning(['Invalid amount', 'Enter a positive credit amount before clicking.']);\n  return;\n}\nif (!window.confirm('Add ' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '?')) { return; }\nconst params = new URLSearchParams({ user: ${matrix_user_id:doublequote}, credit: String(amount) });\n(async () => {\ntry {\n  const r = await fetch(${realm_server:doublequote} + '_grafana-add-credit?' + params.toString(), { method: 'POST', headers: { 'Authorization': 'Bearer ' + ${grafana_secret:doublequote} } });\n  if (r.ok) {\n    context.grafana.notifySuccess(['Credit added', '+' + amount.toLocaleString() + ' credits to ' + ${matrix_user_id:doublequote} + '']);\n    if (typeof context.grafana.refresh === 'function') { context.grafana.refresh(); }\n  } else {\n    const txt = await r.text();\n    context.grafana.notifyError(['Add credit failed', 'HTTP ' + r.status + ': ' + txt]);\n  }\n} catch (err) {\n  context.grafana.notifyError(['Add credit failed', String(err)]);\n}\n\n})().catch(function (err) { console.error('operator action handler error:', err); });"
+            }
+          ],
+          "initial": {
+            "code": "",
+            "contentType": "application/json",
+            "datasource": "cef5v5sl9k7i8f",
+            "getPayload": "return {};",
+            "highlight": false,
+            "method": "datasource",
+            "payload": {}
+          },
+          "layout": {
+            "orientation": "horizontal",
+            "padding": 10,
+            "sectionVariant": "default",
+            "sections": [
+              {
+                "id": "current",
+                "name": "Current state"
+              },
+              {
+                "id": "actions",
+                "name": "Grant credit"
+              }
+            ],
+            "variant": "split"
+          },
+          "reset": {
+            "icon": "process",
+            "text": "Refresh",
+            "variant": "hidden"
+          },
+          "resetAction": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "mode": "initial",
+            "payload": {}
+          },
+          "saveDefault": {
+            "icon": "save",
+            "text": "Save Default",
+            "variant": "hidden"
+          },
+          "submit": {
+            "icon": "cloud-upload",
+            "text": "Submit",
+            "variant": "hidden"
+          },
+          "sync": false,
+          "update": {
+            "code": "",
+            "confirm": false,
+            "contentType": "application/json",
+            "getPayload": "return {};",
+            "method": "-",
+            "payload": {},
+            "payloadMode": "all"
+          },
+          "updateEnabled": "disabled"
+        },
+        "pluginVersion": "6.2.0",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "WITH balance AS (\n  SELECT\n    SUM(CASE WHEN c.credit_type = 'plan_allowance' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) +\n    SUM(CASE WHEN c.credit_type = 'plan_allowance_used' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) AS remaining_plan_allowance,\n    SUM(CASE WHEN c.credit_type = 'extra_credit' THEN c.credit_amount ELSE 0 END) +\n    SUM(CASE WHEN c.credit_type = 'extra_credit_used' THEN c.credit_amount ELSE 0 END) AS remaining_extra_credit\n  FROM users u\n  LEFT JOIN credits_ledger c ON c.user_id = u.id\n  LEFT JOIN subscription_cycles sc ON sc.id = c.subscription_cycle_id\n  LEFT JOIN subscriptions s ON s.id = sc.subscription_id\n  WHERE u.matrix_user_id = ${matrix_user_id:sqlstring}\n),\nlast_grant AS (\n  SELECT c.credit_amount, c.created_at\n    FROM users u\n    JOIN credits_ledger c ON c.user_id = u.id\n   WHERE u.matrix_user_id = ${matrix_user_id:sqlstring}\n     AND c.credit_type = 'extra_credit'\n   ORDER BY c.created_at DESC\n   LIMIT 1\n)\nSELECT\n  ${matrix_user_id:sqlstring} AS user_id,\n  COALESCE((SELECT remaining_plan_allowance FROM balance), 0) AS remaining_plan_allowance,\n  COALESCE((SELECT remaining_extra_credit FROM balance), 0) AS remaining_extra_credit,\n  COALESCE(\n    (SELECT '+' || credit_amount::TEXT || ' credits at ' || TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || ' UTC' FROM last_grant),\n    'never'\n  ) AS last_extra_credit_grant;",
+            "refId": "A"
+          }
+        ],
+        "title": "Add Extra Credit to ${matrix_user_id}",
+        "type": "volkovlabs-form-panel"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Credit ledger summary for this user.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "auto",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "inspect": false
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "yellow"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "matrix_user_id"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "User ID"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_plan_allowance"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Plan Allowance"
+                },
+                {
+                  "id": "color"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_plan_allowance_used"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Plan Allowance Used"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "remaining_plan_allowance"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Remaining Plan Allowance"
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_extra_credit"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Extra Credit"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "total_extra_credit_used"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Extra Credit Used"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "remaining_extra_credit"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Remaining Extra Credit"
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-text"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 18
+        },
+        "id": 5,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": []
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n    u.matrix_user_id,\n    SUM(CASE WHEN c.credit_type = 'plan_allowance' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) as total_plan_allowance,\n    ABS(SUM(CASE WHEN c.credit_type = 'plan_allowance_used' AND s.status = 'active' THEN c.credit_amount ELSE 0 END)) as total_plan_allowance_used,\n    SUM(CASE WHEN c.credit_type = 'plan_allowance' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) + \n    SUM(CASE WHEN c.credit_type = 'plan_allowance_used' AND s.status = 'active' THEN c.credit_amount ELSE 0 END) as remaining_plan_allowance,\n    SUM(CASE WHEN c.credit_type = 'extra_credit' THEN c.credit_amount ELSE 0 END) as total_extra_credit,\n    ABS(SUM(CASE WHEN c.credit_type = 'extra_credit_used' THEN c.credit_amount ELSE 0 END)) as total_extra_credit_used,\n    SUM(CASE WHEN c.credit_type = 'extra_credit' THEN c.credit_amount ELSE 0 END) + \n    SUM(CASE WHEN c.credit_type = 'extra_credit_used' THEN c.credit_amount ELSE 0 END) as remaining_extra_credit\nFROM users u\nLEFT JOIN credits_ledger c ON c.user_id = u.id\nLEFT JOIN subscription_cycles sc ON sc.id = c.subscription_cycle_id\nLEFT JOIN subscriptions s ON s.id = sc.subscription_id\nWHERE u.matrix_user_id = ${matrix_user_id:sqlstring}\n    AND (c.credit_type IN ('plan_allowance', 'plan_allowance_used', 'extra_credit', 'extra_credit_used') OR c.credit_type IS NULL)\nGROUP BY u.matrix_user_id;",
+            "refId": "A"
+          }
+        ],
+        "title": "Boxel Credits",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Operator action: grant the selected permission level to this user on the chosen realm. POSTs to the realm-server with Authorization: Bearer.",
+        "fieldConfig": {
+          "defaults": {
+            "actions": [
+              {
+                "type": "fetch",
+                "title": "Grant ${permission_label} to ${matrix_user_id} on ${grant_realm_url}",
+                "fetch": {
+                  "method": "POST",
+                  "url": "${realm_server}_grafana-upsert-realm-user-permission",
+                  "queryParams": [
+                    [
+                      "realm",
+                      "${grant_realm_url}"
+                    ],
+                    [
+                      "user",
+                      "${matrix_user_id}"
+                    ],
+                    [
+                      "read",
+                      "${read_flag}"
+                    ],
+                    [
+                      "write",
+                      "${write_flag}"
+                    ]
+                  ],
+                  "headers": [
+                    [
+                      "Authorization",
+                      "Bearer ${grafana_secret}"
+                    ]
+                  ],
+                  "body": ""
+                },
+                "confirmation": "Grant ${permission_label} to ${matrix_user_id} on ${grant_realm_url}?",
+                "oneClick": false
+              }
+            ],
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [
+              {
+                "options": {
+                  "from": 0,
+                  "result": {
+                    "index": 0,
+                    "text": "Grant"
+                  },
+                  "to": 9999999999999
+                },
+                "type": "range"
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 26
+        },
+        "id": 6,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "name"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT 1 AS click;",
+            "refId": "A"
+          }
+        ],
+        "title": "Grant Permission",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Realms this user has access to. Set the Realm and Permission Level above, then click Grant Permission to add or upgrade access.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 150
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_url"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Realm"
+                },
+                {
+                  "id": "custom.minWidth",
+                  "value": 320
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "permission"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Permission"
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "realm_owner"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Realm Owner"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "id": 7,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Realm Owner"
+            },
+            {
+              "desc": true,
+              "displayName": "write"
+            },
+            {
+              "desc": true,
+              "displayName": "read"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT \n  realm_url,\n  read,\n  write,\n  realm_owner,\n  CASE\n    WHEN realm_owner THEN 'owner'\n    WHEN write THEN 'read/write'\n    WHEN read THEN 'read'\n    ELSE 'none'\n  END AS permission\nFROM realm_user_permissions\nWHERE username = ${matrix_user_id:sqlstring}\nORDER BY realm_owner DESC, write DESC, read DESC, realm_url ASC\nLIMIT 500;",
+            "refId": "A"
+          }
+        ],
+        "title": "Realms Accessible to ${matrix_user_id}",
+        "type": "table"
+      }
+    ],
+    "refresh": "30s",
+    "schemaVersion": 42,
+    "tags": [
+      "entity:user"
+    ],
+    "templating": {
+      "list": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "select matrix_user_id from users order by matrix_user_id",
+          "description": "User to inspect. Drill-throughs from other dashboards prefill this.",
+          "hide": 0,
+          "includeAll": false,
+          "label": "User",
+          "multi": false,
+          "name": "matrix_user_id",
+          "options": [],
+          "query": "select matrix_user_id from users order by matrix_user_id",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "description": "Realm to grant access on (used by the Grant Permission button).",
+          "hide": 0,
+          "includeAll": false,
+          "label": "Realm to grant access on",
+          "multi": false,
+          "name": "grant_realm_url",
+          "options": [],
+          "query": "SELECT REGEXP_REPLACE(url, '^https?://', '') AS __text, url AS __value FROM realm_registry WHERE kind IN ('bootstrap', 'source') ORDER BY 1;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": false,
+          "sort": 1,
+          "type": "query"
+        },
+        {
+          "current": {
+            "selected": true,
+            "text": "read",
+            "value": "read"
+          },
+          "hide": 0,
+          "includeAll": false,
+          "label": "Permission Level",
+          "multi": false,
+          "name": "permission_level",
+          "options": [],
+          "query": "read,read_write",
+          "skipUrlSync": false,
+          "type": "custom"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "permission_label",
+          "multi": false,
+          "name": "permission_label",
+          "options": [],
+          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'read/write' ELSE 'read' END AS permission_label;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT 'true' AS read_flag;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "read_flag",
+          "multi": false,
+          "name": "read_flag",
+          "options": [],
+          "query": "SELECT 'true' AS read_flag;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "cef5v5sl9k7i8f"
+          },
+          "definition": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
+          "hide": 2,
+          "includeAll": false,
+          "label": "write_flag",
+          "multi": false,
+          "name": "write_flag",
+          "options": [],
+          "query": "SELECT CASE WHEN '$permission_level' = 'read_write' THEN 'true' ELSE 'false' END AS write_flag;",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "sort": 0,
+          "type": "query"
+        },
+        {
+          "hide": 2,
+          "name": "realm_server",
+          "query": "__REALM_SERVER_URL__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "hide": 2,
+          "name": "grafana_secret",
+          "query": "REPLACE_AT_APPLY_TIME",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Users",
+    "weekStart": ""
+  }
+}

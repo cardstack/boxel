@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { module, test } from 'qunit';
 import { z, type ZodType } from 'zod';
 
@@ -6,6 +10,7 @@ import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import {
   ClaudeCodeFactoryAgent,
   buildSdkToolsFromFactoryTools,
+  buildWorkspaceScopedCanUseTool,
 } from '../src/factory-agent/claude-code';
 import type { AgentContext } from '../src/factory-agent';
 import {
@@ -44,7 +49,10 @@ function makeContext(): AgentContext {
     },
     knowledge: [],
     skills: [],
-    targetRealmUrl: 'https://realms.example.test/hassan/personal/',
+    targetRealm: 'https://realms.example.test/testuser/personal/',
+    // System-prompt rendering requires this — see requireDarkfactoryModuleUrl.
+    darkfactoryModuleUrl:
+      'https://realms.example.test/software-factory/darkfactory',
   };
 }
 
@@ -85,6 +93,122 @@ function emptyQueryIterator() {
 // ---------------------------------------------------------------------------
 
 module('factory-agent-claude-code', function () {
+  module('buildWorkspaceScopedCanUseTool', function () {
+    const workspaceDir = '/tmp/factory-workspace-scoping-test';
+    let canUseTool = buildWorkspaceScopedCanUseTool(workspaceDir);
+    let opts = {
+      signal: new AbortController().signal,
+      toolUseID: 'test-tool-use-id',
+    };
+
+    test('allows non-fs tools without inspecting input', async function (assert) {
+      let result = await canUseTool('Bash', { command: 'ls' }, opts);
+      assert.strictEqual(result.behavior, 'allow');
+    });
+
+    test('allows fs ops with realm-relative paths', async function (assert) {
+      for (let toolName of ['Read', 'Write', 'Edit', 'MultiEdit']) {
+        let result = await canUseTool(
+          toolName,
+          { file_path: 'sticky-note.gts' },
+          opts,
+        );
+        assert.strictEqual(
+          result.behavior,
+          'allow',
+          `${toolName} on a relative path is allowed`,
+        );
+      }
+    });
+
+    test('allows fs ops with absolute paths inside the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: `${workspaceDir}/StickyNote/note-1.json` },
+        opts,
+      );
+      assert.strictEqual(result.behavior, 'allow');
+    });
+
+    test('denies fs ops with absolute paths outside the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: '/Users/jurgen/code/boxel/elsewhere/sticky-note.gts' },
+        opts,
+      );
+      assert.strictEqual(
+        result.behavior,
+        'deny',
+        'absolute path outside workspace is denied',
+      );
+      if (result.behavior === 'deny') {
+        assert.true(
+          result.message.includes('outside the factory workspace'),
+          'deny message names the violation',
+        );
+      }
+    });
+
+    test('denies fs ops that traverse out of the workspace', async function (assert) {
+      let result = await canUseTool(
+        'Write',
+        { file_path: '../leaks-here.gts' },
+        opts,
+      );
+      assert.strictEqual(result.behavior, 'deny');
+    });
+
+    test('passes through input on allow so the SDK keeps the original args', async function (assert) {
+      let input = { file_path: 'sticky-note.gts' };
+      let result = await canUseTool('Write', input, opts);
+      assert.strictEqual(result.behavior, 'allow');
+      if (result.behavior === 'allow') {
+        assert.strictEqual(result.updatedInput, input);
+      }
+    });
+
+    test('allows absolute paths via the canonical (realpath) workspace location', async function (assert) {
+      // Reproduce the macOS /var → /private/var situation in a portable way:
+      // create a real directory and a symlink that points at it. If we
+      // construct the hook with the symlink path and the SDK reports a
+      // file_path through the canonical (realpath) location, the hook must
+      // not flag that as escaping the workspace.
+      let realDir = mkdtempSync(join(tmpdir(), 'factory-canon-real-'));
+      let symlinkDir = `${realDir}-link`;
+      symlinkSync(realDir, symlinkDir);
+      try {
+        let canonicalCanUseTool = buildWorkspaceScopedCanUseTool(symlinkDir);
+        let result = await canonicalCanUseTool(
+          'Write',
+          { file_path: `${realDir}/sticky-note.gts` },
+          opts,
+        );
+        assert.strictEqual(
+          result.behavior,
+          'allow',
+          'absolute path through the canonical location is recognized as inside the workspace',
+        );
+
+        // And going the other way: hook constructed via the canonical
+        // path, file_path expressed through the symlink form.
+        let canonicalCanUseTool2 = buildWorkspaceScopedCanUseTool(realDir);
+        let result2 = await canonicalCanUseTool2(
+          'Write',
+          { file_path: `${symlinkDir}/sticky-note.gts` },
+          opts,
+        );
+        assert.strictEqual(
+          result2.behavior,
+          'allow',
+          'absolute path through the symlink form is recognized as inside the canonical workspace',
+        );
+      } finally {
+        unlinkSync(symlinkDir);
+        rmSync(realDir, { recursive: true, force: true });
+      }
+    });
+  });
+
   module('buildSdkToolsFromFactoryTools', function () {
     test('each tool exposes a Zod schema (not JSON Schema) via inputSchema', function (assert) {
       let factoryTool = makeTool({
@@ -263,7 +387,7 @@ module('factory-agent-claude-code', function () {
     test('wires the factory MCP server into Options.mcpServers', async function (assert) {
       let capturedOptions: Options | undefined;
       let agent = new ClaudeCodeFactoryAgent(
-        {},
+        { workspaceDir: '/tmp/factory-workspace-test' },
         {
           promptLoader: stubPromptLoader,
           queryFn: ({ options }) => {
@@ -280,18 +404,193 @@ module('factory-agent-claude-code', function () {
       assert.ok(mcpServers, 'mcpServers is set');
       assert.true('factory' in mcpServers, 'factory MCP server registered');
 
-      // Built-in Claude Code tools must be disabled so the model only has
-      // the factory's custom tools — this guards against the control-plane
-      // boundary drifting.
-      assert.deepEqual(capturedOptions!.tools, []);
+      // Native Claude Code fs / shell tools are enabled so the model
+      // can read and write workspace files directly. Realm I/O still
+      // goes through the factory MCP tools.
+      assert.deepEqual(capturedOptions!.tools, [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
+      ]);
 
+      // CS-11033: native fs tools must NOT appear in allowedTools.
+      // The SDK auto-approves anything in allowedTools and skips
+      // canUseTool entirely. Keeping Write/Edit/etc out of this list
+      // is what causes the path-scoping hook to actually fire.
       assert.deepEqual(capturedOptions!.allowedTools, [
         'mcp__factory__signal_done',
       ]);
 
-      assert.strictEqual(capturedOptions!.permissionMode, 'bypassPermissions');
-      assert.true(capturedOptions!.allowDangerouslySkipPermissions);
+      assert.strictEqual(
+        capturedOptions!.cwd,
+        '/tmp/factory-workspace-test',
+        'cwd is set to the factory workspace so native fs tools resolve realm-relative paths',
+      );
+
+      // `default` (verified empirically — see scripts/canusetool-repro.ts)
+      // is the only permission mode where the SDK invokes canUseTool
+      // for tools outside allowedTools and honors the hook's
+      // allow/deny. `dontAsk` and `bypassPermissions` either skip the
+      // hook entirely or silently deny without consulting it.
+      assert.strictEqual(capturedOptions!.permissionMode, 'default');
+      assert.strictEqual(
+        typeof capturedOptions!.canUseTool,
+        'function',
+        'canUseTool is wired so native fs ops can be scoped to the workspace',
+      );
       assert.deepEqual(capturedOptions!.settingSources, []);
+    });
+
+    test('native fs tools are NOT auto-approved so canUseTool can gate them (CS-11033)', async function (assert) {
+      // Regression guard. The SDK skips canUseTool for any tool in
+      // allowedTools — verified empirically in scripts/canusetool-repro.ts.
+      // If a future change adds Read / Write / Edit / MultiEdit /
+      // NotebookEdit / NotebookRead to allowedTools (or switches
+      // permissionMode away from `default`), the workspace-scoping
+      // hook becomes dead code and the model can write to absolute
+      // paths outside the factory workspace again. Lock both
+      // conditions so that regression is caught at unit-test time.
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        { workspaceDir: '/tmp/factory-workspace-test' },
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [makeTool({ name: 'signal_done' })]);
+
+      let allowed = capturedOptions!.allowedTools ?? [];
+      for (let pathScopedTool of [
+        'Read',
+        'Write',
+        'Edit',
+        'MultiEdit',
+        'NotebookEdit',
+        'NotebookRead',
+      ]) {
+        assert.notOk(
+          allowed.includes(pathScopedTool),
+          `${pathScopedTool} must stay out of allowedTools so canUseTool fires for every call`,
+        );
+      }
+      assert.strictEqual(
+        capturedOptions!.permissionMode,
+        'default',
+        'permissionMode must be `default` — other modes either skip canUseTool or silently deny',
+      );
+      assert.strictEqual(
+        typeof capturedOptions!.canUseTool,
+        'function',
+        'canUseTool must be wired alongside the above two conditions',
+      );
+    });
+
+    test('filters out registry-sourced shadow tools from the MCP catalog', async function (assert) {
+      // The filter keeps `'registered'` tools (kebab-case shadows
+      // from the realm-api ToolRegistry) off the Claude MCP catalog.
+      // Verify both halves: registered shadows are filtered, core
+      // tools pass through.
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        { workspaceDir: '/tmp/factory-workspace-test' },
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [
+        makeTool({ name: 'signal_done' }),
+        makeTool({ name: 'run_tests' }),
+        // Registry-sourced (kebab-case) shadow tools must not leak
+        // into the Claude MCP catalog regardless of their plain name.
+        makeTool({ name: 'realm-read', source: 'registered' }),
+        makeTool({ name: 'search-realm', source: 'registered' }),
+        makeTool({ name: 'sample-registered-tool', source: 'registered' }),
+      ]);
+
+      let allowed = capturedOptions!.allowedTools ?? [];
+      for (let registered of [
+        'realm-read',
+        'search-realm',
+        'sample-registered-tool',
+      ]) {
+        assert.notOk(
+          allowed.includes(`mcp__factory__${registered}`),
+          `${registered} (registered) is not exposed on the Claude path`,
+        );
+      }
+      assert.true(
+        allowed.includes('mcp__factory__signal_done'),
+        'control-flow factory tools remain in the MCP catalog',
+      );
+      assert.true(
+        allowed.includes('mcp__factory__run_tests'),
+        'validators remain in the MCP catalog',
+      );
+    });
+
+    test('disables native fs entirely when no workspaceDir is configured', async function (assert) {
+      // Without a workspaceDir we have no cwd to scope against and the
+      // canUseTool hook can't compute "inside the workspace." Enabling
+      // native Read / Write / Bash in that state would let the model
+      // touch the host filesystem unrestricted, which is the regression
+      // this guard prevents. Verify that the agent falls back to
+      // MCP-only when workspaceDir is missing.
+      let capturedOptions: Options | undefined;
+      let agent = new ClaudeCodeFactoryAgent(
+        {},
+        {
+          promptLoader: stubPromptLoader,
+          queryFn: ({ options }) => {
+            capturedOptions = options;
+            return emptyQueryIterator() as never;
+          },
+        },
+      );
+
+      await agent.run(makeContext(), [makeTool({ name: 'signal_done' })]);
+
+      assert.strictEqual(
+        capturedOptions!.cwd,
+        undefined,
+        'no cwd is set when workspaceDir is missing',
+      );
+      assert.strictEqual(
+        capturedOptions!.canUseTool,
+        undefined,
+        'no path-scoping hook is wired when workspaceDir is missing',
+      );
+      assert.deepEqual(
+        capturedOptions!.tools,
+        [],
+        'native fs tools are disabled when workspaceDir is missing',
+      );
+      let allowed = capturedOptions!.allowedTools ?? [];
+      for (let nativeTool of [
+        'Read',
+        'Write',
+        'Edit',
+        'Bash',
+        'Glob',
+        'Grep',
+      ]) {
+        assert.notOk(
+          allowed.includes(nativeTool),
+          `${nativeTool} is not in allowedTools when workspaceDir is missing`,
+        );
+      }
     });
 
     test('DONE_SIGNAL from a tool handler ends the run with status=done', async function (assert) {

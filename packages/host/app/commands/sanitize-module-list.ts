@@ -1,13 +1,15 @@
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
-
-import { trimExecutableExtension } from '@cardstack/runtime-common';
+import {
+  isScopedCSSRequest,
+  rri,
+  trimExecutableExtension,
+} from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import CanReadRealmCommand from './can-read-realm';
-import GetRealmOfUrlCommand from './get-realm-of-url';
+import GetRealmOfResourceIdentifierCommand from './get-realm-of-resource-identifier';
 
 const GLOBAL_URL_STEMS = [
   'https://cardstack.com',
@@ -28,7 +30,7 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     return SanitizeModuleListInput;
   }
 
-  requireInputFields = ['moduleUrls'];
+  requireInputFields = ['moduleIdentifiers'];
 
   protected async run(
     input: BaseCommandModule.SanitizeModuleListInput,
@@ -36,8 +38,8 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
     // Normalize to extensionless URLs before deduplication so that e.g.
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
-    for (const m of input.moduleUrls) {
-      const normalized = trimExecutableExtension(new URL(m)).href;
+    for (const m of input.moduleIdentifiers) {
+      const normalized = trimExecutableExtension(rri(m));
       if (!seen.has(normalized)) {
         seen.set(normalized, m);
       }
@@ -56,23 +58,26 @@ export default class SanitizeModuleListCommand extends HostBaseCommand<
         }
 
         // Only allow modules that belong to a realm we can read
-        const { realmUrl } = await new GetRealmOfUrlCommand(
-          this.commandContext,
-        ).execute({ url: dep });
-        if (!realmUrl) {
+        const { realmIdentifier } =
+          await new GetRealmOfResourceIdentifierCommand(
+            this.commandContext,
+          ).execute({ resourceIdentifier: dep });
+        if (!realmIdentifier) {
           return null;
         }
         const { canRead } = await new CanReadRealmCommand(
           this.commandContext,
-        ).execute({ realmUrl });
+        ).execute({ realmIdentifier });
         return canRead ? dep : null;
       }),
     );
 
-    const moduleUrls = results.filter((dep): dep is string => dep !== null);
+    const moduleIdentifiers = results.filter(
+      (dep): dep is string => dep !== null,
+    );
 
     let commandModule = await this.loadCommandModule();
     const { SanitizeModuleListResult } = commandModule;
-    return new SanitizeModuleListResult({ moduleUrls });
+    return new SanitizeModuleListResult({ moduleIdentifiers });
   }
 }

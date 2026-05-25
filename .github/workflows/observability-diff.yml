@@ -28,6 +28,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    # No fork guard: this job needs no AWS credentials or write tokens,
+    # so it's safe on PRs from forks. It exists because ci-lint.yaml's
+    # `paths-ignore` skips the main lint workflow on observability-only
+    # PRs, so this is the dedicated lint coverage for the package
+    # (shellcheck + jq + prettier + manifest/secret regression checks).
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # `init` installs pnpm — required by lint.sh's prettier --check step.
+      - uses: ./.github/actions/init
+      - name: Lint
+        run: pnpm run lint
+        working-directory: packages/observability
+
   diff:
     name: Diff against staging
     runs-on: ubuntu-latest
@@ -42,10 +59,14 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      # Reuses the apply role from cardstack/infra#665. Permission is
-      # `ssm:GetParameter` on /staging/grafana/grafanactl_token only —
-      # which is what the diff workflow needs (read the token, then use
-      # it to pull dashboards/folders from staging Grafana).
+      # Reuses the apply role from cardstack/infra#665. Permissions are
+      # `ssm:GetParameter` on:
+      #   /staging/grafana/grafanactl_token        (pull-from-staging auth)
+      #   /staging/boxel-grafana/realm_server_url  (placeholder substitution)
+      # The apply role also grants /<env>/boxel/GRAFANA_SECRET, but diff
+      # doesn't read it — diff.sh redacts the secret on both sides before
+      # diffing rather than substituting the real value, so PR comment
+      # output can never carry the credential. See diff.sh for details.
       AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
       GRAFANACTL_VERSION: "0.1.10"
       DIFF_MARKER: "<!-- observability-diff -->"
@@ -54,6 +75,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need history reaching back to the merge-base with the PR's
+          # base branch so `diff.sh --only-changed-since=origin/<base>`
+          # can run `git diff --name-only origin/<base>...HEAD`. Default
+          # fetch-depth: 1 only gives HEAD; 0 = full history.
+          fetch-depth: 0
+
+      - name: Fetch PR base ref
+        # Ensure the PR base ref is available as `origin/<base>` so
+        # diff.sh's `git rev-parse --verify` and `git diff <base>...HEAD`
+        # both succeed. NOTE: no `--depth=1` here. A shallow fetch makes
+        # origin/<base> an orphan with no parent history; when main has
+        # advanced past the PR's actual merge base (any non-trivial PR
+        # in flight long enough for main to move), `git diff <base>...HEAD`
+        # then fails with "no merge base". Unbounded fetch is cheap
+        # against an already-full repo (`fetch-depth: 0` on checkout).
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git fetch --no-tags origin "${PR_BASE_REF}"
 
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
@@ -66,7 +106,19 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN from SSM
+      - name: Source diff-time secrets from SSM
+        # GRAFANA_TOKEN:    pull-from-staging auth.
+        # REALM_SERVER_URL: needed by diff.sh's __REALM_SERVER_URL__
+        #                   substitution (CS-10990); committed JSON
+        #                   carries the placeholder and apply.sh
+        #                   substitutes per-env, so diff.sh has to know
+        #                   the same per-env value to compare
+        #                   apples-to-apples.
+        #
+        # GRAFANA_SECRET is intentionally NOT fetched here — diff.sh
+        # redacts both sides of the diff for the `grafana_secret`
+        # constant template variable, so it never needs the real value
+        # and there's no risk of it appearing in the PR comment output.
         run: |
           GRAFANA_TOKEN="$(aws ssm get-parameter \
             --name /staging/grafana/grafanactl_token \
@@ -75,14 +127,38 @@ jobs:
             --output text)"
           echo "::add-mask::$GRAFANA_TOKEN"
           echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
+          REALM_SERVER_URL="$(aws ssm get-parameter \
+            --name /staging/boxel-grafana/realm_server_url \
+            --query 'Parameter.Value' \
+            --output text)"
+          echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
+
+      - name: Lint (with live-staging validate)
+        # Re-runs lint.sh here because GRAFANA_TOKEN is now available from
+        # SSM, so GRAFANACTL_VALIDATE_ENV=staging adds the "validate
+        # manifests against live staging Grafana" check that the lint job
+        # above can't do (it has no AWS access). Catches manifest issues
+        # before the diff step does an API pull.
+        # PRETTIER_SKIP avoids re-doing the prettier YAML check the lint
+        # job already ran (this job has no pnpm install — staying fast).
+        working-directory: packages/observability
+        env:
+          GRAFANACTL_VALIDATE_ENV: staging
+          PRETTIER_SKIP: "1"
+        run: ./scripts/lint.sh
 
       - name: Compute diff
         id: diff
         working-directory: packages/observability
+        env:
+          # Scope the diff to files THIS PR changes (vs total drift between
+          # staging and main, which can be large and unrelated to the PR).
+          # `pull_request.base.ref` is the target branch (typically `main`).
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -eo pipefail
           DIFF_FILE="$(mktemp)"
-          ./scripts/diff.sh --env staging > "$DIFF_FILE"
+          ./scripts/diff.sh --env staging --only-changed-since="origin/${PR_BASE_REF}" > "$DIFF_FILE"
           # Persist the diff path for the next step (raw stdout via $GITHUB_OUTPUT
           # has multi-line / size limits we want to handle in JS instead).
           echo "diff_file=$DIFF_FILE" >> "$GITHUB_OUTPUT"
@@ -93,10 +169,10 @@ jobs:
           echo "::endgroup::"
 
       - name: Post sticky PR comment
-        # Pinned to SHA (rather than @v7) because this step has
+        # Pinned to SHA (rather than @v9) because this step has
         # pull-requests: write and runs after assuming an AWS role —
         # supply-chain risk is non-negligible.
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DIFF_FILE: ${{ steps.diff.outputs.diff_file }}
         with:
@@ -111,47 +187,6 @@ jobs:
             // can include non-ASCII characters in titles/descriptions.
             const diffBytes = Buffer.byteLength(diff, 'utf8');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-
-            let body;
-            if (!diff.trim()) {
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                'No dashboard / folder changes detected against the staging Grafana.',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            } else if (diffBytes > maxBytes) {
-              // Truncate by bytes, not characters. Walk back from a
-              // character boundary so we don't slice mid-codepoint and
-              // produce invalid UTF-8.
-              const buf = Buffer.from(diff, 'utf8');
-              let cut = maxBytes;
-              while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
-              const truncated = buf.slice(0, cut).toString('utf8');
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
-                '',
-                '```diff',
-                truncated,
-                '```',
-              ].join('\n');
-            } else {
-              body = [
-                marker,
-                '## Observability diff (vs staging)',
-                '',
-                '```diff',
-                diff,
-                '```',
-                '',
-                `_(Run: ${runUrl})_`,
-              ].join('\n');
-            }
 
             // Find existing sticky comment. Paginate so we don't miss
             // the marker on PRs with >100 comments (would otherwise
@@ -168,6 +203,65 @@ jobs:
             const existing = comments.find(
               (c) => c.body && c.body.startsWith(marker)
             );
+
+            if (!diff.trim()) {
+              // No drift between the PR's committed state and live staging.
+              // Don't post a "nothing changed" comment — but if a prior push
+              // left a sticky behind (the PR used to touch dashboards and
+              // now doesn't), delete it so the PR's comment stream matches
+              // its current state.
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+                core.info(`Deleted stale sticky comment ${existing.id}`);
+              } else {
+                core.info('No diff vs staging — nothing to post.');
+              }
+              return;
+            }
+
+            let body;
+            if (diffBytes > maxBytes) {
+              // Truncate by bytes, not characters. Walk back from a
+              // character boundary so we don't slice mid-codepoint and
+              // produce invalid UTF-8.
+              const buf = Buffer.from(diff, 'utf8');
+              let cut = maxBytes;
+              while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
+              const truncated = buf.slice(0, cut).toString('utf8');
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                `Diff truncated (${diffBytes} bytes; limit ${maxBytes}). Full diff: ${runUrl}`,
+                '',
+                '<details><summary>Show diff</summary>',
+                '',
+                '```diff',
+                truncated,
+                '```',
+                '',
+                '</details>',
+              ].join('\n');
+            } else {
+              body = [
+                marker,
+                '## Observability diff (vs staging)',
+                '',
+                '<details><summary>Show diff</summary>',
+                '',
+                '```diff',
+                diff,
+                '```',
+                '',
+                '</details>',
+                '',
+                `_(Run: ${runUrl})_`,
+              ].join('\n');
+            }
 
             if (existing) {
               await github.rest.issues.updateComment({
