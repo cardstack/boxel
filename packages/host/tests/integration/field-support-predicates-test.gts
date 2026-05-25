@@ -507,6 +507,5 @@ module(
         'sentinel element remains in place after read',
       );
     });
-
   },
 );
