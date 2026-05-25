@@ -12,5 +12,6 @@ module.exports = async function (defaults) {
   });
   return compatBuild(app, buildOnce, {
     staticAppPaths: ['lib'],
+    useAddonAppBoot: false,
   });
 };
