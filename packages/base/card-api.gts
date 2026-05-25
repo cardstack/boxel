@@ -3415,12 +3415,12 @@ function lazilyLoadLink(
         : { type: 'link-error', reference, errorDoc };
       if (pluralArgs) {
         // Replace each matching NotLoadedValue slot in the WatchedArray with
-        // the sentinel in place. Mutating the array preserves its identity so
-        // the linksToMany getter — which left the NotLoadedValue sentinels in
-        // place to be swapped out — sees the new terminal sentinels via the
-        // same WatchedArray tracking. The plural getter's isNotLoadedValue
-        // guard skips these terminal sentinels, so they do not retrigger
-        // lazilyLoadLink.
+        // the sentinel in place. `value[index] = sentinel` trips the
+        // WatchedArray proxy, which schedules a single microtask that fires
+        // notifySubscribers + notifyCardTracking — same path the plural
+        // success branch above relies on. No explicit notify here, otherwise
+        // the failure path would double-notify relative to success and
+        // diverge in timing from the WatchedArray-scheduled microtask.
         let { value } = pluralArgs;
         for (let [index, item] of value.entries()) {
           if (!isNotLoadedValue(item)) {
@@ -3434,8 +3434,6 @@ function lazilyLoadLink(
             value[index] = sentinel;
           }
         }
-        notifyCardTracking(instance);
-        notifySubscribers(instance, field.name, value);
       } else {
         // Write the sentinel directly into the data bucket — going through
         // the setter would route through field.validate and the linksTo
