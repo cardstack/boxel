@@ -561,7 +561,7 @@ export function relationshipMeta(
   let related = peekAtField(instance, field.name) as CardDef;
   if (field.fieldType === 'linksToMany') {
     // this is the scenario where the linksToMany is a computed that consumes a link that is not loaded
-    if (isNotLoadedValue(related)) {
+    if (isNonPresentLink(related)) {
       return { type: 'not-loaded', reference: related.reference };
     }
     if (!Array.isArray(related)) {
@@ -570,7 +570,7 @@ export function relationshipMeta(
       );
     }
     return related.map((rel) => {
-      if (isNotLoadedValue(rel)) {
+      if (isNonPresentLink(rel)) {
         return { type: 'not-loaded', reference: rel.reference };
       } else {
         return { type: 'loaded', card: rel ?? null };
@@ -578,7 +578,7 @@ export function relationshipMeta(
     });
   }
 
-  if (isNotLoadedValue(related)) {
+  if (isNonPresentLink(related)) {
     return { type: 'not-loaded', reference: related.reference };
   } else {
     return { type: 'loaded', card: related ?? null };

@@ -163,6 +163,9 @@ import {
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
+  isLinkError,
+  isLinkNotFound,
+  isNonPresentLink,
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
@@ -172,6 +175,8 @@ import {
   setFieldDescription,
   setRealmContextOnField,
   type ComputePassSnapshot,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
   type NotLoadedValue,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
@@ -1195,10 +1200,17 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       return value;
     }
 
-    let maybeNotLoaded = deserialized.get(this.name);
-    if (isNotLoadedValue(maybeNotLoaded)) {
-      lazilyLoadLink(instance, this, maybeNotLoaded.reference);
+    let maybeSentinel = deserialized.get(this.name);
+    if (isNotLoadedValue(maybeSentinel)) {
+      lazilyLoadLink(instance, this, maybeSentinel.reference);
       return undefined;
+    }
+    if (isLinkError(maybeSentinel) || isLinkNotFound(maybeSentinel)) {
+      // Terminal sentinels — the fetch already resolved into a structured
+      // failure. Returning null here matches the public contract that a
+      // broken linksTo reads as empty, and we deliberately do not call
+      // lazilyLoadLink so a permanently-broken link does not spin.
+      return null as unknown as BaseInstanceType<CardT>;
     }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
@@ -1214,11 +1226,18 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (instance == null) {
       return null;
     }
+    if (isNonPresentLink(instance)) {
+      return { id: instance.reference };
+    }
     return this.card[queryableValue](instance, stack);
   }
 
   serialize(
-    value: InstanceType<CardT> | NotLoadedValue,
+    value:
+      | InstanceType<CardT>
+      | NotLoadedValue
+      | LinkErrorValue
+      | LinkNotFoundValue,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts,
@@ -1226,7 +1245,14 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNotLoadedValue(value)) {
+    if (isNonPresentLink(value)) {
+      // Terminal Error/NotFound sentinels serialize the same way a
+      // NotLoadedValue does — the persisted relationship keeps the
+      // reference so a reload deserializes back to NotLoaded and the lazy
+      // loader gets a fresh chance to resolve it (or re-plant the
+      // sentinel if the underlying failure is still present). The
+      // structured errorDoc is in-memory diagnostic state, not part of
+      // the saved card document.
       return {
         relationships: {
           [this.name]: {
@@ -1685,7 +1711,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
-        if (isNotLoadedValue(instance)) {
+        if (isNonPresentLink(instance)) {
           return { id: instance.reference };
         }
         return this.card[queryableValue](instance, stack);
@@ -1744,7 +1770,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNotLoadedValue(value)) {
+      if (isNonPresentLink(value)) {
+        // Terminal Error/NotFound sentinels (planted by lazilyLoadLink on
+        // fetch failure) serialize the same way NotLoadedValue does: keep
+        // the reference so reload deserializes back to NotLoaded and the
+        // lazy loader retries. The structured errorDoc is in-memory only.
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: makeRelativeURL(value.reference, opts),
@@ -2279,7 +2309,7 @@ export class BaseDef {
                 }) ?? null,
             ];
           }
-          if (isNotLoadedValue(rawValue)) {
+          if (isNonPresentLink(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveCardReference(
@@ -3340,10 +3370,6 @@ function lazilyLoadLink(
         (instance as any)[field.name] = fieldValue;
       }
     } catch (e) {
-      // we replace the node-loaded value with a null
-      // TODO in the future consider recording some link meta that this reference is actually missing
-      (instance as any)[field.name] = null;
-
       let error = e as Error;
       let isMissingFile =
         (isCardError(error) && error.status === 404) ||
@@ -3353,14 +3379,7 @@ function lazilyLoadLink(
         isFileLink || reference.endsWith('.json')
           ? reference
           : `${reference}.json`;
-      let payloadError: Pick<SerializedError, 'status' | 'message'> &
-        Partial<Pick<SerializedError, 'title' | 'stack' | 'deps'>> & {
-          additionalErrors?: Array<
-            Partial<
-              Pick<SerializedError, 'title' | 'status' | 'message' | 'stack'>
-            >
-          >;
-        } = {
+      let errorDoc: SerializedError = {
         title: isMissingFile
           ? 'Link Not Found'
           : (error?.message ?? 'Card Error'),
@@ -3369,6 +3388,7 @@ function lazilyLoadLink(
           ? `missing file ${referenceForMissingFile}`
           : (error?.message ?? String(e)),
         stack: error?.stack,
+        additionalErrors: null,
       };
       let deps = new Set<string>([referenceForMissingFile]);
       if (isCardError(error)) {
@@ -3376,7 +3396,7 @@ function lazilyLoadLink(
           deps.add(dep);
         }
         if (error.additionalErrors?.length) {
-          payloadError.additionalErrors = error.additionalErrors.map(
+          errorDoc.additionalErrors = error.additionalErrors.map(
             (additionalError) => {
               let normalized = additionalError as Partial<SerializedError>;
               return {
@@ -3389,18 +3409,44 @@ function lazilyLoadLink(
           );
         }
       }
-      payloadError.deps = [...deps];
-      let payload = JSON.stringify({
-        type: 'error',
-        error: payloadError,
-      });
-      // We use a custom event for render errors--otherwise QUnit will report a "global error"
-      // when we use a promise rejection to signal to the prerender that there was an error
-      // even though everything is working as designed. QUnit is very noisy about these errors...
-      const event = new CustomEvent('boxel-render-error', {
-        detail: { reason: payload },
-      });
-      globalThis.dispatchEvent(event);
+      errorDoc.deps = [...deps];
+      let sentinel: LinkErrorValue | LinkNotFoundValue = isMissingFile
+        ? { type: 'link-not-found', reference, errorDoc }
+        : { type: 'link-error', reference, errorDoc };
+      if (pluralArgs) {
+        // Replace each matching NotLoadedValue slot in the WatchedArray with
+        // the sentinel in place. Mutating the array preserves its identity so
+        // the linksToMany getter — which left the NotLoadedValue sentinels in
+        // place to be swapped out — sees the new terminal sentinels via the
+        // same WatchedArray tracking. The plural getter's isNotLoadedValue
+        // guard skips these terminal sentinels, so they do not retrigger
+        // lazilyLoadLink.
+        let { value } = pluralArgs;
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = resolveCardReference(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          );
+          if (reference === notLoadedRef) {
+            value[index] = sentinel;
+          }
+        }
+        notifyCardTracking(instance);
+        notifySubscribers(instance, field.name, value);
+      } else {
+        // Write the sentinel directly into the data bucket — going through
+        // the setter would route through field.validate and the linksTo
+        // assertions, which only accept BaseDef instances. NotLoadedValue
+        // sentinels are planted via the same direct-bucket-write pattern in
+        // LinksTo.deserialize. The reactive notification pair below is what
+        // setField does after a bucket write.
+        getDataBucket(instance).set(field.name, sentinel);
+        notifyCardTracking(instance);
+        notifySubscribers(instance, field.name, sentinel);
+      }
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);

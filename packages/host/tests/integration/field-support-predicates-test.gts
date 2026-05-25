@@ -26,6 +26,7 @@ let isLinkNotFound: (typeof FieldSupportModule)['isLinkNotFound'];
 let isNonPresentLink: (typeof FieldSupportModule)['isNonPresentLink'];
 let scanForBrokenLinks: (typeof FieldSupportModule)['scanForBrokenLinks'];
 let getDataBucket: (typeof FieldSupportModule)['getDataBucket'];
+let relationshipMeta: (typeof FieldSupportModule)['relationshipMeta'];
 
 const ref = 'https://example.test/cards/pet-1';
 
@@ -80,6 +81,7 @@ module(
       isNonPresentLink = fieldSupport.isNonPresentLink;
       scanForBrokenLinks = fieldSupport.scanForBrokenLinks;
       getDataBucket = fieldSupport.getDataBucket;
+      relationshipMeta = fieldSupport.relationshipMeta;
     });
 
     test('isNotLoadedValue only matches the not-loaded sentinel', function (assert) {
@@ -416,5 +418,95 @@ module(
         rival: 'link-not-found',
       });
     });
+
+    test('singular linksTo getter returns null for a link-error sentinel', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkError());
+      assert.strictEqual(alice.pet, null);
+      // The terminal sentinel must survive the read so a subsequent scan
+      // (e.g. the prerender's broken-link scan) can still locate it.
+      let bucket = getDataBucket(alice).get('pet');
+      assert.true(
+        isLinkError(bucket),
+        'sentinel still in bucket after getter read',
+      );
+    });
+
+    test('singular linksTo getter returns null for a link-not-found sentinel', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkNotFound());
+      assert.strictEqual(alice.pet, null);
+      assert.true(isLinkNotFound(getDataBucket(alice).get('pet')));
+    });
+
+    test('relationshipMeta treats Error / NotFound sentinels as not-loaded', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field rival = linksTo(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      getDataBucket(alice).set('pet', makeLinkError());
+      getDataBucket(alice).set('rival', makeLinkNotFound());
+
+      let petMeta = relationshipMeta(alice, 'pet');
+      assert.deepEqual(
+        petMeta,
+        { type: 'not-loaded', reference: ref },
+        'link-error sentinel surfaces as a not-loaded RelationshipMeta',
+      );
+
+      let rivalMeta = relationshipMeta(alice, 'rival');
+      assert.deepEqual(
+        rivalMeta,
+        { type: 'not-loaded', reference: ref },
+        'link-not-found sentinel surfaces as a not-loaded RelationshipMeta',
+      );
+    });
+
+    test('linksToMany getter does not retrigger load on a terminal sentinel element', function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      let alice = new Person({ firstName: 'Alice' });
+      let healthyPet = new Pet({ name: 'Mango' });
+      let brokenSentinel = makeLinkError();
+      let stored = [healthyPet, brokenSentinel];
+      getDataBucket(alice).set('pets', stored);
+
+      // Read through the public getter. The terminal sentinel must remain
+      // unchanged in the array — the linksToMany lazy-load loop only acts
+      // on isNotLoadedValue entries, so a sentinel-bearing slot must not
+      // be replaced or refetched.
+      let pets = alice.pets;
+      assert.strictEqual(pets.length, 2, 'array length preserved');
+      assert.strictEqual(pets[0], healthyPet, 'healthy element untouched');
+      assert.true(
+        isLinkError(pets[1]),
+        'sentinel element remains in place after read',
+      );
+    });
+
   },
 );
