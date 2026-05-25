@@ -639,5 +639,66 @@ module(basename(__filename), function () {
         'sidecar untouched when we cannot safely modify the card',
       );
     });
+
+    test('treats a card whose `data` is not a plain object as unparseable', async function (assert) {
+      // Parses cleanly as JSON, has a `data` key, but `data` is a string.
+      // augmentExistingCard would mutate `card.data.attributes` and throw
+      // (TypeError on a primitive); we want migrateOne to skip cleanly
+      // instead of bubbling out and aborting the rest of the step.
+      // Subsequent realms in the same backfill walk should still run.
+      const brokenDir = join(realmsRootPath, 'luke', 'broken-data');
+      seedSidecar(brokenDir, {
+        hostHome:
+          'http://localhost:4201/luke/broken-data/SiteConfig/x',
+      });
+      writeFileSync(
+        join(brokenDir, 'realm.json'),
+        JSON.stringify({ data: 'oops' }),
+      );
+
+      const goodDir = join(realmsRootPath, 'luke', 'good-after-broken');
+      seedSidecar(goodDir, {
+        name: 'Good After Broken',
+        hostHome:
+          'http://localhost:4201/luke/good-after-broken/SiteConfig/g',
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.strictEqual(
+        readFileSync(join(brokenDir, 'realm.json'), 'utf8'),
+        JSON.stringify({ data: 'oops' }),
+        'malformed-shape card left untouched',
+      );
+      assert.deepEqual(
+        readSidecar(brokenDir),
+        {
+          hostHome:
+            'http://localhost:4201/luke/broken-data/SiteConfig/x',
+        },
+        'sidecar untouched when card is structurally unsafe to modify',
+      );
+
+      // Critical: the broken realm did not abort the walk.
+      const goodCard = readCard(goodDir) as {
+        data: {
+          attributes: Record<string, unknown>;
+          relationships?: Record<string, unknown>;
+        };
+      };
+      assert.deepEqual(goodCard.data.attributes.cardInfo, {
+        name: 'Good After Broken',
+      });
+      assert.deepEqual(
+        goodCard.data.relationships?.['hostRoutingRules.0.instance'],
+        { links: { self: './SiteConfig/g' } },
+        'realm encountered after the broken one still got its /-rule',
+      );
+    });
   });
 });

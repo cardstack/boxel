@@ -205,6 +205,15 @@ function readExistingCard(cardPath: string): CardDoc | null | 'unparseable' {
   ) {
     return 'unparseable';
   }
+  // `data` must itself be a plain object — augmentExistingCard
+  // mutates card.data.attributes / card.data.relationships, which
+  // throws TypeError on a primitive (e.g. `{ "data": "oops" }`) and
+  // would bubble out of migrateOne, aborting the rest of the
+  // current backfill step.
+  const data = (parsed as { data: unknown }).data;
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return 'unparseable';
+  }
   return parsed as CardDoc;
 }
 
