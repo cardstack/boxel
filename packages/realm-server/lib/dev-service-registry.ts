@@ -49,7 +49,6 @@ export function getEnvironmentSlug(): string {
   }
 }
 
-
 export function serviceHostname(serviceName: string, env?: string): string {
   let slug = env ?? getEnvironmentSlug();
   return `${serviceName}.${slug}.${DOMAIN}`;
