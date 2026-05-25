@@ -9,6 +9,14 @@
 # git's original message.
 set -e
 
+# CI / sync-managed checkouts opt out: the caller has already placed the
+# exact commit they want at contents/, so a `git pull` would either fail
+# (detached HEAD) or silently move HEAD off the intended ref.
+if [ -n "${SKIP_CATALOG_UPDATE:-}" ]; then
+  echo "catalog: SKIP_CATALOG_UPDATE set, skipping update"
+  exit 0
+fi
+
 # Anchor to packages/catalog/ so the script works regardless of CWD
 # (e.g. `sh packages/catalog/scripts/catalog-update.sh` from repo root).
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
