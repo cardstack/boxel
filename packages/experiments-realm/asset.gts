@@ -6,6 +6,7 @@ import {
   Component,
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
+import { cardIdToURL } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import CurrencyIcon from '@cardstack/boxel-icons/currency';
 import CircleDotIcon from '@cardstack/boxel-icons/circle-dot';
@@ -20,7 +21,10 @@ export class Asset extends CardDef {
       if (!this.logoURL) {
         return null;
       }
-      return new URL(this.logoURL, this[relativeTo] || this.id).href;
+      let rel = this[relativeTo] || this.id;
+      let base =
+        typeof rel === 'string' ? cardIdToURL(rel) : rel;
+      return new URL(this.logoURL, base).href;
     },
   });
   @field cardTitle = contains(StringField, {
@@ -89,7 +93,10 @@ class AssetField extends FieldDef {
       if (!this.logoURL) {
         return null;
       }
-      return new URL(this.logoURL, this[relativeTo] || this.id).href;
+      let rel = this[relativeTo] || this.id;
+      let base =
+        typeof rel === 'string' ? cardIdToURL(rel) : rel;
+      return new URL(this.logoURL, base).href;
     },
   });
   @field cardTitle = contains(StringField, {

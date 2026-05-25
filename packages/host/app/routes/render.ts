@@ -23,6 +23,7 @@ import {
   isCardError,
   isBaseDefInstance,
   cardIdToURL,
+  rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RealmIdentifier,
@@ -532,7 +533,7 @@ export default class RenderRoute extends Route<Model> {
 
           (globalThis as any).__boxelSetRenderStage?.('buildModel:hydrating');
           let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: cardIdToURL(id),
+            relativeTo: rri(id),
             realm: realmURL,
             doNotPersist: true,
           });

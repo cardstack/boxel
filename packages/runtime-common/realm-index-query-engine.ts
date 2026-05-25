@@ -36,6 +36,7 @@ import type {
   RealmResourceIdentifier,
   RealmIdentifier,
 } from './card-reference-resolver';
+import { rri } from './card-reference-resolver';
 import {
   normalizeQueryForSignature,
   sortKeysDeep,
@@ -612,7 +613,9 @@ export class RealmIndexQueryEngine {
       return;
     }
 
-    let relativeTo = resource.id ? cardIdToURL(resource.id) : realmURL;
+    let relativeTo: RealmResourceIdentifier | URL = resource.id
+      ? rri(resource.id)
+      : realmURL;
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,

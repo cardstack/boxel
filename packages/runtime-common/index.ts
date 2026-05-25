@@ -810,7 +810,7 @@ export function isMatrixCardError(
 
 export type CreateNewCard = (
   ref: CodeRef,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
   opts?: {
     isLinkedCard?: boolean;
     doc?: LooseSingleCardDocument;
@@ -821,7 +821,7 @@ export type CreateNewCard = (
 interface CardChooserOpts {
   offerToCreate?: {
     ref: CodeRef;
-    relativeTo: URL | undefined;
+    relativeTo: RealmResourceIdentifier | URL | undefined;
     realmURL: URL | undefined;
   };
   createNewCard?: CreateNewCard;
@@ -953,7 +953,7 @@ export type getSearchData = (
 export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
-  relativeTo?: URL | undefined;
+  relativeTo?: RealmResourceIdentifier | URL | undefined;
 }
 
 export interface AddOptions extends CreateOptions {
@@ -1019,7 +1019,7 @@ export type CardCatalogQuery = Query & {
 export interface CardCreator {
   create(
     ref: CodeRef,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | URL | undefined,
     opts?: {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
@@ -1097,7 +1097,7 @@ export function trimExecutableExtension(
 
 export function internalKeyFor(
   ref: CodeRef,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   if (!('type' in ref)) {
     let resolved = resolveCardReference(ref.module, relativeTo);

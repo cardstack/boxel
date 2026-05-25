@@ -12,6 +12,7 @@ import {
   resolveCardReference,
   cardIdToURL,
   rri,
+  type RealmResourceIdentifier,
 } from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
@@ -29,18 +30,20 @@ export function serialize(
   doc: any,
   _visited?: Set<string>,
   opts?: SerializeOpts & {
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier | URL;
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
     allowRelative?: true;
   },
 ): ResolvedCodeRef | {} {
-  let baseURL =
-    opts?.relativeTo instanceof URL
-      ? opts.relativeTo
-      : doc?.data?.id && typeof doc.data.id === 'string'
-        ? cardIdToURL(doc.data.id)
-        : undefined;
+  let baseURL: URL | undefined;
+  if (opts?.relativeTo instanceof URL) {
+    baseURL = opts.relativeTo;
+  } else if (typeof opts?.relativeTo === 'string') {
+    baseURL = cardIdToURL(opts.relativeTo);
+  } else if (doc?.data?.id && typeof doc.data.id === 'string') {
+    baseURL = cardIdToURL(doc.data.id);
+  }
   return {
     ...codeRef,
     ...codeRefAdjustments(codeRef, baseURL, opts),
@@ -50,7 +53,7 @@ export function serialize(
 export async function deserialize<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
-  _relativeTo: URL | undefined,
+  _relativeTo: RealmResourceIdentifier | URL | undefined,
 ): Promise<BaseInstanceType<T>> {
   return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
 }
@@ -62,7 +65,7 @@ export function formatQuery(codeRef: ResolvedCodeRef | {}): string | undefined {
 export async function deserializeAbsolute<T extends BaseDefConstructor>(
   this: T,
   codeRef: ResolvedCodeRef | {},
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | URL | undefined,
 ): Promise<BaseInstanceType<T>> {
   return {
     ...codeRef,
@@ -72,7 +75,7 @@ export async function deserializeAbsolute<T extends BaseDefConstructor>(
 
 function codeRefAdjustments(
   codeRef: any,
-  relativeTo?: URL,
+  relativeTo?: RealmResourceIdentifier | URL,
   opts?: SerializeOpts & {
     trimExecutableExtension?: true;
     maybeRelativeReference?: (reference: string) => string;
