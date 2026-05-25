@@ -26,7 +26,6 @@ let isLinkNotFound: (typeof FieldSupportModule)['isLinkNotFound'];
 let isNonPresentLink: (typeof FieldSupportModule)['isNonPresentLink'];
 let scanForBrokenLinks: (typeof FieldSupportModule)['scanForBrokenLinks'];
 let getDataBucket: (typeof FieldSupportModule)['getDataBucket'];
-let relationshipMeta: (typeof FieldSupportModule)['relationshipMeta'];
 
 const ref = 'https://example.test/cards/pet-1';
 
@@ -81,7 +80,6 @@ module(
       isNonPresentLink = fieldSupport.isNonPresentLink;
       scanForBrokenLinks = fieldSupport.scanForBrokenLinks;
       getDataBucket = fieldSupport.getDataBucket;
-      relationshipMeta = fieldSupport.relationshipMeta;
     });
 
     test('isNotLoadedValue only matches the not-loaded sentinel', function (assert) {
@@ -419,7 +417,7 @@ module(
       });
     });
 
-    test('singular linksTo getter returns null for a link-error sentinel', function (assert) {
+    test('setLinkSentinel / getLinkSentinel round-trip on the side-channel', async function (assert) {
       class Pet extends CardDef {
         @field name = contains(StringField);
       }
@@ -428,56 +426,37 @@ module(
         @field pet = linksTo(Pet);
       }
       let alice = new Person({ firstName: 'Alice' });
-      getDataBucket(alice).set('pet', makeLinkError());
-      assert.strictEqual(alice.pet, null);
-      // The terminal sentinel must survive the read so a subsequent scan
-      // (e.g. the prerender's broken-link scan) can still locate it.
-      let bucket = getDataBucket(alice).get('pet');
-      assert.true(
-        isLinkError(bucket),
-        'sentinel still in bucket after getter read',
-      );
-    });
-
-    test('singular linksTo getter returns null for a link-not-found sentinel', function (assert) {
-      class Pet extends CardDef {
-        @field name = contains(StringField);
-      }
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field pet = linksTo(Pet);
-      }
-      let alice = new Person({ firstName: 'Alice' });
-      getDataBucket(alice).set('pet', makeLinkNotFound());
-      assert.strictEqual(alice.pet, null);
-      assert.true(isLinkNotFound(getDataBucket(alice).get('pet')));
-    });
-
-    test('relationshipMeta treats Error / NotFound sentinels as not-loaded', function (assert) {
-      class Pet extends CardDef {
-        @field name = contains(StringField);
-      }
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field pet = linksTo(Pet);
-        @field rival = linksTo(Pet);
-      }
-      let alice = new Person({ firstName: 'Alice' });
-      getDataBucket(alice).set('pet', makeLinkError());
-      getDataBucket(alice).set('rival', makeLinkNotFound());
-
-      let petMeta = relationshipMeta(alice, 'pet');
-      assert.deepEqual(
-        petMeta,
-        { type: 'not-loaded', reference: ref },
-        'link-error sentinel surfaces as a not-loaded RelationshipMeta',
+      let fieldSupport = await loader.import<typeof FieldSupportModule>(
+        `${baseRealm.url}field-support`,
       );
 
-      let rivalMeta = relationshipMeta(alice, 'rival');
-      assert.deepEqual(
-        rivalMeta,
-        { type: 'not-loaded', reference: ref },
-        'link-not-found sentinel surfaces as a not-loaded RelationshipMeta',
+      assert.strictEqual(
+        fieldSupport.getLinkSentinel(alice, 'pet'),
+        undefined,
+        'no sentinel before setLinkSentinel',
+      );
+
+      let sentinel = makeLinkError();
+      fieldSupport.setLinkSentinel(alice, 'pet', sentinel);
+
+      assert.strictEqual(
+        fieldSupport.getLinkSentinel(alice, 'pet'),
+        sentinel,
+        'sentinel retrievable after setLinkSentinel',
+      );
+      // The side-channel is deliberately separate from the data bucket —
+      // see the linkSentinels declaration in field-support.ts for why.
+      assert.strictEqual(
+        getDataBucket(alice).get('pet'),
+        undefined,
+        'bucket is untouched by setLinkSentinel',
+      );
+
+      fieldSupport.clearLinkSentinel(alice, 'pet');
+      assert.strictEqual(
+        fieldSupport.getLinkSentinel(alice, 'pet'),
+        undefined,
+        'sentinel cleared by clearLinkSentinel',
       );
     });
 
