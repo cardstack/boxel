@@ -6,7 +6,7 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 const path = require('path');
 
-const DEFAULT_REALM_URLS = ['https://localhost:4201/catalog/'];
+const DEFAULT_REALM_URLS = ['https://localhost:4201/software-factory/'];
 
 const realmURLs = process.env.REALM_URL
   ? [process.env.REALM_URL]
