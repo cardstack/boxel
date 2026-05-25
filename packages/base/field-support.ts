@@ -478,16 +478,19 @@ interface PhantomInternalState {
   sentinel: LinkSentinel | null;
 }
 
-// Cache key for the not-set state (no sentinel). Sentinel objects are used as
-// keys directly so a fresh sentinel for the same logical state still mints a
-// fresh phantom — identity tracks the sentinel object, not its `type` string.
-const NOT_SET_KEY: object = Object.freeze({});
-
-type PhantomFieldCache = Map<string, Map<unknown, PhantomValue>>;
+// Per-field cache: one slot for the not-set state and a WeakMap keyed by
+// sentinel object for the loaded / error / not-found states. Weak keys let an
+// obsolete sentinel (and its phantom) become collectable once the bucket
+// rewrites the field with a new sentinel — without weak keys the cache would
+// pin every historical sentinel for the lifetime of the card instance.
+interface PhantomFieldCache {
+  notSet: PhantomValue | undefined;
+  bySentinel: WeakMap<LinkSentinel, PhantomValue>;
+}
 
 const phantomCache = initSharedState(
   'phantomCache',
-  () => new WeakMap<BaseDef, PhantomFieldCache>(),
+  () => new WeakMap<BaseDef, Map<string, PhantomFieldCache>>(),
 );
 
 export function getPhantom(
@@ -502,24 +505,30 @@ export function getPhantom(
   }
   let byField = byInstance.get(fieldName);
   if (!byField) {
-    byField = new Map();
+    byField = { notSet: undefined, bySentinel: new WeakMap() };
     byInstance.set(fieldName, byField);
   }
-  let cacheKey: unknown = sentinel ?? NOT_SET_KEY;
-  let cached = byField.get(cacheKey);
+  if (sentinel === null) {
+    if (!byField.notSet) {
+      byField.notSet = createPhantom({ instance, fieldName, sentinel: null });
+    }
+    return byField.notSet;
+  }
+  let cached = byField.bySentinel.get(sentinel);
   if (cached) {
     return cached;
   }
   let phantom = createPhantom({ instance, fieldName, sentinel });
-  byField.set(cacheKey, phantom);
+  byField.bySentinel.set(sentinel, phantom);
   return phantom;
 }
 
 function createPhantom(state: PhantomInternalState): PhantomValue {
   // Arrow target keeps the proxy callable without dragging a non-configurable
-  // `prototype` own property (which would prevent the `has` trap from hiding
-  // it). `length` and `name` on arrows are configurable, so the `has` trap can
-  // report them absent without violating proxy invariants.
+  // `prototype` own property — that would force `has` to report `prototype`
+  // present and break the "every external key is absent" contract. `length`
+  // and `name` on arrows stay configurable, so `has` can hide them so long as
+  // the target stays extensible (see `preventExtensions` trap below).
   let target: object = () => {};
   let toPrimitive = () => null;
   let proxy = new Proxy(target, {
@@ -546,6 +555,20 @@ function createPhantom(state: PhantomInternalState): PhantomValue {
     },
     deleteProperty() {
       return true;
+    },
+    // Refuse hardening operations. Once the target is non-extensible, every
+    // own property on it must be reported by `has`; once any own property is
+    // non-configurable it cannot be hidden either. Letting `Object.freeze` /
+    // `Object.seal` / `Object.preventExtensions` / `Object.defineProperty`
+    // mutate the target would lock those properties down and break the
+    // "every external key is absent" invariant on subsequent access. Refusing
+    // raises a `TypeError` at the hardening call instead of corrupting the
+    // proxy.
+    preventExtensions() {
+      return false;
+    },
+    defineProperty() {
+      return false;
     },
     getPrototypeOf() {
       return null;

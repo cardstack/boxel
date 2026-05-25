@@ -241,6 +241,46 @@ module('Integration | field-support | phantom value', function (hooks) {
     assert.strictEqual(phantom.foo, undefined, 'a delete is a no-op');
   });
 
+  // Object.freeze / Object.seal / Object.preventExtensions on the proxy would
+  // make the function target non-extensible and (for freeze) lock its `length`
+  // and `name` properties to non-configurable. After that, the `has` trap
+  // returning false for those keys violates proxy invariants, turning the
+  // next property access into a TypeError. Refusing the hardening operation
+  // raises a TypeError at the freeze/seal call instead, and the phantom stays
+  // valid for subsequent reads.
+  test('freezing the phantom is refused and leaves it intact', function (assert) {
+    let phantom = getPhantom(stubInstance(), 'pet', makeNotLoaded());
+    assert.throws(
+      () => Object.preventExtensions(phantom as object),
+      TypeError,
+      'Object.preventExtensions throws TypeError',
+    );
+    assert.throws(
+      () => Object.freeze(phantom as object),
+      TypeError,
+      'Object.freeze throws TypeError',
+    );
+    assert.throws(
+      () => Object.seal(phantom as object),
+      TypeError,
+      'Object.seal throws TypeError',
+    );
+    assert.throws(
+      () => Object.defineProperty(phantom as object, 'foo', { value: 'bar' }),
+      TypeError,
+      'Object.defineProperty throws TypeError',
+    );
+    assert.strictEqual(
+      (phantom as any).anyField,
+      undefined,
+      'post-attempt property reads still resolve to undefined',
+    );
+    assert.true(
+      isPhantom(phantom),
+      'post-attempt the phantom still satisfies isPhantom',
+    );
+  });
+
   // Documenting JS-spec deviations from the ticket's stated mechanics:
   // ECMAScript Abstract Equality returns false for any (Object, Null) pair
   // without invoking Symbol.toPrimitive, and unary `!` on any object (outside
