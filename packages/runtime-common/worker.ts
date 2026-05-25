@@ -164,6 +164,7 @@ export class Worker {
       indexWriter: this.#indexWriter,
       prerenderer: this.#prerenderer,
       definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
       queuePublisher: this.#queuePublisher,
       getAuthedFetch: this.makeAuthedFetch.bind(this),
       reportStatus: this.reportStatus.bind(this),

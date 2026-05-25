@@ -7,6 +7,7 @@ import type {
   Reader,
   RealmPermissions,
   DefinitionLookup,
+  VirtualNetwork,
 } from '../index';
 import type { JobInfo, IndexingProgressEvent } from '../worker';
 export type * from './lint';
@@ -26,6 +27,7 @@ export interface TaskArgs {
   indexWriter: IndexWriter;
   prerenderer: Prerenderer;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
   log: LoggerInstance;
   matrixURL: string;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
