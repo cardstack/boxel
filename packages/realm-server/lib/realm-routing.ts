@@ -240,12 +240,28 @@ export async function hasPublicPermissions(
 // + drops to undefined, matching searchRealms / handle-realm-info's
 // existing "skip missing realm, return partial results" semantics so
 // one broken realm does not 5xx the whole federated request.
+//
+// When the realm is already published into reconciler.mounted (even
+// if its start() is still in-flight via pendingMounts), take the
+// mounted fast-path directly. The default lookupOrMount() awaits
+// pendingMounts to give callers a fully-started realm — but a
+// federated-search fired from inside a realm's *own* first-index
+// prerender would self-deadlock against the very mount it's running
+// inside. The mounted Realm can serve read-side searches against the
+// (currently empty / mid-index) `boxel_index` without waiting for
+// start() to resolve.
 export async function resolveRealmsForFederatedRequest(
   reconciler: RealmRegistryReconciler,
   realmList: string[],
 ): Promise<Array<Realm | undefined>> {
   let results = await Promise.allSettled(
-    realmList.map((url) => reconciler.lookupOrMount(url)),
+    realmList.map((url) => {
+      let mounted = reconciler.mounted.get(url);
+      if (mounted) {
+        return Promise.resolve(mounted);
+      }
+      return reconciler.lookupOrMount(url);
+    }),
   );
   return results.map((result, idx) => {
     if (result.status === 'fulfilled') {
