@@ -2,11 +2,19 @@ import type Koa from 'koa';
 import {
   ensureTrailingSlash,
   insertPermissions,
+  logger,
   type RealmAction,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { sendResponseForBadRequest, setContextResponse } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
+import {
+  adminImpersonateUser,
+  appendRealmToUserAccountData,
+  loginAsMatrixAdmin,
+} from '../synapse';
+
+const log = logger('realm-server');
 
 function parseBoolFlag(
   raw: string | null,
@@ -27,8 +35,39 @@ function parseBoolFlag(
   };
 }
 
+// Only fully-qualified matrix user-ids can carry account_data. Wildcards
+// (the public-read sentinel `*`) and bare localparts have no synapse
+// account to write to, so we skip the matrix sync rather than 400 — the
+// DB grant still stands.
+function isMatrixUserId(user: string): boolean {
+  return user.startsWith('@') && user.includes(':');
+}
+
+// Resolve admin credentials for the synapse admin-impersonate flow. When
+// explicit env-derived values are present (any environment), use them.
+// When both are absent AND the matrix homeserver is localhost, fall back
+// to the dev `admin`/`password` pair that register-matrix-users.ts seeds
+// — this keeps local dev and tests friction-free without baking the
+// default into every other deployment.
+function resolveAdminCreds(
+  matrixURL: URL,
+  username: string | undefined,
+  password: string | undefined,
+): { username: string; password: string } | undefined {
+  if (username && password) {
+    return { username, password };
+  }
+  if (!username && !password && matrixURL.hostname === 'localhost') {
+    return { username: 'admin', password: 'password' };
+  }
+  return undefined;
+}
+
 export default function handleUpsertRealmUserPermission({
   dbAdapter,
+  matrixClient,
+  matrixAdminUsername,
+  matrixAdminPassword,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realm = ctxt.URL.searchParams.get('realm');
@@ -99,16 +138,67 @@ export default function handleUpsertRealmUserPermission({
       [user]: actions,
     });
 
+    // The granted user only learns about the realm on their next host
+    // load if it's present in their matrix `app.boxel.realms`
+    // account_data — that's what the host reads to render the workspace
+    // list. Push the realm in here so the grant becomes visible without
+    // the user manually adding it. Best-effort: a matrix failure logs a
+    // warning and returns 200 so the DB grant doesn't roll back, and
+    // re-running this endpoint is idempotent on both sides.
+    let matrixAccountDataWarning: string | undefined;
+    let appendedToAccountData = false;
+    if (isMatrixUserId(user)) {
+      let creds = resolveAdminCreds(
+        matrixClient.matrixURL,
+        matrixAdminUsername,
+        matrixAdminPassword,
+      );
+      if (creds) {
+        try {
+          let adminToken = await loginAsMatrixAdmin({
+            matrixURL: matrixClient.matrixURL,
+            adminUsername: creds.username,
+            adminPassword: creds.password,
+          });
+          let userToken = await adminImpersonateUser({
+            matrixURL: matrixClient.matrixURL,
+            adminAccessToken: adminToken,
+            userId: user,
+          });
+          let { alreadyPresent } = await appendRealmToUserAccountData({
+            matrixURL: matrixClient.matrixURL,
+            userId: user,
+            userAccessToken: userToken,
+            realmURL: normalizedRealmHref,
+          });
+          appendedToAccountData = !alreadyPresent;
+        } catch (e: any) {
+          matrixAccountDataWarning = `account_data sync failed: ${e?.message ?? String(e)}`;
+          log.warn(
+            `[grafana-upsert-realm-user-permission] ${matrixAccountDataWarning}`,
+          );
+        }
+      } else {
+        matrixAccountDataWarning =
+          'account_data sync skipped: MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not localhost';
+      }
+    } else {
+      matrixAccountDataWarning = `account_data sync skipped: "${user}" is not a fully-qualified matrix user-id`;
+    }
+
+    let responseBody: Record<string, unknown> = {
+      message: `Set ${actions.join('+')} on ${normalizedRealmHref} for user "${user}"`,
+      appendedToAccountData,
+    };
+    if (matrixAccountDataWarning) {
+      responseBody.matrixAccountDataWarning = matrixAccountDataWarning;
+    }
+
     return setContextResponse(
       ctxt,
-      new Response(
-        JSON.stringify({
-          message: `Set ${actions.join('+')} on ${normalizedRealmHref} for user "${user}"`,
-        }),
-        {
-          headers: { 'content-type': SupportedMimeType.JSON },
-        },
-      ),
+      new Response(JSON.stringify(responseBody), {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      }),
     );
   };
 }

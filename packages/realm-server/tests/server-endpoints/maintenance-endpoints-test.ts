@@ -6,8 +6,21 @@ import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
 import { fetchRealmPermissions } from '@cardstack/runtime-common';
-import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
+import {
+  grafanaSecret,
+  insertUser,
+  matrixRegistrationSecret,
+  matrixURL,
+  realmSecretSeed,
+} from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+import {
+  adminImpersonateUser,
+  appendRealmToUserAccountData,
+  loginAsMatrixAdmin,
+  registerUser,
+} from '../../synapse';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -1360,6 +1373,201 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      });
+
+      test("grafana upsert syncs realm to granted user's app.boxel.realms account_data", async function (assert) {
+        // Register a fresh matrix user so the admin-impersonate step
+        // resolves and we own the entire pre/post account_data state for
+        // this test (no carryover from other suites poking the same uid).
+        let localpart = `grafana-grant-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.notOk(
+          response.body.matrixAccountDataWarning,
+          `no matrix warning: ${response.body.matrixAccountDataWarning}`,
+        );
+        assert.true(
+          response.body.appendedToAccountData,
+          'response signals a fresh append',
+        );
+
+        // Read the user's account_data back over matrix to confirm the
+        // workspace list now contains the granted realm.
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let accountDataResponse = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        assert.strictEqual(
+          accountDataResponse.status,
+          200,
+          'account_data row exists',
+        );
+        let body = (await accountDataResponse.json()) as { realms?: string[] };
+        assert.deepEqual(
+          body.realms,
+          [testRealmURL.href],
+          'realm appears in the user account_data',
+        );
+      });
+
+      test('grafana upsert is idempotent on the account_data side', async function (assert) {
+        let localpart = `grafana-grant-idem-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+
+        let firstResponse = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}` +
+              `&read=true&write=false`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(firstResponse.status, 200, 'first call HTTP 200');
+        assert.true(
+          firstResponse.body.appendedToAccountData,
+          'first call appends',
+        );
+
+        // Same user, same realm, second time — the realm should already
+        // be in account_data and the handler should skip the PUT.
+        let secondResponse = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(userId)}` +
+              `&read=true&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(secondResponse.status, 200, 'second call HTTP 200');
+        assert.false(
+          secondResponse.body.appendedToAccountData,
+          'second call does not re-append',
+        );
+
+        // And the account_data should still contain the realm exactly
+        // once — no duplicate entry from the re-grant.
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let accountDataResponse = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        let body = (await accountDataResponse.json()) as { realms?: string[] };
+        assert.deepEqual(
+          body.realms,
+          [testRealmURL.href],
+          'realm appears exactly once after two upserts',
+        );
+      });
+
+      test('appendRealmToUserAccountData preserves prior entries', async function (assert) {
+        // Direct exercise of the helper: pre-seed an unrelated realm in
+        // a fresh user's account_data, then ensure the new realm is
+        // appended without dropping or reordering existing entries.
+        let localpart = `grafana-grant-preserve-${uuidv4().slice(0, 8)}`;
+        let userId = `@${localpart}:localhost`;
+        await registerUser({
+          matrixURL,
+          displayname: localpart,
+          username: localpart,
+          password: 'password',
+          registrationSecret: matrixRegistrationSecret,
+        });
+        let priorRealm = 'http://other-realm.example/r/';
+
+        let adminToken = await loginAsMatrixAdmin({
+          matrixURL,
+          adminUsername: 'admin',
+          adminPassword: 'password',
+        });
+        let userToken = await adminImpersonateUser({
+          matrixURL,
+          adminAccessToken: adminToken,
+          userId,
+        });
+        let seed = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+          {
+            method: 'PUT',
+            headers: {
+              Authorization: `Bearer ${userToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ realms: [priorRealm] }),
+          },
+        );
+        assert.strictEqual(seed.status, 200, 'seed PUT succeeded');
+
+        let result = await appendRealmToUserAccountData({
+          matrixURL,
+          userId,
+          userAccessToken: userToken,
+          realmURL: testRealmURL.href,
+        });
+        assert.false(result.alreadyPresent, 'realm was not already present');
+
+        let after = await fetch(
+          `${matrixURL.href}_matrix/client/v3/user/${encodeURIComponent(
+            userId,
+          )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+          { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        let body = (await after.json()) as { realms?: string[] };
+        assert.deepEqual(
+          body.realms,
+          [priorRealm, testRealmURL.href],
+          'new realm appended after prior entry',
+        );
       });
     },
   );

@@ -277,6 +277,8 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
+  private matrixAdminUsername: string | undefined;
+  private matrixAdminPassword: string | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -307,6 +309,8 @@ export class RealmServer {
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
+    matrixAdminUsername,
+    matrixAdminPassword,
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
@@ -326,6 +330,8 @@ export class RealmServer {
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
+    matrixAdminUsername?: string;
+    matrixAdminPassword?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
     domainsForPublishedRealms?: {
@@ -362,6 +368,8 @@ export class RealmServer {
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
+    this.matrixAdminUsername = matrixAdminUsername;
+    this.matrixAdminPassword = matrixAdminPassword;
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     // Pass-by-reference: handlers and the reconciler both mutate this
@@ -465,6 +473,8 @@ export class RealmServer {
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
+          matrixAdminUsername: this.matrixAdminUsername,
+          matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reconciler: this.reconciler,

@@ -111,6 +111,15 @@ if (!REALM_SERVER_MATRIX_USERNAME) {
 const MATRIX_REGISTRATION_SHARED_SECRET =
   process.env.MATRIX_REGISTRATION_SHARED_SECRET;
 
+// Synapse admin credentials. Optional: only consumed by operator-action
+// endpoints that need to admin-impersonate a target user to read or write
+// their account_data on their behalf (synapse admin tokens can read but
+// not write another user's account_data). When unset on a localhost
+// matrix homeserver, the grafana upsert handler defaults to the dev
+// admin/password pair register-matrix-users.ts creates.
+const MATRIX_ADMIN_USERNAME = process.env.MATRIX_ADMIN_USERNAME;
+const MATRIX_ADMIN_PASSWORD = process.env.MATRIX_ADMIN_PASSWORD;
+
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
     `module caching has been disabled, module executables will be served directly from the filesystem`,
@@ -582,6 +591,8 @@ const smokeTestHostApp = async () => {
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    matrixAdminUsername: MATRIX_ADMIN_USERNAME,
+    matrixAdminPassword: MATRIX_ADMIN_PASSWORD,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     domainsForPublishedRealms,
     getRegistrationSecret: useRegistrationSecretFunction
