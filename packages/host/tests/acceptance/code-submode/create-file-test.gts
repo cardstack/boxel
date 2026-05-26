@@ -455,19 +455,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-boxel-menu-item-text="Upload File…"]');
 
-      await waitUntil(
-        () =>
-          (
-            document.querySelector(
-              '[data-test-card-url-bar-input]',
-            ) as HTMLInputElement | null
-          )?.value?.includes('multi-upload-first.txt'),
-        {
-          timeout: 10000,
-          timeoutMessage:
-            'code editor did not navigate to the first uploaded file',
-        },
-      );
+      await waitUntil(() => fileUpload.activeUploads.length === 0, {
+        timeout: 20000,
+        timeoutMessage: 'uploads did not all complete',
+      });
 
       assert
         .dom('[data-test-card-url-bar-input]')
@@ -482,7 +473,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
             '[data-test-file="multi-upload-second.txt"]',
           ) != null,
         {
-          timeout: 10000,
+          timeout: 20000,
           timeoutMessage:
             'second uploaded file did not appear in the file tree',
         },

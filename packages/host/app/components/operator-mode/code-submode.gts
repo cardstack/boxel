@@ -603,13 +603,19 @@ export default class CodeSubmode extends Component<Signature> {
     if (files.length === 0) {
       return;
     }
-    let tasks = files.map((file) =>
-      this.fileUpload.uploadProvidedFile({ realmURL, file }),
-    );
-    let results = await Promise.all(tasks.map((task) => task.result));
-    let firstSuccess = results.find((fileDef) => fileDef?.url);
-    if (firstSuccess?.url) {
-      this.operatorModeStateService.updateCodePath(new URL(firstSuccess.url));
+    let firstSuccessUrl: string | undefined;
+    // Sequence the uploads — the realm holds a per-realm write lock and
+    // overlapping POSTs can lose the loser. Awaiting each task in turn
+    // keeps all writes durable.
+    for (let file of files) {
+      let task = this.fileUpload.uploadProvidedFile({ realmURL, file });
+      let fileDef = await task.result;
+      if (!firstSuccessUrl && fileDef?.url) {
+        firstSuccessUrl = fileDef.url;
+      }
+    }
+    if (firstSuccessUrl) {
+      this.operatorModeStateService.updateCodePath(new URL(firstSuccessUrl));
     }
   }
 
