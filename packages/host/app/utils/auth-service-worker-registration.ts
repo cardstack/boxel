@@ -10,7 +10,18 @@ import window from 'ember-window-mock';
 
 import { SessionLocalStorageKey } from './local-storage-keys';
 
-function isServiceWorkerSupported(): boolean {
+// Structural so tests can stub without the full service surface.
+export interface AuthServiceWorkerDeps {
+  realmService: {
+    realmOf(input: URL): string | undefined;
+    reauthenticate(realmURL: string): Promise<string | undefined>;
+  };
+  matrixService: {
+    readonly isLoggedIn: boolean;
+  };
+}
+
+export function isServiceWorkerSupported(): boolean {
   return (
     !isTesting() &&
     typeof navigator !== 'undefined' &&
@@ -18,7 +29,9 @@ function isServiceWorkerSupported(): boolean {
   );
 }
 
-export async function registerAuthServiceWorker(): Promise<void> {
+export async function registerAuthServiceWorker(
+  deps: AuthServiceWorkerDeps,
+): Promise<void> {
   if (!isServiceWorkerSupported()) {
     return;
   }
@@ -31,6 +44,11 @@ export async function registerAuthServiceWorker(): Promise<void> {
       syncAllTokensToServiceWorker(tokens);
     }
   });
+
+  navigator.serviceWorker.addEventListener(
+    'message',
+    createTokenRequestHandler(deps),
+  );
 
   try {
     await navigator.serviceWorker.register('/auth-service-worker.js', {
@@ -48,6 +66,58 @@ export async function registerAuthServiceWorker(): Promise<void> {
   } catch (e) {
     console.warn('Failed to register auth service worker:', e);
   }
+}
+
+export function createTokenRequestHandler(deps: AuthServiceWorkerDeps) {
+  return async (event: MessageEvent) => {
+    if (!event.data || event.data.type !== 'request-realm-token') {
+      return;
+    }
+    let port = event.ports?.[0];
+    if (!port) {
+      return;
+    }
+    let requestURL: string | undefined = event.data.requestURL;
+
+    let { realmURL, token } = resolveTokenForRequestURL(requestURL);
+    if (realmURL && token) {
+      port.postMessage({ realmURL, token });
+      return;
+    }
+
+    let owningRealm: string | undefined;
+    if (requestURL) {
+      try {
+        owningRealm = deps.realmService.realmOf(new URL(requestURL));
+      } catch {
+        owningRealm = undefined;
+      }
+    }
+    if (!owningRealm || !deps.matrixService.isLoggedIn) {
+      port.postMessage({});
+      return;
+    }
+
+    // Tell the SW to use its refresh budget; reauthenticate is single-flighted
+    // per realm and syncs the new token to the SW as a side effect.
+    try {
+      port.postMessage({ type: 'pending' });
+    } catch {
+      return;
+    }
+    try {
+      let refreshed = await deps.realmService.reauthenticate(owningRealm);
+      port.postMessage(
+        refreshed ? { realmURL: owningRealm, token: refreshed } : {},
+      );
+    } catch {
+      try {
+        port.postMessage({});
+      } catch {
+        // port closed (page navigated)
+      }
+    }
+  };
 }
 
 export function syncTokenToServiceWorker(
@@ -120,4 +190,34 @@ function readTokensFromStorage(): Record<string, string> | undefined {
     // ignore parse errors
   }
   return undefined;
+}
+
+// Find the longest realm-URL prefix in localStorage that matches the given
+// request URL. Returns `undefined` for both fields when nothing matches —
+// the SW will then preserve its existing pass-through behavior for that
+// request.
+function resolveTokenForRequestURL(requestURL: string | undefined): {
+  realmURL?: string;
+  token?: string;
+} {
+  if (!requestURL) {
+    return {};
+  }
+  let tokens = readTokensFromStorage();
+  if (!tokens) {
+    return {};
+  }
+  let bestRealmURL: string | undefined;
+  for (let realmURL of Object.keys(tokens)) {
+    if (
+      requestURL.startsWith(realmURL) &&
+      (!bestRealmURL || realmURL.length > bestRealmURL.length)
+    ) {
+      bestRealmURL = realmURL;
+    }
+  }
+  if (!bestRealmURL) {
+    return {};
+  }
+  return { realmURL: bestRealmURL, token: tokens[bestRealmURL] };
 }
