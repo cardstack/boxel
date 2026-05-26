@@ -12,6 +12,7 @@ import {
   adminImpersonateUser,
   appendRealmToUserAccountData,
   loginAsMatrixAdmin,
+  logoutMatrixAccessToken,
 } from '../synapse';
 
 const log = logger('realm-server');
@@ -167,13 +168,15 @@ export default function handleUpsertRealmUserPermission({
         matrixAdminPassword,
       );
       if (creds.ok) {
+        let adminToken: string | undefined;
+        let userToken: string | undefined;
         try {
-          let adminToken = await loginAsMatrixAdmin({
+          adminToken = await loginAsMatrixAdmin({
             matrixURL: matrixClient.matrixURL,
             adminUsername: creds.username,
             adminPassword: creds.password,
           });
-          let userToken = await adminImpersonateUser({
+          userToken = await adminImpersonateUser({
             matrixURL: matrixClient.matrixURL,
             adminAccessToken: adminToken,
             userId: user,
@@ -190,6 +193,40 @@ export default function handleUpsertRealmUserPermission({
           log.warn(
             `[grafana-upsert-realm-user-permission] ${matrixAccountDataWarning}`,
           );
+        } finally {
+          // Synapse admin login + admin-impersonate both mint
+          // non-expiring tokens by default. Invalidate them after the
+          // sync so each grafana grant doesn't leave a long-lived
+          // credential behind in synapse's access_tokens table.
+          // Best-effort: a logout failure does not change the sync
+          // result reported above.
+          let cleanups: Promise<unknown>[] = [];
+          if (userToken) {
+            cleanups.push(
+              logoutMatrixAccessToken({
+                matrixURL: matrixClient.matrixURL,
+                accessToken: userToken,
+              }),
+            );
+          }
+          if (adminToken) {
+            cleanups.push(
+              logoutMatrixAccessToken({
+                matrixURL: matrixClient.matrixURL,
+                accessToken: adminToken,
+              }),
+            );
+          }
+          let results = await Promise.allSettled(cleanups);
+          for (let r of results) {
+            if (r.status === 'rejected') {
+              log.warn(
+                `[grafana-upsert-realm-user-permission] token logout failed: ${
+                  (r.reason as any)?.message ?? String(r.reason)
+                }`,
+              );
+            }
+          }
         }
       } else {
         matrixAccountDataWarning = `account_data sync skipped: ${creds.reason}`;

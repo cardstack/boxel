@@ -160,6 +160,28 @@ export async function adminImpersonateUser({
   return body.access_token;
 }
 
+// Invalidate a single matrix access token via the standard logout
+// endpoint. Used so the short-lived admin login + admin-impersonate
+// tokens minted for one grafana grant don't pile up in synapse's
+// access_tokens table. Treats 401 as "token already invalid" — fine.
+export async function logoutMatrixAccessToken({
+  matrixURL,
+  accessToken,
+}: {
+  matrixURL: URL;
+  accessToken: string;
+}): Promise<void> {
+  let response = await fetch(`${matrixURL.href}_matrix/client/v3/logout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok && response.status !== 401) {
+    throw new Error(
+      `matrix logout failed: HTTP ${response.status} ${await response.text()}`,
+    );
+  }
+}
+
 // Append a single realm URL to a user's `app.boxel.realms` account_data,
 // preserving any existing entries. Idempotent: if `realmURL` is already in
 // the user's `realms` array, no PUT is fired and `{ alreadyPresent: true }`
