@@ -34,6 +34,8 @@ import {
   linksToMany,
   setupBaseRealm,
   StringField,
+  subscribeToChanges,
+  unsubscribeFromChanges,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -303,6 +305,34 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     assert.strictEqual(state.kind, 'error');
     if (state.kind === 'error') {
       assert.strictEqual(state.reference, `${testRealmURL}Pet/exploded`);
+    }
+  });
+
+  test('a failed singular lazy load notifies change subscribers with the sentinel', async function (assert) {
+    await setupRealm();
+    let person = await createPerson({
+      pet: { links: { self: `${testRealmURL}Pet/ghost` } },
+    });
+
+    let changes: Array<{ fieldName: string; value: unknown }> = [];
+    let subscriber = (_instance: unknown, fieldName: string, value: unknown) =>
+      changes.push({ fieldName, value });
+    subscribeToChanges(person, subscriber);
+
+    try {
+      // trigger the lazy load that will fail
+      person.pet;
+      await waitUntil(() => isLinkNotFound(bucketEntry(person, 'pet')));
+
+      let petChange = changes.find(
+        (c) => c.fieldName === 'pet' && isLinkNotFound(c.value),
+      );
+      assert.ok(
+        petChange,
+        'subscribeToChanges listeners observe the failed lazy load — change propagation matches a successful load',
+      );
+    } finally {
+      unsubscribeFromChanges(person, subscriber);
     }
   });
 
