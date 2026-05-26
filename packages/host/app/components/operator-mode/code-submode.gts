@@ -588,20 +588,29 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private triggerUploadFile() {
-    let realmURL = this.operatorModeStateService.realmURL;
-    if (!realmURL) {
+    let realmURLString = this.operatorModeStateService.realmURL;
+    if (!realmURLString) {
       throw new Error('No realm available for upload');
     }
-    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
-    task.result
-      .then((fileDef) => {
-        if (fileDef?.url) {
-          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
-        }
-      })
-      .catch((error) => {
-        console.error('Unexpected error during file upload', error);
-      });
+    let realmURL = new URL(realmURLString);
+    this.uploadFiles(realmURL).catch((error) => {
+      console.error('Unexpected error during file upload', error);
+    });
+  }
+
+  private async uploadFiles(realmURL: URL) {
+    let files = await this.fileUpload.pickLocalFiles({});
+    if (files.length === 0) {
+      return;
+    }
+    let tasks = files.map((file) =>
+      this.fileUpload.uploadProvidedFile({ realmURL, file }),
+    );
+    let results = await Promise.all(tasks.map((task) => task.result));
+    let firstSuccess = results.find((fileDef) => fileDef?.url);
+    if (firstSuccess?.url) {
+      this.operatorModeStateService.updateCodePath(new URL(firstSuccess.url));
+    }
   }
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {

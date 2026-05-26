@@ -1,10 +1,4 @@
-import {
-  click,
-  fillIn,
-  settled,
-  waitFor,
-  waitUntil,
-} from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -412,26 +406,15 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
-      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       let fileUpload = getService('file-upload') as FileUploadService;
-      await waitUntil(() => fileUpload.activeUploads.length > 0, {
-        timeout: 2000,
-        timeoutMessage: 'upload task was not created',
-      });
-
-      let task = fileUpload.activeUploads[0];
-      assert.strictEqual(
-        task.state,
-        'picking',
-        'task is in picking state waiting for file',
-      );
-
-      task.__provideFileForTesting(
+      fileUpload.__queueLocalFileBatchForTesting([
         new File(['hello upload'], 'uploaded-via-menu.txt', {
           type: 'text/plain',
         }),
-      );
+      ]);
+
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       await waitUntil(
         () =>
@@ -454,25 +437,76 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         );
     });
 
+    test('can upload multiple files via the New menu', async function (assert) {
+      await visitOperatorMode();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+
+      let fileUpload = getService('file-upload') as FileUploadService;
+      fileUpload.__queueLocalFileBatchForTesting([
+        new File(['file one'], 'multi-upload-first.txt', {
+          type: 'text/plain',
+        }),
+        new File(['file two'], 'multi-upload-second.txt', {
+          type: 'text/plain',
+        }),
+      ]);
+
+      await click('[data-test-boxel-menu-item-text="Upload File…"]');
+
+      await waitUntil(
+        () =>
+          (
+            document.querySelector(
+              '[data-test-card-url-bar-input]',
+            ) as HTMLInputElement | null
+          )?.value?.includes('multi-upload-first.txt'),
+        {
+          timeout: 10000,
+          timeoutMessage:
+            'code editor did not navigate to the first uploaded file',
+        },
+      );
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}multi-upload-first.txt`,
+          'code editor navigated to the first uploaded file',
+        );
+
+      await waitUntil(
+        () =>
+          document.querySelector(
+            '[data-test-file="multi-upload-second.txt"]',
+          ) != null,
+        {
+          timeout: 10000,
+          timeoutMessage:
+            'second uploaded file did not appear in the file tree',
+        },
+      );
+
+      assert
+        .dom('[data-test-file="multi-upload-first.txt"]')
+        .exists('first uploaded file is shown in the file tree');
+      assert
+        .dom('[data-test-file="multi-upload-second.txt"]')
+        .exists('second uploaded file is shown in the file tree');
+    });
+
     test('cancelling upload file picker does not cause errors', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
       await click('[data-test-new-file-button]');
-      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       let fileUpload = getService('file-upload') as FileUploadService;
-      await waitUntil(() => fileUpload.activeUploads.length > 0, {
-        timeout: 2000,
-        timeoutMessage: 'upload task was not created',
-      });
+      // Simulate cancelling the native file picker - empty batch
+      fileUpload.__queueLocalFileBatchForTesting([]);
 
-      let task = fileUpload.activeUploads[0];
-
-      // Simulate cancelling the native file picker
-      task.__provideFileForTesting(null);
-
-      await settled();
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
 
       assert
         .dom('[data-test-card-url-bar-input]')
