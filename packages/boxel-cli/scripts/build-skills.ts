@@ -8,9 +8,16 @@
  * local development against an unreleased boxel-skills branch.
  *
  * Emission policy: every SkillSet aggregator + every SkillPlusMarkdown leaf
- * that is NOT a child of any aggregator. Aggregator children stay inside
- * `plugin/skills/<aggregator>/references/`. No allowlist — adding a card
- * upstream automatically packages it on the next `pnpm build:skills`.
+ * that is NOT a child of any aggregator AND NOT rejected by `isExcluded`.
+ * Aggregator children stay inside `plugin/skills/<aggregator>/references/`.
+ * No allowlist — adding a card upstream automatically packages it on the next
+ * `pnpm build:skills` unless it matches the (small) exclusion rule.
+ *
+ * Stale-dir sweep: each run persists the emitted IDs to
+ * `scripts/.boxel-skills-manifest.json` and, on the next run, deletes any
+ * `plugin/skills/<id>` that was in the prior manifest but not in the new
+ * plan — keeping the plugin from shipping skills that have been removed,
+ * re-parented under an aggregator, or newly excluded.
  *
  * The on-`main` workflow `.github/workflows/boxel-cli-publish.yml` runs this
  * and commits the regenerated `plugin/skills/` diff back to main.
@@ -25,7 +32,7 @@ import {
   statSync,
   writeFileSync,
 } from 'fs';
-import { resolve } from 'path';
+import { relative, resolve } from 'path';
 import { format, resolveConfig } from 'prettier';
 
 const BOXEL_SKILLS_VERSION = 'v0.0.22';
@@ -34,6 +41,7 @@ const BOXEL_SKILLS_REPO_URL = 'https://github.com/cardstack/boxel-skills.git';
 const PLUGIN_DIR = resolve(__dirname, '..', 'plugin');
 const PLUGIN_README_PATH = resolve(PLUGIN_DIR, 'README.md');
 const CACHE_DIR = resolve(__dirname, '..', '.boxel-skills-cache');
+const MANIFEST_PATH = resolve(__dirname, '.boxel-skills-manifest.json');
 
 const README_BEGIN_MARKER =
   '<!-- BEGIN AUTO-GENERATED: boxel-skills (run `pnpm build:skills` to update) -->';
@@ -52,6 +60,45 @@ export const DESCRIPTION_OVERRIDES: Record<string, string> = {
   'boxel-design':
     'Boxel UI design discovery. Use when designing or redesigning a Boxel app, choosing a visual direction, or pushing past default look-and-feel before generating code.',
 };
+
+/**
+ * Upstream cards aimed at the host AI assistant runtime (Matrix chat in the
+ * boxel host app), not Claude Code / Codex. Those skills teach a host-only
+ * tool-call shape (`{name, payload: {description, attributes}}`), reference
+ * host commands like `switch-submode_dd88` / `set-active-llm_1887` /
+ * `patch-fields_3e67`, and assume a chat `roomId` — none of which exist in
+ * the boxel-cli context. Shipping them via the plugin would mislead the
+ * assistant into emitting invalid tool calls.
+ *
+ * Listed explicitly — no prefix rule — so future `env-*` additions upstream
+ * are NOT silently dropped; only IDs verified as host-only belong here. The
+ * boxel-environment aggregator's references are enumerated alongside the
+ * aggregator itself so the exclusion survives upstream re-parenting or
+ * top-level promotion.
+ */
+export const EXCLUDED_IDS = new Set<string>([
+  // Aggregator: its own frontMatter/backMatter teach host JSON shape.
+  'boxel-environment',
+
+  // boxel-environment references — all teach host commands / shapes.
+  'env-assistant-persona',
+  'env-calling-commands',
+  'env-choosing-llm-models',
+  'env-indexing-operations',
+  'env-markdown-edit',
+  'env-searching-and-querying',
+  'env-user-environment-awareness',
+  'env-workflows-and-orchestration-patterns',
+  'source-code-editing',
+
+  // Top-level host-only leaves (siblings of the aggregator).
+  'env-creating-and-editing-cards',
+  'env-sim-boxel-environment-guide',
+]);
+
+export function isExcluded(id: string): boolean {
+  return EXCLUDED_IDS.has(id);
+}
 
 export interface SkillCard {
   id: string;
@@ -308,6 +355,10 @@ async function emitLeaf(sourceRoot: string, card: SkillCard): Promise<void> {
  * - Every SkillPlusMarkdown leaf is emitted UNLESS it's already a child of
  *   some aggregator — those leaves are reachable via the aggregator's
  *   references and don't need a duplicate top-level skill.
+ * - Cards that `isExcluded` rejects are dropped entirely (see that helper
+ *   for rationale). The aggregator-children scan still walks excluded
+ *   aggregators so their children stay claimed and don't get promoted to
+ *   top-level leaves.
  * - Cards with any other `kind` are recorded as `unsupported` so the caller
  *   can warn without exploding the build.
  */
@@ -323,6 +374,7 @@ export function computeEmissionPlan(
   const emit: SkillCard[] = [];
   const unsupported: SkillCard[] = [];
   for (const card of cards.values()) {
+    if (isExcluded(card.id)) continue;
     if (card.kind === 'SkillSet') {
       emit.push(card);
     } else if (card.kind === 'SkillPlusMarkdown') {
@@ -335,6 +387,80 @@ export function computeEmissionPlan(
   emit.sort((a, b) => a.id.localeCompare(b.id));
   unsupported.sort((a, b) => a.id.localeCompare(b.id));
   return { emit, aggregatorChildren, unsupported };
+}
+
+/**
+ * Persisted record of which `plugin/skills/<id>` directories the last
+ * `pnpm build:skills` run wrote. Used to detect and delete dirs that drop
+ * out of the emission plan (e.g. upstream removes a card, re-parents a leaf
+ * under an aggregator, or `isExcluded` starts rejecting it) so the plugin
+ * never ships stale generated skills. CLI-authored skill dirs (file-ops,
+ * realm-sync, etc.) are never written by this script and so are never in
+ * the manifest — the sweep can't touch them.
+ */
+export interface Manifest {
+  version: string;
+  skills: string[];
+}
+
+export function loadManifest(path: string): Manifest | null {
+  if (!existsSync(path)) return null;
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch {
+    return null;
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    typeof data !== 'object' ||
+    data === null ||
+    typeof (data as Manifest).version !== 'string' ||
+    !Array.isArray((data as Manifest).skills) ||
+    !(data as Manifest).skills.every((s) => typeof s === 'string')
+  ) {
+    return null;
+  }
+  return data as Manifest;
+}
+
+/**
+ * Pure function: given the prior manifest and the new emission plan's IDs,
+ * return the IDs whose `plugin/skills/<id>` directory should be deleted.
+ * Stable-sorted so log output is deterministic.
+ */
+export function computeStaleIds(
+  prior: Manifest | null,
+  newEmitIds: readonly string[],
+): string[] {
+  if (!prior) return [];
+  const next = new Set(newEmitIds);
+  return prior.skills.filter((id) => !next.has(id)).sort();
+}
+
+function sweepStaleSkillDirs(staleIds: readonly string[]): void {
+  for (const id of staleIds) {
+    const dir = resolve(PLUGIN_DIR, 'skills', id);
+    if (!existsSync(dir)) continue;
+    rmSync(dir, { recursive: true, force: true });
+    console.log(`removed stale plugin/skills/${id}`);
+  }
+}
+
+function writeManifest(plan: EmissionPlan): void {
+  const manifest: Manifest = {
+    version: BOXEL_SKILLS_VERSION,
+    skills: plan.emit.map((c) => c.id).sort(),
+  };
+  writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n');
+  console.log(
+    `wrote ${relative(resolve(__dirname, '..'), MANIFEST_PATH)} (${manifest.skills.length} skills)`,
+  );
 }
 
 /**
@@ -387,6 +513,13 @@ async function main(): Promise<void> {
   const cards = loadSkillCards(sourceRoot);
   const plan = computeEmissionPlan(cards);
 
+  const priorManifest = loadManifest(MANIFEST_PATH);
+  const staleIds = computeStaleIds(
+    priorManifest,
+    plan.emit.map((c) => c.id),
+  );
+  sweepStaleSkillDirs(staleIds);
+
   for (const card of plan.emit) {
     if (card.kind === 'SkillSet') {
       const related = getRelatedSkills(card);
@@ -402,6 +535,7 @@ async function main(): Promise<void> {
   }
 
   await updatePluginReadme(plan);
+  writeManifest(plan);
 
   if (plan.unsupported.length > 0) {
     console.log('');
