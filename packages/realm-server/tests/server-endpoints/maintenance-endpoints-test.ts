@@ -24,11 +24,42 @@ import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// The handle-upsert-realm-user-permission flow logs in as the local
+// matrix admin to admin-impersonate the granted user and write their
+// `app.boxel.realms` account_data. CI's `register-matrix-users realms-
+// only` step only registers realm-owning users, not the synapse admin,
+// so a lazy bootstrap here ensures `@admin:localhost` exists with
+// `admin: true` before any test that needs to log in as admin runs.
+// Local dev that already has admin registered keeps the same creds.
+async function ensureMatrixAdminUser(): Promise<void> {
+  let loginResponse = await fetch(`${matrixURL.href}_matrix/client/r0/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      type: 'm.login.password',
+      user: 'admin',
+      password: 'password',
+    }),
+  });
+  if (loginResponse.ok) {
+    return;
+  }
+  await registerUser({
+    matrixURL,
+    displayname: 'admin',
+    username: 'admin',
+    password: 'password',
+    registrationSecret: matrixRegistrationSecret,
+    admin: true,
+  });
+}
+
 module(`server-endpoints/${basename(__filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
       let context = setupServerEndpointsTest(hooks);
+      hooks.before(ensureMatrixAdminUser);
 
       test('can force job completion by job_id via grafana endpoint', async function (assert) {
         let [{ id }] = (await context.dbAdapter.execute(`INSERT INTO jobs

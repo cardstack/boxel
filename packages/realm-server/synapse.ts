@@ -46,19 +46,29 @@ export async function registerUser({
   username,
   password,
   registrationSecret,
+  admin = false,
 }: {
   matrixURL: URL;
   displayname: string;
   username: string;
   password: string;
   registrationSecret: string;
+  // Mint the user as a synapse admin. Required for any user that will
+  // later drive synapse's admin-only endpoints (e.g. the admin-
+  // impersonate "log in as user" flow used by the grafana-grant
+  // account_data sync). The MAC's last segment is "admin" / "notadmin"
+  // — both must match between the nonce-MAC and the body's `admin`
+  // bool, hence the joint switch.
+  admin?: boolean;
 }) {
   let nonceResponse = await fetch(
     `${matrixURL.href}_synapse/admin/v1/register`,
   );
   let { nonce } = (await nonceResponse.json()) as { nonce: string };
   let mac = createHmac('sha1', registrationSecret)
-    .update(`${nonce}\0${username}\0${password}\0notadmin`)
+    .update(
+      `${nonce}\0${username}\0${password}\0${admin ? 'admin' : 'notadmin'}`,
+    )
     .digest('hex');
 
   let registerResponse = await fetch(
@@ -74,7 +84,7 @@ export async function registerUser({
         displayname,
         password,
         mac,
-        admin: false,
+        admin,
       }),
     },
   );
