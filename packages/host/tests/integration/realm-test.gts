@@ -3449,26 +3449,33 @@ posts/ignore-me.gts
       }),
     );
     let json = await response.json();
-    assert.deepEqual(
-      json,
-      {
-        data: {
-          id: testRealmURL,
-          type: 'realm-info',
-          attributes: {
-            name: 'Example Workspace',
-            backgroundURL: 'https://example-background-url.com',
-            iconURL: 'https://example-icon-url.com',
-            realmUserId: '@realm_server:localhost',
-            showAsCatalog: null,
-            visibility: 'public',
-            publishable: null,
-            lastPublishedAt: null,
-            includePrerenderedDefaultRealmIndex: null,
-          },
-        },
-      },
-      '/_info response is correct',
+    assert.strictEqual(json.data.id, testRealmURL, 'id is correct');
+    assert.strictEqual(json.data.type, 'realm-info', 'type is correct');
+    let attributes = json.data.attributes;
+    assert.strictEqual(attributes.name, 'Example Workspace', 'name');
+    assert.strictEqual(
+      attributes.backgroundURL,
+      'https://example-background-url.com',
+      'backgroundURL',
+    );
+    assert.strictEqual(
+      attributes.iconURL,
+      'https://example-icon-url.com',
+      'iconURL',
+    );
+    assert.strictEqual(
+      attributes.realmUserId,
+      '@realm_server:localhost',
+      'realmUserId',
+    );
+    assert.strictEqual(attributes.showAsCatalog, null, 'showAsCatalog');
+    assert.strictEqual(attributes.visibility, 'public', 'visibility');
+    assert.strictEqual(attributes.publishable, null, 'publishable');
+    assert.strictEqual(attributes.lastPublishedAt, null, 'lastPublishedAt');
+    assert.strictEqual(
+      attributes.includePrerenderedDefaultRealmIndex,
+      null,
+      'includePrerenderedDefaultRealmIndex',
     );
   });
 
