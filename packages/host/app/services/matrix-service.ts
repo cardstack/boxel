@@ -1845,12 +1845,13 @@ export default class MatrixService extends Service {
   async sendActiveLLMEvent(
     roomId: string,
     model: string,
-    caps: {
-      toolsSupported: boolean;
-      inputModalities: string[];
+    callerOverrides?: {
+      toolsSupported?: boolean;
+      inputModalities?: string[];
       reasoningEffort?: string;
     },
   ) {
+    let caps = this.resolveActiveLLMConfig(roomId, model, callerOverrides);
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
       toolsSupported: caps.toolsSupported,

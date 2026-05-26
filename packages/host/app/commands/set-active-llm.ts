@@ -26,15 +26,7 @@ export default class SetActiveLLMCommand extends HostBaseCommand<
     input: BaseCommandModule.SetActiveLLMInput,
   ): Promise<undefined> {
     if (input.model) {
-      let caps = this.matrixService.resolveActiveLLMConfig(
-        input.roomId,
-        input.model,
-      );
-      await this.matrixService.sendActiveLLMEvent(
-        input.roomId,
-        input.model,
-        caps,
-      );
+      await this.matrixService.sendActiveLLMEvent(input.roomId, input.model);
     }
     if (input.mode) {
       await this.matrixService.sendLLMModeEvent(

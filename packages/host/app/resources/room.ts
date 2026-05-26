@@ -447,8 +447,8 @@ export class RoomResource extends Resource<Args> {
       // Resolve the picker key (SystemCard config id, or raw modelId) to a
       // modelId. SystemCard can carry multiple configs for the same modelId
       // (differentiated by reasoningEffort), so pass the chosen config's
-      // reasoningEffort as a caller override to disambiguate; the resolver
-      // handles tools/modalities lookup itself.
+      // reasoningEffort as a caller override to disambiguate;
+      // sendActiveLLMEvent's internal resolver handles tools/modalities.
       let modelId = key;
       let callerOverrides: { reasoningEffort?: string } | undefined;
 
@@ -465,15 +465,10 @@ export class RoomResource extends Resource<Args> {
         }
       }
 
-      let caps = this.matrixService.resolveActiveLLMConfig(
-        this.matrixRoom.roomId,
-        modelId,
-        callerOverrides,
-      );
       await this.matrixService.sendActiveLLMEvent(
         this.matrixRoom.roomId,
         modelId,
-        caps,
+        callerOverrides,
       );
       let remainingRetries = 20;
       while (this.matrixRoom.activeLLM !== modelId && remainingRetries > 0) {

@@ -279,12 +279,11 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
     );
   });
 
-  test('sendActiveLLMEvent ships the resolved caps verbatim', async function (assert) {
+  test('sendActiveLLMEvent ships resolved caps on the wire for a curated model', async function (assert) {
     let roomId = freshRoom();
     let matrixService = getMatrixService();
 
-    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID);
-    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, caps);
+    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID);
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.deepEqual(
@@ -299,24 +298,23 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
     );
   });
 
-  test('sendActiveLLMEvent preserves an explicit toolsSupported: false on the wire', async function (assert) {
+  test('sendActiveLLMEvent preserves an explicit caller override on the wire', async function (assert) {
     let roomId = freshRoom();
     let matrixService = getMatrixService();
 
-    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID, {
+    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, {
       toolsSupported: false,
     });
-    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, caps);
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.false(
       state?.content?.toolsSupported,
-      'explicit false survives resolver + wire writer',
+      'caller override survives the internal resolver',
     );
     assert.deepEqual(
       state?.content?.inputModalities,
       CURATED_ROW.inputModalities,
-      'inputModalities still come from the curated row',
+      'fields not overridden still come from the curated row',
     );
   });
 
