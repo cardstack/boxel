@@ -618,10 +618,10 @@ module(basename(__filename), function () {
   });
 
   // VN-method coverage for the resolver. Each test owns a local VN, so
-   // they don't interact with the global `prefixMappings` registry that
-   // the modules above (testing the deprecated standalone functions)
-   // rely on. CS-10752 plumbs the resolver state onto VN; the standalone
-   // forms above will be removed once their call sites migrate.
+  // they don't interact with the global `prefixMappings` registry that
+  // the modules above (testing the deprecated standalone functions)
+  // rely on. CS-10752 plumbs the resolver state onto VN; the standalone
+  // forms above will be removed once their call sites migrate.
   module('VirtualNetwork resolver methods', function () {
     function makeVN() {
       let vn = new VirtualNetwork();
@@ -695,10 +695,7 @@ module(basename(__filename), function () {
 
       test('throws on a bare local identifier that resolves to neither', function (assert) {
         let vn = makeVN();
-        assert.throws(
-          () => vn.toURL('welcome-to-boxel-sample'),
-          /Invalid URL/,
-        );
+        assert.throws(() => vn.toURL('welcome-to-boxel-sample'), /Invalid URL/);
       });
     });
 
@@ -738,10 +735,7 @@ module(basename(__filename), function () {
       test('resolves $REALM/ against a prefix-form base', function (assert) {
         let vn = makeVN();
         assert.strictEqual(
-          vn.resolveRRI(
-            '$REALM/string',
-            rri('@cardstack/base/fields/number'),
-          ),
+          vn.resolveRRI('$REALM/string', rri('@cardstack/base/fields/number')),
           '@cardstack/base/string',
         );
       });

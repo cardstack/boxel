@@ -2,6 +2,7 @@ import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm } from './index';
 import {
   registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
@@ -92,6 +93,19 @@ export class VirtualNetwork {
       (rest) => new URL(rest, normalizedTarget).href,
     );
     registerCardReferencePrefix(normalizedId, normalizedTarget);
+  }
+
+  /**
+   * Remove a previously-registered realm prefix mapping. Companion to
+   * `addRealmMapping`. Used today by tests that scope a temporary prefix
+   * to a single test and clean up afterwards so the VN doesn't carry
+   * the mapping into sibling tests.
+   */
+  removeRealmMapping(realmIdentifier: string): void {
+    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    this.realmMappings.delete(normalizedId);
+    this.importMap.delete(normalizedId);
+    unregisterCardReferencePrefix(normalizedId);
   }
 
   knownRealms(): RealmIdentifier[] {
@@ -226,7 +240,8 @@ export class VirtualNetwork {
         // Convert back to scoped form if the resolved URL matches a mapping
         for (let [p, t] of this.realmMappings) {
           if (resolved.href.startsWith(t)) {
-            return (p + resolved.href.slice(t.length)) as RealmResourceIdentifier;
+            return (p +
+              resolved.href.slice(t.length)) as RealmResourceIdentifier;
           }
         }
         return resolved.href as RealmResourceIdentifier;
