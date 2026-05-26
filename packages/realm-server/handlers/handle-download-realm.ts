@@ -1,5 +1,5 @@
 import type Koa from 'koa';
-import type { DBAdapter, Realm } from '@cardstack/runtime-common';
+import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   ensureTrailingSlash,
   fetchUserPermissions,
@@ -34,7 +34,7 @@ const log = logger('download-realm');
 export default function handleDownloadRealm({
   dbAdapter,
   realmSecretSeed,
-  realms,
+  reconciler,
   realmsRootPath,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
@@ -70,7 +70,30 @@ export default function handleDownloadRealm({
       );
       return;
     }
-    if (!hasRealm(realms, realmURL)) {
+    // Resolve the realm's disk path WITHOUT iterating `realms[]`. Phase 3
+    // lazy mount (CS-10894) leaves non-pinned realms absent from
+    // `realms[]` until something drives a request-path `lookupOrMount`;
+    // iterating `realms[]` here would 404 a perfectly valid post-restart
+    // download (CS-11270).
+    //
+    // We don't need a started Realm to stream the archive — the download
+    // is `archiver.directory(realmPath, false)` over on-disk files,
+    // which exist whether or not the realm process is running. Two-tier
+    // lookup mirrors how `multiRealmAuthorization` does presence checks:
+    //   1. `reconciler.mounted` — already-mounted realms (including
+    //      pinned bootstrap realms and any non-pinned realm that has
+    //      been lazy-mounted earlier in this process's lifetime, as
+    //      well as constructor-supplied test realms registered via
+    //      `registerExistingMounts`). Use `realm.dir` directly.
+    //   2. `realm_registry` — non-pinned realms that haven't been
+    //      mounted yet on this instance. Resolve the disk path from
+    //      the row's `kind` + `disk_id`. This is the post-restart path
+    //      CS-11270 is about.
+    let mounted = reconciler.mounted.get(realmURL);
+    let registryRow = mounted
+      ? null
+      : await fetchRegistryRow(dbAdapter, realmURL);
+    if (!mounted && !registryRow) {
       await sendResponseForNotFound(ctxt, `Realm not found: ${realmURL}`);
       return;
     }
@@ -140,12 +163,9 @@ export default function handleDownloadRealm({
       }
     }
 
-    let realmPath = await resolveRealmPath({
-      dbAdapter,
-      realms,
-      realmURL,
-      realmsRootPath,
-    });
+    let realmPath = mounted
+      ? (mounted.dir ?? null)
+      : resolveRealmPath(registryRow!, realmsRootPath);
     if (!realmPath) {
       await sendResponseForNotFound(
         ctxt,
@@ -196,31 +216,40 @@ export default function handleDownloadRealm({
   };
 }
 
-function hasRealm(realms: Realm[], realmURL: string): boolean {
-  return realms.some((realm) => ensureTrailingSlash(realm.url) === realmURL);
+type RegistryRow = {
+  kind: 'bootstrap' | 'source' | 'published';
+  disk_id: string;
+};
+
+async function fetchRegistryRow(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<RegistryRow | null> {
+  let rows = (await query(dbAdapter, [
+    'SELECT kind, disk_id FROM realm_registry WHERE url =',
+    param(realmURL),
+  ])) as RegistryRow[];
+  return rows[0] ?? null;
 }
 
-async function resolveRealmPath({
-  dbAdapter,
-  realms,
-  realmURL,
-  realmsRootPath,
-}: {
-  dbAdapter: DBAdapter;
-  realms: Realm[];
-  realmURL: string;
-  realmsRootPath: string;
-}): Promise<string | null> {
-  let published = (await query(dbAdapter, [
-    "SELECT disk_id FROM realm_registry WHERE kind = 'published' AND url =",
-    param(realmURL),
-  ])) as { disk_id: string }[];
-  if (published.length > 0) {
-    return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, published[0].disk_id);
+// `disk_id` is kind-specific (see the realm_registry migration column
+// comment): for `bootstrap` it's an absolute path; for `source` it's a
+// directory under `realmsRootPath`; for `published` it's a directory
+// under `realmsRootPath/PUBLISHED_DIRECTORY_NAME`.
+function resolveRealmPath(
+  row: RegistryRow,
+  realmsRootPath: string,
+): string | null {
+  switch (row.kind) {
+    case 'bootstrap':
+      return row.disk_id;
+    case 'source':
+      return join(realmsRootPath, row.disk_id);
+    case 'published':
+      return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+    default:
+      return null;
   }
-
-  let realm = realms.find((r) => ensureTrailingSlash(r.url) === realmURL);
-  return realm?.dir ?? null;
 }
 
 function buildArchiveName(realmURL: URL): string {
