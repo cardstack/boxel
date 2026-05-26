@@ -239,9 +239,7 @@ module(basename(__filename), function () {
       // returns the timeout sentinel — that's the expected/passing
       // outcome here.
       const result = await Promise.race([
-        resolveRealmsForFederatedRequest(fixture.reconciler, [
-          fixture.row.url,
-        ]),
+        resolveRealmsForFederatedRequest(fixture.reconciler, [fixture.row.url]),
         new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 250)),
       ]);
 
