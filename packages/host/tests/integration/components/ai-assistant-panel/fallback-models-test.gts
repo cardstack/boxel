@@ -287,7 +287,7 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.deepEqual(
-      state?.content,
+      state,
       {
         model: CURATED_MODEL_ID,
         toolsSupported: CURATED_ROW.toolsSupported,
@@ -308,11 +308,11 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.false(
-      state?.content?.toolsSupported,
+      state?.toolsSupported,
       'caller override survives the internal resolver',
     );
     assert.deepEqual(
-      state?.content?.inputModalities,
+      state?.inputModalities,
       CURATED_ROW.inputModalities,
       'fields not overridden still come from the curated row',
     );
