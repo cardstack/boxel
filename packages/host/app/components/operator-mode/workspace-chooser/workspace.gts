@@ -404,16 +404,14 @@ export default class Workspace extends Component<Signature> {
         text-align: center;
         letter-spacing: var(--boxel-lsp);
       }
-      .name {
+      .info > .name {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
         display: -webkit-box;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         text-wrap: wrap;
-        white-space: normal;
         overflow-wrap: anywhere;
-        min-height: 2lh;
       }
       .visibility {
         color: var(--boxel-400);
