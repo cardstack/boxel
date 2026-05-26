@@ -73,7 +73,8 @@ function resolveAdminCreds(
   }
   return {
     ok: false,
-    reason: 'MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not a local homeserver',
+    reason:
+      'MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not a local homeserver',
   };
 }
 
