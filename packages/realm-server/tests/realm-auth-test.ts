@@ -13,11 +13,13 @@ import {
   testRealmHref,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import type { RealmServer } from '../server';
 
 module(basename(__filename), function () {
   module('realm auth handler', function (hooks) {
     let dbAdapter: PgAdapter;
     let request: SuperTest<SupertestTest>;
+    let testRealmServer: RealmServer;
     const matrixUserId = '@firsttimer:localhost';
 
     setupPermissionedRealmCached(hooks, {
@@ -27,9 +29,14 @@ module(basename(__filename), function () {
         [matrixUserId]: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
-      onRealmSetup: ({ dbAdapter: adapter, request: req }) => {
+      onRealmSetup: ({
+        dbAdapter: adapter,
+        request: req,
+        testRealmServer: server,
+      }) => {
         dbAdapter = adapter;
         request = req;
+        testRealmServer = server.testRealmServer;
       },
     });
 
@@ -84,6 +91,52 @@ module(basename(__filename), function () {
         sessionRoom,
         expectedRoomId,
         'session room is persisted after the realm auth request',
+      );
+    });
+
+    // CS-11264 regression: after a realm-server restart, a non-pinned
+    // realm is not in this process's realms[] until something triggers a
+    // lazy mount via the request path. Pre-fix, _realm-auth iterated
+    // realms[] directly and silently skipped any realm not yet mounted on
+    // this instance — so an owner's first post-restart boxel-cli call
+    // (push/publish/sync) failed with "No realm token available". Post-
+    // fix, the handler routes through reconciler.lookupOrMount, so any
+    // realm the reconciler can resolve (already mounted, or registered
+    // via knownByUrl, or directly readable from realm_registry) yields a
+    // session token.
+    test('POST /_realm-auth issues a token for a realm reachable only via the reconciler (post-restart)', async function (assert) {
+      sinon
+        .stub(MatrixClient.prototype, 'createDM')
+        .resolves('!post-restart-session-room:localhost');
+      sinon.stub(MatrixClient.prototype, 'sendEvent').resolves();
+      sinon.stub(MatrixClient.prototype, 'getJoinedRooms').resolves({
+        joined_rooms: [],
+      });
+      sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      // Simulate the post-restart state where the realm is still
+      // mounted in the reconciler (which knows about it from boot or a
+      // prior lazy mount on another caller) but absent from this
+      // process's realms[] snapshot.
+      testRealmServer.testingOnlyEvictRealmFromRealmsList(testRealmHref);
+
+      let response = await request
+        .post('/_realm-auth')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'server-session-room' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send('{}');
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.body[testRealmHref],
+        'response includes a JWT for the realm even though it was absent from realms[]',
       );
     });
   });

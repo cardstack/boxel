@@ -4,6 +4,7 @@ import type { CreateRoutesArgs } from '../routes';
 import {
   SupportedMimeType,
   fetchUserPermissions,
+  type Realm,
 } from '@cardstack/runtime-common';
 import type { RealmServerTokenClaim } from 'utils/jwt';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
@@ -14,11 +15,10 @@ import * as Sentry from '@sentry/node';
 export default function handleRealmAuth({
   dbAdapter,
   realmSecretSeed,
-  realms,
+  reconciler,
   serverURL,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let allRealms = realms;
     let token = ctxt.state.token as RealmServerTokenClaim;
     let { user: matrixUserId } = token;
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
@@ -42,7 +42,18 @@ export default function handleRealmAuth({
     for (let [realmUrl, permissions] of Object.entries(
       permissionsForAllRealms,
     )) {
-      let realm = allRealms.find((r) => r.url === realmUrl);
+      let realm: Realm | undefined;
+      try {
+        realm = await reconciler.lookupOrMount(realmUrl);
+      } catch (error) {
+        Sentry.withScope((scope) => {
+          scope.setExtra('realmUrl', realmUrl);
+          scope.setExtra('matrixUserId', matrixUserId);
+          scope.setExtra('permissionsForAllRealms', permissionsForAllRealms);
+          Sentry.captureException(error);
+        });
+        continue;
+      }
       if (!realm) {
         console.error(
           `Permissions found pointing to unknown realm ${realmUrl}`,
