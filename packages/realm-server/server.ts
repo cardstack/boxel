@@ -547,6 +547,15 @@ export class RealmServer {
     return [...this.realms];
   }
 
+  // Test-only accessor for the on-disk root that source/published realm
+  // disk_ids resolve under. Exposed so download-realm tests can stage a
+  // source realm at <realmsRootPath>/<disk_id> + matching realm_registry
+  // row to exercise the post-restart code path (CS-11270) without
+  // spinning up a full RealmServer for a second realm.
+  get testingOnlyRealmsRootPath() {
+    return this.realmsRootPath;
+  }
+
   // Test-only accessor for the reconciler. Exposed so realm-auth-test
   // can inspect knownByUrl / mounted as preconditions and assert that
   // _realm-auth does not cold-mount during request handling.
