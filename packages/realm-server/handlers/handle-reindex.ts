@@ -22,7 +22,7 @@ export default function handleReindex({
   serverURL,
   dbAdapter,
   definitionLookup,
-  realms,
+  reconciler,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realmPath = ctxt.URL.searchParams.get('realm')?.replace(/\/$/, '');
@@ -36,7 +36,17 @@ export default function handleReindex({
     let realmURL = new RealmPaths(new URL(serverURL)).directoryURL(
       realmPath,
     ).href;
-    let realm = realms.find((r) => r.url === realmURL);
+    // CS-11271: route through the reconciler so a non-pinned realm that
+    // hasn't been touched on this process since the last restart still
+    // mounts on demand, instead of failing with a confusing
+    // "does not exist on this server" 400.
+    let realm: Realm | undefined;
+    try {
+      realm = await reconciler.lookupOrMount(realmURL);
+    } catch (e: any) {
+      await sendResponseForSystemError(ctxt, e.message);
+      return;
+    }
     if (!realm) {
       await sendResponseForBadRequest(
         ctxt,

@@ -543,6 +543,19 @@ export class RealmServer {
     }
   }
 
+  // Simulate the post-restart "this realm isn't in this process's
+  // realms[] yet" state without tearing down its disk mount, indexer,
+  // or matrix client. CS-11264 / CS-11271 regression tests use this
+  // to prove handlers resolve through the reconciler instead of
+  // realms[]. The realm stays in reconciler.mounted so
+  // lookupOrMount() returns it via the fast path.
+  testingOnlyEvictRealmFromRealmsList(url: string): void {
+    let idx = this.realms.findIndex((r) => r.url === url);
+    if (idx !== -1) {
+      this.realms.splice(idx, 1);
+    }
+  }
+
   // Test-only accessor for the request-path realm resolver. Exposed so
   // lazy-mount integration tests can drive findOrMountRealm directly
   // without spinning up an HTTP listener + mocked Koa context.

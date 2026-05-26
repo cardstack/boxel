@@ -676,6 +676,90 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      // CS-11271 regression: after a realm-server restart, a non-pinned
+      // realm is not in this process's realms[] until something triggers
+      // a lazy mount via the request path. Pre-fix, handle-reindex
+      // iterated realms[] directly and 400'd with "does not exist on
+      // this server" — so the operator's first grafana-reindex on a
+      // non-pinned realm after a deploy / ECS task replacement /
+      // scheduled restart failed with a confusing 400 until something
+      // else triggered a mount. Post-fix, the handler routes through
+      // reconciler.lookupOrMount, so any realm the reconciler can
+      // resolve enqueues a reindex job.
+      test('can reindex a realm via grafana endpoint even when the realm is absent from realms[] (post-restart)', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'mango';
+        let ownerUserId = `@${owner}:localhost`;
+        let realmURL: string;
+        {
+          let response = await context.request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Test Realm',
+                    endpoint,
+                  },
+                },
+              }),
+            );
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
+          realmURL = response.body.data.id;
+        }
+
+        // Simulate post-restart: the realm_registry row + reconciler
+        // mount are intact, but this process's realms[] doesn't
+        // include the realm. Pre-fix, the next line caused the
+        // grafana-reindex POST below to 400.
+        context.testRealmServer.testingOnlyEvictRealmFromRealmsList(realmURL);
+
+        let initialJobs = await context.dbAdapter.execute('select * from jobs');
+        let realmPath = realmURL.substring(
+          new URL(testRealmURL.origin).href.length,
+        );
+        let response = await context.request
+          .post(`/_grafana-reindex?realm=${realmPath}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          response.status,
+          200,
+          'reindex succeeds against a realm absent from realms[]',
+        );
+        let finalJobs = await context.dbAdapter.execute('select * from jobs');
+        assert.strictEqual(
+          finalJobs.length,
+          initialJobs.length + 1,
+          'a from-scratch-index job was enqueued',
+        );
+        let job = finalJobs.pop()!;
+        assert.strictEqual(
+          job.job_type,
+          'from-scratch-index',
+          'job type is correct',
+        );
+        assert.deepEqual(
+          job.args,
+          {
+            realmURL,
+            realmUsername: owner,
+            clearLastModified: true,
+          },
+          'job args target the evicted realm',
+        );
+      });
+
       test('returns 401 when calling grafana reindex endpoint without a grafana secret', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
