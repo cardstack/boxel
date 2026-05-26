@@ -11,7 +11,6 @@ import {
   resolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
-  unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteIdentifier,
   logger,
@@ -30,6 +29,7 @@ import {
   codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
+import type { VirtualNetwork } from './virtual-network';
 import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
 import type {
@@ -156,17 +156,24 @@ function absolutizeInstanceURL(
   url: string,
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
+  virtualNetwork?: VirtualNetwork,
 ) {
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
-  if (isRegisteredPrefix(url)) {
+  if (
+    virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+  ) {
     return;
   }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(resolveCardReference(url, resourceId));
+  setURL(
+    virtualNetwork
+      ? virtualNetwork.resolveURL(url, resourceId).href
+      : resolveCardReference(url, resourceId),
+  );
 }
 
 export class RealmIndexQueryEngine {
@@ -372,7 +379,9 @@ export class RealmIndexQueryEngine {
     if (!resource.meta?.adoptsFrom) {
       return false;
     }
-    let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
+    let relativeTo = resource.id
+      ? this.#realm.virtualNetwork.toURL(resource.id)
+      : this.realmURL;
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
@@ -569,7 +578,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
-    relativizeDocument(doc, this.realmURL);
+    relativizeDocument(doc, this.realmURL, this.#realm.virtualNetwork);
     await this.attachRealmInfo(doc);
     return {
       type: 'doc',
@@ -1291,18 +1300,17 @@ export class RealmIndexQueryEngine {
             }
           }
 
-          let linkURL = new URL(
-            resolveCardReference(
-              relationship.links.self,
-              resource.id ? cardIdToURL(resource.id) : realmURL,
-            ),
+          let vn = this.#realm.virtualNetwork;
+          let linkURL = vn.resolveURL(
+            relationship.links.self,
+            resource.id ? vn.toURL(resource.id) : realmURL,
           );
           let resolvedSelf: string;
           try {
-            resolvedSelf = resolveCardReference(
+            resolvedSelf = vn.resolveURL(
               relationship.links.self,
               resource.id,
-            );
+            ).href;
           } catch {
             throw new Error(
               `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
@@ -1316,7 +1324,7 @@ export class RealmIndexQueryEngine {
           }
           // Use prefix form (e.g. @cardstack/catalog/...) when available
           // so relationship data.id stays portable across environments.
-          let relationshipIdStr = unresolveCardReference(relationshipId.href);
+          let relationshipIdStr = vn.unresolveURL(relationshipId.href);
 
           let inRealm = realmPath.inRealm(linkURL);
           if (inRealm) {
@@ -1522,11 +1530,19 @@ export class RealmIndexQueryEngine {
           ...{ links: { self: resource.id } },
         });
         visitInstanceURLs(rewritten, (url, setURL) =>
-          absolutizeInstanceURL(url, rewritten.id, setURL),
+          absolutizeInstanceURL(
+            url,
+            rewritten.id,
+            setURL,
+            this.#realm.virtualNetwork,
+          ),
         );
         visitModuleDeps(rewritten, (url, setURL) =>
-          absolutizeInstanceURL(url, rewritten.id, (newURL) =>
-            setURL(newURL as RealmResourceIdentifier),
+          absolutizeInstanceURL(
+            url,
+            rewritten.id,
+            (newURL) => setURL(newURL as RealmResourceIdentifier),
+            this.#realm.virtualNetwork,
           ),
         );
         included.push(rewritten);
@@ -1565,6 +1581,7 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
 export function relativizeDocument(
   doc: SingleCardDocument,
   realmURL: URL,
+  virtualNetwork?: VirtualNetwork,
 ): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
@@ -1575,6 +1592,7 @@ export function relativizeDocument(
     doc.data as unknown as LooseCardResource,
     primaryURL,
     realmURL,
+    virtualNetwork,
   );
   if (doc.included) {
     for (let resource of doc.included) {
@@ -1582,6 +1600,7 @@ export function relativizeDocument(
         resource as unknown as LooseCardResource,
         primaryURL,
         realmURL,
+        virtualNetwork,
       );
     }
   }
@@ -1591,28 +1610,41 @@ function relativizeResource(
   resource: LooseCardResource,
   primaryURL: URL,
   realmURL: URL,
+  virtualNetwork?: VirtualNetwork,
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
-  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
+  let resourceURL = resource.id
+    ? virtualNetwork
+      ? virtualNetwork.toURL(resource.id)
+      : cardIdToURL(resource.id)
+    : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (isRegisteredPrefix(url)) {
+    if (
+      virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+    ) {
       return;
     }
-    let urlObj = new URL(resolveCardReference(url, resourceURL));
+    let urlObj = virtualNetwork
+      ? virtualNetwork.resolveURL(url, resourceURL)
+      : new URL(resolveCardReference(url, resourceURL));
     setURL(maybeRelativeReference(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
-    if (isRegisteredPrefix(moduleURL)) {
+    if (
+      virtualNetwork
+        ? virtualNetwork.isRegisteredPrefix(moduleURL)
+        : isRegisteredPrefix(moduleURL)
+    ) {
       return;
     }
-    let absoluteModuleURL = new URL(
-      resolveCardReference(moduleURL, resourceURL),
-    );
+    let absoluteModuleURL = virtualNetwork
+      ? virtualNetwork.resolveURL(moduleURL, resourceURL)
+      : new URL(resolveCardReference(moduleURL, resourceURL));
     setModuleURL(
       maybeRelativeReference(
         absoluteModuleURL,
