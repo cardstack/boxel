@@ -12,12 +12,13 @@ import {
   logger,
 } from './index';
 import {
-  isRegisteredPrefix,
+  isRegisteredPrefix as globalIsRegisteredPrefix,
   rri,
-  unresolveCardReference,
+  unresolveCardReference as globalUnresolveCardReference,
   type RealmResourceIdentifier,
   type RealmIdentifier,
 } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
@@ -51,8 +52,12 @@ export class IndexWriter {
     this.#dbAdapter = dbAdapter;
   }
 
-  async createBatch(realmURL: URL, jobInfo?: JobInfo) {
-    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo);
+  async createBatch(
+    realmURL: URL,
+    jobInfo?: JobInfo,
+    virtualNetwork?: VirtualNetwork,
+  ) {
+    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo, virtualNetwork);
     await batch.ready;
     return batch;
   }
@@ -188,10 +193,27 @@ export class Batch {
     dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
     private jobInfo?: JobInfo,
+    private virtualNetwork?: VirtualNetwork,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#currentInvalidationId = uuidv4();
     this.ready = this.setupBatch();
+  }
+
+  // During the CS-10752 migration window these defer to the deprecated
+  // module-level resolver when no VirtualNetwork was threaded in (e.g. the
+  // worker-manager / copy-task callers). Once every caller supplies a VN the
+  // fallback branch — and the global registry it relies on — goes away.
+  private isRegisteredPrefix(reference: string): boolean {
+    return this.virtualNetwork
+      ? this.virtualNetwork.isRegisteredPrefix(reference)
+      : globalIsRegisteredPrefix(reference);
+  }
+
+  private unresolveURL(url: string): string {
+    return this.virtualNetwork
+      ? this.virtualNetwork.unresolveURL(url)
+      : globalUnresolveCardReference(url);
   }
 
   private async setupBatch(): Promise<void> {
@@ -324,7 +346,7 @@ export class Batch {
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
     let copyURL = (value: string) =>
-      isRegisteredPrefix(value)
+      this.isRegisteredPrefix(value)
         ? value
         : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
     let values = sources.map((entry) => {
@@ -1242,9 +1264,9 @@ export class Batch {
     let pageNumber = 0;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
     // since deps may be stored in prefix form for portability
-    let unresolvedPath = unresolveCardReference(resolvedPath);
+    let unresolvedPath = this.unresolveURL(resolvedPath);
     let searchBothForms =
-      unresolvedPath !== resolvedPath && isRegisteredPrefix(unresolvedPath);
+      unresolvedPath !== resolvedPath && this.isRegisteredPrefix(unresolvedPath);
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage
@@ -1434,7 +1456,7 @@ export class Batch {
           obj.id &&
           typeof obj.id === 'string'
         ) {
-          obj.id = isRegisteredPrefix(obj.id)
+          obj.id = this.isRegisteredPrefix(obj.id)
             ? obj.id
             : this.copiedRealmURL(fromRealm, new URL(obj.id));
         } else {

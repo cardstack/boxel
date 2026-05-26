@@ -189,6 +189,7 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
@@ -366,6 +367,7 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
