@@ -189,6 +189,16 @@ export async function logoutMatrixAccessToken({
 // from the GET is treated as "user has no realms list yet" — equivalent to
 // an empty array. Requires a user-scoped access token (admin-impersonate
 // first; synapse admin tokens cannot write other users' account_data).
+//
+// Lost-update protection: synapse account_data has no optimistic-
+// concurrency primitive, so two appenders racing on the same user can
+// stomp each other. After each PUT we re-GET and check our entry is
+// present; if not, a concurrent PUT overwrote us and we loop. Capped at
+// 3 attempts (one extra retry after the initial GET→PUT→verify) — beyond
+// that the upstream caller logs a warning and returns 200 per the
+// best-effort contract, and re-running the upsert recovers.
+const APPEND_REALM_MAX_ATTEMPTS = 3;
+
 export async function appendRealmToUserAccountData({
   matrixURL,
   userId,
@@ -200,36 +210,81 @@ export async function appendRealmToUserAccountData({
   userAccessToken: string;
   realmURL: string;
 }): Promise<{ alreadyPresent: boolean }> {
+  let firstAttemptAlreadyPresent: boolean | undefined;
+  for (let attempt = 1; attempt <= APPEND_REALM_MAX_ATTEMPTS; attempt++) {
+    let existing = await fetchRealmsAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+    );
+    let realms = Array.isArray(existing.realms) ? existing.realms : [];
+    if (realms.includes(realmURL)) {
+      // First-attempt observation: the caller cares whether THIS
+      // invocation appended, so a realm that was already there before
+      // we did anything reads as `alreadyPresent: true`. A retry-loop
+      // observation: a concurrent writer added our realm for us — still
+      // a fresh append from the caller's perspective.
+      return { alreadyPresent: firstAttemptAlreadyPresent ?? true };
+    }
+    firstAttemptAlreadyPresent = false;
+    await putRealmsAccountData(matrixURL, userId, userAccessToken, {
+      ...existing,
+      realms: [...realms, realmURL],
+    });
+    // Verify our entry survived; if another writer raced us we retry.
+    let verified = await fetchRealmsAccountData(
+      matrixURL,
+      userId,
+      userAccessToken,
+    );
+    let verifiedRealms = Array.isArray(verified.realms) ? verified.realms : [];
+    if (verifiedRealms.includes(realmURL)) {
+      return { alreadyPresent: false };
+    }
+  }
+  throw new Error(
+    `matrix ${APP_BOXEL_REALMS_EVENT_TYPE} append for "${userId}" lost to a concurrent writer after ${APPEND_REALM_MAX_ATTEMPTS} attempts`,
+  );
+}
+
+async function fetchRealmsAccountData(
+  matrixURL: URL,
+  userId: string,
+  userAccessToken: string,
+): Promise<Record<string, unknown>> {
   let path = `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`;
-  let getResponse = await fetch(`${matrixURL.href}${path}`, {
+  let response = await fetch(`${matrixURL.href}${path}`, {
     headers: { Authorization: `Bearer ${userAccessToken}` },
   });
-  let existing: { realms?: string[] } = {};
-  if (getResponse.status === 404) {
-    existing = { realms: [] };
-  } else if (!getResponse.ok) {
+  if (response.status === 404) {
+    return {};
+  }
+  if (!response.ok) {
     throw new Error(
-      `matrix GET ${APP_BOXEL_REALMS_EVENT_TYPE} for "${userId}" failed: HTTP ${getResponse.status} ${await getResponse.text()}`,
+      `matrix GET ${APP_BOXEL_REALMS_EVENT_TYPE} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
     );
-  } else {
-    existing = (await getResponse.json()) as { realms?: string[] };
   }
-  let realms = Array.isArray(existing.realms) ? existing.realms : [];
-  if (realms.includes(realmURL)) {
-    return { alreadyPresent: true };
-  }
-  let putResponse = await fetch(`${matrixURL.href}${path}`, {
+  return (await response.json()) as Record<string, unknown>;
+}
+
+async function putRealmsAccountData(
+  matrixURL: URL,
+  userId: string,
+  userAccessToken: string,
+  content: Record<string, unknown>,
+): Promise<void> {
+  let path = `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`;
+  let response = await fetch(`${matrixURL.href}${path}`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${userAccessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ ...existing, realms: [...realms, realmURL] }),
+    body: JSON.stringify(content),
   });
-  if (!putResponse.ok) {
+  if (!response.ok) {
     throw new Error(
-      `matrix PUT ${APP_BOXEL_REALMS_EVENT_TYPE} for "${userId}" failed: HTTP ${putResponse.status} ${await putResponse.text()}`,
+      `matrix PUT ${APP_BOXEL_REALMS_EVENT_TYPE} for "${userId}" failed: HTTP ${response.status} ${await response.text()}`,
     );
   }
-  return { alreadyPresent: false };
 }
