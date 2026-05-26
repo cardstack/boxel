@@ -676,17 +676,28 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      // CS-11271 regression: after a realm-server restart, a non-pinned
-      // realm is not in this process's realms[] until something triggers
-      // a lazy mount via the request path. Pre-fix, handle-reindex
-      // iterated realms[] directly and 400'd with "does not exist on
-      // this server" — so the operator's first grafana-reindex on a
-      // non-pinned realm after a deploy / ECS task replacement /
-      // scheduled restart failed with a confusing 400 until something
-      // else triggered a mount. Post-fix, the handler routes through
-      // reconciler.lookupOrMount, so any realm the reconciler can
-      // resolve enqueues a reindex job.
-      test('can reindex a realm via grafana endpoint even when the realm is absent from realms[] (post-restart)', async function (assert) {
+      // CS-11271 regression: pre-fix, handle-reindex resolved the
+      // target realm via `realms.find(...)` against the in-memory
+      // list. Under Phase 3 lazy mount that list is no longer the
+      // authoritative view — non-pinned realms only appear in it
+      // after some request has driven a `reconciler.lookupOrMount`
+      // for them. The operator-facing failure mode was "first
+      // grafana-reindex after a deploy / ECS task replacement on a
+      // non-pinned realm returns 400 'realm does not exist on this
+      // server'". This test proves the handler now resolves through
+      // the reconciler instead of `realms[]`: we evict the realm
+      // from `realms[]` only (leaving it in `reconciler.mounted`),
+      // so `lookupOrMount` resolves via its mounted fast path.
+      // Pre-fix the same eviction caused the 400.
+      //
+      // The true cold-mount path (registry row present, mounted
+      // empty) is exercised against the reconciler directly in
+      // `tests/lazy-mount-test.ts`; reproducing it inside this
+      // handler test would require constructing a second `Realm`
+      // instance against the disk of the realm `/_create-realm`
+      // already mounted, which races on workers / matrix / queue
+      // subscribers.
+      test('can reindex a realm via grafana endpoint even when the realm is absent from realms[]', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = `@${owner}:localhost`;
@@ -718,10 +729,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           realmURL = response.body.data.id;
         }
 
-        // Simulate post-restart: the realm_registry row + reconciler
-        // mount are intact, but this process's realms[] doesn't
-        // include the realm. Pre-fix, the next line caused the
-        // grafana-reindex POST below to 400.
         context.testRealmServer.testingOnlyEvictRealmFromRealmsList(realmURL);
 
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
@@ -743,7 +750,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           initialJobs.length + 1,
           'a from-scratch-index job was enqueued',
         );
-        let job = finalJobs.pop()!;
+        // Identify the new job by id rather than relying on row order
+        // — `select * from jobs` has no ORDER BY so the grafana-
+        // reindex job isn't guaranteed to be the last element, and
+        // filtering by `args.realmURL` would also match the
+        // /_create-realm bootstrap index.
+        let initialJobIds = new Set(initialJobs.map((j: any) => String(j.id)));
+        let newJobs = finalJobs.filter(
+          (j: any) => !initialJobIds.has(String(j.id)),
+        );
+        assert.strictEqual(
+          newJobs.length,
+          1,
+          'exactly one new job was enqueued',
+        );
+        let job = newJobs[0];
         assert.strictEqual(
           job.job_type,
           'from-scratch-index',

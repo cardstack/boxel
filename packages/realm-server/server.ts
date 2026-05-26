@@ -543,12 +543,18 @@ export class RealmServer {
     }
   }
 
-  // Simulate the post-restart "this realm isn't in this process's
-  // realms[] yet" state without tearing down its disk mount, indexer,
-  // or matrix client. CS-11264 / CS-11271 regression tests use this
-  // to prove handlers resolve through the reconciler instead of
-  // realms[]. The realm stays in reconciler.mounted so
-  // lookupOrMount() returns it via the fast path.
+  // Remove a realm from the in-memory `realms[]` view without touching
+  // reconciler.mounted or tearing down the realm's workers / matrix
+  // client / indexer. CS-11264 / CS-11271 regression tests use this to
+  // prove handlers consult the reconciler rather than iterating
+  // `realms[]` directly — after eviction, lookups must still resolve
+  // via reconciler.mounted's fast path. This is NOT a full post-
+  // restart simulation: in a real restart non-pinned realms are also
+  // absent from reconciler.mounted, which would then drive a cold
+  // mount via lookupOrMount. The cold-mount path through the
+  // reconciler itself is covered in lazy-mount-test.ts; reproducing
+  // it inside an HTTP handler test would race a second Realm
+  // instance against the pre-existing legacy mount.
   testingOnlyEvictRealmFromRealmsList(url: string): void {
     let idx = this.realms.findIndex((r) => r.url === url);
     if (idx !== -1) {

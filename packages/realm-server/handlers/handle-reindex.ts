@@ -33,9 +33,27 @@ export default function handleReindex({
       );
       return;
     }
-    let realmURL = new RealmPaths(new URL(serverURL)).directoryURL(
-      realmPath,
-    ).href;
+    let serverURLObj = new URL(serverURL);
+    let realmURLObj = new RealmPaths(serverURLObj).directoryURL(realmPath);
+    let realmURL = realmURLObj.href;
+    // Reject `realm=` values that resolve to a URL outside this server's
+    // URL space. `directoryURL` uses `new URL(local, base)`, which lets
+    // an absolute `local` ("http://evil/", "//foo/", etc.) override the
+    // base — the pre-CS-11271 `realms.find()` check accidentally
+    // enforced "must be hosted here" because the in-memory list only
+    // contained local mounts, but the reconciler probe against the
+    // cluster-wide `realm_registry` doesn't. Defence-in-depth on top
+    // of `grafanaAuthorization`.
+    if (
+      realmURLObj.origin !== serverURLObj.origin ||
+      !realmURLObj.pathname.startsWith(serverURLObj.pathname)
+    ) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `"realm" must be a path under this server (${serverURLObj.href})`,
+      );
+      return;
+    }
     // CS-11271: route through the reconciler so a non-pinned realm that
     // hasn't been touched on this process since the last restart still
     // mounts on demand, instead of failing with a confusing
