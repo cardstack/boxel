@@ -148,12 +148,12 @@ export async function performCardIndexing({
     renderError = normalizeToErrorEntry(renderResult?.error, uncaughtError);
     let runtimeErrorDeps = renderResult?.deps ?? [];
     let metaModuleDeps = modulesConsumedInMeta(resource.meta).map((m) =>
-      canonicalURL(m, instanceURL.href),
+      canonicalURL(m, instanceURL.href, virtualNetwork),
     );
     let errorIdDep =
       renderError.error.id &&
       renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ? [canonicalURL(renderError.error.id, instanceURL.href)]
+        ? [canonicalURL(renderError.error.id, instanceURL.href, virtualNetwork)]
         : undefined;
 
     let queryFieldPaths = dependencyResolver.extractQueryFieldRelationshipPaths(

@@ -43,6 +43,7 @@ export class IndexRunnerDependencyManager {
   ) => Promise<OrderingDependencyRow[]>;
   #indexBackedDependencyErrors: IndexBackedDependencyErrors;
   #relationshipDependencyExtractor: RelationshipDependencyExtractor;
+  #virtualNetwork: VirtualNetwork;
 
   constructor({
     realmURL,
@@ -53,8 +54,10 @@ export class IndexRunnerDependencyManager {
     getInvalidations,
   }: DependencyResolverOptions) {
     this.#getOrderingDependencyRows = getOrderingDependencyRows;
+    this.#virtualNetwork = virtualNetwork;
     this.#indexBackedDependencyErrors = new IndexBackedDependencyErrors({
       realmURL,
+      virtualNetwork,
       readDefinitionCacheEntries,
       getDependencyRows,
       getInvalidations,
@@ -99,7 +102,7 @@ export class IndexRunnerDependencyManager {
       }
       let base = new URL(row.url);
       for (let dep of row.deps ?? []) {
-        let normalized = canonicalURL(dep, base.href);
+        let normalized = canonicalURL(dep, base.href, this.#virtualNetwork);
         if (!byHref.has(normalized) || normalized === row.url) {
           continue;
         }

@@ -673,7 +673,7 @@ export class IndexRunner {
       let row = bestByUrl.get(url.href);
       if (row?.deps?.length) {
         for (let dep of row.deps) {
-          let resolved = canonicalURL(dep, url.href);
+          let resolved = canonicalURL(dep, url.href, this.#virtualNetwork);
           // `.json` marks an instance dep and `.glimmer-scoped.css`
           // marks an inline-styles artifact; everything else in the
           // deps array is a module URL (stored extensionless after
@@ -736,7 +736,7 @@ export class IndexRunner {
       if (typeof module !== 'string') {
         return undefined;
       }
-      return canonicalURL(module, url.href);
+      return canonicalURL(module, url.href, this.#virtualNetwork);
     } catch {
       return undefined;
     }

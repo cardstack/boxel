@@ -68,13 +68,18 @@ export class RelationshipDependencyExtractor {
     }
 
     let selfUrls = new Set<string>();
-    let canonicalSelf = canonicalURL(relativeTo.href, relativeTo.href);
+    let canonicalSelf = canonicalURL(
+      relativeTo.href,
+      relativeTo.href,
+      this.#virtualNetwork,
+    );
     selfUrls.add(canonicalSelf);
     selfUrls.add(
       normalizeRelationshipDependency(
         canonicalSelf,
         relativeTo,
         this.#realmURL,
+        this.#virtualNetwork,
       ),
     );
     if (canonicalSelf.endsWith('.json')) {
@@ -106,6 +111,7 @@ export class RelationshipDependencyExtractor {
           maybeId,
           relativeTo,
           this.#realmURL,
+          this.#virtualNetwork,
         );
         if (normalized && !selfUrls.has(normalized)) {
           deps.add(normalized);
@@ -182,6 +188,7 @@ export class RelationshipDependencyExtractor {
         id,
         relativeTo,
         this.#realmURL,
+        this.#virtualNetwork,
       );
       if (normalized) {
         deps.add(normalized);
@@ -193,6 +200,7 @@ export class RelationshipDependencyExtractor {
         selfLink,
         relativeTo,
         this.#realmURL,
+        this.#virtualNetwork,
       );
       if (normalized) {
         deps.add(normalized);
