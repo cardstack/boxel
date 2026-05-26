@@ -720,6 +720,113 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      // CS-11271 regression: pre-fix, handle-reindex resolved the
+      // target realm via `realms.find(...)` against the in-memory
+      // list. Under Phase 3 lazy mount that list is no longer the
+      // authoritative view — non-pinned realms only appear in it
+      // after some request has driven a `reconciler.lookupOrMount`
+      // for them. The operator-facing failure mode was "first
+      // grafana-reindex after a deploy / ECS task replacement on a
+      // non-pinned realm returns 400 'realm does not exist on this
+      // server'". This test proves the handler now resolves through
+      // the reconciler instead of `realms[]`: we evict the realm
+      // from `realms[]` only (leaving it in `reconciler.mounted`),
+      // so `lookupOrMount` resolves via its mounted fast path.
+      // Pre-fix the same eviction caused the 400.
+      //
+      // The true cold-mount path (registry row present, mounted
+      // empty) is exercised against the reconciler directly in
+      // `tests/lazy-mount-test.ts`; reproducing it inside this
+      // handler test would require constructing a second `Realm`
+      // instance against the disk of the realm `/_create-realm`
+      // already mounted, which races on workers / matrix / queue
+      // subscribers.
+      test('can reindex a realm via grafana endpoint even when the realm is absent from realms[]', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'mango';
+        let ownerUserId = `@${owner}:localhost`;
+        let realmURL: string;
+        {
+          let response = await context.request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Test Realm',
+                    endpoint,
+                  },
+                },
+              }),
+            );
+          assert.strictEqual(response.status, 202, 'HTTP 202 status');
+          realmURL = response.body.data.id;
+        }
+
+        context.testRealmServer.testingOnlyEvictRealmFromRealmsList(realmURL, {
+          keepMounted: true,
+        });
+
+        let initialJobs = await context.dbAdapter.execute('select * from jobs');
+        let realmPath = realmURL.substring(
+          new URL(testRealmURL.origin).href.length,
+        );
+        let response = await context.request
+          .post(`/_grafana-reindex?realm=${realmPath}`)
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          response.status,
+          200,
+          'reindex succeeds against a realm absent from realms[]',
+        );
+        let finalJobs = await context.dbAdapter.execute('select * from jobs');
+        assert.strictEqual(
+          finalJobs.length,
+          initialJobs.length + 1,
+          'a from-scratch-index job was enqueued',
+        );
+        // Identify the new job by id rather than relying on row order
+        // — `select * from jobs` has no ORDER BY so the grafana-
+        // reindex job isn't guaranteed to be the last element, and
+        // filtering by `args.realmURL` would also match the
+        // /_create-realm bootstrap index.
+        let initialJobIds = new Set(initialJobs.map((j: any) => String(j.id)));
+        let newJobs = finalJobs.filter(
+          (j: any) => !initialJobIds.has(String(j.id)),
+        );
+        assert.strictEqual(
+          newJobs.length,
+          1,
+          'exactly one new job was enqueued',
+        );
+        let job = newJobs[0];
+        assert.strictEqual(
+          job.job_type,
+          'from-scratch-index',
+          'job type is correct',
+        );
+        assert.deepEqual(
+          job.args,
+          {
+            realmURL,
+            realmUsername: owner,
+            clearLastModified: true,
+          },
+          'job args target the evicted realm',
+        );
+      });
+
       test('returns 401 when calling grafana reindex endpoint without a grafana secret', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';

@@ -560,21 +560,41 @@ export class RealmServer {
     }
   }
 
-  // Simulate the post-restart "this realm has a registry row but no
-  // active Realm instance on this process" state without tearing down
-  // its disk mount, indexer, or matrix client. realm-auth-test uses
-  // this to prove _realm-auth issues a JWT for a realm that is absent
-  // from both realms[] and reconciler.mounted — i.e. one that would
-  // need a cold lookupOrMount to be materialized. The registry row
-  // (and reconciler.knownByUrl entry) is left in place; the next
-  // request that actually needs the realm will lazy-mount it via the
-  // normal request path.
-  testingOnlyEvictRealmFromRealmsList(url: string): void {
+  // Drop a realm from this process's in-memory view to simulate a
+  // post-restart state, without tearing down its disk mount, indexer,
+  // or matrix client. Two regression-test shapes need different
+  // amounts of eviction:
+  //
+  //   - Default (keepMounted: false) — remove from BOTH `realms[]` and
+  //     `reconciler.mounted`, leaving only the realm_registry row /
+  //     `knownByUrl` entry. This is the true post-restart state for a
+  //     non-pinned realm: a handler that wants the realm must resolve
+  //     it from the registry (and would cold-mount via lookupOrMount
+  //     if it actually needs a started Realm). realm-auth-test uses
+  //     this to prove `_realm-auth` issues a JWT from registry
+  //     presence alone, without mounting.
+  //
+  //   - keepMounted: true — remove from `realms[]` only, leaving the
+  //     realm in `reconciler.mounted`. Use this for handlers that DO
+  //     route through `reconciler.lookupOrMount` (e.g. the
+  //     `_grafana-reindex` path): the test proves the handler consults
+  //     the reconciler rather than iterating `realms[]`, while the
+  //     mounted fast-path keeps `lookupOrMount` from constructing a
+  //     second `Realm` against the already-mounted disk (which would
+  //     race on workers / matrix / queue subscribers). The genuine
+  //     cold-mount path is covered against the reconciler directly in
+  //     lazy-mount-test.ts.
+  testingOnlyEvictRealmFromRealmsList(
+    url: string,
+    opts?: { keepMounted?: boolean },
+  ): void {
     let idx = this.realms.findIndex((r) => r.url === url);
     if (idx !== -1) {
       this.realms.splice(idx, 1);
     }
-    this.reconciler.mounted.delete(url);
+    if (!opts?.keepMounted) {
+      this.reconciler.mounted.delete(url);
+    }
   }
 
   // Test-only accessor for the request-path realm resolver. Exposed so
