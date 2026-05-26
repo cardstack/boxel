@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import {
   type ResolvedCodeRef,
   join,
@@ -22,9 +24,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import type NetworkService from '../services/network';
-
-import { service } from '@ember/service';
 
 import ExecuteAtomicOperationsCommand from './execute-atomic-operations';
 import FetchCardJsonCommand from './fetch-card-json';
@@ -32,6 +31,8 @@ import GetCardCommand from './get-card';
 import ReadSourceCommand from './read-source';
 import SerializeCardCommand from './serialize-card';
 import ValidateRealmCommand from './validate-realm';
+
+import type NetworkService from '../services/network';
 
 const log = logger('catalog:install');
 

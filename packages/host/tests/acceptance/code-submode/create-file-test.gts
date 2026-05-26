@@ -14,6 +14,8 @@ import {
   rri,
   baseRRI,
   Deferred,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
@@ -1315,21 +1317,23 @@ export class TestCard extends CardDef {
   });
 
   module('when a selected spec uses a prefix-form ref', function (hooks) {
-    // beforeEach (vs once-per-module before) so we can use `getService` —
-    // the Ember test context isn't set up until the per-test
-    // setupApplicationTest hook runs. Cheap to repeat; the registration
-    // is idempotent.
-    hooks.beforeEach(function () {
-      getService('network').virtualNetwork.addRealmMapping(
-        testPrefixRealmURL2,
-        testRealmURL2,
-      );
+    // hooks.before (once-per-module) is intentional — the prefix needs
+    // to be registered before `setupAcceptanceTestRealm` indexes
+    // `spec/animal.json`, whose `adoptsFrom` ref is `@test-realm/test2/
+    // animal`. `hooks.beforeEach` runs *after* setupApplicationTest's
+    // own beforeEach (which is where the indexer fires), so we'd be too
+    // late. Continuing to use the deprecated global registry here until
+    // the rest of CS-10752 lands and we can re-architect this test to
+    // register through a VN that's already in scope at module-setup
+    // time. The VN.addRealmMapping bridge keeps both stores in sync, so
+    // this still produces the same observable effect on migrated code
+    // paths.
+    hooks.before(function () {
+      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
     });
 
-    hooks.afterEach(function () {
-      getService('network').virtualNetwork.removeRealmMapping(
-        testPrefixRealmURL2,
-      );
+    hooks.after(function () {
+      unregisterCardReferencePrefix(testPrefixRealmURL2);
     });
 
     test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {

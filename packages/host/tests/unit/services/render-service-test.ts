@@ -33,7 +33,6 @@ function makeVN(): VirtualNetwork {
 }
 
 module('Unit | Service | render-service', function () {
-
   test('CardStoreWithErrors resolves registered prefix ids for card and file lookups', function (assert) {
     let store = new CardStoreWithErrors(globalThis.fetch, makeVN());
     let card = {} as CardDef;
