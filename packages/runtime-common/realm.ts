@@ -6705,6 +6705,7 @@ export class Realm {
       definition,
       relativeTo,
       definitionLookup: this.#definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
     });
   }
 
