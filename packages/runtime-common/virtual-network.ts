@@ -3,6 +3,9 @@ import { baseRealm } from './index';
 import {
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
+  isRegisteredPrefix as globalIsRegisteredPrefix,
+  resolveCardReference as globalResolveCardReference,
+  unresolveCardReference as globalUnresolveCardReference,
   type RealmIdentifier,
   type RealmResourceIdentifier,
 } from './card-reference-resolver';
@@ -126,7 +129,12 @@ export class VirtualNetwork {
         return true;
       }
     }
-    return false;
+    // Migration fallback: also consult the deprecated module-level
+    // `prefixMappings` registry so callers migrated to VN see prefixes
+    // that legacy code (and tests) still register via
+    // `registerCardReferencePrefix`. Removed in the final CS-10752
+    // cutover commit alongside the registry itself.
+    return globalIsRegisteredPrefix(reference);
   }
 
   /**
@@ -142,7 +150,11 @@ export class VirtualNetwork {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
       }
     }
-    return url as RealmResourceIdentifier;
+    // Migration fallback: defer to the deprecated module-level
+    // `unresolveCardReference` so prefixes registered globally (e.g. by
+    // legacy tests via `registerCardReferencePrefix`) still unresolve
+    // correctly. Removed in the final CS-10752 cutover.
+    return globalUnresolveCardReference(url) as RealmResourceIdentifier;
   }
 
   /**
@@ -158,6 +170,15 @@ export class VirtualNetwork {
     let resolved = this.resolveRRIToURL(rri);
     if (resolved !== undefined) {
       return new URL(resolved);
+    }
+    // Migration fallback: defer to the deprecated module-level
+    // `resolveCardReference` so prefixes registered globally still
+    // resolve. Removed in the final CS-10752 cutover.
+    try {
+      return new URL(globalResolveCardReference(rri, undefined));
+    } catch {
+      // Not a registered prefix anywhere; fall through to plain URL
+      // parsing (preserves the original throw for non-URL inputs).
     }
     return new URL(rri);
   }
