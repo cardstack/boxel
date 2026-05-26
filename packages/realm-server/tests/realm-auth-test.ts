@@ -127,9 +127,7 @@ module(basename(__filename), function () {
       // issue a JWT from the registry presence alone.
       testRealmServer.testingOnlyEvictRealmFromRealmsList(testRealmHref);
       assert.false(
-        testRealmServer.testingOnlyRealms.some(
-          (r) => r.url === testRealmHref,
-        ),
+        testRealmServer.testingOnlyRealms.some((r) => r.url === testRealmHref),
         'precondition: realm is absent from realms[]',
       );
       assert.false(
