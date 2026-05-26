@@ -14,8 +14,6 @@ import {
   rri,
   baseRRI,
   Deferred,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
@@ -1317,12 +1315,21 @@ export class TestCard extends CardDef {
   });
 
   module('when a selected spec uses a prefix-form ref', function (hooks) {
-    hooks.before(function () {
-      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
+    // beforeEach (vs once-per-module before) so we can use `getService` —
+    // the Ember test context isn't set up until the per-test
+    // setupApplicationTest hook runs. Cheap to repeat; the registration
+    // is idempotent.
+    hooks.beforeEach(function () {
+      getService('network').virtualNetwork.addRealmMapping(
+        testPrefixRealmURL2,
+        testRealmURL2,
+      );
     });
 
-    hooks.after(function () {
-      unregisterCardReferencePrefix(testPrefixRealmURL2);
+    hooks.afterEach(function () {
+      getService('network').virtualNetwork.removeRealmMapping(
+        testPrefixRealmURL2,
+      );
     });
 
     test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {
