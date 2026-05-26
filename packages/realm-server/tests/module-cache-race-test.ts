@@ -1699,8 +1699,8 @@ module(basename(__filename), function () {
   // `setup:<realm>-in-deployment` rsync). The broadcast is the
   // prevent layer; without it the reindex persists stale bytes into
   // `boxel_index.pristine_doc` plus sticky `error_doc` rows that
-  // survive past fleet stabilization (the 2026-05-22
-  // whitepaper.boxel.ai incident).
+  // survive past fleet stabilization (see CS-11245 for the
+  // originating incident).
   module(
     '#startup broadcasts source-cache wipe for bootstrap realms (CS-11245)',
     function (hooks) {

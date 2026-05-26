@@ -2536,8 +2536,8 @@ export class Realm {
             // pre-rsync bytes. `getSourceOrRedirect` would return those
             // stale bytes and the reindex would persist them into
             // `boxel_index.pristine_doc` plus sticky `error_doc` rows
-            // that survive past fleet stabilization (the 2026-05-22
-            // whitepaper.boxel.ai incident). Broadcast a per-realm
+            // that survive past fleet stabilization (see CS-11245 for
+            // the originating incident). Broadcast a per-realm
             // NOTIFY so every peer drops its entries for this URL and
             // the next read falls through to `/persistent/` (EFS,
             // already brought up to date by this container's
