@@ -827,6 +827,12 @@ interface CardChooserOpts {
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
   preselectConsumingRealm?: boolean;
+  /**
+   * When true, the realm scope is fixed to consumingRealm and the user
+   * cannot broaden it via the realm picker. Use for fields that must
+   * reference cards within the consuming realm (e.g. RoutingRuleField).
+   */
+  lockConsumingRealm?: boolean;
   preselectedCardUrls?: string[];
 }
 

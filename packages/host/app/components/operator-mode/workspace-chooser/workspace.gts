@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import CircleAlert from '@cardstack/boxel-icons/circle-alert';
+import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import { dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -820,6 +821,11 @@ export default class Workspace extends Component<Signature> {
         action: this.toggleFavorite,
       }),
       new MenuItem({
+        label: 'Realm Settings',
+        icon: FileSettingsIcon,
+        action: this.openRealmConfig,
+      }),
+      new MenuItem({
         label: 'Delete Workspace',
         icon: IconTrash,
         action: this.openDeleteModal,
@@ -827,6 +833,16 @@ export default class Workspace extends Component<Signature> {
         disabled: !this.canDeleteWorkspace,
       }),
     ];
+  }
+
+  @action openRealmConfig() {
+    let realmURL = this.args.realmIdentifier.endsWith('/')
+      ? this.args.realmIdentifier
+      : `${this.args.realmIdentifier}/`;
+    this.operatorModeStateService.openCardInInteractMode(
+      `${realmURL}realm`,
+      'edit',
+    );
   }
 
   @action async toggleFavorite() {

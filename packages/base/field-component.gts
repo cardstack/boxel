@@ -49,6 +49,13 @@ export interface BoxComponentSignature {
       format?: Format;
       displayContainer?: boolean;
       typeConstraint?: ResolvedCodeRef;
+      /**
+       * When true (only meaningful on linksTo / linksToMany editors),
+       * hard-scope the card chooser to the consuming realm — the realm
+       * picker in the catalog modal is locked and the user cannot pick
+       * a card from another realm. UI hint only; no runtime validation.
+       */
+      lockConsumingRealm?: boolean;
     };
   };
   Blocks: {};

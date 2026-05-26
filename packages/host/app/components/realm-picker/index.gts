@@ -14,6 +14,8 @@ export interface RealmFilter {
   onChange: (selected: URL[]) => void;
   /** Resolved realm URL strings (handles select-all → all available realms) */
   selectedURLs: string[];
+  /** When true, the realm scope is locked and the picker UI is disabled. */
+  locked?: boolean;
 }
 
 interface Signature {
@@ -110,7 +112,9 @@ export default class RealmPicker extends Component<Signature> {
           @renderInPlace={{false}}
           @destination={{@destination}}
           @matchTriggerWidth={{false}}
+          @disabled={{@filter.locked}}
           data-test-realm-picker
+          data-test-realm-picker-locked={{@filter.locked}}
         />
       </:default>
       <:loading>
