@@ -55,7 +55,12 @@ function makeMonacoWorker(workerUrl: string): Worker {
     let blob = new Blob([`importScripts(${JSON.stringify(absolute.href)});`], {
       type: 'text/javascript',
     });
-    return new Worker(URL.createObjectURL(blob));
+    let blobUrl = URL.createObjectURL(blob);
+    try {
+      return new Worker(blobUrl);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
   }
   return new Worker(absolute.href);
 }
