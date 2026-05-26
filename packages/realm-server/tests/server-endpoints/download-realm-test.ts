@@ -198,7 +198,13 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
     writeFileSync(join(realmDir, 'marker.txt'), 'cs-11270-regression-marker');
 
-    let realmHref = `http://127.0.0.1:9999/${realmId}/`;
+    // Anchor the new realm's URL to the test server's origin so the
+    // URL is structurally identical to the testRealm's (same host:port,
+    // different path) — keeps the test representative of a real
+    // post-restart download against this server and won't get caught
+    // out if `_download-realm` ever grows an "is this URL hosted by
+    // this realm-server?" check.
+    let realmHref = new URL(`/${realmId}/`, testRealmURL.origin).href;
     await context.dbAdapter.execute(`INSERT INTO realm_registry
         (url, kind, disk_id, owner_username, pinned)
         VALUES (
@@ -255,6 +261,44 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     assert.notOk(
       mountedAfter.includes(realmHref),
       'handler did not mount the realm as a side effect of the download',
+    );
+  });
+
+  // Defense-in-depth: `disk_id` is just a string column on
+  // `realm_registry`. Today every write path validates input
+  // (`create-realm.ts` accepts endpoints matching /^[a-z0-9-]+$/ only),
+  // but the path resolver shouldn't trust that — a future write path
+  // (or a backfill rebuilt from an operator-controlled disk layout)
+  // could store an absolute path or `..` segments. The handler must
+  // refuse to zip anything outside `realmsRootPath`.
+  test('refuses to resolve source realms whose disk_id escapes realmsRootPath', async function (assert) {
+    let realmHref = new URL(`/traversal-${uuidv4()}/`, testRealmURL.origin)
+      .href;
+    await context.dbAdapter.execute(`INSERT INTO realm_registry
+        (url, kind, disk_id, owner_username, pinned)
+        VALUES (
+          '${realmHref}',
+          'source',
+          '../etc',
+          'cs-11270-owner',
+          false
+        )`);
+    await context.dbAdapter.execute(`INSERT INTO realm_user_permissions
+        (realm_url, username, read, write, realm_owner)
+        VALUES ('${realmHref}', '*', true, false, false)`);
+
+    let response = await context.request
+      .get('/_download-realm')
+      .query({ realm: realmHref });
+
+    assert.strictEqual(
+      response.status,
+      404,
+      'traversal disk_id is rejected before any file access',
+    );
+    assert.ok(
+      response.body.errors?.[0]?.includes('not stored in realmsRootPath'),
+      'error message points at the realmsRootPath constraint',
     );
   });
 

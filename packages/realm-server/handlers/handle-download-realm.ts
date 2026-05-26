@@ -13,7 +13,7 @@ import { parseRealmsParam } from '@cardstack/runtime-common/search-utils';
 import { verifyURLSignature } from '@cardstack/runtime-common/url-signature';
 import archiver from 'archiver';
 import { existsSync, statSync } from 'fs-extra';
-import { join } from 'path';
+import { join, relative, resolve, sep, isAbsolute } from 'path';
 import type { CreateRoutesArgs } from '../routes';
 import { retrieveTokenClaim } from '../utils/jwt';
 import {
@@ -236,6 +236,16 @@ async function fetchRegistryRow(
 // comment): for `bootstrap` it's an absolute path; for `source` it's a
 // directory under `realmsRootPath`; for `published` it's a directory
 // under `realmsRootPath/PUBLISHED_DIRECTORY_NAME`.
+//
+// `source`/`published` rows go through `safeJoinUnderRoot` rather than
+// a bare `path.join`. Both write paths today validate inputs
+// (`create-realm.ts` rejects endpoints that don't match
+// /^[a-z0-9-]+$/, etc.), but `disk_id` is just a string column and a
+// future write path (or a backfill rebuilt from disk by an operator
+// with shell access) could write an absolute path or `..` segments
+// that would let `path.join` escape `realmsRootPath`. Anchoring with
+// `path.resolve` + a prefix check keeps the handler's blast radius
+// pinned to the realm root regardless of how the row was written.
 function resolveRealmPath(
   row: RegistryRow,
   realmsRootPath: string,
@@ -244,12 +254,33 @@ function resolveRealmPath(
     case 'bootstrap':
       return row.disk_id;
     case 'source':
-      return join(realmsRootPath, row.disk_id);
+      return safeJoinUnderRoot(realmsRootPath, row.disk_id);
     case 'published':
-      return join(realmsRootPath, PUBLISHED_DIRECTORY_NAME, row.disk_id);
+      return safeJoinUnderRoot(
+        join(realmsRootPath, PUBLISHED_DIRECTORY_NAME),
+        row.disk_id,
+      );
     default:
       return null;
   }
+}
+
+function safeJoinUnderRoot(root: string, segment: string): string | null {
+  if (isAbsolute(segment)) {
+    return null;
+  }
+  let absoluteRoot = resolve(root);
+  let candidate = resolve(absoluteRoot, segment);
+  if (candidate !== absoluteRoot && !candidate.startsWith(absoluteRoot + sep)) {
+    return null;
+  }
+  // Belt and suspenders — `path.relative` should agree, and surfaces any
+  // edge case path.resolve might smooth over.
+  let rel = relative(absoluteRoot, candidate);
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    return null;
+  }
+  return candidate;
 }
 
 function buildArchiveName(realmURL: URL): string {
