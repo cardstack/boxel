@@ -6,8 +6,8 @@ import {
   CardError,
   isCardError,
 } from './index';
-import { cardIdToURL } from './card-reference-resolver';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 async function loadDocumentWithRequest(
   fetch: typeof globalThis.fetch,
@@ -73,8 +73,12 @@ async function loadDocumentWithRequest(
 export async function loadCardDocument(
   fetch: typeof globalThis.fetch,
   url: string,
+  virtualNetwork?: VirtualNetwork,
 ) {
-  let requestURL = cardIdToURL(!url.endsWith('.json') ? `${url}.json` : url);
+  let target = !url.endsWith('.json') ? `${url}.json` : url;
+  let requestURL = virtualNetwork
+    ? virtualNetwork.toURL(target)
+    : new URL(target);
   let json = await loadDocumentWithRequest(
     fetch,
     url,
@@ -103,8 +107,9 @@ export async function loadCardDocument(
 export async function loadFileMetaDocument(
   fetch: typeof globalThis.fetch,
   url: string,
+  virtualNetwork?: VirtualNetwork,
 ): Promise<SingleFileMetaDocument | CardError> {
-  let requestURL = cardIdToURL(url);
+  let requestURL = virtualNetwork ? virtualNetwork.toURL(url) : new URL(url);
   let json = await loadDocumentWithRequest(
     fetch,
     url,

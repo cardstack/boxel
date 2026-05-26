@@ -1420,10 +1420,15 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private createCardStore(): CardStore {
-    return new CardStore(this.referenceCount, this.network.authedFetch, {
-      getSearchResource: (parent, getQuery, getRealms, opts) =>
-        this.getSearchResource(parent, getQuery, getRealms, opts),
-    });
+    return new CardStore(
+      this.referenceCount,
+      this.network.authedFetch,
+      this.network.virtualNetwork,
+      {
+        getSearchResource: (parent, getQuery, getRealms, opts) =>
+          this.getSearchResource(parent, getQuery, getRealms, opts),
+      },
+    );
   }
 
   private handleInvalidations = (event: RealmEventContent) => {

@@ -106,7 +106,7 @@ export class CardStoreWithErrors implements CardStore {
       return await promise;
     }
     try {
-      promise = loadCardDocument(this.#fetch, url);
+      promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
       this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
@@ -124,7 +124,7 @@ export class CardStoreWithErrors implements CardStore {
       return await promise;
     }
     try {
-      promise = loadFileMetaDocument(this.#fetch, url);
+      promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
       this.#fileMetaDocsInFlight.set(url, promise);
       return await promise;
     } finally {
