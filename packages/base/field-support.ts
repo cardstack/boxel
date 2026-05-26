@@ -3,6 +3,7 @@ import {
   isBaseInstance,
   isCardInstance,
   isFieldInstance,
+  localId,
   primitive,
   type SerializedError,
 } from '@cardstack/runtime-common';
@@ -479,10 +480,10 @@ export type RelationshipState<T extends CardDef = CardDef> =
       isLoaded: true;
       isError: false;
       value: T;
-      // Undefined when `value` is an unsaved linked card — those carry only a
-      // local id, not a fully-qualified URL. All other kinds always have a
-      // string reference.
-      reference: string | undefined;
+      // Fully-qualified URL once the linked card is saved; the card's local id
+      // before then. Both resolve through the store's identity map, which
+      // correlates the local id to the remote URL when the server assigns one.
+      reference: string;
     }
   | {
       kind: 'not-loaded';
@@ -561,7 +562,9 @@ function relationshipStateForEntry<T extends CardDef>(
     isLoaded: true,
     isError: false,
     value: entry as T,
-    reference: (entry as CardDef).id,
+    // Saved cards carry a URL `id`; unsaved cards carry only a local id. Both
+    // are resolvable references through the store's identity map.
+    reference: (entry as CardDef).id ?? (entry as CardDef)[localId],
   };
 }
 
@@ -570,6 +573,16 @@ function relationshipStateForEntry<T extends CardDef>(
 // element) for `linksToMany`. Pure read — entangles with card tracking via the
 // shared field getter so templates re-render when sentinels change, but never
 // triggers `lazilyLoadLink` and never mutates the data bucket.
+//
+// Render stability: this returns a fresh envelope object (and a fresh array for
+// the plural case) on every call, so the envelope's own identity is NOT stable
+// across renders. The stable anchors are `reference` (a string) and `value`
+// (the underlying card instance, itself stable across renders). Templates that
+// render editable inputs per element MUST key `{{#each}}` on `reference` and
+// bind inputs to `value` — never to envelope identity — or the each-blocks tear
+// down on every re-render and input fields lose cursor focus in edit format.
+// `getRelationship` itself schedules no re-renders (see the render-count test),
+// so it cannot destabilize a component on its own.
 export function getRelationship<T extends CardDef = CardDef>(
   instance: CardDef,
   fieldName: string,

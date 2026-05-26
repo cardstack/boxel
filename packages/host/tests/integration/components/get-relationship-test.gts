@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 import {
   PermissionsContextName,
   baseRealm,
+  localId,
   type Permissions,
   type SerializedError,
 } from '@cardstack/runtime-common';
@@ -138,10 +139,11 @@ module('Integration | getRelationship', function (hooks) {
       assert.strictEqual(state.reference, `${testRealmURL}Pet/mango`);
     });
 
-    test("returns kind 'present' with undefined reference when the linked card is unsaved", async function (assert) {
-      // Unsaved CardDef instances have a localId but no `id` (no URL) until
-      // saveCard runs. `getRelationship` reports them as 'present' with
-      // `reference: undefined` rather than synthesizing a URL.
+    test("returns kind 'present' with the local id as reference when the linked card is unsaved", async function (assert) {
+      // Unsaved CardDef instances have a localId but no URL `id` until saveCard
+      // runs. getRelationship reports them as 'present' with the local id as
+      // the reference — the store's identity map correlates that local id to
+      // the remote URL once the server assigns one, so it stays resolvable.
       class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
@@ -160,8 +162,13 @@ module('Integration | getRelationship', function (hooks) {
       assert.strictEqual(state.value, unsavedPet);
       assert.strictEqual(
         state.reference,
-        undefined,
-        'unsaved linked card has no URL yet',
+        unsavedPet[localId],
+        'unsaved linked card uses its local id as the reference',
+      );
+      assert.strictEqual(
+        typeof state.reference,
+        'string',
+        'reference is always a string for present',
       );
     });
 
@@ -656,6 +663,64 @@ module('Integration | getRelationship', function (hooks) {
         1,
         'three getRelationship reads in one render frame did not schedule re-renders',
       );
+    });
+
+    test('stability anchors: value and reference are stable across calls even though the envelope is fresh', async function (assert) {
+      // Edit-mode component stability depends on consumers keying on the stable
+      // `reference` string and binding inputs to the stable `value` card —
+      // never to envelope identity. This locks in that those anchors are stable
+      // across repeated reads while the envelope object intentionally is not.
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ firstName: 'Mango' });
+      let vangogh = new Pet({ firstName: 'Van Gogh' });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      await saveCard(vangogh, `${testRealmURL}Pet/vangogh`, loader);
+      let person = new Person({
+        firstName: 'Hassan',
+        pets: [mango, vangogh],
+      });
+
+      let first = getRelationship(person, 'pets');
+      let second = getRelationship(person, 'pets');
+      assertPlural(assert, first);
+      assertPlural(assert, second);
+
+      assert.notStrictEqual(
+        first,
+        second,
+        'the returned array is a fresh object each call',
+      );
+      assert.notStrictEqual(
+        first[0],
+        second[0],
+        'each envelope is a fresh object each call',
+      );
+
+      // Stable anchors — these are what edit-mode templates must key/bind on.
+      assert.strictEqual(
+        first[0].value,
+        second[0].value,
+        'value (card instance) is identical across calls',
+      );
+      assert.strictEqual(
+        first[0].value,
+        mango,
+        'value is the original card instance',
+      );
+      assert.strictEqual(
+        first[0].reference,
+        second[0].reference,
+        'reference string is stable across calls',
+      );
+      assert.strictEqual(first[1].value, vangogh);
     });
   });
 
