@@ -1784,8 +1784,7 @@ module(basename(__filename), function () {
           'RealmIndexUpdater.fullIndex was invoked exactly once on startup',
         );
         assert.ok(
-          wildcardNotifyCall &&
-            wildcardNotifyCall.calledBefore(fullIndexStub.getCall(0)),
+          wildcardNotifyCall?.calledBefore(fullIndexStub.getCall(0)),
           'the NOTIFY happened before from-scratch-index was enqueued',
         );
       });
