@@ -41,7 +41,14 @@ interface Signature {
   Element: HTMLElement;
 }
 
-const noopCardModifier = modifier(() => undefined);
+type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
+
+// Cast: a function-based no-op stands in for the class-based tracking
+// modifier so applying it is always type-safe even when no context provides
+// a real one.
+const noopCardModifier = modifier(
+  () => undefined,
+) as unknown as CardComponentModifier;
 
 export default class CardList extends Component<Signature> {
   @consume(CardCrudFunctionsContextName)
@@ -54,7 +61,7 @@ export default class CardList extends Component<Signature> {
   // PrerenderedCard does for rows that produced HTML. Falls back to a no-op
   // when no context provides one (e.g. CardList used outside operator mode),
   // so applying the modifier is always safe.
-  private get cardComponentModifier() {
+  private get cardComponentModifier(): CardComponentModifier {
     return this.cardContext?.cardComponentModifier ?? noopCardModifier;
   }
 
@@ -62,8 +69,13 @@ export default class CardList extends Component<Signature> {
   // <li> itself). HTML rows are tracked by PrerenderedCard on their own
   // component root, so tracking the <li> too would double-register them and
   // misplace the overlay — hence the no-op for those.
-  private trackerFor = (card: { hasHtml?: boolean; isError?: boolean }) =>
-    this.shouldRenderFallback(card) ? this.cardComponentModifier : noopCardModifier;
+  private trackerFor = (card: {
+    hasHtml?: boolean;
+    isError?: boolean;
+  }): CardComponentModifier =>
+    this.shouldRenderFallback(card)
+      ? this.cardComponentModifier
+      : noopCardModifier;
 
   @action
   handleCardClick(cardUrl: string, event?: Event) {

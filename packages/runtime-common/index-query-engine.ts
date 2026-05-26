@@ -439,6 +439,7 @@ export class IndexQueryEngine {
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
       atom_html: atomHtml,
+      icon_html: iconHtml,
       markdown,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -466,6 +467,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      iconHtml: iconHtml ?? null,
       markdown,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
