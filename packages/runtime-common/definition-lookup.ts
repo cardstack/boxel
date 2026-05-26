@@ -86,12 +86,20 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   error_doc: 'JSON',
 });
 
-function canonicalURL(url: string, relativeTo?: string): string {
+function canonicalURL(
+  url: string,
+  relativeTo?: string,
+  virtualNetwork?: VirtualNetwork,
+): string {
   // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
   // to real URLs so that realm-membership checks and DB lookups work.
-  if (isRegisteredPrefix(url)) {
+  if (
+    virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+  ) {
     try {
-      return resolveCardReference(url, undefined);
+      return virtualNetwork
+        ? virtualNetwork.toURL(url).href
+        : resolveCardReference(url, undefined);
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -309,6 +317,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   #dbAdapter: DBAdapter;
   #prerenderer: Prerenderer;
   #fetch: typeof fetch;
+  #virtualNetwork: VirtualNetwork;
   #realms: LocalRealm[] = [];
   #createPrerenderAuth: (
     userId: string,
@@ -356,6 +365,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     this.#dbAdapter = dbAdapter;
     this.#prerenderer = prerenderer;
     this.#fetch = virtualNetwork.fetch;
+    this.#virtualNetwork = virtualNetwork;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#populateCoordinator = populateCoordinator;
   }
@@ -373,7 +383,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition | undefined> {
-    let canonicalModuleURL = canonicalURL(codeRef.module);
+    let canonicalModuleURL = canonicalURL(codeRef.module, undefined, this.#virtualNetwork);
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,
@@ -413,7 +423,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     moduleUrl: string,
     opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
-    let canonicalModuleURL = canonicalURL(moduleUrl);
+    let canonicalModuleURL = canonicalURL(moduleUrl, undefined, this.#virtualNetwork);
     let context = await this.buildLookupContext(canonicalModuleURL);
     if (!context) {
       return undefined;
@@ -760,7 +770,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition> {
-    let canonicalModuleURL = canonicalURL(codeRef.module);
+    let canonicalModuleURL = canonicalURL(codeRef.module, undefined, this.#virtualNetwork);
     let canonicalCodeRef =
       canonicalModuleURL === codeRef.module
         ? codeRef
@@ -822,7 +832,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   async invalidate(moduleURL: string): Promise<string[]> {
-    let canonicalModuleURL = canonicalURL(moduleURL);
+    let canonicalModuleURL = canonicalURL(moduleURL, undefined, this.#virtualNetwork);
     let resolvedRealmURL = this.resolveLocalRealmURL(canonicalModuleURL);
     if (!resolvedRealmURL) {
       return [];
@@ -1206,7 +1216,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let candidateUrls = new Set<string>();
     for (let moduleUrl of query.moduleUrls) {
-      let canonicalModuleUrl = canonicalURL(moduleUrl);
+      let canonicalModuleUrl = canonicalURL(moduleUrl, undefined, this.#virtualNetwork);
       candidateUrls.add(canonicalModuleUrl);
       candidateUrls.add(normalizeExecutableURL(canonicalModuleUrl));
     }
@@ -1403,7 +1413,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
-    let canonical = canonicalURL(dep, relativeTo.href);
+    let canonical = canonicalURL(dep, relativeTo.href, this.#virtualNetwork);
     try {
       let url = new URL(canonical);
       if (hasExecutableExtension(url.href)) {
@@ -1525,7 +1535,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = cardIdToURL(error.id);
+            base = this.#virtualNetwork
+              ? this.#virtualNetwork.toURL(error.id)
+              : cardIdToURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }
@@ -1677,7 +1689,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   private moduleKey(moduleURL: string): string | undefined {
-    let canonical = canonicalURL(moduleURL);
+    let canonical = canonicalURL(moduleURL, undefined, this.#virtualNetwork);
     if (!canonical) {
       return undefined;
     }
@@ -1685,7 +1697,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   private moduleURLVariants(moduleURL: string): string[] {
-    let canonical = canonicalURL(moduleURL);
+    let canonical = canonicalURL(moduleURL, undefined, this.#virtualNetwork);
     if (!canonical) {
       return [];
     }
