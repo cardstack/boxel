@@ -4,6 +4,7 @@ import {
   type FileMetaResource,
   type SingleCardDocument,
 } from '../index';
+import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 import { normalizeRelationshipDependency } from './dependency-normalization';
 
@@ -15,9 +16,17 @@ export type RelationshipSource =
 
 export class RelationshipDependencyExtractor {
   #realmURL: URL;
+  #virtualNetwork: VirtualNetwork;
 
-  constructor({ realmURL }: { realmURL: URL }) {
+  constructor({
+    realmURL,
+    virtualNetwork,
+  }: {
+    realmURL: URL;
+    virtualNetwork: VirtualNetwork;
+  }) {
     this.#realmURL = realmURL;
+    this.#virtualNetwork = virtualNetwork;
   }
 
   extractDirectRelationshipDeps(
@@ -167,6 +176,7 @@ export class RelationshipDependencyExtractor {
     for (let id of extractRelationshipIds(
       relationship as any,
       relativeTo.href,
+      this.#virtualNetwork,
     )) {
       let normalized = normalizeRelationshipDependency(
         id,

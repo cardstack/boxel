@@ -22,6 +22,9 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+import type NetworkService from '../services/network';
+
+import { service } from '@ember/service';
 
 import ExecuteAtomicOperationsCommand from './execute-atomic-operations';
 import FetchCardJsonCommand from './fetch-card-json';
@@ -36,6 +39,8 @@ export default class ListingInstallCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput,
   typeof BaseCommandModule.ListingInstallResult
 > {
+  @service declare private network: NetworkService;
+
   description =
     'Install catalog listing with bringing them to code mode, and then remixing them via AI';
 
@@ -211,7 +216,11 @@ export default class ListingInstallCommand extends HostBaseCommand<
       for (let rel of Object.values(relationships)) {
         let rels = Array.isArray(rel) ? rel : [rel];
         for (let relationship of rels) {
-          let relatedIds = extractRelationshipIds(relationship, baseUrl);
+          let relatedIds = extractRelationshipIds(
+            relationship,
+            baseUrl,
+            this.network.virtualNetwork,
+          );
           for (let relatedId of relatedIds) {
             if (!visited.has(relatedId)) {
               queue.push(relatedId);

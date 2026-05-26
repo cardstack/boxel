@@ -5,6 +5,7 @@ import type {
 } from '../index';
 import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
+import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
 import {
@@ -16,6 +17,7 @@ type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 
 interface DependencyResolverOptions {
   realmURL: URL;
+  virtualNetwork: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
@@ -44,6 +46,7 @@ export class IndexRunnerDependencyManager {
 
   constructor({
     realmURL,
+    virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
     getOrderingDependencyRows,
@@ -59,6 +62,7 @@ export class IndexRunnerDependencyManager {
     this.#relationshipDependencyExtractor = new RelationshipDependencyExtractor(
       {
         realmURL,
+        virtualNetwork,
       },
     );
   }

@@ -155,6 +155,7 @@ export class IndexRunner {
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
+      virtualNetwork: this.#virtualNetwork,
       readDefinitionCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
           return {};
