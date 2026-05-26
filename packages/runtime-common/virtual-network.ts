@@ -166,6 +166,35 @@ export class VirtualNetwork {
    *
    * Replacement for the deprecated `cardIdToURL()`.
    */
+  /**
+   * Resolve `reference` (relative path, prefix-form RRI, or URL string)
+   * to a canonical URL object using `relativeTo` as the base when
+   * `reference` is relative. Replacement for the deprecated module-level
+   * `resolveCardReference()` for callers that need URL form.
+   *
+   * Composes `resolveRRI` + `toURL` and falls back to the deprecated
+   * resolver if VN-aware resolution can't see the relevant prefix (e.g.
+   * a global-only registration during the migration window). The
+   * fallback is removed together with the rest of the global registry
+   * in the final CS-10752 cutover commit.
+   */
+  resolveURL(reference: string, relativeTo: URL | string | undefined): URL {
+    let base: RealmResourceIdentifier | undefined;
+    if (relativeTo instanceof URL) {
+      base = relativeTo.href as RealmResourceIdentifier;
+    } else if (typeof relativeTo === 'string') {
+      base = relativeTo as RealmResourceIdentifier;
+    }
+    try {
+      return this.toURL(this.resolveRRI(reference, base));
+    } catch {
+      // Migration fallback: resolveRRI's relative-against-prefix-form
+      // branches iterate VN's own map directly; if the prefix is only
+      // registered on the deprecated global, defer to it.
+      return new URL(globalResolveCardReference(reference, relativeTo));
+    }
+  }
+
   toURL(rri: string): URL {
     let resolved = this.resolveRRIToURL(rri);
     if (resolved !== undefined) {
