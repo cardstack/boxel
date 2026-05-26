@@ -28,6 +28,7 @@ import {
   testModuleRealm,
   cardInfo,
   getFileCreatedAt,
+  realmConfigCardJSON,
 } from '../helpers';
 import {
   setupBaseRealm,
@@ -3427,15 +3428,15 @@ posts/ignore-me.gts
     }
   });
 
-  test('realm can serve info requests by reading .realm.json', async function (assert) {
+  test('realm can serve info requests by reading the RealmConfig card', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `{
-          "name": "Example Workspace",
-          "backgroundURL": "https://example-background-url.com",
-          "iconURL": "https://example-icon-url.com"
-        }`,
+        'realm.json': realmConfigCardJSON({
+          name: 'Example Workspace',
+          backgroundURL: 'https://example-background-url.com',
+          iconURL: 'https://example-icon-url.com',
+        }),
       },
     });
     let response = await handle(
@@ -3471,7 +3472,7 @@ posts/ignore-me.gts
     );
   });
 
-  test('realm can serve info requests if .realm.json is missing', async function (assert) {
+  test('realm can serve info requests if the RealmConfig card is missing', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {},
@@ -3499,11 +3500,11 @@ posts/ignore-me.gts
     );
   });
 
-  test('realm can serve info requests if .realm.json is malformed', async function (assert) {
+  test('realm can serve info requests if the RealmConfig card is malformed', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
-        '.realm.json': `Some example content that is not valid json`,
+        'realm.json': `Some example content that is not valid json`,
       },
     });
     let response = await handle(

@@ -15,6 +15,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -90,11 +91,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
             name: 'Charlie',
             species: 'Bird',
           }),
-          '.realm.json': {
-            name: 'Test Realm',
-            backgroundURL: null,
-            iconURL: null,
-          },
+          'realm.json': realmConfigCardJSON({ name: 'Test Realm' }),
         },
       });
     });

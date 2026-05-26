@@ -44,6 +44,7 @@ import {
   setMonacoContent,
   setupRealmServerEndpoints,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -272,7 +273,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         'example-file.gts': `
           @field name = contains(StringField);
         `,
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
   });

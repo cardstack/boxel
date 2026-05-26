@@ -15,6 +15,7 @@ import {
   setupOnSave,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
@@ -62,7 +63,10 @@ module('Integration | loading', function (hooks) {
         mockMatrixUtils,
         contents: {
           'card-with-broken-icon.gts': cardWithBrokenIconDefSource,
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
         },
       }),
     );

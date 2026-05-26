@@ -437,26 +437,23 @@ describe('realm push (integration)', () => {
     ]);
   });
 
-  it('does not upload .realm.json (protected file) even if present locally', async () => {
+  it('does not upload dotfiles even if present locally', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'card.gts', 'export const card = true;\n');
-    writeLocalFile(localDir, '.realm.json', '{"name":"locally-edited-marker"}');
+    // .gitkeep stands in for any local dotfile a workspace might carry;
+    // sync ignores anything starting with `.` (see shouldIgnoreFile in
+    // realm-sync-base).
+    writeLocalFile(localDir, '.gitkeep', 'locally-edited-marker');
 
     await pushCommand(localDir, realmUrl, { profileManager });
 
     expect(await remoteFileExists(realmUrl, 'card.gts')).toBe(true);
-    // The remote .realm.json may not exist at all on a freshly-created
-    // realm (CS-10053 stopped seeding one). Either way, the local file
-    // must not have been pushed.
-    if (await remoteFileExists(realmUrl, '.realm.json')) {
-      let remoteRealmJson = await fetchRemoteFile(realmUrl, '.realm.json');
-      expect(remoteRealmJson).not.toContain('locally-edited-marker');
-    }
+    expect(await remoteFileExists(realmUrl, '.gitkeep')).toBe(false);
 
     let manifest = readManifest(localDir);
-    expect(manifest.files['.realm.json']).toBeUndefined();
+    expect(manifest.files['.gitkeep']).toBeUndefined();
   });
 
   // --- Flag-combination scenarios ---

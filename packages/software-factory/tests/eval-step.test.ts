@@ -74,7 +74,7 @@ module('EvalValidationStep', function () {
         fetchFilenames: makeFetchFilenames([
           'Cards/my-card.json',
           'index.json',
-          '.realm.json',
+          'realm.json',
           'hello.test.gts',
         ]),
         evaluateModuleFn: makeEvaluateModule({}),

@@ -51,7 +51,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'zip file signature is present',
     );
     assert.ok(
-      response.body.includes(Buffer.from('.realm.json')),
+      response.body.includes(Buffer.from('realm.json')),
       'archive includes realm files',
     );
   });

@@ -205,10 +205,6 @@ describe('file touch (integration)', () => {
     expect(result.touched).toContain('touch-check.gts');
     expect(result.touched).toContain('cards/one.json');
     expect(result.touched).toContain('cards/two.json');
-    // .realm.json is filtered out before per-target processing, so it must
-    // appear in neither list — otherwise --all would exit 1 in normal realms.
-    expect(result.touched).not.toContain('.realm.json');
-    expect(result.skipped.map((s) => s.path)).not.toContain('.realm.json');
     expect(result.skipped).toEqual([]);
   });
 
@@ -268,17 +264,6 @@ describe('file touch (integration)', () => {
     expect(result.touched).toEqual([]);
     expect(result.skipped).toEqual([
       { path: 'cards/note.txt', reason: 'unsupported extension' },
-    ]);
-  });
-
-  it('skips protected files like `.realm.json`', async () => {
-    let result = await touchFiles(realmUrl, ['.realm.json'], {
-      profileManager,
-    });
-    expect(result.ok).toBe(false);
-    expect(result.touched).toEqual([]);
-    expect(result.skipped).toEqual([
-      { path: '.realm.json', reason: 'protected file' },
     ]);
   });
 

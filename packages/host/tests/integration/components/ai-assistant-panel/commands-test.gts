@@ -32,6 +32,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -246,7 +247,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
             },
           },
         },
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
 
@@ -308,7 +309,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
             },
           },
         },
-        '.realm.json': `{ "name": "${readOnlyRealmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: readOnlyRealmName }),
       },
     });
   });

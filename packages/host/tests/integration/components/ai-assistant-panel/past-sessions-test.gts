@@ -21,6 +21,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -160,7 +161,7 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
           }),
           pet: petMango,
         }),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
   });

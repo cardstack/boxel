@@ -21,6 +21,7 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -112,7 +113,10 @@ module('Integration | card-catalog', function (hooks) {
         'pet.gts': { Pet },
         'tree.gts': { Tree },
         'publishing-packet.gts': { PublishingPacket },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
+        'realm.json': realmConfigCardJSON({
+          name: realmName,
+          iconURL: 'https://example-icon.test',
+        }),
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({
           cardTitle: 'Publishing Packet',

@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -666,7 +667,10 @@ export function setupOperatorModeTests(
             cardTitle: 'Space Story',
             blogPost,
           }),
-          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+          'realm.json': realmConfigCardJSON({
+            name: realmName,
+            iconURL: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+          }),
           ...Object.fromEntries(personCards),
         },
       }));

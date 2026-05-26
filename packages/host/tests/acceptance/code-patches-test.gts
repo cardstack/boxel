@@ -40,6 +40,7 @@ import {
   setupUserSubscription,
   getMonacoContent,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -110,12 +111,12 @@ module('Acceptance | Code patches tests', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'index.json': new CardsGrid(),
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
           'hello.txt': 'Hello, world!',
           'hi.txt': 'Hi, world!\nHow are you?',
           'empty-file.gts': '',

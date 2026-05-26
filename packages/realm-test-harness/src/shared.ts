@@ -53,7 +53,7 @@ export type SynapseInstance = {
 };
 
 export interface RealmConfig {
-  /** Directory containing the realm fixture (`.realm.json`, cards, etc). */
+  /** Directory containing the realm fixture (`realm.json`, cards, etc). */
   dir: string;
   /** Path under the realm-server URL the realm mounts at, e.g. 'test/'. */
   path: string;

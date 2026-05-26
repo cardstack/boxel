@@ -671,14 +671,9 @@ module(basename(__filename), function () {
           'realm_server_3',
           ...sourceRealmURL.pathname.split('/').filter(Boolean),
         );
-        let sourceRealmConfigPath = join(sourceRealmPath, '.realm.json');
-        let sourceRealmConfig = pathExistsSync(sourceRealmConfigPath)
-          ? readJsonSync(sourceRealmConfigPath)
-          : {};
-        writeJsonSync(sourceRealmConfigPath, {
-          ...sourceRealmConfig,
-          publishable: true,
-        });
+        // publishable is owned by realm_metadata after CS-10053 — the
+        // realm createRealm flow already seeded the row with
+        // publishable=true, so nothing extra is needed here.
 
         let homeCardPath = 'SiteConfig/custom-home';
         let absoluteHomeLink = `${sourceRealmUrlString}${homeCardPath}`;

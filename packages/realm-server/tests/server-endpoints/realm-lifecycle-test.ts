@@ -90,8 +90,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           owner,
           endpoint,
         );
-        // CS-10053: publishable lives in realm_metadata now; createRealm
-        // no longer writes a .realm.json sidecar at all.
+        // Defensive: the legacy .realm.json sidecar is gone — neither
+        // createRealm nor any other write path should produce one.
         assert.notOk(
           existsSync(join(realmPath, '.realm.json')),
           'no .realm.json sidecar is written by createRealm',
