@@ -110,29 +110,12 @@ module(basename(__filename), function () {
       },
     });
 
-    // CS-11259 regression guard.
-    //
-    // /_create-realm calls reconciler.ensureMounted() for the new
-    // realm. ensureMounted publishes the Realm into reconciler.mounted
-    // synchronously and then awaits realm.start(). For a brand-new
-    // realm, start() awaits the first full index, which prerenders
-    // index.json. The CardsGrid in index.json fires _federated-search
-    // against the new realm. If resolveRealmsForFederatedRequest were
-    // to re-enter lookupOrMount() for the same URL, it would find the
-    // URL in pendingMounts and await the very start() it is nested
-    // inside — deadlocking until the prerender's 90s render timeout
-    // breaks the cycle.
-    //
-    // The mounted fast-path avoids the self-await: when the URL is
-    // already in reconciler.mounted (even if pendingMounts still has
-    // it), the resolver returns that Realm directly without awaiting
-    // start(). Searches against the mid-index `boxel_index` return
-    // empty for a brand-new realm, which is the correct answer for
-    // the cards-grid query that triggered this chain.
-    test('returns the published Realm without awaiting an in-flight start()', async function (assert) {
-      // Hold start() open for the duration of the test so the mount
-      // stays in pendingMounts. resolveRealmsForFederatedRequest must
-      // still return promptly via the mounted fast-path.
+    // Shared fixture: a reconciler whose mounts await a manually-
+    // controlled `startPromise`. The test seeds an in-flight mount
+    // by calling `ensureMounted(row)` and not awaiting; the fixture
+    // exposes both maps + a resolveStart() hook so cleanup can let
+    // start() settle before afterEach tears the DB adapter down.
+    function makeInFlightMountFixture() {
       let resolveStart: (() => void) | undefined;
       const startPromise = new Promise<void>((r) => {
         resolveStart = r;
@@ -151,7 +134,6 @@ module(basename(__filename), function () {
         prepareRealmFromRow: (row) => slowStartingRealm(row.url),
         unmount: async () => {},
       });
-
       const row: RealmRegistryRow = {
         id: 'cs-11259-fixture',
         url: 'http://localhost:4444/cs-11259-deadlock/',
@@ -162,52 +144,151 @@ module(basename(__filename), function () {
         last_published_at: null,
         pinned: false,
       };
-
-      // Begin the mount but do not await. start() is gated on
-      // startPromise, so the mount stays in-flight until the test
-      // resolves it during cleanup.
       const mountPromise = reconciler.ensureMounted(row);
+      return {
+        reconciler,
+        row,
+        mountPromise,
+        async settle() {
+          resolveStart!();
+          await mountPromise;
+        },
+      };
+    }
 
-      // Confirm the deadlock-shaped precondition is actually set up:
-      // both maps must hold the URL (ensureMounted publishes mounted
-      // synchronously, then sets pendingMounts to the start() promise).
+    // CS-11259 regression guard, self-mount path.
+    //
+    // /_create-realm calls reconciler.ensureMounted() for the new
+    // realm. ensureMounted publishes the Realm into reconciler.mounted
+    // synchronously and then awaits realm.start(). For a brand-new
+    // realm, start() awaits the first full index, which prerenders
+    // index.json. The CardsGrid in index.json fires _federated-search
+    // against the new realm. If resolveRealmsForFederatedRequest were
+    // to re-enter lookupOrMount() for the same URL, it would find the
+    // URL in pendingMounts and await the very start() it is nested
+    // inside — deadlocking until the prerender's 90s render timeout
+    // breaks the cycle.
+    //
+    // The self-mount fast-path takes a tightly scoped exception:
+    // when the request carries `x-boxel-consuming-realm === url`
+    // (the federated-search originated from a prerender for THIS
+    // realm) AND the URL is already published into
+    // `reconciler.mounted`, the resolver returns that Realm
+    // directly without awaiting start(). Searches against the
+    // mid-index `boxel_index` return empty for a brand-new realm,
+    // which is the correct answer for the cards-grid query that
+    // triggered this chain.
+    test('self-mount: consumingRealm === url returns the published Realm without awaiting start()', async function (assert) {
+      const fixture = makeInFlightMountFixture();
+
       assert.true(
-        reconciler.pendingMounts.has(row.url),
+        fixture.reconciler.pendingMounts.has(fixture.row.url),
         'mount is in-flight (pendingMounts has the URL)',
       );
       assert.true(
-        reconciler.mounted.has(row.url),
+        fixture.reconciler.mounted.has(fixture.row.url),
         'mounted has the URL (published synchronously before start())',
       );
 
-      // If the fix is broken, this call awaits the in-flight start()
-      // — which never resolves in this test — and the race below
+      // If the fix is broken (e.g. the fast-path doesn't honor
+      // `consumingRealm`), this call awaits the in-flight start() —
+      // which never resolves in this test — and the race below
       // surfaces the regression as a timeout. A 250ms budget is
-      // orders of magnitude shorter than the 90s production deadlock
-      // and still generous enough to avoid CI-environment flake.
+      // orders of magnitude shorter than the 90s production
+      // deadlock and still generous enough to avoid CI-environment
+      // flake.
       const result = await Promise.race([
-        resolveRealmsForFederatedRequest(reconciler, [row.url]),
+        resolveRealmsForFederatedRequest(
+          fixture.reconciler,
+          [fixture.row.url],
+          { consumingRealm: fixture.row.url },
+        ),
         new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 250)),
       ]);
 
       assert.notStrictEqual(
         result,
         'timeout',
-        'resolveRealmsForFederatedRequest did not self-await in-flight start()',
+        'fast-path fired: resolver did not self-await in-flight start()',
       );
       if (result !== 'timeout') {
         assert.strictEqual(result.length, 1, 'one realm in result');
         assert.strictEqual(
           result[0]?.url,
-          row.url,
+          fixture.row.url,
           'returned the published Realm (mounted fast-path)',
         );
       }
 
-      // Let the mount settle so afterEach teardown does not race a
-      // dangling promise that holds open the DB adapter.
-      resolveStart!();
-      await mountPromise;
+      await fixture.settle();
+    });
+
+    // Scoping guard for the codex review concern on PR #4947: the
+    // fast-path must NOT fire for callers that lack a matching
+    // consumingRealm. A normal multi-replica federated-search
+    // hitting a realm whose mount is in flight (rare race window
+    // between `ensureMounted` publishing into `mounted` and
+    // `start()` resolving) must still wait on start() to preserve
+    // read-after-mount consistency.
+    test('non-self-mount: omitted consumingRealm makes resolver await in-flight start()', async function (assert) {
+      const fixture = makeInFlightMountFixture();
+
+      // No `consumingRealm` opt → fast-path predicate fails → resolver
+      // routes through lookupOrMount → awaits pendingMounts. The
+      // start() never resolves in this test, so the race below
+      // returns the timeout sentinel — that's the expected/passing
+      // outcome here.
+      const result = await Promise.race([
+        resolveRealmsForFederatedRequest(fixture.reconciler, [
+          fixture.row.url,
+        ]),
+        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 250)),
+      ]);
+
+      assert.strictEqual(
+        result,
+        'timeout',
+        'no consumingRealm: resolver awaited in-flight start() (did not return early via the fast-path)',
+      );
+
+      await fixture.settle();
+    });
+
+    // Cross-realm scoping: a federated-search fired from inside a
+    // prerender for realm A that also queries realm B should only
+    // fast-path realm A. Realm B is a normal lookup and must still
+    // await its own start() if mid-mount.
+    test('cross-realm: consumingRealm only fast-paths the matching URL', async function (assert) {
+      const fixture = makeInFlightMountFixture();
+      const otherUrl = 'http://localhost:4444/cs-11259-other/';
+      const otherRow: RealmRegistryRow = {
+        ...fixture.row,
+        id: 'cs-11259-other',
+        url: otherUrl,
+        disk_id: 'cs-11259-other',
+      };
+      // Seed a second in-flight mount via the same reconciler.
+      const otherMountPromise = fixture.reconciler.ensureMounted(otherRow);
+
+      // Pass the FIRST realm as consumingRealm; the SECOND must
+      // route through lookupOrMount → await the in-flight start().
+      const result = await Promise.race([
+        resolveRealmsForFederatedRequest(
+          fixture.reconciler,
+          [fixture.row.url, otherUrl],
+          { consumingRealm: fixture.row.url },
+        ),
+        new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), 250)),
+      ]);
+
+      assert.strictEqual(
+        result,
+        'timeout',
+        'cross-realm slot still awaited start(): only the consumingRealm match takes the fast-path',
+      );
+
+      await fixture.settle();
+      await otherMountPromise;
     });
   });
 });

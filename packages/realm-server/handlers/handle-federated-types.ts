@@ -1,6 +1,11 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  logger,
+  sanitizeConsumingRealmHeader,
+  SupportedMimeType,
+  X_BOXEL_CONSUMING_REALM_HEADER,
+} from '@cardstack/runtime-common';
 import {
   makeFederatedCardTypeSummaryDoc,
   type FederatedCardTypeSummaryEntry,
@@ -25,9 +30,14 @@ export default function handleFederatedTypes({
 }): (ctxt: Koa.Context) => Promise<void> {
   return async function (ctxt: Koa.Context) {
     let { realmList } = getMultiRealmAuthorization(ctxt);
+    let consumingRealm = sanitizeConsumingRealmHeader(
+      ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
+    );
     let [publicReadableRealms, realmInstances] = await Promise.all([
       getPublicReadableRealms(dbAdapter, realmList),
-      resolveRealmsForFederatedRequest(reconciler, realmList),
+      resolveRealmsForFederatedRequest(reconciler, realmList, {
+        consumingRealm,
+      }),
     ]);
 
     let payload = getSearchRequestPayload(ctxt) as

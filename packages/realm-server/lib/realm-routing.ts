@@ -241,24 +241,36 @@ export async function hasPublicPermissions(
 // existing "skip missing realm, return partial results" semantics so
 // one broken realm does not 5xx the whole federated request.
 //
-// When the realm is already published into reconciler.mounted (even
-// if its start() is still in-flight via pendingMounts), take the
-// mounted fast-path directly. The default lookupOrMount() awaits
-// pendingMounts to give callers a fully-started realm — but a
-// federated-search fired from inside a realm's *own* first-index
-// prerender would self-deadlock against the very mount it's running
-// inside. The mounted Realm can serve read-side searches against the
-// (currently empty / mid-index) `boxel_index` without waiting for
-// start() to resolve.
+// CS-11259 self-mount fast-path. A `_federated-search` fired from
+// inside a prerender that is itself rendering for `url` would re-
+// enter `lookupOrMount(url)`, find the URL in `pendingMounts`, and
+// await the very `start()` it is nested inside — deadlocking until
+// the 90s prerender timeout breaks the cycle. When the request
+// carries `x-boxel-consuming-realm === url` (it originated from a
+// prerender for this exact realm) AND the URL is already published
+// into `reconciler.mounted` (`ensureMounted` publishes it
+// synchronously before awaiting `start()`), resolve to that
+// published Realm without awaiting startup. Searches against the
+// mid-index `boxel_index` return the correct empty result for a
+// brand-new realm and the rest of the chain unwinds.
+//
+// Scope is intentionally narrow: any caller without a
+// `consumingRealm` (live SPA / API requests, cross-replica federated
+// requests) keeps the default `lookupOrMount` behavior and still
+// waits on `start()` for read-after-mount consistency. A cross-realm
+// federated search fired from inside a prerender only fast-paths the
+// self-realm slot; other URLs in `realmList` still go through
+// `lookupOrMount`.
 export async function resolveRealmsForFederatedRequest(
   reconciler: RealmRegistryReconciler,
   realmList: string[],
+  opts?: { consumingRealm?: string | null },
 ): Promise<Array<Realm | undefined>> {
+  let consumingRealm = opts?.consumingRealm ?? null;
   let results = await Promise.allSettled(
     realmList.map((url) => {
-      let mounted = reconciler.mounted.get(url);
-      if (mounted) {
-        return Promise.resolve(mounted);
+      if (consumingRealm === url && reconciler.mounted.has(url)) {
+        return Promise.resolve(reconciler.mounted.get(url)!);
       }
       return reconciler.lookupOrMount(url);
     }),
