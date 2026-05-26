@@ -977,20 +977,21 @@ module(basename(__filename), function () {
         'file entry includes contentType',
       );
 
-      // CS-11171: executable modules are FileDef subclasses
-      // (GtsFileDef/TsFileDef) and CardsGrid's "All Files" group renders
-      // their fitted/isolated formats. Before the fix, the fused visit
-      // gated fileRender behind `!isModule`, so every HTML column on
-      // these rows was NULL and the grid showed nothing. The FileDef
-      // FileRender pass now runs for modules too.
+      // CS-11171: executable modules are FileDef subclasses — `person.gts`
+      // resolves to GtsFileDef, which inherits its fitted/isolated/etc.
+      // templates (and their `data-test-ts-*` markers) from TsFileDef.
+      // CardsGrid's "All Files" group renders those formats. Before the
+      // fix, the fused visit gated fileRender behind `!isModule`, so every
+      // HTML column on these rows was NULL and the grid showed nothing.
+      // The FileDef FileRender pass now runs for modules too.
       assert.ok(
         entry?.isolatedHtml?.includes('data-test-ts-isolated'),
-        'executable file entry has FileDef isolated HTML rendered from the TsFileDef template',
+        'executable file entry has FileDef isolated HTML (GtsFileDef, via the inherited TsFileDef template)',
       );
       let fittedHtml = Object.values(entry?.fittedHtml ?? {}).join('');
       assert.ok(
         fittedHtml.includes('data-test-ts-fitted'),
-        'executable file entry has FileDef fitted HTML rendered from the TsFileDef template',
+        'executable file entry has FileDef fitted HTML (GtsFileDef, via the inherited TsFileDef template)',
       );
     });
 

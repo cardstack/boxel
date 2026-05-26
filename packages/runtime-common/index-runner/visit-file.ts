@@ -142,9 +142,10 @@ export async function visitFileForIndexingFused({
   // (.gts/.ts). Module files are also FileDef subclasses (GtsFileDef /
   // TsFileDef) with their own fitted/embedded/atom/isolated templates, and
   // CardsGrid's "All Files" group renders those formats — so they need the
-  // FileDef-format HTML just like .json/.md/image files do (CS-11171). The
-  // module prerender pass (gated by `isModule` below via `hasModulePrerender`)
-  // is orthogonal: it produces the compiled module artifact, not format HTML.
+  // FileDef-format HTML just like .json/.md/image files do (CS-11171).
+  // `isModule` does NOT gate this: it's only recorded as the
+  // `hasModulePrerender` flag on the file-index row below (a metadata hint
+  // for downstream consumers; the file indexer no longer acts on it).
   // Missing-resource cases are handled downstream by the file indexer.
   let needFileRender = true;
 
