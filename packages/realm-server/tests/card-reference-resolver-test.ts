@@ -656,16 +656,13 @@ module(basename(__filename), function () {
       // shared global, which the fallback in `vn.isRegisteredPrefix`
       // then sees. Re-enable in the final CS-10752 cutover commit that
       // removes the bridge and the fallbacks.
-      test.skip(
-        'uses only this VN’s mappings — not a sibling VN',
-        function (assert) {
-          let vn = makeVN();
-          let other = new VirtualNetwork();
-          other.addRealmMapping('@other/realm/', 'http://other.example.com/');
-          assert.false(vn.isRegisteredPrefix('@other/realm/foo'));
-          assert.true(other.isRegisteredPrefix('@other/realm/foo'));
-        },
-      );
+      test.skip('uses only this VN’s mappings — not a sibling VN', function (assert) {
+        let vn = makeVN();
+        let other = new VirtualNetwork();
+        other.addRealmMapping('@other/realm/', 'http://other.example.com/');
+        assert.false(vn.isRegisteredPrefix('@other/realm/foo'));
+        assert.true(other.isRegisteredPrefix('@other/realm/foo'));
+      });
     });
 
     module('unresolveURL', function () {
