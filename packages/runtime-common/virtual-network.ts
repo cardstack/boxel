@@ -406,7 +406,7 @@ export class VirtualNetwork {
     });
 
     return withRetries(new URL(request.url), () =>
-      fetcher(this.nativeFetch, handlers)(request, init),
+      fetcher(this.nativeFetch, handlers, this)(request, init),
     );
   }
 

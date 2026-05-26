@@ -863,35 +863,39 @@ export class Realm {
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
-    let _fetch = fetcher(virtualNetwork.fetch, [
-      // when we run cards directly in node we do so under the authority of the
-      // realm server so that we can assume the user that owns this realm. this
-      // logic will eventually go away after we refactor to running cards only
-      // in headless chrome.
-      async (req, next) => {
-        if (!owner) {
-          owner = await this.getRealmOwnerUserId();
-        }
-        req.headers.set('X-Boxel-Assume-User', owner);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (request, next) => {
-        if (!this.paths.inRealm(rri(request.url))) {
-          return next(request);
-        }
-        return await this.internalHandle(request, true);
-      },
-      authorizationMiddleware(
-        // ditto with above, we run cards under the authority of the realm
-        // server so that we can assume user that owns this realm. refactor this
-        // back to using the realm's own matrix client after running cards in
-        // headless chrome lands.
-        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
-      ),
-    ]);
+    let _fetch = fetcher(
+      virtualNetwork.fetch,
+      [
+        // when we run cards directly in node we do so under the authority of the
+        // realm server so that we can assume the user that owns this realm. this
+        // logic will eventually go away after we refactor to running cards only
+        // in headless chrome.
+        async (req, next) => {
+          if (!owner) {
+            owner = await this.getRealmOwnerUserId();
+          }
+          req.headers.set('X-Boxel-Assume-User', owner);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        async (request, next) => {
+          if (!this.paths.inRealm(rri(request.url))) {
+            return next(request);
+          }
+          return await this.internalHandle(request, true);
+        },
+        authorizationMiddleware(
+          // ditto with above, we run cards under the authority of the realm
+          // server so that we can assume user that owns this realm. refactor this
+          // back to using the realm's own matrix client after running cards in
+          // headless chrome lands.
+          new RealmAuthDataSource(this.#matrixClient, () => _fetch),
+        ),
+      ],
+      virtualNetwork,
+    );
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);

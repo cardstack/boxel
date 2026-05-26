@@ -240,16 +240,20 @@ export class Worker {
       args.realmUsername,
       this.#matrixURL.href,
     );
-    _fetch = fetcher(this.#virtualNetwork.fetch, [
-      async (req, next) => {
-        req.headers.set('X-Boxel-Assume-User', realmUserId);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      authorizationMiddleware(realmAuthDataSource),
-    ]);
+    _fetch = fetcher(
+      this.#virtualNetwork.fetch,
+      [
+        async (req, next) => {
+          req.headers.set('X-Boxel-Assume-User', realmUserId);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        authorizationMiddleware(realmAuthDataSource),
+      ],
+      this.#virtualNetwork,
+    );
     return _fetch;
   }
 

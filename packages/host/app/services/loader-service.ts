@@ -118,7 +118,11 @@ export default class LoaderService extends Service {
 
     middlewareStack.push(authorizationMiddleware(this.realm));
     middlewareStack.push(authErrorEventMiddleware());
-    let fetch = fetcher(this.network.fetch, middlewareStack);
+    let fetch = fetcher(
+      this.network.fetch,
+      middlewareStack,
+      this.network.virtualNetwork,
+    );
     let loader = new Loader(fetch, this.network.resolveImport, {
       // Route the loader's transient-5xx retry backoff sleep through
       // scheduleNativeTimeout so it bypasses the render-timer-stub during
