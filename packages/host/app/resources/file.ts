@@ -197,7 +197,7 @@ class _FileResource extends Resource<Args> {
     }
   }
 
-  private read = restartableTask(async () => {
+  private read = restartableTask(async (opts?: { force?: boolean }) => {
     let response;
     try {
       response = await this.network.authedFetch(this._url, {
@@ -225,7 +225,15 @@ class _FileResource extends Resource<Args> {
 
     let lastModified = response.headers.get('last-modified') || undefined;
 
+    // Skip the lastModified short-circuit when the read was triggered by an
+    // explicit invalidation event — the realm has authoritatively told us the
+    // file changed. The Last-Modified header is only unix-second precision
+    // (unixTime() in @cardstack/runtime-common, used by both the node-realm
+    // adapter and the in-memory test adapter), so two writes within the same
+    // wall-clock second carry identical headers and would otherwise leave
+    // the editor stale on the second write.
     if (
+      !opts?.force &&
       lastModified &&
       this.innerState.state === 'ready' &&
       this.innerState.lastModified === lastModified
@@ -323,7 +331,7 @@ class _FileResource extends Resource<Args> {
         }
 
         if (reloadFile) {
-          this.read.perform();
+          this.read.perform({ force: true });
         }
       }
     });
