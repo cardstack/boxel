@@ -228,6 +228,10 @@ export class Loader {
     this.virtualNetwork = options?.virtualNetwork;
   }
 
+  getVirtualNetwork(): VirtualNetwork | undefined {
+    return this.virtualNetwork;
+  }
+
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
