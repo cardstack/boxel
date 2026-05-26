@@ -71,7 +71,8 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
     })(),
   });
 
-  let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
+  let { createAndJoinRoom, getRoomState, simulateRemoteMessage } =
+    mockMatrixUtils;
 
   setupRealmCacheTeardown(hooks);
 
@@ -129,7 +130,7 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
     return openAiAssistant();
   }
 
-  test('sendActiveLLMEvent fills caps from constant for a curated model when no systemCard', async function (assert) {
+  test('resolveActiveLLMConfig fills caps from DEFAULT_FALLBACK_MODELS for a curated model when no systemCard', async function (assert) {
     let roomId = freshRoom();
     let matrixService = getMatrixService();
     assert.strictEqual(
@@ -138,7 +139,152 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
       'precondition: no systemCard',
     );
 
-    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID);
+    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID);
+
+    assert.strictEqual(
+      caps.toolsSupported,
+      CURATED_ROW.toolsSupported,
+      'toolsSupported from curated row',
+    );
+    assert.deepEqual(
+      caps.inputModalities,
+      CURATED_ROW.inputModalities,
+      'inputModalities from curated row',
+    );
+    assert.strictEqual(
+      caps.reasoningEffort,
+      undefined,
+      'reasoningEffort never auto-filled from the curated fallback',
+    );
+  });
+
+  test('resolveActiveLLMConfig falls to conservative floor for a non-curated model with no prior event', async function (assert) {
+    let roomId = freshRoom();
+    let matrixService = getMatrixService();
+
+    let caps = matrixService.resolveActiveLLMConfig(
+      roomId,
+      NON_CURATED_MODEL_ID,
+    );
+
+    assert.false(
+      caps.toolsSupported,
+      'conservative floor disables tools for an unknown model',
+    );
+    assert.deepEqual(
+      caps.inputModalities,
+      ['text'],
+      'conservative floor limits modalities to text',
+    );
+    assert.strictEqual(
+      caps.reasoningEffort,
+      undefined,
+      'reasoningEffort stays undefined at the floor',
+    );
+  });
+
+  test('resolveActiveLLMConfig: caller override beats DEFAULT_FALLBACK_MODELS', async function (assert) {
+    let roomId = freshRoom();
+    let matrixService = getMatrixService();
+
+    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID, {
+      toolsSupported: false,
+    });
+
+    assert.false(
+      caps.toolsSupported,
+      'explicit caller override wins over the curated row',
+    );
+    assert.deepEqual(
+      caps.inputModalities,
+      CURATED_ROW.inputModalities,
+      'fields not overridden still come from the curated row',
+    );
+  });
+
+  test('resolveActiveLLMConfig rehydrates caps from a prior valid event for the same model', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getMatrixService();
+
+    // Seed a prior valid active-llm event for an uncurated model. The dumb
+    // wire writer ships the caps verbatim, and the timeline propagates them
+    // back into the local MatrixRoom event list.
+    await matrixService.sendActiveLLMEvent(roomId, 'uncurated/model-x', {
+      toolsSupported: true,
+      inputModalities: ['text', 'audio'],
+    });
+    await waitUntil(() =>
+      matrixService
+        .getRoomData(roomId)
+        ?.events?.some(
+          (e) =>
+            e.type === APP_BOXEL_ACTIVE_LLM &&
+            (e as { content?: { model?: string } }).content?.model ===
+              'uncurated/model-x',
+        ),
+    );
+
+    let caps = matrixService.resolveActiveLLMConfig(
+      roomId,
+      'uncurated/model-x',
+    );
+
+    assert.true(
+      caps.toolsSupported,
+      'toolsSupported rehydrated from prior event',
+    );
+    assert.deepEqual(
+      caps.inputModalities,
+      ['text', 'audio'],
+      'inputModalities rehydrated from prior event',
+    );
+  });
+
+  test('resolveActiveLLMConfig skips a prior broken event and falls to the conservative floor', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let matrixService = getMatrixService();
+
+    // Seed a CS-11249-era broken event: caps missing. Layer 4 must filter it
+    // out and resolution must drop to the conservative floor.
+    simulateRemoteMessage(
+      roomId,
+      '@testuser:localhost',
+      { model: 'uncurated/broken-model' },
+      { type: APP_BOXEL_ACTIVE_LLM, state_key: '' },
+    );
+    await waitUntil(() =>
+      matrixService
+        .getRoomData(roomId)
+        ?.events?.some(
+          (e) =>
+            e.type === APP_BOXEL_ACTIVE_LLM &&
+            (e as { content?: { model?: string } }).content?.model ===
+              'uncurated/broken-model',
+        ),
+    );
+
+    let caps = matrixService.resolveActiveLLMConfig(
+      roomId,
+      'uncurated/broken-model',
+    );
+
+    assert.false(
+      caps.toolsSupported,
+      'broken prior event ignored; tools disabled at the floor',
+    );
+    assert.deepEqual(
+      caps.inputModalities,
+      ['text'],
+      'broken prior event ignored; modalities at the floor',
+    );
+  });
+
+  test('sendActiveLLMEvent ships the resolved caps verbatim', async function (assert) {
+    let roomId = freshRoom();
+    let matrixService = getMatrixService();
+
+    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID);
+    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, caps);
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.deepEqual(
@@ -146,66 +292,31 @@ module('Integration | ai-assistant-panel | fallback-models', function (hooks) {
       {
         model: CURATED_MODEL_ID,
         toolsSupported: CURATED_ROW.toolsSupported,
-        reasoningEffort: CURATED_ROW.reasoningEffort,
+        reasoningEffort: undefined,
         inputModalities: CURATED_ROW.inputModalities,
       },
-      'curated model caps filled from DEFAULT_FALLBACK_MODELS',
+      'state event reflects the resolved caps; reasoningEffort stays undefined',
     );
   });
 
-  test('sendActiveLLMEvent ships undefined caps for a non-curated model (constant does not cover it)', async function (assert) {
+  test('sendActiveLLMEvent preserves an explicit toolsSupported: false on the wire', async function (assert) {
     let roomId = freshRoom();
     let matrixService = getMatrixService();
 
-    await matrixService.sendActiveLLMEvent(roomId, NON_CURATED_MODEL_ID);
-
-    let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
-    assert.strictEqual(
-      state?.content?.model,
-      NON_CURATED_MODEL_ID,
-      'non-curated model id ships as-is',
-    );
-    assert.strictEqual(
-      state?.content?.toolsSupported,
-      undefined,
-      'no caps for non-curated model',
-    );
-    assert.strictEqual(
-      state?.content?.reasoningEffort,
-      undefined,
-      'no reasoningEffort for non-curated model',
-    );
-    assert.strictEqual(
-      state?.content?.inputModalities,
-      undefined,
-      'no inputModalities for non-curated model',
-    );
-  });
-
-  test('sendActiveLLMEvent respects explicit toolsSupported: false (never overridden by constant)', async function (assert) {
-    let roomId = freshRoom();
-    let matrixService = getMatrixService();
-
-    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, {
+    let caps = matrixService.resolveActiveLLMConfig(roomId, CURATED_MODEL_ID, {
       toolsSupported: false,
     });
+    await matrixService.sendActiveLLMEvent(roomId, CURATED_MODEL_ID, caps);
 
     let state = getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.false(
       state?.content?.toolsSupported,
-      'explicit false is preserved on the wire',
+      'explicit false survives resolver + wire writer',
     );
-    // inputModalities + reasoningEffort not provided by caller → fall back to
-    // the constant.
     assert.deepEqual(
       state?.content?.inputModalities,
       CURATED_ROW.inputModalities,
-      'partial config: missing inputModalities filled from constant',
-    );
-    assert.strictEqual(
-      state?.content?.reasoningEffort,
-      CURATED_ROW.reasoningEffort,
-      'partial config: missing reasoningEffort filled from constant',
+      'inputModalities still come from the curated row',
     );
   });
 

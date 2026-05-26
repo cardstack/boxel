@@ -81,17 +81,15 @@ export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 // Refresh: re-derive from `https://openrouter.ai/api/v1/models` when the
 // curated set changes. Derivation rules mirror
 // `packages/host/app/commands/sync-openrouter-models.ts:67-141`:
-//   toolsSupported    = supported_parameters.includes('tools')
-//   supportsReasoning = supported_parameters.includes('reasoning')
-//   inputModalities   = architecture.input_modalities (verbatim)
-// `reasoningEffort` is the default applied when neither caller nor SystemCard
-// has chosen one; tune per model as product policy evolves.
+//   toolsSupported  = supported_parameters.includes('tools')
+//   inputModalities = architecture.input_modalities (verbatim)
+// `reasoningEffort` is intentionally not modeled here — it's a user choice,
+// not a model capability. Callers / SystemCard supply it; the fallback never
+// auto-fills it.
 export interface FallbackModelConfig {
   modelId: string;
   displayName: string;
   toolsSupported: boolean;
-  supportsReasoning: boolean;
-  reasoningEffort?: string;
   inputModalities: string[];
 }
 
@@ -100,48 +98,36 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     modelId: 'anthropic/claude-sonnet-4.6',
     displayName: 'Anthropic: Claude Sonnet 4.6',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
     modelId: 'anthropic/claude-opus-4.7',
     displayName: 'Anthropic: Claude Opus 4.7',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
     modelId: 'google/gemini-3-flash-preview',
     displayName: 'Google: Gemini 3 Flash Preview',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file', 'audio', 'video'],
   },
   {
     modelId: 'google/gemini-3.1-pro-preview',
     displayName: 'Google: Gemini 3.1 Pro Preview',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['audio', 'file', 'image', 'text', 'video'],
   },
   {
     modelId: 'openai/gpt-5.4',
     displayName: 'OpenAI: GPT-5.4',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['text', 'image', 'file'],
   },
   {
     modelId: 'openai/gpt-5.5',
     displayName: 'OpenAI: GPT-5.5',
     toolsSupported: true,
-    supportsReasoning: true,
-    reasoningEffort: 'medium',
     inputModalities: ['file', 'image', 'text'],
   },
 ] as const;

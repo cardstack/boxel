@@ -53,11 +53,6 @@ const tests: SharedTests<unknown> = Object.freeze({
         'boolean',
         `${label}: toolsSupported is not a boolean`,
       );
-      assert.strictEqual(
-        typeof row.supportsReasoning,
-        'boolean',
-        `${label}: supportsReasoning is not a boolean`,
-      );
       assert.ok(
         Array.isArray(row.inputModalities),
         `${label}: inputModalities is not an array`,
@@ -73,13 +68,6 @@ const tests: SharedTests<unknown> = Object.freeze({
           `${label}: inputModalities contains a non-string ${m}`,
         );
       }
-      if (row.reasoningEffort !== undefined) {
-        let validEfforts = ['minimal', 'low', 'medium', 'high', 'xhigh'];
-        assert.ok(
-          validEfforts.includes(row.reasoningEffort),
-          `${label}: reasoningEffort '${row.reasoningEffort}' is not one of ${validEfforts.join(', ')}`,
-        );
-      }
     }
   },
 
@@ -88,8 +76,6 @@ const tests: SharedTests<unknown> = Object.freeze({
       'modelId',
       'displayName',
       'toolsSupported',
-      'supportsReasoning',
-      'reasoningEffort',
       'inputModalities',
     ]);
     for (let row of DEFAULT_FALLBACK_MODELS) {

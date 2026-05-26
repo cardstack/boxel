@@ -444,15 +444,13 @@ export class RoomResource extends Resource<Args> {
         throw new Error('matrixRoom is required to activate LLM');
       }
 
-      // Resolve the key to a modelId and config properties
+      // Resolve the picker key (SystemCard config id, or raw modelId) to a
+      // modelId. SystemCard can carry multiple configs for the same modelId
+      // (differentiated by reasoningEffort), so pass the chosen config's
+      // reasoningEffort as a caller override to disambiguate; the resolver
+      // handles tools/modalities lookup itself.
       let modelId = key;
-      let config:
-        | {
-            toolsSupported?: boolean;
-            reasoningEffort?: string;
-            inputModalities?: string[];
-          }
-        | undefined;
+      let callerOverrides: { reasoningEffort?: string } | undefined;
 
       let systemCard = this.matrixService.systemCard;
       if (systemCard?.modelConfigurations) {
@@ -461,18 +459,21 @@ export class RoomResource extends Resource<Args> {
         );
         if (modelConfig?.modelId) {
           modelId = modelConfig.modelId;
-          config = {
-            toolsSupported: modelConfig.toolsSupported,
-            reasoningEffort: modelConfig.reasoningEffort,
-            inputModalities: modelConfig.inputModalities,
-          };
+          if (modelConfig.reasoningEffort !== undefined) {
+            callerOverrides = { reasoningEffort: modelConfig.reasoningEffort };
+          }
         }
       }
 
+      let caps = this.matrixService.resolveActiveLLMConfig(
+        this.matrixRoom.roomId,
+        modelId,
+        callerOverrides,
+      );
       await this.matrixService.sendActiveLLMEvent(
         this.matrixRoom.roomId,
         modelId,
-        config,
+        caps,
       );
       let remainingRetries = 20;
       while (this.matrixRoom.activeLLM !== modelId && remainingRetries > 0) {

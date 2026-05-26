@@ -94,6 +94,7 @@ import type {
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
+  ActiveLLMEvent,
   BoxelContext,
   BotTriggerContent,
   CardMessageContent,
@@ -1733,44 +1734,128 @@ export default class MatrixService extends Service {
     return this.timelineLoadingState.get(this.currentRoomId) ?? false;
   }
 
-  async sendActiveLLMEvent(
+  // Five-layer resolver guaranteeing defined `toolsSupported` + `inputModalities`
+  // on the wire. `reasoningEffort` is a user choice, never auto-filled from
+  // the curated fallback or the conservative floor.
+  //
+  //   1. caller overrides (preserves explicit false / explicit values)
+  //   2. SystemCard.modelConfigurations match by modelId
+  //   3. DEFAULT_FALLBACK_MODELS match by modelId
+  //   4. most-recent valid prior app.boxel.active-llm event in this room
+  //      for the same model (skips CS-11249-era broken events)
+  //   5. conservative floor: tools off, modalities text-only
+  //
+  // Layer 4 reads in-memory events only; if the timeline isn't paginated yet
+  // (rare race) it degrades to layer 5, which is the safe direction.
+  resolveActiveLLMConfig(
     roomId: string,
     model: string,
-    config?: {
+    callerOverrides?: {
       toolsSupported?: boolean;
-      reasoningEffort?: string;
       inputModalities?: string[];
+      reasoningEffort?: string;
     },
-  ) {
-    let resolvedConfig = config;
-    if (!resolvedConfig) {
-      let modelConfiguration = this.systemCard?.modelConfigurations?.find(
-        (configuration) => configuration.modelId === model,
-      );
-      if (modelConfiguration) {
-        resolvedConfig = {
-          toolsSupported: modelConfiguration.toolsSupported,
-          reasoningEffort: modelConfiguration.reasoningEffort,
-          inputModalities: modelConfiguration.inputModalities,
-        };
+  ): {
+    toolsSupported: boolean;
+    inputModalities: string[];
+    reasoningEffort?: string;
+  } {
+    let toolsSupported: boolean | undefined = callerOverrides?.toolsSupported;
+    let inputModalities: string[] | undefined =
+      callerOverrides?.inputModalities;
+    let reasoningEffort: string | undefined = callerOverrides?.reasoningEffort;
+
+    let scMatch = this.systemCard?.modelConfigurations?.find(
+      (c) => c.modelId === model,
+    );
+    if (scMatch) {
+      if (
+        toolsSupported === undefined &&
+        scMatch.toolsSupported !== undefined
+      ) {
+        toolsSupported = scMatch.toolsSupported;
+      }
+      if (
+        inputModalities === undefined &&
+        scMatch.inputModalities !== undefined
+      ) {
+        inputModalities = scMatch.inputModalities;
+      }
+      if (
+        reasoningEffort === undefined &&
+        scMatch.reasoningEffort !== undefined
+      ) {
+        reasoningEffort = scMatch.reasoningEffort;
       }
     }
 
-    // Fill any still-undefined capability fields from the realm-independent
-    // fallback so we never ship `toolsSupported: undefined` for one of the
-    // curated models. `??` preserves an explicit `false`/value from the caller
-    // and from SystemCard; the fallback only fires when nothing upstream set
-    // the field.
-    let fallback = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
+    let fb = DEFAULT_FALLBACK_MODELS.find((m) => m.modelId === model);
+    if (fb) {
+      if (toolsSupported === undefined) {
+        toolsSupported = fb.toolsSupported;
+      }
+      if (inputModalities === undefined) {
+        inputModalities = fb.inputModalities;
+      }
+    }
 
+    if (
+      toolsSupported === undefined ||
+      inputModalities === undefined ||
+      reasoningEffort === undefined
+    ) {
+      let roomData = this.getRoomData(roomId);
+      let priorEvents = (roomData?.events ?? [])
+        .filter((e) => e.type === APP_BOXEL_ACTIVE_LLM)
+        .map((e) => e as ActiveLLMEvent)
+        .filter(
+          (e) =>
+            e.content.model === model &&
+            e.content.toolsSupported !== undefined &&
+            e.content.inputModalities !== undefined,
+        )
+        .sort((a, b) => (b.origin_server_ts ?? 0) - (a.origin_server_ts ?? 0));
+      let mostRecent = priorEvents[0];
+      if (mostRecent) {
+        if (toolsSupported === undefined) {
+          toolsSupported = mostRecent.content.toolsSupported;
+        }
+        if (inputModalities === undefined) {
+          inputModalities = mostRecent.content.inputModalities;
+        }
+        if (
+          reasoningEffort === undefined &&
+          mostRecent.content.reasoningEffort !== undefined
+        ) {
+          reasoningEffort = mostRecent.content.reasoningEffort;
+        }
+      }
+    }
+
+    if (toolsSupported === undefined) {
+      toolsSupported = false;
+    }
+    if (inputModalities === undefined) {
+      inputModalities = ['text'];
+    }
+
+    return { toolsSupported, inputModalities, reasoningEffort };
+  }
+
+  async sendActiveLLMEvent(
+    roomId: string,
+    model: string,
+    caps: {
+      toolsSupported: boolean;
+      inputModalities: string[];
+      reasoningEffort?: string;
+    },
+  ) {
     await this.client.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
       model,
-      toolsSupported:
-        resolvedConfig?.toolsSupported ?? fallback?.toolsSupported,
-      reasoningEffort:
-        resolvedConfig?.reasoningEffort ?? fallback?.reasoningEffort,
-      inputModalities:
-        resolvedConfig?.inputModalities ?? fallback?.inputModalities,
+      toolsSupported: caps.toolsSupported,
+      reasoningEffort: caps.reasoningEffort,
+      inputModalities: caps.inputModalities,
     });
   }
 
