@@ -45,22 +45,35 @@ function isMatrixUserId(user: string): boolean {
 
 // Resolve admin credentials for the synapse admin-impersonate flow. When
 // explicit env-derived values are present (any environment), use them.
-// When both are absent AND the matrix homeserver is localhost, fall back
-// to the dev `admin`/`password` pair that register-matrix-users.ts seeds
-// — this keeps local dev and tests friction-free without baking the
-// default into every other deployment.
+// When both are absent AND the matrix homeserver is on a `.localhost`
+// hostname (covers bare `localhost` and env-mode Traefik names like
+// `matrix.<slug>.localhost`), fall back to the dev `admin`/`password`
+// pair that register-matrix-users.ts seeds — keeps local dev and tests
+// friction-free without baking the default into every other deployment.
 function resolveAdminCreds(
   matrixURL: URL,
   username: string | undefined,
   password: string | undefined,
-): { username: string; password: string } | undefined {
+):
+  | { ok: true; username: string; password: string }
+  | { ok: false; reason: string } {
   if (username && password) {
-    return { username, password };
+    return { ok: true, username, password };
   }
-  if (!username && !password && matrixURL.hostname === 'localhost') {
-    return { username: 'admin', password: 'password' };
+  if (username || password) {
+    return {
+      ok: false,
+      reason: `MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD must be set together (got only ${username ? 'USERNAME' : 'PASSWORD'})`,
+    };
   }
-  return undefined;
+  let h = matrixURL.hostname;
+  if (h === 'localhost' || h.endsWith('.localhost')) {
+    return { ok: true, username: 'admin', password: 'password' };
+  }
+  return {
+    ok: false,
+    reason: 'MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not a local homeserver',
+  };
 }
 
 export default function handleUpsertRealmUserPermission({
@@ -153,7 +166,7 @@ export default function handleUpsertRealmUserPermission({
         matrixAdminUsername,
         matrixAdminPassword,
       );
-      if (creds) {
+      if (creds.ok) {
         try {
           let adminToken = await loginAsMatrixAdmin({
             matrixURL: matrixClient.matrixURL,
@@ -179,8 +192,7 @@ export default function handleUpsertRealmUserPermission({
           );
         }
       } else {
-        matrixAccountDataWarning =
-          'account_data sync skipped: MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not localhost';
+        matrixAccountDataWarning = `account_data sync skipped: ${creds.reason}`;
       }
     } else {
       matrixAccountDataWarning = `account_data sync skipped: "${user}" is not a fully-qualified matrix user-id`;

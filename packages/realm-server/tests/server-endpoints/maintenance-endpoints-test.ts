@@ -1500,6 +1500,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
           { headers: { Authorization: `Bearer ${userToken}` } },
         );
+        assert.strictEqual(
+          accountDataResponse.status,
+          200,
+          'account_data GET returned 200',
+        );
         let body = (await accountDataResponse.json()) as { realms?: string[] };
         assert.deepEqual(
           body.realms,
@@ -1561,6 +1566,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             userId,
           )}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
           { headers: { Authorization: `Bearer ${userToken}` } },
+        );
+        assert.strictEqual(
+          after.status,
+          200,
+          'account_data GET returned 200',
         );
         let body = (await after.json()) as { realms?: string[] };
         assert.deepEqual(
