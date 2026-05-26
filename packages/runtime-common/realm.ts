@@ -6337,11 +6337,13 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // Opt-in field: only an explicit `true` is meaningful (every
+        // consumer checks `=== true`). An unset BooleanField serializes
+        // as `false` once the card is indexed, so collapse anything but
+        // `true` to null to keep the disk-read and index-read paths — and
+        // the pre-card sidecar behavior — consistent.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6375,11 +6377,10 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // See the disk-overlay note above: collapse non-`true` to null so
+        // an unset field (which indexes as `false`) doesn't flip /_info.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {

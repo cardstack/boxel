@@ -24,7 +24,10 @@ function binaryParser(
 }
 
 module(`server-endpoints/${basename(__filename)}`, function (hooks) {
-  let context = setupServerEndpointsTest(hooks);
+  // Use the `simple` fixture so the realm has real card files to assert
+  // the archive contains. The `blank` fixture is an empty directory
+  // (just a .gitkeep) after the .realm.json sidecar removal.
+  let context = setupServerEndpointsTest(hooks, { fixture: 'simple' });
 
   test('downloads realm as a zip archive', async function (assert) {
     let response = await context.request
@@ -51,7 +54,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'zip file signature is present',
     );
     assert.ok(
-      response.body.includes(Buffer.from('realm.json')),
+      response.body.includes(Buffer.from('person.gts')),
       'archive includes realm files',
     );
   });
