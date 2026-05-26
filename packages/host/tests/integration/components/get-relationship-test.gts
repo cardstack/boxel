@@ -138,6 +138,33 @@ module('Integration | getRelationship', function (hooks) {
       assert.strictEqual(state.reference, `${testRealmURL}Pet/mango`);
     });
 
+    test("returns kind 'present' with undefined reference when the linked card is unsaved", async function (assert) {
+      // Unsaved CardDef instances have a localId but no `id` (no URL) until
+      // saveCard runs. `getRelationship` reports them as 'present' with
+      // `reference: undefined` rather than synthesizing a URL.
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let unsavedPet = new Pet({ firstName: 'Mango' });
+      let person = new Person({ firstName: 'Hassan', pet: unsavedPet });
+
+      let state = getRelationship(person, 'pet');
+      assertSingular(assert, state);
+      assertKind(assert, state, 'present');
+      assert.strictEqual(state.value, unsavedPet);
+      assert.strictEqual(
+        state.reference,
+        undefined,
+        'unsaved linked card has no URL yet',
+      );
+    });
+
     test("returns kind 'not-set' when the field has never been assigned", async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
@@ -313,6 +340,33 @@ module('Integration | getRelationship', function (hooks) {
       assertPlural(assert, states);
       assert.strictEqual(states.length, 0);
     });
+
+    test('whole-field sentinel (computed linksToMany unresolved upstream) surfaces as a one-element array', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      let sentinel: NotLoadedSentinel = {
+        type: 'not-loaded',
+        reference: `${testRealmURL}upstream/computed-source`,
+      };
+      getDataBucket(person).set('pets', sentinel);
+
+      let states = getRelationship(person, 'pets');
+      assertPlural(assert, states);
+      assert.strictEqual(states.length, 1);
+      assertKind(assert, states[0], 'not-loaded');
+      assert.strictEqual(
+        states[0].reference,
+        `${testRealmURL}upstream/computed-source`,
+      );
+    });
   });
 
   module('relationshipMeta back-compat wrapper', function () {
@@ -440,6 +494,45 @@ module('Integration | getRelationship', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, { Person });
       let person = new Person({ firstName: 'Hassan' });
       assert.strictEqual(relationshipMeta(person, 'firstName'), undefined);
+    });
+
+    test('legacy linksToMany scalar shape: whole-field sentinel returns a scalar meta, not a one-element array', async function (assert) {
+      // The original `relationshipMeta` returned a scalar
+      // `{ type: 'not-loaded', reference }` for the case where a computed
+      // linksToMany consumed an unresolved upstream link. `getRelationship`'s
+      // typed contract wraps that as `[state]`, so the back-compat wrapper
+      // must un-wrap it to keep pre-existing branches stable.
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      getDataBucket(person).set('pets', {
+        type: 'not-loaded',
+        reference: `${testRealmURL}upstream/computed-source`,
+      } satisfies NotLoadedSentinel);
+
+      let meta = relationshipMeta(person, 'pets');
+      assert.notOk(
+        Array.isArray(meta),
+        'whole-field sentinel surfaces as scalar legacy meta, not an array',
+      );
+      if (!meta || Array.isArray(meta)) {
+        assert.ok(false, 'expected scalar legacy meta');
+      } else {
+        assert.strictEqual(meta.type, 'not-loaded');
+        if (meta.type === 'not-loaded') {
+          assert.strictEqual(
+            meta.reference,
+            `${testRealmURL}upstream/computed-source`,
+          );
+        }
+      }
     });
   });
 

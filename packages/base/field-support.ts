@@ -479,7 +479,10 @@ export type RelationshipState<T extends CardDef = CardDef> =
       isLoaded: true;
       isError: false;
       value: T;
-      reference: string;
+      // Undefined when `value` is an unsaved linked card — those carry only a
+      // local id, not a fully-qualified URL. All other kinds always have a
+      // string reference.
+      reference: string | undefined;
     }
   | {
       kind: 'not-loaded';
@@ -633,6 +636,17 @@ export function relationshipMeta(
   }
   if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
+  }
+  // Legacy linksToMany scalar shape: a computed `linksToMany` whose upstream
+  // link hasn't resolved surfaces as a single sentinel rather than an array.
+  // Before `getRelationship`, this returned a scalar meta (not a one-element
+  // array). `getRelationship`'s typed contract wraps it as `[state]`, so the
+  // wrapper unwraps that case here to keep `relationshipMeta` callers stable.
+  if (field.fieldType === 'linksToMany') {
+    let peeked = peekAtField(instance, fieldName);
+    if (isNonPresentLink(peeked)) {
+      return toLegacyRelationshipMeta(relationshipStateForEntry(peeked));
+    }
   }
   let state = getRelationship(instance, fieldName);
   if (Array.isArray(state)) {
