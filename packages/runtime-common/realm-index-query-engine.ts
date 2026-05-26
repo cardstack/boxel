@@ -801,7 +801,10 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id ? cardIdToURL(resource.id) : realmURL,
+      relativeTo: resource.id
+        ? this.#realm.virtualNetwork.toURL(resource.id)
+        : realmURL,
+      virtualNetwork: this.#realm.virtualNetwork,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
