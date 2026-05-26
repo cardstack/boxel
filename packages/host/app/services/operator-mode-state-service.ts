@@ -16,7 +16,6 @@ import type {
   RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
   rri,
   RealmPaths,
   type LocalPath,
@@ -836,7 +835,9 @@ export default class OperatorModeStateService extends Service {
     moduleInspectorView?: ModuleInspectorView,
   ) {
     let codePathURL =
-      typeof codePath === 'string' ? cardIdToURL(codePath) : codePath;
+      typeof codePath === 'string'
+        ? this.network.virtualNetwork.toURL(codePath)
+        : codePath;
     let canonicalCodePath = await this.determineCanonicalCodePath(codePathURL);
     this._state.codePath = canonicalCodePath;
     this.updateOpenDirsForNestedPath();
