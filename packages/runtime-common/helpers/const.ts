@@ -21,8 +21,6 @@ export const testRealmInfo: RealmInfo = {
   backgroundURL: null,
   iconURL: null,
   showAsCatalog: null,
-  interactHome: null,
-  hostHome: null,
   visibility: 'public',
   realmUserId: '@realm_server:localhost',
   publishable: null,

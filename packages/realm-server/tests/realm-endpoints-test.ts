@@ -553,51 +553,6 @@ module(basename(__filename), function () {
         }
       });
 
-      test('realm-owner can patch multiple properties including interactHome and hostHome', async function (assert) {
-        let interactHome = 'card://realm-url.com/space';
-        let hostHome = 'https://hosted.space/';
-
-        let response = await request
-          .patch('/_config')
-          .set('Accept', SupportedMimeType.JSON)
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'user', [
-              'read',
-              'write',
-              'realm-owner',
-            ])}`,
-          )
-          .send({
-            data: {
-              type: 'realm-config',
-              attributes: { interactHome, hostHome },
-            },
-          });
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.strictEqual(
-          response.body.data.type,
-          'realm-config',
-          'response uses the realm-config type',
-        );
-        assert.strictEqual(
-          response.body.data.attributes.interactHome,
-          interactHome,
-          'response includes updated interactHome',
-        );
-        assert.strictEqual(
-          response.body.data.attributes.hostHome,
-          hostHome,
-          'response includes updated hostHome',
-        );
-        assert.deepEqual(
-          readJSONSync(realmConfigPath),
-          { ...(initialConfig ?? {}), interactHome, hostHome },
-          '.realm.json contains both updated properties',
-        );
-      });
-
       test('card responses reflect updated realm config without re-indexing', async function (assert) {
         // Fetch a card before updating realm config
         let cardResponse = await request

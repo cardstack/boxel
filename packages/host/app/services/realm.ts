@@ -120,11 +120,7 @@ export interface RealmPrivateDependencyReport {
   warningTypes?: PublishabilityWarningType[];
 }
 
-type RealmInfoProperty =
-  | 'backgroundURL'
-  | 'iconURL'
-  | 'interactHome'
-  | 'hostHome';
+type RealmInfoProperty = 'backgroundURL' | 'iconURL';
 
 type AuthStatus =
   | { type: 'logged-in'; token: string; claims: JWTPayload }
@@ -456,10 +452,6 @@ class RealmResource {
       isPublic,
     }) as EnhancedRealmInfo;
     this.info = updatedInfo;
-  }
-
-  async setHostHome(hostHome: string | null): Promise<void> {
-    return await this.setRealmInfoProperty('hostHome', hostHome);
   }
 
   async fetchRealmPermissions() {
@@ -856,8 +848,6 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
-        interactHome: null,
-        hostHome: null,
       };
     }
 
@@ -873,8 +863,6 @@ export default class RealmService extends Service {
         isIndexing: false,
         isPublic: false,
         lastPublishedAt: null,
-        interactHome: null,
-        hostHome: null,
       };
     } else {
       return resource.info;
@@ -898,10 +886,6 @@ export default class RealmService extends Service {
     permissions: ('read' | 'write')[],
   ) {
     await this.knownRealm(url)?.setRealmPermission(userId, permissions);
-  }
-
-  async setHostHome(url: string, hostHome: string | null): Promise<void> {
-    await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
   removeRealm(url: string) {
