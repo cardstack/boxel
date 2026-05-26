@@ -537,10 +537,34 @@ export class RealmServer {
     return [...this.realms];
   }
 
+  // Test-only accessor for the reconciler. Exposed so realm-auth-test
+  // can inspect knownByUrl / mounted as preconditions and assert that
+  // _realm-auth does not cold-mount during request handling.
+  get testingOnlyReconciler() {
+    return this.reconciler;
+  }
+
   testingOnlyUnmountRealms() {
     for (let realm of this.realms) {
       this.virtualNetwork.unmount(realm.handle);
     }
+  }
+
+  // Simulate the post-restart "this realm has a registry row but no
+  // active Realm instance on this process" state without tearing down
+  // its disk mount, indexer, or matrix client. realm-auth-test uses
+  // this to prove _realm-auth issues a JWT for a realm that is absent
+  // from both realms[] and reconciler.mounted — i.e. one that would
+  // need a cold lookupOrMount to be materialized. The registry row
+  // (and reconciler.knownByUrl entry) is left in place; the next
+  // request that actually needs the realm will lazy-mount it via the
+  // normal request path.
+  testingOnlyEvictRealmFromRealmsList(url: string): void {
+    let idx = this.realms.findIndex((r) => r.url === url);
+    if (idx !== -1) {
+      this.realms.splice(idx, 1);
+    }
+    this.reconciler.mounted.delete(url);
   }
 
   // Test-only accessor for the request-path realm resolver. Exposed so
