@@ -841,6 +841,7 @@ export class IndexRunner {
         precomputedRenderResult: renderResult,
         timingDiagnostics,
         dependencyResolver: this.#dependencyResolver,
+        virtualNetwork: this.#virtualNetwork,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
         logWarn: (message) => this.#log.warn(message),
