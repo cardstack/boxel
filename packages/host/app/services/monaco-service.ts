@@ -52,10 +52,9 @@ const { serverEchoDebounceMs } = config;
 function makeMonacoWorker(workerUrl: string): Worker {
   let absolute = new URL(workerUrl, window.location.href);
   if (absolute.origin !== window.location.origin) {
-    let blob = new Blob(
-      [`importScripts(${JSON.stringify(absolute.href)});`],
-      { type: 'text/javascript' },
-    );
+    let blob = new Blob([`importScripts(${JSON.stringify(absolute.href)});`], {
+      type: 'text/javascript',
+    });
     return new Worker(URL.createObjectURL(blob));
   }
   return new Worker(absolute.href);
