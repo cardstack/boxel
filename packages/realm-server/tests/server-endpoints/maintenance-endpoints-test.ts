@@ -729,7 +729,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           realmURL = response.body.data.id;
         }
 
-        context.testRealmServer.testingOnlyEvictRealmFromRealmsList(realmURL);
+        context.testRealmServer.testingOnlyEvictRealmFromRealmsList(realmURL, {
+          keepMounted: true,
+        });
 
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         let realmPath = realmURL.substring(

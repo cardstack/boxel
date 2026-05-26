@@ -3,6 +3,8 @@ import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
 
+import { sanitizeSlug } from '../../../scripts/env-slug.js';
+
 const DOMAIN = 'localhost';
 
 let _traefikDir: string | undefined;
@@ -42,15 +44,6 @@ export function getEnvironmentSlug(): string {
   } catch {
     return 'default';
   }
-}
-
-function sanitizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 export function getSynapseContainerName(): string {
