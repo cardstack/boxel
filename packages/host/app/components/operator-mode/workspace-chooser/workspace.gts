@@ -277,7 +277,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card {
         display: flex;
         flex-direction: column;
-        width: fit-content;
+        width: var(--boxel-xxs-container);
         position: relative;
         cursor: pointer;
         --item-container-border-color: transparent;
@@ -407,6 +407,13 @@ export default class Workspace extends Component<Signature> {
       .name {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        text-wrap: wrap;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        min-height: 2lh;
       }
       .visibility {
         color: var(--boxel-400);

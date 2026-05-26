@@ -318,6 +318,45 @@ module('Acceptance | workspace-chooser', function (hooks) {
     });
   });
 
+  module('long realm names', function () {
+    test('workspace card stays constrained to icon-tile width when the name is long', async function (assert) {
+      let longName =
+        'A Workspace Name Long Enough To Wrap Onto Multiple Lines For Centering';
+
+      let restoreA = withUpdatedRealmInfo(realmAURL, { name: longName });
+
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await settled();
+
+      let cardSelector = `[data-test-workspace-list] [data-test-workspace="${longName}"]`;
+
+      assert
+        .dom(cardSelector)
+        .exists('workspace card renders with the long realm name');
+      assert
+        .dom(`${cardSelector} [data-test-workspace-name]`)
+        .hasText(
+          longName,
+          'name element renders the full long name in the DOM',
+        );
+
+      // ItemContainer (.workspace button) is hard-set to var(--boxel-xxs-container)
+      // and is the visual icon-tile width. The outer .workspace-card must match it
+      // so the name column stays centered under the tile.
+      let cardEl = document.querySelector(cardSelector) as HTMLElement | null;
+      let tileEl = cardEl?.querySelector(
+        'button.workspace',
+      ) as HTMLElement | null;
+      assert.strictEqual(
+        cardEl?.offsetWidth,
+        tileEl?.offsetWidth,
+        'workspace-card width matches icon-tile width (does not grow with long names)',
+      );
+
+      restoreA();
+    });
+  });
+
   module('hosted overlay', function () {
     test('host trigger is not shown for non-hosted workspaces', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
