@@ -56,15 +56,27 @@ export default function handleRealmAuth({
     // the mount happens later, when the holder actually hits a realm
     // endpoint and findOrMountRealm/lookupOrMount runs there.
     //
-    // Same lookup order as multiRealmAuthorization (CS-11238): in-memory
-    // reconciler.knownByUrl first, then a single batched probe against
-    // realm_registry for any URLs not yet reflected in this process
-    // (e.g. a freshly-published row from a peer instance between NOTIFY
-    // and the next reconcile pass).
+    // Mirrors multiRealmAuthorization's three-step lookup order
+    // (CS-11238):
+    //   1. reconciler.mounted — covers realms currently mounted on
+    //      this process, including the mid-start window AND legacy-
+    //      registered mounts from registerExistingMounts that have
+    //      no realm_registry row (test fixtures and the pre-Phase-3
+    //      boot path use this — the reconciler intentionally does
+    //      not put them in knownByUrl so the unmount phase doesn't
+    //      tear them down).
+    //   2. reconciler.knownByUrl — in-memory mirror of realm_registry,
+    //      refreshed at boot, on NOTIFY, and by the safety-net poll.
+    //   3. Direct realm_registry probe — covers the gap between a
+    //      peer instance's INSERT+NOTIFY and this instance's next
+    //      reconcile pass.
     let registeredUrls = new Set<string>();
     let urlsToProbe: string[] = [];
     for (let realmUrl of accessibleRealmUrls) {
-      if (reconciler.knownByUrl.has(realmUrl)) {
+      if (
+        reconciler.mounted.has(realmUrl) ||
+        reconciler.knownByUrl.has(realmUrl)
+      ) {
         registeredUrls.add(realmUrl);
       } else {
         urlsToProbe.push(realmUrl);

@@ -13,6 +13,7 @@ import {
   testRealmHref,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
+import { insertSourceRealmInRegistry } from '../lib/realm-registry-writes';
 import type { RealmServer } from '../server';
 
 module(basename(__filename), function () {
@@ -119,6 +120,21 @@ module(basename(__filename), function () {
         joined_rooms: [],
       });
       sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
+
+      // Bring the test fixture's realm into the realm_registry so the
+      // post-restart state we're simulating is faithful: in production
+      // every realm has a registry row, but runTestRealmServer
+      // legacy-registers its testRealm into reconciler.mounted without
+      // inserting (registerExistingMounts deliberately bypasses
+      // knownByUrl to preserve legacy mounts across reconcile passes).
+      // Insert + reconcile so reconciler.knownByUrl reflects the row,
+      // matching what a real boot would have done.
+      await insertSourceRealmInRegistry(dbAdapter, {
+        url: testRealmHref,
+        diskId: 'node-test_realm/test',
+        ownerUsername: 'node-test_realm',
+      });
+      await testRealmServer.testingOnlyReconcile();
 
       // Simulate the post-restart state: registry row + knownByUrl
       // entry are present (reconciler boot has reflected the registry),
