@@ -3456,7 +3456,12 @@ function lazilyLoadLink(
           }
         }
       } else {
+        // Mirror `setField`'s notification (minus validate, which rejects a
+        // non-card value): write the bucket, notify change subscribers, then
+        // card tracking. Without the `notifySubscribers` call, `subscribeToChanges`
+        // listeners would observe a successful lazy load but not a failed one.
         getDataBucket(instance).set(field.name, sentinel);
+        notifySubscribers(instance, field.name, sentinel);
         notifyCardTracking(instance);
       }
 
