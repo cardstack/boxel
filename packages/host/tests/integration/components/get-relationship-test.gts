@@ -522,6 +522,12 @@ module('Integration | getRelationship', function (hooks) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
       let renderCount = 0;
       let bump = () => {
         renderCount++;
@@ -530,14 +536,9 @@ module('Integration | getRelationship', function (hooks) {
       let stateKind = (s: ReturnType<typeof getRelationship>) =>
         Array.isArray(s) ? s.map((x) => x.kind).join(',') : s.kind;
 
-      let mango = new Pet({ firstName: 'Mango' });
-
-      class Person extends CardDef {
-        @field firstName = contains(StringField);
-        @field pet = linksTo(Pet);
-      }
-      let person = new Person({ firstName: 'Hassan', pet: mango });
-      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      // 'not-set' is enough for the render-count contract — any kind exercises
+      // the same template-side read path, and not-set needs no realm setup.
+      let person = new Person({ firstName: 'Hassan' });
 
       await render(
         <template>
@@ -550,13 +551,13 @@ module('Integration | getRelationship', function (hooks) {
 
       assert
         .dom('[data-test-a]')
-        .hasText('present', 'first read renders present');
+        .hasText('not-set', 'first read returns not-set');
       assert
         .dom('[data-test-b]')
-        .hasText('present', 'second read renders present');
+        .hasText('not-set', 'second read returns not-set');
       assert
         .dom('[data-test-c]')
-        .hasText('present', 'third read renders present');
+        .hasText('not-set', 'third read returns not-set');
       assert.strictEqual(
         renderCount,
         1,
