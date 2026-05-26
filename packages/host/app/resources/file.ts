@@ -197,7 +197,7 @@ class _FileResource extends Resource<Args> {
     }
   }
 
-  private read = restartableTask(async () => {
+  private read = restartableTask(async (opts?: { force?: boolean }) => {
     let response;
     try {
       response = await this.network.authedFetch(this._url, {
@@ -225,9 +225,24 @@ class _FileResource extends Resource<Args> {
 
     let lastModified = response.headers.get('last-modified') || undefined;
 
+    // The short-circuit skips a no-op state update when nothing has changed.
+    // Two guards both have to hold:
+    //   1. Same URL as the prior state. Last-Modified is only unix-second
+    //      precision (formatRFC7231(fileRef.lastModified * 1000) where
+    //      fileRef.lastModified is unixTime(Date.now()) in both the
+    //      node-realm and in-memory test adapters), so two DIFFERENT files
+    //      written within the same wall-clock second carry identical
+    //      headers — without the URL guard, navigating between such files
+    //      would leave innerState pointing at the prior file.
+    //   2. force !== true. An invalidation-driven read passes force: true
+    //      because the realm has authoritatively told us the file changed,
+    //      which outranks our cached timestamp — same reason same-second
+    //      rewrites of the SAME file would otherwise be skipped.
     if (
+      !opts?.force &&
       lastModified &&
       this.innerState.state === 'ready' &&
+      this.innerState.url === rri(response.url) &&
       this.innerState.lastModified === lastModified
     ) {
       return;
@@ -323,7 +338,7 @@ class _FileResource extends Resource<Args> {
         }
 
         if (reloadFile) {
-          this.read.perform();
+          this.read.perform({ force: true });
         }
       }
     });
