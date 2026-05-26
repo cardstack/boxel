@@ -3403,51 +3403,18 @@ function lazilyLoadLink(
       let sentinel: LinkErrorValue | LinkNotFoundValue = isMissingFile
         ? { type: 'link-not-found', reference, errorDoc }
         : { type: 'link-error', reference, errorDoc };
-      if (pluralArgs) {
-        // Replace each matching NotLoadedValue slot in the WatchedArray with
-        // the sentinel in place. `value[index] = sentinel` trips the
-        // WatchedArray proxy, which schedules a single microtask that fires
-        // notifySubscribers + notifyCardTracking — same path the plural
-        // success branch above relies on. No explicit notify here, otherwise
-        // the failure path would double-notify relative to success and
-        // diverge in timing from the WatchedArray-scheduled microtask.
-        let { value } = pluralArgs;
-        for (let [index, item] of value.entries()) {
-          if (!isNotLoadedValue(item)) {
-            continue;
-          }
-          let notLoadedRef = resolveCardReference(
-            item.reference,
-            instance.id ?? instance[relativeTo],
-          );
-          if (reference === notLoadedRef) {
-            value[index] = sentinel;
-          }
-        }
-      } else {
-        // Two writes, intentionally: the legacy null-write through the
-        // setter preserves every bucket-driven path (serialize, queryable,
-        // the field-support `getter`, peekAtField, the autoSave
-        // notification chain) byte-for-byte, while `setLinkSentinel`
-        // plants the structured failure on a per-instance side-channel
-        // that `scanForBrokenLinks` consumes. The split keeps the bucket
-        // state identical to `main`'s shape — the alternative (sentinel
-        // in the bucket) tripped the host-tests cascade because an
-        // autoSave fired off the broken card's notify-subscribers chain
-        // raced the realm's error_doc publish, and `drainAutoSaveQueue`
-        // saw a CardDef instead of an error_doc and re-serialized the
-        // in-memory card over the user's Monaco text. CS-11223 will
-        // revisit whether bucket-storage becomes reachable once the
-        // consumer set has been migrated.
-        (instance as any)[field.name] = null;
-        setLinkSentinel(instance, field.name, sentinel);
-      }
-      // Transitional: the host's render pipeline still listens for this
-      // CustomEvent to flag the failure inside `renderHTML` synchronously,
-      // matching the throw timing the broken-link tolerance project
-      // relied on. The sentinel write above is the durable representation
-      // — the dispatch comes out in a follow-up once every consumer of
-      // the event has migrated to the bucket scan.
+      // Two writes: the null-write through the setter keeps every
+      // bucket-driven consumer (serialize, queryable, the field-support
+      // getter, peekAtField, the autoSave notify chain) on a value
+      // shape they already understand; `setLinkSentinel` records the
+      // structured failure on a per-instance side-channel for consumers
+      // that need the typed link-error/link-not-found form.
+      (instance as any)[field.name] = null;
+      setLinkSentinel(instance, field.name, sentinel);
+      // The host's render pipeline still listens for this CustomEvent
+      // to flag the failure inside `renderHTML` synchronously — that
+      // synchronous throw is what the indexer's error-doc capture
+      // depends on.
       let payload = JSON.stringify({ type: 'error', error: errorDoc });
       const event = new CustomEvent('boxel-render-error', {
         detail: { reason: payload },
