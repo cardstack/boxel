@@ -1,9 +1,11 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { consume } from 'ember-provide-consume-context';
+import { modifier } from 'ember-modifier';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
@@ -15,6 +17,7 @@ import {
   removeFileExtension,
   rri,
   CardCrudFunctionsContextName,
+  CardContextName,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -38,9 +41,22 @@ interface Signature {
   Element: HTMLElement;
 }
 
+const noopCardModifier = modifier(() => undefined);
+
 export default class CardList extends Component<Signature> {
   @consume(CardCrudFunctionsContextName)
   declare cardCrudFunctions: CardCrudFunctions | undefined;
+
+  @consume(CardContextName)
+  declare cardContext: CardContext | undefined;
+
+  // Tracks the fallback element with the overlay system the same way
+  // PrerenderedCard does for rows that produced HTML. Falls back to a no-op
+  // when no context provides one (e.g. CardList used outside operator mode),
+  // so applying the modifier is always safe.
+  private get cardComponentModifier() {
+    return this.cardContext?.cardComponentModifier ?? noopCardModifier;
+  }
 
   @action
   handleCardClick(cardUrl: string, event?: Event) {
@@ -123,9 +139,32 @@ export default class CardList extends Component<Signature> {
                       this `<li>` can still route the user into interact-mode
                       (and from there into Code Mode via the kebab menu).
                       Error rows are excluded so PrerenderedCard's dedicated
-                      error component still gets rendered for them. }}
-                  <div class='card-fallback' data-test-card-fallback>
-                    <FileIcon class='card-fallback__icon' role='presentation' />
+                      error component still gets rendered for them.
+                      The tracking modifier + type attributes mirror what
+                      PrerenderedCard stamps on HTML rows, so the overlay
+                      system labels and acts on these rows too. }}
+                  <div
+                    class='card-fallback'
+                    data-test-card-fallback
+                    data-card-type-display-name={{card.cardType}}
+                    data-card-type-icon-html={{card.iconHtml}}
+                    {{this.cardComponentModifier
+                      cardId=card.url
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    {{#if card.iconHtml}}
+                      <span
+                        class='card-fallback__icon card-fallback__icon--svg'
+                      >{{htmlSafe card.iconHtml}}</span>
+                    {{else}}
+                      <FileIcon
+                        class='card-fallback__icon'
+                        role='presentation'
+                      />
+                    {{/if}}
                     <div class='card-fallback__name'>
                       {{this.fileNameFromUrl card.url}}
                     </div>
@@ -217,6 +256,13 @@ export default class CardList extends Component<Signature> {
         height: 2rem;
         color: var(--boxel-500);
         flex-shrink: 0;
+      }
+      .card-fallback__icon--svg {
+        display: inline-flex;
+      }
+      .card-fallback__icon--svg > svg {
+        width: 100%;
+        height: 100%;
       }
       .card-fallback__name {
         font: 500 var(--boxel-font-sm);
