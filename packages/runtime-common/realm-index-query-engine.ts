@@ -235,11 +235,7 @@ export class RealmIndexQueryEngine {
         `DB Adapter was not provided to SearchIndex constructor--this is required when using a db based index`,
       );
     }
-    this.#indexQueryEngine = new IndexQueryEngine(
-      dbAdapter,
-      definitionLookup,
-      realm.virtualNetwork,
-    );
+    this.#indexQueryEngine = new IndexQueryEngine(dbAdapter, definitionLookup);
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;
     this.#fetch = fetch;

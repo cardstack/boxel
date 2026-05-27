@@ -3,7 +3,6 @@ import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
-import type { VirtualNetwork } from './virtual-network';
 import {
   type CardResource,
   type CodeRef,
@@ -180,16 +179,10 @@ export { isValidPrerenderedHtmlFormat };
 export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
-  #virtualNetwork: VirtualNetwork | undefined;
 
-  constructor(
-    dbAdapter: DBAdapter,
-    definitionLookup: DefinitionLookup,
-    virtualNetwork?: VirtualNetwork,
-  ) {
+  constructor(dbAdapter: DBAdapter, definitionLookup: DefinitionLookup) {
     this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
-    this.#virtualNetwork = virtualNetwork;
   }
 
   async #query(expression: Expression) {
@@ -490,7 +483,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKey = internalKeyFor(ref, undefined);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -513,7 +506,7 @@ export class IndexQueryEngine {
     if (!isResolvedCodeRef(ref)) {
       return false;
     }
-    let typeKey = internalKeyFor(ref, undefined, this.#virtualNetwork);
+    let typeKey = internalKeyFor(ref, undefined);
     let rows = (await this.#query([
       'SELECT 1',
       `FROM ${tableFromOpts(opts)} AS i ${tableValuedFunctionsPlaceholder}`,
@@ -851,9 +844,7 @@ export class IndexQueryEngine {
     htmlColumnExpression.push('COALESCE(');
     if (renderType) {
       htmlColumnExpression.push(`ANY_VALUE(${fieldName}) ->> `);
-      htmlColumnExpression.push(
-        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
-      );
+      htmlColumnExpression.push(param(internalKeyFor(renderType, undefined)));
       htmlColumnExpression.push(',');
     }
 
@@ -901,10 +892,10 @@ export class IndexQueryEngine {
         `WHEN ANY_VALUE(${htmlFormat}_html) ->> `,
       );
       usedRenderTypeColumnExpression.push(
-        param(internalKeyFor(renderType, undefined, this.#virtualNetwork)),
+        param(internalKeyFor(renderType, undefined)),
       );
       usedRenderTypeColumnExpression.push(
-        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined, this.#virtualNetwork)}'`,
+        `IS NOT NULL THEN '${internalKeyFor(renderType, undefined)}'`,
       );
       usedRenderTypeColumnExpression.push(
         ...[
@@ -1003,7 +994,7 @@ export class IndexQueryEngine {
     return [
       tableValuedEach('types'),
       '=',
-      param(internalKeyFor(ref, undefined, this.#virtualNetwork)),
+      param(internalKeyFor(ref, undefined)),
     ];
   }
 
