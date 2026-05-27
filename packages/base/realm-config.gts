@@ -9,6 +9,7 @@ import {
 } from './card-api';
 import BooleanField from './boolean';
 import StringField from './string';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import LinkIcon from '@cardstack/boxel-icons/link';
 
@@ -83,6 +84,124 @@ export class RoutingRuleField extends FieldDef {
   static edit = RoutingRuleEdit;
 }
 
+class RealmConfigEmbedded extends Component<typeof RealmConfig> {
+  <template>
+    <div class='realm-config-embedded' data-test-realm-config-embedded>
+      {{#if @model.iconURL}}
+        <img class='icon' src={{@model.iconURL}} alt='' />
+      {{else}}
+        <FileSettingsIcon class='icon' />
+      {{/if}}
+      <span class='title'>{{@model.cardTitle}}</span>
+      <span class='rule-count'>
+        {{@model.hostRoutingRules.length}}
+        routing
+        {{if (eq @model.hostRoutingRules.length 1) 'rule' 'rules'}}
+      </span>
+    </div>
+    <style scoped>
+      .realm-config-embedded {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+      }
+      .icon {
+        width: var(--boxel-icon-med);
+        height: var(--boxel-icon-med);
+        border-radius: var(--boxel-border-radius-sm);
+        flex-shrink: 0;
+      }
+      .title {
+        font: 600 var(--boxel-font);
+      }
+      .rule-count {
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+        margin-left: auto;
+      }
+    </style>
+  </template>
+}
+
+class RealmConfigIsolated extends Component<typeof RealmConfig> {
+  <template>
+    <article class='realm-config-isolated' data-test-realm-config-isolated>
+      <header class='header'>
+        {{#if @model.iconURL}}
+          <img class='icon' src={{@model.iconURL}} alt='' />
+        {{else}}
+          <FileSettingsIcon class='icon' />
+        {{/if}}
+        <h1 class='title'>{{@model.cardTitle}}</h1>
+      </header>
+
+      <section class='section'>
+        <h2 class='section-title'>Host Routing Rules</h2>
+        {{#if @model.hostRoutingRules.length}}
+          <ul class='rules' data-test-routing-rules>
+            {{#each @model.hostRoutingRules as |rule|}}
+              <li class='rule'>{{rule.path}}
+                {{#if rule.instance}}
+                  <span class='arrow' aria-hidden='true'>→</span>
+                  {{rule.instance.title}}
+                {{/if}}
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <p class='empty' data-test-routing-rules-empty>
+            No routing rules configured.
+          </p>
+        {{/if}}
+      </section>
+    </article>
+    <style scoped>
+      .realm-config-isolated {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .icon {
+        width: var(--boxel-icon-xl);
+        height: var(--boxel-icon-xl);
+        border-radius: var(--boxel-border-radius);
+      }
+      .title {
+        font: 700 var(--boxel-font-lg);
+        margin: 0;
+      }
+      .section-title {
+        font: 600 var(--boxel-font);
+        margin: 0 0 var(--boxel-sp-xs);
+      }
+      .rules {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+      }
+      .rule {
+        font-family: var(--boxel-font-family-mono, monospace);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .arrow {
+        opacity: 0.6;
+        margin: 0 var(--boxel-sp-xxs);
+      }
+      .empty {
+        color: var(--boxel-450);
+      }
+    </style>
+  </template>
+}
+
 export class RealmConfig extends CardDef {
   static displayName = 'Realm Config';
   static icon = FileSettingsIcon;
@@ -108,4 +227,7 @@ export class RealmConfig extends CardDef {
       return name ? `${name} Config` : `Untitled ${RealmConfig.displayName}`;
     },
   });
+
+  static embedded = RealmConfigEmbedded;
+  static isolated = RealmConfigIsolated;
 }
