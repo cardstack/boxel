@@ -36,6 +36,7 @@ function isSafeHttpUrl(url: string): boolean {
 }
 
 export default class BrokenLinkTemplate extends GlimmerComponent<{
+  Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
 }> {
   private get isNotFound() {
@@ -113,6 +114,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       class='broken-link-template {{@format}} {{@state}}'
       data-test-broken-link-template={{@format}}
       data-test-broken-link-state={{@state}}
+      ...attributes
     >
       {{#if (eq @format 'atom')}}
         <span class='atom-line'>
@@ -223,7 +225,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         max-height: 600px;
         container-type: size;
         gap: 2px;
-        padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
         font: 500 var(--boxel-font-xs);
       }
       .broken-link-template.embedded {
@@ -370,7 +372,10 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         line-height: 1;
       }
       .atom-label {
+        flex: 0 0 auto;
         font-weight: 600;
+        font-size: 0.9em;
+        white-space: nowrap;
       }
       .atom-url {
         font-family: var(--boxel-monospace-font-family, monospace);
