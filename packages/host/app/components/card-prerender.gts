@@ -437,6 +437,9 @@ export default class CardPrerender extends Component {
       if (requested.fileRender) {
         // Bump nonce between passes (see cardRender pass for rationale).
         this.#nonce++;
+        // Start the pass clean, like fileExtract/cardRender — a render error
+        // from an earlier pass must not be re-thrown by this one.
+        this.localIndexer.renderError = undefined;
         let effectiveFileData =
           fileData ??
           (response.fileExtract?.resource && baseOptions.fileDefCodeRef
@@ -714,11 +717,16 @@ export default class CardPrerender extends Component {
     let context = this.#currentContext ?? this.#contextFromDom();
     let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
     let cardId = context?.cardId ?? url.replace(/\.json$/, '');
-    let payload = JSON.stringify(
-      withCardType(normalizeRenderError(renderError, { cardId }), cardType),
+    // Throw to propagate — the visit's cardRender catch turns this into the
+    // card's error doc. Deliberately NOT written to `localIndexer.renderError`:
+    // that field persists across visit passes, and a later fileRender pass
+    // re-throws whatever it holds, which would misreport a clean file render as
+    // this card's broken-link error.
+    throw new Error(
+      JSON.stringify(
+        withCardType(normalizeRenderError(renderError, { cardId }), cardType),
+      ),
     );
-    this.localIndexer.renderError = payload;
-    throw new Error(payload);
   }
 
   #contextFromDom(): CardRenderContext | undefined {
