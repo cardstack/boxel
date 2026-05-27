@@ -1,4 +1,4 @@
-import { waitFor, click, triggerEvent } from '@ember/test-helpers';
+import { waitFor, click, triggerEvent, find } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -318,5 +318,38 @@ module('Integration | overlay-menu-items', function (hooks) {
       .doesNotExist(
         'the card-flavored URL label is suppressed for file targets',
       );
+  });
+
+  test('hover type-label tab clips its shape without a separate border-radius', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let overlaySelector = `[data-test-overlay-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    await waitFor(`[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`);
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
+      'mouseenter',
+    );
+    await waitFor(`${overlaySelector} [data-test-overlay-label]`);
+
+    let label = find(`${overlaySelector} [data-test-overlay-label]`)!;
+    let styles = window.getComputedStyle(label);
+
+    // The rounded corners live in the clip-path, not border-radius. Combining
+    // the two leaves a light-grey anti-aliasing seam at the corners, so the
+    // label must keep its corner rounding entirely within the clip shape.
+    assert.notEqual(
+      styles.clipPath,
+      'none',
+      'type-label tab clips its flag shape via clip-path',
+    );
+    assert.strictEqual(
+      styles.borderTopLeftRadius,
+      '0px',
+      'type-label tab has no border-radius (rounding is folded into the clip-path)',
+    );
   });
 });

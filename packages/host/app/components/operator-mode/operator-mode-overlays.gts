@@ -253,8 +253,19 @@ export default class OperatorModeOverlays extends Overlays {
         letter-spacing: 0.5px;
         text-transform: uppercase;
         white-space: nowrap;
-        border-radius: 5px 0 0 5px;
-        clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
+        /* The rounded left corners are part of the clip-path itself (a 4px
+           bevel) rather than a separate border-radius. Combining border-radius
+           with clip-path leaves a faint light-grey anti-aliasing seam at the
+           rounded corners; folding the rounding into the single clip shape so
+           the fill and the drop-shadow share identical geometry removes it. */
+        clip-path: polygon(
+          4px 0,
+          calc(100% - 13px) 0,
+          100% 100%,
+          4px 100%,
+          0 calc(100% - 4px),
+          0 4px
+        );
         pointer-events: auto;
         z-index: 1;
         filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
