@@ -81,11 +81,15 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               data-test-remove-card
             />
           {{/if}}
+          {{! The editor lays the slot out in flow (a `1fr auto` grid), not a
+              fixed-dimension card slot, so the placeholder renders `embedded`
+              (flow-sized) rather than `fitted` (which clamps to a badge
+              footprint and would clip the URL here). }}
           <BrokenLinkTemplate
             @brokenUrl={{@brokenLink.reference}}
             @errorDoc={{@brokenLink.errorDoc}}
             @state={{@brokenLink.kind}}
-            @format='fitted'
+            @format='embedded'
           />
         {{else if this.isEmpty}}
           {{#if permissions.canWrite}}
