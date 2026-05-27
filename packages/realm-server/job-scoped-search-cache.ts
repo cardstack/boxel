@@ -15,11 +15,10 @@ const log = logger('job-scoped-search-cache');
 const TABLE = 'job_scoped_search_cache';
 
 // Missed-NOTIFY backstop. The jobs_finished listener evicts a job's entries as
-// soon as it finalizes (CS-11179); this TTL only governs the janitor sweep
-// that reclaims rows a job left behind because a replica missed the NOTIFY —
-// the same ceiling the in-memory cache used. Picked to comfortably outlive a
-// single indexing batch (from-scratch reindexes of large realms can run an
-// hour or more) while bounding the leak window.
+// soon as it finalizes; this TTL only governs the janitor sweep that reclaims
+// rows a job left behind when a replica missed the NOTIFY. Picked to
+// comfortably outlive a single indexing batch (from-scratch reindexes of large
+// realms can run an hour or more) while bounding the leak window.
 const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 
 // How often the janitor sweeps aged rows. Infrequent — eviction is normally
@@ -27,9 +26,8 @@ const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 
 // Per-batch read cache used during indexing, backed by a shared Postgres table
-// (CS-11278) so every realm-server replica reads and writes the same entries —
-// horizontal scaling no longer fragments the hit rate the way a per-process
-// Map would.
+// so every realm-server replica reads and writes the same entries — one
+// consolidated hit rate across the fleet rather than one per process.
 //
 // Each entry is keyed by the `<jobId>.<reservationId>` job identity (stamped on
 // `x-boxel-job-id`) plus the md5 of the canonical `(realms, query, opts)`
@@ -51,11 +49,11 @@ const DEFAULT_JANITOR_INTERVAL_MS = 30 * 60 * 1000;
 // are only stamped by indexer-driven prerender requests, so user-facing API
 // callers always bypass and see live state.
 //
-// Entries store the *resolved, serialized* response bytes (CS-11176 made the
-// value a `string`). Concurrent same-key populates each run their own
-// `populate` and race to `INSERT ... ON CONFLICT DO NOTHING`; first write wins,
-// and because both came from the same `(jobId, query)` tuple against the same
-// snapshot-stable `boxel_index` either resolved doc is equally valid.
+// Entries store the *resolved, serialized* response bytes (a `string`).
+// Concurrent same-key populates each run their own `populate` and race to
+// `INSERT ... ON CONFLICT DO NOTHING`; first write wins, and because both came
+// from the same `(jobId, query)` tuple against the same snapshot-stable
+// `boxel_index` either resolved doc is equally valid.
 export class JobScopedSearchCache {
   readonly #dbAdapter: DBAdapter;
   readonly #ttlMs: number;
@@ -86,7 +84,7 @@ export class JobScopedSearchCache {
     populate: () => Promise<string>;
   }): Promise<string> {
     let hash = innerKeyHash(args.realms, args.query, args.opts);
-    let existing = await this.#peekByHash(args.jobId, hash);
+    let existing = await this.#getCachedByHash(args.jobId, hash);
     if (existing !== undefined) {
       let stat = this.#stats.get(args.jobId);
       if (stat) stat.hits += 1;
@@ -117,22 +115,25 @@ export class JobScopedSearchCache {
     return result;
   }
 
-  // Look up the cached body without populating or touching stats. Used by the
+  // Read the cached body without populating or touching stats. Used by the
   // handler's 304 path to confirm the slot still exists before returning
   // Not-Modified.
-  async peek(args: {
+  async getCached(args: {
     jobId: string;
     realms: string[];
     query: Query;
     opts: unknown | undefined;
   }): Promise<string | undefined> {
-    return this.#peekByHash(
+    return this.#getCachedByHash(
       args.jobId,
       innerKeyHash(args.realms, args.query, args.opts),
     );
   }
 
-  async #peekByHash(jobId: string, hash: string): Promise<string | undefined> {
+  async #getCachedByHash(
+    jobId: string,
+    hash: string,
+  ): Promise<string | undefined> {
     let rows = (await query(this.#dbAdapter, [
       `SELECT result FROM ${TABLE} WHERE job_id=`,
       param(jobId),

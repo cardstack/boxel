@@ -258,12 +258,12 @@ module(basename(__filename), function (hooks) {
       assert.strictEqual(await cache.size(), 1, 'only job 43 entry survives');
     });
 
-    test('peek: returns the cached body for a known key, undefined otherwise', async function (assert) {
+    test('getCached: returns the cached body for a known key, undefined otherwise', async function (assert) {
       let cache = new JobScopedSearchCache(dbAdapter);
       let populate = async () => makeDoc('peeked');
 
       assert.strictEqual(
-        await cache.peek({
+        await cache.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery(),
@@ -282,7 +282,7 @@ module(basename(__filename), function (hooks) {
       });
 
       assert.strictEqual(
-        await cache.peek({
+        await cache.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery(),
@@ -292,14 +292,14 @@ module(basename(__filename), function (hooks) {
         'warm cache returns the cached body',
       );
       assert.strictEqual(
-        await cache.peek({
+        await cache.getCached({
           jobId: '99.9',
           realms: [realmA],
           query: makeQuery(),
           opts: undefined,
         }),
         undefined,
-        'a different jobId is not visible to peek',
+        'a different jobId is not visible to getCached',
       );
     });
 
@@ -334,14 +334,14 @@ module(basename(__filename), function (hooks) {
         "replica B returned replica A's cached bytes",
       );
       assert.strictEqual(
-        await replicaB.peek({
+        await replicaB.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery(),
           opts: undefined,
         }),
         makeDoc('shared'),
-        'replica B can peek the shared entry',
+        'replica B can read the shared entry',
       );
     });
 
@@ -360,7 +360,7 @@ module(basename(__filename), function (hooks) {
       await replicaB.clearJob('42.1');
 
       assert.strictEqual(
-        await replicaA.peek({
+        await replicaA.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery(),
@@ -403,7 +403,7 @@ module(basename(__filename), function (hooks) {
 
       assert.strictEqual(await cache.size(), 1, 'the aged entry was swept');
       assert.strictEqual(
-        await cache.peek({
+        await cache.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery('fresh'),
@@ -413,7 +413,7 @@ module(basename(__filename), function (hooks) {
         'the fresh entry survived',
       );
       assert.strictEqual(
-        await cache.peek({
+        await cache.getCached({
           jobId: '42.1',
           realms: [realmA],
           query: makeQuery('old'),

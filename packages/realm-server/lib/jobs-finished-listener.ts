@@ -11,20 +11,18 @@ import type { JobScopedSearchCache } from '../job-scoped-search-cache';
 
 const log = logger('realm-server:jobs-finished-listener');
 
-// CS-11179: NOTIFY-driven eviction for the in-memory JobScopedSearchCache.
+// NOTIFY-driven eviction for the JobScopedSearchCache.
 //
 // `pg-queue` emits `NOTIFY jobs_finished` (no payload) whenever a job's
-// finalize transaction commits. The cache otherwise releases a finished job's
-// entries only when their TTL elapses — fine on a single replica, but a
-// from-scratch reindex of a large realm fans out hundreds of distinct queries
-// within one job, so across many concurrent jobs that residue adds up. Wiring
-// the LISTEN side here drops a job's entries as soon as the worker signals
-// completion instead of waiting for TTL.
+// finalize transaction commits. Absent this listener the cache releases a
+// finished job's entries only when the janitor sweeps them past the TTL.
+// Wiring the LISTEN side here drops a job's entries as soon as the worker
+// signals completion instead of waiting for that sweep.
 //
 // Best-effort, like the other realm-server NOTIFY listeners: a missed
-// notification just leaves entries to TTL out (a bounded memory window, never
-// a correctness issue — a re-run of a job hashes to a different cache key
-// because the key embeds `<jobId>.<reservationId>`).
+// notification just leaves entries for the janitor to reclaim (a bounded
+// window, never a correctness issue — a re-run of a job hashes to a different
+// cache key because the key embeds `<jobId>.<reservationId>`).
 //
 // The NOTIFY has no payload, so on each notification we sweep: take the
 // `<jobId>.<reservationId>` keys the cache currently holds, ask `jobs` which
