@@ -12,7 +12,7 @@ After a PR is opened, arm a **persistent `Monitor`** that polls GitHub and emits
 
 ## Pick a form — and read this first
 
-Two behaviors are bundled in the full form: (a) reacting to CI failures, and (b) **drafting replies to human reviewers' comments** under the PR author's GitHub account. Behavior (b) is the controversial part: a teammate may not want an agent answering reviewers before they've seen the feedback themselves, and replies post under *their* identity. Respect that.
+Two behaviors are bundled in the full form: (a) reacting to CI failures, and (b) **drafting replies to human reviewers' comments**. Behavior (b) is the judgment call. The replies are posted through the PR author's GitHub account, but each one begins with the `[Claude Code 🤖]` prefix (see the `pr-comment-attribution` skill), so reviewers can see at a glance that the agent wrote it — not the author. The concern is therefore social, not mistaken identity: a teammate may simply not want an agent taking a first pass at reviewers' feedback before they've engaged with it themselves. Respect that.
 
 - **Full form** — watches review comments + reviews + CI, and the agent drafts a per-thread reply to each (prefixed per the `pr-comment-attribution` skill so reviewers know it's the agent). Use when the PR author is comfortable with the agent taking a first pass at review feedback.
 - **CI-only form** (reduced) — watches **only** CI checks turning red; review comments are left entirely to the human author. Use this when anyone is uncomfortable with the agent replying on their behalf. It still gives you the tight fix-CI-fast loop without touching the social surface.
@@ -29,7 +29,7 @@ rm -f "$CHECKS_FILE"; touch "$CHECKS_FILE"
 
 # Pre-seed currently-failing checks at the CURRENT head SHA only.
 HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
-[ -n "$HEAD_SHA" ] && gh pr checks "$PR" --json name,bucket \
+[ -n "$HEAD_SHA" ] && gh pr checks -R "$REPO" "$PR" --json name,bucket \
   --jq '.[] | select(.bucket=="fail") | "check-fail|'"$HEAD_SHA"'|\(.name)"' 2>/dev/null >> "$CHECKS_FILE"
 echo "Pre-seeded check-fails=$(wc -l < $CHECKS_FILE) (head=$HEAD_SHA)"
 
@@ -39,7 +39,7 @@ while true; do
 
   HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
   if [ -n "$HEAD_SHA" ]; then
-    gh pr checks "$PR" --json name,bucket --jq '.[] | select(.bucket=="fail") | .name' 2>/dev/null \
+    gh pr checks -R "$REPO" "$PR" --json name,bucket --jq '.[] | select(.bucket=="fail") | .name' 2>/dev/null \
     | while IFS= read -r name; do
         [ -z "$name" ] && continue
         key="check-fail|$HEAD_SHA|$name"
@@ -68,11 +68,11 @@ CHECKS_FILE="/tmp/<slug>-pr-monitor-checks.txt"
 rm -f "$SEEN_FILE" "$CHECKS_FILE"; touch "$SEEN_FILE" "$CHECKS_FILE"
 
 # Pre-seed existing comments/reviews so a restart doesn't flood the chat.
-gh api "repos/$REPO/issues/$PR/comments" --jq '.[].id' 2>/dev/null | sed 's/^/issue-/' >> "$SEEN_FILE"
-gh api "repos/$REPO/pulls/$PR/comments"  --jq '.[].id' 2>/dev/null | sed 's/^/review-comment-/' >> "$SEEN_FILE"
-gh api "repos/$REPO/pulls/$PR/reviews"   --jq '.[].id' 2>/dev/null | sed 's/^/review-/' >> "$SEEN_FILE"
+gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[].id' 2>/dev/null | sed 's/^/issue-/' >> "$SEEN_FILE"
+gh api --paginate "repos/$REPO/pulls/$PR/comments"  --jq '.[].id' 2>/dev/null | sed 's/^/review-comment-/' >> "$SEEN_FILE"
+gh api --paginate "repos/$REPO/pulls/$PR/reviews"   --jq '.[].id' 2>/dev/null | sed 's/^/review-/' >> "$SEEN_FILE"
 HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
-[ -n "$HEAD_SHA" ] && gh pr checks "$PR" --json name,bucket \
+[ -n "$HEAD_SHA" ] && gh pr checks -R "$REPO" "$PR" --json name,bucket \
   --jq '.[] | select(.bucket=="fail") | "check-fail|'"$HEAD_SHA"'|\(.name)"' 2>/dev/null >> "$CHECKS_FILE"
 echo "Pre-seeded comments=$(wc -l < $SEEN_FILE) check-fails=$(wc -l < $CHECKS_FILE) (head=$HEAD_SHA)"
 
@@ -81,13 +81,13 @@ while true; do
   if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then echo "PR-$state"; exit 0; fi
 
   {
-    gh api "repos/$REPO/issues/$PR/comments" --jq '.[]
+    gh api --paginate "repos/$REPO/issues/$PR/comments" --jq '.[]
       | select(.body | contains("'"$REPLY_MARKER"'") | not)
       | "issue\t\(.id)\t\(.user.login)\t\(.html_url)\t\((.body // "") | gsub("\\s+"; " ") | .[0:160])"' 2>/dev/null
-    gh api "repos/$REPO/pulls/$PR/comments" --jq '.[]
+    gh api --paginate "repos/$REPO/pulls/$PR/comments" --jq '.[]
       | select(.body | contains("'"$REPLY_MARKER"'") | not)
       | "review-comment\t\(.id)\t\(.user.login)\t\(.html_url)\t\(.path):\(.line // .original_line // 0)\t\((.body // "") | gsub("\\s+"; " ") | .[0:160])"' 2>/dev/null
-    gh api "repos/$REPO/pulls/$PR/reviews" --jq '.[]
+    gh api --paginate "repos/$REPO/pulls/$PR/reviews" --jq '.[]
       | select((.state=="APPROVED") or (.state=="CHANGES_REQUESTED") or (.state=="DISMISSED") or (.state=="COMMENTED" and (.body // "")!=""))
       | "review\t\(.id)\t\(.user.login)\t\(.html_url)\t\(.state)\t\((.body // "") | gsub("\\s+"; " ") | .[0:160])"' 2>/dev/null
   } | while IFS=$'\t' read -r kind id rest; do
@@ -101,7 +101,7 @@ while true; do
 
   HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
   if [ -n "$HEAD_SHA" ]; then
-    gh pr checks "$PR" --json name,bucket --jq '.[] | select(.bucket=="fail") | .name' 2>/dev/null \
+    gh pr checks -R "$REPO" "$PR" --json name,bucket --jq '.[] | select(.bucket=="fail") | .name' 2>/dev/null \
     | while IFS= read -r name; do
         [ -z "$name" ] && continue
         key="check-fail|$HEAD_SHA|$name"
@@ -132,6 +132,8 @@ Arm via the `Monitor` tool with `persistent: true`. Replies go in their own thre
 8. **Reply with the threaded endpoint** `pulls/<n>/comments/<id>/replies` — `pulls/<n>/comments` creates a new top-level comment instead of nesting.
 9. **60s polling** is plenty; faster burns API rate limits with no gain.
 10. **Empty-body `COMMENTED` reviews are the agent's own reply-wrappers.** Posting a threaded reply makes GitHub auto-create a parent `review` row with `state="COMMENTED"` and an empty body. The marker lives on the inline comment, not this wrapper, so filter empty-body COMMENTED reviews out at the `reviews` stage (the jq above already does).
+11. **`gh pr checks` needs `-R "$REPO"`.** Unlike `gh api`, `gh pr checks` (and `gh pr view`) accept `-R`. Without it, `gh` resolves the PR from the current directory's repo/branch — so a monitor launched from anywhere else silently pre-seeds and polls the wrong PR. Pass `-R "$REPO"` on every `gh pr checks` / `gh pr view` call.
+12. **Paginate the comment/review endpoints.** `gh api` returns only the first page (~30 items) by default. On a PR with many comments, feedback past page one never emits. Pass `--paginate` on every `issues/<n>/comments`, `pulls/<n>/comments`, and `pulls/<n>/reviews` call (pre-seed and poll).
 
 ## Re-arming after a broken window
 
