@@ -821,7 +821,11 @@ export default class Room extends Component<Signature> {
       if (!this.args.selectedCardRef) {
         return;
       }
-      let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+      let moduleId = internalKeyFor(
+        this.args.selectedCardRef,
+        undefined,
+        this.network.virtualNetwork,
+      );
       state.value = this.playgroundPanelService.getSelection(moduleId)?.cardId;
     })();
 

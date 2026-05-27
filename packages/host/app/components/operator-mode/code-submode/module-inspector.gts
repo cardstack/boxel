@@ -414,6 +414,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     const moduleId = internalKeyFor(
       this.selectedDeclarationAsCodeRef,
       undefined,
+      this.network.virtualNetwork,
     );
     const cardId = rri(id.replace(/\.json$/, ''));
 

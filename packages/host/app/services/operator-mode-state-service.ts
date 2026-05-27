@@ -1453,7 +1453,11 @@ export default class OperatorModeStateService extends Service {
         return playgroundSelections[this.codePathString];
       }
       let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
-        ? internalKeyFor(this.codeSemanticsService.selectedCodeRef!, undefined)
+        ? internalKeyFor(
+            this.codeSemanticsService.selectedCodeRef!,
+            undefined,
+            this.network.virtualNetwork,
+          )
         : null;
       if (selectedCodeRefUrl && playgroundSelections[selectedCodeRefUrl]) {
         return playgroundSelections[selectedCodeRefUrl];

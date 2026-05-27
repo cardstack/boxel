@@ -113,7 +113,7 @@ export default class CardTypeService extends Service {
         localName: card.name,
       };
     }
-    let id = internalKeyFor(ref, undefined);
+    let id = internalKeyFor(ref, undefined, this.network.virtualNetwork);
     let cached = this.typeCache.get(id);
     if (cached) {
       return cached;
