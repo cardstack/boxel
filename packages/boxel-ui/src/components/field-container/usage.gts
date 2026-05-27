@@ -8,7 +8,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVars from '../../helpers/css-var.ts';
-import { ALL_ICON_COMPONENTS } from '../../icons.gts';
+import { ALL_ICON_COMPONENTS } from '../../icons.ts';
 import Profile from '../../icons/profile.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelInput from '../input/index.gts';

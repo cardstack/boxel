@@ -26,7 +26,7 @@ export default function (assert: Assert) {
     if (typeof actualValue === 'number') {
       actualNumericValue = actualValue;
     } else {
-      actualNumericValue = Number(actualValue.replace(/[^0-9.]/g, ''));
+      actualNumericValue = Number(actualValue?.replace(/[^0-9.]/g, ''));
     }
     if (Math.abs(actualNumericValue - expectedValue) <= allowedDifference) {
       this.pushResult({

@@ -11,7 +11,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
-import { CheckMark, IconX } from '../../icons.gts';
+import { CheckMark, IconX } from '../../icons.ts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelField from '../field-container/index.gts';
 import {

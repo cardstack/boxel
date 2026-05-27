@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 import type { ComponentLike } from '@glint/template';
 
 import { cn, eq } from '../../helpers.ts';
-import { FailureBordered, Warning } from '../../icons.gts';
+import { FailureBordered, Warning } from '../../icons.ts';
 import Button, { type BoxelButtonKind } from '../button/index.gts';
 
 interface MessagesSignature {

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg viewBox='0 0 16 16' fill='none' stroke='currentColor' stroke-width='1.4'>
+  <rect x='2' y='2' width='12' height='12' rx='1.25'/>
+  <line x1='4.5' y1='5.25' x2='9.5' y2='5.25'/>
+  <rect x='4.5' y='6.5' width='7' height='2' rx='0.5' fill='currentColor' fill-opacity='0.3' stroke='none'/>
+  <line x1='4.5' y1='10.5' x2='8' y2='10.5'/>
+  <rect x='4.5' y='11.75' width='7' height='1.75' rx='0.5' fill='currentColor' fill-opacity='0.3' stroke='none'/>
+</svg>

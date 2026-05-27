@@ -1,4 +1,6 @@
 // Augment Glint's HTML element attributes with missing properties
+export {};
+
 declare global {
   // glimmer-scoped-css uses <style scoped> which isn't in Glint v2's type defs
   interface HTMLStyleElementAttributes {

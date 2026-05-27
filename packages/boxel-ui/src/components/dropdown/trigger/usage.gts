@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { ALL_ICON_COMPONENTS } from '../../../icons.gts';
+import { ALL_ICON_COMPONENTS } from '../../../icons.ts';
 import IconGlobe from '../../../icons/icon-globe.gts';
 import type { Icon } from '../../../icons/types.ts';
 import BoxelDropdownTrigger from './index.gts';

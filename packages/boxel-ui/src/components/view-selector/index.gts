@@ -8,7 +8,7 @@ import {
   Card as CardIcon,
   Grid3x3 as GridIcon,
   Rows4 as StripIcon,
-} from '../../icons.gts';
+} from '../../icons.ts';
 import RadioInput from '../radio-input/index.gts';
 
 export interface ViewItem {

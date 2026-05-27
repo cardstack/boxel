@@ -6,7 +6,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat } from '@ember/helper';
 
 import cn from '../../helpers/cn.ts';
-import { IconPencil, ThreeDotsHorizontal } from '../../icons.gts';
+import { IconPencil, ThreeDotsHorizontal } from '../../icons.ts';
 import type { Icon } from '../../icons/types.ts';
 import type { BoxelButtonSize } from '../button/index.gts';
 import IconButton from '../icon-button/index.gts';

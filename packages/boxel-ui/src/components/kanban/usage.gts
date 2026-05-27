@@ -9,7 +9,7 @@ import {
   Card as CardIcon,
   Grid3x3 as GridIcon,
   Rows4 as RowsIcon,
-} from '../../icons.gts';
+} from '../../icons.ts';
 import CardContainer from '../card-container/index.gts';
 import Switch from '../switch/index.gts';
 import type { ViewItem } from '../view-selector/index.gts';

@@ -150,7 +150,7 @@ module('Integration | Component | phone-input', function (hooks) {
 
   test('it requires a value when marked as required', async function (assert) {
     let value: string | null = null;
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => (value = newValue);
 
     await render(
       <template>

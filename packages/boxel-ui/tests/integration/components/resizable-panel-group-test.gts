@@ -94,7 +94,7 @@ let moveResizePanelHandle = async function ({
   let resizePanelHandles = document.querySelectorAll(
     `[data-boxel-panel-resize-handle-id]`,
   );
-  let resizeHandleId = resizePanelHandles[panelIndex].getAttribute(
+  let resizeHandleId = resizePanelHandles[panelIndex]?.getAttribute(
     'data-boxel-panel-resize-handle-id',
   );
   if (!resizeHandleId) {
@@ -105,7 +105,7 @@ let moveResizePanelHandle = async function ({
   let groupSizeInPixels =
     orientation === 'horizontal' ? groupRect.width : groupRect.height;
   let resizeHandleRect =
-    resizePanelHandles[panelIndex].children[0]!.getBoundingClientRect();
+    resizePanelHandles[panelIndex]!.children[0]!.getBoundingClientRect();
   let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
 
   let elementToMove = find(
@@ -163,8 +163,8 @@ let assertPanels = function ({
   for (let index = 0; index < panelSizesInPixels.length; index++) {
     assert.deepEqual(
       orientation === 'horizontal'
-        ? computedStyles[index].width
-        : computedStyles[index].height,
+        ? computedStyles[index]!.width
+        : computedStyles[index]!.height,
       panelSizesInPixels[index],
     );
   }
@@ -349,7 +349,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined minSize and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].minSize = 40;
+        this.renderController.panels[0]!.minSize = 40;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -425,8 +425,8 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined minSize, not collapsible, and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].minSize = 40;
-        this.renderController.panels[0].collapsible = false;
+        this.renderController.panels[0]!.minSize = 40;
+        this.renderController.panels[0]!.collapsible = false;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -480,7 +480,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
       });
 
       test<MyTestContext>(`it can lay out panels with a defined maxSize and ${orientationProperties.orientation} orientation`, async function (assert) {
-        this.renderController.panels[0].maxSize = 80;
+        this.renderController.panels[0]!.maxSize = 80;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -553,7 +553,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
           panelSizesInPixels: ['210px', '90px'],
         });
 
-        this.renderController.panels[1].isHidden = true;
+        this.renderController.panels[1]!.isHidden = true;
         await waitForRerender();
         assertPanels({
           assert,

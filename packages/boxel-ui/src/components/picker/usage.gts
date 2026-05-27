@@ -10,7 +10,7 @@ import {
   IconCircle,
   IconGlobe,
   IconHexagon,
-} from '../../icons.gts';
+} from '../../icons.ts';
 import Picker, { type PickerOption } from './index.gts';
 
 export default class PickerUsage extends Component {

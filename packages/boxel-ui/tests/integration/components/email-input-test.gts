@@ -12,7 +12,7 @@ module('Integration | Component | email-input', function (hooks) {
 
   test('it delays invalid state until blur', async function (assert) {
     let value: string | null = null;
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => (value = newValue);
 
     await render(
       <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
@@ -41,7 +41,7 @@ module('Integration | Component | email-input', function (hooks) {
 
   test('it respects external value changes and accepts addresses with pluses and subdomains', async function (assert) {
     let value: string | null = 'first.last+tag@sub.domain.co';
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => (value = newValue);
 
     await render(
       <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
@@ -57,7 +57,7 @@ module('Integration | Component | email-input', function (hooks) {
 
   test('it validates external value on render', async function (assert) {
     let value: string | null = 'alice@';
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => (value = newValue);
 
     await render(
       <template><EmailInput @value={{value}} @onChange={{set}} /></template>,
@@ -147,7 +147,7 @@ module('Integration | Component | email-input', function (hooks) {
 
   test('it requires a value when marked as required', async function (assert) {
     let value: string | null = null;
-    const set = (newValue: string) => (value = newValue);
+    const set = (newValue: string | null) => (value = newValue);
 
     await render(
       <template>
