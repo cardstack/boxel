@@ -769,6 +769,101 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'owner-with-broken-pet.gts': `
+                import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPet extends CardDef {
+                  static displayName = "Owner With Broken Pet";
+                  @field name = contains(StringField);
+                  @field pet = linksTo(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#if @model.pet}}{{@model.pet.name}}{{/if}}</template>
+                  }
+                }
+              `,
+              // Links to ./missing-pet, which does not exist — the lazy load
+              // 404s, the relationship settles into a not-found state, and the
+              // render route's getRelationship scan surfaces it.
+              'owner-with-broken-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    pet: {
+                      links: {
+                        self: './missing-pet',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pet'),
+                      name: 'OwnerWithBrokenPet',
+                    },
+                  },
+                },
+              },
+              'owner-with-broken-pets.gts': `
+                import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPets extends CardDef {
+                  static displayName = "Owner With Broken Pets";
+                  @field name = contains(StringField);
+                  @field pets = linksToMany(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#each @model.pets as |pet|}}{{#if pet}}{{pet.name}}{{/if}}{{/each}}</template>
+                  }
+                }
+              `,
+              'real-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Real Pet',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'Pet',
+                    },
+                  },
+                },
+              },
+              // One present element (./real-pet) and one broken element
+              // (./missing-pets-2, which does not exist): the plural getter
+              // settles the broken slot into a not-found state that the render
+              // route's getRelationship scan surfaces while the good slot loads.
+              'owner-with-broken-pets.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    'pets.0': {
+                      links: {
+                        self: './real-pet',
+                      },
+                    },
+                    'pets.1': {
+                      links: {
+                        self: './missing-pet-2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'OwnerWithBrokenPets',
+                    },
+                  },
+                },
+              },
               'rejects.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Rejects extends CardDef {
@@ -1294,6 +1389,68 @@ module(basename(__filename), function () {
         assert.ok(
           deps.some((dep) => dep.includes(`${realmURL}broken`)),
           'deps include failing module',
+        );
+      });
+
+      test('card prerender captures a broken linksTo via the relationship scan', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pet.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'prerender reports an error for the broken linksTo',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          404,
+          'a missing link target surfaces as 404',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('missing-pet'),
+          `error message names the missing link target, got: ${result.response.error?.error.message}`,
+        );
+        let deps = result.response.error?.error.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet')),
+          `deps include the broken link reference, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
+      test('card prerender captures a broken linksToMany element via the relationship scan', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pets.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'prerender reports an error for the broken linksToMany element',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          404,
+          'a missing element target surfaces as 404',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('missing-pet-2'),
+          `error message names the missing element target, got: ${result.response.error?.error.message}`,
+        );
+        let deps = result.response.error?.error.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet-2')),
+          `deps include the broken element reference, got: ${JSON.stringify(deps)}`,
         );
       });
 

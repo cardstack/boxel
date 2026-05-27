@@ -23,8 +23,10 @@ import {
 } from '../../helpers';
 import {
   CardDef,
+  FieldDef,
   contains,
   field,
+  getBrokenLinks,
   getDataBucket,
   getRelationship,
   linksTo,
@@ -373,6 +375,333 @@ module('Integration | getRelationship', function (hooks) {
         states[0].reference,
         `${testRealmURL}upstream/computed-source`,
       );
+    });
+  });
+
+  module('getBrokenLinks', function () {
+    test('returns no findings when every declared link is present or unset', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ firstName: 'Mango' });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      let person = new Person({
+        firstName: 'Hassan',
+        pet: mango,
+        pets: [mango],
+      });
+
+      assert.deepEqual(
+        getBrokenLinks(person),
+        [],
+        'a present singular link, a present plural link, and unset links yield nothing',
+      );
+    });
+
+    test('finds a singular linksTo in error state', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      let doc = errorDoc('upstream exploded');
+      getDataBucket(person).set('pet', {
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: doc,
+      } satisfies LinkErrorSentinel);
+
+      let findings = getBrokenLinks(person);
+      assert.strictEqual(findings.length, 1, 'one finding');
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].kind, 'error');
+      assert.strictEqual(findings[0].reference, `${testRealmURL}Pet/exploded`);
+      assert.strictEqual(findings[0].errorDoc, doc);
+    });
+
+    test('finds a singular linksTo in not-found state', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      let doc = errorDoc('missing', 404);
+      getDataBucket(person).set('pet', {
+        type: 'link-not-found',
+        reference: `${testRealmURL}Pet/missing`,
+        errorDoc: doc,
+      } satisfies LinkNotFoundSentinel);
+
+      let findings = getBrokenLinks(person);
+      assert.strictEqual(findings.length, 1);
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].kind, 'not-found');
+      assert.strictEqual(findings[0].reference, `${testRealmURL}Pet/missing`);
+      assert.strictEqual(findings[0].errorDoc, doc);
+    });
+
+    test('ignores a not-loaded (in-flight) link', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      getDataBucket(person).set('pet', {
+        type: 'not-loaded',
+        reference: `${testRealmURL}Pet/loading`,
+      } satisfies NotLoadedSentinel);
+
+      assert.deepEqual(
+        getBrokenLinks(person),
+        [],
+        'a not-loaded slot is an in-flight fetch, not a terminal failure',
+      );
+    });
+
+    test('plural: reports only the broken slots, one finding per slot, under the field name', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ firstName: 'Mango' });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      let person = new Person({ firstName: 'Hassan', pets: [mango] });
+
+      let errDoc = errorDoc('boom');
+      let notFoundDoc = errorDoc('missing', 404);
+      let pets = getDataBucket(person).get('pets');
+      pets.push({
+        type: 'not-loaded',
+        reference: `${testRealmURL}Pet/vangogh`,
+      } satisfies NotLoadedSentinel);
+      pets.push({
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: errDoc,
+      } satisfies LinkErrorSentinel);
+      pets.push({
+        type: 'link-not-found',
+        reference: `${testRealmURL}Pet/missing`,
+        errorDoc: notFoundDoc,
+      } satisfies LinkNotFoundSentinel);
+
+      let findings = getBrokenLinks(person);
+      assert.strictEqual(
+        findings.length,
+        2,
+        'only the error and not-found slots are reported (present + not-loaded skipped)',
+      );
+      assert.deepEqual(
+        findings.map((f) => f.fieldName),
+        ['pets', 'pets'],
+        'each finding carries the plural field name',
+      );
+      assert.deepEqual(findings.map((f) => f.kind).sort(), [
+        'error',
+        'not-found',
+      ]);
+      let errorFinding = findings.find((f) => f.kind === 'error');
+      assert.strictEqual(
+        errorFinding?.reference,
+        `${testRealmURL}Pet/exploded`,
+      );
+      assert.strictEqual(errorFinding?.errorDoc, errDoc);
+    });
+
+    test('reports every broken declared field across a card', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      getDataBucket(person).set('pet', {
+        type: 'link-not-found',
+        reference: `${testRealmURL}Pet/missing`,
+        errorDoc: errorDoc('missing', 404),
+      } satisfies LinkNotFoundSentinel);
+      getDataBucket(person).set('pets', [
+        {
+          type: 'link-error',
+          reference: `${testRealmURL}Pet/exploded`,
+          errorDoc: errorDoc('boom'),
+        } satisfies LinkErrorSentinel,
+      ]);
+
+      let findings = getBrokenLinks(person);
+      assert.deepEqual(
+        findings.map((f) => f.fieldName).sort(),
+        ['pet', 'pets'],
+        'both the broken singular and plural fields are reported',
+      );
+    });
+
+    test('skips computed relationship fields', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+        // A computed alias of the (broken) declared `pet`. The scan must report
+        // the declared field only; computed fields are not scanned.
+        @field petAlias = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.pet;
+          },
+        });
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let person = new Person({ firstName: 'Hassan' });
+      getDataBucket(person).set('pet', {
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: errorDoc('upstream exploded'),
+      } satisfies LinkErrorSentinel);
+
+      let findings = getBrokenLinks(person);
+      assert.deepEqual(
+        findings.map((f) => f.fieldName),
+        ['pet'],
+        'only the declared field is reported, not the computed alias',
+      );
+    });
+
+    test('recurses into a contained FieldDef and finds its broken linksTo', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Detail extends FieldDef {
+        @field label = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field detail = contains(Detail);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet, Detail });
+
+      let person = new Person({
+        firstName: 'Hassan',
+        detail: new Detail({ label: 'x' }),
+      });
+      let doc = errorDoc('upstream exploded');
+      // Plant the sentinel on the contained FieldDef's own bucket — a contained
+      // field has no index entry, so only recursion catches this.
+      getDataBucket((person as any).detail).set('pet', {
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: doc,
+      } satisfies LinkErrorSentinel);
+
+      let findings = getBrokenLinks(person);
+      assert.strictEqual(
+        findings.length,
+        1,
+        'the contained broken link is found',
+      );
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].kind, 'error');
+      assert.strictEqual(findings[0].reference, `${testRealmURL}Pet/exploded`);
+      assert.strictEqual(findings[0].errorDoc, doc);
+    });
+
+    test('recurses into a present linked card and finds its broken linksTo', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Child extends CardDef {
+        @field name = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      class Parent extends CardDef {
+        @field name = contains(StringField);
+        @field child = linksTo(Child);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Parent, Child, Pet });
+
+      let child = new Child({ name: 'Child' });
+      await saveCard(child, `${testRealmURL}Child/c`, loader);
+      let parent = new Parent({ name: 'Parent', child });
+      let doc = errorDoc('missing', 404);
+      getDataBucket(child).set('pet', {
+        type: 'link-not-found',
+        reference: `${testRealmURL}Pet/missing`,
+        errorDoc: doc,
+      } satisfies LinkNotFoundSentinel);
+
+      let findings = getBrokenLinks(parent);
+      assert.strictEqual(
+        findings.length,
+        1,
+        "the present linked child's broken link is found",
+      );
+      assert.strictEqual(findings[0].fieldName, 'pet');
+      assert.strictEqual(findings[0].kind, 'not-found');
+      assert.strictEqual(findings[0].reference, `${testRealmURL}Pet/missing`);
+    });
+
+    test('cycle protection: a present self-link does not loop', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Node extends CardDef {
+        @field name = contains(StringField);
+        @field self = linksTo(() => Node);
+        @field pet = linksTo(Pet);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Node, Pet });
+
+      let node = new Node({ name: 'Node' });
+      await saveCard(node, `${testRealmURL}Node/n`, loader);
+      // A present link back to itself (the cycle) plus one broken link.
+      getDataBucket(node).set('self', node);
+      getDataBucket(node).set('pet', {
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: errorDoc('boom'),
+      } satisfies LinkErrorSentinel);
+
+      let findings = getBrokenLinks(node);
+      assert.strictEqual(
+        findings.length,
+        1,
+        'the broken link is found exactly once; the self-cycle terminates',
+      );
+      assert.strictEqual(findings[0].fieldName, 'pet');
     });
   });
 

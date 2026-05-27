@@ -619,6 +619,92 @@ export function getRelationship<T extends CardDef = CardDef>(
   return relationshipStateForEntry<T>(related);
 }
 
+export interface BrokenLinkFinding {
+  // The declared `linksTo` / `linksToMany` field holding the broken reference.
+  fieldName: string;
+  // `'error'` for a generic upstream failure, `'not-found'` for an HTTP 404.
+  kind: 'error' | 'not-found';
+  // The broken target reference, preserved from the relationship state.
+  reference: string;
+  // The upstream error captured when the lazy load failed.
+  errorDoc: SerializedError;
+}
+
+// Walk the rendered instance graph and collect every `linksTo` / `linksToMany`
+// relationship currently in an `'error'` or `'not-found'` state, reading
+// relationship state exclusively through `getRelationship`. This is the
+// indexer's broken-link error-capture surface: the prerender calls it once the
+// store has settled and emits a structured failure payload from the findings.
+//
+// The walk recurses to match the coverage the legacy `boxel-render-error`
+// dispatch had — that event fired for any failed lazy load anywhere in the
+// rendered graph, not just the root card:
+//   - present `linksTo` / `linksToMany` values are recursed into, since a
+//     loaded linked card can itself hold a link that was dereferenced (and
+//     failed) during this render;
+//   - `contains` / `containsMany` values are recursed into, since a contained
+//     card has no index entry of its own — a broken link inside one is only
+//     catchable here.
+// A `visited` WeakSet guards against cycles (e.g. a `linksTo` to self).
+//
+// Routing relationship reads through `getRelationship` keeps the data-bucket
+// layout an implementation detail — no sentinel-shape predicate or direct
+// bucket read lives here. `getRelationship` is a pure read: it never triggers
+// `lazilyLoadLink`, so recursing into present/contained values surfaces only
+// states that genuinely failed during this render, never a fresh fetch.
+// `'present'`, `'not-loaded'`, and `'not-set'` states are not terminal
+// failures; a `'not-loaded'` slot in particular is an in-flight fetch, so
+// callers must scan only after the store has settled.
+//
+// Computed relationship fields are skipped: `lazilyLoadLink` only plants
+// sentinels on a declared field's bucket, and a computed read derives from its
+// declared fields anyway, so the declared field is the single place a real
+// broken-link state can live.
+export function getBrokenLinks(
+  instance: BaseDef,
+  visited: WeakSet<object> = new WeakSet(),
+): BrokenLinkFinding[] {
+  if (visited.has(instance)) {
+    return [];
+  }
+  visited.add(instance);
+  let findings: BrokenLinkFinding[] = [];
+  let fields = getFields(instance);
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field || field.computeVia) {
+      continue;
+    }
+    if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+      let state = getRelationship(instance as CardDef, fieldName);
+      for (let entry of Array.isArray(state) ? state : [state]) {
+        if (entry.kind === 'error' || entry.kind === 'not-found') {
+          findings.push({
+            fieldName,
+            kind: entry.kind,
+            reference: entry.reference,
+            errorDoc: entry.errorDoc,
+          });
+        } else if (entry.kind === 'present') {
+          findings.push(...getBrokenLinks(entry.value, visited));
+        }
+      }
+    } else if (
+      field.fieldType === 'contains' ||
+      field.fieldType === 'containsMany'
+    ) {
+      // The `contains` getter is side-effect-free (no lazy load); reading it
+      // yields the nested card/field value(s) to recurse into.
+      let value = getter(instance, field);
+      for (let item of Array.isArray(value) ? value : [value]) {
+        if (isCardOrField(item)) {
+          findings.push(...getBrokenLinks(item, visited));
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
 interface NotLoadedRelationship {
   type: 'not-loaded';
