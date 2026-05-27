@@ -3,6 +3,7 @@ import {
   isBaseInstance,
   isCardInstance,
   isFieldInstance,
+  localId,
   primitive,
   type SerializedError,
 } from '@cardstack/runtime-common';
@@ -468,6 +469,156 @@ export function peekAtField(instance: BaseDef, fieldName: string): any {
   return getter(instance, field);
 }
 
+// Public typed read surface for `linksTo` / `linksToMany` relationship state.
+// All consumers outside card-api.gts query relationship state through this API
+// rather than reading the data bucket directly. The five discriminators cover
+// every state a linked field can be in; callers branch on `kind` and read the
+// fields the union narrows to.
+export type RelationshipState<T extends CardDef = CardDef> =
+  | {
+      kind: 'present';
+      isLoaded: true;
+      isError: false;
+      value: T;
+      // Fully-qualified URL once the linked card is saved; the card's local id
+      // before then. Both resolve through the store's identity map, which
+      // correlates the local id to the remote URL when the server assigns one.
+      reference: string;
+    }
+  | {
+      kind: 'not-loaded';
+      isLoaded: false;
+      isError: false;
+      value: undefined;
+      reference: string;
+    }
+  | {
+      kind: 'error';
+      isLoaded: false;
+      isError: true;
+      value: undefined;
+      reference: string;
+      errorDoc: SerializedError;
+    }
+  | {
+      kind: 'not-found';
+      isLoaded: false;
+      isError: true;
+      value: undefined;
+      reference: string;
+      errorDoc: SerializedError;
+    }
+  | {
+      kind: 'not-set';
+      isLoaded: false;
+      isError: false;
+      value: undefined;
+      reference: undefined;
+    };
+
+function relationshipStateForEntry<T extends CardDef>(
+  entry: unknown,
+): RelationshipState<T> {
+  if (isNotLoadedValue(entry)) {
+    return {
+      kind: 'not-loaded',
+      isLoaded: false,
+      isError: false,
+      value: undefined,
+      reference: entry.reference,
+    };
+  }
+  if (isLinkError(entry)) {
+    return {
+      kind: 'error',
+      isLoaded: false,
+      isError: true,
+      value: undefined,
+      reference: entry.reference,
+      errorDoc: entry.errorDoc,
+    };
+  }
+  if (isLinkNotFound(entry)) {
+    return {
+      kind: 'not-found',
+      isLoaded: false,
+      isError: true,
+      value: undefined,
+      reference: entry.reference,
+      errorDoc: entry.errorDoc,
+    };
+  }
+  if (entry == null) {
+    return {
+      kind: 'not-set',
+      isLoaded: false,
+      isError: false,
+      value: undefined,
+      reference: undefined,
+    };
+  }
+  return {
+    kind: 'present',
+    isLoaded: true,
+    isError: false,
+    value: entry as T,
+    // Saved cards carry a URL `id`; unsaved cards carry only a local id. Both
+    // are resolvable references through the store's identity map.
+    reference: (entry as CardDef).id ?? (entry as CardDef)[localId],
+  };
+}
+
+// Read the relationship state for a `linksTo` or `linksToMany` field. Returns a
+// single `RelationshipState` for singular `linksTo`, or an array (one entry per
+// element) for `linksToMany`. Pure read — entangles with card tracking via the
+// shared field getter so templates re-render when sentinels change, but never
+// triggers `lazilyLoadLink` and never mutates the data bucket.
+//
+// Render stability: this returns a fresh envelope object (and a fresh array for
+// the plural case) on every call, so the envelope's own identity is NOT stable
+// across renders. The stable anchors are `reference` (a string) and `value`
+// (the underlying card instance, itself stable across renders). Templates that
+// render editable inputs per element MUST key `{{#each}}` on `reference` and
+// bind inputs to `value` — never to envelope identity — or the each-blocks tear
+// down on every re-render and input fields lose cursor focus in edit format.
+// `getRelationship` itself schedules no re-renders (see the render-count test),
+// so it cannot destabilize a component on its own.
+export function getRelationship<T extends CardDef = CardDef>(
+  instance: CardDef,
+  fieldName: string,
+): RelationshipState<T> | RelationshipState<T>[] {
+  let field = getField(instance, fieldName);
+  if (!field) {
+    throw new Error(
+      `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
+    );
+  }
+  if (field.fieldType !== 'linksTo' && field.fieldType !== 'linksToMany') {
+    throw new Error(
+      `getRelationship requires a 'linksTo' or 'linksToMany' field; '${fieldName}' on ${instance.constructor.name} is '${field.fieldType}'`,
+    );
+  }
+
+  let related = peekAtField(instance, field.name);
+
+  if (field.fieldType === 'linksToMany') {
+    // A computed `linksToMany` can surface as a single sentinel when it
+    // consumes an unresolved upstream link. Wrap it as a one-element array so
+    // callers can branch uniformly on the plural shape.
+    if (isNonPresentLink(related)) {
+      return [relationshipStateForEntry<T>(related)];
+    }
+    if (!Array.isArray(related)) {
+      throw new Error(
+        `expected ${fieldName} to be an array but was ${typeof related}`,
+      );
+    }
+    return related.map((entry) => relationshipStateForEntry<T>(entry));
+  }
+
+  return relationshipStateForEntry<T>(related);
+}
+
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
 interface NotLoadedRelationship {
   type: 'not-loaded';
@@ -480,6 +631,12 @@ interface LoadedRelationship {
   card: CardDef | null;
 }
 
+/**
+ * @deprecated Use {@link getRelationship} instead. `relationshipMeta` is a
+ * back-compat wrapper that collapses the five-kind `RelationshipState` union
+ * into the legacy `{ type: 'loaded' | 'not-loaded' }` envelope and will be
+ * removed once all callers have migrated.
+ */
 export function relationshipMeta(
   instance: CardDef,
   fieldName: string,
@@ -493,31 +650,37 @@ export function relationshipMeta(
   if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
   }
-  let related = peekAtField(instance, field.name) as CardDef;
+  // Legacy linksToMany scalar shape: a computed `linksToMany` whose upstream
+  // link hasn't resolved surfaces as a single sentinel rather than an array.
+  // Before `getRelationship`, this returned a scalar meta (not a one-element
+  // array). `getRelationship`'s typed contract wraps it as `[state]`, so the
+  // wrapper unwraps that case here to keep `relationshipMeta` callers stable.
   if (field.fieldType === 'linksToMany') {
-    // this is the scenario where the linksToMany is a computed that consumes a link that is not loaded
-    if (isNotLoadedValue(related)) {
-      return { type: 'not-loaded', reference: related.reference };
+    let peeked = peekAtField(instance, fieldName);
+    if (isNonPresentLink(peeked)) {
+      return toLegacyRelationshipMeta(relationshipStateForEntry(peeked));
     }
-    if (!Array.isArray(related)) {
-      throw new Error(
-        `expected ${fieldName} to be an array but was ${typeof related}`,
-      );
-    }
-    return related.map((rel) => {
-      if (isNotLoadedValue(rel)) {
-        return { type: 'not-loaded', reference: rel.reference };
-      } else {
-        return { type: 'loaded', card: rel ?? null };
-      }
-    });
   }
+  let state = getRelationship(instance, fieldName);
+  if (Array.isArray(state)) {
+    return state.map(toLegacyRelationshipMeta);
+  }
+  return toLegacyRelationshipMeta(state);
+}
 
-  if (isNotLoadedValue(related)) {
-    return { type: 'not-loaded', reference: related.reference };
-  } else {
-    return { type: 'loaded', card: related ?? null };
+function toLegacyRelationshipMeta(
+  state: RelationshipState,
+): RelationshipMeta {
+  // Legacy callers only branched on 'loaded' vs 'not-loaded'; the new error /
+  // not-found kinds did not exist when the contract was written. Map them to
+  // 'not-loaded' so existing consumers see a stable shape until migration.
+  if (state.isLoaded) {
+    return { type: 'loaded', card: state.value };
   }
+  if (state.kind === 'not-set') {
+    return { type: 'loaded', card: null };
+  }
+  return { type: 'not-loaded', reference: state.reference };
 }
 
 export function serializedGet<CardT extends BaseDefConstructor>(

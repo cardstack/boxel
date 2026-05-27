@@ -160,6 +160,7 @@ import {
   getFieldDescription,
   getFieldOverrides,
   getFields,
+  getRelationship,
   getter,
   isArrayOfCardOrField,
   isCard,
@@ -174,6 +175,7 @@ import {
   setRealmContextOnField,
   type ComputePassSnapshot,
   type NotLoadedValue,
+  type RelationshipState,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
@@ -200,6 +202,7 @@ export {
   getDataBucket,
   getFieldDescription,
   getFields,
+  getRelationship,
   peekAtField,
   isCard,
   isField,
@@ -220,6 +223,7 @@ export {
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type RelationshipState,
   type ResourceID,
   type SerializeOpts,
 };
