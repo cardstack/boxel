@@ -785,8 +785,7 @@ module(basename(__filename), function () {
                 }
               `,
               // Links to ./missing-pet, which does not exist — the lazy load
-              // 404s, the relationship settles into a not-found state, and the
-              // render route's getRelationship scan surfaces it.
+              // 404s and the prerender surfaces a not-found error for the card.
               'owner-with-broken-pet.json': {
                 data: {
                   attributes: {
@@ -836,9 +835,9 @@ module(basename(__filename), function () {
                 },
               },
               // One present element (./real-pet) and one broken element
-              // (./missing-pets-2, which does not exist): the plural getter
-              // settles the broken slot into a not-found state that the render
-              // route's getRelationship scan surfaces while the good slot loads.
+              // (./missing-pet-2, which does not exist): the good slot loads
+              // while the broken slot 404s, and the prerender surfaces a
+              // not-found error for the card.
               'owner-with-broken-pets.json': {
                 data: {
                   attributes: {
