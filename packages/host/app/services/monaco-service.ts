@@ -10,13 +10,19 @@ import { task } from 'ember-concurrency';
 
 import merge from 'lodash/merge';
 
-// The worker suffix here is a vite feature that builds them into standalone
-// worker scripts, which will be outside the main bundle in prod.
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker.js?worker';
-import CSSWorker from 'monaco-editor/esm/vs/language/css/css.worker.js?worker';
-import HTMLWorker from 'monaco-editor/esm/vs/language/html/html.worker.js?worker';
-import JSONWorker from 'monaco-editor/esm/vs/language/json/json.worker.js?worker';
-import TSWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?worker';
+// The `?worker&url` suffix is a vite feature that builds each worker into a
+// standalone script outside the main bundle and gives us back its URL. We
+// can't use the plain `?worker` form (which returns a Worker constructor)
+// because in deployed environments the host bundle is served from a
+// different origin than the page (e.g. boxel-host.stack.cards vs
+// realms.stack.cards), and `new Worker(crossOriginUrl)` is forbidden by
+// the browser. `makeMonacoWorker` below wraps the cross-origin URL in a
+// same-origin Blob shim so worker construction succeeds.
+import EditorWorkerUrl from 'monaco-editor/esm/vs/editor/editor.worker.js?worker&url';
+import CSSWorkerUrl from 'monaco-editor/esm/vs/language/css/css.worker.js?worker&url';
+import HTMLWorkerUrl from 'monaco-editor/esm/vs/language/html/html.worker.js?worker&url';
+import JSONWorkerUrl from 'monaco-editor/esm/vs/language/json/json.worker.js?worker&url';
+import TSWorkerUrl from 'monaco-editor/esm/vs/language/typescript/ts.worker.js?worker&url';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 
@@ -37,25 +43,47 @@ export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
 const { serverEchoDebounceMs } = config;
+
+// `new Worker(url)` rejects cross-origin URLs, but importScripts inside a
+// worker is allowed to fetch them. When the worker URL is on a different
+// origin (deployed environments where the host bundle is served from a
+// different host than the page), spawn a same-origin Blob worker that
+// immediately importScripts the real worker code.
+function makeMonacoWorker(workerUrl: string): Worker {
+  let absolute = new URL(workerUrl, window.location.href);
+  if (absolute.origin !== window.location.origin) {
+    let blob = new Blob([`importScripts(${JSON.stringify(absolute.href)});`], {
+      type: 'text/javascript',
+    });
+    let blobUrl = URL.createObjectURL(blob);
+    try {
+      return new Worker(blobUrl);
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  }
+  return new Worker(absolute.href);
+}
+
 (
   globalThis as unknown as { MonacoEnvironment: _MonacoSDK.Environment }
 ).MonacoEnvironment = {
   getWorker: function (_workerId, label) {
     switch (label) {
       case 'json':
-        return new JSONWorker();
+        return makeMonacoWorker(JSONWorkerUrl);
       case 'css':
       case 'scss':
       case 'less':
-        return new CSSWorker();
+        return makeMonacoWorker(CSSWorkerUrl);
       case 'typescript':
       case 'javascript':
-        return new TSWorker();
+        return makeMonacoWorker(TSWorkerUrl);
       case 'html':
       case 'handlebars':
-        return new HTMLWorker();
+        return makeMonacoWorker(HTMLWorkerUrl);
       default:
-        return new EditorWorker();
+        return makeMonacoWorker(EditorWorkerUrl);
     }
   },
 };

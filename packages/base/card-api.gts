@@ -119,6 +119,7 @@ import ImageDefFittedTemplate from './default-templates/image-def-fitted';
 import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
+import ImageIcon from '@cardstack/boxel-icons/image';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -2860,6 +2861,7 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
+  static icon = ImageIcon;
   static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
