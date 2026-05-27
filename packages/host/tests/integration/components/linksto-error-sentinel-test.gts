@@ -28,6 +28,7 @@ import {
   CardDef,
   contains,
   field,
+  getBrokenLinks,
   getDataBucket,
   getRelationship,
   linksTo,
@@ -334,6 +335,36 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
     } finally {
       unsubscribeFromChanges(person, subscriber);
     }
+  });
+
+  test('getBrokenLinks reports a real 404 lazy-load failure read through getRelationship', async function (assert) {
+    await setupRealm();
+    let person = await createPerson({
+      pet: { links: { self: `${testRealmURL}Pet/ghost` } },
+    });
+
+    // reading the field kicks off the lazy load that 404s and plants the sentinel
+    person.pet;
+    await waitUntil(() => isLinkNotFound(bucketEntry(person, 'pet')));
+
+    let findings = getBrokenLinks(person);
+    assert.strictEqual(
+      findings.length,
+      1,
+      'the broken declared field is found',
+    );
+    assert.strictEqual(findings[0].fieldName, 'pet');
+    assert.strictEqual(findings[0].kind, 'not-found');
+    assert.strictEqual(
+      findings[0].reference,
+      `${testRealmURL}Pet/ghost`,
+      'the finding carries the broken reference the producer planted',
+    );
+    assert.strictEqual(
+      (findings[0].errorDoc as SerializedError).status,
+      404,
+      'the finding carries the upstream errorDoc',
+    );
   });
 
   test('a plural lazy-load failure swaps the sentinel into the failed slot in place', async function (assert) {

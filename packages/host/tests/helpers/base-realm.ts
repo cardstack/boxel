@@ -162,6 +162,7 @@ let serializeFileDef: (typeof CardAPIModule)['serializeFileDef'];
 let isSaved: (typeof CardAPIModule)['isSaved'];
 let relationshipMeta: (typeof CardAPIModule)['relationshipMeta'];
 let getRelationship: (typeof CardAPIModule)['getRelationship'];
+let getBrokenLinks: (typeof CardAPIModule)['getBrokenLinks'];
 let getDataBucket: (typeof CardAPIModule)['getDataBucket'];
 let getQueryableValue: (typeof CardAPIModule)['getQueryableValue'];
 let subscribeToChanges: (typeof CardAPIModule)['subscribeToChanges'];
@@ -367,6 +368,7 @@ async function initialize() {
     isSaved,
     relationshipMeta,
     getRelationship,
+    getBrokenLinks,
     getDataBucket,
     getQueryableValue,
     subscribeToChanges,
@@ -450,6 +452,7 @@ export {
   isSaved,
   relationshipMeta,
   getRelationship,
+  getBrokenLinks,
   getDataBucket,
   getQueryableValue,
   subscribeToChanges,

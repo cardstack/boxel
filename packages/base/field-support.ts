@@ -619,6 +619,100 @@ export function getRelationship<T extends CardDef = CardDef>(
   return relationshipStateForEntry<T>(related);
 }
 
+export interface BrokenLinkFinding {
+  // The declared `linksTo` / `linksToMany` field holding the broken reference.
+  fieldName: string;
+  // `'error'` for a generic upstream failure, `'not-found'` for an HTTP 404.
+  kind: 'error' | 'not-found';
+  // The broken target reference, preserved from the relationship state.
+  reference: string;
+  // The upstream error captured when the lazy load failed.
+  errorDoc: SerializedError;
+}
+
+// Walk the rendered instance graph and collect every `linksTo` / `linksToMany`
+// relationship currently in an `'error'` or `'not-found'` state. This is the
+// intended read surface for the indexer's broken-link error capture: a caller
+// scans the instance after the store has settled and builds a structured
+// failure payload from the findings. (Wiring it into the prerender / render
+// route is tracked separately; nothing in production calls this yet.)
+//
+// The walk recurses to match the coverage the legacy `boxel-render-error`
+// dispatch had — that event fired for any failed lazy load anywhere in the
+// rendered graph, not just the root card:
+//   - present `linksTo` / `linksToMany` values are recursed into, since a
+//     loaded linked card can itself hold a link that was dereferenced (and
+//     failed) during this render;
+//   - `contains` / `containsMany` values are recursed into, since a contained
+//     card has no index entry of its own — a broken link inside one is only
+//     catchable here.
+// A `visited` WeakSet guards against cycles (e.g. a `linksTo` to self).
+//
+// Pure read: only fields already materialized in the data bucket are inspected.
+// A broken link is always present in the bucket (the failed `lazilyLoadLink`
+// planted a sentinel there), and an unmaterialized field holds neither a broken
+// link nor a nested card — so skipping absent fields loses nothing and avoids
+// the getter's side effect of initializing them with `emptyValue` (which would
+// pollute `getUsedFields` / serialization). Relationship state is then read
+// through `getRelationship`, which never triggers `lazilyLoadLink`, so a
+// recursed value surfaces only states that genuinely failed during this render.
+// `'present'`, `'not-loaded'`, and `'not-set'` are not terminal failures; a
+// `'not-loaded'` slot is an in-flight fetch, so callers must scan only after
+// the store has settled.
+//
+// Computed relationship fields are skipped: `lazilyLoadLink` only plants
+// sentinels on a declared field's bucket, and a computed read derives from its
+// declared fields anyway, so the declared field is the single place a real
+// broken-link state can live.
+export function getBrokenLinks(
+  instance: BaseDef,
+  visited: WeakSet<object> = new WeakSet(),
+): BrokenLinkFinding[] {
+  if (visited.has(instance)) {
+    return [];
+  }
+  visited.add(instance);
+  let findings: BrokenLinkFinding[] = [];
+  let bucket = getDataBucket(instance);
+  let fields = getFields(instance);
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field || field.computeVia) {
+      continue;
+    }
+    // Only inspect fields already in the data bucket — reading an absent field
+    // through the getter would initialize it (see above).
+    if (!bucket.has(fieldName)) {
+      continue;
+    }
+    if (field.fieldType === 'linksTo' || field.fieldType === 'linksToMany') {
+      let state = getRelationship(instance as CardDef, fieldName);
+      for (let entry of Array.isArray(state) ? state : [state]) {
+        if (entry.kind === 'error' || entry.kind === 'not-found') {
+          findings.push({
+            fieldName,
+            kind: entry.kind,
+            reference: entry.reference,
+            errorDoc: entry.errorDoc,
+          });
+        } else if (entry.kind === 'present') {
+          findings.push(...getBrokenLinks(entry.value, visited));
+        }
+      }
+    } else if (
+      field.fieldType === 'contains' ||
+      field.fieldType === 'containsMany'
+    ) {
+      let value = bucket.get(fieldName);
+      for (let item of Array.isArray(value) ? value : [value]) {
+        if (isCardOrField(item)) {
+          findings.push(...getBrokenLinks(item, visited));
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
 interface NotLoadedRelationship {
   type: 'not-loaded';
