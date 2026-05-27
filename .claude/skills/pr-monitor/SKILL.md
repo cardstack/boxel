@@ -31,7 +31,7 @@ rm -f "$CHECKS_FILE"; touch "$CHECKS_FILE"
 HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
 [ -n "$HEAD_SHA" ] && gh pr checks -R "$REPO" "$PR" --json name,bucket \
   --jq '.[] | select(.bucket=="fail") | "check-fail|'"$HEAD_SHA"'|\(.name)"' 2>/dev/null >> "$CHECKS_FILE"
-echo "Pre-seeded check-fails=$(wc -l < $CHECKS_FILE) (head=$HEAD_SHA)"
+echo "Pre-seeded check-fails=$(wc -l < "$CHECKS_FILE") (head=$HEAD_SHA)"
 
 while true; do
   state=$(gh -R "$REPO" pr view "$PR" --json state --jq '.state' 2>/dev/null || echo "")
@@ -74,7 +74,7 @@ gh api --paginate "repos/$REPO/pulls/$PR/reviews"   --jq '.[].id' 2>/dev/null | 
 HEAD_SHA=$(gh -R "$REPO" pr view "$PR" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
 [ -n "$HEAD_SHA" ] && gh pr checks -R "$REPO" "$PR" --json name,bucket \
   --jq '.[] | select(.bucket=="fail") | "check-fail|'"$HEAD_SHA"'|\(.name)"' 2>/dev/null >> "$CHECKS_FILE"
-echo "Pre-seeded comments=$(wc -l < $SEEN_FILE) check-fails=$(wc -l < $CHECKS_FILE) (head=$HEAD_SHA)"
+echo "Pre-seeded comments=$(wc -l < "$SEEN_FILE") check-fails=$(wc -l < "$CHECKS_FILE") (head=$HEAD_SHA)"
 
 while true; do
   state=$(gh -R "$REPO" pr view "$PR" --json state --jq '.state' 2>/dev/null || echo "")
