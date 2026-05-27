@@ -130,12 +130,12 @@
   `TEST_MODULE=card-endpoints-test.ts pnpm test-module`
 - Run a list of modules:
   `TEST_MODULES=card-endpoints-test.ts|another-module-test.ts pnpm test`
-- Run only specific test *files* (skip parsing the other ~100):
+- Run only specific test _files_ (skip parsing the other ~100):
   `TEST_FILES=sanitize-head-html-test pnpm test`
   `TEST_FILES=realm-endpoints/invalidate-urls-test,server-endpoints/queue-status-test pnpm test`
   Comma-separated paths relative to `tests/`, with or without `./` prefix or `.ts` suffix.
   Use this — not `TEST_MODULES` — when measuring one file's wall time / peak RSS in isolation:
-  `TEST_MODULES` filters which modules *run*, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
+  `TEST_MODULES` filters which modules _run_, but every file still gets parsed and required, so per-file deltas get masked by the all-files startup baseline.
 - Measure per-file wall time + peak RSS (median across N runs):
   `./scripts/measure-test-file.sh sanitize-head-html-test [runs]`
   Wraps `TEST_FILES` + `/usr/bin/time -l` with a clean per-file signal. Re-preps test-pg between runs. Used for before/after PR baselines on CS-10009 fixture migrations.
@@ -167,12 +167,12 @@
 
 PRs touching `packages/boxel-cli/**` must use a conventional-commit prefix in the **PR title** (not the commit message — squash isn't used; the on-`main` workflow reads the PR title via `gh api`). The PR-title check (`.github/workflows/boxel-cli-pr-title.yml`) enforces this.
 
-| Prefix | Bump level (per touched surface) |
-|---|---|
-| `feat!:` / `fix!:` / body `BREAKING CHANGE:` | major |
-| `feat:` | minor |
-| `fix:` / `perf:` / `refactor:` | patch |
-| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none |
+| Prefix                                                     | Bump level (per touched surface) |
+| ---------------------------------------------------------- | -------------------------------- |
+| `feat!:` / `fix!:` / body `BREAKING CHANGE:`               | major                            |
+| `feat:`                                                    | minor                            |
+| `fix:` / `perf:` / `refactor:`                             | patch                            |
+| `chore:` / `docs:` / `test:` / `build:` / `ci:` / `style:` | none                             |
 
 Scopes are allowed: `feat(profile): …`. Other monorepo packages are unaffected — this only applies when the PR's diff touches `packages/boxel-cli/**`.
 
@@ -280,8 +280,24 @@ This end-to-end workflow can be used as a template for future tickets.
 
 ## Suggested PR body template
 
+A progressive-disclosure structure: orient the reviewer first, then point them at the load-bearing parts, then explain the decisions that aren't obvious from the diff.
+
+Scale the template to the PR. For small PRs (roughly 1-3 files, no tricky decisions), `## Background and Goal` alone is usually enough — omit the other sections rather than padding them. Add `## Where to start` and `## Key decisions and non-obvious mechanics` only when they earn their place: multiple files where reading order matters, or decisions a reviewer couldn't infer from the diff.
+
+```markdown
+## Background and Goal
+
+- 2-3 sentences on the context and what this PR accomplishes.
+
+## Where to start (omit for small PRs)
+
+- A short list of the areas to read first and why they matter — point reviewers at the load-bearing parts before the supporting changes.
+- Example: "Start with `Foo.bar` — that's the new orchestration entry. Then the refactored `Baz` to see how the new contract is consumed."
+
+## Key decisions and non-obvious mechanics (omit for small PRs)
+
+- Major decisions and the "why" behind them. Edge cases handled. Be succinct (3-5 bullets typical).
+- Don't restate what the diff shows; don't recap failed attempts that aren't relevant anymore.
 ```
-## Summary
-- <bullet 1>
-- <bullet 2>
-```
+
+Skip a test-plan section — CI shows test status. Skip tool-attribution footers — commit trailers handle that.
