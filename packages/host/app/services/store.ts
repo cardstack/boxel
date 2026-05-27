@@ -433,7 +433,7 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    if (isLocalId(id)) {
+    if (isLocalId(id, this.network.virtualNetwork)) {
       let instanceOrError = this.peek(id);
       if (instanceOrError) {
         let realmURL = isCardInstance(instanceOrError)
@@ -1395,7 +1395,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
 
     // if there are no more subscribers to this realm then unsubscribe from realm
-    let realmHref = !isLocalId(id)
+    let realmHref = !isLocalId(id, this.network.virtualNetwork)
       ? [...this.subscriptions.keys()].find((realmURL) =>
           id.startsWith(realmURL),
         )
@@ -1409,7 +1409,7 @@ export default class StoreService extends Service implements StoreInterface {
       subscription &&
       ![...this.referenceCount.entries()].find(
         ([referenceId, count]) =>
-          !isLocalId(referenceId) &&
+          !isLocalId(referenceId, this.network.virtualNetwork) &&
           count > 0 &&
           referenceId.startsWith(realmHref),
       )
@@ -1556,7 +1556,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (referenceCount === 0) {
         continue;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id, this.network.virtualNetwork)) {
         let remoteIdsForLocal = this.store.getRemoteIds(id);
         if (remoteIdsForLocal.length === 0) {
           let error = this.store.getCardError(id);
@@ -1805,7 +1805,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -1964,7 +1964,7 @@ export default class StoreService extends Service implements StoreInterface {
         return existingInstance as T | CardErrorJSONAPI;
       }
       let vn = this.network.virtualNetwork;
-      if (isLocalId(id) && !vn.isRegisteredPrefix(id)) {
+      if (isLocalId(id, vn) && !vn.isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
       let url = vn.isRegisteredPrefix(id) ? vn.toURL(id).href : id;
@@ -2122,7 +2122,10 @@ export default class StoreService extends Service implements StoreInterface {
         } finally {
           autoSaveState.isSaving = false;
           this.calculateLastSavedMsg(autoSaveState);
-          if (isLocalId(queueName) && instance.id) {
+          if (
+            isLocalId(queueName, this.network.virtualNetwork) &&
+            instance.id
+          ) {
             this.autoSaveStates.set(instance.id, autoSaveState);
           }
         }
@@ -2314,7 +2317,11 @@ export default class StoreService extends Service implements StoreInterface {
         let cardError = errorResponse.errors[0];
         this.setIdentityContext(cardError);
         let remoteId = cardError.meta?.remoteId;
-        if (remoteId && (!cardError.id || isLocalId(cardError.id))) {
+        if (
+          remoteId &&
+          (!cardError.id ||
+            isLocalId(cardError.id, this.network.virtualNetwork))
+        ) {
           this.store.addCardInstanceOrError(remoteId, cardError);
         }
         return cardError;
@@ -2527,7 +2534,7 @@ export function asURL(
   // (`vn.toURL` falls back to the global during the CS-10752 migration
   // window). So this branches the same way the pre-migration
   // `isLocalId + resolveCardReference` pair did.
-  return isLocalId(id) ? id : vn.toURL(id).href;
+  return isLocalId(id, vn) ? id : vn.toURL(id).href;
 }
 
 function isSystemCardDefaultId(
