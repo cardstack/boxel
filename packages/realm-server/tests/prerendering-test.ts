@@ -2181,8 +2181,8 @@ module(basename(__filename), function () {
           'search doc includes name',
         );
         assert.ok(
-          result.response.deps.includes(`${baseRealm.url}file-api`),
-          'deps include base file-api module',
+          result.response.deps.includes(`${baseRealm.url}card-api`),
+          'deps include base card-api module (where FileDef is defined)',
         );
         assert.notOk(
           result.response.deps.includes(fileURL),

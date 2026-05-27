@@ -25,4 +25,10 @@ exports.up = (pgm) => {
   });
 };
 
-exports.down = (pgm) => {};
+// 1779100257123_drop-published-realms drops this table on UP and
+// re-creates it on DOWN, so during a full rollback the table is restored
+// by that migration's DOWN and must be removed again here. Without this,
+// the reapply UP collides on the leftover relation.
+exports.down = (pgm) => {
+  pgm.dropTable('published_realms');
+};

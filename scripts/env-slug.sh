@@ -9,7 +9,12 @@
 #   SLUG=$(compute_env_slug "my/Branch-Name")         # explicit input
 
 compute_env_slug() {
-  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g'
+  # Cap at 63 chars (DNS label limit) so the slug works as a hostname
+  # label in `<service>.<slug>.localhost`. Chrome treats hostnames with
+  # over-63-char labels as search queries instead of URLs. Strip any
+  # leading/trailing hyphens after the cut so a truncate that lands on
+  # a hyphen doesn't leave the slug ending in one.
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g' | cut -c -63 | sed 's|^-||; s|-$||'
 }
 
 # Use `${VAR:-}` so callers running under `set -u` (e.g.

@@ -7,6 +7,19 @@ set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# If a Traefik container exists but its dynamic-config bind mount points
+# at a directory other than this worktree's traefik/dynamic (e.g. the
+# originating worktree was deleted), remove it so the compose-up branch
+# below recreates it from the current worktree.
+if docker ps -a --format '{{.Names}}' | grep -q '^boxel-traefik$'; then
+  MOUNTED="$(docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)"
+  EXPECTED="$REPO_ROOT/traefik/dynamic"
+  if [ -n "$MOUNTED" ] && [ "$MOUNTED" != "$EXPECTED" ]; then
+    echo "Traefik dynamic-config mount is stale ($MOUNTED); recreating from $EXPECTED"
+    docker rm -f boxel-traefik >/dev/null
+  fi
+fi
+
 # --- Start Traefik ---
 if docker ps --format '{{.Names}}' | grep -q '^boxel-traefik$'; then
   echo "Traefik is already running."

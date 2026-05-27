@@ -5,6 +5,8 @@ import { logger } from '@cardstack/runtime-common';
 import type { AddressInfo, Server } from 'net';
 import yaml from 'yaml';
 
+import { sanitizeSlug } from '../../../scripts/env-slug.js';
+
 const log = logger('dev-service-registry');
 
 const DOMAIN = 'localhost';
@@ -45,15 +47,6 @@ export function getEnvironmentSlug(): string {
   } catch {
     return 'default';
   }
-}
-
-function sanitizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 export function serviceHostname(serviceName: string, env?: string): string {

@@ -88,6 +88,7 @@ jobs:
               - 'packages/eslint-plugin-cardstack-host/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
+              - 'packages/postgres/scripts/determine-changed-migrations.sh'
             boxel-icons:
               - *shared
               - 'packages/boxel-icons/**'

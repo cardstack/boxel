@@ -3463,8 +3463,6 @@ posts/ignore-me.gts
             visibility: 'public',
             publishable: null,
             lastPublishedAt: null,
-            interactHome: null,
-            hostHome: null,
             includePrerenderedDefaultRealmIndex: null,
           },
         },

@@ -659,7 +659,12 @@ module(basename(__filename), function () {
         );
       });
 
-      test('publishing rewrites hostHome URLs that point to the source realm', async function (assert) {
+      test('publishing rewrites hostRoutingRules absolute links that point at the source realm', async function (assert) {
+        // CS-10055: hostHome lives on the realm.json card as a /-rule
+        // whose `instance` linksTo is stored under
+        // `data.relationships['hostRoutingRules.<i>.instance']`. The
+        // publish flow walks those relationships and rewrites any
+        // absolute self-link still pointing at the source realm.
         let sourceRealmURL = new URL(sourceRealmUrlString);
         let sourceRealmPath = join(
           dir.name,
@@ -670,13 +675,37 @@ module(basename(__filename), function () {
         let sourceRealmConfig = pathExistsSync(sourceRealmConfigPath)
           ? readJsonSync(sourceRealmConfigPath)
           : {};
-        let hostHomePath = 'SiteConfig/custom-home';
-        let sourceHostHome = `${sourceRealmUrlString}${hostHomePath}`;
-
         writeJsonSync(sourceRealmConfigPath, {
           ...sourceRealmConfig,
           publishable: true,
-          hostHome: sourceHostHome,
+        });
+
+        let homeCardPath = 'SiteConfig/custom-home';
+        let absoluteHomeLink = `${sourceRealmUrlString}${homeCardPath}`;
+        let relativeAboutLink = './SiteConfig/about-page';
+        let sourceCardPath = join(sourceRealmPath, 'realm.json');
+        writeJsonSync(sourceCardPath, {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Source Realm' },
+              hostRoutingRules: [{ path: '/' }, { path: '/about' }],
+            },
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: absoluteHomeLink },
+              },
+              'hostRoutingRules.1.instance': {
+                links: { self: relativeAboutLink },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
         });
 
         let response = await request
@@ -700,23 +729,31 @@ module(basename(__filename), function () {
         assert.strictEqual(response.status, 202, 'HTTP 202 status');
 
         let publishedRealmId = response.body.data.id;
+        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let publishedRealmPath = join(
           dir.name,
           'realm_server_3',
           '_published',
           publishedRealmId,
         );
-        let publishedRealmConfig = readJsonSync(
-          join(publishedRealmPath, '.realm.json'),
+        let publishedCard = readJsonSync(
+          join(publishedRealmPath, 'realm.json'),
         );
 
         assert.strictEqual(
-          publishedRealmConfig.hostHome,
-          `${response.body.data.attributes.publishedRealmURL}${hostHomePath}`,
-          'hostHome points at published realm',
+          publishedCard.data.relationships['hostRoutingRules.0.instance'].links
+            .self,
+          `${publishedRealmURL}${homeCardPath}`,
+          'absolute /-rule link rewritten to point at the published realm',
         );
+        assert.strictEqual(
+          publishedCard.data.relationships['hostRoutingRules.1.instance'].links
+            .self,
+          relativeAboutLink,
+          'relative link left untouched — stable across copySync',
+        );
+
         // CS-10053: publishable lives in realm_metadata.
-        let publishedRealmURL = response.body.data.attributes.publishedRealmURL;
         let metaRows = (await dbAdapter.execute(
           `SELECT publishable FROM realm_metadata WHERE url = '${publishedRealmURL}'`,
         )) as { publishable: boolean | null }[];

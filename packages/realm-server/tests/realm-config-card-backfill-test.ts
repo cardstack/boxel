@@ -24,6 +24,11 @@ function seedSidecar(realmDir: string, payload: Record<string, unknown>) {
   );
 }
 
+function seedCard(realmDir: string, card: object) {
+  ensureDirSync(realmDir);
+  writeFileSync(join(realmDir, 'realm.json'), JSON.stringify(card, null, 2));
+}
+
 function readSidecar(realmDir: string): unknown {
   return JSON.parse(readFileSync(join(realmDir, '.realm.json'), 'utf8'));
 }
@@ -35,6 +40,11 @@ function readCard(realmDir: string): unknown {
 function cardExists(realmDir: string): boolean {
   return existsSync(join(realmDir, 'realm.json'));
 }
+
+const REALM_CONFIG_ADOPTS_FROM = {
+  module: 'https://cardstack.com/base/realm-config',
+  name: 'RealmConfig',
+};
 
 module(basename(__filename), function () {
   module('runRealmConfigCardBackfill', function (hooks) {
@@ -55,13 +65,13 @@ module(basename(__filename), function () {
       },
     });
 
-    test('writes realm.json card from a source realm sidecar and trims migrated keys', async function (assert) {
+    test('writes realm.json card from a source realm sidecar, migrates hostHome into a /-rule, trims all migrated keys', async function (assert) {
       const realmDir = join(realmsRootPath, 'luke', 'my-realm');
       seedSidecar(realmDir, {
         name: 'My Realm',
         backgroundURL: 'https://example.com/bg.png',
         iconURL: 'https://example.com/icon.svg',
-        hostHome: 'https://hosted.example.com/',
+        hostHome: 'http://localhost:4201/luke/my-realm/SiteConfig/home-card-id',
       });
 
       await runRealmConfigCardBackfill({
@@ -80,49 +90,121 @@ module(basename(__filename), function () {
               cardInfo: { name: 'My Realm' },
               backgroundURL: 'https://example.com/bg.png',
               iconURL: 'https://example.com/icon.svg',
+              hostRoutingRules: [{ path: '/' }],
             },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/realm-config',
-                name: 'RealmConfig',
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: './SiteConfig/home-card-id' },
               },
             },
+            meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
           },
         },
-        'realm.json card written in canonical RealmConfig shape',
+        'card written in canonical RealmConfig shape with split relationships',
       );
-      assert.deepEqual(
-        readSidecar(realmDir),
-        { hostHome: 'https://hosted.example.com/' },
-        'migrated keys trimmed; non-migrated keys (hostHome) preserved',
-      );
+      assert.deepEqual(readSidecar(realmDir), {}, 'sidecar fully trimmed');
     });
 
-    test('skips when realm.json already exists and leaves both files untouched', async function (assert) {
-      const realmDir = join(realmsRootPath, 'luke', 'preserved');
+    test('drops interactHome from the sidecar without writing it to the card', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'interact-only');
       seedSidecar(realmDir, {
-        name: 'Sidecar Name',
-        backgroundURL: 'https://example.com/sidecar-bg.png',
+        name: 'IH Realm',
+        interactHome: 'http://localhost:4201/luke/interact-only/something',
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      const card = readCard(realmDir) as {
+        data: { attributes: Record<string, unknown> };
+      };
+      assert.deepEqual(card.data.attributes.cardInfo, { name: 'IH Realm' });
+      assert.notOk(
+        'interactHome' in card.data.attributes,
+        'interactHome not on card',
+      );
+      assert.notOk(
+        'hostRoutingRules' in card.data.attributes,
+        'no spurious hostRoutingRules array',
+      );
+      assert.deepEqual(readSidecar(realmDir), {}, 'interactHome trimmed');
+    });
+
+    test('adds a /-rule to an existing card and trims hostHome from the sidecar', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'hosthome-only-existing');
+      seedSidecar(realmDir, {
+        hostHome:
+          'http://localhost:4201/luke/hosthome-only-existing/SiteConfig/h1',
+      });
+      seedCard(realmDir, {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Existing' },
+            iconURL: 'https://example.com/x.svg',
+          },
+          meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+        },
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.deepEqual(
+        readCard(realmDir),
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Existing' },
+              iconURL: 'https://example.com/x.svg',
+              hostRoutingRules: [{ path: '/' }],
+            },
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: './SiteConfig/h1' },
+              },
+            },
+            meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+          },
+        },
+        'existing card augmented with /-rule and matching relationship',
+      );
+      assert.deepEqual(readSidecar(realmDir), {}, 'sidecar fully trimmed');
+    });
+
+    test('preserves an existing /-rule when sidecar hostHome points elsewhere (log + no overwrite)', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'slash-rule-already');
+      seedSidecar(realmDir, {
+        hostHome:
+          'http://localhost:4201/luke/slash-rule-already/SiteConfig/sidecar-target',
       });
       const existingCard = {
         data: {
           type: 'card',
           attributes: {
-            cardInfo: { name: 'Card Name' },
-            backgroundURL: 'https://example.com/card-bg.png',
+            hostRoutingRules: [{ path: '/' }, { path: '/about' }],
           },
-          meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
-              name: 'RealmConfig',
+          relationships: {
+            'hostRoutingRules.0.instance': {
+              links: { self: './SiteConfig/card-target' },
+            },
+            'hostRoutingRules.1.instance': {
+              links: { self: './AboutPage/x' },
             },
           },
+          meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
         },
       };
-      writeFileSync(
-        join(realmDir, 'realm.json'),
-        JSON.stringify(existingCard, null, 2),
-      );
+      seedCard(realmDir, existingCard);
 
       await runRealmConfigCardBackfill({
         dbAdapter,
@@ -134,22 +216,81 @@ module(basename(__filename), function () {
       assert.deepEqual(
         readCard(realmDir),
         existingCard,
-        'existing card preserved',
+        'existing /-rule wins; card unchanged',
       );
       assert.deepEqual(
         readSidecar(realmDir),
-        {
-          name: 'Sidecar Name',
-          backgroundURL: 'https://example.com/sidecar-bg.png',
-        },
-        'sidecar untouched when card already exists',
+        {},
+        'sidecar still trimmed (hostHome dropped) even though card was the source of truth',
       );
     });
 
-    test('skips realms whose sidecar has no migratable keys', async function (assert) {
-      const realmDir = join(realmsRootPath, 'luke', 'hosthome-only');
+    test('drops interactHome from sidecar when card already exists, without touching the card', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'ih-existing-card');
       seedSidecar(realmDir, {
-        hostHome: 'https://hosted.example.com/',
+        interactHome: 'http://localhost:4201/luke/ih-existing-card/something',
+      });
+      const existingCard = {
+        data: {
+          type: 'card',
+          attributes: { cardInfo: { name: 'Existing' } },
+          meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+        },
+      };
+      seedCard(realmDir, existingCard);
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.deepEqual(readCard(realmDir), existingCard, 'card unchanged');
+      assert.deepEqual(readSidecar(realmDir), {}, 'interactHome trimmed');
+    });
+
+    test('no-op when card exists and sidecar has nothing migratable', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'noop');
+      seedSidecar(realmDir, {
+        name: 'Stale Sidecar Name',
+        backgroundURL: 'https://example.com/sidecar-bg.png',
+      });
+      const existingCard = {
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: 'Card Name' },
+            backgroundURL: 'https://example.com/card-bg.png',
+          },
+          meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+        },
+      };
+      seedCard(realmDir, existingCard);
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.deepEqual(readCard(realmDir), existingCard, 'card unchanged');
+      assert.deepEqual(
+        readSidecar(realmDir),
+        {
+          name: 'Stale Sidecar Name',
+          backgroundURL: 'https://example.com/sidecar-bg.png',
+        },
+        'sidecar untouched — name/bg are card-owned when card exists',
+      );
+    });
+
+    test('writes a card when only hostHome is in the sidecar and no card exists', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'hosthome-only-fresh');
+      seedSidecar(realmDir, {
+        hostHome:
+          'http://localhost:4201/luke/hosthome-only-fresh/SiteConfig/h2',
       });
 
       await runRealmConfigCardBackfill({
@@ -159,12 +300,25 @@ module(basename(__filename), function () {
         bootstrapRealms: [],
       });
 
-      assert.notOk(cardExists(realmDir), 'no card written');
       assert.deepEqual(
-        readSidecar(realmDir),
-        { hostHome: 'https://hosted.example.com/' },
-        'sidecar untouched',
+        readCard(realmDir),
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              hostRoutingRules: [{ path: '/' }],
+            },
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: './SiteConfig/h2' },
+              },
+            },
+            meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+          },
+        },
+        'fresh card carries only the /-rule + relationship',
       );
+      assert.deepEqual(readSidecar(realmDir), {}, 'sidecar fully trimmed');
     });
 
     test('skips realms whose sidecar is empty {}', async function (assert) {
@@ -197,15 +351,21 @@ module(basename(__filename), function () {
       assert.notOk(existsSync(join(realmDir, '.realm.json')));
     });
 
-    test('migrates hostRoutingRules array verbatim', async function (assert) {
+    test('migrates hostRoutingRules from sidecar into split attributes/relationships shape', async function (assert) {
       const realmDir = join(realmsRootPath, 'luke', 'with-routes');
-      const routes = [
-        { path: '/', instance: 'https://example.com/home' },
-        { path: '/about', instance: 'https://example.com/about' },
-      ];
       seedSidecar(realmDir, {
         name: 'With Routes',
-        hostRoutingRules: routes,
+        hostRoutingRules: [
+          {
+            path: '/',
+            instance:
+              'http://localhost:4201/luke/with-routes/PersonalHome/home',
+          },
+          {
+            path: '/quiz',
+            instance: 'http://localhost:4201/luke/with-routes/Quiz/q1',
+          },
+        ],
       });
 
       await runRealmConfigCardBackfill({
@@ -215,16 +375,29 @@ module(basename(__filename), function () {
         bootstrapRealms: [],
       });
 
-      const card = readCard(realmDir) as {
-        data: { attributes: Record<string, unknown> };
-      };
-      assert.deepEqual(card.data.attributes.cardInfo, { name: 'With Routes' });
       assert.deepEqual(
-        card.data.attributes.hostRoutingRules,
-        routes,
-        'hostRoutingRules migrated verbatim into card attributes',
+        readCard(realmDir),
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'With Routes' },
+              hostRoutingRules: [{ path: '/' }, { path: '/quiz' }],
+            },
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: './PersonalHome/home' },
+              },
+              'hostRoutingRules.1.instance': {
+                links: { self: './Quiz/q1' },
+              },
+            },
+            meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+          },
+        },
+        'hostRoutingRules split into {path} attributes + linksTo relationships',
       );
-      assert.deepEqual(readSidecar(realmDir), {}, 'sidecar fully trimmed');
+      assert.deepEqual(readSidecar(realmDir), {});
     });
 
     test('writes a card from a bootstrap realm sidecar', async function (assert) {
@@ -268,6 +441,7 @@ module(basename(__filename), function () {
       seedSidecar(publishedDir, {
         name: 'Published Realm',
         iconURL: 'https://example.com/pub.svg',
+        hostHome: 'http://localhost:4201/_published/abc/SiteConfig/p1',
       });
       await query(dbAdapter, [
         `INSERT INTO realm_registry (url, kind, disk_id, owner_username, source_url, last_published_at, pinned) VALUES (`,
@@ -290,31 +464,42 @@ module(basename(__filename), function () {
         bootstrapRealms: [],
       });
 
-      const card = readCard(publishedDir) as {
-        data: { attributes: Record<string, unknown> };
-      };
-      assert.deepEqual(card.data.attributes.cardInfo, {
-        name: 'Published Realm',
-      });
-      assert.strictEqual(
-        card.data.attributes.iconURL,
-        'https://example.com/pub.svg',
+      assert.deepEqual(
+        readCard(publishedDir),
+        {
+          data: {
+            type: 'card',
+            attributes: {
+              cardInfo: { name: 'Published Realm' },
+              iconURL: 'https://example.com/pub.svg',
+              hostRoutingRules: [{ path: '/' }],
+            },
+            relationships: {
+              'hostRoutingRules.0.instance': {
+                links: { self: './SiteConfig/p1' },
+              },
+            },
+            meta: { adoptsFrom: REALM_CONFIG_ADOPTS_FROM },
+          },
+        },
+        'published realm card has /-rule with relative link computed against the registry URL',
       );
       assert.deepEqual(readSidecar(publishedDir), {});
     });
 
-    test('migrates a published realm even when realm_registry has no row for it', async function (assert) {
-      // Models the multi-instance startup race called out in PR review:
-      // a peer process holds the registry-backfill advisory lock while
-      // this process wins the config-card-backfill lock, so the
-      // registry table is empty (or sparse) when this pass runs. The
-      // disk-walk must still migrate the realm.
+    test('migrates non-hostHome fields for a published realm even when realm_registry has no row', async function (assert) {
+      // Multi-instance startup race: registry-backfill held by a peer
+      // while this process wins the config-card-backfill lock. The
+      // card-keys-only migration still runs; the hostHome migration is
+      // skipped (URL is required to compute the relative link) and the
+      // sidecar's hostHome is preserved for a future boot.
       const publishedRoot = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       const uuid = '00000000-0000-0000-0000-000000000002';
       const publishedDir = join(publishedRoot, uuid);
       seedSidecar(publishedDir, {
         name: 'Orphan Published Realm',
         backgroundURL: 'https://example.com/orphan-bg.png',
+        hostHome: 'http://localhost:4201/_published/abc/SiteConfig/orphan',
       });
 
       await runRealmConfigCardBackfill({
@@ -325,7 +510,10 @@ module(basename(__filename), function () {
       });
 
       const card = readCard(publishedDir) as {
-        data: { attributes: Record<string, unknown> };
+        data: {
+          attributes: Record<string, unknown>;
+          relationships?: Record<string, unknown>;
+        };
       };
       assert.deepEqual(card.data.attributes.cardInfo, {
         name: 'Orphan Published Realm',
@@ -334,7 +522,17 @@ module(basename(__filename), function () {
         card.data.attributes.backgroundURL,
         'https://example.com/orphan-bg.png',
       );
-      assert.deepEqual(readSidecar(publishedDir), {});
+      assert.notOk(
+        'hostRoutingRules' in card.data.attributes,
+        'no /-rule added; hostHome migration was deferred',
+      );
+      assert.deepEqual(
+        readSidecar(publishedDir),
+        {
+          hostHome: 'http://localhost:4201/_published/abc/SiteConfig/orphan',
+        },
+        'hostHome preserved in sidecar so a future boot can complete the migration',
+      );
     });
 
     test('is idempotent across reruns', async function (assert) {
@@ -342,6 +540,7 @@ module(basename(__filename), function () {
       seedSidecar(realmDir, {
         name: 'Rerun',
         backgroundURL: 'https://example.com/bg.png',
+        hostHome: 'http://localhost:4201/luke/rerun/SiteConfig/r1',
       });
 
       await runRealmConfigCardBackfill({
@@ -409,6 +608,139 @@ module(basename(__filename), function () {
         readFileSync(join(realmDir, '.realm.json'), 'utf8'),
         '[1, 2, 3]',
         'array sidecar left untouched',
+      );
+    });
+
+    test('leaves an unparseable existing card alone (does not overwrite)', async function (assert) {
+      const realmDir = join(realmsRootPath, 'luke', 'broken-card');
+      seedSidecar(realmDir, {
+        hostHome: 'http://localhost:4201/luke/broken-card/SiteConfig/whatever',
+      });
+      writeFileSync(join(realmDir, 'realm.json'), '{ partly written');
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.strictEqual(
+        readFileSync(join(realmDir, 'realm.json'), 'utf8'),
+        '{ partly written',
+        'malformed card left untouched',
+      );
+      assert.deepEqual(
+        readSidecar(realmDir),
+        {
+          hostHome:
+            'http://localhost:4201/luke/broken-card/SiteConfig/whatever',
+        },
+        'sidecar untouched when we cannot safely modify the card',
+      );
+    });
+
+    test('skips invalid entries in sidecar hostRoutingRules without misaligning relationship keys', async function (assert) {
+      // Pre-fix: relationship keys used the original sidecar array index
+      // while attributes.hostRoutingRules used a push-only output index,
+      // so a null entry before a valid one would orphan the link
+      // (attribute at [0], relationship at "hostRoutingRules.1.instance").
+      const realmDir = join(realmsRootPath, 'luke', 'sparse-rules');
+      seedSidecar(realmDir, {
+        name: 'Sparse',
+        hostRoutingRules: [
+          null,
+          {
+            path: '/',
+            instance: 'http://localhost:4201/luke/sparse-rules/Home/h',
+          },
+        ],
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      const card = readCard(realmDir) as {
+        data: {
+          attributes: { hostRoutingRules?: { path?: string }[] };
+          relationships?: Record<string, { links: { self: string | null } }>;
+        };
+      };
+      assert.deepEqual(
+        card.data.attributes.hostRoutingRules,
+        [{ path: '/' }],
+        'invalid entry filtered out, valid /-rule landed at index 0',
+      );
+      assert.deepEqual(
+        card.data.relationships?.['hostRoutingRules.0.instance'],
+        { links: { self: './Home/h' } },
+        'relationship indexed to match the post-filter attribute position',
+      );
+      assert.notOk(
+        card.data.relationships?.['hostRoutingRules.1.instance'],
+        'no orphaned relationship at the original (unfiltered) index',
+      );
+    });
+
+    test('treats a card whose `data` is not a plain object as unparseable', async function (assert) {
+      // Parses cleanly as JSON, has a `data` key, but `data` is a string.
+      // augmentExistingCard would mutate `card.data.attributes` and throw
+      // (TypeError on a primitive); we want migrateOne to skip cleanly
+      // instead of bubbling out and aborting the rest of the step.
+      // Subsequent realms in the same backfill walk should still run.
+      const brokenDir = join(realmsRootPath, 'luke', 'broken-data');
+      seedSidecar(brokenDir, {
+        hostHome: 'http://localhost:4201/luke/broken-data/SiteConfig/x',
+      });
+      writeFileSync(
+        join(brokenDir, 'realm.json'),
+        JSON.stringify({ data: 'oops' }),
+      );
+
+      const goodDir = join(realmsRootPath, 'luke', 'good-after-broken');
+      seedSidecar(goodDir, {
+        name: 'Good After Broken',
+        hostHome: 'http://localhost:4201/luke/good-after-broken/SiteConfig/g',
+      });
+
+      await runRealmConfigCardBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        bootstrapRealms: [],
+      });
+
+      assert.strictEqual(
+        readFileSync(join(brokenDir, 'realm.json'), 'utf8'),
+        JSON.stringify({ data: 'oops' }),
+        'malformed-shape card left untouched',
+      );
+      assert.deepEqual(
+        readSidecar(brokenDir),
+        {
+          hostHome: 'http://localhost:4201/luke/broken-data/SiteConfig/x',
+        },
+        'sidecar untouched when card is structurally unsafe to modify',
+      );
+
+      // Critical: the broken realm did not abort the walk.
+      const goodCard = readCard(goodDir) as {
+        data: {
+          attributes: Record<string, unknown>;
+          relationships?: Record<string, unknown>;
+        };
+      };
+      assert.deepEqual(goodCard.data.attributes.cardInfo, {
+        name: 'Good After Broken',
+      });
+      assert.deepEqual(
+        goodCard.data.relationships?.['hostRoutingRules.0.instance'],
+        { links: { self: './SiteConfig/g' } },
+        'realm encountered after the broken one still got its /-rule',
       );
     });
   });

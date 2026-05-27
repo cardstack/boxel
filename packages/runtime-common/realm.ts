@@ -193,8 +193,6 @@ export type RealmInfo = {
   backgroundURL: string | null;
   iconURL: string | null;
   showAsCatalog: boolean | null;
-  interactHome: string | null;
-  hostHome: string | null;
   visibility: RealmVisibility;
   realmUserId?: string;
   publishable: boolean | null;
@@ -233,9 +231,12 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. Anything not
-// in this set is still written to the legacy .realm.json sidecar until
-// CS-10055 moves hostHome / interactHome off-file.
+// Fields owned by the RealmConfig card instance at /realm.json. Anything
+// not in this set falls through to the legacy `.realm.json` sidecar
+// catch-all (which is itself on the way out — see CS-11131). hostHome
+// is no longer here: CS-10055 unified it into hostRoutingRules under
+// `path: "/"`, so a hostHome PATCH is just an attempted write to an
+// unrecognized key.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -2525,6 +2526,29 @@ export class Realm {
           `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
         );
         if (isNewIndex || this.#fullIndexOnStartup) {
+          if (this.#fullIndexOnStartup) {
+            // CS-11245: bootstrap realms (kind='bootstrap': base,
+            // catalog, skills, …) full-index on every realm-server
+            // boot. On a rolling deploy the worker that picks up the
+            // resulting from-scratch-index job fans HTTP source reads
+            // through the LB, which can route to a still-warm
+            // pre-deploy peer whose `#sourceCache` was populated from
+            // pre-rsync bytes. `getSourceOrRedirect` would return those
+            // stale bytes and the reindex would persist them into
+            // `boxel_index.pristine_doc` plus sticky `error_doc` rows
+            // that survive past fleet stabilization (see CS-11245 for
+            // the originating incident). Broadcast a per-realm
+            // NOTIFY so every peer drops its entries for this URL and
+            // the next read falls through to `/persistent/` (EFS,
+            // already brought up to date by this container's
+            // `setup:<realm>-in-deployment` rsync at PID 1). The local
+            // clear is a no-op on a freshly booted container; the
+            // broadcast is what does the work. Skipped on the
+            // `isNewIndex` branch — that branch fires for first-ever
+            // mounts (e.g., brand-new publish), where peer caches for
+            // a never-before-seen URL are empty by construction.
+            await this.clearLocalSourceCachesAndBroadcast();
+          }
           let priority =
             opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
           let promise = this.#realmIndexUpdater.fullIndex(priority);
@@ -6294,8 +6318,6 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
       showAsCatalog: null,
-      interactHome: null,
-      hostHome: null,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
@@ -6313,9 +6335,6 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.interactHome =
-          realmConfigJson.interactHome ?? realmInfo.interactHome;
-        realmInfo.hostHome = realmConfigJson.hostHome ?? realmInfo.hostHome;
         realmInfo.realmUserId = ensureFullMatrixUserId(
           realmConfigJson.realmUserId ??
             (this.#matrixClient.getUserId()! || this.#matrixClient.username),
