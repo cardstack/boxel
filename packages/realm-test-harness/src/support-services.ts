@@ -2,6 +2,8 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import puppeteer from 'puppeteer';
+
 import { logger } from './logger';
 
 import {
@@ -206,6 +208,81 @@ async function loadMatrixEnvironmentConfigModule() {
   };
 }
 
+// A cold vite optimize of the host's transitive graph routinely exceeds
+// 90s, so the marker probe needs a generous budget. Env-overridable for
+// especially slow CI runners.
+const STANDBY_DOM_RENDER_TIMEOUT_MS =
+  parseInt(process.env.TEST_HARNESS_STANDBY_DOM_TIMEOUT_MS ?? '', 10) ||
+  240_000;
+
+// Drive `<hostURL>/_standby` in a real (headless) browser and wait for the
+// `#standby-ready` marker the host app renders once its bundles have loaded
+// and the app shell has booted — the same signal the prerender's PagePool
+// waits on. This is the only check that proves vite served the full module
+// graph (not just the HTML shell) and the app can render DOM. Throws with
+// the captured vite logs if the marker never appears or vite exits.
+async function assertStandbyRendersDom(
+  hostURL: string,
+  getLogs: () => string,
+  getFatalExitCode: () => number | null,
+): Promise<void> {
+  let standbyURL = `${hostURL.replace(/\/$/, '')}/_standby`;
+  let browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+    ],
+  });
+  try {
+    let page = await browser.newPage();
+    let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
+    // The connection can still be refused for the first moments after `/`
+    // answered (vite binding / restarting); connection-phase failures are
+    // safe to retry until the deadline.
+    for (;;) {
+      let fatal = getFatalExitCode();
+      if (fatal !== null) {
+        throw new Error(
+          `host app (vite preview) exited early with code ${fatal} while waiting for ${standbyURL} to render\n${getLogs()}`,
+        );
+      }
+      let remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error(
+          `Timed out after ${STANDBY_DOM_RENDER_TIMEOUT_MS}ms waiting for ${standbyURL} to render its DOM (#standby-ready)\n${getLogs()}`,
+        );
+      }
+      try {
+        await page.goto(standbyURL, {
+          waitUntil: 'domcontentloaded',
+          timeout: remaining,
+        });
+        break;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_EMPTY_RESPONSE/.test(
+            error.message,
+          )
+        ) {
+          await new Promise((r) => setTimeout(r, 500));
+          continue;
+        }
+        throw error;
+      }
+    }
+    await page.waitForFunction(
+      () => !!document.querySelector('#standby-ready'),
+      { timeout: Math.max(1, deadline - Date.now()) },
+    );
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
 async function ensureHostReady(): Promise<{
   hostURL: string;
   stop?: () => Promise<void>;
@@ -285,6 +362,9 @@ async function ensureHostReady(): Promise<{
         logs = `${logs}${String(chunk)}`.slice(-20_000);
       });
 
+      // Phase 1: wait for vite preview to accept connections. This only
+      // proves the server is listening and can return the HTML shell — it
+      // never requests modules, so it does not prove the app can boot.
       await waitUntil(
         async () => {
           try {
@@ -310,6 +390,25 @@ async function ensureHostReady(): Promise<{
           interval: 500,
           timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
         },
+      );
+
+      // Phase 2: prove vite can actually render the `/_standby` page's DOM,
+      // not just serve the HTML shell. A shell fetch never requests modules,
+      // so it does not kick vite's dep optimizer; only a browser-shaped
+      // navigation forces the (~1000-package) app graph to build, which can
+      // exceed 90s cold. The in-harness realm-server and prerenderer both
+      // drive `/_standby` through Puppeteer and block on the `#standby-ready`
+      // marker (packages/realm-server/prerender/page-pool.ts); gating their
+      // bring-up on the same marker here keeps them from spinning up while
+      // vite is still cold — the window where the prerender's standby load
+      // exhausts its retry budget and renders fail with ECONNREFUSED.
+      await assertStandbyRendersDom(
+        hostURL,
+        () => logs,
+        () =>
+          child.exitCode !== null && !hostStartupLooksLikePortContention(logs)
+            ? child.exitCode
+            : null,
       );
 
       return {
