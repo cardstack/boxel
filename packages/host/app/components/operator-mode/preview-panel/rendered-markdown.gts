@@ -208,7 +208,14 @@ export default class RenderedMarkdown extends Component<Signature> {
                   : 'overflow: hidden',
               );
             }
-            slots.push({ element: el, kind, state: 'resolved', format, card, style });
+            slots.push({
+              element: el,
+              kind,
+              state: 'resolved',
+              format,
+              card,
+              style,
+            });
             continue;
           }
 
@@ -333,8 +340,7 @@ export default class RenderedMarkdown extends Component<Signature> {
             />
           {{else}}
             <div
-              class='markdown-bfm-loading markdown-bfm-loading--block
-                markdown-bfm-loading--{{slot.format}}'
+              class='markdown-bfm-loading markdown-bfm-loading--block markdown-bfm-loading--{{slot.format}}'
               style={{slot.style}}
               aria-hidden='true'
               data-test-markdown-bfm-loading-block
@@ -732,7 +738,8 @@ export default class RenderedMarkdown extends Component<Signature> {
           border: 1px solid var(--md-border);
           border-radius: var(--boxel-border-radius);
           background-color: var(--boxel-light-100);
-          background-image: linear-gradient(
+          background-image:
+            linear-gradient(
               to top right,
               transparent calc(50% - 0.5px),
               var(--md-border) calc(50% - 0.5px),
