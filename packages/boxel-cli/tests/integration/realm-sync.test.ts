@@ -173,13 +173,16 @@ async function establishBaseline(
   await sleep(1100);
 }
 
-// Read a remote source file, retrying for up to `timeoutMs` if the body
-// doesn't yet contain `expectedSubstring`. Returns the final body either way
-// — callers assert on it. `retries` is the number of additional fetches
-// performed beyond the first attempt (0 = matched on first read), so
-// `retries > 0` is the unambiguous signal that the post-sync read had to
-// wait for the realm to settle. `elapsedMs` is for context only; it tracks
-// network + sleep, so it is non-zero even on a first-shot success.
+// Read a remote source file, retrying for up to `timeoutMs` until the body
+// contains `expectedSubstring`. A non-OK response (e.g. a transient 404 while
+// a freshly-written file is not yet visible during the brief post-write
+// window) is treated as a "not yet" signal and keeps the loop polling rather
+// than throwing — so callers tolerate both stale content and a not-yet-visible
+// file. Returns the final body either way — callers assert on it. `retries` is
+// the number of additional fetches performed beyond the first attempt (0 =
+// matched on first read), so `retries > 0` is the unambiguous signal that the
+// read had to wait for the realm to settle. `elapsedMs` is for context only;
+// it tracks network + sleep, so it is non-zero even on a first-shot success.
 async function fetchRemoteFileEventually(
   realmUrl: string,
   relPath: string,
@@ -189,10 +192,16 @@ async function fetchRemoteFileEventually(
   const start = Date.now();
   let attempts = 0;
   let body = '';
+  let url = buildFileUrl(realmUrl, relPath);
   while (Date.now() - start < timeoutMs) {
     attempts++;
-    body = await fetchRemoteFile(realmUrl, relPath);
-    if (body.includes(expectedSubstring)) {
+    let response = await profileManager.authedRealmFetch(url, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    // Drain the body so the connection can be reused, and keep it for the
+    // caller's on-miss diagnostic dump.
+    body = await response.text().catch(() => '');
+    if (response.ok && body.includes(expectedSubstring)) {
       return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
     }
     await sleep(100);
