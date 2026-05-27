@@ -1,5 +1,6 @@
 ---
 name: boxel-cli-pr-title
+allowed-tools: Read, Grep, Bash
 description: Decide whether a PR title needs a conventional-commit prefix. PRs touching packages/boxel-cli/** require one (feat/fix/perf/refactor/chore/docs/test/build/ci/style) because it drives the boxel-cli npm publish version bump; PRs that don't touch boxel-cli get a plain descriptive title with no prefix. Use before opening or retitling any PR.
 ---
 
