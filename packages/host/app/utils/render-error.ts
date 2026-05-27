@@ -72,13 +72,13 @@ export function coerceRenderError(reason: unknown): RenderError | undefined {
 // Build a render error from a settled instance's broken-link scan
 // (`getBrokenLinks`). The first finding becomes the primary error; the `deps`
 // of every finding are unioned so downstream invalidation can reach each
-// broken target — including extra deps carried on non-primary findings. Each
-// finding's `reference` is also folded in: a missing instance's sentinel deps
-// carry the canonical `.json` target, while the bare reference is the id form
-// the invalidation index keys on, and both are needed to reindex the parent
-// when the target reappears. Returns `undefined` when the scan found nothing,
-// so callers branch on a clean render. Run the result through
-// `normalizeRenderError` to apply card-id / missing-link overrides.
+// broken target — including extra deps carried on non-primary findings. The
+// deps come from each finding's `errorDoc.deps`, which already carries the
+// broken instance target in the canonical `.json` form the deps column uses
+// for instances (the bare reference is deliberately not added). Returns
+// `undefined` when the scan found nothing, so callers branch on a clean
+// render. Run the result through `normalizeRenderError` to apply card-id /
+// missing-link overrides.
 export function brokenLinkRenderError(
   findings: BrokenLinkFinding[],
 ): RenderError | undefined {
@@ -90,9 +90,6 @@ export function brokenLinkRenderError(
   for (let finding of findings) {
     for (let dep of finding.errorDoc.deps ?? []) {
       deps.add(dep);
-    }
-    if (finding.reference) {
-      deps.add(finding.reference);
     }
   }
   return {
