@@ -380,9 +380,9 @@ export default class CommandService extends Service {
           }
 
           // Get the LLM mode that was active when this message was created
-          let messageTimestamp = message.created.getTime();
-          let activeModeAtMessageTime =
-            roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+          let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+            message.eventId,
+          );
 
           // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
           // or if requiresApproval is false
@@ -477,19 +477,19 @@ export default class CommandService extends Service {
         }
 
         // Get the LLM mode that was active when this message was created
-        let messageTimestamp = message.created.getTime();
-        let activeModeAtMessageTime =
-          roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+        let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+          message.eventId,
+        );
         // Only auto-apply if in 'act' mode
         if (activeModeAtMessageTime !== 'act') {
           let llmModeEvents = roomResource.llmModeEvents;
           if (llmModeEvents.some((e) => (e as any).content?.mode === 'act')) {
             // The room has used 'act' mode, so a non-'act' resolution here is
-            // worth recording: it pins the timestamp the decision was made
-            // against alongside every mode transition — the data needed to
-            // explain an auto-apply that didn't fire.
+            // worth recording: it pins the message against every mode
+            // transition — the data needed to explain an auto-apply that
+            // didn't fire.
             console.log(
-              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${messageTimestamp}; mode transitions: ${JSON.stringify(
+              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
                 llmModeEvents.map((e) => ({
                   ts: e.origin_server_ts,
                   mode: (e as any).content?.mode,
