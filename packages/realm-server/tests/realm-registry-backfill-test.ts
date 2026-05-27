@@ -6,11 +6,25 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   asExpressions,
   insert,
+  insertPermissions,
   query,
+  param,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
 import { setupDB } from './helpers';
 import { runRegistryBackfill } from '../lib/realm-registry-backfill';
+
+async function publicReadGranted(
+  dbAdapter: PgAdapter,
+  realmURL: string,
+): Promise<boolean> {
+  let rows = (await query(dbAdapter, [
+    `SELECT read FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL),
+    `AND username = '*'`,
+  ])) as Array<{ read: boolean }>;
+  return rows.length > 0 && rows[0].read === true;
+}
 
 interface RegistryRow {
   url: string;
@@ -222,6 +236,88 @@ module(basename(__filename), function () {
         secondDiskId.endsWith('/base-b'),
         'second disk_id is base-b (rehomed)',
       );
+    });
+
+    module('env-mode public-read parity', function (envHooks) {
+      let priorBoxelEnvironment: string | undefined;
+      const envSkillsURL = 'https://realm-server.test-env.localhost/skills/';
+      const envPrivateURL = 'https://realm-server.test-env.localhost/private/';
+      const stdSkillsURL = 'http://localhost:4201/skills/';
+
+      envHooks.beforeEach(function () {
+        priorBoxelEnvironment = process.env.BOXEL_ENVIRONMENT;
+        process.env.BOXEL_ENVIRONMENT = 'test-env';
+      });
+      envHooks.afterEach(function () {
+        if (priorBoxelEnvironment === undefined) {
+          delete process.env.BOXEL_ENVIRONMENT;
+        } else {
+          process.env.BOXEL_ENVIRONMENT = priorBoxelEnvironment;
+        }
+      });
+
+      test('grants public read at the env-mode URL for an already-public path', async function (assert) {
+        // Stand in for the migration seed that makes the standard-mode skills
+        // realm public.
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.true(
+          await publicReadGranted(dbAdapter, envSkillsURL),
+          'env-mode skills realm is now public-readable',
+        );
+      });
+
+      test('does not promote a realm whose path is not already public', async function (assert) {
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'private');
+        seedRealmJson(bootstrapPath, { name: 'private' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envPrivateURL }],
+        });
+
+        assert.false(
+          await publicReadGranted(dbAdapter, envPrivateURL),
+          'a path with no existing public grant stays private',
+        );
+      });
+
+      test('is a no-op when BOXEL_ENVIRONMENT is unset', async function (assert) {
+        delete process.env.BOXEL_ENVIRONMENT;
+        await insertPermissions(dbAdapter, new URL(stdSkillsURL), {
+          '*': ['read'],
+        });
+        const bootstrapPath = join(dir.name, 'skills');
+        seedRealmJson(bootstrapPath, { name: 'skills' });
+
+        await runRegistryBackfill({
+          dbAdapter,
+          realmsRootPath,
+          serverURL,
+          bootstrapRealms: [{ diskPath: bootstrapPath, url: envSkillsURL }],
+        });
+
+        assert.false(
+          await publicReadGranted(dbAdapter, envSkillsURL),
+          'standard mode does not seed env-mode parity rows',
+        );
+      });
     });
 
     test('bootstrap upsert does not clobber a non-bootstrap row with a colliding URL', async function (assert) {

@@ -3,12 +3,16 @@ import { access } from 'fs/promises';
 import { join, resolve } from 'path';
 import {
   PUBLISHED_DIRECTORY_NAME,
+  ensureTrailingSlash,
+  fetchUserPermissions,
+  insertPermissions,
   logger,
   param,
   query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
+import { isEnvironmentMode } from './dev-service-registry';
 
 const log = logger('realm-server:registry-backfill');
 
@@ -80,6 +84,15 @@ export async function runRegistryBackfill(
   await safeStep('stale-bootstrap-check', () =>
     warnOnStaleBootstrapRows(opts, bootstrapUrls ?? new Set()),
   );
+  // Environment mode mounts the dev realms at per-environment Traefik URLs,
+  // which the static-URL permission migrations never seed, so realms that are
+  // public in standard mode read back 401 to unauthenticated clients. Mirror
+  // the public-read policy onto the URLs this server actually serves.
+  if (isEnvironmentMode()) {
+    await safeStep('env-public-read-parity', () =>
+      seedEnvironmentPublicReadParity(opts),
+    );
+  }
 
   // Note: `sourceDiscovered` is the number of realm directories seen on
   // disk, not the number of INSERTs actually executed. Under ON CONFLICT DO
@@ -136,6 +149,48 @@ async function upsertBootstrapRealms(
     ]);
   }
   return seen;
+}
+
+// Grant `*: read` on each bootstrap realm whose path is already declared
+// publicly readable elsewhere, at the URL this server actually serves it
+// from. Public-read seeds in the migrations are keyed on the fixed
+// standard-mode URLs (localhost:4201/<endpoint>/ and the canonical base URL);
+// in environment mode the same realms mount at realm-server.<slug>.localhost
+// URLs that no migration row matches, so they would otherwise 401 to
+// unauthenticated readers. Keying off the already-public set (by path) keeps
+// this in lockstep with whatever the migrations declare public — no second
+// hardcoded realm list — and `insertPermissions` is idempotent, so reruns
+// converge. Only realms whose path is already public are touched, so this
+// cannot promote a realm that policy keeps private.
+async function seedEnvironmentPublicReadParity(
+  opts: RegistryBackfillOpts,
+): Promise<number> {
+  let publicPermissions = await fetchUserPermissions(opts.dbAdapter, {
+    userId: '*',
+    onlyOwnRealms: false,
+  });
+  let publicPaths = new Set<string>();
+  for (let [realmURL, actions] of Object.entries(publicPermissions)) {
+    if (actions.includes('read')) {
+      try {
+        publicPaths.add(new URL(realmURL).pathname);
+      } catch {
+        // Skip rows whose realm_url isn't a parseable absolute URL.
+      }
+    }
+  }
+
+  let seeded = 0;
+  for (let { url } of opts.bootstrapRealms) {
+    let realmURL = new URL(ensureTrailingSlash(url));
+    let alreadyPublic = publicPermissions[realmURL.href]?.includes('read');
+    if (!alreadyPublic && publicPaths.has(realmURL.pathname)) {
+      await insertPermissions(opts.dbAdapter, realmURL, { '*': ['read'] });
+      seeded++;
+      log.info(`seeded public-read parity for env-mode realm ${realmURL.href}`);
+    }
+  }
+  return seeded;
 }
 
 async function upsertSourceRealms(opts: RegistryBackfillOpts): Promise<number> {
