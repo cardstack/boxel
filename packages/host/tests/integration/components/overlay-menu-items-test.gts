@@ -287,12 +287,10 @@ module('Integration | overlay-menu-items', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    let fileCardSelector = `[data-test-overlay-card="${testRealmURL}notes.md"]`;
-    await waitFor(`[data-test-card="${testRealmURL}notes.md"]`);
-    await triggerEvent(
-      `[data-test-card="${testRealmURL}notes.md"]`,
-      'mouseenter',
-    );
+    let fileURL = `${testRealmURL}ParentWithFile/notes.md`;
+    let fileCardSelector = `[data-test-overlay-card="${fileURL}"]`;
+    await waitFor(`[data-test-card="${fileURL}"]`);
+    await triggerEvent(`[data-test-card="${fileURL}"]`, 'mouseenter');
     await waitFor(`${fileCardSelector} [data-test-overlay-more-options]`);
 
     assert

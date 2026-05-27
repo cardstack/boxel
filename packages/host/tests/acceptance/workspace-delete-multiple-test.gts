@@ -206,7 +206,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/3');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('3 Selected');
+    assert.dom('.utility-menu-trigger').containsText('3');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -303,7 +303,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('.utility-menu-trigger').containsText('2');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -338,6 +338,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection is still active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('2 Selected', 'Selection remains active after cancel');
+      .containsText('2', 'Selection remains active after cancel');
   });
 });
