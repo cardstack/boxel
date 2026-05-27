@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<svg viewBox='0 0 16 16' fill='currentColor' stroke='currentColor' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'>
-  <circle cx='12.25' cy='3.25' r='1.85' stroke='none'/>
-  <circle cx='3.75' cy='8' r='1.85' stroke='none'/>
-  <circle cx='12.25' cy='12.75' r='1.85' stroke='none'/>
-  <line x1='5.4' y1='9.05' x2='10.6' y2='11.7' fill='none'/>
-  <line x1='10.6' y1='4.3' x2='5.4' y2='6.95' fill='none'/>
-</svg>
