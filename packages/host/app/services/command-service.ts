@@ -473,9 +473,11 @@ export default class CommandService extends Service {
           // room timeline yet — room processing lagged or dropped it. The event
           // is consumed here and never retried, so a patch that should
           // auto-apply silently won't. Log enough to recognize that race.
-          console.log(
-            `[code-patch-autoapply] event ${eventId} queued but no matching message in room ${roomId}; isProcessing=${roomResource.isProcessing}, messageCount=${roomResource.messages.length}`,
-          );
+          if (isTesting()) {
+            console.log(
+              `[code-patch-autoapply] event ${eventId} queued but no matching message in room ${roomId}; isProcessing=${roomResource.isProcessing}, messageCount=${roomResource.messages.length}`,
+            );
+          }
           continue;
         }
         if (message.agentId !== this.matrixService.agentId) {
@@ -490,7 +492,10 @@ export default class CommandService extends Service {
         // Only auto-apply if in 'act' mode
         if (activeModeAtMessageTime !== 'act') {
           let llmModeEvents = roomResource.llmModeEvents;
-          if (llmModeEvents.some((e) => (e as any).content?.mode === 'act')) {
+          if (
+            isTesting() &&
+            llmModeEvents.some((e) => (e as any).content?.mode === 'act')
+          ) {
             // The room has used 'act' mode, so a non-'act' resolution here is
             // worth recording: it pins the message against every mode
             // transition — the data needed to explain an auto-apply that
@@ -846,7 +851,7 @@ export default class CommandService extends Service {
           this.executedCommandRequestIds.add(
             `${codeData.eventId}:${codeData.codeBlockIndex}`,
           );
-        } else if (this.acceptingAllRoomIds.has(roomId)) {
+        } else if (isTesting() && this.acceptingAllRoomIds.has(roomId)) {
           // During an auto-apply / accept-all run a non-'applied' result means
           // the patch never reaches the "applied" UI state a caller may be
           // waiting on. Record why (e.g. a search block that no longer matches
