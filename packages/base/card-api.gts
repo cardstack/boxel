@@ -3260,11 +3260,7 @@ function lazilyLoadLink(
     inflightLinkLoads.set(instance, inflightLoads);
   }
   let store = getStore(instance);
-  let reference = resolveRef(
-    store,
-    link,
-    instance.id ?? instance[relativeTo],
-  );
+  let reference = resolveRef(store, link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   if (promise) {
@@ -4354,6 +4350,15 @@ declare module 'ember-provide-consume-context/context-registry' {
 
 function getStore(instance: BaseDef): CardStore {
   return stores.get(instance as BaseDef) ?? new FallbackCardStore();
+}
+
+// The VirtualNetwork associated with an instance's store, for prefix/RRI
+// resolution outside this module. Returns undefined when the store can't
+// supply one, so callers fall back to the deprecated module-level resolver.
+export function virtualNetworkFor(
+  instance: BaseDef,
+): VirtualNetwork | undefined {
+  return getStore(instance).virtualNetwork;
 }
 
 // Resolve a (possibly prefix-form or relative) reference to an absolute URL
