@@ -2117,7 +2117,7 @@ function brokenSingularLink(
 // slot when it can't load); `head` / `metadata` / `markdown` / `form` have no
 // dedicated placeholder footprint and fall back to the general-purpose
 // `embedded` layout.
-function brokenLinkFormat(
+export function brokenLinkFormat(
   format: Format | undefined,
   defaultFormat: Format,
 ): BrokenLinkFormat {
