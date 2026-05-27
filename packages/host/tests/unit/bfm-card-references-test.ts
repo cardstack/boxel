@@ -3,6 +3,7 @@ import { module, test } from 'qunit';
 import {
   extractCardReferenceUrls,
   extractBfmReferences,
+  bfmBlockFormatAndSize,
   bfmCardReferenceExtensions,
   bfmExtensionsForKeyword,
   parseBfmSizeSpec,
@@ -697,6 +698,76 @@ module('Unit | bfm-card-references', function () {
       ].join('\n');
       let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
       assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+  });
+
+  module('bfmBlockFormatAndSize', function () {
+    test('defaults to embedded with no sizeStyle when format attr is missing', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize(undefined, undefined, undefined), {
+        format: 'embedded',
+      });
+    });
+
+    test('defaults to embedded when format attr is unrecognized', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('something', '400', '200'), {
+        format: 'embedded',
+      });
+    });
+
+    test('passes isolated through and ignores width/height', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('isolated', '400', '200'), {
+        format: 'isolated',
+      });
+    });
+
+    test('fitted with no width/height returns undefined sizeStyle', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', undefined, undefined), {
+        format: 'fitted',
+        sizeStyle: undefined,
+      });
+    });
+
+    test('fitted converts integer width attr to a px value', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', undefined), {
+        format: 'fitted',
+        sizeStyle: 'width: 400px',
+      });
+    });
+
+    test('fitted passes percentage width attr through unchanged', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', '50%', undefined), {
+        format: 'fitted',
+        sizeStyle: 'width: 50%',
+      });
+    });
+
+    test('fitted converts integer height attr to a px value', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', undefined, '200'), {
+        format: 'fitted',
+        sizeStyle: 'height: 200px',
+      });
+    });
+
+    test('fitted combines width + height into one sizeStyle string', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', '200'), {
+        format: 'fitted',
+        sizeStyle: 'width: 400px; height: 200px',
+      });
+    });
+
+    test('fitted ignores width with unsupported units', function (assert) {
+      // Only `\d+` (px implied) and `\d+%` are accepted; anything else is dropped.
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', '100em', '200'), {
+        format: 'fitted',
+        sizeStyle: 'height: 200px',
+      });
+    });
+
+    test('fitted ignores height with unsupported units', function (assert) {
+      assert.deepEqual(bfmBlockFormatAndSize('fitted', '400', '50%'), {
+        format: 'fitted',
+        sizeStyle: 'width: 400px',
+      });
     });
   });
 });
