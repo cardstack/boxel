@@ -14,6 +14,7 @@ import Component from '@glimmer/component';
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
 import {
+  baseRealm,
   CardError,
   SupportedMimeType,
   type CardErrorsJSONAPI,
@@ -36,6 +37,10 @@ import {
 
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
 import {
   buildModuleModel,
   type ModuleModelContext,
@@ -50,8 +55,8 @@ import {
   type CardRenderContext,
   deriveCardTypeFromDoc,
   withCardType,
-  coerceRenderError,
   normalizeRenderError,
+  brokenLinkRenderError,
 } from '../utils/render-error';
 import {
   enableRenderTimerStub,
@@ -77,7 +82,6 @@ export default class CardPrerender extends Component {
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
-  #renderErrorPayload: string | undefined;
   #cardTypeTracker = new RenderCardTypeTracker();
   #currentContext: CardRenderContext | undefined;
   #moduleTypesCache: ModuleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -102,12 +106,7 @@ export default class CardPrerender extends Component {
       runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
-    window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
     registerDestructor(this, () => {
-      window.removeEventListener(
-        'boxel-render-error',
-        this.#handleRenderErrorEvent,
-      );
       this.localIndexer.teardown(this.#prerendererDelegate);
       this.#cardTypeTracker.clear();
       this.#moduleTypesCache = new WeakMap() as ModuleTypesCache;
@@ -617,7 +616,6 @@ export default class CardPrerender extends Component {
         return REALM_INDEX_BOILERPLATE_HTML;
       }
       let component = routeInfo.attributes.Component;
-      this.#renderErrorPayload = undefined;
       let captureMode: 'innerHTML' | 'outerHTML' | 'textContent';
       if (format === 'markdown') {
         // Mirror realm-server puppeteer capture: markdown renders into a
@@ -636,14 +634,12 @@ export default class CardPrerender extends Component {
         format,
         this.waitForLinkedData,
       );
-      if (this.#renderErrorPayload) {
-        throw new Error(this.#renderErrorPayload);
-      }
 
       if (typeof captured !== 'string') {
         return null;
       }
       await this.#ensureRenderReady(routeInfo);
+      await this.#scanForBrokenLinks(url);
       return this.processCapturedMarkup(captured, {
         isPlainText: format === 'markdown',
       });
@@ -694,38 +690,36 @@ export default class CardPrerender extends Component {
     }
   }
 
-  #handleRenderErrorEvent = (
-    event: Event & { detail?: { reason?: unknown }; reason?: unknown },
-  ) => {
-    let reason =
-      'reason' in event ? (event as any).reason : event.detail?.reason;
-    if (!reason) {
+  // Scan the just-rendered instance for broken links and, if any are present,
+  // throw the structured render error so the visit's catch turns it into the
+  // card's error doc. Must be called only after the route's readyPromise has
+  // settled (via #ensureRenderReady): the lazy link fetches the template
+  // pulled on resolve after the model hook, planting their sentinels then. The
+  // server-side prerenderer surfaces the same capture from the render route's
+  // post-settle scan; this is the in-browser equivalent.
+  async #scanForBrokenLinks(url: string): Promise<void> {
+    let instance = (globalThis as any).__renderModel?.instance as
+      | CardDef
+      | undefined;
+    if (!instance) {
+      return;
+    }
+    let cardApi = await this.loaderService.loader.import<typeof CardAPI>(
+      `${baseRealm.url}card-api`,
+    );
+    let renderError = brokenLinkRenderError(cardApi.getBrokenLinks(instance));
+    if (!renderError) {
       return;
     }
     let context = this.#currentContext ?? this.#contextFromDom();
     let cardType = context ? this.#cardTypeTracker.get(context) : undefined;
-    let renderErrorPayload = coerceRenderError(reason);
-    if (renderErrorPayload) {
-      let normalized = normalizeRenderError(renderErrorPayload, {
-        cardId: context?.cardId,
-      });
-      this.#renderErrorPayload = JSON.stringify(
-        withCardType(normalized, cardType),
-      );
-      return;
-    }
-    if (reason instanceof Error) {
-      this.#renderErrorPayload = reason.message;
-    } else if (typeof reason === 'string') {
-      this.#renderErrorPayload = reason;
-    } else {
-      try {
-        this.#renderErrorPayload = JSON.stringify(reason);
-      } catch (_err) {
-        this.#renderErrorPayload = String(reason);
-      }
-    }
-  };
+    let cardId = context?.cardId ?? url.replace(/\.json$/, '');
+    let payload = JSON.stringify(
+      withCardType(normalizeRenderError(renderError, { cardId }), cardType),
+    );
+    this.localIndexer.renderError = payload;
+    throw new Error(payload);
+  }
 
   #contextFromDom(): CardRenderContext | undefined {
     if (typeof document === 'undefined') {
@@ -770,20 +764,17 @@ export default class CardPrerender extends Component {
         throw new Error(this.localIndexer.renderError);
       }
       let component = routeInfo.attributes.Component;
-      this.#renderErrorPayload = undefined;
       let captured = await this.renderService.renderCardComponent(
         component,
         'outerHTML',
         'isolated',
         this.waitForLinkedData,
       );
-      if (this.#renderErrorPayload) {
-        throw new Error(this.#renderErrorPayload);
-      }
       if (typeof captured !== 'string') {
         return null;
       }
       await this.#ensureRenderReady(routeInfo);
+      await this.#scanForBrokenLinks(url);
       return this.processCapturedMarkup(captured);
     },
   );

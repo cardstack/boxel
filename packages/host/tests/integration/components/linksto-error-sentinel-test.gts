@@ -145,75 +145,57 @@ module('Integration | linksTo error sentinel producer', function (hooks) {
   test('a 404 lazy-load failure plants a link-not-found sentinel in the data bucket', async function (assert) {
     await setupRealm();
 
-    let renderErrors: string[] = [];
-    let onRenderError = (e: Event) => {
-      renderErrors.push((e as CustomEvent).detail.reason);
-    };
-    globalThis.addEventListener('boxel-render-error', onRenderError);
+    let person = await createPerson({
+      pet: { links: { self: `${testRealmURL}Pet/ghost` } },
+    });
 
-    try {
-      let person = await createPerson({
-        pet: { links: { self: `${testRealmURL}Pet/ghost` } },
-      });
+    // reading the field kicks off the lazy load
+    assert.strictEqual(
+      person.pet,
+      undefined,
+      'a not-yet-resolved broken link reads as undefined',
+    );
 
-      // reading the field kicks off the lazy load
+    await waitUntil(() => isLinkNotFound(bucketEntry(person, 'pet')));
+
+    let sentinel = bucketEntry(person, 'pet');
+    assert.true(
+      isLinkNotFound(sentinel),
+      'bucket holds a link-not-found sentinel after the 404',
+    );
+    assert.strictEqual(
+      sentinel.reference,
+      `${testRealmURL}Pet/ghost`,
+      'sentinel preserves the broken reference',
+    );
+    assert.strictEqual(
+      (sentinel.errorDoc as SerializedError).status,
+      404,
+      'errorDoc status is 404',
+    );
+
+    // `undefined` is the same nullish surface a not-loaded link produces, so
+    // existing `== null` consumer checks keep working unchanged.
+    assert.strictEqual(
+      person.pet,
+      undefined,
+      'the field getter surfaces the terminal sentinel as undefined',
+    );
+
+    let state = singularState(getRelationship(person, 'pet'));
+    assert.strictEqual(state.kind, 'not-found', 'getRelationship kind');
+    if (state.kind === 'not-found') {
       assert.strictEqual(
-        person.pet,
-        undefined,
-        'a not-yet-resolved broken link reads as undefined',
-      );
-
-      await waitUntil(() => isLinkNotFound(bucketEntry(person, 'pet')));
-
-      let sentinel = bucketEntry(person, 'pet');
-      assert.true(
-        isLinkNotFound(sentinel),
-        'bucket holds a link-not-found sentinel after the 404',
-      );
-      assert.strictEqual(
-        sentinel.reference,
+        state.reference,
         `${testRealmURL}Pet/ghost`,
-        'sentinel preserves the broken reference',
+        'getRelationship reference',
       );
+      assert.true(state.isError, 'getRelationship marks the state as an error');
       assert.strictEqual(
-        (sentinel.errorDoc as SerializedError).status,
+        state.errorDoc.status,
         404,
-        'errorDoc status is 404',
+        'getRelationship carries the errorDoc',
       );
-
-      // `undefined` is the same nullish surface a not-loaded link produces, so
-      // existing `== null` consumer checks keep working unchanged.
-      assert.strictEqual(
-        person.pet,
-        undefined,
-        'the field getter surfaces the terminal sentinel as undefined',
-      );
-
-      let state = singularState(getRelationship(person, 'pet'));
-      assert.strictEqual(state.kind, 'not-found', 'getRelationship kind');
-      if (state.kind === 'not-found') {
-        assert.strictEqual(
-          state.reference,
-          `${testRealmURL}Pet/ghost`,
-          'getRelationship reference',
-        );
-        assert.true(
-          state.isError,
-          'getRelationship marks the state as an error',
-        );
-        assert.strictEqual(
-          state.errorDoc.status,
-          404,
-          'getRelationship carries the errorDoc',
-        );
-      }
-
-      assert.ok(
-        renderErrors.length > 0,
-        'boxel-render-error dispatch still fires',
-      );
-    } finally {
-      globalThis.removeEventListener('boxel-render-error', onRenderError);
     }
   });
 
