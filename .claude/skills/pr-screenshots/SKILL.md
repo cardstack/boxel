@@ -41,8 +41,8 @@ When a followup materially changes the PR's UI, add a fresh preview rather than 
 ## Generating a preview when the diff doesn't produce one
 
 - Build a self-contained HTML file mirroring the component's CSS at `/tmp/<slug>-preview/preview.html`.
-- Drive `mcp__chrome-devtools__navigate_page` to `file://` that path, then `take_screenshot` with `fullPage: true`.
-- For complex layouts, take multiple focused screenshots at different viewport sizes, using `resize_page` between them.
+- Drive `mcp__chrome-devtools__navigate_page` to the full `file:///tmp/<slug>-preview/preview.html` URL (triple slash), then `mcp__chrome-devtools__take_screenshot` with `fullPage: true`.
+- For complex layouts, take multiple focused screenshots at different viewport sizes, using `mcp__chrome-devtools__resize_page` between them.
 
 ## Open-source / privacy
 
