@@ -288,7 +288,9 @@ module('Integration | overlay-menu-items', function (hooks) {
       },
     );
     let fileURL = `${testRealmURL}ParentWithFile/notes.md`;
-    let fileCardSelector = `[data-test-overlay-card="${fileURL}"]`;
+    // The overlay strips the file extension from cardId for its data-test
+    // attributes (removeFileExtension), so data-test-overlay-card lacks `.md`.
+    let fileCardSelector = `[data-test-overlay-card="${testRealmURL}ParentWithFile/notes"]`;
     await waitFor(`[data-test-card="${fileURL}"]`);
     await triggerEvent(`[data-test-card="${fileURL}"]`, 'mouseenter');
     await waitFor(`${fileCardSelector} [data-test-overlay-more-options]`);

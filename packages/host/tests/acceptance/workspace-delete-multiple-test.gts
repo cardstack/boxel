@@ -1,4 +1,10 @@
-import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  findAll,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -219,7 +225,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    // Verify overlay checkboxes are not checked
+    // Verify overlay chrome is gone. The overlay clears on hover-out via a
+    // 100ms hover-bridge timer (native setTimeout, not tracked by settled),
+    // so poll rather than asserting synchronously.
+    await waitUntil(() => findAll('[data-test-overlay-card]').length === 0);
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
 
