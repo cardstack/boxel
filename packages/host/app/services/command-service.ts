@@ -469,6 +469,13 @@ export default class CommandService extends Service {
         }
         let message = roomResource.messages.find((m) => m.eventId === eventId);
         if (!message) {
+          // The event was queued for auto-apply but its message isn't in the
+          // room timeline yet — room processing lagged or dropped it. The event
+          // is consumed here and never retried, so a patch that should
+          // auto-apply silently won't. Log enough to recognize that race.
+          console.log(
+            `[code-patch-autoapply] event ${eventId} queued but no matching message in room ${roomId}; isProcessing=${roomResource.isProcessing}, messageCount=${roomResource.messages.length}`,
+          );
           continue;
         }
         if (message.agentId !== this.matrixService.agentId) {
@@ -838,6 +845,18 @@ export default class CommandService extends Service {
         if (patchResult.status === 'applied') {
           this.executedCommandRequestIds.add(
             `${codeData.eventId}:${codeData.codeBlockIndex}`,
+          );
+        } else if (this.acceptingAllRoomIds.has(roomId)) {
+          // During an auto-apply / accept-all run a non-'applied' result means
+          // the patch never reaches the "applied" UI state a caller may be
+          // waiting on. Record why (e.g. a search block that no longer matches
+          // because a prior chained patch hadn't landed yet).
+          console.log(
+            `[code-patch-autoapply] patch ${codeData.eventId}:${codeData.codeBlockIndex} on ${fileUrl} did not apply (status=${patchResult.status}${
+              patchResult.failureReason
+                ? `, reason=${patchResult.failureReason}`
+                : ''
+            })`,
           );
         }
       }
