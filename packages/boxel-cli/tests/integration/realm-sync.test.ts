@@ -643,12 +643,21 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
-    // Pre-sync snapshot — proves each side actually holds the bytes we just
-    // wrote. If a future failure shows mismatched state here, the bug is
-    // upstream of sync (writeLocalFile / writeRemoteFile didn't land), not in
-    // conflict resolution.
+    // Pre-sync snapshot — confirm each side holds the bytes we just wrote
+    // before syncing. The remote read polls because writeRemoteFile just
+    // *created* overlap.gts: under the same brief post-write visibility lag
+    // this test guards against, an immediate single-shot GET of a
+    // freshly-created file can 404 (which would throw and reintroduce a
+    // setup flake). fetchRemoteFileEventually returns the last body without
+    // throwing, so the snapshot stays diagnostic-only. If a future failure
+    // shows mismatched state here, the bug is upstream of sync
+    // (writeLocalFile / writeRemoteFile didn't land), not conflict resolution.
     const preLocal = readLocalFile(localDir, 'overlap.gts');
-    const preRemote = await fetchRemoteFile(realmUrl, 'overlap.gts');
+    const { body: preRemote } = await fetchRemoteFileEventually(
+      realmUrl,
+      'overlap.gts',
+      'v = "remote"',
+    );
 
     await sync(localDir, realmUrl, {
       preferLocal: true,
