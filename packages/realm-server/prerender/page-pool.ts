@@ -874,24 +874,6 @@ export class PagePool {
     return evicted;
   }
 
-  // Dispose every affinity (active pages and orphaned shared contexts)
-  // regardless of idle age, awaiting in-flight renders so none outlive the
-  // call. Unlike `evictIdleAffinities`, this drains the whole pool back to
-  // a cold-but-alive state while keeping the browser up for reuse. Used to
-  // quiesce a pool whose upstream realm-server is about to be torn down.
-  async disposeAllAffinities(): Promise<string[]> {
-    let keys = new Set<string>([
-      ...this.#affinityPages.keys(),
-      ...this.#sharedContexts.keys(),
-    ]);
-    let disposed: string[] = [];
-    for (let affinityKey of keys) {
-      await this.disposeAffinity(affinityKey);
-      disposed.push(affinityKey);
-    }
-    return disposed;
-  }
-
   // `queue` defaults to `'file'` so existing tests and call sites that
   // don't care about the queue split keep working unchanged. Production
   // call sites in RenderRunner always pass an explicit queue type.

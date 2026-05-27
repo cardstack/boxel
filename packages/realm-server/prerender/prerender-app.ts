@@ -938,26 +938,6 @@ export function buildPrerenderApp(options: {
     }
   });
 
-  // Drain every affinity's pages back to a cold-but-alive pool, awaiting
-  // in-flight renders. The realm-test-harness calls this just before it
-  // tears down the realm-server this prerender renders against, so no warm
-  // page or in-flight render outlives that server and fails with
-  // ECONNREFUSED on the next module fetch.
-  router.post('/evict-affinities', async (ctxt: Koa.Context) => {
-    try {
-      let disposed = await prerenderer.disposeAllAffinities();
-      ctxt.status = 200;
-      ctxt.body = JSON.stringify({ disposed });
-    } catch (err: any) {
-      Sentry.captureException(err);
-      log.error('Unhandled error in /evict-affinities:', err);
-      ctxt.status = 500;
-      ctxt.body = {
-        errors: [{ status: 500, message: err?.message ?? 'Unknown error' }],
-      };
-    }
-  });
-
   app
     .use((ctxt: Koa.Context, next: Koa.Next) => {
       if (
