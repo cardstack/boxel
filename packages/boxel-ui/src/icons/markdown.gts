@@ -4,13 +4,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
-  <svg fill='currentColor' viewBox='0 0 16 16' ...attributes><text
-      x='8'
-      y='11.5'
-      font-family='ui-monospace, SFMono-Regular, Menlo, monospace'
-      font-size='9.5'
-      font-weight='800'
-      text-anchor='middle'
+  <svg fill="currentColor" viewBox="0 0 16 16" ...attributes><text
+      x="8"
+      y="11.5"
+      font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+      font-size="9.5"
+      font-weight="800"
+      text-anchor="middle"
     >MD</text></svg>
 </template>;
 

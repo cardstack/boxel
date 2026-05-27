@@ -23,46 +23,46 @@ interface Signature {
 
 const Message: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn 'boxel-message' hide-meta=@hideMeta full-width=@fullWidth}}
+    class={{cn "boxel-message" hide-meta=@hideMeta full-width=@fullWidth}}
     data-test-boxel-message
     ...attributes
   >
-    <div class={{cn 'meta' boxel-sr-only=@hideMeta}}>
+    <div class={{cn "meta" boxel-sr-only=@hideMeta}}>
       {{#unless @hideMeta}}
         {{#if @imgURL}}
           <img
             src={{@imgURL}}
-            alt={{if @name @name 'participant'}}
-            width='40px'
-            height='40px'
-            class={{cn 'avatar-img' avatar-img--not-round=@notRound}}
+            alt={{if @name @name "participant"}}
+            width="40px"
+            height="40px"
+            class={{cn "avatar-img" avatar-img--not-round=@notRound}}
             data-test-boxel-message-avatar
           />
         {{else}}
           <Profile
-            width='40px'
-            height='40px'
-            aria-label={{if @name @name 'participant'}}
+            width="40px"
+            height="40px"
+            aria-label={{if @name @name "participant"}}
           />
         {{/if}}
       {{/unless}}
-      <h3 class='info'>
+      <h3 class="info">
         {{#if @name}}
           <span
-            class={{cn 'name' boxel-sr-only=@hideName}}
+            class={{cn "name" boxel-sr-only=@hideName}}
             data-test-boxel-message-name
           >
             {{@name}}
           </span>
         {{/if}}
         {{#let (if @datetime @datetime (dayjs)) as |datetime|}}
-          <time datetime={{datetime}} class='time'>
-            {{dayjsFormat datetime 'MM/DD/YYYY, h:mm A'}}
+          <time datetime={{datetime}} class="time">
+            {{dayjsFormat datetime "MM/DD/YYYY, h:mm A"}}
           </time>
         {{/let}}
       </h3>
     </div>
-    <div class='content'>
+    <div class="content">
       {{yield}}
     </div>
   </div>

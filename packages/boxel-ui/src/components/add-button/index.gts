@@ -19,10 +19,10 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
   <IconButton
     @loading={{@loading}}
     @icon={{PlusIcon}}
-    @width={{if @iconWidth @iconWidth '20px'}}
-    @height={{if @iconHeight @iconHeight '20px'}}
-    class='boxel-add-button'
-    aria-label={{if @loading 'loading' 'add'}}
+    @width={{if @iconWidth @iconWidth "20px"}}
+    @height={{if @iconHeight @iconHeight "20px"}}
+    class="boxel-add-button"
+    aria-label={{if @loading "loading" "add"}}
     data-test-create-new-card-button
     ...attributes
   />

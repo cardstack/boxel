@@ -1,12 +1,12 @@
-import { hash } from '@ember/helper';
-import { render } from '@ember/test-helpers';
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-
 import {
   formatDateTime,
   formatRelativeTime,
 } from '@cardstack/boxel-ui/helpers';
+import { hash } from '@ember/helper';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 const BASE_DATE = new Date('2024-03-15T15:45:00.000Z');
 const REFERENCE_TIME = new Date('2024-03-15T17:45:00.000Z'); // 2 hours after BASE_DATE

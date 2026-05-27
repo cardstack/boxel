@@ -57,7 +57,7 @@ export default class PickerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Picker'>
+    <FreestyleUsage @name="Picker">
       <:description>
         <p>
           Picker is a reusable multi-select component that provides a labeled
@@ -116,39 +116,39 @@ export default class PickerUsage extends Component {
         </ol>
       </:description>
       <:example>
-        <div class='picker-usage-examples'>
-          <div class='picker-usage-example'>
+        <div class="picker-usage-examples">
+          <div class="picker-usage-example">
             <h3>Realm Picker (with icons)</h3>
             <Picker
               @options={{this.realmOptions}}
               @selected={{this.selectedRealms}}
               @onChange={{this.onRealmChange}}
-              @label='Realm'
-              @placeholder='Select realms'
-              @searchPlaceholder='search for a realm'
+              @label="Realm"
+              @placeholder="Select realms"
+              @searchPlaceholder="search for a realm"
             />
           </div>
 
-          <div class='picker-usage-example'>
+          <div class="picker-usage-example">
             <h3>Type Picker (no icons)</h3>
             <Picker
               @options={{this.typeOptions}}
               @selected={{this.selectedTypes}}
               @onChange={{this.onTypeChange}}
-              @label='Type'
-              @placeholder='Select types'
+              @label="Type"
+              @placeholder="Select types"
             />
           </div>
 
-          <div class='picker-usage-example'>
+          <div class="picker-usage-example">
             <h3>Realm Picker (with max display limit of 2)</h3>
             <Picker
               @options={{this.realmOptions}}
               @selected={{this.selectedRealms}}
               @onChange={{this.onRealmChange}}
-              @label='Realm'
-              @placeholder='Select realms'
-              @searchPlaceholder='search for a realm'
+              @label="Realm"
+              @placeholder="Select realms"
+              @searchPlaceholder="search for a realm"
               @maxSelectedDisplay={{2}}
             />
           </div>

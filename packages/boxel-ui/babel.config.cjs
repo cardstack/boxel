@@ -17,6 +17,7 @@ const isCompat = Boolean(process.env.ENABLE_COMPAT_BUILD);
 
 module.exports = {
   plugins: [
+    'ember-concurrency/async-arrow-task-transform',
     [
       '@babel/plugin-transform-typescript',
       {

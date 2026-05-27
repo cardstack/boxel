@@ -1,21 +1,21 @@
 import { module, test } from 'qunit';
 
 import {
+  type KanbanPlacement,
   autoPlaceKanban,
   cardsInColumn,
-  kanbanColumnCount as columnCount,
   findInsertionFromPointer,
+  kanbanColumnCount as columnCount,
   resolveInsertion,
-  type KanbanPlacement,
-} from '@cardstack/boxel-ui/components';
+} from '../../src/components.ts';
 
 function stubRect(
   element: Element,
   rect: {
+    height: number;
     left: number;
     top: number;
     width: number;
-    height: number;
   },
 ): void {
   Object.defineProperty(element, 'getBoundingClientRect', {

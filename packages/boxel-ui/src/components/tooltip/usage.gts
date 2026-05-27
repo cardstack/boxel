@@ -53,7 +53,7 @@ export default class TooltipUsage extends Component {
 
   <template>
     <div
-      class='header-freestyle-container'
+      class="header-freestyle-container"
       style={{cssVar
         boxel-tooltip-background-color=this.tooltipBackgroundColor.value
         boxel-tooltip-text-color=this.tooltipTextColor.value
@@ -63,7 +63,7 @@ export default class TooltipUsage extends Component {
         boxel-tooltip-font=this.tooltipFont.value
       }}
     >
-      <FreestyleUsage @name='Tooltip'>
+      <FreestyleUsage @name="Tooltip">
         <:description>
           Tooltips provide additional information when hovering over an element.
           They support theme variants and customizable styling.
@@ -77,8 +77,8 @@ export default class TooltipUsage extends Component {
           >
             <:trigger>
               <BoxelButton
-                {{on 'click' (fn this.log 'button clicked')}}
-                id='button'
+                {{on "click" (fn this.log "button clicked")}}
+                id="button"
               >
                 Button With Tooltip
               </BoxelButton>
@@ -91,25 +91,25 @@ export default class TooltipUsage extends Component {
 
         <:api as |Args|>
           <Args.String
-            @name='placement'
+            @name="placement"
             @optional={{true}}
-            @description='The positioning of the tooltip relative to the reference element.'
+            @description="The positioning of the tooltip relative to the reference element."
             @value={{this.placement}}
-            @options={{array 'top' 'bottom' 'left' 'right'}}
+            @options={{array "top" "bottom" "left" "right"}}
             @onInput={{fn (mut this.placement)}}
-            @defaultValue='top'
+            @defaultValue="top"
           />
           <Args.Number
-            @name='offset'
+            @name="offset"
             @description="A modifier that adjusts the tooltip's position along specific axes."
             @value={{this.offset}}
             @onInput={{fn (mut this.offset)}}
-            @defaultValue='6'
+            @defaultValue="6"
           />
           <Args.String
-            @name='variant'
+            @name="variant"
             @optional={{true}}
-            @description='Theme-based variant for consistent styling'
+            @description="Theme-based variant for consistent styling"
             @defaultValue={{this.tooltipVariantDefault}}
             @options={{this.tooltipVariants}}
             @onInput={{fn (mut this.variant)}}
@@ -119,44 +119,44 @@ export default class TooltipUsage extends Component {
 
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-tooltip-background-color'
-            @type='color'
-            @description='Global override for tooltip background color (highest priority)'
+            @name="boxel-tooltip-background-color"
+            @type="color"
+            @description="Global override for tooltip background color (highest priority)"
             @value={{this.tooltipBackgroundColor.value}}
             @onInput={{this.tooltipBackgroundColor.update}}
           />
           <Css.Basic
-            @name='boxel-tooltip-text-color'
-            @type='color'
-            @description='Global override for tooltip text color (highest priority)'
+            @name="boxel-tooltip-text-color"
+            @type="color"
+            @description="Global override for tooltip text color (highest priority)"
             @value={{this.tooltipTextColor.value}}
             @onInput={{this.tooltipTextColor.update}}
           />
           <Css.Basic
-            @name='boxel-tooltip-border-color'
-            @type='color'
-            @description='Global override for tooltip border color (highest priority)'
+            @name="boxel-tooltip-border-color"
+            @type="color"
+            @description="Global override for tooltip border color (highest priority)"
             @value={{this.tooltipBorderColor.value}}
             @onInput={{this.tooltipBorderColor.update}}
           />
           <Css.Basic
-            @name='boxel-tooltip-font'
-            @type='font'
-            @description='Global override for tooltip font (highest priority)'
+            @name="boxel-tooltip-font"
+            @type="font"
+            @description="Global override for tooltip font (highest priority)"
             @value={{this.tooltipFont.value}}
             @onInput={{this.tooltipFont.update}}
           />
           <Css.Basic
-            @name='boxel-tooltip-border-radius'
-            @type='dimension'
-            @description='Border radius of the tooltip'
+            @name="boxel-tooltip-border-radius"
+            @type="dimension"
+            @description="Border radius of the tooltip"
             @value={{this.tooltipBorderRadius.value}}
             @onInput={{this.tooltipBorderRadius.update}}
           />
           <Css.Basic
-            @name='boxel-tooltip-padding'
-            @type='dimension'
-            @description='Padding of the tooltip'
+            @name="boxel-tooltip-padding"
+            @type="dimension"
+            @description="Padding of the tooltip"
             @value={{this.tooltipPadding.value}}
             @onInput={{this.tooltipPadding.update}}
           />

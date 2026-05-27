@@ -15,12 +15,11 @@ import ContextButton from './components/context-button/index.gts';
 import CopyButton from './components/copy-button/index.gts';
 import DateRangePicker from './components/date-range-picker/index.gts';
 import DndKanbanBoard, {
-  type DndItem,
   DndColumn,
 } from './components/drag-and-drop/index.gts';
-import BoxelDropdown, {
-  type DropdownAPI as BoxelDropdownAPI,
-} from './components/dropdown/index.gts';
+export { type DndItem } from './components/drag-and-drop/index.gts';
+import BoxelDropdown from './components/dropdown/index.gts';
+export { type DropdownAPI as BoxelDropdownAPI } from './components/dropdown/index.gts';
 import EmailInput from './components/email-input/index.gts';
 import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
 import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
@@ -32,12 +31,15 @@ import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
 import IconButton from './components/icon-button/index.gts';
 import BoxelInput, {
-  type InputBottomTreatment as BoxelInputBottomTreatment,
-  type InputValidationState as BoxelInputValidationState,
   InputBottomTreatments as BoxelInputBottomTreatments,
   InputValidationStates as BoxelInputValidationStates,
 } from './components/input/index.gts';
+export {
+  type InputBottomTreatment as BoxelInputBottomTreatment,
+  type InputValidationState as BoxelInputValidationState,
+} from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
+import { KanbanDragManager } from './components/kanban/drag.gts';
 import {
   type InsertionPoint,
   type KanbanColumnConfig,
@@ -46,10 +48,9 @@ import {
   cardsInColumn,
   columnCount as kanbanColumnCount,
   findInsertionFromPointer,
-  KanbanDragManager,
-  KanbanPlane,
   resolveInsertion,
-} from './components/kanban/index.gts';
+} from './components/kanban/engine.ts';
+import { KanbanPlane } from './components/kanban/plane.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
@@ -60,7 +61,8 @@ import BoxelMultiSelect, {
   BoxelMultiSelectBasic,
 } from './components/multi-select/index.gts';
 import PhoneInput from './components/phone-input/index.gts';
-import Picker, { type PickerOption } from './components/picker/index.gts';
+import Picker from './components/picker/index.gts';
+export { type PickerOption } from './components/picker/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import ProgressRadial from './components/progress-radial/index.gts';
@@ -102,13 +104,10 @@ export {
   BoxelButton,
   BoxelContainer,
   BoxelDropdown,
-  BoxelDropdownAPI,
   BoxelHeader,
   BoxelInput,
-  BoxelInputBottomTreatment,
   BoxelInputBottomTreatments,
   BoxelInputGroup,
-  BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMessage,
   BoxelMultiSelect,
@@ -126,7 +125,6 @@ export {
   CopyButton,
   DateRangePicker,
   DndColumn,
-  DndItem,
   DndKanbanBoard,
   EmailInput,
   EntityDisplayWithIcon,
@@ -148,7 +146,6 @@ export {
   Modal,
   PhoneInput,
   Picker,
-  PickerOption,
   Pill,
   ProgressBar,
   ProgressRadial,

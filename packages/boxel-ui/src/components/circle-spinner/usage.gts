@@ -13,23 +13,23 @@ export default class CircleSpinnerUsage extends Component {
   @cssVariable declare iconColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='CircleSpinner'>
+    <FreestyleUsage @name="CircleSpinner">
       <:description>
         Spinner by composing IconCircle component and CSS. Takes on the size of
         its container.
       </:description>
       <:example>
-        <div class='example-container'>
+        <div class="example-container">
           <CircleSpinner style={{cssVar icon-color=this.iconColor.value}} />
         </div>
       </:example>
 
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-icon-color'
-          @type='color'
-          @description='Color of the stroke of the circle'
-          @defaultValue='#000'
+          @name="boxel-icon-color"
+          @type="color"
+          @description="Color of the stroke of the circle"
+          @defaultValue="#000"
           @value={{this.iconColor.value}}
           @onInput={{this.iconColor.update}}
         />

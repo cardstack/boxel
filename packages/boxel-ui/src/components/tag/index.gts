@@ -17,14 +17,14 @@ export interface TagSignature {
 
 const Tag: TemplateOnlyComponent<TagSignature> = <template>
   <Pill
-    class='tag-pill'
+    class="tag-pill"
     @pillBackgroundColor={{@pillColor}}
     @pillBorderColor={{if @borderColor @borderColor @pillColor}}
     @pillFontColor={{@fontColor}}
     @tag={{@htmlTag}}
     ...attributes
   >
-    <span class={{cn 'tag-name' ellipsize=@ellipsize}}>
+    <span class={{cn "tag-name" ellipsize=@ellipsize}}>
       {{@name}}
     </span>
   </Pill>

@@ -35,7 +35,7 @@ export default class FieldUsage extends Component {
   declare boxelFieldLabelJustifyContent: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='Field'>
+    <FreestyleUsage @name="Field">
       <:example>
         <BoxelFieldContainer
           @tag={{this.tag}}
@@ -57,75 +57,75 @@ export default class FieldUsage extends Component {
 
       <:api as |Args|>
         <Args.String
-          @name='tag'
+          @name="tag"
           @description="html tag to use for the field (ie. use 'label' tag if this is an input/textarea field)"
-          @defaultValue='div'
+          @defaultValue="div"
           @value={{this.tag}}
           @onInput={{fn (mut this.tag)}}
         />
         <Args.String
-          @name='fieldId'
-          @description='field id'
+          @name="fieldId"
+          @description="field id"
           @value={{this.id}}
           @onInput={{fn (mut this.id)}}
         />
         <Args.String
-          @name='label'
-          @description='field label'
+          @name="label"
+          @description="field label"
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
         />
         <Args.Component
-          @name='icon'
-          @description='icon component reference'
+          @name="icon"
+          @description="icon component reference"
           @value={{this.icon}}
           @options={{ALL_ICON_COMPONENTS}}
           @onChange={{fn (mut this.icon)}}
         />
         <Args.Bool
-          @name='vertical'
-          @description='Whether the field should be displayed vertically'
-          @defaultValue='false'
+          @name="vertical"
+          @description="Whether the field should be displayed vertically"
+          @defaultValue="false"
           @onInput={{fn (mut this.vertical)}}
           @value={{this.vertical}}
         />
         <Args.String
-          @name='horizontalLabelSize'
-          @description='Width of the label column (only applies to horizontal layout)'
-          @options={{array 'small' 'default'}}
-          @defaultValue='minmax(4rem, 25%)'
+          @name="horizontalLabelSize"
+          @description="Width of the label column (only applies to horizontal layout)"
+          @options={{array "small" "default"}}
+          @defaultValue="minmax(4rem, 25%)"
           @onInput={{fn (mut this.horizontalLabelSize)}}
           @value={{this.horizontalLabelSize}}
         />
         <Args.Object
-          @name='labelFontSize'
-          @description='label font-size'
-          @options={{array 'small' 'default'}}
+          @name="labelFontSize"
+          @description="label font-size"
+          @options={{array "small" "default"}}
           @onInput={{fn (mut this.labelFontSize)}}
           @value={{this.labelFontSize}}
         />
         <Args.Bool
-          @name='centeredDisplay'
-          @description='Whether the field content should have a special centered display'
-          @defaultValue='false'
+          @name="centeredDisplay"
+          @description="Whether the field content should have a special centered display"
+          @defaultValue="false"
           @onInput={{fn (mut this.centeredDisplay)}}
           @value={{this.centeredDisplay}}
         />
-        <Args.Yield @description='Yield value or form field' />
+        <Args.Yield @description="Yield value or form field" />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-field-label-align'
-          @type='align-items'
-          @description='position of the label text within the label area'
+          @name="boxel-field-label-align"
+          @type="align-items"
+          @description="position of the label text within the label area"
           @value={{this.boxelFieldLabelAlign.value}}
           @defaultValue={{this.boxelFieldLabelAlign.defaults}}
           @onInput={{this.boxelFieldLabelAlign.update}}
         />
         <Css.Basic
-          @name='boxel-field-label-justify-content'
-          @type='justify-content'
-          @description='alignment of label children along main axis'
+          @name="boxel-field-label-justify-content"
+          @type="justify-content"
+          @description="alignment of label children along main axis"
           @value={{this.boxelFieldLabelJustifyContent.value}}
           @defaultValue={{this.boxelFieldLabelJustifyContent.defaults}}
           @onInput={{this.boxelFieldLabelJustifyContent.update}}
@@ -133,52 +133,52 @@ export default class FieldUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Usage with Boxel::Input'>
+    <FreestyleUsage @name="Usage with Boxel::Input">
       <:example>
-        <BoxelFieldContainer @tag='label' @label='Name'>
-          <BoxelInput @id='usage-boxel-input' @value='' />
+        <BoxelFieldContainer @tag="label" @label="Name">
+          <BoxelInput @id="usage-boxel-input" @value="" />
         </BoxelFieldContainer>
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Usage with Boxel::Input (invalid state)'>
+    <FreestyleUsage @name="Usage with Boxel::Input (invalid state)">
       <:example>
         <BoxelFieldContainer
-          @tag='label'
-          @label='Name'
+          @tag="label"
+          @label="Name"
           @vertical={{this.vertical2}}
           @horizontalLabelSize={{this.horizontalLabelSize2}}
           @icon={{this.icon2}}
         >
           <BoxelInput
-            @id=''
-            @state='invalid'
-            @value=''
-            @errorMessage='This is a required field'
-            @helperText='Please enter a value'
+            @id=""
+            @state="invalid"
+            @value=""
+            @errorMessage="This is a required field"
+            @helperText="Please enter a value"
           />
         </BoxelFieldContainer>
       </:example>
       <:api as |Args|>
         <Args.Component
-          @name='icon'
-          @description='icon component reference'
+          @name="icon"
+          @description="icon component reference"
           @value={{this.icon2}}
           @options={{ALL_ICON_COMPONENTS}}
           @onChange={{fn (mut this.icon2)}}
         />
         <Args.Bool
-          @name='vertical'
-          @description='Whether the field should be displayed vertically'
-          @defaultValue='false'
+          @name="vertical"
+          @description="Whether the field should be displayed vertically"
+          @defaultValue="false"
           @onInput={{fn (mut this.vertical2)}}
           @value={{this.vertical2}}
         />
         <Args.String
-          @name='horizontalLabelSize'
-          @description='Width of the label column (only applies to horizontal layout)'
-          @options={{array 'small' 'default'}}
-          @defaultValue='minmax(4rem, 25%)'
+          @name="horizontalLabelSize"
+          @description="Width of the label column (only applies to horizontal layout)"
+          @options={{array "small" "default"}}
+          @defaultValue="minmax(4rem, 25%)"
           @onInput={{fn (mut this.horizontalLabelSize2)}}
           @value={{this.horizontalLabelSize2}}
         />

@@ -21,7 +21,7 @@ export default class BoxelContainerUsage extends Component<Signature> {
   @tracked private display?: BoxelContainerDisplayOption;
 
   <template>
-    <FreestyleUsage @name='BoxelContainer'>
+    <FreestyleUsage @name="BoxelContainer">
       <:description>
         A container that provides standard padding, with options to make it grid
         or flexbox.
@@ -29,7 +29,7 @@ export default class BoxelContainerUsage extends Component<Signature> {
       <:example>
         <BoxelContainer
           @display={{this.display}}
-          @tag={{if this.tag this.tag 'div'}}
+          @tag={{if this.tag this.tag "div"}}
         >
           <h3>h3</h3>
           <p>Hello</p>
@@ -37,21 +37,21 @@ export default class BoxelContainerUsage extends Component<Signature> {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='tag'
-          @description='HTML element tag name (ie. button, section, ul, etc)'
+          @name="tag"
+          @description="HTML element tag name (ie. button, section, ul, etc)"
           @value={{this.tag}}
-          @defaultValue='div'
+          @defaultValue="div"
           @optional={{true}}
           @onInput={{fn (mut this.tag)}}
         />
         <Args.String
-          @name='display'
+          @name="display"
           @optional={{true}}
-          @description='Css display property for grid, flex, inline-grid, and inline-flex'
-          @defaultValue='HTML element default'
+          @description="Css display property for grid, flex, inline-grid, and inline-flex"
+          @defaultValue="HTML element default"
           @options={{this.displayOptions}}
           @onInput={{fn (mut this.display)}}
-          @value='default'
+          @value="default"
         />
       </:api>
     </FreestyleUsage>

@@ -86,7 +86,7 @@ let managePanelsChanged = modifier(
 export default class ResizablePanelGroup extends Component<Signature> {
   <template>
     <div
-      class='boxel-panel-group {{@orientation}}'
+      class="boxel-panel-group {{@orientation}}"
       data-boxel-panel-group
       data-boxel-panel-group-id={{this.id}}
       {{managePanelsChanged this}}
@@ -113,7 +113,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         display: flex;
         height: 100%;
         width: 100%;
-        overflow: 'hidden';
+        overflow: "hidden";
       }
       .vertical {
         flex-direction: column;

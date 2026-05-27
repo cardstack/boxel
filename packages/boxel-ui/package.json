@@ -15,7 +15,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./addon-main.js": "./addon-main.cjs",
-    "./*": "./src/*"
+    "./*": "./src/*.ts"
   },
   "files": [
     "addon-main.cjs",
@@ -30,8 +30,8 @@
     "lint:format": "prettier . --cache --check",
     "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",
     "lint:hbs:fix": "ember-template-lint . --fix --no-error-on-unmatched-pattern",
-    "lint:js": "eslint . --cache",
-    "lint:js:fix": "eslint . --fix",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "ember-tsc --noEmit",
     "start": "vite dev",
     "test": "vite build --mode=development --out-dir dist-tests && testem --file testem.cjs ci --port 0"
@@ -75,6 +75,7 @@
     "@babel/eslint-parser": "^7.25.1",
     "@babel/plugin-transform-typescript": "^7.25.2",
     "@babel/runtime": "^7.25.6",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@ember/app-tsconfig": "^1.0.0",
     "@ember/library-tsconfig": "^1.0.0",
     "@ember/optional-features": "^2.2.0",
@@ -90,6 +91,8 @@
     "@glint/tsserver-plugin": "^2.0.0",
     "@rollup/plugin-babel": "^6.0.4",
     "@types/qunit": "^2.19.12",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
     "axe-core": "^4.0.0",
     "babel-plugin-ember-template-compilation": "^4.0.0",
     "concurrently": "^9.0.1",
@@ -101,11 +104,13 @@
     "ember-source": "^6.7.0",
     "ember-strict-application-resolver": "^0.1.0",
     "ember-template-lint": "^7.9.0",
-    "eslint": "^9.17.0",
-    "eslint-config-prettier": "^10.1.5",
-    "eslint-plugin-ember": "^12.3.3",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-n": "^17.15.1",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-ember": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "eslint-plugin-simple-import-sort": "catalog:",
+    "eslint-plugin-typescript-sort-keys": "catalog:",
     "decorator-transforms": "^2.2.2",
     "globals": "^16.1.0",
     "prettier": "^3.4.2",
@@ -113,8 +118,7 @@
     "qunit": "^2.24.1",
     "qunit-dom": "^3.4.0",
     "testem": "^3.15.1",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.19.1",
+    "typescript": "catalog:",
     "vite": "^8.0.14"
   },
   "ember": {

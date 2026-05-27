@@ -19,17 +19,17 @@ interface Signature {
 
 export default class ColorPicker extends Component<Signature> {
   <template>
-    <div class='color-picker' ...attributes>
-      <label class={{cn 'color-input-container' disabled=@disabled}}>
-        <span class='boxel-sr-only'>Color Picker</span>
+    <div class="color-picker" ...attributes>
+      <label class={{cn "color-input-container" disabled=@disabled}}>
+        <span class="boxel-sr-only">Color Picker</span>
         <Swatch
-          class='color-preview'
+          class="color-preview"
           @color={{@color}}
           @hideLabel={{true}}
-          @style='round'
+          @style="round"
         />
         <BoxelInput
-          type='color'
+          type="color"
           @value={{@color}}
           @onInput={{@onChange}}
           @disabled={{@disabled}}
@@ -38,7 +38,7 @@ export default class ColorPicker extends Component<Signature> {
       </label>
 
       <BoxelInput
-        class='color-text-input'
+        class="color-text-input"
         @value={{@color}}
         @onInput={{@onChange}}
         @disabled={{@disabled}}
@@ -49,12 +49,12 @@ export default class ColorPicker extends Component<Signature> {
       {{#if @color}}
         {{#unless @disabled}}
           <IconButton
-            class='remove'
+            class="remove"
             @icon={{IconX}}
-            @width='16px'
-            @height='16px'
-            {{on 'click' this.remove}}
-            aria-label='Unset color'
+            @width="16px"
+            @height="16px"
+            {{on "click" this.remove}}
+            aria-label="Unset color"
             data-test-remove-color
           />
         {{/unless}}

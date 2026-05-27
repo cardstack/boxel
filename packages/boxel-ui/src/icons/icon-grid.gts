@@ -5,61 +5,61 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns='http://www.w3.org/2000/svg'
-    width='23'
-    height='19'
-    viewBox='0 0 23 19'
+    xmlns="http://www.w3.org/2000/svg"
+    width="23"
+    height="19"
+    viewBox="0 0 23 19"
     ...attributes
   ><g
-      fill='none'
-      stroke='var(--icon-color, currentColor)'
-      stroke-width='1.5'
-    ><rect width='4' height='6' x='1.5' y='1.5' stroke='none' rx='.5' /><rect
-        width='5.5'
-        height='7.5'
-        x='.75'
-        y='.75'
-        rx='1.25'
-      /><rect width='4' height='6' x='9.5' y='1.5' stroke='none' rx='.5' /><rect
-        width='5.5'
-        height='7.5'
-        x='8.75'
-        y='.75'
-        rx='1.25'
+      fill="none"
+      stroke="var(--icon-color, currentColor)"
+      stroke-width="1.5"
+    ><rect width="4" height="6" x="1.5" y="1.5" stroke="none" rx=".5" /><rect
+        width="5.5"
+        height="7.5"
+        x=".75"
+        y=".75"
+        rx="1.25"
+      /><rect width="4" height="6" x="9.5" y="1.5" stroke="none" rx=".5" /><rect
+        width="5.5"
+        height="7.5"
+        x="8.75"
+        y=".75"
+        rx="1.25"
       /><rect
-        width='4'
-        height='6'
-        x='17.5'
-        y='1.5'
-        stroke='none'
-        rx='.5'
-      /><rect width='5.5' height='7.5' x='16.75' y='.75' rx='1.25' /><rect
-        width='4'
-        height='6'
-        x='1.5'
-        y='11.5'
-        stroke='none'
-        rx='.5'
-      /><rect width='5.5' height='7.5' x='.75' y='10.75' rx='1.25' /><rect
-        width='4'
-        height='6'
-        x='9.5'
-        y='11.5'
-        stroke='none'
-        rx='.5'
-      /><rect width='5.5' height='7.5' x='8.75' y='10.75' rx='1.25' /><rect
-        width='4'
-        height='6'
-        x='17.5'
-        y='11.5'
-        stroke='none'
-        rx='.5'
+        width="4"
+        height="6"
+        x="17.5"
+        y="1.5"
+        stroke="none"
+        rx=".5"
+      /><rect width="5.5" height="7.5" x="16.75" y=".75" rx="1.25" /><rect
+        width="4"
+        height="6"
+        x="1.5"
+        y="11.5"
+        stroke="none"
+        rx=".5"
+      /><rect width="5.5" height="7.5" x=".75" y="10.75" rx="1.25" /><rect
+        width="4"
+        height="6"
+        x="9.5"
+        y="11.5"
+        stroke="none"
+        rx=".5"
+      /><rect width="5.5" height="7.5" x="8.75" y="10.75" rx="1.25" /><rect
+        width="4"
+        height="6"
+        x="17.5"
+        y="11.5"
+        stroke="none"
+        rx=".5"
       /><rect
-        width='5.5'
-        height='7.5'
-        x='16.75'
-        y='10.75'
-        rx='1.25'
+        width="5.5"
+        height="7.5"
+        x="16.75"
+        y="10.75"
+        rx="1.25"
       /></g></svg>
 </template>;
 

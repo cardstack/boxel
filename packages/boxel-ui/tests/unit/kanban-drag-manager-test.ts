@@ -1,18 +1,19 @@
-import { module, test } from 'qunit';
-import { settled } from '@ember/test-helpers';
 import {
-  KanbanDragManager,
   type KanbanPlacement,
+  KanbanDragManager,
 } from '@cardstack/boxel-ui/components';
+import { settled } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
 import { delay } from '#tests/helpers';
 
 function stubRect(
   element: Element,
   rect: {
+    height: number;
     left: number;
     top: number;
     width: number;
-    height: number;
   },
 ): void {
   Object.defineProperty(element, 'getBoundingClientRect', {
@@ -454,7 +455,9 @@ module('Unit | kanban-drag-manager', function (hooks) {
       isColumnVisible: () => true,
       onChange: () => {},
       onSelect: (index: number | null) => {
-        if (index === null) deselected = true;
+        if (index === null) {
+          deselected = true;
+        }
       },
     });
 

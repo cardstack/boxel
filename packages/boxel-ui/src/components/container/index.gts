@@ -24,11 +24,11 @@ const Container: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |TagName|}}
     <TagName
       class={{cn
-        'boxel-container'
-        boxel-grid=(eq @display 'grid')
-        boxel-inline-grid=(eq @display 'inline-grid')
-        boxel-flex=(eq @display 'flex')
-        boxel-inline-flex=(eq @display 'inline-flex')
+        "boxel-container"
+        boxel-grid=(eq @display "grid")
+        boxel-inline-grid=(eq @display "inline-grid")
+        boxel-flex=(eq @display "flex")
+        boxel-inline-flex=(eq @display "inline-flex")
       }}
       ...attributes
     >

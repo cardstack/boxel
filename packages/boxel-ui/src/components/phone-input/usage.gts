@@ -17,7 +17,7 @@ export default class PhoneInputUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='PhoneInput'>
+    <FreestyleUsage @name="PhoneInput">
       <:description>
         <p>
           <code>PhoneInput</code>
@@ -41,29 +41,29 @@ export default class PhoneInputUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='value'
-          @description='The current value passed to the input'
+          @name="value"
+          @description="The current value passed to the input"
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
           @optional={{true}}
         />
         <Args.Action
-          @name='onChange'
-          @description='Receives (value, validation, event): value is the sanitized string or null, and validation is the latest NormalizePhoneFormatResult (or null)'
+          @name="onChange"
+          @description="Receives (value, validation, event): value is the sanitized string or null, and validation is the latest NormalizePhoneFormatResult (or null)"
         />
         <Args.String
-          @name='placeholder'
-          @description='Empty input placeholder'
+          @name="placeholder"
+          @description="Empty input placeholder"
           @value={{this.placeholder}}
           @onInput={{fn (mut this.placeholder)}}
         />
         <Args.Bool
-          @name='disabled'
+          @name="disabled"
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
         />
         <Args.Bool
-          @name='required'
+          @name="required"
           @value={{this.required}}
           @onInput={{fn (mut this.required)}}
         />

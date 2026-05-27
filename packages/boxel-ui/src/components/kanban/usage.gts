@@ -185,7 +185,7 @@ export default class KanbanUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Kanban Plane'>
+    <FreestyleUsage @name="Kanban Plane">
       <:description>
         <p>
           <code>KanbanPlane</code>
@@ -208,37 +208,37 @@ export default class KanbanUsage extends Component {
         </p>
       </:description>
       <:example>
-        <div class='kanban-usage'>
-          <div class='kanban-usage-toolbar'>
-            <label class='kanban-toggle'>
-              <span class='kanban-toggle-label'>Hide empty columns</span>
+        <div class="kanban-usage">
+          <div class="kanban-usage-toolbar">
+            <label class="kanban-toggle">
+              <span class="kanban-toggle-label">Hide empty columns</span>
               <Switch
-                @label='Hide empty columns'
+                @label="Hide empty columns"
                 @isEnabled={{this.hideEmpty}}
                 @onChange={{this.toggleHideEmpty}}
               />
             </label>
             <ViewSelector
-              class='kanban-size-picker'
+              class="kanban-size-picker"
               @items={{this.sizeViewOptions}}
               @selectedId={{this.cardSizeView}}
               @onChange={{this.updateCardSizeView}}
             />
             {{#if this.selectedCard}}
-              <span class='kanban-meta'>
+              <span class="kanban-meta">
                 Selected:
                 {{this.selectedCard.title}}
               </span>
             {{/if}}
             {{#if this.openedCard}}
-              <span class='kanban-meta'>
+              <span class="kanban-meta">
                 Opened:
                 {{this.openedCard.title}}
               </span>
             {{/if}}
           </div>
 
-          <div class='kanban-plane-demo'>
+          <div class="kanban-plane-demo">
             <KanbanPlane
               @columns={{this.columns}}
               @placements={{this.placements}}
@@ -253,16 +253,16 @@ export default class KanbanUsage extends Component {
             >
               <:card as |placement|>
                 {{#let (get this.cards placement.index) as |card|}}
-                  <CardContainer class='demo-card'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
+                  <CardContainer class="demo-card">
+                    <div class="demo-card-kind">{{card.kind}}</div>
                     <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
               </:card>
               <:ghost as |dragIndex|>
                 {{#let (get this.cards dragIndex) as |card|}}
-                  <CardContainer class='demo-card demo-card--ghost'>
-                    <div class='demo-card-kind'>{{card.kind}}</div>
+                  <CardContainer class="demo-card demo-card--ghost">
+                    <div class="demo-card-kind">{{card.kind}}</div>
                     <h3>{{card.title}}</h3>
                   </CardContainer>
                 {{/let}}
@@ -273,62 +273,62 @@ export default class KanbanUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name='columns'
-          @description='Column definitions including key, label, color, WIP limit, collapse state, and sort order.'
+          @name="columns"
+          @description="Column definitions including key, label, color, WIP limit, collapse state, and sort order."
           @required={{true}}
           @value={{this.columns}}
         />
         <Args.Object
-          @name='placements'
-          @description='Card placement records that map each card index to a column and sort order.'
+          @name="placements"
+          @description="Card placement records that map each card index to a column and sort order."
           @required={{true}}
           @value={{this.placements}}
         />
         <Args.String
-          @name='cardSize'
-          @description='Fitted card size id used for the card wrapper and for column sizing within the kanban plane.'
+          @name="cardSize"
+          @description="Fitted card size id used for the card wrapper and for column sizing within the kanban plane."
           @options={{this.fittedFormats}}
           @value={{this.cardSize}}
           @onInput={{fn (mut this.cardSize)}}
-          @defaultValue='regular-tile'
+          @defaultValue="regular-tile"
         />
         <Args.Bool
-          @name='hideEmpty'
-          @description='When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns.'
+          @name="hideEmpty"
+          @description="When true, empty columns are moved to the Hidden Columns tray on the right alongside any explicitly collapsed columns."
           @value={{this.hideEmpty}}
           @onInput={{fn (mut this.hideEmpty)}}
         />
         <Args.Action
-          @name='onChange'
-          @description='Invoked with updated placements when the internally owned drag manager commits a move.'
+          @name="onChange"
+          @description="Invoked with updated placements when the internally owned drag manager commits a move."
         />
         <Args.Action
-          @name='onToggleCollapsed'
-          @description='Invoked with the column key when a column is collapsed via its header button or restored from the Hidden Columns tray.'
+          @name="onToggleCollapsed"
+          @description="Invoked with the column key when a column is collapsed via its header button or restored from the Hidden Columns tray."
         />
         <Args.Action
-          @name='onShowEmptyColumns'
-          @description='Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again.'
+          @name="onShowEmptyColumns"
+          @description="Invoked when the user clicks restore on an empty column in the Hidden Columns tray. Should disable the hideEmpty flag so the column becomes visible again."
         />
         <Args.Action
-          @name='onOpen'
-          @description='Invoked with a card index when the internally owned drag manager treats a pointer interaction as open.'
+          @name="onOpen"
+          @description="Invoked with a card index when the internally owned drag manager treats a pointer interaction as open."
         />
         <Args.Action
-          @name='onSelect'
-          @description='Invoked with the selected card index, or null when selection clears, for the internally owned drag manager.'
+          @name="onSelect"
+          @description="Invoked with the selected card index, or null when selection clears, for the internally owned drag manager."
         />
         <Args.Action
-          @name='onAddCard'
-          @description='Optional callback invoked with the target column key when the add-card affordance is used.'
+          @name="onAddCard"
+          @description="Optional callback invoked with the target column key when the add-card affordance is used."
         />
         <Args.Yield
-          @name='placement'
-          @description='Yielded to the card block so callers can render card content for a specific placement.'
+          @name="placement"
+          @description="Yielded to the card block so callers can render card content for a specific placement."
         />
         <Args.Yield
-          @name='dragIndex'
-          @description='Yielded to the ghost block so callers can render drag preview content for the active card index.'
+          @name="dragIndex"
+          @description="Yielded to the ghost block so callers can render drag preview content for the active card index."
         />
       </:api>
     </FreestyleUsage>

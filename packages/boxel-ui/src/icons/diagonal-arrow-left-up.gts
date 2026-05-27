@@ -5,14 +5,14 @@ import type { Signature } from './types.ts';
 
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
-    xmlns='http://www.w3.org/2000/svg'
-    fill='var(--icon-color, #000000)'
-    stroke='var(--icon-color, #000000)'
-    viewBox='5.55 5.5 12.94 13.01'
+    xmlns="http://www.w3.org/2000/svg"
+    fill="var(--icon-color, #000000)"
+    stroke="var(--icon-color, #000000)"
+    viewBox="5.55 5.5 12.94 13.01"
     ...attributes
-  ><g data-name='Layer 2'><path
-        d='M17.71 16.29 9.42 8H15a1 1 0 0 0 0-2H7.05a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1H7a1 1 0 0 0 1-1V9.45l8.26 8.26a1 1 0 0 0 1.42 0 1 1 0 0 0 .03-1.42z'
-        data-name='diagonal-arrow-left-up'
+  ><g data-name="Layer 2"><path
+        d="M17.71 16.29 9.42 8H15a1 1 0 0 0 0-2H7.05a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1H7a1 1 0 0 0 1-1V9.45l8.26 8.26a1 1 0 0 0 1.42 0 1 1 0 0 0 .03-1.42z"
+        data-name="diagonal-arrow-left-up"
       /></g></svg>
 </template>;
 

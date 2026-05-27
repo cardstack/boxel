@@ -1,8 +1,9 @@
-import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from '#tests/helpers';
-import { array } from '@ember/helper';
 import { formatList } from '@cardstack/boxel-ui/helpers';
+import { array } from '@ember/helper';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | helpers | formatList', function (hooks) {
   setupRenderingTest(hooks);

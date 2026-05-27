@@ -18,7 +18,7 @@ export default class RealmIconUsage extends Component {
   });
 
   <template>
-    <FreestyleUsage @name='Realm Icon'>
+    <FreestyleUsage @name="Realm Icon">
       <:example>
         <RealmIcon
           @realmInfo={{this.realmInfo}}
@@ -30,17 +30,17 @@ export default class RealmIconUsage extends Component {
           <label>
             Preview animation
             <input
-              type='checkbox'
+              type="checkbox"
               checked={{this.realmInfo.isIndexing}}
-              name='animate'
-              {{on 'input' this.animate}}
+              name="animate"
+              {{on "input" this.animate}}
             />
           </label>
         {{/if}}
       </:example>
       <:api as |Args|>
         <Args.Bool
-          @name='canAnimate'
+          @name="canAnimate"
           @optional={{true}}
           @defaultValue={{false}}
           @onInput={{fn (mut this.canAnimate)}}
@@ -48,8 +48,8 @@ export default class RealmIconUsage extends Component {
         />
         <Args.Object
           @required={{true}}
-          @name='realmInfo'
-          @description='realm information'
+          @name="realmInfo"
+          @description="realm information"
           @value={{this.realmInfo}}
         />
       </:api>

@@ -65,9 +65,9 @@ export default class FilterListUsage extends Component {
   private onChange = (filter: Filter) => (this.activeFilter = filter);
 
   <template>
-    <FreestyleUsage @name='Filter List'>
+    <FreestyleUsage @name="Filter List">
       <:example>
-        <div class='filter-usage'>
+        <div class="filter-usage">
           <FilterList
             @filters={{this.filters}}
             @activeFilter={{this.activeFilter}}
@@ -79,63 +79,63 @@ export default class FilterListUsage extends Component {
 
       <:api as |Args|>
         <Args.Object
-          @name='filters'
-          @description='An array of objects of type Filter, where the displayName property is required.'
+          @name="filters"
+          @description="An array of objects of type Filter, where the displayName property is required."
           @value={{this.filters}}
-          @defaultValue='[]'
+          @defaultValue="[]"
         />
         <Args.Object
-          @name='activeFilter'
-          @description='The selected filter.'
-          @defaultValue='undefined'
+          @name="activeFilter"
+          @description="The selected filter."
+          @defaultValue="undefined"
           @value={{this.activeFilter}}
         />
         <Args.Object
-          @name='onChanged'
-          @description='A callback function that is triggered when a filter is selected.'
-          @defaultValue='undefined'
+          @name="onChanged"
+          @description="A callback function that is triggered when a filter is selected."
+          @defaultValue="undefined"
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='--boxel-filter-expanded-background'
-          @type='background-color'
-          @description='background-color for expanded list toggle button'
+          @name="--boxel-filter-expanded-background"
+          @type="background-color"
+          @description="background-color for expanded list toggle button"
         />
         <Css.Basic
-          @name='--boxel-filter-expanded-foreground'
-          @type='color'
-          @description='font color for expanded list item'
+          @name="--boxel-filter-expanded-foreground"
+          @type="color"
+          @description="font color for expanded list item"
         />
         <Css.Basic
-          @name='--boxel-filter-hover-background'
-          @type='background-color'
-          @description='hover state background-color for list button'
+          @name="--boxel-filter-hover-background"
+          @type="background-color"
+          @description="hover state background-color for list button"
         />
         <Css.Basic
-          @name='--boxel-filter-hover-foreground'
-          @type='color'
-          @description='hover state font color'
+          @name="--boxel-filter-hover-foreground"
+          @type="color"
+          @description="hover state font color"
         />
         <Css.Basic
-          @name='--boxel-filter-selected-background'
-          @type='background-color'
-          @description='selected (active) state background-color for list button'
+          @name="--boxel-filter-selected-background"
+          @type="background-color"
+          @description="selected (active) state background-color for list button"
         />
         <Css.Basic
-          @name='--boxel-filter-selected-foreground'
-          @type='color'
-          @description='selected (active) state font color'
+          @name="--boxel-filter-selected-foreground"
+          @type="color"
+          @description="selected (active) state font color"
         />
         <Css.Basic
-          @name='--boxel-filter-selected-hover-background'
-          @type='background-color'
-          @description='background-color for hover state of selected list button'
+          @name="--boxel-filter-selected-hover-background"
+          @type="background-color"
+          @description="background-color for hover state of selected list button"
         />
         <Css.Basic
-          @name='--boxel-filter-selected-hover-foreground'
-          @type='color'
-          @description='color for hover state of selected list button'
+          @name="--boxel-filter-selected-hover-foreground"
+          @type="color"
+          @description="color for hover state of selected list button"
         />
       </:cssVars>
     </FreestyleUsage>

@@ -25,15 +25,15 @@ interface Signature {
 const KanbanCard: TemplateOnlyComponent<Signature> = <template>
   <FittedCardContainer
     class={{cn
-      'card'
+      "card"
       selected=@isSelected
       dragging=@isSource
       board-dragging=@isDragging
     }}
     @size={{@size}}
     @style={{@shiftStyle}}
-    role='listitem'
-    tabindex={{if @isRover '0' '-1'}}
+    role="listitem"
+    tabindex={{if @isRover "0" "-1"}}
     data-card-index={{@placement.index}}
     ...attributes
   >

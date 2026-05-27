@@ -37,20 +37,20 @@ export const getIconSize = (size?: BoxelButtonSize) => {
 const IconButton: TemplateOnlyComponent<Signature> = <template>
   <BoxelButton
     class={{cn
-      'boxel-icon-button'
-      (if @size (concat 'boxel-icon-button--' @size))
+      "boxel-icon-button"
+      (if @size (concat "boxel-icon-button--" @size))
       is-round=@round
       loading=@loading
     }}
     @class={{@class}}
     @kind={{@variant}}
-    @size='auto'
+    @size="auto"
     @disabled={{@disabled}}
     ...attributes
   >
     {{#if @loading}}
       <LoadingIcon
-        class='loading-icon'
+        class="loading-icon"
         width={{if @width @width (getIconSize @size)}}
         height={{if @height @height (getIconSize @size)}}
       />
@@ -58,7 +58,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       <@icon
         width={{if @width @width (getIconSize @size)}}
         height={{if @height @height (getIconSize @size)}}
-        class='svg-icon'
+        class="svg-icon"
       />
     {{/if}}
     {{yield}}

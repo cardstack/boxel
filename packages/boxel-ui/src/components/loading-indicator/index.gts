@@ -16,17 +16,17 @@ interface Signature {
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <span
     class={{cn
-      'boxel-loading-indicator'
-      (if @variant (concat 'variant-' @variant) 'variant-default')
+      "boxel-loading-indicator"
+      (if @variant (concat "variant-" @variant) "variant-default")
     }}
     data-test-loading-indicator
     ...attributes
   >
     <LoadingIndicatorIcon
       style={{cssVar
-        icon-color=(if @color @color 'var(--loading-indicator-color)')
+        icon-color=(if @color @color "var(--loading-indicator-color)")
       }}
-      role='presentation'
+      role="presentation"
     />
   </span>
   <style scoped>

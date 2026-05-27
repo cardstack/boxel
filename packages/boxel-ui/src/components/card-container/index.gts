@@ -21,7 +21,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
     <Tag
       class={{cn
-        'boxel-card-container'
+        "boxel-card-container"
         boxel-card-container--boundaries=@displayBoundaries
         boxel-card-container--themed=@isThemed
       }}

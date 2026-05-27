@@ -1,11 +1,10 @@
-import { module, test } from 'qunit';
-
 import {
   buildCssGroups,
   buildCssVariableName,
   entriesToCssRuleMap,
   normalizeCssRuleMap,
 } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 module('Unit | theme-css | buildCssVariableName', function () {
   test('returns empty string when name argument is missing', function (assert) {

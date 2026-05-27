@@ -23,18 +23,18 @@ interface Signature {
 
 export default class SortDropdown extends Component<Signature> {
   <template>
-    <div class='sort-options-group' ...attributes>
-      <span class='sort-options-label'>Sort by</span>
+    <div class="sort-options-group" ...attributes>
+      <span class="sort-options-label">Sort by</span>
       <div>
         <BoxelDropdown>
           <:trigger as |bindings|>
             <BoxelButton
-              @kind='secondary-light'
-              class='sort-button'
+              @kind="secondary-light"
+              class="sort-button"
               {{bindings}}
             >
-              {{if @selectedOption @selectedOption.displayName 'Please Select'}}
-              <DropdownIcon width='12px' height='12px' />
+              {{if @selectedOption @selectedOption.displayName "Please Select"}}
+              <DropdownIcon width="12px" height="12px" />
             </BoxelButton>
           </:trigger>
           <:content as |dd|>

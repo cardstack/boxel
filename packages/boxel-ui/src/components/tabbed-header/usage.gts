@@ -44,7 +44,7 @@ export default class TabbedHeaderUsage extends Component {
   setActiveTab = (tabId: string) => (this.activeTabId = tabId);
 
   <template>
-    <FreestyleUsage @name='TabbedHeader'>
+    <FreestyleUsage @name="TabbedHeader">
       <:example>
         <TabbedHeader
           @headerTitle={{this.headerTitle}}
@@ -54,48 +54,48 @@ export default class TabbedHeaderUsage extends Component {
           @headerBackgroundColor={{this.headerColor}}
         >
           <:headerIcon>
-            <Icon width='25' height='25' role='presentation' />
+            <Icon width="25" height="25" role="presentation" />
           </:headerIcon>
           <:sideContent>
             <BoxelInput
-              @type='search'
+              @type="search"
               @value={{this.searchValue}}
               @onInput={{fn (mut this.searchValue)}}
-              placeholder='Search...'
+              placeholder="Search..."
             />
           </:sideContent>
         </TabbedHeader>
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='headerTitle'
-          @description='Title to be displayed on the header'
+          @name="headerTitle"
+          @description="Title to be displayed on the header"
           @value={{this.headerTitle}}
           @onInput={{fn (mut this.headerTitle)}}
           @required={{true}}
         />
         <Args.Object
-          @name='tabs'
-          @description='Tabs for navigation'
+          @name="tabs"
+          @description="Tabs for navigation"
           @value={{this.tabs}}
           @onInput={{fn (mut this.tabs)}}
         />
         <Args.String
-          @name='activeTabId'
-          @description='Id of the active tab'
+          @name="activeTabId"
+          @description="Id of the active tab"
           @value={{this.activeTabId}}
           @onInput={{fn (mut this.activeTabId)}}
         />
         <Args.Action
-          @name='setActiveTab'
-          @description='Action to be called when a tab is clicked'
+          @name="setActiveTab"
+          @description="Action to be called when a tab is clicked"
         />
         <Args.String
-          @name='headerBackgroundColor'
-          @description='3-or-6 digit hex color code for background color'
+          @name="headerBackgroundColor"
+          @description="3-or-6 digit hex color code for background color"
           @value={{this.headerColor}}
           @onInput={{fn (mut this.headerColor)}}
-          @defaultValue='#ffffff'
+          @defaultValue="#ffffff"
         />
       </:api>
     </FreestyleUsage>

@@ -63,7 +63,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
   <template>
     <PowerSelect
       class={{cn
-        'boxel-multi-select'
+        "boxel-multi-select"
         boxel-multi-select--rounded=(not @matchTriggerWidth)
       }}
       @multiple={{true}}
@@ -87,7 +87,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @extra={{@extra}}
       @dropdownClass={{cn
         @dropdownClass
-        'boxel-multi-select__dropdown'
+        "boxel-multi-select__dropdown"
         boxel-multi-select__dropdown--rounded=(not @matchTriggerWidth)
       }}
       {{! actions  }}
@@ -133,11 +133,11 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
       }
       .boxel-multi-select__dropdown
-        .ember-power-select-option[aria-selected='true'] {
+        .ember-power-select-option[aria-selected="true"] {
         background: var(--boxel-100);
       }
       .boxel-multi-select__dropdown
-        .ember-power-select-option[aria-current='true'] {
+        .ember-power-select-option[aria-current="true"] {
         color: black;
         background: var(--boxel-100);
       }
@@ -174,7 +174,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       .ember-power-select-trigger {
         padding: 0;
       }
-      .boxel-multi-select--rounded.ember-power-select-trigger[aria-expanded='true'] {
+      .boxel-multi-select--rounded.ember-power-select-trigger[aria-expanded="true"] {
         border-radius: var(--boxel-border-radius-sm);
       }
     </style>
@@ -207,7 +207,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
     This is to ensure that the click event from selected item does not bubble up to the trigger
      and cause the dropdown to close
        do not remove eventType argument }}
-      @eventType='click'
+      @eventType="click"
       {{! actions }}
       @onOpen={{@onOpen}}
       @onClose={{@onClose}}

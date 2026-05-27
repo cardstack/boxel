@@ -27,7 +27,7 @@ export default class ContextButtonUsage extends Component {
   @tracked private label = 'context-button usage';
 
   <template>
-    <FreestyleUsage @name='ContextButton'>
+    <FreestyleUsage @name="ContextButton">
       <:example>
         <ContextButton
           @label={{this.label}}
@@ -45,77 +45,77 @@ export default class ContextButtonUsage extends Component {
 
       <:api as |Args|>
         <Args.String
-          @name='label'
-          @description='aria-label attribute value'
+          @name="label"
+          @description="aria-label attribute value"
           @required={{true}}
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
         />
         <Args.String
-          @name='icon'
-          @description='Options from dropdown, or IconComponent'
+          @name="icon"
+          @description="Options from dropdown, or IconComponent"
           @value={{this.icon}}
           @options={{this.iconOptions}}
           @onInput={{fn (mut this.icon)}}
-          @defaultValue='context-menu'
+          @defaultValue="context-menu"
         />
         <Args.String
-          @name='variant'
+          @name="variant"
           @optional={{true}}
           @value={{this.variant}}
           @options={{this.variants}}
           @onInput={{fn (mut this.variant)}}
-          @defaultValue='default'
+          @defaultValue="default"
         />
         <Args.String
-          @name='size'
+          @name="size"
           @optional={{true}}
           @value={{this.size}}
           @options={{this.sizeVariants}}
           @onInput={{fn (mut this.size)}}
-          @defaultValue='base (30px)'
+          @defaultValue="base (30px)"
         />
         <Args.Bool
-          @name='loading'
+          @name="loading"
           @optional={{true}}
           @value={{this.isLoading}}
           @onInput={{fn (mut this.isLoading)}}
-          @defaultValue='false'
+          @defaultValue="false"
         />
         <Args.Bool
-          @name='disabled'
+          @name="disabled"
           @optional={{true}}
           @value={{this.isDisabled}}
           @onInput={{fn (mut this.isDisabled)}}
-          @defaultValue='false'
+          @defaultValue="false"
         />
         <Args.Bool
-          @name='isActive'
+          @name="isActive"
           @optional={{true}}
           @value={{this.isActive}}
           @onInput={{fn (mut this.isActive)}}
-          @defaultValue='false'
+          @defaultValue="false"
         />
         <Args.Bool
-          @name='isToggle'
+          @name="isToggle"
           @optional={{true}}
           @value={{this.isToggle}}
           @onInput={{fn (mut this.isToggle)}}
-          @defaultValue='false'
+          @defaultValue="false"
         />
         <Args.String
-          @name='width'
+          @name="width"
           @optional={{true}}
-          @description='icon width'
-          @defaultValue='16px or 20px'
+          @description="icon width"
+          @defaultValue="16px or 20px"
           @value={{this.width}}
           @onInput={{fn (mut this.width)}}
         />
         <Args.String
-          @name='height'
+          @name="height"
           @optional={{true}}
-          @description='icon height'
-          @defaultValue='16px or 20px'
+          @description="icon height"
+          @defaultValue="16px or 20px"
           @value={{this.height}}
           @onInput={{fn (mut this.height)}}
         />

@@ -30,10 +30,10 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
     <Tag
       class={{cn
-        'boxel-field'
+        "boxel-field"
         vertical=(or @vertical @centeredDisplay)
         horizontal=(not (or @vertical @centeredDisplay))
-        small-label=(eq @horizontalLabelSize 'small')
+        small-label=(eq @horizontalLabelSize "small")
         centered-display=@centeredDisplay
         with-icon=(bool @icon)
       }}
@@ -41,25 +41,25 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       data-test-boxel-field-id={{@fieldId}}
       ...attributes
     >
-      <div class='label-container'>
+      <div class="label-container">
         {{#if @icon}}
           <@icon
-            class='boxel-field__icon'
-            width={{unless @iconWidth '16'}}
-            height={{unless @iconHeight '16'}}
-            role='presentation'
+            class="boxel-field__icon"
+            width={{unless @iconWidth "16"}}
+            height={{unless @iconHeight "16"}}
+            role="presentation"
           />
         {{/if}}
         <Label
-          class='label'
+          class="label"
           @size={{@labelFontSize}}
           data-test-boxel-field-label
         >
           {{@label}}
         </Label>
-        {{yield to='label'}}
+        {{yield to="label"}}
       </div>
-      <div class='content'>
+      <div class="content">
         {{yield}}
       </div>
     </Tag>

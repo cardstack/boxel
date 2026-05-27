@@ -1,6 +1,5 @@
-import { module, test } from 'qunit';
-
 import { dasherize } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 module('Unit | string-helper | dasherize', function () {
   test('converts whitespace-delimited words to lowercase kebab case', function (assert) {

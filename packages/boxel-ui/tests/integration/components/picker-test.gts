@@ -1,16 +1,17 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
+import { type PickerOption, Picker } from '@cardstack/boxel-ui/components';
 import {
   click,
-  render,
-  waitFor,
   fillIn,
-  triggerKeyEvent,
-  setupOnerror,
+  render,
   resetOnerror,
+  setupOnerror,
+  triggerKeyEvent,
+  waitFor,
 } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
-import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 function noop() {}
 
@@ -73,7 +74,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker shows selected items in trigger', async function (assert) {
-    const selected = [testOptions[0], testOptions[1]];
+    const selected = [testOptions[0]!, testOptions[1]!];
 
     await render(
       <template>
@@ -147,7 +148,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker shows selected items in summary section', async function (assert) {
-    const selected = [testOptions[2], testOptions[3]];
+    const selected = [testOptions[2]!, testOptions[3]!];
 
     await render(
       <template>
@@ -226,7 +227,7 @@ module('Integration | Component | picker', function (hooks) {
       'Should have one selected item',
     );
     assert.strictEqual(
-      controller.selected[0].id,
+      controller.selected[0]!.id,
       '1',
       'Should have selected first option',
     );
@@ -287,7 +288,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker filters main list by search term while summary stays visible', async function (assert) {
-    const selected = [testOptionsWithSelectAll[2]]; // Option 2
+    const selected = [testOptionsWithSelectAll[2]!]; // Option 2
 
     await render(
       <template>
@@ -372,7 +373,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker selects select-all when it is chosen after other options', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptionsWithSelectAll[1]];
+      @tracked selected: PickerOption[] = [testOptionsWithSelectAll[1]!];
     }
 
     const controller = new SelectionController();
@@ -582,7 +583,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker limits displayed items when maxSelectedDisplay is set', async function (assert) {
-    const selected = [testOptions[0], testOptions[1], testOptions[2]];
+    const selected = [testOptions[0]!, testOptions[1]!, testOptions[2]!];
 
     await render(
       <template>
@@ -602,10 +603,10 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker shows +X more pill when items exceed maxSelectedDisplay', async function (assert) {
     const selected = [
-      testOptions[0],
-      testOptions[1],
-      testOptions[2],
-      testOptions[3],
+      testOptions[0]!,
+      testOptions[1]!,
+      testOptions[2]!,
+      testOptions[3]!,
     ];
 
     await render(
@@ -627,7 +628,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker does not show +X more pill when items do not exceed maxSelectedDisplay', async function (assert) {
-    const selected = [testOptions[0], testOptions[1]];
+    const selected = [testOptions[0]!, testOptions[1]!];
 
     await render(
       <template>
@@ -648,10 +649,10 @@ module('Integration | Component | picker', function (hooks) {
 
   test('clicking +X more pill opens the dropdown', async function (assert) {
     const selected = [
-      testOptions[0],
-      testOptions[1],
-      testOptions[2],
-      testOptions[3],
+      testOptions[0]!,
+      testOptions[1]!,
+      testOptions[2]!,
+      testOptions[3]!,
     ];
 
     await render(
@@ -680,10 +681,10 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker shows all items when maxSelectedDisplay is not set', async function (assert) {
     const selected = [
-      testOptions[0],
-      testOptions[1],
-      testOptions[2],
-      testOptions[3],
+      testOptions[0]!,
+      testOptions[1]!,
+      testOptions[2]!,
+      testOptions[3]!,
     ];
 
     await render(
@@ -704,7 +705,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker main list never reorders regardless of selection changes', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptions[0], testOptions[1]];
+      @tracked selected: PickerOption[] = [testOptions[0]!, testOptions[1]!];
     }
 
     const controller = new SelectionController();
@@ -763,7 +764,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker main list order stays stable across close and reopen', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptions[0], testOptions[1]];
+      @tracked selected: PickerOption[] = [testOptions[0]!, testOptions[1]!];
     }
 
     const controller = new SelectionController();
@@ -859,7 +860,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('picker deselects item from summary section', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptions[0], testOptions[1]];
+      @tracked selected: PickerOption[] = [testOptions[0]!, testOptions[1]!];
     }
 
     const controller = new SelectionController();
@@ -900,7 +901,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker divider exists between summary and main list', async function (assert) {
-    const selected = [testOptions[0], testOptions[1]];
+    const selected = [testOptions[0]!, testOptions[1]!];
 
     await render(
       <template>
@@ -1085,7 +1086,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('Enter on already-selected option deselects it without closing', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptions[0], testOptions[1]];
+      @tracked selected: PickerOption[] = [testOptions[0]!, testOptions[1]!];
     }
 
     const controller = new SelectionController();
@@ -1262,7 +1263,7 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('ArrowUp from first main list option highlights last summary item', async function (assert) {
-    const selected = [testOptions[0], testOptions[1]];
+    const selected = [testOptions[0]!, testOptions[1]!];
 
     class SelectionController {
       @tracked selected: PickerOption[] = selected;
@@ -1354,7 +1355,7 @@ module('Integration | Component | picker', function (hooks) {
 
   test('Enter on highlighted summary select-all toggles it', async function (assert) {
     class SelectionController {
-      @tracked selected: PickerOption[] = [testOptions[0]];
+      @tracked selected: PickerOption[] = [testOptions[0]!];
     }
 
     const controller = new SelectionController();

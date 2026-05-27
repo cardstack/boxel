@@ -9,13 +9,13 @@ export default class CopyButtonUsage extends Component {
   @tracked textToCopy: string = 'Text to copy';
 
   <template>
-    <FreestyleUsage @name='CopyButton'>
+    <FreestyleUsage @name="CopyButton">
       <:example>
         <CopyButton @textToCopy={{this.textToCopy}} />
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='text'
+          @name="text"
           @onInput={{fn (mut this.textToCopy)}}
           @value={{this.textToCopy}}
         />

@@ -133,14 +133,14 @@ export default class PhoneInput extends Component<Signature> {
 
   <template>
     <BoxelInput
-      @type='tel'
+      @type="tel"
       @value={{this.inputValue}}
-      {{on 'input' this.onInput}}
+      {{on "input" this.onInput}}
       @onBlur={{this.onBlur}}
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
       @disabled={{@disabled}}
-      @placeholder={{if @placeholder @placeholder 'Enter phone'}}
+      @placeholder={{if @placeholder @placeholder "Enter phone"}}
       @required={{@required}}
       data-test-boxel-phone-input
       ...attributes

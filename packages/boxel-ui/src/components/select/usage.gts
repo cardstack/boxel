@@ -107,7 +107,7 @@ export default class BoxelSelectUsage extends Component {
 
   <template>
     <div
-      class='header-freestyle-container'
+      class="header-freestyle-container"
       style={{cssVar
         boxel-select-background-color=this.boxelSelectBackgroundColor.value
         boxel-select-border-color=this.boxelSelectBorderColor.value
@@ -123,7 +123,7 @@ export default class BoxelSelectUsage extends Component {
         boxel-dropdown-focus-border-color=this.boxelDropdownFocusBorderColor.value
       }}
     >
-      <FreestyleUsage @name='Select'>
+      <FreestyleUsage @name="Select">
         <:description>
           Select components allow users to choose from a list of options. They
           support theme variants and customizable styling with search
@@ -141,7 +141,7 @@ export default class BoxelSelectUsage extends Component {
             @renderInPlace={{this.renderInPlace}}
             @disabled={{this.disabled}}
             @variant={{this.variant}}
-            @dropdownClass='boxel-select-usage'
+            @dropdownClass="boxel-select-usage"
             @matchTriggerWidth={{this.matchTriggerWidth}}
             aria-label={{this.placeholder}}
             data-test-select-freestyle-usage
@@ -152,157 +152,157 @@ export default class BoxelSelectUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.Array
-            @name='options'
-            @description='An array of items, to be listed on dropdown'
+            @name="options"
+            @description="An array of items, to be listed on dropdown"
             @required={{true}}
             @items={{this.displayItems}}
           />
           <Args.Action
-            @name='onChange'
-            @description='Invoke this action to close handle selected item'
+            @name="onChange"
+            @description="Invoke this action to close handle selected item"
             @required={{true}}
           />
           <Args.Object
-            @name='selected'
-            @description='Selected item, its type is dependent on items'
+            @name="selected"
+            @description="Selected item, its type is dependent on items"
             @required={{true}}
           />
           <Args.Yield
-            @name='item'
-            @description='Item to be presented on dropdown'
+            @name="item"
+            @description="Item to be presented on dropdown"
           />
           <Args.String
-            @name='placeholder'
-            @description='Placeholder for trigger component'
+            @name="placeholder"
+            @description="Placeholder for trigger component"
             @value={{this.placeholder}}
             @onInput={{fn (mut this.placeholder)}}
           />
           <Args.String
-            @name='variant'
+            @name="variant"
             @optional={{true}}
-            @description='Theme-based variant for consistent styling'
+            @description="Theme-based variant for consistent styling"
             @defaultValue={{this.selectVariantDefault}}
             @options={{this.selectVariants}}
             @onInput={{fn (mut this.variant)}}
             @value={{this.variant}}
           />
           <Args.String
-            @name='verticalPosition'
-            @defaultValue='auto'
+            @name="verticalPosition"
+            @defaultValue="auto"
             @value={{this.verticalPosition}}
-            @options={{array 'auto' 'above' 'below'}}
+            @options={{array "auto" "above" "below"}}
             @onInput={{fn (mut this.verticalPosition)}}
-            @description='The vertical positioning strategy of the content'
+            @description="The vertical positioning strategy of the content"
           />
           <Args.Bool
-            @name='renderInPlace'
+            @name="renderInPlace"
             @defaultValue={{false}}
             @value={{this.renderInPlace}}
             @onInput={{fn (mut this.renderInPlace)}}
-            @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
+            @description="When passed true, the content will render next to the trigger instead of being placed in the root of the body"
           />
           <Args.Bool
-            @name='matchTriggerWidth'
+            @name="matchTriggerWidth"
             @defaultValue={{true}}
             @value={{this.matchTriggerWidth}}
             @onInput={{fn (mut this.matchTriggerWidth)}}
-            @description='Allow dropdown width to match trigger width'
+            @description="Allow dropdown width to match trigger width"
           />
           <Args.Bool
-            @name='disabled'
+            @name="disabled"
             @defaultValue={{false}}
             @value={{this.disabled}}
             @onInput={{fn (mut this.disabled)}}
-            @description='When truthy the component cannot be interacted'
+            @description="When truthy the component cannot be interacted"
           />
           <Args.Bool
-            @name='searchEnabled'
+            @name="searchEnabled"
             @defaultValue={{false}}
-            @description='True to show a search box at the top of the list of items'
+            @description="True to show a search box at the top of the list of items"
             @value={{this.searchEnabled}}
             @onInput={{fn (mut this.searchEnabled)}}
           />
           <Args.String
-            @name='searchField'
+            @name="searchField"
             @onInput={{fn (mut this.searchField)}}
-            @description='Tells the component what property of the options should be used to filter'
+            @description="Tells the component what property of the options should be used to filter"
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-select-background-color'
-            @type='color'
-            @description='Global override for select background color (highest priority)'
+            @name="boxel-select-background-color"
+            @type="color"
+            @description="Global override for select background color (highest priority)"
             @value={{this.boxelSelectBackgroundColor.value}}
             @onInput={{this.boxelSelectBackgroundColor.update}}
           />
           <Css.Basic
-            @name='boxel-select-border-color'
-            @type='color'
-            @description='Global override for select border color (highest priority)'
+            @name="boxel-select-border-color"
+            @type="color"
+            @description="Global override for select border color (highest priority)"
             @value={{this.boxelSelectBorderColor.value}}
             @onInput={{this.boxelSelectBorderColor.update}}
           />
           <Css.Basic
-            @name='boxel-select-text-color'
-            @type='color'
-            @description='Global override for select text color (highest priority)'
+            @name="boxel-select-text-color"
+            @type="color"
+            @description="Global override for select text color (highest priority)"
             @value={{this.boxelSelectTextColor.value}}
             @onInput={{this.boxelSelectTextColor.update}}
           />
           <Css.Basic
-            @name='boxel-select-focus-border-color'
-            @type='color'
-            @description='Global override for select focus border color (highest priority)'
+            @name="boxel-select-focus-border-color"
+            @type="color"
+            @description="Global override for select focus border color (highest priority)"
             @value={{this.boxelSelectFocusBorderColor.value}}
             @onInput={{this.boxelSelectFocusBorderColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-background-color'
-            @type='color'
-            @description='Global override for dropdown background color (highest priority)'
+            @name="boxel-dropdown-background-color"
+            @type="color"
+            @description="Global override for dropdown background color (highest priority)"
             @value={{this.boxelDropdownBackgroundColor.value}}
             @onInput={{this.boxelDropdownBackgroundColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-border-color'
-            @type='color'
-            @description='Global override for dropdown border color (highest priority)'
+            @name="boxel-dropdown-border-color"
+            @type="color"
+            @description="Global override for dropdown border color (highest priority)"
             @value={{this.boxelDropdownBorderColor.value}}
             @onInput={{this.boxelDropdownBorderColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-text-color'
-            @type='color'
-            @description='Global override for dropdown text color (highest priority)'
+            @name="boxel-dropdown-text-color"
+            @type="color"
+            @description="Global override for dropdown text color (highest priority)"
             @value={{this.boxelDropdownTextColor.value}}
             @onInput={{this.boxelDropdownTextColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-highlight-color'
-            @type='color'
-            @description='Global override for dropdown highlight color (highest priority)'
+            @name="boxel-dropdown-highlight-color"
+            @type="color"
+            @description="Global override for dropdown highlight color (highest priority)"
             @value={{this.boxelDropdownHighlightColor.value}}
             @onInput={{this.boxelDropdownHighlightColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-highlight-hover-color'
-            @type='color'
-            @description='Global override for dropdown highlight hover color (highest priority)'
+            @name="boxel-dropdown-highlight-hover-color"
+            @type="color"
+            @description="Global override for dropdown highlight hover color (highest priority)"
             @value={{this.boxelDropdownHighlightHoverColor.value}}
             @onInput={{this.boxelDropdownHighlightHoverColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-hover-color'
-            @type='color'
-            @description='Global override for dropdown hover color (highest priority)'
+            @name="boxel-dropdown-hover-color"
+            @type="color"
+            @description="Global override for dropdown hover color (highest priority)"
             @value={{this.boxelDropdownHoverColor.value}}
             @onInput={{this.boxelDropdownHoverColor.update}}
           />
           <Css.Basic
-            @name='boxel-dropdown-focus-border-color'
-            @type='color'
-            @description='Global override for dropdown focus border color (highest priority)'
+            @name="boxel-dropdown-focus-border-color"
+            @type="color"
+            @description="Global override for dropdown focus border color (highest priority)"
             @value={{this.boxelDropdownFocusBorderColor.value}}
             @onInput={{this.boxelDropdownFocusBorderColor.update}}
           />
@@ -310,9 +310,9 @@ export default class BoxelSelectUsage extends Component {
       </FreestyleUsage>
     </div>
 
-    <FreestyleUsage @name='Usage with FieldContainer'>
+    <FreestyleUsage @name="Usage with FieldContainer">
       <:example>
-        <BoxelField @label='Country'>
+        <BoxelField @label="Country">
           <BoxelSelect
             @placeholder={{this.placeholder}}
             @searchEnabled={{this.searchEnabled}}
@@ -324,7 +324,7 @@ export default class BoxelSelectUsage extends Component {
             @renderInPlace={{this.renderInPlace}}
             @disabled={{this.disabled}}
             @variant={{this.variant}}
-            @dropdownClass='boxel-select-usage'
+            @dropdownClass="boxel-select-usage"
             @matchTriggerWidth={{this.matchTriggerWidth}}
             aria-label={{this.placeholder}}
             as |item|
@@ -335,7 +335,7 @@ export default class BoxelSelectUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Usage With Icons'>
+    <FreestyleUsage @name="Usage With Icons">
       <:example>
         <BoxelSelect
           @selected={{this.selectedItem2}}
@@ -344,7 +344,7 @@ export default class BoxelSelectUsage extends Component {
           aria-label={{this.placeholder}}
           as |option|
         >
-          <option.icon width='16' height='16' />
+          <option.icon width="16" height="16" />
           {{option.label}}
         </BoxelSelect>
       </:example>

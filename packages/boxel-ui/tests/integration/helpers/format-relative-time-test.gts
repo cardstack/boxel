@@ -1,12 +1,12 @@
-import { hash } from '@ember/helper';
-import { render } from '@ember/test-helpers';
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-
 import {
   formatDateTime,
   formatRelativeTime,
 } from '@cardstack/boxel-ui/helpers';
+import { hash } from '@ember/helper';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 const REFERENCE_TIME = new Date('2024-05-01T12:00:00.000Z');
 const MINUTE = 60 * 1000;

@@ -85,7 +85,7 @@ export class KanbanPlane extends Component<{
 
   <template>
     <KanbanPlaneInner
-      class='kanban-plane'
+      class="kanban-plane"
       @boardLabel={{@boardLabel}}
       @cardSize={{@cardSize}}
       @columns={{@columns}}
@@ -97,10 +97,10 @@ export class KanbanPlane extends Component<{
       @placements={{@placements}}
     >
       <:card as |placement|>
-        {{yield placement to='card'}}
+        {{yield placement to="card"}}
       </:card>
       <:ghost as |dragIndex|>
-        {{yield dragIndex to='ghost'}}
+        {{yield dragIndex to="ghost"}}
       </:ghost>
     </KanbanPlaneInner>
 

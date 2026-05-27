@@ -14,23 +14,23 @@ interface Signature {
 
 const Swatch: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn 'boxel-swatch' boxel-swatch--small=(eq @style 'round')}}
+    class={{cn "boxel-swatch" boxel-swatch--small=(eq @style "round")}}
     data-test-swatch={{@color}}
     ...attributes
   >
     {{#unless @hideLabel}}
-      <div class='boxel-swatch-label'>
+      <div class="boxel-swatch-label">
         {{#if @label}}
-          <div class='boxel-swatch-name'>{{@label}}</div>
+          <div class="boxel-swatch-name">{{@label}}</div>
         {{/if}}
-        <code class='boxel-swatch-value'>{{@color}}</code>
+        <code class="boxel-swatch-value">{{@color}}</code>
       </div>
     {{/unless}}
     <div
       class={{cn
-        'boxel-swatch-preview'
-        boxel-swatch-preview--round=(eq @style 'round')
-        boxel-swatch-preview--default=(not (eq @style 'round'))
+        "boxel-swatch-preview"
+        boxel-swatch-preview--round=(eq @style "round")
+        boxel-swatch-preview--default=(not (eq @style "round"))
       }}
       style={{cssVar swatch-background=@color}}
     />

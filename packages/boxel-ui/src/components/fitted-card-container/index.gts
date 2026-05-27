@@ -21,7 +21,7 @@ interface Signature {
 export default class FittedCardContainer extends Component<Signature> {
   <template>
     <div
-      class='boxel-fitted-card-container'
+      class="boxel-fitted-card-container"
       style={{this.containerStyle}}
       ...attributes
     >

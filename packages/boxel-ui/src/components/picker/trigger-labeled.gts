@@ -103,17 +103,17 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   <template>
-    <div class='boxel-trigger' data-test-boxel-picker-trigger>
-      <div class='boxel-trigger-content'>
+    <div class="boxel-trigger" data-test-boxel-picker-trigger>
+      <div class="boxel-trigger-content">
         {{#if this.label}}
           <span
-            class='picker-trigger__label'
+            class="picker-trigger__label"
             data-test-boxel-picker-trigger-label
           >{{this.label}}</span>
         {{/if}}
         {{#if this.showPlaceholder}}
           <div
-            class='boxel-trigger-placeholder'
+            class="boxel-trigger-placeholder"
             data-test-boxel-picker-trigger-placeholder
           >
             {{@placeholder}}
@@ -138,11 +138,11 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
             {{/each}}
             {{#if this.hasMoreItems}}
               <Pill
-                class='picker__more-items'
-                @kind='button'
-                @size='small'
+                class="picker__more-items"
+                @kind="button"
+                @size="small"
                 data-test-boxel-picker-more-items
-                {{on 'click' this.openDropdown}}
+                {{on "click" this.openDropdown}}
               >
                 +{{this.remainingCount}}
                 more
@@ -153,7 +153,7 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
       </div>
       {{#if (not @select.disabled)}}
         <CaretDown
-          class={{cn 'picker-trigger__caret' (if @select.isOpen 'is-open')}}
+          class={{cn "picker-trigger__caret" (if @select.isOpen "is-open")}}
         />
       {{/if}}
     </div>

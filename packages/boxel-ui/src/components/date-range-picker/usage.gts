@@ -39,7 +39,7 @@ export default class DateRangePickerUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Date Range Picker'>
+    <FreestyleUsage @name="Date Range Picker">
       <:example>
         {{this.range1String}}
         <DateRangePicker

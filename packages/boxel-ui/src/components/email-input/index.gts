@@ -95,14 +95,14 @@ export default class EmailInput extends Component<Signature> {
 
   <template>
     <BoxelInput
-      @type='email'
+      @type="email"
       @value={{this.inputValue}}
-      {{on 'input' this.onInput}}
+      {{on "input" this.onInput}}
       @onBlur={{this.onBlur}}
       @state={{this.validationState}}
       @errorMessage={{this.errorMessage}}
       @disabled={{@disabled}}
-      @placeholder={{if @placeholder @placeholder 'Enter email'}}
+      @placeholder={{if @placeholder @placeholder "Enter email"}}
       @required={{@required}}
       data-test-boxel-email-input
       ...attributes

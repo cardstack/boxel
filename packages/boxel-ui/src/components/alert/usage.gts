@@ -19,7 +19,7 @@ export default class AlertUsage extends Component<Signature> {
   private retryHandler = () => console.log('Retry action triggered');
 
   <template>
-    <FreestyleUsage @name='Alert'>
+    <FreestyleUsage @name="Alert">
       <:description>
         A component that displays error or warning messages with an optional
         action.
@@ -27,36 +27,36 @@ export default class AlertUsage extends Component<Signature> {
       <:example>
         <Alert @type={{this.messageType}} as |Alert|>
           <Alert.Messages @messages={{this.messages}} />
-          <Alert.Action @actionName='Retry' @action={{this.retryHandler}} />
+          <Alert.Action @actionName="Retry" @action={{this.retryHandler}} />
         </Alert>
       </:example>
 
       <:api as |Args|>
         <Args.String
-          @name='type'
-          @description='Type of the first message'
+          @name="type"
+          @description="Type of the first message"
           @value={{this.messageType}}
-          @options={{array '' 'error' 'warning'}}
+          @options={{array "" "error" "warning"}}
           @onInput={{fn (mut this.messageType)}}
         />
         <Args.Array
-          @name='messages'
-          @description='Alert messages'
+          @name="messages"
+          @description="Alert messages"
           @items={{this.messages}}
         />
         <Args.Action
-          @name='retryAction'
-          @description='Optional callback function that is triggered when the retry button is clicked'
+          @name="retryAction"
+          @description="Optional callback function that is triggered when the retry button is clicked"
           @optional={{true}}
         />
       </:api>
     </FreestyleUsage>
-    <FreestyleUsage @name='Without Retry Button'>
+    <FreestyleUsage @name="Without Retry Button">
       <:example>
-        <Alert @type='warning' as |Alert|>
+        <Alert @type="warning" as |Alert|>
           <Alert.Messages
             @messages={{array
-              'You are about to run out of credit. Please upgrade your plan or buy additional credit soon.'
+              "You are about to run out of credit. Please upgrade your plan or buy additional credit soon."
             }}
           />
         </Alert>

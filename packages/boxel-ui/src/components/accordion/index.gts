@@ -18,7 +18,7 @@ interface Signature {
 
 const Accordion: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn 'boxel-accordion' boxel-accordion-container=@displayContainer}}
+    class={{cn "boxel-accordion" boxel-accordion-container=@displayContainer}}
     ...attributes
   >
     {{yield (hash Item=AccordionItem)}}

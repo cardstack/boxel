@@ -20,9 +20,9 @@ const Label: TemplateOnlyComponent<Signature> = <template>
   {{#let (element @tag) as |Tag|}}
     <Tag
       class={{cn
-        'boxel-label'
-        boxel-label--small=(eq @size 'small')
-        boxel-label--default=(eq @size 'default')
+        "boxel-label"
+        boxel-label--small=(eq @size "small")
+        boxel-label--default=(eq @size "default")
         boxel-ellipsize=@ellipsize
       }}
       ...attributes

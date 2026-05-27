@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from '#tests/helpers';
 import { formatCurrency } from '@cardstack/boxel-ui/helpers';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | helpers | formatCurrency', function (hooks) {
   setupRenderingTest(hooks);

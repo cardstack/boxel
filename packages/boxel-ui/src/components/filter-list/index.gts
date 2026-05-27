@@ -28,8 +28,8 @@ interface Signature {
 }
 
 const FilterList: TemplateOnlyComponent<Signature> = <template>
-  <ul class='filter-list' role='tree' ...attributes>
-    {{#each @filters key='displayName' as |filter|}}
+  <ul class="filter-list" role="tree" ...attributes>
+    {{#each @filters key="displayName" as |filter|}}
       <ListItem
         @filter={{filter}}
         @onChanged={{@onChanged}}
@@ -69,50 +69,50 @@ interface ListItemSignature {
 export class ListItem extends Component<ListItemSignature> {
   <template>
     <li
-      class='filter-list-item'
-      role='treeitem'
+      class="filter-list-item"
+      role="treeitem"
       aria-expanded={{if
         this.isExpanded
-        'true'
-        (if this.hasNestedItems 'false')
+        "true"
+        (if this.hasNestedItems "false")
       }}
-      aria-selected='{{this.isSelected}}'
+      aria-selected="{{this.isSelected}}"
       aria-label={{@filter.displayName}}
       data-test-filter-list-item={{@filter.displayName}}
       ...attributes
     >
       <span
         class={{cn
-          'list-item-buttons'
+          "list-item-buttons"
           is-selected=this.isSelected
           is-expanded=this.isExpanded
         }}
       >
         <Button
-          @kind='text-only'
-          @size='small'
-          class='filter-list__button'
-          {{on 'click' this.onChange}}
+          @kind="text-only"
+          @size="small"
+          class="filter-list__button"
+          {{on "click" this.onChange}}
           data-test-boxel-filter-list-button={{@filter.displayName}}
           data-test-selected-filter={{if this.isSelected @filter.displayName}}
         >
           {{#if (isString @filter.icon)}}
-            {{htmlSafe (addClassToSVG @filter.icon 'filter-list__icon')}}
+            {{htmlSafe (addClassToSVG @filter.icon "filter-list__icon")}}
           {{else if @filter.icon}}
-            <@filter.icon class='filter-list__icon' role='presentation' />
+            <@filter.icon class="filter-list__icon" role="presentation" />
           {{/if}}
-          <span class='filter-name boxel-ellipsize'>
+          <span class="filter-name boxel-ellipsize">
             {{@filter.displayName}}
           </span>
         </Button>
         {{#if this.hasNestedItems}}
           <IconButton
-            class='dropdown-toggle'
+            class="dropdown-toggle"
             @icon={{DropdownArrow}}
-            @width='10'
-            @height='10'
-            aria-label='Toggle {{@filter.displayName}} group items'
-            {{on 'click' this.toggleExpanded}}
+            @width="10"
+            @height="10"
+            aria-label="Toggle {{@filter.displayName}} group items"
+            {{on "click" this.toggleExpanded}}
           />
         {{/if}}
       </span>
@@ -121,8 +121,8 @@ export class ListItem extends Component<ListItemSignature> {
           @filters={{@filter.filters}}
           @onChanged={{@onChanged}}
           @activeFilter={{@activeFilter}}
-          role='group'
-          aria-label='{{@filter.displayName}} group'
+          role="group"
+          aria-label="{{@filter.displayName}} group"
         />
       {{/if}}
     </li>

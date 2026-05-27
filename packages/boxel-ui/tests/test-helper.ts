@@ -1,15 +1,16 @@
-import EmberApp from 'ember-strict-application-resolver';
 import EmberRouter from '@ember/routing/router';
-import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
-import { setup } from 'qunit-dom';
-import { start as qunitStart, setupEmberOnerrorValidation } from 'ember-qunit';
 import { setTesting } from '@embroider/macros';
-import setupHeightAssertion from './helpers/height-assertion';
 import {
   setRunOptions,
   setupConsoleLogger,
 } from 'ember-a11y-testing/test-support';
+import { setupEmberOnerrorValidation, start as qunitStart } from 'ember-qunit';
+import EmberApp from 'ember-strict-application-resolver';
+import * as QUnit from 'qunit';
+import { setup } from 'qunit-dom';
+
+import setupHeightAssertion from './helpers/height-assertion';
 
 class Router extends EmberRouter {
   location = 'none';

@@ -1,9 +1,10 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-import { render, settled } from '@ember/test-helpers';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
 import type { Icon } from '@cardstack/boxel-ui/icons';
+import { render, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 const OverrideIcon: Icon = <template>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">

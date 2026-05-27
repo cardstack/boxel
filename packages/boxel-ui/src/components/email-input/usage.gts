@@ -17,7 +17,7 @@ export default class EmailInputUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='EmailInput'>
+    <FreestyleUsage @name="EmailInput">
       <:description>
         <p>
           <code>EmailInput</code>
@@ -42,30 +42,30 @@ export default class EmailInputUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='value'
-          @description='The current value passed to the input'
+          @name="value"
+          @description="The current value passed to the input"
           @value={{this.value}}
           @onInput={{fn (mut this.value)}}
           @optional={{true}}
         />
         <Args.Action
-          @name='onChange'
-          @description='Called with input (string, or null if empty) when not invalid'
+          @name="onChange"
+          @description="Called with input (string, or null if empty) when not invalid"
         />
         <Args.String
-          @name='placeholder'
-          @description='Empty input placeholder'
+          @name="placeholder"
+          @description="Empty input placeholder"
           @value={{this.placeholder}}
           @onInput={{fn (mut this.placeholder)}}
-          @defaultValue='Enter email'
+          @defaultValue="Enter email"
         />
         <Args.Bool
-          @name='disabled'
+          @name="disabled"
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
         />
         <Args.Bool
-          @name='required'
+          @name="required"
           @value={{this.required}}
           @onInput={{fn (mut this.required)}}
         />

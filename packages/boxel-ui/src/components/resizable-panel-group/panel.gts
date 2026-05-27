@@ -40,7 +40,7 @@ let managePanelRegistration = modifier((element, [panel]: [Panel]) => {
 export default class Panel extends Component<Signature> {
   <template>
     <div
-      class='boxel-panel'
+      class="boxel-panel"
       style={{(this.getStyle)}}
       data-boxel-panel-group-id={{@groupId}}
       data-boxel-panel-id={{this.id}}

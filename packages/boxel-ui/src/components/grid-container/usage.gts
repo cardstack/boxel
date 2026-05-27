@@ -34,7 +34,7 @@ export default class GridContainerUsage extends Component<Signature> {
   }
 
   <template>
-    <FreestyleUsage @name='GridContainer'>
+    <FreestyleUsage @name="GridContainer">
       <:description>
         A CSS grid container for laying out fitted cards. Supports both a simple
         default slot and an item-based API that yields a
@@ -65,39 +65,39 @@ export default class GridContainerUsage extends Component<Signature> {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name='items'
-          @description='Array of items to iterate over. Each item and a GridItemContainer component are yielded to the block. When omitted, an empty block is yielded for custom content.'
+          @name="items"
+          @description="Array of items to iterate over. Each item and a GridItemContainer component are yielded to the block. When omitted, an empty block is yielded for custom content."
           @value={{this.sampleItems}}
         />
         <Args.String
-          @name='size'
-          @description='Fitted format size id. Controls grid column width and row height. Must be a valid FittedFormatId.'
+          @name="size"
+          @description="Fitted format size id. Controls grid column width and row height. Must be a valid FittedFormatId."
           @options={{this.usageFormatOptions}}
           @value={{this.size}}
           @onInput={{fn (mut this.size)}}
         />
         <Args.String
-          @name='viewFormat'
+          @name="viewFormat"
           @description='"grid" uses auto-fill columns sized to the format width. "list" stacks items in a single column.'
-          @options={{array 'grid' 'list'}}
+          @options={{array "grid" "list"}}
           @value={{this.viewFormat}}
           @onInput={{fn (mut this.viewFormat)}}
-          @defaultValue='grid'
+          @defaultValue="grid"
         />
         <Args.Bool
-          @name='fullWidthItem'
-          @description='When true, each GridItemContainer stretches to full width. Height is still constrained by @size.'
+          @name="fullWidthItem"
+          @description="When true, each GridItemContainer stretches to full width. Height is still constrained by @size."
           @value={{this.fullWidthItem}}
           @onInput={{fn (mut this.fullWidthItem)}}
           @defaultValue={{false}}
         />
         <Args.String
-          @name='tag'
-          @description='HTML element tag used to render the container element.'
-          @defaultValue='div'
+          @name="tag"
+          @description="HTML element tag used to render the container element."
+          @defaultValue="div"
         />
         <Args.Yield
-          @description='When @items is provided, yields (item, GridItemContainer) per entry. When @items is omitted, yields an empty block for custom content.'
+          @description="When @items is provided, yields (item, GridItemContainer) per entry. When @items is omitted, yields an empty block for custom content."
         />
       </:api>
     </FreestyleUsage>

@@ -1,13 +1,14 @@
-import { module, test } from 'qunit';
-import { click, render } from '@ember/test-helpers';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { setupRenderingTest } from '#tests/helpers';
 import {
-  KanbanPlane,
   type KanbanColumnConfig,
   type KanbanPlacement,
+  KanbanPlane,
 } from '@cardstack/boxel-ui/components';
+import { on } from '@ember/modifier';
+import { click, render } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | Component | kanban-plane', function (hooks) {
   setupRenderingTest(hooks);

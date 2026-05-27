@@ -26,13 +26,13 @@ export default class AvatarUsage extends Component {
 
   <template>
     <div
-      class='avatar-freestyle-container'
+      class="avatar-freestyle-container"
       style={{cssVar
         profile-avatar-icon-size=this.profileAvatarIconSize.value
         profile-avatar-icon-border=this.profileAvatarIconBorder.value
       }}
     >
-      <FreestyleUsage @name='Avatar'>
+      <FreestyleUsage @name="Avatar">
         <:description>
           An avatar component that displays a user's initials on a colored
           background.
@@ -47,45 +47,45 @@ export default class AvatarUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.String
-            @name='userId'
+            @name="userId"
             @required={{true}}
-            @description='Unique identifier for the user'
+            @description="Unique identifier for the user"
             @value={{this.userId}}
             @onInput={{fn (mut this.userId)}}
           />
           <Args.String
-            @name='displayName'
-            @description='User display name'
-            @defaultValue='userId'
+            @name="displayName"
+            @description="User display name"
+            @defaultValue="userId"
             @value={{this.displayName}}
             @onInput={{fn (mut this.displayName)}}
           />
           <Args.String
-            @name='thumbnailURL'
-            @description='URL of the user thumbnail'
+            @name="thumbnailURL"
+            @description="URL of the user thumbnail"
             @value={{this.thumbnailURL}}
             @onInput={{fn (mut this.thumbnailURL)}}
           />
           <Args.Bool
-            @name='isReady'
+            @name="isReady"
             @required={{true}}
-            @description='Shows initials on the avatar once this is true'
+            @description="Shows initials on the avatar once this is true"
             @value={{this.isReady}}
             @onInput={{fn (mut this.isReady)}}
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='profile-avatar-icon-size'
-            @type='length'
-            @description='Size of the avatar (CSS length value).'
+            @name="profile-avatar-icon-size"
+            @type="length"
+            @description="Size of the avatar (CSS length value)."
             @value={{this.profileAvatarIconSize.value}}
             @onInput={{this.profileAvatarIconSize.update}}
           />
           <Css.Basic
-            @name='profile-avatar-icon-border'
-            @type='<line-width> || <line-style> || <color>'
-            @description='Border of the avatar (CSS border value).'
+            @name="profile-avatar-icon-border"
+            @type="<line-width> || <line-style> || <color>"
+            @description="Border of the avatar (CSS border value)."
             @value={{this.profileAvatarIconBorder.value}}
             @onInput={{this.profileAvatarIconBorder.update}}
           />

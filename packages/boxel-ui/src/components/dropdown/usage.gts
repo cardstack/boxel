@@ -20,14 +20,14 @@ export default class BoxelDropdownUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Dropdown'>
+    <FreestyleUsage @name="Dropdown">
       <:description>
         This component is a building block for more complex components. By
         default this component will render the dropdown in the body using
         #-in-element and absolutely position it to place it in the proper
         coordinates relative to the trigger. Consider using
         <a
-          href='https://github.com/josemarluedke/ember-focus-trap'
+          href="https://github.com/josemarluedke/ember-focus-trap"
         >ember-focus-trap</a>
         within the content block to improve accessibility when the dropdown is
         open.
@@ -47,9 +47,9 @@ export default class BoxelDropdownUsage extends Component {
               @closeMenu={{dd.close}}
               @items={{array
                 (menuItem
-                  'Duplicate' (fn this.log 'Duplicate menu item clicked')
+                  "Duplicate" (fn this.log "Duplicate menu item clicked")
                 )
-                (menuItem 'Share' (fn this.log 'Share menu item clicked'))
+                (menuItem "Share" (fn this.log "Share menu item clicked"))
               }}
             />
           </:content>
@@ -73,45 +73,45 @@ export default class BoxelDropdownUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='contentClass'
-          @description='CSS Class to apply to the dropdown content div'
+          @name="contentClass"
+          @description="CSS Class to apply to the dropdown content div"
           @hideControls={{true}}
         />
         <Args.String
-          @name='variant'
+          @name="variant"
           @optional={{true}}
-          @description='Theme-based variant for consistent styling'
+          @description="Theme-based variant for consistent styling"
           @options={{this.dropdownVariants}}
           @onInput={{fn (mut this.variant)}}
           @value={{this.variant}}
         />
         <Args.Bool
-          @name='matchTriggerWidth'
-          @description='Whether to match the width of the trigger'
+          @name="matchTriggerWidth"
+          @description="Whether to match the width of the trigger"
           @hideControls={{true}}
         />
         <Args.Action
-          @name='registerAPI'
-          @description='Action called when the publicAPI changes, passing the publicAPI object.'
+          @name="registerAPI"
+          @description="Action called when the publicAPI changes, passing the publicAPI object."
         />
         <Args.Action
-          @name='onClose'
-          @description='Action called when the dropdown is closing'
+          @name="onClose"
+          @description="Action called when the dropdown is closing"
         />
         <Args.Bool
-          @name='autoClose'
+          @name="autoClose"
           @optional={{true}}
-          @description='Whether the dropdown should automatically close when mouse leaves the dropdown content'
+          @description="Whether the dropdown should automatically close when mouse leaves the dropdown content"
           @value={{this.shouldDropdownAutoClose}}
           @onInput={{fn (mut this.shouldDropdownAutoClose)}}
         />
         <Args.Yield
-          @name='trigger'
-          @description='Content to be used as trigger for basic dropdown. Yields a bindings modifier which applies aria- attributes and event handling.'
+          @name="trigger"
+          @description="Content to be used as trigger for basic dropdown. Yields a bindings modifier which applies aria- attributes and event handling."
         />
         <Args.Yield
-          @name='content'
-          @description='Content to show on dropdown. The provided block is rendered when trigger is triggered. Yields close action to close the dropdown'
+          @name="content"
+          @description="Content to show on dropdown. The provided block is rendered when trigger is triggered. Yields close action to close the dropdown"
         />
       </:api>
     </FreestyleUsage>

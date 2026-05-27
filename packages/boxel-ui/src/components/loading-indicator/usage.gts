@@ -27,12 +27,12 @@ export default class LoadingIndicatorUsage extends Component {
 
   <template>
     <FreestyleUsage
-      @name='Loading Indicator'
-      @description='Default loading indicator for Boxel components.'
+      @name="Loading Indicator"
+      @description="Default loading indicator for Boxel components."
     >
       <:example>
         <BoxelLoadingIndicator
-          class='loading-indicator-usage__example'
+          class="loading-indicator-usage__example"
           style={{cssVars
             boxel-loading-indicator-size=this.boxelLoadingIndicatorSize.value
           }}
@@ -42,26 +42,26 @@ export default class LoadingIndicatorUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='color'
-          @description='Custom color override (CSS color value)'
+          @name="color"
+          @description="Custom color override (CSS color value)"
           @value={{this.color}}
           @onInput={{fn (mut this.color)}}
-          @default='undefined'
+          @default="undefined"
         />
         <Args.String
-          @name='variant'
-          @description='Theme-based color variant'
+          @name="variant"
+          @description="Theme-based color variant"
           @value={{this.variant}}
           @onInput={{fn (mut this.variant)}}
           @options={{this.variants}}
-          @default='undefined'
+          @default="undefined"
         />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='loading-indicator-size'
-          @type='length'
-          @description='Sets height and width for loading indicator icon.'
+          @name="loading-indicator-size"
+          @type="length"
+          @description="Sets height and width for loading indicator icon."
           @defaultValue={{this.boxelLoadingIndicatorSize.defaults}}
           @value={{this.boxelLoadingIndicatorSize.value}}
           @onInput={{this.boxelLoadingIndicatorSize.update}}

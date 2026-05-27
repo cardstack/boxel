@@ -9,7 +9,7 @@ interface Signature {
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class CircleSpinner extends Component<Signature> {
   <template>
-    <IconCircle class='circle-spinner' ...attributes />
+    <IconCircle class="circle-spinner" ...attributes />
     <style scoped>
       .circle-spinner {
         animation: rotate 1.5s ease-in-out infinite;

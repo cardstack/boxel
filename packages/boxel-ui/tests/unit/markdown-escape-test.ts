@@ -1,6 +1,5 @@
-import { module, test } from 'qunit';
-
 import { markdownEscape } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 // markdownEscape emits CommonMark backslash escapes. Per the CommonMark spec
 // (https://spec.commonmark.org/0.30/#backslash-escapes), any ASCII punctuation

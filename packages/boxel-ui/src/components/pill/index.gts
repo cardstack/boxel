@@ -45,18 +45,18 @@ export interface PillSignature {
 }
 
 const Pill: TemplateOnlyComponent<PillSignature> = <template>
-  {{#let (element (if (eq @kind 'button') 'button' @tag)) as |Tag|}}
+  {{#let (element (if (eq @kind "button") "button" @tag)) as |Tag|}}
     <Tag
       class={{cn
-        'pill'
-        (if (eq @kind 'button') 'button-pill')
-        (if @variant (concat 'variant-' @variant) 'variant-default')
+        "pill"
+        (if (eq @kind "button") "button-pill")
+        (if @variant (concat "variant-" @variant) "variant-default")
         (if
-          (and (bool @size) (not (eq @size 'auto')))
-          (concat 'pill-size--' @size)
+          (and (bool @size) (not (eq @size "auto")))
+          (concat "pill-size--" @size)
         )
       }}
-      type={{if (eq @kind 'button') 'button'}}
+      type={{if (eq @kind "button") "button"}}
       style={{cssVar
         pill-background-color=@pillBackgroundColor
         pill-font-color=(if
@@ -70,17 +70,17 @@ const Pill: TemplateOnlyComponent<PillSignature> = <template>
       }}
       ...attributes
     >
-      {{#if (has-block 'iconLeft')}}
-        <figure class='icon'>
-          {{yield to='iconLeft'}}
+      {{#if (has-block "iconLeft")}}
+        <figure class="icon">
+          {{yield to="iconLeft"}}
         </figure>
       {{/if}}
 
       {{yield}}
 
-      {{#if (has-block 'iconRight')}}
-        <figure class='icon'>
-          {{yield to='iconRight'}}
+      {{#if (has-block "iconRight")}}
+        <figure class="icon">
+          {{yield to="iconRight"}}
         </figure>
       {{/if}}
     </Tag>

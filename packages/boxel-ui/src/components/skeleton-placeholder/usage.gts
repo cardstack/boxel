@@ -29,7 +29,7 @@ export default class SkeletonPlaceholderUsage extends Component {
 
   <template>
     <div
-      class='skeleton-freestyle-container'
+      class="skeleton-freestyle-container"
       style={{cssVar
         boxel-skeleton-background=this.boxelSkeletonBackground.value
         boxel-skeleton-highlight=this.boxelSkeletonHighlight.value
@@ -38,7 +38,7 @@ export default class SkeletonPlaceholderUsage extends Component {
         boxel-skeleton-border-radius=this.boxelSkeletonBorderRadius.value
       }}
     >
-      <FreestyleUsage @name='Skeleton Placeholder'>
+      <FreestyleUsage @name="Skeleton Placeholder">
         <:description>
           A skeleton placeholder component to show loading states
         </:description>
@@ -47,50 +47,50 @@ export default class SkeletonPlaceholderUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.String
-            @name='animation'
+            @name="animation"
             @value={{this.animation}}
-            @options={{array 'wave' 'pulse' 'none'}}
-            @description='Animation type for the skeleton'
+            @options={{array "wave" "pulse" "none"}}
+            @description="Animation type for the skeleton"
             @onInput={{fn (mut this.animation)}}
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-skeleton-width'
-            @type='string'
-            @description='Width of the skeleton (px or %)'
+            @name="boxel-skeleton-width"
+            @type="string"
+            @description="Width of the skeleton (px or %)"
             @defaultValue={{this.boxelSkeletonWidth.defaults}}
             @value={{this.boxelSkeletonWidth.value}}
             @onInput={{this.boxelSkeletonWidth.update}}
           />
           <Css.Basic
-            @name='boxel-skeleton-height'
-            @type='string'
-            @description='Height of the skeleton (px or %)'
+            @name="boxel-skeleton-height"
+            @type="string"
+            @description="Height of the skeleton (px or %)"
             @defaultValue={{this.boxelSkeletonHeight.defaults}}
             @value={{this.boxelSkeletonHeight.value}}
             @onInput={{this.boxelSkeletonHeight.update}}
           />
           <Css.Basic
-            @name='boxel-skeleton-border-radius'
-            @type='string'
-            @description='Border radius of the skeleton'
+            @name="boxel-skeleton-border-radius"
+            @type="string"
+            @description="Border radius of the skeleton"
             @defaultValue={{this.boxelSkeletonBorderRadius.defaults}}
             @value={{this.boxelSkeletonBorderRadius.value}}
             @onInput={{this.boxelSkeletonBorderRadius.update}}
           />
           <Css.Basic
-            @name='boxel-skeleton-background'
-            @type='color'
-            @description='Background color of the skeleton'
+            @name="boxel-skeleton-background"
+            @type="color"
+            @description="Background color of the skeleton"
             @defaultValue={{this.boxelSkeletonBackground.defaults}}
             @value={{this.boxelSkeletonBackground.value}}
             @onInput={{this.boxelSkeletonBackground.update}}
           />
           <Css.Basic
-            @name='boxel-skeleton-highlight'
-            @type='color'
-            @description='Highlight color for the wave animation (only applies when animation=wave)'
+            @name="boxel-skeleton-highlight"
+            @type="color"
+            @description="Highlight color for the wave animation (only applies when animation=wave)"
             @defaultValue={{this.boxelSkeletonHighlight.defaults}}
             @value={{this.boxelSkeletonHighlight.value}}
             @onInput={{this.boxelSkeletonHighlight.update}}

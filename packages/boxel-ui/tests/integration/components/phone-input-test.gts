@@ -1,13 +1,13 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-import { fillIn, render, triggerEvent } from '@ember/test-helpers';
-
 import { PhoneInput } from '@cardstack/boxel-ui/components';
 import type {
-  NormalizePhoneFormatResult,
   NormalizedPhoneNumberFormat,
+  NormalizePhoneFormatResult,
   PhoneFormatValidationError,
 } from '@cardstack/boxel-ui/helpers/validate-phone-format';
+import { fillIn, render, triggerEvent } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 type Validation = NormalizePhoneFormatResult | null | undefined;
 

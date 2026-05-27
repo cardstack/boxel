@@ -21,28 +21,28 @@ interface Signature {
 const Header: TemplateOnlyComponent<Signature> = <template>
   <header
     class={{cn
-      large=(eq @size 'large')
+      large=(eq @size "large")
       has-background=@hasBackground
       hasBottomBorder=@hasBottomBorder
     }}
     data-test-boxel-header
     ...attributes
   >
-    {{#if (has-block 'icon')}}
-      {{yield to='icon'}}
+    {{#if (has-block "icon")}}
+      {{yield to="icon"}}
     {{/if}}
 
     {{#if @title}}
-      <div class='title boxel-ellipsize' data-test-boxel-header-title>
+      <div class="title boxel-ellipsize" data-test-boxel-header-title>
         {{@title}}
       </div>
     {{/if}}
 
     {{yield}}
 
-    {{#if (has-block 'detail')}}
-      <div class='detail'>
-        {{yield to='detail'}}
+    {{#if (has-block "detail")}}
+      <div class="detail">
+        {{yield to="detail"}}
       </div>
     {{/if}}
   </header>

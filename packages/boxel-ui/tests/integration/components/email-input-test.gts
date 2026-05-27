@@ -1,9 +1,9 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-import { fillIn, render, triggerEvent, typeIn } from '@ember/test-helpers';
-
 import { EmailInput } from '@cardstack/boxel-ui/components';
 import type { EmailFormatValidationError } from '@cardstack/boxel-ui/helpers/validate-email-format';
+import { fillIn, render, triggerEvent, typeIn } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 type Validation = EmailFormatValidationError | null | undefined;
 

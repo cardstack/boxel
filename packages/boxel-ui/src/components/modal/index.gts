@@ -32,37 +32,37 @@ export default class Modal extends Component<Signature> {
 
   <template>
     {{#if @isOpen}}
-      {{setBodyClass 'has-modal'}}
+      {{setBodyClass "has-modal"}}
       <div
         style={{cssVar
           boxel-modal-z-index=(if
-            (eq @layer 'urgent')
-            'var(--boxel-layer-modal-urgent)'
-            'var(--boxel-layer-modal-default)'
+            (eq @layer "urgent")
+            "var(--boxel-layer-modal-urgent)"
+            "var(--boxel-layer-modal-default)"
           )
         }}
       >
         <button
           disabled={{@isOverlayDismissalDisabled}}
-          type='button'
-          {{on 'click' @onClose}}
-          class='overlay'
+          type="button"
+          {{on "click" @onClose}}
+          class="overlay"
           style={{cssVar
             boxel-modal-overlay-color=@boxelModalOverlayColor
             boxel-modal-background-image-url=this.backgroundImageURL
           }}
-          tabindex='-1'
+          tabindex="-1"
         >
-          <span class='boxel-sr-only'>Close modal</span>
+          <span class="boxel-sr-only">Close modal</span>
         </button>
 
         <dialog
-          class='{{@size}} {{if @centered "centered"}}'
+          class="{{@size}} {{if @centered 'centered'}}"
           open={{@isOpen}}
-          aria-modal='true'
+          aria-modal="true"
           ...attributes
         >
-          <div class='boxel-modal__inner'>
+          <div class="boxel-modal__inner">
             {{yield}}
           </div>
         </dialog>

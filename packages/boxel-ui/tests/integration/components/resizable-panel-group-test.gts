@@ -1,13 +1,13 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'ember-qunit';
-import type { RenderingTestContext } from '@ember/test-helpers';
-import { find, doubleClick, render } from '@ember/test-helpers';
-import { htmlSafe } from '@ember/template';
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
-import { tracked } from '@glimmer/tracking';
-import { triggerEvent } from '@ember/test-helpers';
 import type { Orientation } from '@cardstack/boxel-ui/components/resizable-panel-group/utils/types';
+import { not } from '@cardstack/boxel-ui/helpers';
+import { htmlSafe } from '@ember/template';
+import type { RenderingTestContext } from '@ember/test-helpers';
+import { doubleClick, find, render } from '@ember/test-helpers';
+import { triggerEvent } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
 
 const RESIZE_HANDLE_WIDTH = 8;
 const PANEL_INDEX_1_MIN_SIZE = 15;
@@ -23,13 +23,13 @@ class PanelProperties {
   showResizeHandle?: boolean;
   constructor(
     panelArgs: {
-      defaultSize?: number;
-      minSize?: number;
-      maxSize?: number;
       collapsible?: boolean;
+      defaultSize?: number;
+      isHidden?: boolean;
+      maxSize?: number;
+      minSize?: number;
       outerContainerStyle?: string;
       showResizeHandle?: boolean;
-      isHidden?: boolean;
     } = {},
     testArgs: {
       outerContainerStyle?: string;
@@ -81,11 +81,11 @@ let moveResizePanelHandle = async function ({
   hitAreaMargin = 0,
   moveWithSeparator = false, // Use the separator parent element of the handle to move
 }: {
-  panelIndex: number;
-  orientation: string;
-  moveDelta: number;
   hitAreaMargin?: number;
+  moveDelta: number;
   moveWithSeparator?: boolean;
+  orientation: string;
+  panelIndex: number;
 }) {
   let groupEl = document.querySelector('[data-boxel-panel-group]');
   if (!groupEl) {
@@ -206,7 +206,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         renderController: RenderController,
       ) {
         // Putting this in <style scoped> causes syntax highlighting to break
-        let testContainerStyles = `
+        const testContainerStyles = `
             #test-container {
               ${orientationProperties.perpendicularDimension}: 100px;
               max-${orientationProperties.dimension}: 100%;
@@ -234,12 +234,12 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
                       @collapsible={{panel.collapsible}}
                     >
                       <div
-                        class='panel'
+                        class="panel"
                         style={{htmlSafe
                           (if
                             panel.outerContainerStyle
                             panel.outerContainerStyle
-                            ''
+                            ""
                           )
                         }}
                         data-test-panel-index={{index}}

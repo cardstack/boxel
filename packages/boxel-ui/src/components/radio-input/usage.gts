@@ -85,7 +85,7 @@ export default class RadioInputUsage extends Component {
   @cssVariable declare boxelRadioOptionHoverColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='Radio'>
+    <FreestyleUsage @name="Radio">
       <:description>
         Radio input
       </:description>
@@ -93,7 +93,7 @@ export default class RadioInputUsage extends Component {
         <RadioInput
           @groupDescription={{this.groupDescription}}
           @items={{this.items}}
-          @name='example-radio-usage'
+          @name="example-radio-usage"
           @checkedId={{this.checkedIdItems}}
           @disabled={{this.disabled}}
           @orientation={{this.orientation}}
@@ -116,92 +116,92 @@ export default class RadioInputUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.String
-          @name='groupDescription'
-          @description='Description for this group of radio buttons'
+          @name="groupDescription"
+          @description="Description for this group of radio buttons"
           @value={{this.groupDescription}}
           @onInput={{fn (mut this.groupDescription)}}
           @optional={{true}}
         />
         <Args.Object
-          @name='items'
+          @name="items"
           @description="Items which will be represented by radio buttons. Each should have a unique 'id' attribute"
           @value={{this.items}}
           @onInput={{fn (mut this.items)}}
         />
         <Args.String
-          @name='checkedId'
-          @description='The id of the currently checked/selected item'
+          @name="checkedId"
+          @description="The id of the currently checked/selected item"
           @value={{this.checkedIdItems}}
           @onInput={{fn (mut this.checkedIdItems)}}
           @optional={{true}}
         />
         <Args.Bool
-          @name='disabled'
-          @description='Whether selection is disabled'
-          @defaultValue='false'
+          @name="disabled"
+          @description="Whether selection is disabled"
+          @defaultValue="false"
           @value={{this.disabled}}
           @onInput={{fn (mut this.disabled)}}
           @optional={{true}}
         />
         <Args.Bool
-          @name='hideRadio'
-          @description='Visually hides the radio input circle'
-          @defaultValue='false'
+          @name="hideRadio"
+          @description="Visually hides the radio input circle"
+          @defaultValue="false"
           @value={{this.hideRadio}}
           @onInput={{fn (mut this.hideRadio)}}
         />
         <Args.Bool
-          @name='hideBorder'
-          @description='Visually hides the item border'
-          @defaultValue='false'
+          @name="hideBorder"
+          @description="Visually hides the item border"
+          @defaultValue="false"
           @value={{this.hideBorder}}
           @onInput={{fn (mut this.hideBorder)}}
         />
         <Args.String
-          @name='spacing'
-          @description='Adjusts spacing level'
-          @defaultValue=''
-          @options={{array 'default' 'compact'}}
+          @name="spacing"
+          @description="Adjusts spacing level"
+          @defaultValue=""
+          @options={{array "default" "compact"}}
           @onInput={{fn (mut this.spacing)}}
           @value={{this.spacing}}
         />
         <Args.String
-          @name='orientation'
-          @description='Orientation of the radio buttons'
-          @defaultValue='horizontal'
-          @options={{array 'horizontal' 'vertical' 'default'}}
+          @name="orientation"
+          @description="Orientation of the radio buttons"
+          @defaultValue="horizontal"
+          @options={{array "horizontal" "vertical" "default"}}
           @onInput={{fn (mut this.orientation)}}
           @value={{this.orientation}}
         />
         <Args.Yield
-          @description='Yields an object with the default component to use (RadioInput::Item), the data for the item passed in, and whether that item is selected'
+          @description="Yields an object with the default component to use (RadioInput::Item), the data for the item passed in, and whether that item is selected"
         />
         <Args.String
-          @name='variant'
-          @description='Theme variant for the radio input'
-          @defaultValue='default'
-          @options={{array 'default' 'muted'}}
+          @name="variant"
+          @description="Theme variant for the radio input"
+          @defaultValue="default"
+          @options={{array "default" "muted"}}
           @value={{this.selectedVariant}}
           @onInput={{fn (mut this.selectedVariant)}}
           @optional={{true}}
         />
         <Args.String
-          @name='radioBackgroundColor'
-          @description='Custom background color for the radio input (overrides theme)'
+          @name="radioBackgroundColor"
+          @description="Custom background color for the radio input (overrides theme)"
           @value={{this.radioBackgroundColor}}
           @onInput={{fn (mut this.radioBackgroundColor)}}
           @optional={{true}}
         />
         <Args.String
-          @name='radioBorderColor'
-          @description='Custom border color for the radio input (overrides theme)'
+          @name="radioBorderColor"
+          @description="Custom border color for the radio input (overrides theme)"
           @value={{this.radioBorderColor}}
           @onInput={{fn (mut this.radioBorderColor)}}
           @optional={{true}}
         />
         <Args.String
-          @name='radioHighlightColor'
-          @description='Custom highlight color for the radio input (overrides theme)'
+          @name="radioHighlightColor"
+          @description="Custom highlight color for the radio input (overrides theme)"
           @value={{this.radioHighlightColor}}
           @onInput={{fn (mut this.radioHighlightColor)}}
           @optional={{true}}
@@ -209,17 +209,17 @@ export default class RadioInputUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-radio-input-option-padding'
-          @type='dimension'
-          @description='padding for each option'
+          @name="boxel-radio-input-option-padding"
+          @type="dimension"
+          @description="padding for each option"
           @defaultValue={{this.boxelRadioInputOptionPadding.defaults}}
           @value={{this.boxelRadioInputOptionPadding.value}}
           @onInput={{this.boxelRadioInputOptionPadding.update}}
         />
         <Css.Basic
-          @name='boxel-radio-input-option-gap'
-          @type='dimension'
-          @description='gap between circle and label'
+          @name="boxel-radio-input-option-gap"
+          @type="dimension"
+          @description="gap between circle and label"
           @defaultValue={{this.boxelRadioInputOptionGap.defaults}}
           @value={{this.boxelRadioInputOptionGap.value}}
           @onInput={{this.boxelRadioInputOptionGap.update}}
@@ -227,16 +227,16 @@ export default class RadioInputUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Multiple Choice Example'>
+    <FreestyleUsage @name="Multiple Choice Example">
       <:example>
         <RadioInput
           @groupDescription={{this.groupDescription}}
           @items={{this.items}}
-          @name='example-radio-usage'
+          @name="example-radio-usage"
           @checkedId={{this.checkedIdItems}}
           @disabled={{this.disabled}}
-          @orientation='vertical'
-          @spacing='compact'
+          @orientation="vertical"
+          @spacing="compact"
           @hideRadio={{false}}
           @hideBorder={{true}}
           style={{cssVar
@@ -254,16 +254,16 @@ export default class RadioInputUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='T Shirt Variants Example'>
+    <FreestyleUsage @name="T Shirt Variants Example">
       <:example>
         <RadioInput
           @groupDescription={{this.groupDescription}}
           @items={{this.tshirts}}
-          @name='example-radio-usage'
+          @name="example-radio-usage"
           @checkedId={{this.checkedIdTshirts}}
           @disabled={{this.disabled}}
-          @orientation='horizontal'
-          @spacing='default'
+          @orientation="horizontal"
+          @spacing="default"
           @hideRadio={{true}}
           @hideBorder={{false}}
           style={{cssVar
@@ -279,18 +279,18 @@ export default class RadioInputUsage extends Component {
       </:example>
     </FreestyleUsage>
 
-    <FreestyleUsage @name='Rating Scale Example'>
+    <FreestyleUsage @name="Rating Scale Example">
       <:description>
         A simple rating scale using radio buttons.
       </:description>
       <:example>
         <RadioInput
-          @groupDescription='Rate your experience'
+          @groupDescription="Rate your experience"
           @items={{this.ratings}}
-          @name='rating-scale'
+          @name="rating-scale"
           @checkedId={{this.selectedRating}}
-          @orientation='horizontal'
-          @spacing='default'
+          @orientation="horizontal"
+          @spacing="default"
           as |item|
         >
           <item.component @onChange={{fn this.onChangeRating item.data.id}}>

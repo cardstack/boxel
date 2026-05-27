@@ -28,13 +28,13 @@ export default class ProgressRadialUsage extends Component {
 
   <template>
     <div
-      class='progress-radial-freestyle-container'
+      class="progress-radial-freestyle-container"
       style={{cssVar
         boxel-progress-radial-fill-color=this.boxelProgressRadialFillColor.value
         boxel-progress-radial-background-color=this.boxelProgressRadialBackgroundColor.value
       }}
     >
-      <FreestyleUsage @name='Progress Radial'>
+      <FreestyleUsage @name="Progress Radial">
         <:description>
           A circular progress indicator to show completion of a task
         </:description>
@@ -43,31 +43,31 @@ export default class ProgressRadialUsage extends Component {
         </:example>
         <:api as |Args|>
           <Args.Number
-            @name='value'
-            @description='Current value of the progress'
+            @name="value"
+            @description="Current value of the progress"
             @value={{this.value}}
             @onInput={{fn (mut this.value)}}
           />
           <Args.Number
-            @name='max'
-            @description='Maximum value of the progress'
+            @name="max"
+            @description="Maximum value of the progress"
             @value={{this.max}}
             @onInput={{fn (mut this.max)}}
           />
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-progress-radial-fill-color'
-            @type='color'
-            @description='Color of the progress value'
+            @name="boxel-progress-radial-fill-color"
+            @type="color"
+            @description="Color of the progress value"
             @defaultValue={{this.boxelProgressRadialFillColor.defaults}}
             @value={{this.boxelProgressRadialFillColor.value}}
             @onInput={{this.boxelProgressRadialFillColor.update}}
           />
           <Css.Basic
-            @name='boxel-progress-radial-background-color'
-            @type='color'
-            @description='Background color of the progress indicator'
+            @name="boxel-progress-radial-background-color"
+            @type="color"
+            @description="Background color of the progress indicator"
             @defaultValue={{this.boxelProgressRadialBackgroundColor.defaults}}
             @value={{this.boxelProgressRadialBackgroundColor.value}}
             @onInput={{this.boxelProgressRadialBackgroundColor.update}}

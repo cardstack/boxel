@@ -208,8 +208,8 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
     <PowerSelect
       id={{this.selectId}}
       class={{cn
-        'boxel-select'
-        (if @variant (concat 'variant-' @variant) 'variant-default')
+        "boxel-select"
+        (if @variant (concat "variant-" @variant) "variant-default")
       }}
       @options={{@options}}
       @searchField={{@searchField}}
@@ -222,9 +222,9 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       @renderInPlace={{@renderInPlace}}
       @verticalPosition={{@verticalPosition}}
       @dropdownClass={{cn
-        'boxel-select__dropdown'
+        "boxel-select__dropdown"
         @dropdownClass
-        (if @variant (concat 'variant-' @variant) 'variant-default')
+        (if @variant (concat "variant-" @variant) "variant-default")
       }}
       @loadingMessage={{@loadingMessage}}
       @onFocus={{this.onOpen}}
@@ -241,7 +241,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         @triggerComponent
         (component
           BoxelSelectDefaultTrigger
-          invertIcon=(eq @verticalPosition 'above')
+          invertIcon=(eq @verticalPosition "above")
           variant=@variant
         )
       }}
@@ -259,7 +259,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         @optionsComponent
         (component BoxelSelectOptions)
       }}
-      data-select-trigger='true'
+      data-select-trigger="true"
       ...attributes
       as |item|
     >
@@ -302,11 +302,11 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         color: var(--select-text-color);
         transition: border-color var(--boxel-transition);
       }
-      .boxel-select[aria-expanded='true'] {
+      .boxel-select[aria-expanded="true"] {
         border-radius: var(--boxel-form-control-border-radius);
       }
 
-      .boxel-select:not([aria-disabled='true']):hover {
+      .boxel-select:not([aria-disabled="true"]):hover {
         cursor: pointer;
         border-color: var(--select-focus-border-color);
       }
@@ -415,7 +415,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         );
       }
 
-      .boxel-select[aria-disabled='true'] {
+      .boxel-select[aria-disabled="true"] {
         background-color: var(--muted, var(--boxel-100));
         color: var(--select-placeholder-color);
         cursor: not-allowed;
@@ -498,13 +498,13 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
         margin-bottom: 2px;
       }
 
-      .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
+      .boxel-select__dropdown .ember-power-select-option[aria-selected="true"] {
         background-color: var(--dropdown-highlight-color);
         color: var(--dropdown-selected-text-color);
       }
 
       .boxel-select__dropdown
-        .ember-power-select-option[aria-selected='true']:hover {
+        .ember-power-select-option[aria-selected="true"]:hover {
         background-color: var(--dropdown-highlight-hover-color);
         color: var(--dropdown-selected-text-color);
       }
@@ -558,7 +558,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       }
 
       /* All variants use the same reusable theme variables */
-      .boxel-select__dropdown[class*='variant-'] {
+      .boxel-select__dropdown[class*="variant-"] {
         --dropdown-highlight-color: var(
           --boxel-dropdown-highlight-color,
           var(--theme-highlight, var(--boxel-highlight))
@@ -726,47 +726,47 @@ export class BoxelSelectOptions extends PowerSelectOptions {
 
   <template>
     <ul
-      class='boxel-select-options-list ember-power-select-options'
-      role='listbox'
-      aria-label='Select options'
-      id='ember-power-select-options-{{@select.uniqueId}}'
+      class="boxel-select-options-list ember-power-select-options"
+      role="listbox"
+      aria-label="Select options"
+      id="ember-power-select-options-{{@select.uniqueId}}"
     >
       {{#each @options as |option index|}}
         <li
           class={{cn
-            'boxel-select-option-item'
-            'ember-power-select-option'
+            "boxel-select-option-item"
+            "ember-power-select-option"
             (if
-              (eq option @select.selected) 'ember-power-select-option--selected'
+              (eq option @select.selected) "ember-power-select-option--selected"
             )
             (if
               (eq option @select.highlighted)
-              'ember-power-select-option--highlighted'
+              "ember-power-select-option--highlighted"
             )
           }}
-          id='{{@select.uniqueId}}-{{@groupIndex}}{{index}}'
-          data-option-index='{{@groupIndex}}{{index}}'
+          id="{{@select.uniqueId}}-{{@groupIndex}}{{index}}"
+          data-option-index="{{@groupIndex}}{{index}}"
           data-test-option={{index}}
           data-test-option-id={{option.id}}
-          role='option'
+          role="option"
           aria-selected={{eq option @select.selected}}
-          aria-disabled={{if (get option 'disabled') 'true'}}
+          aria-disabled={{if (get option "disabled") "true"}}
           aria-current={{eq option @select.highlighted}}
-          {{on 'click' (fn this.handleSelect option @select)}}
-          {{on 'mouseenter' (fn @select.actions.highlight option)}}
+          {{on "click" (fn this.handleSelect option @select)}}
+          {{on "mouseenter" (fn @select.actions.highlight option)}}
         >
-          <span class='boxel-select-option-text'>
+          <span class="boxel-select-option-text">
             {{yield option @select}}
           </span>
           {{#if @select.selected}}
-            <span class='boxel-select-option-checkmark-container'>
+            <span class="boxel-select-option-checkmark-container">
               {{#if (eq option @select.selected)}}
                 <Check
-                  class='boxel-select-option-checkmark'
-                  role='presentation'
-                  width='16'
-                  height='16'
-                  aria-hidden='true'
+                  class="boxel-select-option-checkmark"
+                  role="presentation"
+                  width="16"
+                  height="16"
+                  aria-hidden="true"
                 />
               {{/if}}
             </span>
@@ -812,7 +812,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         box-sizing: border-box;
       }
 
-      .boxel-select-option-item:not([aria-disabled='true']):hover {
+      .boxel-select-option-item:not([aria-disabled="true"]):hover {
         background-color: var(--dropdown-hover-color);
         color: var(--dropdown-selected-text-color);
         cursor: pointer;
@@ -837,7 +837,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
         );
       }
 
-      .boxel-select-option-item[aria-disabled='true'] {
+      .boxel-select-option-item[aria-disabled="true"] {
         opacity: 0.5;
         cursor: not-allowed;
         pointer-events: none;

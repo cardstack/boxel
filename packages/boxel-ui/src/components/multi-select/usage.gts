@@ -43,9 +43,9 @@ interface CheckBoxArgs {
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class CheckboxIndicator extends Component<CheckBoxArgs> {
   <template>
-    <div class='checkbox-indicator'>
-      <span class={{cn 'check-icon' check-icon--selected=@isSelected}}>
-        <CheckMark width='12' height='12' />
+    <div class="checkbox-indicator">
+      <span class={{cn "check-icon" check-icon--selected=@isSelected}}>
+        <CheckMark width="12" height="12" />
       </span>
     </div>
     <style scoped>
@@ -87,14 +87,14 @@ interface AssigneePillArgs {
 // eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class AssigneePill extends Component<AssigneePillArgs> {
   <template>
-    <span class='assignee-pill'>
-      <div class='assignee-pill-content'>
+    <span class="assignee-pill">
+      <div class="assignee-pill-content">
         <CheckboxIndicator @isSelected={{@isSelected}} @option={{@option}} />
-        <div class='assignee-avatar'>{{@option.avatar}}</div>
-        <div class='assignee-name'>{{@option.name}}</div>
+        <div class="assignee-avatar">{{@option.avatar}}</div>
+        <div class="assignee-name">{{@option.name}}</div>
       </div>
-      <div class='assignee-issues'>{{@option.issues}}
-        {{getPlural 'issue' @option.issues}}</div>
+      <div class="assignee-issues">{{@option.issues}}
+        {{getPlural "issue" @option.issues}}</div>
     </span>
 
     <style scoped>
@@ -138,8 +138,8 @@ class AssigneePill extends Component<AssigneePillArgs> {
 
 export class SelectedCountry extends BoxelSelectedItem<Country> {
   <template>
-    <div class='selected-country'>
-      <CheckMark width='12' height='12' />
+    <div class="selected-country">
+      <CheckMark width="12" height="12" />
       {{@option.name}}
     </div>
   </template>
@@ -215,13 +215,13 @@ export default class BoxelMultiSelectUsage extends Component {
 
   <template>
     <div
-      class='boxel-multi-select-usage-container'
+      class="boxel-multi-select-usage-container"
       style={{cssVar
         boxel-selected-pill-background-color=this.boxelSelectedPillBackgroundColor.value
         boxel-multi-select-pill-color=this.boxelMultiSelectPillColor.value
       }}
     >
-      <FreestyleUsage @name='Multi Select'>
+      <FreestyleUsage @name="Multi Select">
         <:description>
           <p>
             Boxel Multi Select is a component that enables the selection of
@@ -250,10 +250,10 @@ export default class BoxelMultiSelectUsage extends Component {
             @disabled={{this.disabled}}
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{this.matchTriggerWidth}}
-            @searchField='name'
+            @searchField="name"
             @searchEnabled={{true}}
             @closeOnSelect={{false}}
-            @ariaLabel='Select countries'
+            @ariaLabel="Select countries"
             as |option|
           >
             {{option.name}}
@@ -263,56 +263,56 @@ export default class BoxelMultiSelectUsage extends Component {
         <:api as |Args|>
           {{! TODO: This is a bug. Args.Array does not display the objects in the UI in ember-freestyle }}
           <Args.Object
-            @name='options'
-            @description='An array of objects, to be listed on dropdown'
+            @name="options"
+            @description="An array of objects, to be listed on dropdown"
             @value={{this.items}}
             @onInput={{fn (mut this.items)}}
           />
           <Args.Array
-            @name='selected'
-            @description='Array of selected items'
+            @name="selected"
+            @description="Array of selected items"
             @required={{true}}
           />
           <Args.String
-            @name='placeholder'
-            @description='Placeholder for trigger component'
+            @name="placeholder"
+            @description="Placeholder for trigger component"
             @value={{this.placeholder}}
             @onInput={{fn (mut this.placeholder)}}
           />
           <Args.Bool
-            @name='disabled'
+            @name="disabled"
             @defaultValue={{false}}
             @value={{this.disabled}}
             @onInput={{fn (mut this.disabled)}}
-            @description='When truthy the component cannot be interacted'
+            @description="When truthy the component cannot be interacted"
           />
           <Args.Bool
-            @name='renderInPlace'
+            @name="renderInPlace"
             @defaultValue={{false}}
             @value={{this.renderInPlace}}
             @onInput={{fn (mut this.renderInPlace)}}
-            @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
+            @description="When passed true, the content will render next to the trigger instead of being placed in the root of the body"
           />
           <Args.Bool
-            @name='matchTriggerWidth'
+            @name="matchTriggerWidth"
             @defaultValue={{true}}
             @value={{this.matchTriggerWidth}}
             @onInput={{fn (mut this.matchTriggerWidth)}}
-            @description='Allow dropdown width to match trigger width'
+            @description="Allow dropdown width to match trigger width"
           />
 
         </:api>
         <:cssVars as |Css|>
           <Css.Basic
-            @name='boxel-selected-pill-background-color'
-            @type='background-color'
+            @name="boxel-selected-pill-background-color"
+            @type="background-color"
             @defaultValue={{this.boxelSelectedPillBackgroundColor.defaults}}
             @value={{this.boxelSelectedPillBackgroundColor.value}}
             @onInput={{this.boxelSelectedPillBackgroundColor.update}}
           />
           <Css.Basic
-            @name='boxel-multi-select-pill-color'
-            @type='color'
+            @name="boxel-multi-select-pill-color"
+            @type="color"
             @defaultValue={{this.boxelMultiSelectPillColor.defaults}}
             @value={{this.boxelMultiSelectPillColor.value}}
             @onInput={{this.boxelMultiSelectPillColor.update}}
@@ -320,19 +320,19 @@ export default class BoxelMultiSelectUsage extends Component {
         </:cssVars>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Custom Dropdown Component'>
+      <FreestyleUsage @name="Custom Dropdown Component">
         <:example>
           <BoxelMultiSelect
             @options={{this.assignees}}
             @selected={{this.selectedAssignees}}
             @onChange={{this.onSelectAssignees}}
-            @placeholder='Select assignees'
+            @placeholder="Select assignees"
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
-            @searchField='name'
+            @searchField="name"
             @searchEnabled={{true}}
             @closeOnSelect={{false}}
-            @ariaLabel='Select assignees'
+            @ariaLabel="Select assignees"
             as |option|
           >
             <AssigneePill
@@ -344,20 +344,20 @@ export default class BoxelMultiSelectUsage extends Component {
       </FreestyleUsage>
 
       <FreestyleUsage
-        @name='Custom Selected Item Component (Uses our TriggerComponent)'
+        @name="Custom Selected Item Component (Uses our TriggerComponent)"
       >
         <:example>
           <BoxelMultiSelect
             @options={{this.assignees}}
             @selected={{this.selectedAssignees}}
             @onChange={{this.onSelectAssignees}}
-            @placeholder='Select assignees'
+            @placeholder="Select assignees"
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
-            @searchField='name'
+            @searchField="name"
             @searchEnabled={{true}}
             @closeOnSelect={{false}}
-            @ariaLabel='Select countries'
+            @ariaLabel="Select countries"
             @selectedItemComponent={{component SelectedCountry}}
             as |option|
           >
@@ -366,17 +366,17 @@ export default class BoxelMultiSelectUsage extends Component {
         </:example>
       </FreestyleUsage>
 
-      <FreestyleUsage @name='Boxel Multi Select Basic'>
+      <FreestyleUsage @name="Boxel Multi Select Basic">
         <:example>
           <BoxelMultiSelectBasic
             @options={{this.assignees}}
             @selected={{this.selectedAssignees}}
-            @placeholder='Select assignees'
+            @placeholder="Select assignees"
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
             @closeOnSelect={{false}}
             @onChange={{this.onSelectAssignees}}
-            @ariaLabel='Select assignees'
+            @ariaLabel="Select assignees"
             as |option|
           >
             {{option.name}}
@@ -393,9 +393,9 @@ export default class BoxelMultiSelectUsage extends Component {
           </p>
         </:description>
       </FreestyleUsage>
-      <FreestyleUsage @name='Usage with FieldContainer'>
+      <FreestyleUsage @name="Usage with FieldContainer">
         <:example>
-          <BoxelField @label='Country'>
+          <BoxelField @label="Country">
             <BoxelMultiSelect
               @options={{this.items}}
               @selected={{this.selectedItems}}
@@ -404,10 +404,10 @@ export default class BoxelMultiSelectUsage extends Component {
               @disabled={{this.disabled}}
               @renderInPlace={{this.renderInPlace}}
               @matchTriggerWidth={{this.matchTriggerWidth}}
-              @searchField='name'
+              @searchField="name"
               @searchEnabled={{true}}
               @closeOnSelect={{false}}
-              @ariaLabel='Select countries'
+              @ariaLabel="Select countries"
               as |option|
             >
               {{option.name}}

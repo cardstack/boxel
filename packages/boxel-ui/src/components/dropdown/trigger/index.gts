@@ -18,22 +18,22 @@ interface Signature {
 const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
   <BoxelButton
     class={{cn
-      'boxel-dropdown-trigger'
+      "boxel-dropdown-trigger"
       boxel-dropdown-trigger--showing-placeholder=@isMissingValue
     }}
     @disabled={{@disabled}}
     ...attributes
   >
     {{#if @icon}}
-      <@icon class='boxel-dropdown-trigger__icon' role='presentation' />
+      <@icon class="boxel-dropdown-trigger__icon" role="presentation" />
     {{/if}}
 
     {{@label}}
     <CaretDown
-      class='boxel-dropdown-trigger__caret'
-      width='8'
-      height='8'
-      role='presentation'
+      class="boxel-dropdown-trigger__caret"
+      width="8"
+      height="8"
+      role="presentation"
     />
   </BoxelButton>
   <style scoped>

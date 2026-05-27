@@ -1,11 +1,12 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from '#tests/helpers';
-import { click, render, waitFor, triggerEvent } from '@ember/test-helpers';
 import {
   BoxelDropdown,
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
+import { click, render, triggerEvent, waitFor } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | Component | dropdown', function (hooks) {
   setupRenderingTest(hooks);

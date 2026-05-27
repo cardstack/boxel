@@ -30,10 +30,10 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
     );
   }
   <template>
-    <div class='boxel-trigger'>
-      <div class='boxel-trigger-content'>
+    <div class="boxel-trigger">
+      <div class="boxel-trigger-content">
         {{#if this.showPlaceholder}}
-          <div class='boxel-trigger-placeholder'>
+          <div class="boxel-trigger-placeholder">
             {{@placeholder}}
           </div>
         {{else}}
@@ -44,8 +44,8 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
       </div>
       {{#if (not @select.disabled)}}
 
-        {{#if (has-block 'icon')}}
-          {{yield to='icon'}}
+        {{#if (has-block "icon")}}
+          {{yield to="icon"}}
         {{/if}}
       {{/if}}
     </div>
@@ -102,9 +102,9 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       <:icon>
         <CaretDown
           class={{cn
-            'icon'
-            (if @select.isOpen 'is-open')
-            (if @invertIcon 'is-inverted')
+            "icon"
+            (if @select.isOpen "is-open")
+            (if @invertIcon "is-inverted")
           }}
           data-test-caret-down
         />

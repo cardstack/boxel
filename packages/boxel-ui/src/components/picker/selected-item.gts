@@ -87,53 +87,53 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
 
   <template>
     <Pill
-      class='picker-selected-item'
-      @size='small'
+      class="picker-selected-item"
+      @size="small"
       data-test-boxel-picker-selected-item={{this.text}}
     >
       <:iconLeft>
         {{#if this.icon}}
-          <div class='picker-selected-item__icon'>
+          <div class="picker-selected-item__icon">
             {{#if this.isIconURL}}
               <img
                 src={{this.iconString}}
-                width='14'
-                height='14'
-                alt=''
-                class='picker-selected-item__icon-image'
+                width="14"
+                height="14"
+                alt=""
+                class="picker-selected-item__icon-image"
               />
             {{else if this.iconString}}
               {{htmlSafe
                 (addClassToSVG
-                  this.iconString 'picker-selected-item__icon-image'
+                  this.iconString "picker-selected-item__icon-image"
                 )
               }}
             {{else if this.iconComponent}}
               <this.iconComponent
-                width='14'
-                height='14'
-                class='picker-selected-item__icon-component'
-                role='presentation'
+                width="14"
+                height="14"
+                class="picker-selected-item__icon-component"
+                role="presentation"
               />
             {{/if}}
           </div>
         {{/if}}
       </:iconLeft>
       <:default>
-        <span class='picker-selected-item__text'>{{this.text}}</span>
+        <span class="picker-selected-item__text">{{this.text}}</span>
       </:default>
       <:iconRight>
         {{#if this.displayRemoveButton}}
           <ContextButton
-            @icon='close'
-            @size='extra-small'
-            @variant='highlight'
-            @label='Remove'
-            @width='14'
-            @height='14'
-            class='picker-selected-item__remove'
-            {{on 'click' (fn this.remove @option)}}
-            {{on 'keydown' (fn this.handleKeydown @option)}}
+            @icon="close"
+            @size="extra-small"
+            @variant="highlight"
+            @label="Remove"
+            @width="14"
+            @height="14"
+            class="picker-selected-item__remove"
+            {{on "click" (fn this.remove @option)}}
+            {{on "keydown" (fn this.handleKeydown @option)}}
             data-test-boxel-picker-remove-button
           />
         {{/if}}

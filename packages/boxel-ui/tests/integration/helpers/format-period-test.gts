@@ -1,7 +1,8 @@
-import { module, test } from 'qunit';
-import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from '#tests/helpers';
 import { formatPeriod } from '@cardstack/boxel-ui/helpers';
+import { render } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '#tests/helpers';
 
 module('Integration | helpers | formatPeriod', function (hooks) {
   setupRenderingTest(hooks);

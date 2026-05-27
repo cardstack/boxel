@@ -15,9 +15,9 @@ export interface GridItemContainerSignature {
 
 const GridItemContainer: TemplateOnlyComponent<GridItemContainerSignature> =
   <template>
-    <div class='boxel-grid-item-container' ...attributes>
-      {{#if (has-block 'before')}}
-        {{yield to='before'}}
+    <div class="boxel-grid-item-container" ...attributes>
+      {{#if (has-block "before")}}
+        {{yield to="before"}}
       {{/if}}
 
       <FittedCardContainer
@@ -28,8 +28,8 @@ const GridItemContainer: TemplateOnlyComponent<GridItemContainerSignature> =
         {{yield}}
       </FittedCardContainer>
 
-      {{#if (has-block 'after')}}
-        {{yield to='after'}}
+      {{#if (has-block "after")}}
+        {{yield to="after"}}
       {{/if}}
     </div>
   </template>;

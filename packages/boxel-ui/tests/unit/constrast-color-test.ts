@@ -1,6 +1,5 @@
-import { module, test } from 'qunit';
-
 import { getContrastColor } from '@cardstack/boxel-ui/helpers';
+import { module, test } from 'qunit';
 
 module('Unit | contrast-color test', function () {
   const darkText = 'var(--boxel-dark, #000000)';

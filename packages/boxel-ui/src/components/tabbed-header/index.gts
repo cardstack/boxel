@@ -29,29 +29,29 @@ interface Signature {
 export default class TabbedHeader extends Component<Signature> {
   <template>
     <header
-      class='app-header'
+      class="app-header"
       style={{cssVar
         header-background-color=@headerBackgroundColor
         header-text-color=(getContrastColor @headerBackgroundColor)
       }}
       ...attributes
     >
-      <div class='app-title-group'>
-        {{#if (has-block 'headerIcon')}}
-          {{yield to='headerIcon'}}
+      <div class="app-title-group">
+        {{#if (has-block "headerIcon")}}
+          {{yield to="headerIcon"}}
         {{/if}}
-        <h1 class='app-title'>{{@headerTitle}}</h1>
+        <h1 class="app-title">{{@headerTitle}}</h1>
       </div>
 
-      <div class='app-content'>
-        <nav class='app-nav'>
-          <ul class='app-tab-list'>
+      <div class="app-content">
+        <nav class="app-nav">
+          <ul class="app-tab-list">
             {{#each @tabs as |tab|}}
               <li>
                 <a
-                  href='#{{tab.tabId}}'
-                  {{on 'click' (fn @setActiveTab tab.tabId)}}
-                  class={{if (eq @activeTabId tab.tabId) 'active'}}
+                  href="#{{tab.tabId}}"
+                  {{on "click" (fn @setActiveTab tab.tabId)}}
+                  class={{if (eq @activeTabId tab.tabId) "active"}}
                   data-test-tab-label={{tab.displayName}}
                 >
                   {{tab.displayName}}
@@ -61,9 +61,9 @@ export default class TabbedHeader extends Component<Signature> {
           </ul>
         </nav>
 
-        <div class='app-side-content'>
-          {{#if (has-block 'sideContent')}}
-            {{yield to='sideContent'}}
+        <div class="app-side-content">
+          {{#if (has-block "sideContent")}}
+            {{yield to="sideContent"}}
           {{/if}}
         </div>
       </div>

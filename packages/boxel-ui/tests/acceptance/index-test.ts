@@ -1,7 +1,7 @@
-import { module, test } from 'qunit';
 import { find, visit } from '@ember/test-helpers';
-import { setupApplicationTest } from 'ember-qunit';
 import { a11yAudit } from 'ember-a11y-testing/test-support';
+import { setupApplicationTest } from 'ember-qunit';
+import { module, test } from 'qunit';
 
 module('Acceptance | Docs', function (hooks) {
   setupApplicationTest(hooks);

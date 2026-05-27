@@ -95,23 +95,23 @@ export default class RadioInput extends Component<Signature> {
     </style>
     <fieldset
       class={{cn
-        'boxel-radio-fieldset'
-        boxel-radio-fieldset--compact=(eq @spacing 'compact')
+        "boxel-radio-fieldset"
+        boxel-radio-fieldset--compact=(eq @spacing "compact")
       }}
       disabled={{@disabled}}
       ...attributes
     >
-      <legend class='boxel-radio-fieldset__legend'>
+      <legend class="boxel-radio-fieldset__legend">
         {{@groupDescription}}
       </legend>
       {{! this div is necessary because Chrome has a special case for fieldsets and it breaks grid auto placement }}
       <div
         class={{cn
-          'boxel-radio-fieldset__container'
+          "boxel-radio-fieldset__container"
           boxel-radio-fieldset__container--horizontal=(eq
-            @orientation 'horizontal'
+            @orientation "horizontal"
           )
-          boxel-radio-fieldset__container--vertical=(eq @orientation 'vertical')
+          boxel-radio-fieldset__container--vertical=(eq @orientation "vertical")
         }}
       >
         {{#each @items as |item i|}}

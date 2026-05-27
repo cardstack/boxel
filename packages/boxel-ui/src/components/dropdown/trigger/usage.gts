@@ -13,7 +13,7 @@ export default class BoxelDropdownUsage extends Component {
   @tracked label: string | undefined = 'Choose one';
   @tracked isMissingValue: boolean | undefined;
   <template>
-    <FreestyleUsage @name='DropdownTrigger'>
+    <FreestyleUsage @name="DropdownTrigger">
       <:description>
         This component is a building block for rendering a dropdown trigger with
         a label and optional icon. It is a button with no border and a downward
@@ -29,21 +29,21 @@ export default class BoxelDropdownUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Component
-          @name='icon'
-          @description='Optional icon component reference to show on the left of the trigger'
+          @name="icon"
+          @description="Optional icon component reference to show on the left of the trigger"
           @value={{this.icon}}
           @options={{ALL_ICON_COMPONENTS}}
           @onChange={{fn (mut this.icon)}}
         />
         <Args.String
-          @name='label'
-          @description='The text to display'
+          @name="label"
+          @description="The text to display"
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
         />
         <Args.Bool
-          @name='isMissingValue'
-          @description='Whether the value is present. If true, the label will be shown in a lighter placeholder-esque shade.'
+          @name="isMissingValue"
+          @description="Whether the value is present. If true, the label will be shown in a lighter placeholder-esque shade."
           @defaultValue={{false}}
           @value={{this.isMissingValue}}
           @onInput={{fn (mut this.isMissingValue)}}
