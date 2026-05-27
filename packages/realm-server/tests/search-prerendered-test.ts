@@ -233,6 +233,15 @@ module(basename(__filename), function () {
                 json.meta.isFileMeta,
                 `isFileMeta flag is set for ${format} file-meta query`,
               );
+              assert.strictEqual(
+                json.data[0].attributes.cardType,
+                'Markdown',
+                `${format} result carries the FileDef subclass display name as cardType`,
+              );
+              assert.ok(
+                json.data[0].attributes.iconHtml,
+                `${format} result carries the FileDef subclass iconHtml`,
+              );
             }
           });
         },

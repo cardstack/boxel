@@ -1,9 +1,11 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { consume } from 'ember-provide-consume-context';
+import { modifier } from 'ember-modifier';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
@@ -15,6 +17,7 @@ import {
   removeFileExtension,
   rri,
   CardCrudFunctionsContextName,
+  CardContextName,
   type Query,
 } from '@cardstack/runtime-common';
 
@@ -38,9 +41,41 @@ interface Signature {
   Element: HTMLElement;
 }
 
+type CardComponentModifier = NonNullable<CardContext['cardComponentModifier']>;
+
+// Cast: a function-based no-op stands in for the class-based tracking
+// modifier so applying it is always type-safe even when no context provides
+// a real one.
+const noopCardModifier = modifier(
+  () => undefined,
+) as unknown as CardComponentModifier;
+
 export default class CardList extends Component<Signature> {
   @consume(CardCrudFunctionsContextName)
   declare cardCrudFunctions: CardCrudFunctions | undefined;
+
+  @consume(CardContextName)
+  declare cardContext: CardContext | undefined;
+
+  // Tracks the fallback row with the overlay system the same way
+  // PrerenderedCard does for rows that produced HTML. Falls back to a no-op
+  // when no context provides one (e.g. CardList used outside operator mode),
+  // so applying the modifier is always safe.
+  private get cardComponentModifier(): CardComponentModifier {
+    return this.cardContext?.cardComponentModifier ?? noopCardModifier;
+  }
+
+  // Only fallback rows are tracked on the <li> (their visible card is the
+  // <li> itself). HTML rows are tracked by PrerenderedCard on their own
+  // component root, so tracking the <li> too would double-register them and
+  // misplace the overlay — hence the no-op for those.
+  private trackerFor = (card: {
+    hasHtml?: boolean;
+    isError?: boolean;
+  }): CardComponentModifier =>
+    this.shouldRenderFallback(card)
+      ? this.cardComponentModifier
+      : noopCardModifier;
 
   @action
   handleCardClick(cardUrl: string, event?: Event) {
@@ -112,9 +147,23 @@ export default class CardList extends Component<Signature> {
                 data-test-cards-grid-item={{removeFileExtension card.url}}
                 {{! In order to support scrolling cards into view we use a selector that is not pruned out in production builds }}
                 data-cards-grid-item={{removeFileExtension card.url}}
+                data-card-type-display-name={{if
+                  (this.shouldRenderFallback card)
+                  card.cardType
+                }}
+                data-card-type-icon-html={{if
+                  (this.shouldRenderFallback card)
+                  card.iconHtml
+                }}
                 role={{if this.cardCrudFunctions.viewCard 'button'}}
                 tabindex={{if this.cardCrudFunctions.viewCard '0'}}
                 {{on 'click' (fn this.handleCardClick card.url)}}
+                {{(this.trackerFor card)
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
               >
                 {{#if (this.shouldRenderFallback card)}}
                   {{! CS-11171: file rows whose prerender produced no HTML
@@ -123,9 +172,21 @@ export default class CardList extends Component<Signature> {
                       this `<li>` can still route the user into interact-mode
                       (and from there into Code Mode via the kebab menu).
                       Error rows are excluded so PrerenderedCard's dedicated
-                      error component still gets rendered for them. }}
+                      error component still gets rendered for them.
+                      The <li> carries the tracking modifier + type attributes
+                      (see trackerFor) so the overlay system labels and acts on
+                      these rows too, aligned to the visible card. }}
                   <div class='card-fallback' data-test-card-fallback>
-                    <FileIcon class='card-fallback__icon' role='presentation' />
+                    {{#if card.iconHtml}}
+                      <span
+                        class='card-fallback__icon card-fallback__icon--svg'
+                      >{{htmlSafe card.iconHtml}}</span>
+                    {{else}}
+                      <FileIcon
+                        class='card-fallback__icon'
+                        role='presentation'
+                      />
+                    {{/if}}
                     <div class='card-fallback__name'>
                       {{this.fileNameFromUrl card.url}}
                     </div>
@@ -217,6 +278,13 @@ export default class CardList extends Component<Signature> {
         height: 2rem;
         color: var(--boxel-500);
         flex-shrink: 0;
+      }
+      .card-fallback__icon--svg {
+        display: inline-flex;
+      }
+      .card-fallback__icon--svg > svg {
+        width: 100%;
+        height: 100%;
       }
       .card-fallback__name {
         font: 500 var(--boxel-font-sm);

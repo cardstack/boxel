@@ -669,11 +669,14 @@ module(
         assert
           .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
           .exists();
+        await click(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+        );
         assert
-          .dom(
-            `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
-          )
-          .doesNotExist('edit icon not displayed for linked card');
+          .dom('[data-test-boxel-menu-item-text="Edit"]')
+          .doesNotExist(
+            'Edit menu item not displayed for read-only linked card',
+          );
         await click(
           `[data-test-links-to-editor="pet"] [data-test-field-component-card]`,
         );
