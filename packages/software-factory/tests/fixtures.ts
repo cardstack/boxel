@@ -392,6 +392,27 @@ async function startRealmProcess(
   let runningChild = child;
   let stop = async () => {
     try {
+      // Drain the worker-scoped prerender before tearing down this realm
+      // stack. The prerender outlives the per-test realm-server on a stable
+      // port; without this it can reuse a warm page (or finish an in-flight
+      // render) against the dead port and fail with ECONNREFUSED on its next
+      // module fetch — surfacing as a render timeout that trips the test's
+      // realm-setup timeout. Best-effort: the prerender may already be gone.
+      try {
+        let ac = new AbortController();
+        let t = setTimeout(() => ac.abort(), 15_000);
+        try {
+          await fetch(`${testWorkerPrerenderURL}/evict-affinities`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/vnd.api+json' },
+            signal: ac.signal,
+          });
+        } finally {
+          clearTimeout(t);
+        }
+      } catch {
+        // best effort — prerender may be down, draining, or already drained
+      }
       if (runningChild.exitCode === null) {
         killProcessGroup(runningChild.pid!, 'SIGTERM');
         await new Promise<void>((resolve, reject) => {

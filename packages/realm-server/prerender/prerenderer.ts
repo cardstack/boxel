@@ -200,6 +200,17 @@ export class Prerenderer {
     await this.#pagePool.disposeAffinity(affinityKey);
   }
 
+  // Drain every affinity's pages back to a cold-but-alive pool. Used to
+  // quiesce the prerender before the realm-server it renders against is
+  // torn down, so no warm page or in-flight render outlives that server.
+  async disposeAllAffinities(): Promise<string[]> {
+    let disposed = await this.#pagePool.disposeAllAffinities();
+    for (let affinityKey of disposed) {
+      this.#renderRunner.clearAuthCache(affinityKey);
+    }
+    return disposed;
+  }
+
   // Block until the standby pool has reached its desired count. The
   // constructor and `disposeAffinity` both kick refill fire-and-forget;
   // tests that need a fresh tab in their *next* `prerenderVisit` call
