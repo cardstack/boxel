@@ -54,6 +54,7 @@ const files: Record<string, any> = {
     name: 'Test Workspace A',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+    iconURL: testRealmAIconURL,
   }),
   'index.json': {
     data: {

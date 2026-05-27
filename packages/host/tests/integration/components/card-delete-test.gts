@@ -214,7 +214,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -438,13 +438,13 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -502,7 +502,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     assert
       .dom(
@@ -555,7 +555,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
@@ -612,7 +612,7 @@ module('Integration | card-delete', function (hooks) {
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
-        ).length === 1,
+        ).length === 2,
     );
     let notFound = await adapter.openFile('Pet/mango.json');
     assert.strictEqual(notFound, undefined, 'file ref does not exist');

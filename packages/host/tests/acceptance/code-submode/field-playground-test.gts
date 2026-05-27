@@ -1131,6 +1131,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'author.gts': authorCard,
             'realm.json': realmConfigCardJSON({
+              name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
@@ -1196,6 +1197,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
               },
             },
             'realm.json': realmConfigCardJSON({
+              name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
             }),

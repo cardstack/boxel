@@ -493,6 +493,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
+              name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
@@ -509,6 +510,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
+              name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
             }),
@@ -524,6 +526,7 @@ module('Acceptance | code submode tests', function (_hooks) {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
+              name: `Catalog Realm`,
               backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
               iconURL:
                 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
