@@ -1141,6 +1141,24 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 }
 
+// Wire fragment for a non-present link — the union of not-loaded and the
+// terminal link-error / link-not-found sentinels. All three serialize to the
+// identical not-loaded shape: the broken reference is preserved as a
+// relationship link (with no errorDoc or discriminator) so a save→reload cycle
+// reconstructs the state from the live target rather than persisting transient
+// failure data. Shared by the singular and plural linksTo serializers so the
+// two paths cannot drift.
+function serializeNonPresentLink(
+  reference: string,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return {
+    links: { self: makeRelativeURL(reference, opts) },
+    data: { type: relationshipType, id: reference },
+  };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1255,12 +1273,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (isNonPresentLink(value)) {
       return {
         relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.reference, opts),
-            },
-            data: { type: relationshipType, id: value.reference },
-          },
+          [this.name]: serializeNonPresentLink(
+            value.reference,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1781,12 +1798,11 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         return;
       }
       if (isNonPresentLink(value)) {
-        relationships[`${this.name}\.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.reference, opts),
-          },
-          data: { type: relationshipType, id: value.reference },
-        };
+        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+          value.reference,
+          relationshipType,
+          opts,
+        );
         return;
       }
       if (isFileDef(this.card) && !value.id) {
