@@ -370,7 +370,10 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
         line-height: 1;
       }
       .atom-label {
+        flex: 0 0 auto;
         font-weight: 600;
+        font-size: 0.9em;
+        white-space: nowrap;
       }
       .atom-url {
         font-family: var(--boxel-monospace-font-family, monospace);
