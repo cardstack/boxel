@@ -156,6 +156,10 @@ export default class BasicFittedUsage extends Component {
     },
   ];
 
+  style = (spec: { height: number; width: number }) => {
+    return `container-name: fitted-card; container-type: size; width: {{spec.width}}px; height: {{spec.height}}px`;
+  };
+
   <template>
     {{! template-lint-disable no-inline-styles style-concatenation }}
     <FreestyleUsage @name="BasicFitted">
@@ -173,10 +177,7 @@ export default class BasicFittedUsage extends Component {
       </:description>
       <:example>
         <FittedUsagePreview @specs={{this.specs}} as |spec|>
-          <CardContainer
-            @displayBoundaries={{true}}
-            style="container-name: fitted-card; container-type: size; width: {{spec.width}}px; height: {{spec.height}}px"
-          >
+          <CardContainer @displayBoundaries={{true}} style={{this.style spec}}>
             <BasicFitted
               @primary={{this.primary}}
               @secondary={{this.secondary}}
