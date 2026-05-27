@@ -82,7 +82,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_NO_WARNINGS=1 \
   PGPORT="${PGPORT}" \
   PGDATABASE="${PGDATABASE}" \
-  LOG_LEVELS='*=info' \
+  LOG_LEVELS="${LOG_LEVELS:-*=info}" \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
