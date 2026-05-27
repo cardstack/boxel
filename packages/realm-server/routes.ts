@@ -85,6 +85,12 @@ export type CreateRoutesArgs = {
   reconciler: RealmRegistryReconciler;
   realmsRootPath: string;
   getMatrixRegistrationSecret: () => Promise<string>;
+  // Synapse admin credentials. Optional at the top: when both are unset the
+  // grafana upsert handler falls back to a localhost-only default so local
+  // dev / tests don't need to thread env vars through. When provided they
+  // are used as-is for any environment (staging, prod).
+  matrixAdminUsername?: string;
+  matrixAdminPassword?: string;
   serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;

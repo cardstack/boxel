@@ -1002,6 +1002,7 @@ export async function createRealm({
   cardSizeLimitBytes,
   fileSizeLimitBytes,
   transpileCoordinator,
+  fullIndexOnStartup,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1024,6 +1025,12 @@ export async function createRealm({
   // is the only thing serializing them — that's the behavior we want to
   // exercise.
   transpileCoordinator?: PopulateCoordinator;
+  // Forwarded to the Realm constructor's `fullIndexOnStartup` option so
+  // tests can exercise the bootstrap-realm code path in `Realm.#startup`
+  // (the kind='bootstrap' branch that triggers the CS-11245 broadcast).
+  // Production sets this via `resolveFullIndexOnStartup`; tests opt in
+  // explicitly because `createRealm` has no realm-registry row to read.
+  fullIndexOnStartup?: true;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -1071,28 +1078,31 @@ export async function createRealm({
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
-  let realm = new Realm({
-    url: realmURL,
-    adapter,
-    secretSeed: realmSecretSeed,
-    virtualNetwork,
-    dbAdapter,
-    queue: publisher,
-    matrixClient,
-    realmServerURL: new URL(new URL(realmURL).origin).href,
-    definitionLookup,
-    cardSizeLimitBytes:
-      cardSizeLimitBytes ??
-      Number(
-        process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
-      ),
-    fileSizeLimitBytes:
-      fileSizeLimitBytes ??
-      Number(
-        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
-      ),
-    transpileCoordinator,
-  });
+  let realm = new Realm(
+    {
+      url: realmURL,
+      adapter,
+      secretSeed: realmSecretSeed,
+      virtualNetwork,
+      dbAdapter,
+      queue: publisher,
+      matrixClient,
+      realmServerURL: new URL(new URL(realmURL).origin).href,
+      definitionLookup,
+      cardSizeLimitBytes:
+        cardSizeLimitBytes ??
+        Number(
+          process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+        ),
+      fileSizeLimitBytes:
+        fileSizeLimitBytes ??
+        Number(
+          process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+        ),
+      transpileCoordinator,
+    },
+    fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
+  );
   if (worker) {
     virtualNetwork.mount(realm.handle);
     await worker.run();

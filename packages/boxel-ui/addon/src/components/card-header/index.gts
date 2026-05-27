@@ -12,7 +12,6 @@ import { MenuItem } from '../../helpers/menu-item.ts';
 import { and } from '../../helpers/truth-helpers.ts';
 import { bool, or } from '../../helpers/truth-helpers.ts';
 import setCssVar from '../../modifiers/set-css-var.ts';
-import Button from '../button/index.gts';
 import ContextButton from '../context-button/index.gts';
 import BoxelDropdown from '../dropdown/index.gts';
 import Menu from '../menu/index.gts';
@@ -129,8 +128,27 @@ export default class CardHeader extends Component<Signature> {
               <div class='utility-menu-positioner'>
                 <BoxelDropdown @autoClose={{true}}>
                   <:trigger as |ddModifier|>
-                    <Button class='utility-menu-trigger' {{ddModifier}}>
-                      <span>
+                    <button
+                      type='button'
+                      class='utility-menu-trigger'
+                      {{ddModifier}}
+                    >
+                      <svg
+                        class='utility-menu-trigger-icon'
+                        viewBox='0 0 14 14'
+                        fill='none'
+                        aria-hidden='true'
+                      >
+                        <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
+                        <path
+                          d='M3.5 7.5L5.5 9.5L10.5 4.5'
+                          stroke='var(--boxel-teal)'
+                          stroke-width='1.5'
+                          stroke-linecap='round'
+                          stroke-linejoin='round'
+                        />
+                      </svg>
+                      <span class='utility-menu-trigger-text'>
                         {{@utilityMenu.triggerText}}
                       </span>
                       <DropdownArrowDown
@@ -138,7 +156,7 @@ export default class CardHeader extends Component<Signature> {
                         width='13px'
                         height='13px'
                       />
-                    </Button>
+                    </button>
                   </:trigger>
                   <:content as |dd|>
                     <Menu
@@ -411,23 +429,38 @@ export default class CardHeader extends Component<Signature> {
           height: var(--utility-menu-trigger-height);
         }
         .utility-menu-trigger {
-          --boxel-button-min-height: var(--utility-menu-trigger-height);
-          --boxel-button-padding: 0 var(--boxel-sp-xxs);
-          --boxel-button-border-radius: calc(var(--boxel-border-radius) - 4px);
-          --boxel-button-font: var(--boxel-font-sm);
-          --boxel-button-box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
-          --boxel-button-border: solid 1px rgba(0, 0, 0, 0.35);
-
           position: absolute;
           top: 0;
           right: 0;
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          min-height: var(--utility-menu-trigger-height);
           width: max-content;
+          padding: 0 var(--boxel-sp-xs);
+          border: none;
+          border-radius: 6px;
+          background-color: var(--boxel-teal);
+          color: var(--boxel-dark);
+          font: 700 var(--boxel-font-sm);
+          cursor: pointer;
+        }
+        .utility-menu-trigger:hover:not(:disabled),
+        .utility-menu-trigger:focus-visible:not(:disabled) {
+          background-color: #00da9f;
+        }
+        .utility-menu-trigger-icon {
+          width: 14px;
+          height: 14px;
+          flex-shrink: 0;
+        }
+        .utility-menu-trigger-text {
+          line-height: 1;
         }
         .utility-menu-dropdown-arrow {
-          margin-left: var(--boxel-sp-xl);
+          margin-left: 0;
           vertical-align: middle;
         }
-
         @container card-header (min-width: 30rem) {
           .card-type-display-name {
             padding-inline: 1.875rem;

@@ -515,16 +515,16 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     await triggerEvent(`[data-test-card="${testRealmURL}usd"]`, 'mouseenter');
     assert
       .dom(
-        `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-edit]`,
-      )
-      .exists()
-      .isNotDisabled();
-    assert
-      .dom(
         `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-more-options]`,
       )
       .exists()
       .isNotDisabled();
+    await click(
+      `[data-test-overlay-card="${testRealmURL}usd"] [data-test-overlay-more-options]`,
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Edit"]')
+      .exists('Edit menu item exposed for editable linked card');
 
     await click(
       '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',

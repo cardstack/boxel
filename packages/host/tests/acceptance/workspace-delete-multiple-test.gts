@@ -1,4 +1,10 @@
-import { click, findAll, triggerEvent, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  findAll,
+  triggerEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -101,10 +107,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     let cardSelector = `[data-test-cards-grid-item="${testRealmURL}${cardPath}"] .field-component-card`;
     await triggerEvent(cardSelector, 'mouseenter');
     await waitFor(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await click(
-      `[data-test-overlay-card="${testRealmURL}${cardPath}"] button.actions-item__button`,
+      `[data-test-overlay-card="${testRealmURL}${cardPath}"] [data-test-overlay-select="${testRealmURL}${cardPath}"]`,
     );
     await triggerEvent(cardSelector, 'mouseleave');
   }
@@ -135,13 +141,13 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection state is active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .containsText('1', 'Selection chip shows count');
 
     // Select additional cards
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('.utility-menu-trigger').containsText('2');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -203,7 +209,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/3');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('3 Selected');
+    assert.dom('.utility-menu-trigger').containsText('3');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -216,7 +222,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       .dom('.utility-menu-trigger')
       .doesNotExist('Selection summary is cleared after deselect');
 
-    // Verify overlay checkboxes are not checked
+    // Verify overlay chrome is gone. The overlay clears on hover-out via a
+    // 100ms hover-bridge timer (native setTimeout, not tracked by settled),
+    // so poll rather than asserting synchronously.
+    await waitUntil(() => findAll('[data-test-overlay-card]').length === 0);
     assert.dom('[data-test-overlay-card]').doesNotExist();
   });
 
@@ -246,7 +255,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection state is active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('1 Selected', 'Selection menu appears');
+      .containsText('1', 'Selection chip shows count');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -257,7 +266,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify all cards are selected
     assert
       .dom('.utility-menu-trigger')
-      .containsText(`${totalCardCount} Selected`, 'All cards are now selected');
+      .containsText(`${totalCardCount}`, 'All cards are now selected');
 
     // Open utility menu again to verify "Select All" is no longer available
     await click('.utility-menu-trigger');
@@ -300,7 +309,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     await selectCard('Pet/2');
 
     // Verify selection count
-    assert.dom('.utility-menu-trigger').containsText('2 Selected');
+    assert.dom('.utility-menu-trigger').containsText('2');
 
     // Open utility menu
     await click('.utility-menu-trigger');
@@ -335,6 +344,6 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
     // Verify selection is still active
     assert
       .dom('.utility-menu-trigger')
-      .containsText('2 Selected', 'Selection remains active after cancel');
+      .containsText('2', 'Selection remains active after cancel');
   });
 });

@@ -72,11 +72,14 @@ module('Integration | overlay-menu-items', function (hooks) {
 
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
+    let markdownFileDef: typeof import('https://cardstack.com/base/markdown-file-def');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    markdownFileDef = await loader.import(`${baseRealm.url}markdown-file-def`);
 
     let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringField } = string;
+    let { MarkdownDef } = markdownFileDef;
 
     class CardWithCustomMenu extends CardDef {
       static displayName = 'Card With Custom Menu';
@@ -118,11 +121,31 @@ module('Integration | overlay-menu-items', function (hooks) {
       };
     }
 
+    class ParentWithFile extends CardDef {
+      static displayName = 'Parent With File';
+      @field name = contains(StringField);
+      @field markdown = linksTo(MarkdownDef);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: ParentWithFile) {
+          return this.name;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-parent-with-file={{@model.name}}><@fields.name /></h2>
+          <@fields.markdown />
+        </template>
+      };
+    }
+
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'card-with-custom-menu.gts': { CardWithCustomMenu },
         'parent-card.gts': { ParentCard },
+        'parent-with-file.gts': { ParentWithFile },
+        'ParentWithFile/notes.md':
+          '# Hello\n\nMarkdown content for the FileDef overlay test.',
         'index.json': {
           data: {
             type: 'card',
@@ -165,6 +188,31 @@ module('Integration | overlay-menu-items', function (hooks) {
               adoptsFrom: {
                 module: '../parent-card',
                 name: 'ParentCard',
+              },
+            },
+          },
+        },
+        'ParentWithFile/1.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'My Parent With File',
+            },
+            relationships: {
+              markdown: {
+                links: {
+                  self: './notes.md',
+                },
+                data: {
+                  type: 'file-meta',
+                  id: './notes.md',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../parent-with-file',
+                name: 'ParentWithFile',
               },
             },
           },
@@ -231,5 +279,44 @@ module('Integration | overlay-menu-items', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
       .exists('Copy Card URL menu item is also present');
+  });
+
+  test('linked FileDef overlay menu uses file-specific labels', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}ParentWithFile/1`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let fileURL = `${testRealmURL}ParentWithFile/notes.md`;
+    // The overlay strips the file extension from cardId for its data-test
+    // attributes (removeFileExtension), so data-test-overlay-card lacks `.md`.
+    let fileCardSelector = `[data-test-overlay-card="${testRealmURL}ParentWithFile/notes"]`;
+    await waitFor(`[data-test-card="${fileURL}"]`);
+    await triggerEvent(`[data-test-card="${fileURL}"]`, 'mouseenter');
+    await waitFor(`${fileCardSelector} [data-test-overlay-more-options]`);
+
+    assert
+      .dom(`${fileCardSelector} [data-test-overlay-label]`)
+      .containsText(
+        'Markdown',
+        "type-label tab uses the FileDef's displayName, not the generic 'Card' fallback",
+      );
+
+    await click(`${fileCardSelector} [data-test-overlay-more-options]`);
+    assert
+      .dom('[data-test-boxel-menu-item-text="View file"]')
+      .exists('menu shows View file, not View card');
+    assert
+      .dom('[data-test-boxel-menu-item-text="View card"]')
+      .doesNotExist('the card-flavored label is suppressed for file targets');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy File URL"]')
+      .exists('menu shows Copy File URL, not Copy Card URL');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+      .doesNotExist(
+        'the card-flavored URL label is suppressed for file targets',
+      );
   });
 });

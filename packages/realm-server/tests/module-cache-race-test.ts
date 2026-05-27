@@ -8,6 +8,8 @@ import type { RealmHttpServer as Server } from '../server';
 import type { Realm } from '@cardstack/runtime-common';
 import {
   CachingDefinitionLookup,
+  REALM_FILE_CHANGES_CHANNEL,
+  RealmIndexUpdater,
   SupportedMimeType,
   param,
   query,
@@ -1688,6 +1690,143 @@ module(basename(__filename), function () {
           await waitForZeroLiveRows(),
           0,
           'L2 rows tombstoned by the worker-side NOTIFY even though startReindex never ran',
+        );
+      });
+    },
+  );
+
+  // CS-11245: bootstrap realms (kind='bootstrap': base, catalog, skills,
+  // …) full-index on every realm-server boot. The from-scratch-index
+  // worker that picks up the resulting job fans HTTP source reads
+  // through the load balancer, which during a rolling deploy can land
+  // on a still-warm pre-deploy peer whose `#sourceCache` is populated
+  // from pre-rsync bytes. `Realm.#startup` now broadcasts a
+  // `realm_file_changes:<url>:*` NOTIFY before enqueueing the
+  // from-scratch-index, so every peer drops its cache for this URL
+  // and the next HTTP read falls through to `/persistent/` (EFS,
+  // already brought up to date by the new container's
+  // `setup:<realm>-in-deployment` rsync). The broadcast is the
+  // prevent layer; without it the reindex persists stale bytes into
+  // `boxel_index.pristine_doc` plus sticky `error_doc` rows that
+  // survive past fleet stabilization (see CS-11245 for the
+  // originating incident).
+  module(
+    '#startup broadcasts source-cache wipe for bootstrap realms (CS-11245)',
+    function (hooks) {
+      let dbAdapter: PgAdapter;
+      let publisher: import('@cardstack/runtime-common').QueuePublisher;
+      let runner: import('@cardstack/runtime-common').QueueRunner;
+      setupDB(hooks, {
+        beforeEach: async (adapter, pub, run) => {
+          dbAdapter = adapter;
+          publisher = pub;
+          runner = run;
+        },
+      });
+
+      hooks.afterEach(function () {
+        sinon.restore();
+      });
+
+      const startupRealmURL = 'http://127.0.0.1:6666/startup/';
+
+      async function buildStartupRealm({
+        fullIndexOnStartup,
+      }: {
+        fullIndexOnStartup: boolean;
+      }): Promise<Realm> {
+        let tmp = dirSync();
+        let dir = join(tmp.name, 'startup-realm');
+        ensureDirSync(dir);
+        writeJSONSync(join(dir, '.realm.json'), { name: 'Startup Realm' });
+        let virtualNetwork = createVirtualNetwork();
+        let prerenderer = await getTestPrerenderer();
+        let definitionLookup = new CachingDefinitionLookup(
+          dbAdapter,
+          prerenderer,
+          virtualNetwork,
+          testCreatePrerenderAuth,
+        );
+        let { realm } = await createRealm({
+          dir,
+          definitionLookup,
+          realmURL: startupRealmURL,
+          permissions: { '*': ['read'] },
+          virtualNetwork,
+          publisher,
+          runner,
+          dbAdapter,
+          ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+        });
+        return realm;
+      }
+
+      test('bootstrap realm emits realm_file_changes wildcard NOTIFY before enqueuing the from-scratch-index', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+        // Stub fullIndex so the test doesn't actually run a from-scratch
+        // pass — we only care that the broadcast precedes the call.
+        let fullIndexStub = sinon
+          .stub(RealmIndexUpdater.prototype, 'fullIndex')
+          .resolves();
+
+        let realm = await buildStartupRealm({ fullIndexOnStartup: true });
+        await realm.start();
+
+        let wildcardNotifyCall = notifyStub
+          .getCalls()
+          .find(
+            (c) =>
+              c.args[0] === REALM_FILE_CHANGES_CHANNEL &&
+              c.args[1] === `${startupRealmURL}:*`,
+          );
+
+        assert.ok(
+          wildcardNotifyCall,
+          'realm_file_changes wildcard NOTIFY was emitted for the realm URL during startup',
+        );
+        assert.strictEqual(
+          fullIndexStub.callCount,
+          1,
+          'RealmIndexUpdater.fullIndex was invoked exactly once on startup',
+        );
+        assert.ok(
+          wildcardNotifyCall?.calledBefore(fullIndexStub.getCall(0)),
+          'the NOTIFY happened before from-scratch-index was enqueued',
+        );
+      });
+
+      test('non-bootstrap realm (isNewIndex-only branch) does NOT broadcast on startup', async function (assert) {
+        let originalNotify = dbAdapter.notify.bind(dbAdapter);
+        let notifyStub = sinon
+          .stub(dbAdapter, 'notify')
+          .callsFake((channel, payload) => originalNotify(channel, payload));
+        let fullIndexStub = sinon
+          .stub(RealmIndexUpdater.prototype, 'fullIndex')
+          .resolves();
+
+        let realm = await buildStartupRealm({ fullIndexOnStartup: false });
+        await realm.start();
+
+        let wildcardNotifyCall = notifyStub
+          .getCalls()
+          .find(
+            (c) =>
+              c.args[0] === REALM_FILE_CHANGES_CHANNEL &&
+              c.args[1] === `${startupRealmURL}:*`,
+          );
+
+        assert.strictEqual(
+          wildcardNotifyCall,
+          undefined,
+          'no realm_file_changes wildcard NOTIFY on a first-mount fresh-index realm whose kind is not bootstrap',
+        );
+        assert.strictEqual(
+          fullIndexStub.callCount,
+          1,
+          'fullIndex still ran via the isNewIndex branch, even without a broadcast',
         );
       });
     },

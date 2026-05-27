@@ -362,9 +362,10 @@ module(basename(__filename), function () {
     test('does not serialize against the realm-write lock', async function (assert) {
       // Even if a user id string equals a realm URL string (it never does
       // in practice, but the namespacing guarantees it), the two lock
-      // spaces are disjoint. We assert that by holding a withWriteLock and
-      // a withUserCostLock on the same string concurrently — they must run
-      // in parallel, not serialize.
+      // spaces are disjoint. We prove it by holding a withWriteLock open and
+      // running a withUserCostLock on the same string to completion *inside*
+      // that window — the cost lock must acquire and finish without waiting
+      // for the write lock to release.
       const shared = 'http://localhost:4201/shared/';
       const events: string[] = [];
       const eventTimes: number[] = [];
@@ -374,32 +375,63 @@ module(basename(__filename), function () {
         eventTimes.push(Date.now());
       };
 
-      // Synchronize on write entering its critical section before kicking
-      // off the cost-lock acquisition. A fixed-millisecond head start raced
-      // the postgres roundtrip on slow CI runners.
-      //
-      // Race the entry signal against the write promise so a pre-entry
-      // rejection surfaces immediately instead of hanging the test.
+      // Hold the write lock open until the cost lock has run to completion,
+      // rather than holding it for a fixed duration and hoping the cost
+      // lock's postgres roundtrip slots inside that window. On slow runners
+      // the roundtrip can outlast a fixed window, pushing cost-start past
+      // write-end — a scheduling artifact, not a real lock-ordering bug.
+      // Gating write-end on the cost lock finishing makes the order depend
+      // only on the lock spaces being disjoint, not on postgres latency. If
+      // they ever DID serialize, the cost lock would block on the held write
+      // lock and the guard below fires with a timeline instead of hanging.
       let signalWriteEntered!: () => void;
       const writeEntered = new Promise<void>((r) => {
         signalWriteEntered = r;
       });
+      let releaseWrite!: () => void;
+      const writeReleased = new Promise<void>((r) => {
+        releaseWrite = r;
+      });
       const writePromise = dbAdapter.withWriteLock(shared, async () => {
         push('write-start');
         signalWriteEntered();
-        await new Promise((r) => setTimeout(r, 100));
+        await writeReleased;
         push('write-end');
       });
+      // Race the entry signal against the write promise so a pre-entry
+      // rejection surfaces immediately instead of hanging the test.
       await Promise.race([writeEntered, writePromise]);
-      const costPromise = dbAdapter.withUserCostLock(shared, async () => {
-        push('cost-start');
-        push('cost-end');
-      });
 
-      await Promise.all([writePromise, costPromise]);
+      let guardTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const costPromise = dbAdapter.withUserCostLock(shared, async () => {
+          push('cost-start');
+          push('cost-end');
+        });
+        const guard = new Promise<never>((_resolve, reject) => {
+          guardTimer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `user-cost lock did not acquire while the realm-write lock was held — the lock spaces appear to be serializing; timeline: ${timeline(
+                    events,
+                    startedAt,
+                    eventTimes,
+                  )}`,
+                ),
+              ),
+            10_000,
+          );
+        });
+        await Promise.race([costPromise, guard]);
+      } finally {
+        clearTimeout(guardTimer);
+        releaseWrite();
+        await writePromise;
+      }
 
-      // cost-* should slot in between write-start and write-end because
-      // the locks are in different namespaces.
+      // cost-* slots in between write-start and write-end because the locks
+      // are in different namespaces.
       assert.deepEqual(
         events,
         ['write-start', 'cost-start', 'cost-end', 'write-end'],
