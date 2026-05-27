@@ -104,7 +104,7 @@ export default class OperatorModeOverlays extends Overlays {
             style={{renderedCard.overlayZIndexStyle}}
             ...attributes
           >
-            {{! Type-label tab — hover only, anchored top-left, overflows when long }}
+            {{! Type-label tab — hover only, anchored top-right, overflows off the left when long }}
             {{#if isHovered}}
               <div
                 class='adorn-label'
@@ -234,13 +234,14 @@ export default class OperatorModeOverlays extends Overlays {
       }
 
       /* Type-label tab — flag shape with sloped right edge, anchored above
-         the card's top-left corner so its left edge aligns with the 4px
-         selection stroke. */
+         the card's top-right corner so its right edge aligns with the 4px
+         selection stroke. Long names overflow off the card's left edge
+         rather than the right. */
       .adorn-label {
         position: absolute;
         bottom: calc(100% + 2px);
-        left: -4px;
-        right: auto;
+        right: -4px;
+        left: auto;
         top: auto;
         display: inline-flex;
         align-items: center;

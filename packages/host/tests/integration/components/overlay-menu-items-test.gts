@@ -1,4 +1,4 @@
-import { waitFor, click, triggerEvent } from '@ember/test-helpers';
+import { waitFor, click, triggerEvent, find } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -318,5 +318,34 @@ module('Integration | overlay-menu-items', function (hooks) {
       .doesNotExist(
         'the card-flavored URL label is suppressed for file targets',
       );
+  });
+
+  test('hover type-label tab is right-justified so long names overflow off the left edge', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let cardSelector = `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    let overlaySelector = `[data-test-overlay-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    await waitFor(cardSelector);
+    await triggerEvent(cardSelector, 'mouseenter');
+    await waitFor(`${overlaySelector} [data-test-overlay-label]`);
+
+    let label = find(`${overlaySelector} [data-test-overlay-label]`)!;
+    let overlay = find(overlaySelector)!;
+    let labelRect = label.getBoundingClientRect();
+    let overlayRect = overlay.getBoundingClientRect();
+
+    // The tab is anchored to the card's top-right corner: its right edge hugs
+    // the overlay's right edge (within the 4px selection-stroke inset) while
+    // long names overflow off the left. So the label's right edge sits closer
+    // to the overlay's right edge than its left edge does to the left edge.
+    assert.ok(
+      Math.abs(labelRect.right - overlayRect.right) <=
+        Math.abs(labelRect.left - overlayRect.left),
+      "type-label tab is right-justified (anchored to the card's right edge)",
+    );
   });
 });
