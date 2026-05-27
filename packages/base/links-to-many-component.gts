@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
+import { fn, get } from '@ember/helper';
 import {
   BaseDef,
   type CardContext,
@@ -14,7 +14,10 @@ import {
   CreateCardFn,
   CardCrudFunctions,
   isFileDef,
+  brokenLinkFormat,
 } from './card-api';
+import BrokenLinkTemplate from './default-templates/broken-link-template';
+import { getRelationship, type RelationshipState } from './field-support';
 import {
   BoxComponentSignature,
   DefaultFormatsConsumer,
@@ -201,10 +204,18 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     // Returning a fresh wrapper object with a nonce-backed key ensures we refresh
     // the child component identity after reordering. That keeps templates that
     // read directly from @model (instead of <@fields>) in sync.
+    //
+    // `broken` carries the per-slot terminal failure state (read once here via a
+    // pure `getRelationship`) so a broken element shows the placeholder + remove
+    // affordance instead of trying to render a sentinel as a card. The `{{#each}}`
+    // still keys on the stable index `key`, so adding this never changes block
+    // identity and an input elsewhere in the edit form keeps focus.
+    let broken = brokenSlotsFor(this.args.model, this.args.field.name);
     return this.args.arrayField.children.map((child, index) => ({
       box: child,
       index,
       key: index,
+      broken: broken[index],
     }));
   }
 
@@ -255,14 +266,24 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   data-test-remove={{entry.index}}
                 />
               {{/if}}
-              {{#let
-                (getBoxComponent
-                  (@cardTypeFor @field entry.box) entry.box @field
-                )
-                as |Item|
-              }}
-                <Item @format='fitted' />
-              {{/let}}
+              {{#if entry.broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{entry.broken.reference}}
+                  @errorDoc={{entry.broken.errorDoc}}
+                  @state={{entry.broken.kind}}
+                  @format='fitted'
+                  data-test-plural-view-item={{entry.index}}
+                />
+              {{else}}
+                {{#let
+                  (getBoxComponent
+                    (@cardTypeFor @field entry.box) entry.box @field
+                  )
+                  as |Item|
+                }}
+                  <Item @format='fitted' />
+                {{/let}}
+              {{/if}}
             </li>
           {{/each}}
         </ul>
@@ -384,30 +405,64 @@ interface LinksToManyCompactEditorSignature {
 class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditorSignature> {
   @consume(CardContextName) declare cardContext: CardContext;
 
+  // Per-slot broken-link state, read once per render via a pure
+  // `getRelationship`. The `{{#each}}` keeps keying on the stable child box, so
+  // this only drives the inner branch that swaps a broken card for the
+  // placeholder and never destabilizes a sibling pill mid-edit.
+  get brokenSlots() {
+    return brokenSlotsFor(this.args.model, this.args.field.name);
+  }
+
   <template>
     <div class='boxel-pills' data-test-pills ...attributes>
-      {{#each @arrayField.children as |boxedElement i|}}
-        {{#let
-          (getBoxComponent
-            (@cardTypeFor @field boxedElement) boxedElement @field
-          )
-          as |Item|
-        }}
-          <Pill class='item-pill' data-test-pill-item={{i}}>
-            <Item @format='atom' @displayContainer={{false}} />
-            <IconButton
-              @icon={{IconX}}
-              @width='10px'
-              @height='10px'
-              class='remove-item-button'
-              {{on 'click' (fn @remove i)}}
-              aria-label='Remove'
-              data-test-remove-card
-              data-test-remove={{i}}
-            />
-          </Pill>
-        {{/let}}
-      {{/each}}
+      {{#let this.brokenSlots as |brokenSlots|}}
+        {{#each @arrayField.children as |boxedElement i|}}
+          {{#let (get brokenSlots i) as |broken|}}
+            {{#if broken}}
+              <Pill class='item-pill' data-test-pill-item={{i}}>
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format='atom'
+                  data-test-plural-view-item={{i}}
+                />
+                <IconButton
+                  @icon={{IconX}}
+                  @width='10px'
+                  @height='10px'
+                  class='remove-item-button'
+                  {{on 'click' (fn @remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
+              </Pill>
+            {{else}}
+              {{#let
+                (getBoxComponent
+                  (@cardTypeFor @field boxedElement) boxedElement @field
+                )
+                as |Item|
+              }}
+                <Pill class='item-pill' data-test-pill-item={{i}}>
+                  <Item @format='atom' @displayContainer={{false}} />
+                  <IconButton
+                    @icon={{IconX}}
+                    @width='10px'
+                    @height='10px'
+                    class='remove-item-button'
+                    {{on 'click' (fn @remove i)}}
+                    aria-label='Remove'
+                    data-test-remove-card
+                    data-test-remove={{i}}
+                  />
+                </Pill>
+              {{/let}}
+            {{/if}}
+          {{/let}}
+        {{/each}}
+      {{/let}}
       <Button
         class='compact-add-new'
         @size='small'
@@ -503,6 +558,35 @@ function shouldRenderEditor(
 ) {
   return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
+
+type BrokenSlot = Extract<RelationshipState, { kind: 'error' | 'not-found' }>;
+
+// Per-slot broken-link state for a `linksToMany` field, index-aligned with
+// `arrayField.children`: a terminal failure (`error` / `not-found`) at slot `i`
+// surfaces here; every other kind — `present`, `not-loaded`, `not-set` — is
+// `undefined`, so the caller falls through to its normal per-item render.
+//
+// `getRelationship` is a pure read (it never retriggers `lazilyLoadLink`) and
+// returns a FRESH array on every call, so callers MUST NOT key a `{{#each}}` on
+// these entries; read it once per render and index into the result by the slot
+// position the surrounding loop already keys on. A computed whole-field sentinel
+// surfaces as a one-element array while the field getter yields an empty child
+// list, so the lengths can differ — indexing by the child position is safe
+// because the extra entry is never read.
+function brokenSlotsFor(
+  model: Box<CardDef>,
+  fieldName: string,
+): (BrokenSlot | undefined)[] {
+  let owner = model.value;
+  if (owner == null) {
+    return [];
+  }
+  let state = getRelationship(owner, fieldName);
+  let states = Array.isArray(state) ? state : [state];
+  return states.map((rel) =>
+    rel.kind === 'error' || rel.kind === 'not-found' ? rel : undefined,
+  );
+}
 const componentCache = initSharedState(
   'linksToManyComponentCache',
   () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
@@ -531,6 +615,11 @@ export function getLinksToManyComponent({
     arrayField.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
+  // Read per-slot broken-link state once per render (a pure read), index-aligned
+  // with getComponents() above. The `{{#each}}` keeps keying on the stable
+  // per-child component identity; this only feeds the inner branch that swaps in
+  // the placeholder, so a broken slot never destabilizes its siblings.
+  let getBrokenSlots = () => brokenSlotsFor(model, field.name);
   let isComputed = !!field.computeVia || !!field.queryDefinition;
   let isFileDefField = isFileDef(field.card);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
@@ -566,20 +655,37 @@ export function getLinksToManyComponent({
               data-test-plural-view-format={{effectiveFormat}}
               ...attributes
             >
-              {{#each (getComponents) as |Item i|}}
-                <div class='linksToMany-itemContainer'>
-                  <Item
-                    @format={{getPluralChildFormat
-                      effectiveFormat
-                      model
-                      isFileDefField
-                    }}
-                    @displayContainer={{@displayContainer}}
-                    class='linksToMany-item'
-                    data-test-plural-view-item={{i}}
-                  />
-                </div>
-              {{/each}}
+              {{#let (getBrokenSlots) as |brokenSlots|}}
+                {{#each (getComponents) as |Item i|}}
+                  <div class='linksToMany-itemContainer'>
+                    {{#let (get brokenSlots i) as |broken|}}
+                      {{#if broken}}
+                        <BrokenLinkTemplate
+                          @brokenUrl={{broken.reference}}
+                          @errorDoc={{broken.errorDoc}}
+                          @state={{broken.kind}}
+                          @format={{brokenLinkFormat
+                            effectiveFormat
+                            effectiveFormat
+                          }}
+                          data-test-plural-view-item={{i}}
+                        />
+                      {{else}}
+                        <Item
+                          @format={{getPluralChildFormat
+                            effectiveFormat
+                            model
+                            isFileDefField
+                          }}
+                          @displayContainer={{@displayContainer}}
+                          class='linksToMany-item'
+                          data-test-plural-view-item={{i}}
+                        />
+                      {{/if}}
+                    {{/let}}
+                  </div>
+                {{/each}}
+              {{/let}}
             </div>
           {{/let}}
         {{/if}}

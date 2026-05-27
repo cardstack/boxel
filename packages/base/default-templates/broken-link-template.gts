@@ -36,6 +36,7 @@ function isSafeHttpUrl(url: string): boolean {
 }
 
 export default class BrokenLinkTemplate extends GlimmerComponent<{
+  Element: HTMLDivElement;
   Args: BrokenLinkTemplateArgs;
 }> {
   private get isNotFound() {
@@ -113,6 +114,7 @@ export default class BrokenLinkTemplate extends GlimmerComponent<{
       class='broken-link-template {{@format}} {{@state}}'
       data-test-broken-link-template={{@format}}
       data-test-broken-link-state={{@state}}
+      ...attributes
     >
       {{#if (eq @format 'atom')}}
         <span class='atom-line'>
