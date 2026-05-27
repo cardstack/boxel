@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import type { Icon } from '../../icons/types.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
@@ -321,6 +321,7 @@ export default class Picker extends Component<PickerSignature> {
     <BoxelMultiSelectBasic
       @options={{this.displayOptions}}
       @selected={{@selected}}
+      {{! @glint-expect-error upstream types changed }}
       @onChange={{this.onChange}}
       @onClose={{this.onClose}}
       @placeholder={{@placeholder}}

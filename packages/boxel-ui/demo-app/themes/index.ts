@@ -2,16 +2,16 @@ import {
   extractCssVariables,
   sanitizeHtmlSafe,
 } from '@cardstack/boxel-ui/helpers';
-import { htmlSafe, type SafeString } from '@ember/template';
+import { type SafeString, htmlSafe } from '@ember/template';
 
+import { Boxel } from './boxel.ts';
 import { Bubblegum } from './bubblegum.ts';
+import { Candyland } from './candyland.ts';
+import { DarkStudio } from './dark-studio.ts';
+import { Doom64 } from './doom64.ts';
 import { NeoBrutalism } from './neo-brutalism.ts';
 import { SoftPop } from './soft-pop.ts';
-import { Candyland } from './candyland.ts';
-import { Doom64 } from './doom64.ts';
 import { StarryNight } from './starry-night.ts';
-import { Boxel } from './boxel.ts';
-import { DarkStudio } from './dark-studio.ts';
 
 export interface Theme {
   name: string;

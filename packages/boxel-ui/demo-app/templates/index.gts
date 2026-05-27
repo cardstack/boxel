@@ -1,33 +1,29 @@
+import {
+  BoxelContainer,
+  BoxelSelect,
+  FieldContainer,
+  Switch,
+} from '@cardstack/boxel-ui/components';
+import { ALL_USAGE_COMPONENTS } from '@cardstack/boxel-ui/usage';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
-import { tracked } from '@glimmer/tracking';
 import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
-
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
 import BasicDropdownWormhole from 'ember-basic-dropdown/components/basic-dropdown';
-
 import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 import { pageTitle } from 'ember-page-title';
 
-import { ALL_USAGE_COMPONENTS } from '@cardstack/boxel-ui/usage';
-import Themes, { type Theme } from '../themes/index';
 import IconsGrid from '../components/icons-grid';
-
-import {
-  BoxelSelect,
-  FieldContainer,
-  Switch,
-  BoxelContainer,
-} from '@cardstack/boxel-ui/components';
-
 import formatComponentName from '../helpers/format-component-name';
+import Themes, { type Theme } from '../themes/index';
 
 interface UsageComponent {
-  title: string;
   component: ComponentLike;
+  title: string;
 }
 
 class IndexComponent extends Component {
@@ -104,7 +100,7 @@ class IndexComponent extends Component {
     </style>
   </template>
 
-  private intervalId?: NodeJS.Timeout;
+  private intervalId?: ReturnType<typeof setInterval>;
   private themes: Theme[] = [{ name: '<None>' }, ...Themes];
   private usageComponents = ALL_USAGE_COMPONENTS.map(([name, c]) => {
     return {

@@ -1,6 +1,7 @@
 import Captions from '@cardstack/boxel-icons/captions';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
@@ -157,7 +158,9 @@ export default class BasicFittedUsage extends Component {
   ];
 
   style = (spec: { height: number; width: number }) => {
-    return `container-name: fitted-card; container-type: size; width: {{spec.width}}px; height: {{spec.height}}px`;
+    return htmlSafe(
+      `container-name: fitted-card; container-type: size; width: ${spec.width}px; height: ${spec.height}px`,
+    );
   };
 
   <template>

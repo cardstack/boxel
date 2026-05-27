@@ -1,8 +1,8 @@
-import Component from '@glimmer/component';
 import { ALL_ICON_COMPONENTS } from '@cardstack/boxel-icons/boxel-icons-meta';
 import { Tooltip } from '@cardstack/boxel-ui/components';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 function importStatement(name: string): string {
   return `import ${toPascalCase(name)} from '@cardstack/boxel-icons/${name}';`;
@@ -54,15 +54,15 @@ export default class IconsGridComponent extends Component {
 
   <template>
     <div>
-      <div class='boxel-icons-header'>
+      <div class="boxel-icons-header">
         <label>Filter:
           <input
-            type='text'
-            placeholder='Search for an icon'
-            class='boxel-input'
-            {{on 'input' this.updateIconFilterString}}
+            type="text"
+            placeholder="Search for an icon"
+            class="boxel-input"
+            {{on "input" this.updateIconFilterString}}
           /></label>
-        <div class='boxel-icons-count'>
+        <div class="boxel-icons-count">
           Showing
           {{this.boxelIconsComponents.length}}
           of
@@ -70,7 +70,7 @@ export default class IconsGridComponent extends Component {
           icons
         </div>
       </div>
-      <div class='boxel-icons-grid'>
+      <div class="boxel-icons-grid">
         {{#each this.boxelIconsComponents as |c|}}
           <div>
             {{#let (makeCopyable) as |copyable|}}
@@ -78,7 +78,7 @@ export default class IconsGridComponent extends Component {
                 <:trigger>
                   <c.component
                     {{on
-                      'click'
+                      "click"
                       (copyable.copyToClipboard (importStatement c.name))
                     }}
                   />

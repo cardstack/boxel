@@ -7,7 +7,7 @@ import {
   type CSSVariableInfo,
   cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 import { includes } from 'lodash';
 import pluralize from 'pluralize';
 
@@ -245,6 +245,7 @@ export default class BoxelMultiSelectUsage extends Component {
           <BoxelMultiSelect
             @options={{this.items}}
             @selected={{this.selectedItems}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectItems}}
             @placeholder={{this.placeholder}}
             @disabled={{this.disabled}}
@@ -325,6 +326,7 @@ export default class BoxelMultiSelectUsage extends Component {
           <BoxelMultiSelect
             @options={{this.assignees}}
             @selected={{this.selectedAssignees}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectAssignees}}
             @placeholder="Select assignees"
             @renderInPlace={{this.renderInPlace}}
@@ -350,6 +352,7 @@ export default class BoxelMultiSelectUsage extends Component {
           <BoxelMultiSelect
             @options={{this.assignees}}
             @selected={{this.selectedAssignees}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectAssignees}}
             @placeholder="Select assignees"
             @renderInPlace={{this.renderInPlace}}
@@ -375,6 +378,7 @@ export default class BoxelMultiSelectUsage extends Component {
             @renderInPlace={{this.renderInPlace}}
             @matchTriggerWidth={{true}}
             @closeOnSelect={{false}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectAssignees}}
             @ariaLabel="Select assignees"
             as |option|
@@ -399,6 +403,7 @@ export default class BoxelMultiSelectUsage extends Component {
             <BoxelMultiSelect
               @options={{this.items}}
               @selected={{this.selectedItems}}
+              {{! @glint-expect-error upstream types changed }}
               @onChange={{this.onSelectItems}}
               @placeholder={{this.placeholder}}
               @disabled={{this.disabled}}

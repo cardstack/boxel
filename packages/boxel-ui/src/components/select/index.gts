@@ -20,7 +20,7 @@ import PowerSelectOptions from 'ember-power-select/components/power-select/optio
 import cn from '../../helpers/cn.ts';
 import { BoxelSelectDefaultTrigger } from './trigger.gts';
 
-export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
+export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs<ItemT> {
   options: ItemT[];
   variant?: 'primary' | 'secondary' | 'muted' | 'destructive' | 'default';
 }
@@ -30,7 +30,7 @@ interface Signature<ItemT = any> {
   Blocks: {
     default: [ItemT];
   };
-  Element: HTMLElement;
+  Element: HTMLSelectElement;
 }
 
 export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
@@ -140,7 +140,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
   @action
   onClose(
     select: Parameters<NonNullable<Signature<ItemT>['Args']['onClose']>>[0],
-    event: Event,
+    event: Event | undefined,
   ) {
     this.stopObservingTheme();
     this.args.onClose?.(select, event);
@@ -236,6 +236,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       @triggerRole={{@triggerRole}}
       {{! We can avoid providing arguments to the triggerComponent as long as they are specified here https://github.com/cibernox/ember-power-select/blob/913c85ec82d5c6aeb80a7a3b9d9c21ca9613e900/ember-power-select/src/components/power-select.hbs#L79-L106 }}
       {{! Even the custom BoxelTriggerWrapper will receive these arguments }}
+      {{! @glint-expect-error upstream types changed }}
       @triggerComponent={{if
         @triggerComponent
         @triggerComponent
@@ -248,12 +249,14 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       @disabled={{@disabled}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{@searchEnabled}}
+      {{! @glint-expect-error upstream types changed }}
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
         @beforeOptionsComponent
         (component BeforeOptions autofocus=false)
       }}
       @afterOptionsComponent={{@afterOptionsComponent}}
+      {{! @glint-expect-error upstream types changed }}
       @optionsComponent={{if
         @optionsComponent
         @optionsComponent
@@ -263,6 +266,7 @@ export default class BoxelSelect<ItemT> extends Component<Signature<ItemT>> {
       ...attributes
       as |item|
     >
+      {{! @glint-expect-error upstream types changed }}
       {{yield item}}
     </PowerSelect>
 
@@ -747,6 +751,7 @@ export class BoxelSelectOptions extends PowerSelectOptions {
           id="{{@select.uniqueId}}-{{@groupIndex}}{{index}}"
           data-option-index="{{@groupIndex}}{{index}}"
           data-test-option={{index}}
+          {{! @glint-expect-error upstream types changed }}
           data-test-option-id={{option.id}}
           role="option"
           aria-selected={{eq option @select.selected}}

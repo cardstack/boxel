@@ -2,7 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import IconX from '../../icons/icon-x.gts';
 import Pill from '../pill/index.gts';

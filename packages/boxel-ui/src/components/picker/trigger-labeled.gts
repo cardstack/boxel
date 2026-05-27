@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import { cn } from '../../helpers.ts';
 import { not } from '../../helpers/truth-helpers.ts';
@@ -37,6 +37,7 @@ type ExtendedSelect = Select & {
 
 export default class PickerLabeledTrigger extends Component<TriggerLabeledSignature> {
   get showPlaceholder() {
+    // @ts-expect-error upstream types changed
     return this.args.placeholder && this.args.select.selected.length === 0;
   }
 
@@ -52,10 +53,12 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
     const selected = this.args.select.selected;
     if (
       !this.maxSelectedDisplay ||
+      // @ts-expect-error upstream types changed
       selected.length <= this.maxSelectedDisplay
     ) {
       return selected;
     }
+    // @ts-expect-error upstream types changed
     return selected.slice(0, this.maxSelectedDisplay);
   }
 
@@ -63,10 +66,12 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
     const selected = this.args.select.selected;
     if (
       !this.maxSelectedDisplay ||
+      // @ts-expect-error upstream types changed
       selected.length <= this.maxSelectedDisplay
     ) {
       return 0;
     }
+    // @ts-expect-error upstream types changed
     return selected.length - this.maxSelectedDisplay;
   }
 
@@ -77,9 +82,11 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   @action
   removeItem(item: any, event?: Event) {
     event?.stopPropagation();
+    // @ts-expect-error upstream types changed
     const newSelected = this.args.select.selected.filter(
       (i: any) => i !== item,
     );
+    // @ts-expect-error upstream types changed
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }

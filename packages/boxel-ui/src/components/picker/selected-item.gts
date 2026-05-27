@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';

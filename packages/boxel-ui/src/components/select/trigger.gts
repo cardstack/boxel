@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import { cn } from '../../helpers.ts';
 import { not } from '../../helpers/truth-helpers.ts';
@@ -26,6 +26,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
     return (
       this.args.placeholder &&
       (this.args.select?.selected === undefined || //undefined check is for single-select
+        // @ts-expect-error upstream types changed
         this.args.select?.selected.length === 0) //length check is for multi-select
     );
   }

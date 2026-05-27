@@ -134,7 +134,9 @@ export default class BoxelSelectUsage extends Component {
             @placeholder={{this.placeholder}}
             @searchEnabled={{this.searchEnabled}}
             @searchField={{this.searchField}}
+            {{! @glint-expect-error upstream types changed }}
             @selected={{this.selectedItem}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectItem}}
             @options={{this.items}}
             @verticalPosition={{this.verticalPosition}}
@@ -317,7 +319,9 @@ export default class BoxelSelectUsage extends Component {
             @placeholder={{this.placeholder}}
             @searchEnabled={{this.searchEnabled}}
             @searchField={{this.searchField}}
+            {{! @glint-expect-error upstream types changed }}
             @selected={{this.selectedItem}}
+            {{! @glint-expect-error upstream types changed }}
             @onChange={{this.onSelectItem}}
             @options={{this.items}}
             @verticalPosition={{this.verticalPosition}}
@@ -339,6 +343,7 @@ export default class BoxelSelectUsage extends Component {
       <:example>
         <BoxelSelect
           @selected={{this.selectedItem2}}
+          {{! @glint-expect-error upstream types changed }}
           @onChange={{this.onSelectItem2}}
           @options={{this.items2}}
           aria-label={{this.placeholder}}

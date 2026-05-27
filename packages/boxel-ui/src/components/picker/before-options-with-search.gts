@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import { eq } from '../../helpers.ts';
 import BoxelInput from '../input/index.gts';

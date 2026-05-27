@@ -2,12 +2,10 @@ import 'ember-power-select/styles';
 
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type {
-  PowerSelectArgs,
-  Select,
-} from 'ember-power-select/components/power-select';
+import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
+import type { Select } from 'ember-power-select/types';
 
 import { cn, not } from '../../helpers.ts';
 import { BoxelAfterOptionsComponent } from './after-options.gts';
@@ -18,7 +16,8 @@ import BoxelMultiSelectDefaultTrigger, {
   type TriggerComponentSignature,
 } from './trigger.gts';
 
-export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
+// @ts-expect-error upstream types changed
+export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs<ItemT> {
   afterOptionsComponent?: ComponentLike<any>;
   ariaLabel?: string;
   beforeOptionsComponent?: ComponentLike<any>;
@@ -66,9 +65,11 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         "boxel-multi-select"
         boxel-multi-select--rounded=(not @matchTriggerWidth)
       }}
+      {{! @glint-expect-error upstream types changed }}
       @multiple={{true}}
       {{! required args }}
       @options={{@options}}
+      {{! @glint-expect-error upstream types changed }}
       @selected={{@selected}}
       @onChange={{@onChange}}
       {{! basic options }}
@@ -91,13 +92,19 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         boxel-multi-select__dropdown--rounded=(not @matchTriggerWidth)
       }}
       {{! actions  }}
+      {{! @glint-expect-error upstream types changed }}
       @onOpen={{@onOpen}}
+      {{! @glint-expect-error upstream types changed }}
       @onClose={{@onClose}}
+      {{! @glint-expect-error upstream types changed }}
       @onBlur={{@onBlur}}
       {{! custom components }}
+      {{! @glint-expect-error upstream types changed }}
       @selectedItemComponent={{@selectedItemComponent}}
+      {{! @glint-expect-error upstream types changed }}
       @triggerComponent={{@triggerComponent}}
       @afterOptionsComponent={{@afterOptionsComponent}}
+      {{! @glint-expect-error upstream types changed }}
       @beforeOptionsComponent={{if
         @beforeOptionsComponent
         (component @beforeOptionsComponent)
@@ -106,6 +113,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       ...attributes
       as |option select|
     >
+      {{! @glint-expect-error upstream types changed }}
       {{yield option select}}
     </PowerSelect>
     {{! template-lint-disable require-scoped-style }}
@@ -189,6 +197,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       {{! required args }}
       @options={{@options}}
       @selected={{@selected}}
+      {{! @glint-expect-error upstream types changed }}
       @onChange={{@onChange}}
       {{! basic options }}
       @placeholder={{@placeholder}}
@@ -200,6 +209,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @searchEnabled={{@searchEnabled}}
       @closeOnSelect={{@closeOnSelect}}
       @ariaLabel={{@ariaLabel}}
+      {{! @glint-expect-error upstream types changed }}
       @registerAPI={{@registerAPI}}
       @initiallyOpened={{@initiallyOpened}}
       @extra={{@extra}}

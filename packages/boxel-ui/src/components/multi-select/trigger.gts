@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
-import type { Select } from 'ember-power-select/components/power-select';
+import type { Select } from 'ember-power-select/types';
 
 import { cn } from '../../helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
@@ -35,30 +35,36 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   TriggerComponentSignature<ItemT>
 > {
   get showPlaceholder() {
+    // @ts-expect-error upstream types changed
     return this.args.placeholder && this.args.select.selected.length == 0;
   }
 
   private maxVisibleItems = 3;
 
   get visibleContent(): any[] {
+    // @ts-expect-error upstream types changed
     return this.args.select.selected.slice(0, this.maxVisibleItems);
   }
 
   get hasMoreItems(): boolean {
+    // @ts-expect-error upstream types changed
     return this.args.select.selected.length > this.maxVisibleItems;
   }
 
   get remainingItemsCount(): number {
+    // @ts-expect-error upstream types changed
     return this.args.select.selected.length - this.maxVisibleItems;
   }
 
   @action
   removeExcessItems(event: Event) {
     event.stopPropagation();
+    // @ts-expect-error upstream types changed
     const newSelected = this.args.select.selected.slice(
       0,
       this.maxVisibleItems,
     );
+    // @ts-expect-error upstream types changed
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
@@ -66,9 +72,11 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   @action
   removeItem(item: any, event?: Event) {
     event?.stopPropagation();
+    // @ts-expect-error upstream types changed
     const newSelected = this.args.select.selected.filter(
       (i: any) => i !== item,
     );
+    // @ts-expect-error upstream types changed
     this.args.select.selected = [...newSelected];
     this.args.select.actions.select(newSelected);
   }
@@ -84,6 +92,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   get hasSelectedItems() {
+    // @ts-expect-error upstream types changed
     return this.args.select.selected && this.args.select.selected.length > 0;
   }
 

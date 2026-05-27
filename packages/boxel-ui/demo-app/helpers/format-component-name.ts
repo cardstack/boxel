@@ -1,5 +1,6 @@
 import { helper } from '@ember/component/helper';
 import { typeOf } from '@ember/utils';
+
 import { titleize } from '../utils/titleize.ts';
 
 export default helper(function formatComponentName([componentPath]: [string]) {
