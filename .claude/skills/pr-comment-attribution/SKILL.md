@@ -23,9 +23,10 @@ Every PR comment the agent posts, with no exceptions:
 
 …across whichever tool posts it:
 
-- `gh pr comment`
+- `gh pr comment` (top-level issue comment)
+- `gh pr review --comment` / `--approve` / `--request-changes` (review-summary body)
 - `gh api repos/<owner>/<repo>/issues/<n>/comments` and `.../pulls/<n>/comments/<id>/replies`
-- the GitHub MCP tools (`add_reply_to_pull_request_comment`, `add_issue_comment`, etc.)
+- the GitHub MCP tools (`add_reply_to_pull_request_comment`, `add_issue_comment`, `pull_request_review_write`, etc.)
 
 ## Example
 
