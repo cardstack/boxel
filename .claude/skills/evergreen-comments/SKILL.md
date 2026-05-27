@@ -1,5 +1,6 @@
 ---
 name: evergreen-comments
+allowed-tools: Read, Grep
 description: Write code comments, PR descriptions, PR review replies, and other reader-facing prose so they describe the code as it is now — never the journey of how it got there, and never a private ticket/PR reference. Use whenever writing or editing a code comment, a PR title/description/comment, or restating a tracker ticket. Triggers on adding/editing comments, opening or updating a PR, or replying to review feedback.
 ---
 
