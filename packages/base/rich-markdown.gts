@@ -19,6 +19,7 @@ import {
   containsMany,
   field,
   linksToMany,
+  virtualNetworkFor,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import CodeMirrorEditor from './codemirror-editor';
@@ -57,7 +58,7 @@ export class RichMarkdownField extends FieldDef {
       let rel = this[relativeTo];
       let baseUrl = rel
         ? typeof rel === 'string'
-          ? cardIdToURL(rel).href
+          ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
           : rel.href
         : '';
       return extractCardReferenceUrls(this.content, baseUrl);
@@ -79,11 +80,14 @@ export class RichMarkdownField extends FieldDef {
       return this.args.model?.content ?? null;
     }
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -99,11 +103,14 @@ export class RichMarkdownField extends FieldDef {
       return this.args.model?.content ?? null;
     }
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     <template>
       <MarkdownTemplate
@@ -125,7 +132,9 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    _modeState = new TrackedObject({ value: 'compose' as 'compose' | 'source' | 'preview' });
+    _modeState = new TrackedObject({
+      value: 'compose' as 'compose' | 'source' | 'preview',
+    });
 
     get _mode(): 'compose' | 'source' | 'preview' {
       return this._modeState.value;
@@ -135,11 +144,14 @@ export class RichMarkdownField extends FieldDef {
       this.args.model.content = markdown;
     };
     get baseUrl(): string | null {
-      let rel = this.args.model?.[relativeTo];
-      if (!rel) {
+      let model = this.args.model;
+      let rel = model?.[relativeTo];
+      if (!model || !rel) {
         return null;
       }
-      return typeof rel === 'string' ? cardIdToURL(rel).href : rel.href;
+      return typeof rel === 'string'
+        ? (virtualNetworkFor(model)?.toURL(rel).href ?? cardIdToURL(rel).href)
+        : rel.href;
     }
     get linkedCards(): CardDef[] | null {
       try {
@@ -221,7 +233,9 @@ export class RichMarkdownField extends FieldDef {
           font-size: 0.8rem;
           cursor: pointer;
           color: var(--boxel-400, #666);
-          transition: background-color 0.15s, color 0.15s;
+          transition:
+            background-color 0.15s,
+            color 0.15s;
         }
 
         .mode-btn:last-child {
