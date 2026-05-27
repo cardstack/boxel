@@ -309,7 +309,7 @@ You can also use `mise run services:realm-server` if you want the functionality 
 
 In development, you can visit an indexing dashboard at [`http://localhost:4210/_indexing-dashboard`](http://localhost:4210/_indexing-dashboard) to view the status of all active indexing jobs across all workers.
 
-In environment mode, this is at `http://worker.environment-name.localhost/_indexing-dashboard`.
+In environment mode, this is at `https://worker.<slug>.localhost/_indexing-dashboard`.
 
 ### Card Pre-rendering
 
@@ -704,12 +704,14 @@ BOXEL_ENVIRONMENT=parallel mise run services:ai-bot
 
 In environment mode, services are available at:
 
-| Service      | Hostname                               |
-| ------------ | -------------------------------------- |
-| Host app     | `http://host.<slug>.localhost`         |
-| Realm server | `http://realm-server.<slug>.localhost` |
-| Matrix       | `http://matrix.<slug>.localhost`       |
-| Icons        | `http://icons.<slug>.localhost`        |
+Traefik terminates TLS for these hostnames, so they are served over HTTPS (plain HTTP redirects to HTTPS):
+
+| Service      | Hostname                                |
+| ------------ | --------------------------------------- |
+| Host app     | `https://host.<slug>.localhost`         |
+| Realm server | `https://realm-server.<slug>.localhost` |
+| Matrix       | `https://matrix.<slug>.localhost`       |
+| Icons        | `https://icons.<slug>.localhost`        |
 
 Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
 
