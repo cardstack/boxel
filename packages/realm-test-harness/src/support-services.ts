@@ -244,6 +244,9 @@ async function assertStandbyRendersDom(
   });
   let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
   let lastError: Error | undefined;
+  let startedAt = Date.now();
+  let attempt = 0;
+  supportLog.info(`standby DOM gate: probing ${standbyURL} for #standby-ready`);
   try {
     // Retry the whole navigation + marker wait on a fresh page each attempt,
     // not just the connection phase. While vite is cold-optimizing, a first
@@ -269,6 +272,7 @@ async function assertStandbyRendersDom(
         );
       }
       let attemptTimeout = Math.min(STANDBY_DOM_ATTEMPT_TIMEOUT_MS, remaining);
+      attempt++;
       let page = await browser.newPage();
       try {
         await page.goto(standbyURL, {
@@ -279,9 +283,17 @@ async function assertStandbyRendersDom(
           () => !!document.querySelector('#standby-ready'),
           { timeout: attemptTimeout },
         );
+        supportLog.info(
+          `standby DOM gate: #standby-ready after ${Date.now() - startedAt}ms (${attempt} attempt(s))`,
+        );
         return;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
+        supportLog.info(
+          `standby DOM gate: attempt ${attempt} did not render (${
+            Date.now() - startedAt
+          }ms elapsed): ${lastError.message.split('\n')[0]}`,
+        );
         await new Promise((r) => setTimeout(r, 500));
       } finally {
         await page.close().catch(() => {});

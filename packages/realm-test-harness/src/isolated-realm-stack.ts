@@ -830,6 +830,7 @@ export async function startIsolatedRealmStack({
 
     // Release the realm-server port holder right before the child binds.
     await realmServerPortInfo.releaseHolder();
+    let realmServerSpawnedAt = Date.now();
     let realmServer = spawn('ts-node', serverArgs, {
       cwd: realmServerDir,
       env,
@@ -860,6 +861,15 @@ export async function startIsolatedRealmStack({
         label: 'realm server',
         process: realmServer,
       });
+      // Time to bind: the realm-server only writes this metadata after it
+      // clears its `smokeTestHostApp` host-readiness wait and calls
+      // `server.listen`. A large value here means the port was refused for
+      // that whole window — the ECONNREFUSED-to-realm-server flake.
+      realmLog.info(
+        `realm server bound port ${realmServerRuntime.port} after ${
+          Date.now() - realmServerSpawnedAt
+        }ms`,
+      );
       compatProxy.setTargetPort(realmServerRuntime.port, () =>
         describeRealmServerHealth(realmServer, realmServerExit, getServerLogs),
       );
@@ -882,6 +892,9 @@ export async function startIsolatedRealmStack({
         ),
         createProcessExitPromise(workerManager, 'worker manager'),
       ]);
+      realmLog.info(
+        `realm server ready after ${Date.now() - realmServerSpawnedAt}ms total`,
+      );
 
       return {
         compatProxy,
