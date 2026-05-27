@@ -67,9 +67,7 @@ function makeCards() {
     @field firstName = contains(StringField);
     @field pets = linksToMany(Pet);
     static isolated = class extends Component<typeof Person> {
-      <template>
-        <@fields.pets @format='fitted' />
-      </template>
+      <template><@fields.pets @format='fitted' /></template>
     };
     static edit = class extends Component<typeof Person> {
       <template>
@@ -188,10 +186,14 @@ module(
         .hasAttribute('data-test-broken-link-state', 'not-found');
       assert.dom('[data-test-broken-link-url]').hasText(GHOST_URL);
       assert
-        .dom('[data-test-plural-view-item="0"] [data-test-broken-link-template]')
+        .dom(
+          '[data-test-plural-view-item="0"] [data-test-broken-link-template]',
+        )
         .doesNotExist('the first (present) slot is not the broken one');
       assert
-        .dom('[data-test-plural-view-item="2"] [data-test-broken-link-template]')
+        .dom(
+          '[data-test-plural-view-item="2"] [data-test-broken-link-template]',
+        )
         .doesNotExist('the last (present) slot is not the broken one');
     });
 
@@ -240,7 +242,9 @@ module(
         .hasAttribute('data-test-broken-link-state', 'error');
       assert.dom('[data-test-broken-link-url]').hasText(EXPLODED_URL);
       assert
-        .dom('[data-test-plural-view-item="0"] [data-test-broken-link-template]')
+        .dom(
+          '[data-test-plural-view-item="0"] [data-test-broken-link-template]',
+        )
         .doesNotExist('the present slot is not the broken one');
     });
 
@@ -357,7 +361,10 @@ module(
         .doesNotExist('removing clears the broken reference');
       assert
         .dom('[data-test-pet]')
-        .exists({ count: 1 }, 'the healthy sibling is untouched by the removal');
+        .exists(
+          { count: 1 },
+          'the healthy sibling is untouched by the removal',
+        );
     });
 
     test('editing a sibling field while a broken element is present does not tear down the present element', async function (assert) {
