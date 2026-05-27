@@ -1,0 +1,291 @@
+:root {
+  /* internal variables used for base scaling defaults - do not override */
+  --_boxel-font-size: 1rem; /* 16px */
+  --_boxel-spacing: 1rem; /* 16px */
+  --_boxel-radius: 0.625rem; /* 10px */
+  --_boxel-sp-unit: 0.25rem; /* 4px */
+  /* end of internal variables */
+
+  /* boxel base variable defaults  */
+  --boxel-font-size: var(--_boxel-font-size);
+  --boxel-spacing: var(--_boxel-spacing);
+  --boxel-radius: var(--_boxel-radius);
+
+  /* font-family */
+  --boxel-font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  --boxel-serif-font-family: 'IBM Plex Serif', 'Georgia', Times, serif;
+  --boxel-monospace-font-family:
+    'IBM Plex Mono', 'Menlo', 'Courier New', Courier, monospace;
+
+  /* font size range -- note: see semantic names on line 248 */
+  --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
+  --boxel-font-size-xl: calc(var(--boxel-font-size) * 2); /* 32px */
+  --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375); /* 22px */
+  --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25); /* 20px */
+  /* --boxel-font-size: 16px; (base - declared on line 10) */
+  --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875); /* 14px */
+  --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75); /* 12px */
+  --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
+
+  /* font shorthand -- note: see semantic names on line 248 */
+  --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)
+    var(--boxel-font-family);
+  --boxel-font-lg: var(--boxel-font-size-lg) / calc(30 / 22)
+    var(--boxel-font-family);
+  --boxel-font-md: var(--boxel-font-size-md) / calc(28 / 20)
+    var(--boxel-font-family);
+  --boxel-font: var(--boxel-font-size) / calc(22 / 16) var(--boxel-font-family);
+  --boxel-font-sm: var(--boxel-font-size-sm) / calc(18 / 13)
+    var(--boxel-font-family); /* default */
+  --boxel-font-xs: var(--boxel-font-size-xs) / calc(15 / 11)
+    var(--boxel-font-family);
+
+  /* line-height for corresponding font-size */
+  --boxel-line-height-xl: calc(43 / 32); /* 1.34375 */
+  --boxel-line-height-lg: calc(30 / 22); /* 1.3636 */
+  --boxel-line-height-md: calc(28 / 20); /* 1.4 */
+  --boxel-line-height: calc(22 / 16); /* 1.375 */
+  --boxel-line-height-sm: calc(18 / 13); /* 1.3846 (body) */
+  --boxel-line-height-xs: calc(15 / 11); /* 1.3636 */
+
+  /* letter-spacing */
+  /* Note: the px conversion is using default font_size = 16px (1rem) */
+  /* Formula: px = em * font_size */
+  --boxel-lsp-xxl: 0.1em; /* 1.6px */
+  --boxel-lsp-xl: 0.05em; /* 0.8px */
+  --boxel-lsp-lg: 0.035em; /* 0.56px */
+  --boxel-lsp: 0.025em; /* 0.4px */
+  --boxel-lsp-sm: 0.015em; /* 0.24px */
+  --boxel-lsp-xs: 0.01em; /* 0.16px */
+  --boxel-lsp-xxs: 0.005em; /* 0.08px */
+
+  /* Modular scale for spacing */
+  --boxel-ratio: 1.333; /* scale (based on "Perfect Fourth" scale) */
+  --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio)); /* 2.14px */
+  --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio)); /* 2.86px */
+  --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio)); /* 3.57px */
+  --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio)); /* 4.76px */
+  --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio)); /* 6.75px */
+  --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio)); /* 9px */
+  --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 12px */
+  --boxel-sp: var(--boxel-spacing); /* 16px */
+  --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.33px */
+  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 28.44px */
+  --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.92px */
+  --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio)); /* 50.56px */
+  --boxel-sp-4xl: calc(var(--boxel-sp-3xl) * var(--boxel-ratio)); /* 67.41px */
+  --boxel-sp-5xl: calc(var(--boxel-sp-4xl) * var(--boxel-ratio)); /* 89.88px */
+  --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--boxel-ratio)); /* 119.84px */
+
+  /* common icon sizes */
+  --boxel-icon-2xs: 0.75rem; /* 12px */
+  --boxel-icon-xxs: var(
+    --boxel-icon-2xs
+  ); /* DEPRECATED: use --boxel-icon-2xs */
+  --boxel-icon-xs: 1rem; /* 16px */
+  --boxel-icon-sm: 1.25rem; /* 20px */
+  --boxel-icon-med: 1.875rem; /* 30px */
+  --boxel-icon-lg: 2.5rem; /* 40px */
+  --boxel-icon-xl: 3.75rem; /* 60px */
+  --boxel-icon-xxl: 5rem; /* 80px */
+
+  /* button sizes */
+  --boxel-button-mini: 1.25rem; /* 20px */
+  --boxel-button-xs: 1.5rem; /* 24px */
+  --boxel-button-sm: 1.875rem; /* 30px - base */
+  --boxel-button-tall: 2.5rem; /* 40px */
+  --boxel-button-touch: 3rem; /* 48px */
+
+  /* border-color */
+  --boxel-border-color: #d3d3d3;
+  --boxel-button-border-color: #acacac;
+
+  /* border */
+  --boxel-border: 1px solid var(--boxel-border-color);
+  --boxel-border-dark: 1px solid var(--boxel-dark);
+  --boxel-border-flexible: 1px solid rgba(255, 255, 255, 0.35);
+  --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
+
+  /* border-radius */
+  --boxel-border-radius-2xs: calc(
+    var(--boxel-border-radius-xs) - 2.5px
+  ); /* 1.5px */
+  --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 2px); /* 4px */
+  --boxel-border-radius-sm: calc(var(--boxel-border-radius) - 4px); /* 6px */
+  --boxel-border-radius: var(--boxel-radius); /* 10px - base */
+  --boxel-border-radius-lg: calc(var(--boxel-border-radius) + 2px); /* 12px */
+  --boxel-border-radius-xl: calc(
+    var(--boxel-border-radius-lg) + 3px
+  ); /* 15px */
+  --boxel-border-radius-2xl: calc(
+    var(--boxel-border-radius-xl) + 5px
+  ); /* 20px */
+
+  /* animations */
+  --boxel-infinite-spin-animation: boxel-spin 6000ms linear infinite;
+
+  /* transition */
+  --boxel-transition: 0.2s ease;
+  --boxel-transition-properties:
+    color var(--boxel-transition), background-color var(--boxel-transition),
+    border-color var(--boxel-transition), box-shadow var(--boxel-transition),
+    filter var(--boxel-transition); /* for commonly used properties */
+
+  /* box-shadow */
+  --boxel-box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+  --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
+  --boxel-deep-box-shadow: 0 5px 15px 0 rgba(0 0 0 / 50%);
+
+  /* outline */
+  --boxel-outline-width: 2px;
+  --boxel-outline-color: var(--boxel-blue);
+  --boxel-outline-style: solid;
+  --boxel-outline: var(--boxel-outline-width) var(--boxel-outline-style)
+    var(--boxel-outline-color);
+
+  /* Container sizes */
+  --boxel-xxs-container: 15.625rem; /* 250px */
+  --boxel-xs-container: 17.8125rem; /* 285px */
+  --boxel-sm-container: 36.25rem; /* 580px */
+  --boxel-md-container: 40.625rem; /* 650px */
+  --boxel-lg-container: 43.75rem; /* 700px */
+  --boxel-xl-container: 65rem; /* 1040px */
+  --boxel-xxl-container: 83.76rem; /* 1340px */
+
+  /* COLOR PALETTE */
+
+  /**** Revisited Colors BOXEL-UI ****/
+  --boxel-50: #f5f5f5;
+  --boxel-100: #f8f7fa;
+  --boxel-200: #e8e8e8;
+  --boxel-300: #d1d1d1;
+  --boxel-400: #afafb7;
+  --boxel-450: #919191;
+  --boxel-500: #5a586a;
+  --boxel-550: #525252;
+  --boxel-600: #413e4e;
+  --boxel-650: #3b394b;
+  --boxel-700: #272330;
+  --boxel-800: #1a1628;
+
+  --boxel-cyan: #00ebe5;
+  --boxel-teal: #00ffba;
+  --boxel-dark-teal: #00ebac;
+  --boxel-red: #ff5050;
+  --boxel-pink: #ff009d;
+  --boxel-orange: #ff7f00;
+  --boxel-yellow: #ffd800;
+  --boxel-lime: #c3fc33;
+  --boxel-green: #37eb77;
+  --boxel-dark-green: #00ac3d;
+  --boxel-lilac: #a66dfa;
+  --boxel-fuschia: #ac00ff;
+  --boxel-purple: #6638ff;
+  --boxel-blue: #0069f9;
+  --boxel-navy: #281e78;
+
+  --boxel-label-color: currentColor;
+  /**** End of revisited colors ****/
+
+  /* Primary colors */
+  --boxel-light: #fff;
+  --boxel-dark: #000;
+  --boxel-dark-hover: rgba(0, 0, 0, 0.1);
+  --boxel-darker-hover: rgba(0, 0, 0, 0.5);
+  --boxel-light-hover-35: rgba(255, 255, 255, 0.35);
+
+  --boxel-highlight: var(--boxel-teal);
+  --boxel-highlight-hover: var(--boxel-dark-teal);
+  --boxel-danger: var(
+    --boxel-red
+  ); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */
+  --boxel-danger-hover: #fa1521;
+  --boxel-danger-bg: #ffe9e9;
+
+  /* Boxel purples */
+  --boxel-purple-100: var(--boxel-100);
+  --boxel-purple-200: var(--boxel-400); /* formerly: #b3b1b8; */
+  --boxel-purple-300: var(--boxel-400);
+  --boxel-purple-400: var(--boxel-500); /* formerly: #6b6a80; */
+  --boxel-purple-500: var(--boxel-500);
+  --boxel-purple-600: var(--boxel-600); /* Cardspace bg */
+  --boxel-purple-700: var(--boxel-700); /* formerly: #393642; */
+  --boxel-purple-750: var(--boxel-700); /* formerly: #363441; */
+  --boxel-purple-800: var(--boxel-700); /* formerly: #2e2d38; */
+  --boxel-purple-900: var(--boxel-700); /* Card Wallet bg */
+
+  /* Boxel neutrals */
+  --boxel-light-100: #f4f4f4;
+  --boxel-light-200: var(--boxel-200); /* formerly: #f0f0f0; */
+  --boxel-light-300: var(--boxel-200); /* formerly: #efefef; */
+  --boxel-light-400: var(--boxel-200);
+  --boxel-light-500: var(--boxel-300); /* formerly: #dedede; */
+  --boxel-light-600: var(--boxel-300);
+
+  /* Status colors */
+  --boxel-error-100: #dc0202; /* alert - attention - error */
+  --boxel-error-200: #ed0000;
+  --boxel-error-300: #ff0000;
+  --boxel-error-400: #ff5050;
+  --boxel-warning-100: var(--boxel-yellow); /* warning - notification */
+  --boxel-warning-200: #ffba00;
+  --boxel-success-100: var(--boxel-green);
+  --boxel-success-200: var(--boxel-teal);
+  --boxel-success-300: var(--boxel-dark-green);
+
+  /* z-index layers */
+  --boxel-layer-floating-button: 1000;
+  --boxel-layer-modal-default: 1500;
+  --boxel-layer-modal-urgent: 2000;
+
+  /* Form control appearance */
+  --boxel-form-control-height: 2.5rem; /* 40px */
+  --boxel-form-control-placeholder-color: var(--boxel-400);
+  --boxel-form-control-border-color: var(--boxel-border-color);
+  --boxel-form-control-border-radius: var(--boxel-border-radius);
+  --boxel-form-control-dark-mode-placeholder-color: #acacac;
+  --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
+
+  /* deprecated - Do Not Use */
+  --boxel-sp-xxxl: var(--boxel-sp-3xl); /* xxxl is deprecated, use 3xl */
+  --boxel-sp-xxl: var(--boxel-sp-2xl); /* xxl is deprecated, use 2xl */
+  --boxel-sp-xxs: var(--boxel-sp-2xs); /* xxs is deprecated, use 2xs */
+  --boxel-sp-xxxs: var(--boxel-sp-3xs); /* xxxs is deprecated, use 3xs */
+  --boxel-border-radius-xxs: var(
+    --boxel-border-radius-2xs
+  ); /* xxs is deprecated, use 2xs */
+  --boxel-border-radius-xxl: var(
+    --boxel-border-radius-2xl
+  ); /* xxl is deprecated, use 2xl */
+}
+
+/** Semantic CSS Variables for General Use */
+:root {
+  /* font-family */
+  --boxel-body-font-family: var(--boxel-font-family);
+  --boxel-heading-font-family: var(--boxel-font-family);
+  --boxel-section-heading-font-family: var(--boxel-font-family);
+  --boxel-subheading-font-family: var(--boxel-font-family);
+  --boxel-caption-font-family: var(--boxel-font-family);
+
+  /* font-size */
+  --boxel-heading-font-size: var(--boxel-font-size-lg); /* 22px */
+  --boxel-section-heading-font-size: var(--boxel-font-size-md); /* 18px */
+  --boxel-subheading-font-size: var(--boxel-font-size); /* 16px */
+  --boxel-body-font-size: var(--boxel-font-size-sm); /* 14px */
+  --boxel-caption-font-size: var(--boxel-font-size-xs); /* 12px */
+
+  /* line-height */
+  --boxel-body-line-height: var(--boxel-line-height-sm);
+  --boxel-heading-line-height: var(--boxel-line-height-lg);
+  --boxel-caption-line-height: var(--boxel-line-height-xs);
+  --boxel-section-heading-line-height: var(--boxel-line-height-md);
+  --boxel-subheading-line-height: var(--boxel-line-height);
+
+  /* font-weight */
+  --boxel-heading-font-weight: 700;
+  --boxel-section-heading-font-weight: 500;
+  --boxel-subheading-font-weight: 500;
+  --boxel-body-font-weight: 400;
+  --boxel-caption-font-weight: 500;
+}

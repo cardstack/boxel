@@ -1,0 +1,6 @@
+export const PRECISION = 10;
+
+export const EXCEEDED_HORIZONTAL_MIN = 0b0001;
+export const EXCEEDED_HORIZONTAL_MAX = 0b0010;
+export const EXCEEDED_VERTICAL_MIN = 0b0100;
+export const EXCEEDED_VERTICAL_MAX = 0b1000;

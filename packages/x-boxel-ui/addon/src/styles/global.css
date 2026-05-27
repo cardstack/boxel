@@ -1,0 +1,212 @@
+/* Note on css layers: css @layer rules are used to create a layering system for the css.
+   The order of the layers is important as it determines the precedence of the styles.
+   The layers are defined in the following order:
+   1. reset: for resetting default browser styles
+   2. utilities: for utility classes that can be used throughout the application
+   3. boxelComponentL1: for base component styles
+   4. boxelComponentL2: for component styles that build on top of base styles
+   5. boxelComponentL3: for component styles that build on top of L2 styles
+   This layering system allows for easier overrides and customizations of styles at different levels.
+   More info: https://developer.mozilla.org/en-US/docs/Web/CSS/@layer
+*/
+@layer reset, utilities, boxelComponentL1, boxelComponentL2, boxelComponentL3;
+
+@layer reset {
+  * {
+    box-sizing: border-box;
+  }
+
+  :root {
+    @supports (interpolate-size: allow-keywords) {
+      interpolate-size: allow-keywords;
+    }
+  }
+
+  #isolated-render {
+    display: none;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: var(--boxel-dark, #000);
+    font-family: var(
+      --boxel-font-family,
+      'IBM Plex Sans',
+      'Helvetica Neue',
+      Arial,
+      sans-serif
+    );
+    font-size: var(--boxel-body-font-size, 0.875rem);
+    letter-spacing: var(--boxel-lsp-xs, 0.01em);
+    line-height: var(--boxel-line-height-sm, calc(18 / 13));
+    background-color: var(--boxel-light, #fff);
+    overscroll-behavior: none;
+  }
+
+  body.has-modal {
+    overflow: hidden;
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(
+      --boxel-monospace-font-family,
+      'IBM Plex Mono',
+      'Menlo',
+      'Courier New',
+      Courier,
+      monospace
+    );
+  }
+
+  a {
+    display: inline-block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    display: inline-block;
+    font: inherit;
+  }
+
+  img,
+  svg {
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  [alt] {
+    color: currentColor;
+    font: var(--boxel-font-xs);
+    letter-spacing: var(--boxel-lsp-sm);
+  }
+
+  a:hover {
+    color: var(--boxel-highlight);
+    cursor: pointer;
+  }
+
+  a:focus {
+    outline: var(--boxel-outline);
+  }
+
+  a:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  button:hover:not(:disabled),
+  [role='button']:hover:not(:disabled, [aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  button:focus:not(:disabled),
+  [role='button']:focus:not(:disabled) {
+    outline: var(--boxel-outline);
+  }
+
+  button:focus:not(:focus-visible),
+  [role='button']:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  input:not([type='color']):disabled,
+  select:disabled,
+  textarea:disabled {
+    opacity: 0.5;
+  }
+
+  input[type='color']:disabled {
+    pointer-events: none;
+  }
+
+  input:focus:not(:focus-visible),
+  textarea:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible {
+    outline-color: var(--boxel-highlight);
+  }
+}
+
+@layer utilities {
+  .boxel-contents-only {
+    display: contents;
+  }
+
+  /* Hides content visually only
+  (accessible via screen readers) */
+  .boxel-sr-only:not(:focus):not(:active) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    border: 0;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* may need to add "max-width: 100%;" in some cases */
+  .boxel-ellipsize {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Thin translucent scrollbar for dark-background containers */
+  .boxel-dark-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255 255 255 / 20%) transparent;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar {
+    width: 0.5rem;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255 255 255 / 20%);
+    border-radius: var(--boxel-border-radius-xs);
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255 255 255 / 35%);
+  }
+
+  /* can be used via `--boxel-infinite-spin-animation` css-variable. example:
+    @media (prefers-reduced-motion: no-preference) {
+      .loading-icon {
+        animation: var(--boxel-infinite-spin-animation);
+      }
+    }
+  */
+  @keyframes boxel-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+#ember-basic-dropdown-wormhole
+  .boxel-dropdown__content.ember-basic-dropdown-content {
+  z-index: calc(var(--boxel-layer-modal-urgent) + 1);
+}

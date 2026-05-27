@@ -1,0 +1,15 @@
+# See https://help.github.com/ignore-files/ for more about ignoring files.
+
+/dist/
+/tmp/
+
+# dependencies
+node_modules/
+
+# misc
+/.eslintcache
+/addon/.eslintcache
+.env*
+.pnpm-debug.log
+npm-debug.log*
+yarn-error.log
