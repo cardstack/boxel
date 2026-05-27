@@ -161,7 +161,9 @@ function absolutizeInstanceURL(
   // Registered prefix references (e.g. @cardstack/catalog/foo) are already
   // in their canonical portable form — don't resolve them.
   if (
-    virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+    virtualNetwork
+      ? virtualNetwork.isRegisteredPrefix(url)
+      : isRegisteredPrefix(url)
   ) {
     return;
   }
@@ -1623,7 +1625,9 @@ function relativizeResource(
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
     if (
-      virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+      virtualNetwork
+        ? virtualNetwork.isRegisteredPrefix(url)
+        : isRegisteredPrefix(url)
     ) {
       return;
     }

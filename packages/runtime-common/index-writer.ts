@@ -1266,7 +1266,8 @@ export class Batch {
     // since deps may be stored in prefix form for portability
     let unresolvedPath = this.unresolveURL(resolvedPath);
     let searchBothForms =
-      unresolvedPath !== resolvedPath && this.isRegisteredPrefix(unresolvedPath);
+      unresolvedPath !== resolvedPath &&
+      this.isRegisteredPrefix(unresolvedPath);
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage

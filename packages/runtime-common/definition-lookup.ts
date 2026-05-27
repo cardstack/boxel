@@ -94,7 +94,9 @@ function canonicalURL(
   // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
   // to real URLs so that realm-membership checks and DB lookups work.
   if (
-    virtualNetwork ? virtualNetwork.isRegisteredPrefix(url) : isRegisteredPrefix(url)
+    virtualNetwork
+      ? virtualNetwork.isRegisteredPrefix(url)
+      : isRegisteredPrefix(url)
   ) {
     try {
       return virtualNetwork
@@ -383,7 +385,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition | undefined> {
-    let canonicalModuleURL = canonicalURL(codeRef.module, undefined, this.#virtualNetwork);
+    let canonicalModuleURL = canonicalURL(
+      codeRef.module,
+      undefined,
+      this.#virtualNetwork,
+    );
     let context = await this.buildLookupContext(
       canonicalModuleURL,
       contextOpts,
@@ -423,7 +429,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     moduleUrl: string,
     opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
-    let canonicalModuleURL = canonicalURL(moduleUrl, undefined, this.#virtualNetwork);
+    let canonicalModuleURL = canonicalURL(
+      moduleUrl,
+      undefined,
+      this.#virtualNetwork,
+    );
     let context = await this.buildLookupContext(canonicalModuleURL);
     if (!context) {
       return undefined;
@@ -770,7 +780,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     contextOpts?: LookupContext,
   ): Promise<Definition> {
-    let canonicalModuleURL = canonicalURL(codeRef.module, undefined, this.#virtualNetwork);
+    let canonicalModuleURL = canonicalURL(
+      codeRef.module,
+      undefined,
+      this.#virtualNetwork,
+    );
     let canonicalCodeRef =
       canonicalModuleURL === codeRef.module
         ? codeRef
@@ -832,7 +846,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   }
 
   async invalidate(moduleURL: string): Promise<string[]> {
-    let canonicalModuleURL = canonicalURL(moduleURL, undefined, this.#virtualNetwork);
+    let canonicalModuleURL = canonicalURL(
+      moduleURL,
+      undefined,
+      this.#virtualNetwork,
+    );
     let resolvedRealmURL = this.resolveLocalRealmURL(canonicalModuleURL);
     if (!resolvedRealmURL) {
       return [];
@@ -1216,7 +1234,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
     let candidateUrls = new Set<string>();
     for (let moduleUrl of query.moduleUrls) {
-      let canonicalModuleUrl = canonicalURL(moduleUrl, undefined, this.#virtualNetwork);
+      let canonicalModuleUrl = canonicalURL(
+        moduleUrl,
+        undefined,
+        this.#virtualNetwork,
+      );
       candidateUrls.add(canonicalModuleUrl);
       candidateUrls.add(normalizeExecutableURL(canonicalModuleUrl));
     }
