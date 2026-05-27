@@ -703,6 +703,59 @@ module('Integration | getRelationship', function (hooks) {
       );
       assert.strictEqual(findings[0].fieldName, 'pet');
     });
+
+    test('is a pure read: does not initialize absent fields in the data bucket', async function (assert) {
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+      }
+      class Detail extends FieldDef {
+        @field label = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field bestFriend = linksTo(Pet);
+        // Left unset on purpose — none of these may be materialized by the scan.
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+        @field detail = contains(Detail);
+      }
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet, Detail });
+
+      // Only firstName + a broken bestFriend are in the bucket; pet / pets /
+      // detail are never touched.
+      let person = new Person({ firstName: 'Hassan' });
+      let bucket = getDataBucket(person);
+      let bestFriend = {
+        type: 'link-error',
+        reference: `${testRealmURL}Pet/exploded`,
+        errorDoc: errorDoc('boom'),
+      } satisfies LinkErrorSentinel;
+      bucket.set('bestFriend', bestFriend);
+
+      let keysBefore = [...bucket.keys()].sort();
+
+      let findings = getBrokenLinks(person);
+      assert.strictEqual(findings.length, 1, 'finds the one broken link');
+      assert.strictEqual(findings[0].fieldName, 'bestFriend');
+
+      // The scan added nothing — absent linksTo / linksToMany / contains fields
+      // were not initialized via the field getter's emptyValue.
+      assert.deepEqual(
+        [...bucket.keys()].sort(),
+        keysBefore,
+        'no new bucket entries: absent fields stay absent after the scan',
+      );
+      assert.false(bucket.has('pet'), 'unset singular linksTo not initialized');
+      assert.false(bucket.has('pets'), 'unset linksToMany not initialized');
+      assert.false(bucket.has('detail'), 'unset contains not initialized');
+      // The entries that were present keep their identity — nothing replaced.
+      assert.strictEqual(
+        bucket.get('bestFriend'),
+        bestFriend,
+        'present sentinel entry is the same object after the scan',
+      );
+    });
   });
 
   module('relationshipMeta back-compat wrapper', function () {
