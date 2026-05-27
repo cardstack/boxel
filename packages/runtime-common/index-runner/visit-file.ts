@@ -138,10 +138,16 @@ export async function visitFileForIndexingFused({
 
   let needCardRender = Boolean(parsedCardResource);
   let needFileExtract = true; // every file gets a file entry
-  // fileRender is requested for all non-module files. This is broader than
-  // the legacy file-indexer gating (`extractResult.resource && !hasModulePrerender`);
-  // missing-resource cases are handled downstream by the file indexer.
-  let needFileRender = !isModule;
+  // fileRender is requested for every file, including executable modules
+  // (.gts/.ts). Module files are also FileDef subclasses (GtsFileDef /
+  // TsFileDef) with their own fitted/embedded/atom/isolated templates, and
+  // CardsGrid's "All Files" group renders those formats — so they need the
+  // FileDef-format HTML just like .json/.md/image files do (CS-11171).
+  // `isModule` does NOT gate this: it's only recorded as the
+  // `hasModulePrerender` flag on the file-index row below (a metadata hint
+  // for downstream consumers; the file indexer no longer acts on it).
+  // Missing-resource cases are handled downstream by the file indexer.
+  let needFileRender = true;
 
   if (lastModified == null) {
     logWarn(
