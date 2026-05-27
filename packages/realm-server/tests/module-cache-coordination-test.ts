@@ -330,6 +330,85 @@ module(basename(__filename), function () {
     });
   });
 
+  // Each distinct coalesce key wins its OWN advisory lock, so a burst of
+  // distinct-key callers produces that many concurrent winners — there is
+  // no loser path to throttle them (the schema editor alone fetches ~31
+  // distinct cold base modules in one page load). Each winner pins one
+  // pool connection for its lock transaction; if its `fn` also had to
+  // check out a SECOND pool client for the cache re-read + persist, then
+  // once concurrent winners reach the pool ceiling every pinned
+  // connection's `fn` would block waiting for a client its peers hold —
+  // a self-deadlock that hangs all module serving. Threading the pinned
+  // querier into `fn` keeps a coordinated load to exactly one connection,
+  // so winners drain through a pool far smaller than their count.
+  module('ModuleCacheCoordinator pool exhaustion', function (hooks) {
+    let savedPoolMax: string | undefined;
+    hooks.before(function () {
+      savedPoolMax = process.env.PG_POOL_MAX;
+      // Force a pool smaller than the concurrent-winner count below so the
+      // test would deadlock if a winner needed a second connection.
+      process.env.PG_POOL_MAX = '2';
+    });
+    hooks.after(function () {
+      if (savedPoolMax === undefined) {
+        delete process.env.PG_POOL_MAX;
+      } else {
+        process.env.PG_POOL_MAX = savedPoolMax;
+      }
+    });
+
+    let dbAdapter: PgAdapter;
+    setupDB(hooks, {
+      before: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    test('concurrent distinct-key winners doing DB work on the pinned querier do not deadlock a small pool', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        const winnerCount = 5; // > PG_POOL_MAX (2)
+        const runs = Array.from({ length: winnerCount }, (_unused, i) =>
+          coordinator.tryAcquireAndRun(
+            `pool-exhaustion-key-${i}`,
+            async (querier) => {
+              // DB work a winner must do while holding the lock. Routing it
+              // through the pinned querier (instead of the shared dbAdapter)
+              // is what keeps this to a single pool connection.
+              const rows = await querier(['SELECT', param(i), '::int AS n']);
+              return Number(rows[0].n);
+            },
+          ),
+        );
+
+        const timeout = new Promise<never>((_resolve, reject) => {
+          const t = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'coordinated transpiles deadlocked: winners did not all complete — pinned querier likely not being used for fn DB work',
+                ),
+              ),
+            20_000,
+          );
+          (t as { unref?: () => void }).unref?.();
+        });
+
+        const outcomes = await Promise.race([Promise.all(runs), timeout]);
+        assert.deepEqual(
+          outcomes
+            .map((o) => (o.acquired ? o.result : 'loser'))
+            .sort((a, b) => Number(a) - Number(b)),
+          [0, 1, 2, 3, 4],
+          'all distinct-key winners acquired and completed',
+        );
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+  });
+
   module(
     'CachingDefinitionLookup coordinated path (integration)',
     function (hooks) {
