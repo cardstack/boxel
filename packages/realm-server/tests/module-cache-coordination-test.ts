@@ -235,6 +235,83 @@ module(basename(__filename), function () {
       }
     });
 
+    test('tryAcquireAndRun: a savepoint-guarded fn write failure does not abort the lock transaction', async function (assert) {
+      // A winner runs its DB work on the pinned querier inside the
+      // coordinator's lock transaction. A best-effort write (like the
+      // transpile cache UPSERT) that fails must NOT poison that
+      // transaction, or the coordinator's pg_notify + COMMIT would fail
+      // and the already-produced result would never be served. Wrapping
+      // the write in a savepoint keeps the transaction usable.
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        const peerCoordinator = new ModuleCacheCoordinator({ dbAdapter });
+        await peerCoordinator.start();
+        try {
+          await new Promise((r) => setTimeout(r, 100));
+          let notified = false;
+          const waitPromise = peerCoordinator
+            .waitForKey('savepoint-key', 5000)
+            .then(() => {
+              notified = true;
+            });
+          await new Promise((r) => setTimeout(r, 50));
+
+          const outcome = await coordinator.tryAcquireAndRun(
+            'savepoint-key',
+            async (querier) => {
+              await querier(['SAVEPOINT best_effort_write']);
+              try {
+                await querier(['SELECT * FROM table_that_does_not_exist']);
+              } catch {
+                // Best-effort: swallow and roll back just this statement.
+                await querier(['ROLLBACK TO SAVEPOINT best_effort_write']);
+              }
+              return 'served-despite-write-failure';
+            },
+          );
+
+          assert.deepEqual(outcome, {
+            acquired: true,
+            result: 'served-despite-write-failure',
+          });
+          await waitPromise;
+          assert.true(
+            notified,
+            'NOTIFY fired → lock transaction committed despite the inner write failure',
+          );
+        } finally {
+          await peerCoordinator.shutDown();
+        }
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+
+    test('tryAcquireAndRun: an unguarded fn write failure aborts the lock transaction and the winner throws', async function (assert) {
+      // Documents why the savepoint above is required: without it, a
+      // swallowed write failure leaves the transaction aborted, so the
+      // coordinator's pg_notify + COMMIT fail and the winner rejects
+      // instead of returning its result.
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        await assert.rejects(
+          coordinator.tryAcquireAndRun('unguarded-key', async (querier) => {
+            try {
+              await querier(['SELECT * FROM table_that_does_not_exist']);
+            } catch {
+              // Swallow like a best-effort write, but with no savepoint the
+              // transaction is now aborted.
+            }
+            return 'returned-but-transaction-poisoned';
+          }),
+        );
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+
     test('waitForKey: resolves on NOTIFY before timeout', async function (assert) {
       const coordinator = new ModuleCacheCoordinator({ dbAdapter });
       await coordinator.start();
