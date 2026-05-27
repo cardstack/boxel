@@ -167,6 +167,40 @@ module(basename(__filename), function () {
         'a failed sweep leaves the cache intact (entries fall back to TTL)',
       );
     });
+
+    test('coalesces a burst of notifications into one in-flight sweep + one re-run', async function (assert) {
+      let calls = 0;
+      let release!: () => void;
+      let gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let cache = new FakeSearchCache(['5.1']);
+      let listener = new JobsFinishedListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        searchCache: cache,
+        fetchFinalizedJobIds: async () => {
+          calls++;
+          // Hold the first sweep open so the next notifications land while it
+          // is still in flight.
+          if (calls === 1) {
+            await gate;
+          }
+          return new Set();
+        },
+      });
+
+      let first = listener.handleNotification(); // starts the sweep, awaits gate
+      await listener.handleNotification(); // arrives mid-sweep → queued
+      await listener.handleNotification(); // also mid-sweep → still just queued
+      release();
+      await first;
+
+      assert.strictEqual(
+        calls,
+        2,
+        'the burst collapses to the in-flight sweep plus a single re-run',
+      );
+    });
   });
 
   module('JobsFinishedListener (DB-backed sweep)', function (hooks) {

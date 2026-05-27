@@ -1,4 +1,9 @@
-import { logger, query, param, any } from '@cardstack/runtime-common';
+import {
+  logger,
+  query,
+  param,
+  separatedByCommas,
+} from '@cardstack/runtime-common';
 import type { Expression } from '@cardstack/runtime-common';
 import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
 
@@ -43,6 +48,12 @@ export class JobsFinishedListener {
   #fetchFinalizedJobIds: (candidateJobIds: number[]) => Promise<Set<number>>;
   #subscription?: NotificationSubscription;
   #starting?: Promise<void>;
+  // Single-flight guard: `jobs_finished` fires once per job completion, so a
+  // burst of completions would otherwise launch overlapping sweeps (and DB
+  // queries). Collapse the burst — run one sweep at a time, and if more
+  // notifications land mid-sweep, re-run exactly once afterward.
+  #sweeping = false;
+  #sweepQueued = false;
 
   constructor(deps: JobsFinishedListenerDeps) {
     this.#deps = deps;
@@ -88,14 +99,27 @@ export class JobsFinishedListener {
     await sub?.unsubscribe();
   }
 
-  // Exposed for tests; also invoked internally by the LISTEN handler. Returns
-  // the sweep promise so tests can await it; the subscribe callback fires it
-  // best-effort and swallows errors.
+  // Exposed for tests; also invoked internally by the LISTEN handler. Resolves
+  // when the work prompted by this notification has settled. Coalesces
+  // concurrent calls: if a sweep is already running, just mark that another
+  // pass is needed and let the in-flight sweep re-run once when it finishes.
   async handleNotification(): Promise<void> {
+    if (this.#sweeping) {
+      this.#sweepQueued = true;
+      return;
+    }
+    this.#sweeping = true;
     try {
-      await this.#sweep();
-    } catch (err: unknown) {
-      log.warn(`jobs_finished sweep failed: ${String(err)}`);
+      do {
+        this.#sweepQueued = false;
+        try {
+          await this.#sweep();
+        } catch (err: unknown) {
+          log.warn(`jobs_finished sweep failed: ${String(err)}`);
+        }
+      } while (this.#sweepQueued);
+    } finally {
+      this.#sweeping = false;
     }
   }
 
@@ -139,8 +163,8 @@ async function fetchFinalizedJobIdsFromDb(
     return new Set();
   }
   let rows = (await query(dbAdapter, [
-    `SELECT id FROM jobs WHERE status IN ('resolved', 'rejected') AND (`,
-    ...any(candidateJobIds.map((id) => [`id=`, param(id)])),
+    `SELECT id FROM jobs WHERE status IN ('resolved', 'rejected') AND id IN (`,
+    ...separatedByCommas(candidateJobIds.map((id) => [param(id)])),
     `)`,
   ] as Expression)) as { id: number | string }[];
   return new Set(rows.map((row) => Number(row.id)));
