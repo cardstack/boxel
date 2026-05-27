@@ -1,6 +1,6 @@
 ---
 name: evergreen-comments
-description: Write code comments, PR descriptions, PR review replies, and other reader-facing prose so they describe the code as it is now — never the journey of how it got there, and never a private ticket/PR reference. Use whenever writing or editing a code comment, a PR title/description/comment, a commit's reader-facing prose, or restating a tracker ticket. Triggers on adding/editing comments, opening or updating a PR, or replying to review feedback.
+description: Write code comments, PR descriptions, PR review replies, and other reader-facing prose so they describe the code as it is now — never the journey of how it got there, and never a private ticket/PR reference. Use whenever writing or editing a code comment, a PR title/description/comment, or restating a tracker ticket. Triggers on adding/editing comments, opening or updating a PR, or replying to review feedback.
 ---
 
 # Evergreen Comments & Prose
@@ -8,6 +8,8 @@ description: Write code comments, PR descriptions, PR review replies, and other 
 Reader-facing prose describes the **current contract**, stated as timeless fact. It does not narrate how the author arrived, and it does not reference private trackers or sibling changes. Delivery state and iteration history rot the moment PRs renumber, tickets close, branches reland, or the work gets restructured — and the reader years later cares about the invariant the code upholds, not the path to it. Archaeology is `git log` / `git blame` territory.
 
 This codebase is **open source**; the issue tracker is **private**. A ticket ID in a comment is opaque to almost everyone who will ever read it.
+
+**Scope.** These rules govern prose you *write or introduce*: code comments, skill files, PR descriptions, PR review replies, and tracker restatements. Two things are deliberately outside it: **commit messages** (see [Where the journey legitimately goes](#where-the-journey-legitimately-goes)) and **pre-existing prose you're merely editing around** — you need not clean up rot you didn't write.
 
 ## The two rules
 
@@ -24,10 +26,10 @@ Always cut:
 
 ### 2. No private-tracker or sibling-change references
 
-Never put any of these in code comments, skill files, PR descriptions, or review replies:
-- **Ticket IDs** (e.g. `CS-12345`, `CS-12345 PR 3`) — private tracker, meaningless and opaque to outside readers
+Never write a *real* one of these into code comments, skill files, PR descriptions, or review replies. (Clearly-fake illustrative placeholders — like the anti-pattern examples in this very skill — are the obvious exception; you can't teach the rule without showing what it forbids.)
+- **Ticket IDs** — a real `CS-…` identifier; the private tracker is meaningless and opaque to outside readers
 - **PR numbers / PR-letter labels** — `#4863`, "PR A", "PR B", "stacked PR N", "in this PR we…"
-- **Sibling-change references** — "same pattern PR 2 added", "see also PR 6's comments"
+- **Sibling-change references** — "same pattern the prior PR added", "see also that other PR's comments"
 
 Name the **mechanism**, not the change:
 - ❌ "PR A's PagePool fix makes the on-demand path safe."
@@ -66,7 +68,7 @@ When a ticket's original framing predates data you now have, rewrite it as a cle
 
 ## Where the journey legitimately goes
 
-- **Commit messages** — one substantive change each; the "why now" lives here.
+- **Commit messages** — exempt from the no-journey and temporal rules: one substantive change each, and the chronology / "why now" belongs here.
 - **The private tracker** — staff-only, full detail welcome.
 - **`git blame` / `git log`** — the canonical history. Nothing in a comment competes with it.
 
@@ -74,4 +76,4 @@ When a ticket's original framing predates data you now have, rewrite it as a cle
 
 Read it back. If a sentence starts with "Earlier", "Before", "Originally", "First I", "I tried", "I reproduced", "Confirmed by", "After reverting", "until now", "used to", "previously", or "now we" — that's journey or temporal rot. Cut it. If it names a ticket ID, PR number, or PR letter — cut that too. If what remains explains *what the code does now and why*, ship. If it explains *how you arrived*, cut more.
 
-Pre-existing rotty references in code you're editing can stay (they're historical context) — the rule governs prose you write.
+As stated in [Scope](#scope) above: pre-existing rotty references in code you're editing can stay — the rule governs prose you write, not cleanup of what's already there.
