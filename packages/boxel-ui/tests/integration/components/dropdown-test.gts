@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { click, render, waitFor, triggerEvent } from '@ember/test-helpers';
 import {
   BoxelDropdown,
@@ -28,7 +28,7 @@ module('Integration | Component | dropdown', function (hooks) {
           <:content as |dd|>
             <div
               data-test-boxel-dropdown-content-1
-              class='boxel-dropdown__content'
+              class="boxel-dropdown__content"
             >
               <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
             </div>
@@ -59,7 +59,7 @@ module('Integration | Component | dropdown', function (hooks) {
           <:content as |dd|>
             <div
               data-test-boxel-dropdown-content-2
-              class='boxel-dropdown__content'
+              class="boxel-dropdown__content"
             >
               <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
             </div>

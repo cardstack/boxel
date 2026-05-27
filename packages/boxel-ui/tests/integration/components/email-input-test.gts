@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { fillIn, render, triggerEvent, typeIn } from '@ember/test-helpers';
 
 import { EmailInput } from '@cardstack/boxel-ui/components';

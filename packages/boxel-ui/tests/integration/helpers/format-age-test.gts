@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { formatAge } from '@cardstack/boxel-ui/helpers';
 
 module('Integration | helpers | formatAge', function (hooks) {
@@ -21,17 +21,17 @@ module('Integration | helpers | formatAge', function (hooks) {
     );
 
     await render(
-      <template>{{formatAge almostTwoYearsAgo unit='auto'}}</template>,
+      <template>{{formatAge almostTwoYearsAgo unit="auto"}}</template>,
     );
     assert.dom().hasText('1 year', 'auto unit selects years');
 
     await render(
-      <template>{{formatAge almostTwoYearsAgo unit='years'}}</template>,
+      <template>{{formatAge almostTwoYearsAgo unit="years"}}</template>,
     );
     assert.dom().hasText('1 year', 'explicit years unit');
 
     await render(
-      <template>{{formatAge almostTwoYearsAgo unit='months'}}</template>,
+      <template>{{formatAge almostTwoYearsAgo unit="months"}}</template>,
     );
     assert.dom().hasText('23 months', 'explicit months unit');
 
@@ -39,7 +39,7 @@ module('Integration | helpers | formatAge', function (hooks) {
       Date.now() - 5.9 * 30 * 24 * 60 * 60 * 1000,
     );
     await render(
-      <template>{{formatAge almostSixMonthsAgo unit='auto'}}</template>,
+      <template>{{formatAge almostSixMonthsAgo unit="auto"}}</template>,
     );
     assert
       .dom()
@@ -75,12 +75,12 @@ module('Integration | helpers | formatAge', function (hooks) {
     assert.dom().hasText('0 days', 'handles newborn age');
 
     await render(
-      <template>{{formatAge null fallback='Age unknown'}}</template>,
+      <template>{{formatAge null fallback="Age unknown"}}</template>,
     );
     assert.dom().hasText('Age unknown', 'uses fallback for null');
 
     await render(
-      <template>{{formatAge undefined fallback='No birthdate'}}</template>,
+      <template>{{formatAge undefined fallback="No birthdate"}}</template>,
     );
     assert.dom().hasText('No birthdate', 'uses fallback for undefined');
   });
@@ -122,28 +122,28 @@ module('Integration | helpers | formatAge', function (hooks) {
 
     await render(
       <template>
-        {{formatAge almostTwentyFiveYearsAgo locale='en-US'}}
+        {{formatAge almostTwentyFiveYearsAgo locale="en-US"}}
       </template>,
     );
     assert.dom().hasText('24 years', 'English age formatting');
 
     await render(
       <template>
-        {{formatAge almostTwentyFiveYearsAgo locale='es-ES'}}
+        {{formatAge almostTwentyFiveYearsAgo locale="es-ES"}}
       </template>,
     );
     assert.dom().hasText('24 años', 'Spanish age formatting');
 
     await render(
       <template>
-        {{formatAge almostTwentyFiveYearsAgo locale='fr-FR'}}
+        {{formatAge almostTwentyFiveYearsAgo locale="fr-FR"}}
       </template>,
     );
     assert.dom().hasText('24 ans', 'French age formatting');
 
     await render(
       <template>
-        {{formatAge almostTwentyFiveYearsAgo locale='zh-CN'}}
+        {{formatAge almostTwentyFiveYearsAgo locale="zh-CN"}}
       </template>,
     );
     assert.dom().hasText('24岁', 'Chinese age formatting');
@@ -156,14 +156,14 @@ module('Integration | helpers | formatAge', function (hooks) {
 
     await render(
       <template>
-        {{formatAge almostOneYearThreeMonthsAgo precise=true locale='es-ES'}}
+        {{formatAge almostOneYearThreeMonthsAgo precise=true locale="es-ES"}}
       </template>,
     );
     assert.dom().hasText('1 año, 2 meses', 'Spanish precise age');
 
     await render(
       <template>
-        {{formatAge almostOneYearThreeMonthsAgo precise=true locale='fr-FR'}}
+        {{formatAge almostOneYearThreeMonthsAgo precise=true locale="fr-FR"}}
       </template>,
     );
     assert.dom().hasText('1\u00A0an, 2\u00A0mois', 'French precise age');
@@ -172,13 +172,13 @@ module('Integration | helpers | formatAge', function (hooks) {
   test('invalid birthdate handling', async function (assert) {
     await render(
       <template>
-        {{formatAge 'invalid-date' fallback='Invalid birthdate'}}
+        {{formatAge "invalid-date" fallback="Invalid birthdate"}}
       </template>,
     );
     assert.dom().hasText('Invalid birthdate', 'handles invalid date strings');
 
     await render(
-      <template>{{formatAge 'not-a-date' fallback='Bad date'}}</template>,
+      <template>{{formatAge "not-a-date" fallback="Bad date"}}</template>,
     );
     assert.dom().hasText('Bad date', 'handles non-date strings');
   });
@@ -187,7 +187,7 @@ module('Integration | helpers | formatAge', function (hooks) {
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
 
     await render(
-      <template>{{formatAge futureDate fallback='Future birthdate'}}</template>,
+      <template>{{formatAge futureDate fallback="Future birthdate"}}</template>,
     );
     assert.dom().hasText('Future birthdate', 'handles future birthdates');
   });
@@ -195,10 +195,10 @@ module('Integration | helpers | formatAge', function (hooks) {
   test('days unit formatting', async function (assert) {
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
-    await render(<template>{{formatAge threeDaysAgo unit='days'}}</template>);
+    await render(<template>{{formatAge threeDaysAgo unit="days"}}</template>);
     assert.dom().hasText('3 days', 'explicit days unit');
 
-    await render(<template>{{formatAge threeDaysAgo unit='auto'}}</template>);
+    await render(<template>{{formatAge threeDaysAgo unit="auto"}}</template>);
     assert.dom().hasText('3 days', 'auto unit selects days for very young age');
   });
 

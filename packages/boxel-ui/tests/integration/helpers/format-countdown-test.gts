@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { formatCountdown } from '@cardstack/boxel-ui/helpers';
 
 module('Integration | helpers | formatCountdown', function (hooks) {
@@ -98,7 +98,7 @@ module('Integration | helpers | formatCountdown', function (hooks) {
 
     await render(
       <template>
-        {{formatCountdown pastEvent fallback='Event finished'}}
+        {{formatCountdown pastEvent fallback="Event finished"}}
       </template>,
     );
     assert.dom().hasText('Event finished', 'uses fallback for past events');
@@ -106,12 +106,12 @@ module('Integration | helpers | formatCountdown', function (hooks) {
 
   test('countdown edge cases', async function (assert) {
     await render(
-      <template>{{formatCountdown null fallback='No event'}}</template>,
+      <template>{{formatCountdown null fallback="No event"}}</template>,
     );
     assert.dom().hasText('No event', 'uses fallback for null');
 
     await render(
-      <template>{{formatCountdown undefined fallback='No date set'}}</template>,
+      <template>{{formatCountdown undefined fallback="No date set"}}</template>,
     );
     assert.dom().hasText('No date set', 'uses fallback for undefined');
 
@@ -151,21 +151,21 @@ module('Integration | helpers | formatCountdown', function (hooks) {
 
     await render(
       <template>
-        {{formatCountdown oneDayFromNow showDays=true locale='en-US'}}
+        {{formatCountdown oneDayFromNow showDays=true locale="en-US"}}
       </template>,
     );
     assert.dom().hasText('1 day, 0:00:00', 'English countdown formatting');
 
     await render(
       <template>
-        {{formatCountdown oneDayFromNow showDays=true locale='es-ES'}}
+        {{formatCountdown oneDayFromNow showDays=true locale="es-ES"}}
       </template>,
     );
     assert.dom().hasText('1 día, 0:00:00', 'Spanish countdown formatting');
 
     await render(
       <template>
-        {{formatCountdown oneDayFromNow showDays=true locale='fr-FR'}}
+        {{formatCountdown oneDayFromNow showDays=true locale="fr-FR"}}
       </template>,
     );
     assert.dom().hasText('1 jour, 0:00:00', 'French countdown formatting');
@@ -174,13 +174,13 @@ module('Integration | helpers | formatCountdown', function (hooks) {
   test('invalid date handling', async function (assert) {
     await render(
       <template>
-        {{formatCountdown 'invalid-date' fallback='Invalid event date'}}
+        {{formatCountdown "invalid-date" fallback="Invalid event date"}}
       </template>,
     );
     assert.dom().hasText('Invalid event date', 'handles invalid date strings');
 
     await render(
-      <template>{{formatCountdown 'not-a-date' fallback='Bad date'}}</template>,
+      <template>{{formatCountdown "not-a-date" fallback="Bad date"}}</template>,
     );
     assert.dom().hasText('Bad date', 'handles non-date strings');
   });

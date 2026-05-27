@@ -1,7 +1,7 @@
 import { hash } from '@ember/helper';
 import { render } from '@ember/test-helpers';
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 
 import {
   formatDateTime,
@@ -28,7 +28,7 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
 
     await render(
       <template>
-        {{formatRelativeTime past locale='en-US' now=REFERENCE_TIME}}
+        {{formatRelativeTime past locale="en-US" now=REFERENCE_TIME}}
       </template>,
     );
 
@@ -42,9 +42,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           future
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          size='tiny'
+          size="tiny"
         }}
       </template>,
     );
@@ -59,10 +59,10 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           future
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          size='long'
-          numeric='always'
+          size="long"
+          numeric="always"
         }}
       </template>,
     );
@@ -77,9 +77,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           future
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          size='short'
+          size="short"
         }}
       </template>,
     );
@@ -188,9 +188,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           almostThreeHours
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          round='ceil'
+          round="ceil"
         }}
       </template>,
     );
@@ -200,9 +200,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           twoHours
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          unitCeil='minute'
+          unitCeil="minute"
         }}
       </template>,
     );
@@ -304,7 +304,7 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           recent
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
           nowThresholdMs=5000
         }}
@@ -327,7 +327,7 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           past
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
           switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
           absoluteOptions=absoluteOptions
@@ -348,9 +348,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           pastSeconds
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          unit='s'
+          unit="s"
         }}
       </template>,
     );
@@ -360,9 +360,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           excelSerial
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          parse=(hash serialOrigin='excel1900')
+          parse=(hash serialOrigin="excel1900")
         }}
       </template>,
     );
@@ -371,12 +371,12 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
 
   test('falls back for invalid values', async function (assert) {
     await render(
-      <template>{{formatRelativeTime 'invalid' fallback='Unknown'}}</template>,
+      <template>{{formatRelativeTime "invalid" fallback="Unknown"}}</template>,
     );
     assert.dom().hasText('Unknown', 'uses fallback for invalid strings');
 
     await render(
-      <template>{{formatRelativeTime null fallback='Missing'}}</template>,
+      <template>{{formatRelativeTime null fallback="Missing"}}</template>,
     );
     assert.dom().hasText('Missing', 'uses fallback for null');
   });
@@ -417,7 +417,7 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           past
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
           switchToAbsoluteAfterMs=DAY
           absoluteOptions=absoluteOptions
@@ -443,7 +443,7 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           past
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
           switchToAbsoluteAfterMs=switchToAbsoluteAfterMs
           absoluteOptions=absoluteOptions
@@ -461,9 +461,9 @@ module('Integration | helpers | formatRelativeTime', function (hooks) {
       <template>
         {{formatRelativeTime
           past
-          locale='en-US'
+          locale="en-US"
           now=REFERENCE_TIME
-          unitCeil='second'
+          unitCeil="second"
           nowThresholdMs=0
         }}
       </template>,

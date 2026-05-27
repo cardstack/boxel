@@ -4,7 +4,7 @@ import {
   KanbanDragManager,
   type KanbanPlacement,
 } from '@cardstack/boxel-ui/components';
-import { delay } from 'test-app/tests/helpers';
+import { delay } from '#tests/helpers';
 
 function stubRect(
   element: Element,

@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { render, settled } from '@ember/test-helpers';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
 const OverrideIcon: Icon = <template>
-  <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">
     <text data-test-override-icon>hey</text>
   </svg>
 </template>;
@@ -26,8 +26,8 @@ module('Integration | Component | InputGroup', function (hooks) {
     await render(
       <template>
         <BoxelInputGroup
-          @placeholder='InputGroup'
-          @value='hello'
+          @placeholder="InputGroup"
+          @value="hello"
           @state={{stateObject.state}}
           @validIcon={{stateObject.validIcon}}
           @invalidIcon={{stateObject.invalidIcon}}
@@ -56,7 +56,7 @@ module('Integration | Component | InputGroup', function (hooks) {
 
   test('forwards the @name arg to the inner input element', async function (assert) {
     await render(
-      <template><BoxelInputGroup @name='username' @value='' /></template>,
+      <template><BoxelInputGroup @name="username" @value="" /></template>,
     );
 
     assert.dom('input').hasAttribute('name', 'username');

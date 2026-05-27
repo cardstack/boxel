@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { formatNames } from '@cardstack/boxel-ui/helpers';
 
 module('Integration | helpers | formatNames', function (hooks) {
@@ -16,18 +16,18 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('name format options', async function (assert) {
     const name = { first: 'John', middle: 'Michael', last: 'Doe' };
 
-    await render(<template>{{formatNames name format='full'}}</template>);
+    await render(<template>{{formatNames name format="full"}}</template>);
     assert
       .dom()
       .hasText('John Michael Doe', 'full format includes middle name');
 
-    await render(<template>{{formatNames name format='first-last'}}</template>);
+    await render(<template>{{formatNames name format="first-last"}}</template>);
     assert.dom().hasText('John Doe', 'first-last format excludes middle name');
 
-    await render(<template>{{formatNames name format='last-first'}}</template>);
+    await render(<template>{{formatNames name format="last-first"}}</template>);
     assert.dom().hasText('Doe, John', 'last-first format with comma');
 
-    await render(<template>{{formatNames name format='initials'}}</template>);
+    await render(<template>{{formatNames name format="initials"}}</template>);
     assert.dom().hasText('J.M.D.', 'initials format shows abbreviated form');
   });
 
@@ -44,27 +44,27 @@ module('Integration | helpers | formatNames', function (hooks) {
   });
 
   test('string name input', async function (assert) {
-    await render(<template>{{formatNames 'John Doe'}}</template>);
+    await render(<template>{{formatNames "John Doe"}}</template>);
     assert.dom().hasText('John Doe', 'handles string input directly');
 
-    await render(<template>{{formatNames 'John Michael Doe'}}</template>);
+    await render(<template>{{formatNames "John Michael Doe"}}</template>);
     assert.dom().hasText('John Michael Doe', 'handles full string name');
   });
 
   test('name edge cases', async function (assert) {
     await render(
-      <template>{{formatNames null fallback='Anonymous'}}</template>,
+      <template>{{formatNames null fallback="Anonymous"}}</template>,
     );
     assert.dom().hasText('Anonymous', 'uses fallback for null');
 
     await render(
-      <template>{{formatNames undefined fallback='No name'}}</template>,
+      <template>{{formatNames undefined fallback="No name"}}</template>,
     );
     assert.dom().hasText('No name', 'uses fallback for undefined');
 
     const emptyName = {};
     await render(
-      <template>{{formatNames emptyName fallback='Missing name'}}</template>,
+      <template>{{formatNames emptyName fallback="Missing name"}}</template>,
     );
     assert.dom().hasText('Missing name', 'uses fallback for empty object');
   });
@@ -86,10 +86,10 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('custom separator', async function (assert) {
     const name = { first: 'John', middle: 'Michael', last: 'Doe' };
 
-    await render(<template>{{formatNames name separator=' - '}}</template>);
+    await render(<template>{{formatNames name separator=" - "}}</template>);
     assert.dom().hasText('John - Michael - Doe', 'uses custom separator');
 
-    await render(<template>{{formatNames name separator='.'}}</template>);
+    await render(<template>{{formatNames name separator="."}}</template>);
     assert.dom().hasText('John.Michael.Doe', 'uses dot separator');
   });
 
@@ -97,7 +97,7 @@ module('Integration | helpers | formatNames', function (hooks) {
     const hungarianName = { first: 'János', last: 'Nagy' };
 
     await render(
-      <template>{{formatNames hungarianName format='last-first'}}</template>,
+      <template>{{formatNames hungarianName format="last-first"}}</template>,
     );
     assert
       .dom()
@@ -107,7 +107,7 @@ module('Integration | helpers | formatNames', function (hooks) {
 
     await render(
       <template>
-        {{formatNames easternName format='last-first' separator=' '}}
+        {{formatNames easternName format="last-first" separator=" "}}
       </template>,
     );
     assert
@@ -118,12 +118,12 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('localization', async function (assert) {
     const name = { first: 'Jean', last: 'Dupont' };
 
-    await render(<template>{{formatNames name locale='fr-FR'}}</template>);
+    await render(<template>{{formatNames name locale="fr-FR"}}</template>);
     assert.dom().hasText('Jean Dupont', 'French name formatting');
 
     await render(
       <template>
-        {{formatNames name format='last-first' locale='fr-FR'}}
+        {{formatNames name format="last-first" locale="fr-FR"}}
       </template>,
     );
     assert.dom().hasText('Dupont, Jean', 'French last-first formatting');
@@ -144,11 +144,11 @@ module('Integration | helpers | formatNames', function (hooks) {
   test('initials formatting variations', async function (assert) {
     const name = { first: 'John', middle: 'Michael', last: 'Doe' };
 
-    await render(<template>{{formatNames name format='initials'}}</template>);
+    await render(<template>{{formatNames name format="initials"}}</template>);
     assert.dom().hasText('J.M.D.', 'initials with periods');
 
     await render(
-      <template>{{formatNames name format='initials' separator=''}}</template>,
+      <template>{{formatNames name format="initials" separator=""}}</template>,
     );
     assert.dom().hasText('JMD', 'initials without periods');
   });
@@ -160,7 +160,7 @@ module('Integration | helpers | formatNames', function (hooks) {
       last: 'Windsor-Mountbatten',
     };
 
-    await render(<template>{{formatNames longName format='full'}}</template>);
+    await render(<template>{{formatNames longName format="full"}}</template>);
     assert
       .dom()
       .hasText(
@@ -169,7 +169,7 @@ module('Integration | helpers | formatNames', function (hooks) {
       );
 
     await render(
-      <template>{{formatNames longName format='initials'}}</template>,
+      <template>{{formatNames longName format="initials"}}</template>,
     );
     assert
       .dom()
@@ -181,7 +181,7 @@ module('Integration | helpers | formatNames', function (hooks) {
 
     await render(
       <template>
-        {{formatNames nameWithEmpty fallback='Incomplete name'}}
+        {{formatNames nameWithEmpty fallback="Incomplete name"}}
       </template>,
     );
     assert.dom().hasText('Incomplete name', 'handles empty string parts');

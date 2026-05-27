@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { currencyFormat } from '@cardstack/boxel-ui/helpers';
 
 module('Integration | helpers | currencyFormat test', function (hooks) {
@@ -15,13 +15,13 @@ module('Integration | helpers | currencyFormat test', function (hooks) {
   });
 
   test('it handles custom currencies', async function (assert) {
-    await render(<template>{{currencyFormat 100 'EUR'}}</template>);
+    await render(<template>{{currencyFormat 100 "EUR"}}</template>);
     assert.dom().hasText('€100.00', 'formats as euros');
 
-    await render(<template>{{currencyFormat 100 'JPY'}}</template>);
+    await render(<template>{{currencyFormat 100 "JPY"}}</template>);
     assert.dom().hasText('¥100', 'formats as yen');
 
-    await render(<template>{{currencyFormat 100 'GBP'}}</template>);
+    await render(<template>{{currencyFormat 100 "GBP"}}</template>);
     assert.dom().hasText('£100.00', 'formats as pounds');
   });
 

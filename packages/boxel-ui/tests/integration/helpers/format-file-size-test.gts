@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { render } from '@ember/test-helpers';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import { formatFileSize } from '@cardstack/boxel-ui/helpers';
 
 module('Integration | helpers | formatFileSize', function (hooks) {
@@ -48,12 +48,12 @@ module('Integration | helpers | formatFileSize', function (hooks) {
     assert.dom().hasText('0 B', 'handles zero bytes');
 
     await render(
-      <template>{{formatFileSize null fallback='Unknown size'}}</template>,
+      <template>{{formatFileSize null fallback="Unknown size"}}</template>,
     );
     assert.dom().hasText('Unknown size', 'uses fallback for null');
 
     await render(
-      <template>{{formatFileSize undefined fallback='No size'}}</template>,
+      <template>{{formatFileSize undefined fallback="No size"}}</template>,
     );
     assert.dom().hasText('No size', 'uses fallback for undefined');
   });
@@ -82,13 +82,13 @@ module('Integration | helpers | formatFileSize', function (hooks) {
     await render(
       <template>
         {{! @glint-expect-error: invalid input type }}
-        {{formatFileSize 'not-a-number' fallback='Invalid size'}}
+        {{formatFileSize "not-a-number" fallback="Invalid size"}}
       </template>,
     );
     assert.dom().hasText('Invalid size', 'handles non-numeric input');
 
     await render(
-      <template>{{formatFileSize -1024 fallback='Negative size'}}</template>,
+      <template>{{formatFileSize -1024 fallback="Negative size"}}</template>,
     );
     assert.dom().hasText('Negative size', 'handles negative sizes');
   });
@@ -96,21 +96,21 @@ module('Integration | helpers | formatFileSize', function (hooks) {
   test('precision edge cases', async function (assert) {
     await render(
       <template>
-        {{formatFileSize 1024 precision=100 fallback='Huge precision'}}
+        {{formatFileSize 1024 precision=100 fallback="Huge precision"}}
       </template>,
     );
     assert.dom().hasText('Huge precision', 'handles huge precision values');
 
     await render(
       <template>
-        {{formatFileSize 1024 precision=2.5 fallback='Float precision'}}
+        {{formatFileSize 1024 precision=2.5 fallback="Float precision"}}
       </template>,
     );
     assert.dom().hasText('Float precision', 'handles float precision values');
 
     await render(
       <template>
-        {{formatFileSize 1024 precision=-1 fallback='Negative precision'}}
+        {{formatFileSize 1024 precision=-1 fallback="Negative precision"}}
       </template>,
     );
     assert.dom().hasText('Negative precision', 'handles negative precision');
@@ -118,17 +118,17 @@ module('Integration | helpers | formatFileSize', function (hooks) {
 
   test('localization', async function (assert) {
     await render(
-      <template>{{formatFileSize 1048576 locale='de-DE'}}</template>,
+      <template>{{formatFileSize 1048576 locale="de-DE"}}</template>,
     );
     assert.dom().hasText('1,00 MiB', 'German locale formatting');
 
     await render(
-      <template>{{formatFileSize 1048576 locale='fr-FR'}}</template>,
+      <template>{{formatFileSize 1048576 locale="fr-FR"}}</template>,
     );
     assert.dom().hasText('1,00 MiB', 'French locale formatting');
 
     await render(
-      <template>{{formatFileSize 1048576 locale='ko-KR'}}</template>,
+      <template>{{formatFileSize 1048576 locale="ko-KR"}}</template>,
     );
     assert.dom().hasText('1.00 MiB', 'Korean locale formatting');
   });

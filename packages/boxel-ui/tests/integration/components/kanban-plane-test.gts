@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import { click, render } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import { setupRenderingTest } from 'test-app/tests/helpers';
+import { setupRenderingTest } from '#tests/helpers';
 import {
   KanbanPlane,
   type KanbanColumnConfig,
@@ -134,7 +134,7 @@ module('Integration | Component | kanban-plane', function (hooks) {
 
     await render(
       <template>
-        <button type='button' {{on 'click' state.toggleHideEmpty}}>
+        <button type="button" {{on "click" state.toggleHideEmpty}}>
           Hide empty columns
         </button>
         <KanbanPlane
