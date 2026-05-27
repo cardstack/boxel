@@ -134,7 +134,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         gap: var(--boxel-sp-xs);
         align-items: center;
       }
-      .links-to-editor > :deep(.boxel-card-container) {
+      /* The linked card (or the broken-link placeholder standing in for it)
+         occupies the leading 1fr column; the remove button, though first in the
+         DOM, is reordered into the trailing `auto` column. */
+      .links-to-editor > :deep(.boxel-card-container),
+      .links-to-editor > :deep(.broken-link-template) {
         order: -1;
       }
       .links-to-editor .field-component-card {
