@@ -124,7 +124,7 @@ export class JobsFinishedListener {
   }
 
   async #sweep(): Promise<void> {
-    let keys = this.#deps.searchCache.jobIds();
+    let keys = await this.#deps.searchCache.jobIds();
     if (keys.length === 0) {
       return;
     }
@@ -149,7 +149,7 @@ export class JobsFinishedListener {
     let finalized = await this.#fetchFinalizedJobIds([...keysByJobId.keys()]);
     for (let jobId of finalized) {
       for (let key of keysByJobId.get(jobId) ?? []) {
-        this.#deps.searchCache.clearJob(key);
+        await this.#deps.searchCache.clearJob(key);
       }
     }
   }

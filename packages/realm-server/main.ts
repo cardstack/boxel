@@ -369,10 +369,12 @@ const smokeTestHostApp = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
-  // One process-wide job-scoped search cache, shared between the request
-  // handlers (via RealmServer → createRoutes) and the JobsFinishedListener
-  // so a `jobs_finished` NOTIFY evicts the same entries the handlers populate.
-  let searchCache = new JobScopedSearchCache();
+  // DB-backed job-scoped search cache (CS-11278), shared across replicas via
+  // Postgres. One instance per process, shared between the request handlers
+  // (via RealmServer → createRoutes) and the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
+  let searchCache = new JobScopedSearchCache(dbAdapter);
+  searchCache.startJanitor();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -621,6 +623,7 @@ const smokeTestHostApp = async () => {
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
+    searchCache.stopJanitor();
     httpServer.close(() => {
       (async () => {
         await Promise.all([

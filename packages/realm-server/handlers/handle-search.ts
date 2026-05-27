@@ -155,7 +155,7 @@ export default function handleSearch(opts: {
         // TTL-evicted slot whose ETag the caller happens to remember
         // must fall through and re-populate, otherwise a follow-up
         // request would find nothing to revalidate against.
-        let cached = searchCache!.peek({
+        let cached = await searchCache!.peek({
           jobId: jobId!,
           realms: realmList,
           query: cardsQuery,

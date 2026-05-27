@@ -386,7 +386,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
-    this.searchCache = searchCache ?? new JobScopedSearchCache();
+    this.searchCache = searchCache ?? new JobScopedSearchCache(dbAdapter);
   }
 
   @Memoize()
