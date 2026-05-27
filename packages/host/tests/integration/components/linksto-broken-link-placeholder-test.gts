@@ -286,7 +286,7 @@ module(
       );
     });
 
-    test('in edit format a broken link shows the placeholder and can be removed', async function (assert) {
+    test('in edit format a broken link shows the placeholder plus remove and replace affordances', async function (assert) {
       await setupRealm();
       let person = await createPerson({
         pet: { links: { self: GHOST_URL } },
@@ -295,6 +295,10 @@ module(
       await renderCard(loader, person, 'edit');
       await waitFor('[data-test-broken-link-template]');
 
+      // The broken state is distinguished from the empty state by the
+      // placeholder: a never-set link shows only the bare "Link" button, while a
+      // broken link surfaces the URL alongside remove (clear) and replace (swap)
+      // controls.
       assert
         .dom('[data-test-broken-link-template]')
         .exists('editor shows the broken-link placeholder');
@@ -305,8 +309,22 @@ module(
         .dom('[data-test-remove-card]')
         .exists('editor offers a remove affordance for the broken reference');
       assert
-        .dom('[data-test-add-new]')
-        .doesNotExist('a broken link is not treated as empty');
+        .dom('[data-test-add-new="pet"]')
+        .exists('editor offers a "Link" affordance to replace the broken link')
+        .hasText(
+          'Link Pet',
+          'the replace control is labelled for the field type',
+        );
+    });
+
+    test('removing a broken link reverts the slot to the empty "Link" affordance', async function (assert) {
+      await setupRealm();
+      let person = await createPerson({
+        pet: { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'edit');
+      await waitFor('[data-test-broken-link-template]');
 
       await click('[data-test-remove-card]');
 
@@ -314,8 +332,35 @@ module(
         .dom('[data-test-broken-link-template]')
         .doesNotExist('removing clears the broken reference');
       assert
-        .dom('[data-test-add-new]')
+        .dom('[data-test-add-new="pet"]')
         .exists('the slot reverts to the empty "Link" affordance');
+      assert
+        .dom('[data-test-remove-card]')
+        .doesNotExist('the empty state has nothing to remove');
+    });
+
+    test('a read-only broken link shows the placeholder without remove or replace controls', async function (assert) {
+      // Override the writable permissions the module installs by default.
+      let permissions: Permissions = { canWrite: false, canRead: true };
+      provideConsumeContext(PermissionsContextName, permissions);
+
+      await setupRealm();
+      let person = await createPerson({
+        pet: { links: { self: GHOST_URL } },
+      });
+
+      await renderCard(loader, person, 'edit');
+      await waitFor('[data-test-broken-link-template]');
+
+      assert
+        .dom('[data-test-broken-link-url]')
+        .hasText(GHOST_URL, 'read-only editor still surfaces the broken URL');
+      assert
+        .dom('[data-test-remove-card]')
+        .doesNotExist('a read-only broken link cannot be removed');
+      assert
+        .dom('[data-test-add-new="pet"]')
+        .doesNotExist('a read-only broken link cannot be replaced');
     });
   },
 );

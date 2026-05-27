@@ -38,10 +38,7 @@ import { type RelationshipState } from './field-support';
 // `getRelationship`. The owning `linksTo` component reads it (it has the
 // containing instance in scope) and hands it down so the editor can show the
 // placeholder + a remove affordance instead of an empty "Link" button.
-type BrokenLink = Extract<
-  RelationshipState,
-  { kind: 'error' | 'not-found' }
->;
+type BrokenLink = Extract<RelationshipState, { kind: 'error' | 'not-found' }>;
 
 interface Signature {
   Element: HTMLElement;
@@ -68,18 +65,32 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       >
         {{#if @brokenLink}}
           {{! A broken reference still occupies the slot — show the placeholder
-              (so the broken URL is visible) and, when writable, the remove
-              affordance so it can be cleared. }}
+              (so the broken URL is visible) and, when writable, the controls to
+              clear it (remove) or swap it for a working link (replace) without
+              first reverting to the empty state. }}
           {{#if permissions.canWrite}}
-            <IconButton
-              @icon={{IconMinusCircle}}
-              @width='20px'
-              @height='20px'
-              class='remove'
-              {{on 'click' this.remove}}
-              aria-label='Remove'
-              data-test-remove-card
-            />
+            <div class='broken-controls'>
+              <IconButton
+                @icon={{IconMinusCircle}}
+                @width='20px'
+                @height='20px'
+                class='remove'
+                {{on 'click' this.remove}}
+                aria-label='Remove'
+                data-test-remove-card
+              />
+              <Button
+                class='replace'
+                @kind='muted'
+                @size='small'
+                @rectangular={{true}}
+                {{on 'click' this.add}}
+                data-test-add-new={{@field.name}}
+              >
+                Link
+                {{@field.card.displayName}}
+              </Button>
+            </div>
           {{/if}}
           {{! The editor lays the slot out in flow (a `1fr auto` grid), not a
               fixed-dimension card slot, so the placeholder renders `embedded`
@@ -172,6 +183,20 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       }
       .add-new {
         width: fit-content;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      /* Broken-state controls stack in the trailing `auto` column beside the
+         placeholder: remove (clear the reference) above replace (swap in a
+         working link via the card chooser). */
+      .broken-controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .replace {
+        width: fit-content;
+        white-space: nowrap;
         letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
