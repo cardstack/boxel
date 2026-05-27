@@ -240,6 +240,12 @@ jobs:
           # because production strips the test entry (`tests/index.html`)
           # entirely. Only sourcemaps are dropped; the resulting harness
           # is ~60MB unpacked / ~15MB compressed.
+          #
+          # Build @cardstack/boxel-ui first: the host's vite build imports
+          # `@cardstack/boxel-ui/styles/global.css`, which resolves to the
+          # addon's `dist/`. Without this the host build fails with
+          # "Rolldown failed to resolve import @cardstack/boxel-ui/styles/global.css".
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm run build
           # Use --no-git-checks because the workflow's commit + tag is already
@@ -327,7 +333,9 @@ jobs:
           # See the unstable job's "Publish to npm" step for the rationale —
           # `build:test-harness` reads from `packages/host/dist/`, so the
           # host's dev bundle has to exist before we can build the slim
-          # harness.
+          # harness. boxel-ui must be built before host (the host build
+          # imports `@cardstack/boxel-ui/styles/global.css` from its dist/).
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm build
 
