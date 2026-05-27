@@ -215,6 +215,12 @@ const STANDBY_DOM_RENDER_TIMEOUT_MS =
   parseInt(process.env.TEST_HARNESS_STANDBY_DOM_TIMEOUT_MS ?? '', 10) ||
   240_000;
 
+// Per-attempt cap, bounded by the overall budget. Short enough that a boot
+// that stalls on a mid-optimize module error is abandoned for a fresh page
+// rather than burning the whole budget; long enough to clear a near-ready
+// optimize in one go.
+const STANDBY_DOM_ATTEMPT_TIMEOUT_MS = 60_000;
+
 // Drive `<hostURL>/_standby` in a real (headless) browser and wait for the
 // `#standby-ready` marker the host app renders once its bundles have loaded
 // and the app shell has booted — the same signal the prerender's PagePool
@@ -236,12 +242,17 @@ async function assertStandbyRendersDom(
       '--disable-gpu',
     ],
   });
+  let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
+  let lastError: Error | undefined;
   try {
-    let page = await browser.newPage();
-    let deadline = Date.now() + STANDBY_DOM_RENDER_TIMEOUT_MS;
-    // The connection can still be refused for the first moments after `/`
-    // answered (vite binding / restarting); connection-phase failures are
-    // safe to retry until the deadline.
+    // Retry the whole navigation + marker wait on a fresh page each attempt,
+    // not just the connection phase. While vite is cold-optimizing, a first
+    // load can fetch the shell but error or stall on a module request and
+    // never render `#standby-ready`; that page stays permanently stuck, so a
+    // single `waitForFunction` would burn the entire budget on a dead boot.
+    // A fresh page reloads against the now-further-along optimizer (which
+    // keeps running server-side across page closes) and eventually succeeds.
+    // Mirrors the prerender PagePool's fresh-page standby retry.
     for (;;) {
       let fatal = getFatalExitCode();
       if (fatal !== null) {
@@ -252,32 +263,30 @@ async function assertStandbyRendersDom(
       let remaining = deadline - Date.now();
       if (remaining <= 0) {
         throw new Error(
-          `Timed out after ${STANDBY_DOM_RENDER_TIMEOUT_MS}ms waiting for ${standbyURL} to render its DOM (#standby-ready)\n${getLogs()}`,
+          `Timed out after ${STANDBY_DOM_RENDER_TIMEOUT_MS}ms waiting for ${standbyURL} to render its DOM (#standby-ready)` +
+            (lastError ? `\nlast attempt: ${lastError.message}` : '') +
+            `\n${getLogs()}`,
         );
       }
+      let attemptTimeout = Math.min(STANDBY_DOM_ATTEMPT_TIMEOUT_MS, remaining);
+      let page = await browser.newPage();
       try {
         await page.goto(standbyURL, {
           waitUntil: 'domcontentloaded',
-          timeout: remaining,
+          timeout: attemptTimeout,
         });
-        break;
+        await page.waitForFunction(
+          () => !!document.querySelector('#standby-ready'),
+          { timeout: attemptTimeout },
+        );
+        return;
       } catch (error) {
-        if (
-          error instanceof Error &&
-          /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_EMPTY_RESPONSE/.test(
-            error.message,
-          )
-        ) {
-          await new Promise((r) => setTimeout(r, 500));
-          continue;
-        }
-        throw error;
+        lastError = error instanceof Error ? error : new Error(String(error));
+        await new Promise((r) => setTimeout(r, 500));
+      } finally {
+        await page.close().catch(() => {});
       }
     }
-    await page.waitForFunction(
-      () => !!document.querySelector('#standby-ready'),
-      { timeout: Math.max(1, deadline - Date.now()) },
-    );
   } finally {
     await browser.close().catch(() => {});
   }
