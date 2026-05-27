@@ -39,7 +39,7 @@ import handleClaimBoxelDomainRequest from './handlers/handle-claim-boxel-domain'
 import handleDeleteBoxelClaimedDomainRequest from './handlers/handle-delete-boxel-claimed-domain';
 import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
-import { JobScopedSearchCache } from './job-scoped-search-cache';
+import type { JobScopedSearchCache } from './job-scoped-search-cache';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
 import handleFederatedTypes from './handlers/handle-federated-types';
@@ -105,6 +105,7 @@ export type CreateRoutesArgs = {
   };
   assetsURL: URL;
   prerenderer?: Prerenderer;
+  searchCache: JobScopedSearchCache;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -113,15 +114,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
-  // One job-scoped same-realm search cache per realm-server process.
-  // Lives for the life of the process; TTL-evicts entries 10 min after
-  // their initial populate (hits do NOT refresh the TTL — tying it to
-  // populate time bounds the leak deterministically, where touch-
-  // refresh would let a hot entry survive indefinitely past job
-  // completion). Future work wires NOTIFY-driven eviction so a job
-  // completion releases its entries immediately. Hard-capped to bound
-  // worst-case memory under a synthetic-jobId flood.
-  let searchCache = new JobScopedSearchCache();
+  // One job-scoped same-realm search cache per realm-server process,
+  // created by the composition root (main.ts) and shared with the
+  // JobsFinishedListener so a `jobs_finished` NOTIFY can evict a job's
+  // entries immediately rather than waiting on TTL (CS-11179). TTL-evicts
+  // entries 10 min after their initial populate as the missed-NOTIFY
+  // backstop (hits do NOT refresh the TTL — tying it to populate time
+  // bounds the leak deterministically). Hard-capped to bound worst-case
+  // memory under a synthetic-jobId flood.
+  let searchCache = args.searchCache;
 
   let createRealmDeps: CreateRealmDeps = {
     serverURL: new URL(args.serverURL),

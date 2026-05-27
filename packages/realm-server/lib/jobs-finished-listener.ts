@@ -1,0 +1,147 @@
+import { logger, query, param, any } from '@cardstack/runtime-common';
+import type { Expression } from '@cardstack/runtime-common';
+import type { PgAdapter, NotificationSubscription } from '@cardstack/postgres';
+
+import type { JobScopedSearchCache } from '../job-scoped-search-cache';
+
+const log = logger('realm-server:jobs-finished-listener');
+
+// CS-11179: NOTIFY-driven eviction for the in-memory JobScopedSearchCache.
+//
+// `pg-queue` emits `NOTIFY jobs_finished` (no payload) whenever a job's
+// finalize transaction commits. The cache otherwise releases a finished job's
+// entries only when their TTL elapses — fine on a single replica, but a
+// from-scratch reindex of a large realm fans out hundreds of distinct queries
+// within one job, so across many concurrent jobs that residue adds up. Wiring
+// the LISTEN side here drops a job's entries as soon as the worker signals
+// completion instead of waiting for TTL.
+//
+// Best-effort, like the other realm-server NOTIFY listeners: a missed
+// notification just leaves entries to TTL out (a bounded memory window, never
+// a correctness issue — a re-run of a job hashes to a different cache key
+// because the key embeds `<jobId>.<reservationId>`).
+//
+// The NOTIFY has no payload, so on each notification we sweep: take the
+// `<jobId>.<reservationId>` keys the cache currently holds, ask `jobs` which
+// of those job ids have finalized (status resolved | rejected), and clear the
+// matching entries. This queries only the jobs we actually hold entries for,
+// rather than scanning by a recency window.
+const JOBS_FINISHED_CHANNEL = 'jobs_finished';
+
+type SearchCacheView = Pick<JobScopedSearchCache, 'jobIds' | 'clearJob'>;
+
+export interface JobsFinishedListenerDeps {
+  dbAdapter: PgAdapter;
+  searchCache: SearchCacheView;
+  // Test seam: given the job ids the cache currently holds entries for, return
+  // the subset that have finalized. Defaults to a query against `jobs`.
+  fetchFinalizedJobIds?: (candidateJobIds: number[]) => Promise<Set<number>>;
+}
+
+export class JobsFinishedListener {
+  #deps: JobsFinishedListenerDeps;
+  #fetchFinalizedJobIds: (candidateJobIds: number[]) => Promise<Set<number>>;
+  #subscription?: NotificationSubscription;
+  #starting?: Promise<void>;
+
+  constructor(deps: JobsFinishedListenerDeps) {
+    this.#deps = deps;
+    this.#fetchFinalizedJobIds =
+      deps.fetchFinalizedJobIds ??
+      ((ids) => fetchFinalizedJobIdsFromDb(deps.dbAdapter, ids));
+  }
+
+  async start(): Promise<void> {
+    if (this.#subscription || this.#starting) {
+      await this.#starting;
+      return;
+    }
+    this.#starting = (async () => {
+      this.#subscription = await this.#deps.dbAdapter.subscribe(
+        JOBS_FINISHED_CHANNEL,
+        () => {
+          // The notification carries no payload — sweep the cache against the
+          // jobs table. Fire-and-forget: failures are logged, never thrown.
+          void this.handleNotification();
+        },
+      );
+    })();
+    try {
+      await this.#starting;
+    } finally {
+      this.#starting = undefined;
+    }
+  }
+
+  async shutDown(): Promise<void> {
+    // Mirror the sibling listeners: wait for any in-flight start() to finish
+    // wiring #subscription before tearing down, so a racing start() can't
+    // install a live subscription after we thought we were shut down. Swallow
+    // start() errors — if startup failed there's nothing to unsubscribe.
+    try {
+      await this.#starting;
+    } catch {
+      // ignore
+    }
+    const sub = this.#subscription;
+    this.#subscription = undefined;
+    await sub?.unsubscribe();
+  }
+
+  // Exposed for tests; also invoked internally by the LISTEN handler. Returns
+  // the sweep promise so tests can await it; the subscribe callback fires it
+  // best-effort and swallows errors.
+  async handleNotification(): Promise<void> {
+    try {
+      await this.#sweep();
+    } catch (err: unknown) {
+      log.warn(`jobs_finished sweep failed: ${String(err)}`);
+    }
+  }
+
+  async #sweep(): Promise<void> {
+    let keys = this.#deps.searchCache.jobIds();
+    if (keys.length === 0) {
+      return;
+    }
+    // Cache keys are `<jobId>.<reservationId>`; group by the numeric jobId so
+    // a single job's finalize clears every reservation's entries.
+    let keysByJobId = new Map<number, string[]>();
+    for (let key of keys) {
+      let jobId = Number(key.split('.')[0]);
+      if (!Number.isSafeInteger(jobId)) {
+        continue;
+      }
+      let group = keysByJobId.get(jobId);
+      if (!group) {
+        group = [];
+        keysByJobId.set(jobId, group);
+      }
+      group.push(key);
+    }
+    if (keysByJobId.size === 0) {
+      return;
+    }
+    let finalized = await this.#fetchFinalizedJobIds([...keysByJobId.keys()]);
+    for (let jobId of finalized) {
+      for (let key of keysByJobId.get(jobId) ?? []) {
+        this.#deps.searchCache.clearJob(key);
+      }
+    }
+  }
+}
+
+async function fetchFinalizedJobIdsFromDb(
+  dbAdapter: PgAdapter,
+  candidateJobIds: number[],
+): Promise<Set<number>> {
+  if (candidateJobIds.length === 0) {
+    return new Set();
+  }
+  let rows = (await query(dbAdapter, [
+    `SELECT id FROM jobs WHERE status IN ('resolved', 'rejected') AND (`,
+    ...any(candidateJobIds.map((id) => [`id=`, param(id)])),
+    `)`,
+  ] as Expression)) as { id: number | string }[];
+  return new Set(rows.map((row) => Number(row.id)));
+}
