@@ -31,12 +31,24 @@ import {
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
+import BrokenLinkTemplate from './default-templates/broken-link-template';
+import { type RelationshipState } from './field-support';
+
+// A broken singular link surfaces as a terminal failure state from
+// `getRelationship`. The owning `linksTo` component reads it (it has the
+// containing instance in scope) and hands it down so the editor can show the
+// placeholder + a remove affordance instead of an empty "Link" button.
+type BrokenLink = Extract<
+  RelationshipState,
+  { kind: 'error' | 'not-found' }
+>;
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     model: Box<BaseDef | null>;
     field: Field<LinkableDefConstructor>;
+    brokenLink?: BrokenLink;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
   };
@@ -54,7 +66,32 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         data-test-links-to-editor={{@field.name}}
         ...attributes
       >
-        {{#if this.isEmpty}}
+        {{#if @brokenLink}}
+          {{! A broken reference still occupies the slot — show the placeholder
+              (so the broken URL is visible) and, when writable, the remove
+              affordance so it can be cleared. }}
+          {{#if permissions.canWrite}}
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              aria-label='Remove'
+              data-test-remove-card
+            />
+          {{/if}}
+          {{! The editor lays the slot out in flow (a `1fr auto` grid), not a
+              fixed-dimension card slot, so the placeholder renders `embedded`
+              (flow-sized) rather than `fitted` (which clamps to a badge
+              footprint and would clip the URL here). }}
+          <BrokenLinkTemplate
+            @brokenUrl={{@brokenLink.reference}}
+            @errorDoc={{@brokenLink.errorDoc}}
+            @state={{@brokenLink.kind}}
+            @format='embedded'
+          />
+        {{else if this.isEmpty}}
           {{#if permissions.canWrite}}
             <Button
               class='add-new'
@@ -101,7 +138,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         gap: var(--boxel-sp-xs);
         align-items: center;
       }
-      .links-to-editor > :deep(.boxel-card-container) {
+      /* The linked card (or the broken-link placeholder standing in for it)
+         occupies the leading 1fr column; the remove button, though first in the
+         DOM, is reordered into the trailing `auto` column. */
+      .links-to-editor > :deep(.boxel-card-container),
+      .links-to-editor > :deep(.broken-link-template) {
         order: -1;
       }
       .links-to-editor .field-component-card {
