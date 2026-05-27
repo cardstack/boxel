@@ -843,6 +843,7 @@ export default class Workspace extends Component<Signature> {
       `${realmURL}realm`,
       'edit',
     );
+    this.operatorModeStateService.closeWorkspaceChooser();
   }
 
   @action async toggleFavorite() {

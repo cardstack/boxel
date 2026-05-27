@@ -87,6 +87,20 @@ module('Acceptance | workspace-chooser', function (hooks) {
             },
           },
         },
+        'realm.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              hostRoutingRules: [],
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
       },
     });
 
@@ -180,6 +194,23 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert
         .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
         .exists('favorited workspace appears in favorites section');
+    });
+  });
+
+  module('realm settings', function () {
+    test('opens the realm config card in edit mode and closes the chooser', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      await click(`[data-test-workspace-menu-trigger="${realmAURL}"]`);
+      await click('[data-test-boxel-menu-item-text="Realm Settings"]');
+
+      await waitFor(`[data-test-stack-card="${realmAURL}realm"]`);
+      assert
+        .dom('[data-test-workspace-chooser]')
+        .doesNotExist('workspace chooser is dismissed');
+      assert
+        .dom(`[data-test-stack-card="${realmAURL}realm"]`)
+        .exists('realm config card is opened on the stack');
     });
   });
 
