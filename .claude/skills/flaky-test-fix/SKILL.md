@@ -21,7 +21,7 @@ Flaky tests are uncertain by nature. A fix that looks correct in local repro oft
 Before touching anything, find out whether this test has been worked on before. Search by test name, file path, and failure signature:
 
 ```bash
-gh search prs --state=all "<test name or file>"
+gh search prs "<test name or file>"   # searches open + closed by default
 gh pr list --state=all --search "<test name or failure signature>"
 git log --oneline -- <path/to/test/file>
 ```
