@@ -165,6 +165,9 @@ import {
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
+  isLinkError,
+  isLinkNotFound,
+  isNonPresentLink,
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
@@ -174,6 +177,8 @@ import {
   setFieldDescription,
   setRealmContextOnField,
   type ComputePassSnapshot,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
   type NotLoadedValue,
   type RelationshipState,
 } from './field-support';
@@ -1205,6 +1210,14 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
       return undefined;
     }
+    // link-error / link-not-found are terminal failure states planted by
+    // lazilyLoadLink. They surface to userland as `undefined` (the same shape a
+    // not-loaded link produces) and are NOT retried — re-reading must not kick
+    // off another fetch. `getRelationship` is the only way to observe the
+    // structured failure from outside this module.
+    if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
+      return undefined;
+    }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
     return value;
@@ -1219,6 +1232,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (instance == null) {
       return null;
     }
+    // A terminal sentinel queries by its reference, the same as a not-loaded
+    // link — the broken reference is preserved in the search doc.
+    if (isNonPresentLink(instance)) {
+      return { id: instance.reference };
+    }
     return this.card[queryableValue](instance, stack);
   }
 
@@ -1231,7 +1249,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNotLoadedValue(value)) {
+    // A terminal sentinel (link-error / link-not-found) serializes the same way
+    // a not-loaded link does — the reference is preserved as a relationship
+    // link so a save→reload cycle keeps the broken reference rather than
+    // silently dropping it.
+    if (isNonPresentLink(value)) {
       return {
         relationships: {
           [this.name]: {
@@ -1408,7 +1430,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       );
     }
     if (value) {
-      if (isNotLoadedValue(value)) {
+      if (isNonPresentLink(value)) {
         return value;
       }
       if (isFileDef(this.card) && !value.id) {
@@ -1616,6 +1638,15 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
+    // A whole-field terminal sentinel (a computed linksToMany that consumes an
+    // upstream link which resolved to an error / not-found) is terminal: surface
+    // an empty array to userland and do NOT retrigger the loader. Per-slot
+    // terminal sentinels living inside the array are handled below — they are
+    // simply skipped by the not-loaded retrigger scan.
+    if (isLinkError(value) || isLinkNotFound(value)) {
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+    }
+
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1690,7 +1721,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
-        if (isNotLoadedValue(instance)) {
+        if (isNonPresentLink(instance)) {
           return { id: instance.reference };
         }
         return this.card[queryableValue](instance, stack);
@@ -1716,8 +1747,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     // this can be a not loaded value happen when the linksToMany is a
-    // computed that consumes a linkTo field that is not loaded
-    if (isNotLoadedValue(values)) {
+    // computed that consumes a linkTo field that is not loaded (or a terminal
+    // error / not-found sentinel surfacing through the same computed path)
+    if (isNonPresentLink(values)) {
       return { relationships: {} };
     }
 
@@ -1749,7 +1781,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNotLoadedValue(value)) {
+      if (isNonPresentLink(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: makeRelativeURL(value.reference, opts),
@@ -1980,7 +2012,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         !instanceOf(value, expectedCard)
       ) {
@@ -1989,7 +2021,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         isFileDef(expectedCard) &&
         !value.id
@@ -2284,7 +2316,7 @@ export class BaseDef {
                 }) ?? null,
             ];
           }
-          if (isNotLoadedValue(rawValue)) {
+          if (isNonPresentLink(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveCardReference(
@@ -3346,10 +3378,6 @@ function lazilyLoadLink(
         (instance as any)[field.name] = fieldValue;
       }
     } catch (e) {
-      // we replace the node-loaded value with a null
-      // TODO in the future consider recording some link meta that this reference is actually missing
-      (instance as any)[field.name] = null;
-
       let error = e as Error;
       let isMissingFile =
         (isCardError(error) && error.status === 404) ||
@@ -3396,6 +3424,49 @@ function lazilyLoadLink(
         }
       }
       payloadError.deps = [...deps];
+
+      // Plant a typed sentinel into the data bucket (singular) or the failed
+      // array slot(s) (plural), replacing the legacy `field = null` write. The
+      // field getter surfaces these as `undefined` to userland — the same
+      // surface a not-loaded link produces — and never retriggers the loader
+      // for them; `getRelationship` is the only way to read the structured
+      // failure from outside this module. HTTP 404 → `link-not-found`, every
+      // other failure → `link-error`.
+      let errorDoc: SerializedError = {
+        ...payloadError,
+        additionalErrors: payloadError.additionalErrors ?? null,
+      };
+      let sentinel: LinkErrorValue | LinkNotFoundValue = isMissingFile
+        ? { type: 'link-not-found', reference, errorDoc }
+        : { type: 'link-error', reference, errorDoc };
+      if (pluralArgs) {
+        // Swap the sentinel into the slot(s) whose reference just failed,
+        // leaving the WatchedArray identity intact so Glimmer re-renders. We
+        // match the same not-loaded entries the success path would have
+        // replaced with the loaded card.
+        let { value } = pluralArgs;
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = resolveCardReference(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          );
+          if (reference === notLoadedRef) {
+            value[index] = sentinel;
+          }
+        }
+      } else {
+        // Mirror `setField`'s notification (minus validate, which rejects a
+        // non-card value): write the bucket, notify change subscribers, then
+        // card tracking. Without the `notifySubscribers` call, `subscribeToChanges`
+        // listeners would observe a successful lazy load but not a failed one.
+        getDataBucket(instance).set(field.name, sentinel);
+        notifySubscribers(instance, field.name, sentinel);
+        notifyCardTracking(instance);
+      }
+
       let payload = JSON.stringify({
         type: 'error',
         error: payloadError,
@@ -3422,7 +3493,7 @@ function trackRuntimeRelationshipDependency(
   declaredCard: LinkableDefConstructor,
   dependencyTrackingContext?: RuntimeDependencyTrackingContext,
 ): void {
-  if (!value || isNotLoadedValue(value)) {
+  if (!value || isNonPresentLink(value)) {
     return;
   }
   let id = (value as { id?: unknown }).id;
