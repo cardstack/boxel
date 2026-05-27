@@ -643,15 +643,41 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    // Pre-sync snapshot — proves each side actually holds the bytes we just
+    // wrote. If a future failure shows mismatched state here, the bug is
+    // upstream of sync (writeLocalFile / writeRemoteFile didn't land), not in
+    // conflict resolution.
+    const preLocal = readLocalFile(localDir, 'overlap.gts');
+    const preRemote = await fetchRemoteFile(realmUrl, 'overlap.gts');
+
     await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
 
-    // Local should win
-    expect(await fetchRemoteFile(realmUrl, 'overlap.gts')).toContain(
-      'v = "local"',
-    );
+    // Local should win. Poll-retry the remote read to distinguish "sync didn't
+    // push" from "push landed but a brief post-write visibility race made the
+    // GET read stale bytes" — the same race-prone shape (concurrent
+    // local+remote mutation immediately followed by sync) the baseline
+    // conflict test guards against. `retries > 0` on a passing assertion
+    // points at the visibility race; a miss with retries exhausted means the
+    // bytes never settled within the timeout.
+    const {
+      body: remoteAfter,
+      elapsedMs,
+      retries,
+    } = await fetchRemoteFileEventually(realmUrl, 'overlap.gts', 'v = "local"');
+
+    if (!remoteAfter.includes('v = "local"')) {
+      console.error(
+        `[first-sync-overlap-prefer-local diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `retries=${retries} elapsedMs=${elapsedMs} realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(remoteAfter).toContain('v = "local"');
   });
 
   it('delete-vs-change conflict with --prefer-local deletes remote', async () => {
