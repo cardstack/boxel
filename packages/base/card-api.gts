@@ -2109,17 +2109,30 @@ function brokenSingularLink(
 }
 
 // The broken-link placeholder stands in for the card that failed to load, so it
-// adopts the same footprint the card would have had. `edit` collapses to
-// `fitted` to mirror `getChildFormat` (a card def has no editable slot when it
-// can't load), leaving the four view formats the placeholder renders.
+// adopts the same footprint the card would have had. The placeholder defines
+// only four footprints (`isolated` / `fitted` / `embedded` / `atom`), so every
+// other reachable `Format` is mapped to its nearest stand-in rather than cast:
+// `edit` collapses to `fitted` (mirroring `getChildFormat`, since a computed
+// linksTo can reach the view path in edit format and a card def has no editable
+// slot when it can't load); `head` / `metadata` / `markdown` / `form` have no
+// dedicated placeholder footprint and fall back to the general-purpose
+// `embedded` layout.
 function brokenLinkFormat(
   format: Format | undefined,
   defaultFormat: Format,
 ): BrokenLinkFormat {
   let effectiveFormat = format ?? defaultFormat;
-  return effectiveFormat === 'edit'
-    ? 'fitted'
-    : (effectiveFormat as BrokenLinkFormat);
+  switch (effectiveFormat) {
+    case 'isolated':
+    case 'fitted':
+    case 'atom':
+    case 'embedded':
+      return effectiveFormat;
+    case 'edit':
+      return 'fitted';
+    default:
+      return 'embedded';
+  }
 }
 
 function fieldComponent(
