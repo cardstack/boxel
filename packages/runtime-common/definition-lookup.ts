@@ -414,7 +414,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
                 ...codeRef,
                 module: canonicalModuleURL as RealmResourceIdentifier,
               };
-        let moduleId = internalKeyFor(canonicalCodeRef, undefined);
+        let moduleId = internalKeyFor(
+          canonicalCodeRef,
+          undefined,
+          this.#virtualNetwork,
+        );
         let entry = cached.definitions[moduleId];
         if (entry && 'definition' in entry) {
           return entry.definition;
@@ -828,7 +832,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    const moduleId = internalKeyFor(canonicalCodeRef, undefined);
+    const moduleId = internalKeyFor(
+      canonicalCodeRef,
+      undefined,
+      this.#virtualNetwork,
+    );
     let defOrError = moduleEntry.definitions[moduleId];
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {

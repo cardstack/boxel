@@ -487,7 +487,11 @@ export class RealmIndexQueryEngine {
           opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
         if (htmlByType) {
           if (opts.renderType) {
-            let renderTypeKey = internalKeyFor(opts.renderType, undefined);
+            let renderTypeKey = internalKeyFor(
+              opts.renderType,
+              undefined,
+              this.#realm.virtualNetwork,
+            );
             if (htmlByType[renderTypeKey] != null) {
               html = htmlByType[renderTypeKey];
               usedRenderTypeKey = renderTypeKey;
@@ -644,7 +648,13 @@ export class RealmIndexQueryEngine {
       '',
       realmURL,
       opts,
-      [internalKeyFor(definition.codeRef, undefined)],
+      [
+        internalKeyFor(
+          definition.codeRef,
+          undefined,
+          this.#realm.virtualNetwork,
+        ),
+      ],
     );
   }
 
@@ -709,7 +719,11 @@ export class RealmIndexQueryEngine {
       if (!isResolvedCodeRef(fieldDefinition.fieldOrCard)) {
         continue;
       }
-      let childCardKey = internalKeyFor(fieldDefinition.fieldOrCard, undefined);
+      let childCardKey = internalKeyFor(
+        fieldDefinition.fieldOrCard,
+        undefined,
+        this.#realm.virtualNetwork,
+      );
       if (visited.filter((v) => v === childCardKey).length > RECURSING_DEPTH) {
         continue;
       }

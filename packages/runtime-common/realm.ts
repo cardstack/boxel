@@ -4381,8 +4381,12 @@ export class Realm {
 
       if (
         originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url) !==
-          internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
+          internalKeyFor(
+            originalClone.meta.adoptsFrom,
+            url,
+            this.#virtualNetwork,
+          )
       ) {
         return badRequest({
           message: `Cannot change card instance type to ${JSON.stringify(

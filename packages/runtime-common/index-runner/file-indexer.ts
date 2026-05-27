@@ -159,7 +159,7 @@ export async function performFileIndexing({
   }
 
   let fallbackTypes = fileTypeRefs.map((ref: ResolvedCodeRef) =>
-    internalKeyFor(ref, undefined),
+    internalKeyFor(ref, undefined, virtualNetwork),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);
