@@ -19,7 +19,6 @@ import Modifier from 'ember-modifier';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
-import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -348,27 +347,26 @@ export default class RenderedMarkdown extends Component<Signature> {
           {{/if}}
         {{else}}
           {{#if (eq slot.kind 'inline')}}
-            <Pill
-              @variant='muted'
-              @size='extra-small'
+            <span
+              class='markdown-bfm-broken markdown-bfm-broken--inline'
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-inline
             >
-              <:iconLeft><LinkOffIcon width='12' height='12' /></:iconLeft>
-              <:default>{{slot.typeName}}</:default>
-            </Pill>
+              <span class='markdown-bfm-broken-label'>
+                <LinkOffIcon width='12' height='12' />
+                {{slot.typeName}}
+              </span>
+            </span>
           {{else}}
             <div
-              class='markdown-bfm-broken markdown-bfm-broken--{{slot.format}}'
+              class='markdown-bfm-broken markdown-bfm-broken--block markdown-bfm-broken--{{slot.format}}'
               style={{slot.style}}
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-block
             >
               <span class='markdown-bfm-broken-label'>
-                <Pill @variant='muted' @size='small'>
-                  <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
-                  <:default>{{slot.typeName}}</:default>
-                </Pill>
+                <LinkOffIcon width='14' height='14' />
+                {{slot.typeName}}
               </span>
             </div>
           {{/if}}
@@ -727,14 +725,13 @@ export default class RenderedMarkdown extends Component<Signature> {
           }
         }
 
-        /* Broken-link placeholder: card-sized box with a diagonal cross and a
-           centered type-name chip. */
+        /* Broken-link placeholder: a card-sized box with a faint diagonal
+           cross and a centered icon + type-name label (no chip). */
         .markdown-bfm-broken {
           display: flex;
           align-items: center;
           justify-content: center;
           max-width: 100%;
-          margin: var(--boxel-sp-xxxs) 0;
           border: 1px solid var(--md-border);
           border-radius: var(--boxel-border-radius);
           background-color: var(--boxel-light-100);
@@ -755,11 +752,32 @@ export default class RenderedMarkdown extends Component<Signature> {
             );
           overflow: hidden;
         }
-        .markdown-bfm-broken-label {
-          position: relative;
-          padding: var(--boxel-sp-5xs);
+        .markdown-bfm-broken--inline {
+          display: inline-flex;
+          min-height: 1.6em;
+          padding: 0 var(--boxel-sp-5xs);
+          vertical-align: middle;
           border-radius: var(--boxel-border-radius-sm);
+        }
+        .markdown-bfm-broken--block {
+          display: flex;
+          margin: var(--boxel-sp-xxxs) 0;
+        }
+        .markdown-bfm-broken-label {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-5xs);
+          padding: 0 var(--boxel-sp-4xs);
+          /* Match the box fill so the cross does not slice through the text. */
           background-color: var(--boxel-light-100);
+          color: var(--boxel-500);
+          font-size: 0.75rem;
+          font-weight: 500;
+          line-height: 1.5;
+          white-space: nowrap;
+        }
+        .markdown-bfm-broken-label svg {
+          flex: none;
         }
       } /* end @layer baseComponent */
     </style>
