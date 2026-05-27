@@ -108,6 +108,9 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
+import BrokenLinkTemplate, {
+  type BrokenLinkFormat,
+} from './default-templates/broken-link-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
@@ -1515,30 +1518,41 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       <template>
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
-            {{#if
-              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
-            }}
-              <LinksToEditor
-                @model={{(getInnerModel)}}
-                @field={{linksToField}}
-                @typeConstraint={{@typeConstraint}}
-                @createCard={{cardCrudFunctions.createCard}}
-                ...attributes
-              />
-            {{else}}
-              {{#let (fieldComponent linksToField model) as |FieldComponent|}}
-                <FieldComponent
-                  @format={{getChildFormat
-                    @format
-                    defaultFormats.cardDef
-                    model
-                    isFileDefField
-                  }}
-                  @displayContainer={{@displayContainer}}
+            {{#let (brokenSingularLink model linksToField.name) as |broken|}}
+              {{#if
+                (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+              }}
+                <LinksToEditor
+                  @model={{(getInnerModel)}}
+                  @field={{linksToField}}
+                  @brokenLink={{broken}}
+                  @typeConstraint={{@typeConstraint}}
+                  @createCard={{cardCrudFunctions.createCard}}
                   ...attributes
                 />
-              {{/let}}
-            {{/if}}
+              {{else if broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  ...attributes
+                />
+              {{else}}
+                {{#let (fieldComponent linksToField model) as |FieldComponent|}}
+                  <FieldComponent
+                    @format={{getChildFormat
+                      @format
+                      defaultFormats.cardDef
+                      model
+                      isFileDefField
+                    }}
+                    @displayContainer={{@displayContainer}}
+                    ...attributes
+                  />
+                {{/let}}
+              {{/if}}
+            {{/let}}
           </DefaultFormatsConsumer>
         </CardCrudFunctionsConsumer>
       </template>
@@ -2066,6 +2080,46 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       cardTypeFor,
     });
   }
+}
+
+// Read the singular `linksTo` relationship state for the field named
+// `fieldName` on the card that `model` boxes, returning the state only when it
+// is a terminal failure (`error` / `not-found`). Every other kind — including
+// `not-loaded` and `not-set`, which the field getter also surfaces as
+// `undefined` — yields `undefined` here so the caller falls through to the
+// normal render path. `getRelationship` is a pure read (it never retriggers
+// `lazilyLoadLink`), so this is the single call per render that distinguishes a
+// broken link from an absent one.
+function brokenSingularLink(
+  model: Box<CardDef>,
+  fieldName: string,
+): Extract<RelationshipState, { kind: 'error' | 'not-found' }> | undefined {
+  let owner = model.value;
+  if (owner == null) {
+    return undefined;
+  }
+  let state = getRelationship(owner, fieldName);
+  if (Array.isArray(state)) {
+    return undefined;
+  }
+  if (state.kind === 'error' || state.kind === 'not-found') {
+    return state;
+  }
+  return undefined;
+}
+
+// The broken-link placeholder stands in for the card that failed to load, so it
+// adopts the same footprint the card would have had. `edit` collapses to
+// `fitted` to mirror `getChildFormat` (a card def has no editable slot when it
+// can't load), leaving the four view formats the placeholder renders.
+function brokenLinkFormat(
+  format: Format | undefined,
+  defaultFormat: Format,
+): BrokenLinkFormat {
+  let effectiveFormat = format ?? defaultFormat;
+  return effectiveFormat === 'edit'
+    ? 'fitted'
+    : (effectiveFormat as BrokenLinkFormat);
 }
 
 function fieldComponent(

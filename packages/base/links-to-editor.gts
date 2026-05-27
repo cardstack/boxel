@@ -31,12 +31,24 @@ import {
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
+import BrokenLinkTemplate from './default-templates/broken-link-template';
+import { type RelationshipState } from './field-support';
+
+// A broken singular link surfaces as a terminal failure state from
+// `getRelationship`. The owning `linksTo` component reads it (it has the
+// containing instance in scope) and hands it down so the editor can show the
+// placeholder + a remove affordance instead of an empty "Link" button.
+type BrokenLink = Extract<
+  RelationshipState,
+  { kind: 'error' | 'not-found' }
+>;
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     model: Box<BaseDef | null>;
     field: Field<LinkableDefConstructor>;
+    brokenLink?: BrokenLink;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
   };
@@ -54,7 +66,28 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         data-test-links-to-editor={{@field.name}}
         ...attributes
       >
-        {{#if this.isEmpty}}
+        {{#if @brokenLink}}
+          {{! A broken reference still occupies the slot — show the placeholder
+              (so the broken URL is visible) and, when writable, the remove
+              affordance so it can be cleared. }}
+          {{#if permissions.canWrite}}
+            <IconButton
+              @icon={{IconMinusCircle}}
+              @width='20px'
+              @height='20px'
+              class='remove'
+              {{on 'click' this.remove}}
+              aria-label='Remove'
+              data-test-remove-card
+            />
+          {{/if}}
+          <BrokenLinkTemplate
+            @brokenUrl={{@brokenLink.reference}}
+            @errorDoc={{@brokenLink.errorDoc}}
+            @state={{@brokenLink.kind}}
+            @format='fitted'
+          />
+        {{else if this.isEmpty}}
           {{#if permissions.canWrite}}
             <Button
               class='add-new'
