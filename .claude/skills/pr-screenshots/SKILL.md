@@ -1,5 +1,6 @@
 ---
 name: pr-screenshots
+allowed-tools: Read, Grep, Bash, mcp__chrome-devtools__navigate_page, mcp__chrome-devtools__take_screenshot, mcp__chrome-devtools__resize_page
 description: Attach a screenshot or preview image to a PR description or comment when there's no direct image-upload path. Commit the image to the branch, reference its commit-SHA-pinned raw URL in the PR body, then strip the file in a followup commit. Use whenever a PR has a visual change (CSS, layout, component rendering) worth showing reviewers, or when asked to add/refresh a preview image on a PR.
 ---
 
