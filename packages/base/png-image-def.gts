@@ -1,10 +1,12 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
+import PngIcon from '@cardstack/boxel-icons/file-type-png';
 import ImageDef from './image-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
 import { extractPngDimensions } from './png-meta-extractor';
 
 export class PngDef extends ImageDef {
   static displayName = 'PNG Image';
+  static icon = PngIcon;
   static acceptTypes = '.png,image/png';
 
   static async extractAttributes(

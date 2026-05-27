@@ -88,6 +88,7 @@ export interface IndexedFile {
   embeddedHtml: { [refURL: string]: string } | null;
   fittedHtml: { [refURL: string]: string } | null;
   atomHtml: string | null;
+  iconHtml: string | null;
   markdown: string | null;
   realmVersion: number;
   realmURL: string;
@@ -438,6 +439,7 @@ export class IndexQueryEngine {
       embedded_html: embeddedHtml,
       fitted_html: fittedHtml,
       atom_html: atomHtml,
+      icon_html: iconHtml,
       markdown,
       realm_version: realmVersion,
       realm_url: realmURL,
@@ -465,6 +467,7 @@ export class IndexQueryEngine {
       embeddedHtml,
       fittedHtml,
       atomHtml,
+      iconHtml: iconHtml ?? null,
       markdown,
       lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt:
@@ -655,7 +658,7 @@ export class IndexQueryEngine {
       { filter, sort, page },
       opts,
       [
-        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
+        'SELECT url, ANY_VALUE(pristine_doc) AS pristine_doc, ANY_VALUE(search_doc) AS search_doc, ANY_VALUE(types) AS types, ANY_VALUE(display_names) AS display_names, ANY_VALUE(deps) AS deps, ANY_VALUE(last_modified) AS last_modified, ANY_VALUE(resource_created_at) AS resource_created_at, ANY_VALUE(isolated_html) AS isolated_html, ANY_VALUE(head_html) AS head_html, ANY_VALUE(embedded_html) AS embedded_html, ANY_VALUE(fitted_html) AS fitted_html, ANY_VALUE(atom_html) AS atom_html, ANY_VALUE(icon_html) AS icon_html, ANY_VALUE(markdown) AS markdown, ANY_VALUE(realm_version) AS realm_version, ANY_VALUE(realm_url) AS realm_url, ANY_VALUE(indexed_at) AS indexed_at',
       ],
       'file',
     );
@@ -696,6 +699,7 @@ export class IndexQueryEngine {
       fittedHtml:
         (result.fitted_html as { [refURL: string]: string } | null) ?? null,
       atomHtml: result.atom_html ?? null,
+      iconHtml: result.icon_html ?? null,
       markdown: result.markdown ?? null,
       lastModified,
       resourceCreatedAt,

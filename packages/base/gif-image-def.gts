@@ -1,10 +1,12 @@
 import { readFirstBytes } from '@cardstack/runtime-common';
+import GifIcon from '@cardstack/boxel-icons/gif';
 import ImageDef from './image-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
 import { extractGifDimensions } from './gif-meta-extractor';
 
 export class GifDef extends ImageDef {
   static displayName = 'GIF Image';
+  static icon = GifIcon;
   static acceptTypes = '.gif,image/gif';
 
   static async extractAttributes(
