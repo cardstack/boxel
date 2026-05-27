@@ -23,6 +23,7 @@ import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  bfmBlockFormatAndSize,
   CardContextName,
   cardTypeName,
   extractCardReferenceUrls,
@@ -39,25 +40,21 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+type SlotState = 'resolved' | 'loading' | 'unresolved';
 
-interface ResolvedSlot {
+interface RenderSlot {
   element: HTMLElement;
-  card: CardDef;
+  kind: 'inline' | 'block';
+  state: SlotState;
   format: CardSlotFormat;
-  kind: 'inline' | 'block';
+  // Inline sizing (width/height) so loading and broken placeholders match the
+  // eventual card's footprint; also carries `overflow: hidden` for resolved
+  // fitted cards.
   style?: ReturnType<typeof htmlSafe>;
+  card?: CardDef; // present when state === 'resolved'
+  url?: string; // present when state === 'loading' | 'unresolved'
+  typeName?: string; // present when state === 'unresolved'
 }
-
-interface UnresolvedSlot {
-  element: HTMLElement;
-  url: string;
-  typeName: string;
-  kind: 'inline' | 'block';
-}
-
-type RenderSlot =
-  | (ResolvedSlot & { card: CardDef })
-  | (UnresolvedSlot & { card?: undefined });
 
 function resolveUrl(raw: string, baseUrl: string | undefined): string {
   try {
@@ -179,76 +176,63 @@ export default class RenderedMarkdown extends Component<Signature> {
       let collectSlots = (): RenderSlot[] => {
         let cardsByUrl = this.loadedCards;
         let slots: RenderSlot[] = [];
-        let resolvedEls = new Set<HTMLElement>();
 
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          let rawUrl = el.dataset.boxelBfmInlineRef;
-          if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
-          if (card) {
-            resolvedEls.add(el);
-            slots.push({ element: el, card, format: 'atom', kind: 'inline' });
-          }
-        }
-
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          let rawUrl = el.dataset.boxelBfmBlockRef;
-          if (!rawUrl) continue;
-          let resolved = resolveUrl(rawUrl, baseUrl);
-          let card = cardsByUrl.get(resolved);
-          if (card) {
-            let bfmFormat = el.dataset.boxelBfmFormat;
-            let format: CardSlotFormat =
-              bfmFormat === 'fitted' || bfmFormat === 'isolated'
-                ? bfmFormat
-                : 'embedded';
-
-            let style: ReturnType<typeof htmlSafe> | undefined;
-            if (format === 'fitted') {
-              let w = el.dataset.boxelBfmWidth;
-              let h = el.dataset.boxelBfmHeight;
-              let parts: string[] = [];
-              if (w && /^\d+%$/.test(w)) {
-                parts.push(`width: ${w}`);
-              } else if (w && /^\d+$/.test(w)) {
-                parts.push(`width: ${w}px`);
-              }
-              if (h && /^\d+$/.test(h)) {
-                parts.push(`height: ${h}px`);
-              }
-              parts.push('overflow: hidden');
-              style = htmlSafe(parts.join('; '));
-            }
-
-            resolvedEls.add(el);
-            slots.push({ element: el, card, format, kind: 'block', style });
-          }
-        }
-
-        if (!showFallback) return slots;
         for (let el of Array.from(
           element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
         )) {
-          let url =
-            el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
-          if (!resolvedEls.has(el) && url) {
-            let kind: 'inline' | 'block' = el.dataset.boxelBfmInlineRef
-              ? 'inline'
-              : 'block';
+          let isInline = !!el.dataset.boxelBfmInlineRef;
+          let rawUrl =
+            el.dataset.boxelBfmInlineRef ?? el.dataset.boxelBfmBlockRef ?? '';
+          if (!rawUrl) continue;
+          let kind: 'inline' | 'block' = isInline ? 'inline' : 'block';
+
+          let format: CardSlotFormat = 'atom';
+          let sizeStyle: string | undefined;
+          if (!isInline) {
+            let derived = bfmBlockFormatAndSize(
+              el.dataset.boxelBfmFormat,
+              el.dataset.boxelBfmWidth,
+              el.dataset.boxelBfmHeight,
+            );
+            format = derived.format;
+            sizeStyle = derived.sizeStyle;
+          }
+
+          let card = cardsByUrl.get(resolveUrl(rawUrl, baseUrl));
+          if (card) {
+            let style: ReturnType<typeof htmlSafe> | undefined;
+            if (format === 'fitted') {
+              style = htmlSafe(
+                sizeStyle
+                  ? `${sizeStyle}; overflow: hidden`
+                  : 'overflow: hidden',
+              );
+            }
+            slots.push({ element: el, kind, state: 'resolved', format, card, style });
+            continue;
+          }
+
+          // No card yet: show the sized loading shimmer until linkedCards has
+          // settled (showFallback), then fall back to the broken-link box.
+          let style = sizeStyle ? htmlSafe(sizeStyle) : undefined;
+          if (!showFallback) {
             slots.push({
               element: el,
-              url,
-              typeName: cardTypeName(url),
               kind,
+              state: 'loading',
+              format,
+              style,
+              url: rawUrl,
+            });
+          } else {
+            slots.push({
+              element: el,
+              kind,
+              state: 'unresolved',
+              format,
+              style,
+              url: rawUrl,
+              typeName: cardTypeName(rawUrl),
             });
           }
         }
@@ -265,20 +249,11 @@ export default class RenderedMarkdown extends Component<Signature> {
             let current = this.renderSlots[index];
             if (!current || current.element !== slot.element) return true;
             if (current.kind !== slot.kind) return true;
-            if (!!current.card !== !!slot.card) return true;
-            if (current.card && slot.card) {
-              return (
-                current.card !== slot.card ||
-                (current as ResolvedSlot).format !==
-                  (slot as ResolvedSlot).format
-              );
-            }
-            if (!current.card && !slot.card) {
-              return (
-                (current as UnresolvedSlot).url !== (slot as UnresolvedSlot).url
-              );
-            }
-            return false;
+            if (current.state !== slot.state) return true;
+            if (current.format !== slot.format) return true;
+            if (current.card !== slot.card) return true;
+            if (current.url !== slot.url) return true;
+            return String(current.style ?? '') !== String(slot.style ?? '');
           });
 
         if (didChange) {
@@ -311,7 +286,7 @@ export default class RenderedMarkdown extends Component<Signature> {
     </div>
     {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
-        {{#if slot.card}}
+        {{#if (eq slot.state 'resolved')}}
           {{#if (eq slot.kind 'inline')}}
             <span
               class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
@@ -349,6 +324,22 @@ export default class RenderedMarkdown extends Component<Signature> {
               />
             </div>
           {{/if}}
+        {{else if (eq slot.state 'loading')}}
+          {{#if (eq slot.kind 'inline')}}
+            <span
+              class='markdown-bfm-loading markdown-bfm-loading--inline'
+              aria-hidden='true'
+              data-test-markdown-bfm-loading-inline
+            />
+          {{else}}
+            <div
+              class='markdown-bfm-loading markdown-bfm-loading--block
+                markdown-bfm-loading--{{slot.format}}'
+              style={{slot.style}}
+              aria-hidden='true'
+              data-test-markdown-bfm-loading-block
+            />
+          {{/if}}
         {{else}}
           {{#if (eq slot.kind 'inline')}}
             <Pill
@@ -362,14 +353,17 @@ export default class RenderedMarkdown extends Component<Signature> {
             </Pill>
           {{else}}
             <div
-              class='markdown-bfm-unresolved--block'
+              class='markdown-bfm-broken markdown-bfm-broken--{{slot.format}}'
+              style={{slot.style}}
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-block
             >
-              <Pill @variant='muted' @size='small'>
-                <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
-                <:default>{{slot.typeName}}</:default>
-              </Pill>
+              <span class='markdown-bfm-broken-label'>
+                <Pill @variant='muted' @size='small'>
+                  <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
+                  <:default>{{slot.typeName}}</:default>
+                </Pill>
+              </span>
             </div>
           {{/if}}
         {{/if}}
@@ -667,14 +661,45 @@ export default class RenderedMarkdown extends Component<Signature> {
           border-radius: var(--boxel-border-radius);
         }
 
+        /* Placeholder footprint shared by loading + broken states. The
+           default block sizes approximate the eventual card so the layout does
+           not jump when the card resolves; explicit fitted dimensions arrive
+           as an inline style that overrides these. */
+        .markdown-bfm-loading--embedded,
+        .markdown-bfm-broken--embedded {
+          width: 100%;
+          min-height: 9.375rem;
+        }
+        .markdown-bfm-loading--isolated,
+        .markdown-bfm-broken--isolated {
+          width: 100%;
+          min-height: 18.75rem;
+        }
+        .markdown-bfm-loading--fitted,
+        .markdown-bfm-broken--fitted {
+          width: 15.625rem;
+          height: 10.625rem;
+        }
+
         /* Loading shimmer */
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty) {
-          background-color: var(--boxel-light-200);
-          border-radius: var(--boxel-border-radius-sm);
+        .markdown-bfm-loading {
           position: relative;
           overflow: hidden;
+          max-width: 100%;
+          background-color: var(--boxel-light-200);
+          border-radius: var(--boxel-border-radius);
         }
-        .markdown-content :deep([data-boxel-bfm-type='card']:empty::after) {
+        .markdown-bfm-loading--inline {
+          display: inline-block;
+          width: 6em;
+          height: 1.2em;
+          vertical-align: middle;
+          border-radius: var(--boxel-border-radius-sm);
+        }
+        .markdown-bfm-loading--block {
+          display: block;
+        }
+        .markdown-bfm-loading::after {
           content: '';
           position: absolute;
           inset: 0;
@@ -684,19 +709,8 @@ export default class RenderedMarkdown extends Component<Signature> {
             var(--boxel-light-100),
             transparent
           );
-          animation: bfm-shimmer 1.6s linear 0.5s infinite;
           transform: translateX(-100%);
-        }
-        .markdown-content :deep([data-boxel-bfm-inline-ref]:empty) {
-          display: inline-block;
-          width: 6em;
-          height: 1.2em;
-          vertical-align: middle;
-        }
-        .markdown-content :deep([data-boxel-bfm-block-ref]:empty) {
-          display: block;
-          width: 100%;
-          height: 3em;
+          animation: bfm-shimmer 1.6s linear 0.5s infinite;
         }
         @keyframes bfm-shimmer {
           0% {
@@ -707,10 +721,38 @@ export default class RenderedMarkdown extends Component<Signature> {
           }
         }
 
-        /* Unresolved block indicator */
-        .markdown-bfm-unresolved--block {
-          display: block;
+        /* Broken-link placeholder: card-sized box with a diagonal cross and a
+           centered type-name chip. */
+        .markdown-bfm-broken {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          max-width: 100%;
           margin: var(--boxel-sp-xxxs) 0;
+          border: 1px solid var(--md-border);
+          border-radius: var(--boxel-border-radius);
+          background-color: var(--boxel-light-100);
+          background-image: linear-gradient(
+              to top right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            ),
+            linear-gradient(
+              to bottom right,
+              transparent calc(50% - 0.5px),
+              var(--md-border) calc(50% - 0.5px),
+              var(--md-border) calc(50% + 0.5px),
+              transparent calc(50% + 0.5px)
+            );
+          overflow: hidden;
+        }
+        .markdown-bfm-broken-label {
+          position: relative;
+          padding: var(--boxel-sp-5xs);
+          border-radius: var(--boxel-border-radius-sm);
+          background-color: var(--boxel-light-100);
         }
       } /* end @layer baseComponent */
     </style>
