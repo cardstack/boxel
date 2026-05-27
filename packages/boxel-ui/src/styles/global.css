@@ -36,8 +36,8 @@
     color: var(--boxel-dark, #000);
     font-family: var(
       --boxel-font-family,
-      'IBM Plex Sans',
-      'Helvetica Neue',
+      "IBM Plex Sans",
+      "Helvetica Neue",
       Arial,
       sans-serif
     );
@@ -58,9 +58,9 @@
   samp {
     font-family: var(
       --boxel-monospace-font-family,
-      'IBM Plex Mono',
-      'Menlo',
-      'Courier New',
+      "IBM Plex Mono",
+      "Menlo",
+      "Courier New",
       Courier,
       monospace
     );
@@ -103,17 +103,17 @@
   }
 
   button:hover:not(:disabled),
-  [role='button']:hover:not(:disabled, [aria-disabled='true']) {
+  [role="button"]:hover:not(:disabled, [aria-disabled="true"]) {
     cursor: pointer;
   }
 
   button:focus:not(:disabled),
-  [role='button']:focus:not(:disabled) {
+  [role="button"]:focus:not(:disabled) {
     outline: var(--boxel-outline);
   }
 
   button:focus:not(:focus-visible),
-  [role='button']:focus:not(:focus-visible) {
+  [role="button"]:focus:not(:focus-visible) {
     outline-color: transparent;
   }
 
@@ -125,13 +125,13 @@
     letter-spacing: inherit;
   }
 
-  input:not([type='color']):disabled,
+  input:not([type="color"]):disabled,
   select:disabled,
   textarea:disabled {
     opacity: 0.5;
   }
 
-  input[type='color']:disabled {
+  input[type="color"]:disabled {
     pointer-events: none;
   }
 

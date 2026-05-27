@@ -12,10 +12,10 @@
   --boxel-radius: var(--_boxel-radius);
 
   /* font-family */
-  --boxel-font-family: 'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif;
-  --boxel-serif-font-family: 'IBM Plex Serif', 'Georgia', Times, serif;
+  --boxel-font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --boxel-serif-font-family: "IBM Plex Serif", "Georgia", Times, serif;
   --boxel-monospace-font-family:
-    'IBM Plex Mono', 'Menlo', 'Courier New', Courier, monospace;
+    "IBM Plex Mono", "Menlo", "Courier New", Courier, monospace;
 
   /* font size range -- note: see semantic names on line 248 */
   --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25); /* 36px */
