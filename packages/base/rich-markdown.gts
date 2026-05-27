@@ -61,7 +61,11 @@ export class RichMarkdownField extends FieldDef {
           ? (virtualNetworkFor(this)?.toURL(rel).href ?? cardIdToURL(rel).href)
           : rel.href
         : '';
-      return extractCardReferenceUrls(this.content, baseUrl);
+      return extractCardReferenceUrls(
+        this.content,
+        baseUrl,
+        virtualNetworkFor(this),
+      );
     },
   });
 
