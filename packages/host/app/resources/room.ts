@@ -509,7 +509,11 @@ export class RoomResource extends Resource<Args> {
       if (event.origin_server_ts <= timestamp) {
         if (
           !latestLLMModeEvent ||
-          event.origin_server_ts > latestLLMModeEvent.origin_server_ts
+          // Matrix timestamps have millisecond resolution, so two mode
+          // transitions can share an origin_server_ts. llmModeEvents preserves
+          // chronological insertion order, so on a tie the later-iterated event
+          // is the more recent transition and must win.
+          event.origin_server_ts >= latestLLMModeEvent.origin_server_ts
         ) {
           latestLLMModeEvent = event;
         }

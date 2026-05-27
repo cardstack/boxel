@@ -482,6 +482,21 @@ export default class CommandService extends Service {
           roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
         // Only auto-apply if in 'act' mode
         if (activeModeAtMessageTime !== 'act') {
+          let llmModeEvents = roomResource.llmModeEvents;
+          if (llmModeEvents.some((e) => (e as any).content?.mode === 'act')) {
+            // The room has used 'act' mode, so a non-'act' resolution here is
+            // worth recording: it pins the timestamp the decision was made
+            // against alongside every mode transition — the data needed to
+            // explain an auto-apply that didn't fire.
+            console.log(
+              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${messageTimestamp}; mode transitions: ${JSON.stringify(
+                llmModeEvents.map((e) => ({
+                  ts: e.origin_server_ts,
+                  mode: (e as any).content?.mode,
+                })),
+              )}`,
+            );
+          }
           continue;
         }
 
