@@ -667,20 +667,27 @@ jobs:
           path: /tmp/host-dist.log
           retention-days: 30
 
-  # Proof-of-concept: boot the realm-server test stack under environment
-  # mode (BOXEL_ENVIRONMENT set -> Traefik, *.localhost hostnames, per-slug
-  # paths) and assert the public-read parity gate the host PoC already
-  # validates. A single shard of the realm-server suite then runs under
-  # the same env-mode environment as a non-blocking slice, exercising any
-  # code path that branches on isEnvironmentMode() / reads BOXEL_ENVIRONMENT
+  # Run the realm-server test suite under environment mode (BOXEL_ENVIRONMENT
+  # set -> Traefik, *.localhost hostnames, per-slug paths), so any code path
+  # that branches on isEnvironmentMode() / reads BOXEL_ENVIRONMENT
   # (dev-service-registry, prerender/config, manager-server, prerenderer,
-  # synapse, worker-manager, setup-localhost-resolver, registry-backfill).
-  # Scaling to all 6 shards is the follow-up once this is green.
+  # synapse, worker-manager, setup-localhost-resolver, registry-backfill) gets
+  # CI coverage. Each shard also asserts the public-read parity gate against
+  # its own env-mode stack. Shards are non-blocking while the env-mode suite
+  # is being matured; promote to required once stable.
   realm-server-test-env-mode-poc:
-    name: Realm Server Env-Mode PoC
+    name: Realm Server Env-Mode (shard ${{ matrix.shardIndex }}, ${{ matrix.shardTotal }})
     needs: [change-check]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: realm-server-env-mode-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     env:
       BOXEL_ENVIRONMENT: ci
       SKIP_CATALOG: "true"
@@ -739,14 +746,13 @@ jobs:
 
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js 1 6)" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
 
-      # First slice: run shard 1/6 of the realm-server suite against the
-      # env-mode stack above. Kept non-blocking so the parity gate above
-      # remains the job's required signal while integration-level fallout
-      # against the env-mode stack is matured.
-      - name: Run realm-server shard 1/6 in env mode (in progress, non-blocking)
+      # Kept non-blocking so the parity gate above remains the per-shard
+      # required signal while integration-level fallout against the env-mode
+      # stack is matured. Flip to blocking once stable.
+      - name: Run realm-server shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }} in env mode (non-blocking)
         continue-on-error: true
         run: pnpm test
         working-directory: packages/realm-server
