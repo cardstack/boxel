@@ -986,27 +986,8 @@ export async function stopIsolatedRealmStack(
 ): Promise<void> {
   let cleanupError: unknown;
 
-  // Order matters: close the front door before killing what's behind it.
-  // The worker-scoped prerender (when shared across tests) keeps issuing
-  // standby refills and other requests at the stable compat-proxy port.
-  // Killing the realm-server first would leave the proxy briefly alive
-  // with a dead upstream — any request landing in that window would loop
-  // through `fetchUpstreamWithRetry`'s ECONNREFUSED backoff and come back
-  // as a 502, which (a) ties up the proxy and (b) surfaces in the
-  // prerender as a `StandbyTargetNotReadyError` / render failure on a
-  // realm whose teardown the test thought was over. Stopping the proxy
-  // first sets its `stopping` flag and aborts in-flight retries
-  // immediately (see `startCompatRealmProxy`), so subsequent requests
-  // get an immediate 503 with no chance to race the realm-server's
-  // SIGTERM.
   try {
     await stack.prerender?.stop();
-  } catch (error) {
-    cleanupError ??= error;
-  }
-
-  try {
-    await stack.compatProxy?.stop();
   } catch (error) {
     cleanupError ??= error;
   }
@@ -1019,6 +1000,12 @@ export async function stopIsolatedRealmStack(
 
   try {
     await stopManagedProcess(stack.workerManager);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    await stack.compatProxy?.stop();
   } catch (error) {
     cleanupError ??= error;
   }
