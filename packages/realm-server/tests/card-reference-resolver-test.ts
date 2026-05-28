@@ -620,8 +620,7 @@ module(basename(__filename), function () {
   // VN-method coverage for the resolver. Each test owns a local VN, so
   // they don't interact with the global `prefixMappings` registry that
   // the modules above (testing the deprecated standalone functions)
-  // rely on. CS-10752 plumbs the resolver state onto VN; the standalone
-  // forms above will be removed once their call sites migrate.
+  // rely on.
   module('VirtualNetwork resolver methods', function () {
     function makeVN() {
       let vn = new VirtualNetwork();
@@ -649,13 +648,13 @@ module(basename(__filename), function () {
         assert.false(vn.isRegisteredPrefix('http://example.com/foo'));
       });
 
-      // SKIP-MIGRATION: while `VN.isRegisteredPrefix` falls back to the
-      // deprecated global `prefixMappings` registry (and
-      // `VN.addRealmMapping` bridges into it), two VN instances are not
-      // isolated from each other — registering on `other` writes to the
-      // shared global, which the fallback in `vn.isRegisteredPrefix`
-      // then sees. Re-enable in the final CS-10752 cutover commit that
-      // removes the bridge and the fallbacks.
+      // Skipped: VN instances aren't isolated from each other while
+      // `VN.addRealmMapping` bridges into the deprecated global
+      // `prefixMappings` registry and `VN.isRegisteredPrefix` falls back
+      // to it — registering on `other` writes to the shared global,
+      // which the fallback in `vn.isRegisteredPrefix` then sees. The
+      // invariant under test (one VN's mappings don't leak to another)
+      // only holds without the bridge + fallback.
       test.skip('uses only this VN’s mappings — not a sibling VN', function (assert) {
         let vn = makeVN();
         let other = new VirtualNetwork();

@@ -59,9 +59,7 @@ const prefixMappings = new Map<string, string>();
 /**
  * @deprecated Use {@link VirtualNetwork.addRealmMapping} instead. This
  * module-level registration is bridged by `VN.addRealmMapping` for the
- * existing call sites; new code should not call this directly. Slated
- * for removal once all callers of the deprecated resolver functions
- * below have been migrated (see CS-10752).
+ * existing call sites; new code should not call this directly.
  */
 export function registerCardReferencePrefix(
   prefix: string,

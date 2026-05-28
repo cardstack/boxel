@@ -129,11 +129,9 @@ export class VirtualNetwork {
         return true;
       }
     }
-    // Migration fallback: also consult the deprecated module-level
-    // `prefixMappings` registry so callers migrated to VN see prefixes
-    // that legacy code (and tests) still register via
-    // `registerCardReferencePrefix`. Removed in the final CS-10752
-    // cutover commit alongside the registry itself.
+    // Also consult the deprecated module-level `prefixMappings` registry
+    // so VN-aware callers see prefixes that legacy code (and tests)
+    // register via `registerCardReferencePrefix`.
     return globalIsRegisteredPrefix(reference);
   }
 
@@ -150,10 +148,9 @@ export class VirtualNetwork {
         return (prefix + url.slice(target.length)) as RealmResourceIdentifier;
       }
     }
-    // Migration fallback: defer to the deprecated module-level
-    // `unresolveCardReference` so prefixes registered globally (e.g. by
-    // legacy tests via `registerCardReferencePrefix`) still unresolve
-    // correctly. Removed in the final CS-10752 cutover.
+    // Defer to the deprecated module-level `unresolveCardReference` so
+    // prefixes registered globally (e.g. by legacy tests via
+    // `registerCardReferencePrefix`) still unresolve correctly.
     return globalUnresolveCardReference(url) as RealmResourceIdentifier;
   }
 
@@ -174,9 +171,7 @@ export class VirtualNetwork {
    *
    * Composes `resolveRRI` + `toURL` and falls back to the deprecated
    * resolver if VN-aware resolution can't see the relevant prefix (e.g.
-   * a global-only registration during the migration window). The
-   * fallback is removed together with the rest of the global registry
-   * in the final CS-10752 cutover commit.
+   * a global-only registration).
    */
   resolveURL(reference: string, relativeTo: URL | string | undefined): URL {
     let base: RealmResourceIdentifier | undefined;
@@ -188,9 +183,9 @@ export class VirtualNetwork {
     try {
       return this.toURL(this.resolveRRI(reference, base));
     } catch {
-      // Migration fallback: resolveRRI's relative-against-prefix-form
-      // branches iterate VN's own map directly; if the prefix is only
-      // registered on the deprecated global, defer to it.
+      // resolveRRI's relative-against-prefix-form branches iterate VN's
+      // own map directly; if the prefix is only registered on the
+      // deprecated global, defer to it.
       return new URL(globalResolveCardReference(reference, relativeTo));
     }
   }
@@ -200,9 +195,8 @@ export class VirtualNetwork {
     if (resolved !== undefined) {
       return new URL(resolved);
     }
-    // Migration fallback: defer to the deprecated module-level
-    // `resolveCardReference` so prefixes registered globally still
-    // resolve. Removed in the final CS-10752 cutover.
+    // Defer to the deprecated module-level `resolveCardReference` so
+    // prefixes registered globally still resolve.
     try {
       return new URL(globalResolveCardReference(rri, undefined));
     } catch {

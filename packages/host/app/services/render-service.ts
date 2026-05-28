@@ -138,11 +138,11 @@ export class CardStoreWithErrors implements CardStore {
 
   private normalizeURL(id: string): string {
     let key = id.replace(/\.json$/, '');
-    // Same gate as the pre-migration `isLocalId + resolveCardReference`
-    // pair. `vn.toURL` falls back to the deprecated global registry
-    // during the CS-10752 migration window, so legacy
-    // `registerCardReferencePrefix` setups still produce canonical URL
-    // form here (and thus share one cache key with URL-form lookups).
+    // Local IDs pass through; remote IDs canonicalize to URL form via the
+    // VN so prefix-form and URL-form lookups share a cache key. `vn.toURL`
+    // also consults the deprecated global registry, so prefixes registered
+    // via `registerCardReferencePrefix` (without a VN) resolve to the same
+    // canonical URL.
     return isLocalId(key) ? id : this.#virtualNetwork.toURL(id).href;
   }
 

@@ -2530,11 +2530,10 @@ export function asURL(
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  // `isLocalId` (which reads the global prefix registry) and `vn.toURL`
-  // both see prefixes registered via either VN or the deprecated global
-  // (`vn.toURL` falls back to the global during the CS-10752 migration
-  // window). So this branches the same way the pre-migration
-  // `isLocalId + resolveCardReference` pair did.
+  // Locals stay as-is; remotes resolve through the VN. `isLocalId` and
+  // `vn.toURL` both consult the VN's mappings and fall back to the
+  // deprecated module-level registry, so prefixes registered either way
+  // produce the same canonical URL.
   return isLocalId(id, vn) ? id : vn.toURL(id).href;
 }
 
