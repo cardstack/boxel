@@ -1738,7 +1738,18 @@ module(basename(__filename), function () {
         let tmp = dirSync();
         let dir = join(tmp.name, 'startup-realm');
         ensureDirSync(dir);
-        writeJSONSync(join(dir, '.realm.json'), { name: 'Startup Realm' });
+        writeJSONSync(join(dir, 'realm.json'), {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'Startup Realm' } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        });
         let virtualNetwork = createVirtualNetwork();
         let prerenderer = await getTestPrerenderer();
         let definitionLookup = new CachingDefinitionLookup(

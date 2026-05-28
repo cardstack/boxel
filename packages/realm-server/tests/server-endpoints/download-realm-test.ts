@@ -195,8 +195,23 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     let realmDir = join(realmsRootPath, realmId);
     mkdirSync(realmDir, { recursive: true });
     writeFileSync(
-      join(realmDir, '.realm.json'),
-      JSON.stringify({ name: 'CS-11270 regression realm' }, null, 2),
+      join(realmDir, 'realm.json'),
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'CS-11270 regression realm' } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
     );
     writeFileSync(join(realmDir, 'marker.txt'), 'cs-11270-regression-marker');
 
