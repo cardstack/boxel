@@ -344,8 +344,9 @@ module('Integration | overlay-menu-items', function (hooks) {
     let card = find(cardSelector) as HTMLElement;
     let boundary = find(parentSelector) as HTMLElement;
 
-    // Floating-ui positions asynchronously via Promise; wait for the
-    // label to acquire a non-zero footprint before measuring.
+    // The label is positioned asynchronously by trackLabelOverflow's
+    // autoUpdate; wait for it to acquire a non-zero footprint before
+    // measuring.
     await waitUntil(() => label.getBoundingClientRect().width > 0, {
       timeout: 1000,
     });
@@ -379,9 +380,9 @@ module('Integration | overlay-menu-items', function (hooks) {
       );
     }
 
-    // Either way, floating-ui's shift/size keep the label inside the
-    // containing-card boundary (a few pixels of slop for sub-pixel
-    // rounding, the shift padding, and the drop-shadow's render box).
+    // Either way the label stays inside the visible stack-item frame
+    // (a few pixels of slop for sub-pixel rounding and the
+    // drop-shadow's render box).
     assert.ok(
       labelRect.left >= boundaryRect.left - 4,
       'label left edge stays inside the containing card',

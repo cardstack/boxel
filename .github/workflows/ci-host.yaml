@@ -130,15 +130,6 @@ jobs:
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
-          # [readiness-diag] — start-server-and-test reads DEBUG and
-          # propagates `log: true` + `verbose: true` to wait-on, so each
-          # readiness-probe attempt prints its HTTP status / connection
-          # error. Distinguishes "server not listening" from "server
-          # hanging mid-request" from "server returning 500" when the
-          # 10-minute wait-on timer fires. Remove together with the
-          # other [readiness-diag] markers once the root cause is
-          # identified.
-          DEBUG: start-server-and-test
 
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -259,15 +250,6 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
-          # [readiness-diag] — start-server-and-test reads DEBUG and
-          # propagates `log: true` + `verbose: true` to wait-on, so each
-          # readiness-probe attempt prints its HTTP status / connection
-          # error. Distinguishes "server not listening" from "server
-          # hanging mid-request" from "server returning 500" when the
-          # 10-minute wait-on timer fires. Remove together with the
-          # other [readiness-diag] markers once the root cause is
-          # identified.
-          DEBUG: start-server-and-test
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
