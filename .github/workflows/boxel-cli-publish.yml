@@ -2,15 +2,20 @@ name: boxel-cli publish
 
 # Single workflow file that owns both publish paths for @cardstack/boxel-cli:
 #
-#   • `unstable` job — on every merge to main that touches packages/boxel-cli/**,
-#     regenerate plugin skill content, decide per-surface version bumps from the
-#     merged PR's title (conventional-commit prefix), commit the bumps back to
-#     main, tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` to npm under
-#     dist-tag `unstable`.
+#   • `unstable` job
+#       - On push to main touching `packages/boxel-cli/**` — regenerate plugin
+#         skill content, decide per-surface version bumps from the merged PR's
+#         title (conventional-commit prefix), commit the bumps back to main,
+#         tag, and publish `@cardstack/boxel-cli@<v>-unstable.<n>` under
+#         dist-tag `unstable`.
+#       - Via "Run workflow" with the `confirm` field left blank — skip the
+#         bump/commit/tag dance and publish whatever version is currently in
+#         `packages/boxel-cli/package.json` under dist-tag `unstable`. Fails
+#         loudly if that version is already on npm (npm refuses to clobber).
 #
-#   • `stable` job — manual workflow_dispatch that strips `-unstable.<n>` from the
-#     current version and publishes the resulting clean semver under dist-tag
-#     `latest`. The deliberate "cut a release" step.
+#   • `stable` job — "Run workflow" with `confirm = promote`. Strips
+#     `-unstable.<n>` from the current version and publishes the resulting
+#     clean semver under dist-tag `latest`. The deliberate "cut a release" step.
 #
 # Both flows live in one file so they share a single npm Trusted-Publisher rule
 # (registered against this filename). Splitting them into separate workflow files
@@ -33,8 +38,8 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type 'promote' to confirm publishing the latest unstable to npm latest"
-        required: true
+        description: "Leave blank to publish current main as unstable. Type 'promote' to strip -unstable.N and publish as latest."
+        required: false
         type: string
 
 permissions:
@@ -48,8 +53,10 @@ concurrency:
 
 jobs:
   unstable:
-    name: Regen, bump, publish unstable
-    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    name: Publish unstable
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && (github.event_name == 'push' || inputs.confirm == '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -69,6 +76,7 @@ jobs:
 
       - name: Fetch PR title from merge SHA
         id: pr
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -94,7 +102,7 @@ jobs:
           echo "PR title: $PR_TITLE"
 
       - name: Regenerate plugin synopsis and skills
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         working-directory: packages/boxel-cli
         run: |
           pnpm run build:plugin
@@ -102,7 +110,7 @@ jobs:
 
       - name: Compute release
         id: release
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         working-directory: packages/boxel-cli
         env:
           PR_TITLE: ${{ steps.pr.outputs.title }}
@@ -122,7 +130,7 @@ jobs:
           echo "nextPlugin=$(echo "$RESULT" | jq -r '.nextPlugin // ""')" >> "$GITHUB_OUTPUT"
 
       - name: Apply version bumps
-        if: steps.pr.outputs.skip != 'true' && (steps.release.outputs.npmBump != 'none' || steps.release.outputs.pluginBump != 'none')
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && (steps.release.outputs.npmBump != 'none' || steps.release.outputs.pluginBump != 'none')
         env:
           NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
           NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
@@ -151,7 +159,7 @@ jobs:
 
       - name: Generate release notes
         id: notes
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
           NEW_TAG: boxel-cli-v${{ steps.release.outputs.nextNpm }}
@@ -195,7 +203,7 @@ jobs:
 
       - name: Commit, tag, and push
         id: commit
-        if: steps.pr.outputs.skip != 'true'
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true'
         env:
           NEXT_NPM: ${{ steps.release.outputs.nextNpm }}
           NEXT_PLUGIN: ${{ steps.release.outputs.nextPlugin }}
@@ -226,7 +234,7 @@ jobs:
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none'
+        if: github.event_name == 'workflow_dispatch' || (steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none')
         working-directory: packages/boxel-cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -264,7 +272,7 @@ jobs:
           pnpm publish --tag unstable --access public --provenance --no-git-checks
 
       - name: Create GitHub Release (prerelease)
-        if: steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
+        if: github.event_name == 'push' && steps.pr.outputs.skip != 'true' && steps.release.outputs.npmBump != 'none' && steps.commit.outputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.commit.outputs.tag }}
@@ -289,7 +297,7 @@ jobs:
 
   stable:
     name: Promote latest unstable to stable
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm == 'promote'
     runs-on: ubuntu-latest
     steps:
       - name: Validate confirmation
