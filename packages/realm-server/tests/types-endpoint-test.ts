@@ -9,6 +9,7 @@ import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
 import {
   setupPermissionedRealmCached,
   runTestRealmServer,
+  logRealmIndexDiagnostics,
   setupDB,
   setupMatrixRoom,
   createVirtualNetwork,
@@ -231,6 +232,18 @@ module(basename(__filename), function () {
       let actualInstances = response.body.data.filter(
         (entry: any) => entry.attributes.kind === 'instance',
       );
+      if (actualInstances.length === 0) {
+        // Read-time companion to the build-time diagnostic: an empty instance
+        // set here means the realm served by this (cached-template-restored)
+        // realm-server has no `realm_meta` instances. Dump the restored DB
+        // state so the next failure shows whether the snapshot itself was
+        // empty/degraded or a version mismatch surfaced on read.
+        await logRealmIndexDiagnostics(
+          dbAdapter,
+          realmURL.href,
+          'types-endpoint-read',
+        );
+      }
       assert.deepEqual(
         sortCardTypeSummaries(actualInstances),
         sortCardTypeSummaries(instanceEntries),
