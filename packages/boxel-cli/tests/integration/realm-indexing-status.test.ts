@@ -21,32 +21,14 @@ import {
 let profileManager: ProfileManager;
 let cleanupProfile: () => void;
 let realmUrl: string;
-let realmServerResult: Awaited<ReturnType<typeof startTestRealmServer>>;
 
 beforeAll(async () => {
-  realmServerResult = await startTestRealmServer({
-    fileSystem: {
-      'broken-card.gts': `
-        import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-        export class BrokenCard extends CardDef {
-          @field title = contains(StringField);
-        }
-      `,
-      'broken-instance.json': {
-        data: {
-          type: 'card',
-          attributes: { cardTitle: 'Broken' },
-          meta: {
-            adoptsFrom: {
-              module: './broken-card',
-              name: 'BrokenCard',
-            },
-          },
-        },
-      },
-    },
-  });
+  // Boot a clean realm with no fileSystem — the noopPrerenderer can't
+  // extract types from card .gts modules, so any seeded card would show
+  // up as a "File extract error" row and poison the first test's
+  // empty-realm assertion. Tests that need errors seed them directly
+  // via INSERT below.
+  await startTestRealmServer();
   realmUrl = `${TEST_REALM_SERVER_URL}/test/`;
   let testProfile = createTestProfileDir();
   profileManager = testProfile.profileManager;
@@ -72,7 +54,8 @@ describe('realm indexing-status (integration)', () => {
     let dbAdapter = getTestDbAdapter();
     expect(dbAdapter).toBeDefined();
 
-    let cardURL = `${realmUrl}broken-instance.json`;
+    let cardURL = `${realmUrl}injected-error.json`;
+    let fileAlias = `${realmUrl}injected-error`;
     let errorDoc = {
       message: 'render failed: missing module',
       status: 500,
@@ -81,23 +64,20 @@ describe('realm indexing-status (integration)', () => {
     };
     let timingDiagnostics = { invalidationId: 'inv-cli-test-1', ms: 17 };
 
-    // Ensure the realm is indexed so the broken-instance row exists.
-    let realm = realmServerResult.realms.find((r) => r.url === realmUrl);
-    expect(realm).toBeDefined();
-    await realm!.realmIndexUpdater.fullIndex();
-
     for (let table of ['boxel_index', 'boxel_index_working']) {
       await dbAdapter!.execute(
-        `UPDATE ${table}
-         SET has_error = TRUE,
-             error_doc = $1::jsonb,
-             timing_diagnostics = $2::jsonb
-         WHERE url = $3 AND type = 'instance'`,
+        `INSERT INTO ${table}
+           (url, file_alias, type, realm_version, realm_url,
+            has_error, error_doc, timing_diagnostics, is_deleted)
+         VALUES ($1, $2, 'instance', 1, $3,
+                 TRUE, $4::jsonb, $5::jsonb, FALSE)`,
         {
           bind: [
+            cardURL,
+            fileAlias,
+            realmUrl,
             JSON.stringify(errorDoc),
             JSON.stringify(timingDiagnostics),
-            cardURL,
           ],
         },
       );
