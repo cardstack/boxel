@@ -2268,20 +2268,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert.dom('[data-test-card-error]').exists();
       assert
         .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
-        .hasText(`missing file ${testRealmURL}Person/missing-person`);
+        .hasText(`${testRealmURL}Person/missing-person not found`);
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
       assert
         .dom('[data-test-error-details]')
-        .containsText('Person/missing-person');
+        .containsText('Person/missing-person not found');
       assert.dom('[data-test-error-stack]').exists();
 
       // fix error
@@ -2360,10 +2360,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       assert
         .dom('[data-test-boxel-card-header-title]')
-        .containsText('Card Error: Link Not Found');
+        .containsText('Card Error');
       assert
         .dom('[data-test-error-message]')
-        .containsText(`missing file ${testRealmURL}Person/missing-person`);
+        .containsText(`${testRealmURL}Person/missing-person not found`);
     });
   });
 });

@@ -383,22 +383,21 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         },
         'Person/error.json': {
-          // Lands as instance-error from the seed indexing pass because it
-          // adopts from a module that does not exist in the realm. Module
-          // → instance propagation surfaces the missing module as the
-          // instance's own error_doc, so the operator-mode UI tests see an
-          // error card with a `missing file …` payload — same shape as the
-          // earlier broken-linksTo fixture produced, now driven by a missing
-          // adoptsFrom module since broken-linksTo no longer demotes the
-          // consuming instance.
+          // Lands as instance-error from the seed indexing pass because
+          // `BoomPerson.boom` is a computed field that throws on
+          // serialization. The card still adopts from a real module so it
+          // appears in cards-grid queries and the operator-mode error UI
+          // can render it; broken-linksTo no longer demotes the consumer
+          // so we use a throws-on-compute card type as the "make this card
+          // error" lever.
           data: {
             attributes: {
               firstName: 'Error',
             },
             meta: {
               adoptsFrom: {
-                module: testRRI('Person/missing-person'),
-                name: 'MissingPerson',
+                module: testRRI('boom-person'),
+                name: 'BoomPerson',
               },
             },
           },
@@ -565,8 +564,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: testRRI('Person/missing-person'),
-                  name: 'MissingPerson',
+                  module: testRRI('boom-person'),
+                  name: 'BoomPerson',
                 },
               },
             },
@@ -599,7 +598,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
 
         assert.dom(`[data-test-card-error]`).exists();
-        assert.dom(`[data-test-error-message]`).includesText('missing file');
+        assert.dom(`[data-test-error-message]`).includesText('Boom!');
       });
 
       test('can delete a card', async function (assert) {
@@ -659,13 +658,9 @@ module('Acceptance | operator mode tests', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Person/error"] [data-test-card-error]`,
       )
       .exists('the error state of the card is displayed');
-    assert
-      .dom('[data-test-error-message]')
-      .includesText(`missing file ${testRealmURL}Person/missing-person`);
+    assert.dom('[data-test-error-message]').includesText('Boom!');
     await click('[data-test-toggle-details]');
-    assert
-      .dom('[data-test-error-details]')
-      .includesText(`Person/missing-person`);
+    assert.dom('[data-test-error-details]').includesText('Boom!');
   });
 
   test('error card header more-options menu includes Copy Card URL', async function (assert) {

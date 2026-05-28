@@ -3748,30 +3748,36 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        // child-error is the only entry in indexing-error state — its
+        // adoptsFrom module is missing, so module → instance propagation
+        // demotes it. parent-rel and grandparent-rel each linksTo a
+        // downstream card; instance → instance propagation terminates at
+        // the first hop, so the consumers stay indexable. The broken slot
+        // renders the placeholder inline.
+        let childError = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childError?.type,
+          'instance-error',
+          'child-error inherits its missing adoptsFrom module via module → instance propagation',
+        );
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'parent is in error while relationship target is broken',
+          'instance',
+          'parent stays indexable while its linksTo target is broken — broken slot renders the placeholder',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'grandparent is in error while downstream relationship target is broken',
+          'instance',
+          'grandparent stays indexable while its downstream linksTo chain reaches a broken card',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          assert.ok(
-            hasErrorDetail(grandParentBefore.error, 'missing-child'),
-            'two-hop relationship error details include missing child module context',
-          );
-        } else {
-          assert.ok(false, 'expected grandparent to be an instance error');
-        }
 
         await realm.write(
           'missing-child.gts',
@@ -3785,13 +3791,21 @@ module(basename(__filename), function () {
         `,
         );
 
+        let childErrorAfter = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childErrorAfter?.type,
+          'instance',
+          'child-error recovers once the missing adoptsFrom module is created',
+        );
         let parentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentAfter?.type,
           'instance',
-          'parent repairs after relationship target is fixed',
+          'parent stays a clean instance after the relationship target recovers',
         );
         let grandParentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
@@ -3799,7 +3813,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           grandParentAfter?.type,
           'instance',
-          'grandparent repairs after downstream relationship target is fixed',
+          'grandparent stays a clean instance after the downstream target recovers',
         );
 
         let parentDeps = await depsFor(`${testRealm}parent-rel.json`);
