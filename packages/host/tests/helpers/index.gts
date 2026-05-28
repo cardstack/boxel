@@ -2097,3 +2097,80 @@ export async function addSkillToAiAssistant(
     throw enriched;
   }
 }
+
+// Waits for a freshly-created AI assistant room to finish loading its
+// default skills, so that simulateRemoteMessage can resolve a command name
+// (e.g. show-card_566f) against the room's skill commands. Without this the
+// room's processRoomTask can still be mid-loadSkills when the simulated
+// timeline event is processed, in which case message-builder finds no
+// matching codeRef and the command is reported as "No command for the name
+// X was found" instead of executing/validating.
+export async function waitForNewRoomSkillsLoaded(roomId: string) {
+  await settled();
+
+  let matrixService = getService('matrix-service') as {
+    getRoomData(roomId: string): {
+      skillsConfig: {
+        enabledSkillCards?: Array<{ sourceUrl?: string }>;
+        disabledSkillCards?: Array<{ sourceUrl?: string }>;
+        commandDefinitions?: Array<{ sourceUrl?: string }>;
+      };
+    } | null;
+    roomResources: Map<
+      string,
+      {
+        skills?: Array<{ cardId: string }>;
+        commands?: Array<unknown>;
+      }
+    >;
+  };
+
+  try {
+    await waitUntil(
+      () => {
+        let roomData = matrixService.getRoomData(roomId);
+        let enabled = roomData?.skillsConfig?.enabledSkillCards ?? [];
+        if (enabled.length === 0) {
+          return false;
+        }
+        let roomResource = matrixService.roomResources.get(roomId);
+        // commands is computed from loaded skill instances in the store, so
+        // a non-empty list proves that loadSkills finished and the skill
+        // card's @field commands is populated — i.e. message-builder will be
+        // able to resolve the request's functionName.
+        return Boolean(
+          roomResource && (roomResource.commands?.length ?? 0) > 0,
+        );
+      },
+      {
+        timeout: 5000,
+        timeoutMessage: `Timed out waiting for new AI room ${roomId} skills/commands to load`,
+      },
+    );
+  } catch (err) {
+    let roomData = matrixService.getRoomData(roomId);
+    let roomResource = matrixService.roomResources.get(roomId);
+    let diagnostic = {
+      roomId,
+      hasRoomData: Boolean(roomData),
+      hasRoomResource: Boolean(roomResource),
+      enabledSkillCards:
+        roomData?.skillsConfig?.enabledSkillCards?.map((f) => f.sourceUrl) ??
+        null,
+      disabledSkillCards:
+        roomData?.skillsConfig?.disabledSkillCards?.map((f) => f.sourceUrl) ??
+        null,
+      commandDefinitionsCount:
+        roomData?.skillsConfig?.commandDefinitions?.length ?? null,
+      roomResourceSkillIds: roomResource?.skills?.map((s) => s.cardId) ?? null,
+      roomResourceCommandCount: roomResource?.commands?.length ?? null,
+    };
+    let originalMessage = err instanceof Error ? err.message : String(err);
+    let enriched = new Error(
+      `${originalMessage} | diagnostics: ${JSON.stringify(diagnostic)}`,
+    );
+    (enriched as Error & { cause?: unknown }).cause =
+      err instanceof Error ? err : undefined;
+    throw enriched;
+  }
+}

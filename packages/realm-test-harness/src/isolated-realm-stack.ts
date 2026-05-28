@@ -145,6 +145,89 @@ function describeCompatProxyError(error: unknown): string {
   return parts.join(' <- ');
 }
 
+// Connection-phase upstream failure codes worth retrying. The
+// realm-server this proxy fronts is torn down and restarted on a stable
+// port between tests, so a render's module fetch can land in the brief
+// window where the port has no listener (ECONNREFUSED) or isn't
+// resolvable yet. These errors happen before any request bytes reach the
+// server, so retrying is side-effect-free for every HTTP method.
+const RETRYABLE_CONNECT_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+// A reset or broken pipe can surface after the request was already
+// written, so only retry these for methods with no server-side effect.
+const RETRYABLE_IDEMPOTENT_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// ~2.1s total across the retries — long enough to ride out a realm-server
+// restart's bind gap, short enough not to stall an in-flight render.
+const UPSTREAM_RETRY_BACKOFF_MS = [50, 150, 300, 600, 1000];
+
+function connectErrorCode(error: unknown): string | undefined {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    let code = (current as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      return code;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+function isRetryableUpstreamError(error: unknown, method: string): boolean {
+  let code = connectErrorCode(error);
+  if (!code) {
+    return false;
+  }
+  if (RETRYABLE_CONNECT_CODES.has(code)) {
+    return true;
+  }
+  return IDEMPOTENT_METHODS.has(method) && RETRYABLE_IDEMPOTENT_CODES.has(code);
+}
+
+// Retries connection-phase failures with a bounded backoff before letting
+// the error propagate to the proxy's 502 handler. On give-up it annotates
+// the error with the attempt count and elapsed time so the 502 body can
+// report them — the realm child's logs are buffered out of CI output,
+// while the 502 body surfaces in the prerender's captured render error.
+async function fetchUpstreamWithRetry(
+  upstreamURL: URL,
+  init: RequestInit,
+  method: string,
+): Promise<Response> {
+  let startedAt = Date.now();
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetch(upstreamURL, init);
+    } catch (error) {
+      let canRetry =
+        attempt < UPSTREAM_RETRY_BACKOFF_MS.length &&
+        isRetryableUpstreamError(error, method);
+      if (!canRetry) {
+        if (error instanceof Error) {
+          let annotated = error as Error & {
+            compatProxyAttempts?: number;
+            compatProxyElapsedMs?: number;
+          };
+          annotated.compatProxyAttempts = attempt + 1;
+          annotated.compatProxyElapsedMs = Date.now() - startedAt;
+        }
+        throw error;
+      }
+      let delay = UPSTREAM_RETRY_BACKOFF_MS[attempt];
+      realmLog.info(
+        `startCompatRealmProxy: retrying upstream fetch to ${upstreamURL.href} ` +
+          `(attempt ${attempt + 1}, code=${connectErrorCode(error)}) after ${delay}ms`,
+      );
+      attempt++;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 async function startCompatRealmProxy({
   listenPort,
 }: {
@@ -180,12 +263,16 @@ async function startCompatRealmProxy({
           ),
         ) as Record<string, string>;
         headers['x-boxel-forwarded-url'] = incomingURL.href;
-        let response = await fetch(upstreamURL, {
-          method: req.method,
-          headers,
-          body: body as BodyInit | undefined,
-          redirect: 'manual',
-        });
+        let response = await fetchUpstreamWithRetry(
+          upstreamURL,
+          {
+            method: req.method,
+            headers,
+            body: body as BodyInit | undefined,
+            redirect: 'manual',
+          },
+          req.method ?? 'GET',
+        );
 
         let responseHeaders = new Headers(response.headers);
         let location = responseHeaders.get('location');
@@ -211,13 +298,21 @@ async function startCompatRealmProxy({
         res.end(Buffer.from(await response.arrayBuffer()));
       } catch (error) {
         let description = describeCompatProxyError(error);
+        let annotated = error as {
+          compatProxyAttempts?: number;
+          compatProxyElapsedMs?: number;
+        };
+        let suffix =
+          annotated?.compatProxyAttempts != null
+            ? ` after ${annotated.compatProxyAttempts} attempt(s) over ${annotated.compatProxyElapsedMs}ms`
+            : '';
         realmLog.warn(
-          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}: ${description}`,
+          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}${suffix}: ${description}`,
         );
         res.statusCode = 502;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
         res.end(
-          `software-factory compat proxy failed for ${upstreamURL.href}: ${description}`,
+          `software-factory compat proxy failed for ${upstreamURL.href}${suffix}: ${description}`,
         );
       }
     },

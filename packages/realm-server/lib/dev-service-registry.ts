@@ -1,9 +1,11 @@
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { writeFileSync, renameSync, unlinkSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import type { AddressInfo, Server } from 'net';
 import yaml from 'yaml';
+
+import { sanitizeSlug } from '../../../scripts/env-slug.js';
 
 const log = logger('dev-service-registry');
 
@@ -45,15 +47,6 @@ export function getEnvironmentSlug(): string {
   } catch {
     return 'default';
   }
-}
-
-function sanitizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 export function serviceHostname(serviceName: string, env?: string): string {
@@ -155,6 +148,30 @@ export function registerService(
   log.info(
     `Registered ${serviceName} at ${hostname} -> localhost:${actualPort}`,
   );
+  kickTraefikIfNeeded();
+}
+
+// Traefik's file-provider `watch: true` uses inotify, which Docker
+// Desktop on macOS doesn't propagate through bind mounts — Traefik
+// keeps serving the previous file's contents and the new dynamic port
+// never reaches the proxy (502 Bad Gateway). Traefik v3 has no
+// file-provider polling option, so the workaround is to bounce the
+// container after each registration. Linux's inotify works fine, so
+// the kick is a no-op there. Concurrent restarts are serialized by
+// the Docker daemon; the last one to finish has the latest config.
+function kickTraefikIfNeeded(): void {
+  if (process.platform !== 'darwin') return;
+  let child = spawn('docker', ['restart', 'boxel-traefik'], {
+    // Fully detached so the realm-server process can exit without
+    // waiting on docker — readiness probes through Traefik already
+    // have retry behavior to ride out the brief downtime.
+    stdio: 'ignore',
+    detached: true,
+  });
+  child.on('error', (e) =>
+    log.warn(`Could not restart Traefik (file-watcher kick): ${e.message}`),
+  );
+  child.unref();
 }
 
 /**

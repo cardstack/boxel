@@ -824,14 +824,11 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-stack-card="${testRealm2URL}Person/hassan"] [data-test-links-to-editor="pet"] [data-test-field-component-card]`,
         'mouseenter',
       );
-      assert
-        .dom(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
-        )
-        .exists();
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
       );
+      assert.dom('[data-test-boxel-menu-item-text="Edit"]').exists();
+      await click('[data-test-boxel-menu-item-text="Edit"]');
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-card-format="edit"]`,
@@ -856,8 +853,9 @@ module('Acceptance | interact submode tests', function (hooks) {
         'mouseenter',
       );
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
       );
+      await click('[data-test-boxel-menu-item-text="Edit"]');
       assert
         .dom(
           `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
@@ -1081,8 +1079,9 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       await click(
-        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-edit]`,
+        `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
       );
+      await click('[data-test-boxel-menu-item-text="Edit"]');
 
       assert
         .dom(

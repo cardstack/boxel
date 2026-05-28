@@ -3,6 +3,8 @@ import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
 
+import { sanitizeSlug } from '../../../scripts/env-slug.js';
+
 const DOMAIN = 'localhost';
 
 let _traefikDir: string | undefined;
@@ -42,15 +44,6 @@ export function getEnvironmentSlug(): string {
   } catch {
     return 'default';
   }
-}
-
-function sanitizeSlug(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
 }
 
 export function getSynapseContainerName(): string {
@@ -95,13 +88,35 @@ export function registerSynapseWithTraefik(hostPort: number): void {
   let routerKey = `${serviceName}-${slug}`;
   let hostname = `${serviceName}.${slug}.${DOMAIN}`;
 
+  // Mirror dev-service-registry.ts: two routers per service. `websecure`
+  // (port 443) terminates TLS at Traefik using the mkcert leaf in
+  // traefik/dynamic/tls.yml; the sibling `-http` router on :80
+  // 308-redirects to https. The browser hits the host bundle over https,
+  // so matrix login fetches (`https://matrix.<slug>.localhost/`) need
+  // the websecure router or every CORS preflight 404s.
+  let redirectMiddleware = `${routerKey}-https-redirect`;
   let config: any = {
     http: {
       routers: {
         [routerKey]: {
           rule: `Host(\`${hostname}\`)`,
           service: routerKey,
+          entryPoints: ['websecure'],
+          tls: {},
+        },
+        [`${routerKey}-http`]: {
+          rule: `Host(\`${hostname}\`)`,
           entryPoints: ['web'],
+          middlewares: [redirectMiddleware],
+          service: routerKey,
+        },
+      },
+      middlewares: {
+        [redirectMiddleware]: {
+          redirectScheme: {
+            scheme: 'https',
+            permanent: true,
+          },
         },
       },
       services: {
@@ -116,6 +131,24 @@ export function registerSynapseWithTraefik(hostPort: number): void {
 
   atomicWrite(configPath, yaml.stringify(config));
   console.log(`Registered Synapse at ${hostname} -> localhost:${hostPort}`);
+  kickTraefikIfNeeded();
+}
+
+// Bounce Traefik on macOS after a config write — Docker Desktop's bind
+// mounts don't propagate inotify, and Traefik v3 file provider has no
+// polling option. See dev-service-registry.ts for the full rationale.
+function kickTraefikIfNeeded(): void {
+  if (process.platform !== 'darwin') return;
+  let { spawn } = require('child_process') as typeof import('child_process');
+  let child = spawn('docker', ['restart', 'boxel-traefik'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  child.on('error', () => {
+    // Docker not running or container missing — readiness probes
+    // through Traefik will surface the underlying problem.
+  });
+  child.unref();
 }
 
 export function deregisterSynapseFromTraefik(): void {

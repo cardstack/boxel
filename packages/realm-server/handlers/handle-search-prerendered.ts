@@ -60,12 +60,20 @@ export default function handleSearchPrerendered(opts: {
       cardUrls: parsed.cardUrls,
       renderType: parsed.renderType,
     };
+    // `consumingRealm` is read unconditionally — even when the
+    // job-scoped search cache is disabled, `resolveRealmsForFederatedRequest`
+    // uses it to scope CS-11259's self-mount fast-path. The cache gate
+    // below ANDs it with `searchCache && jobId` to decide cacheability.
+    let consumingRealm = sanitizeConsumingRealmHeader(
+      ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
+    );
     // Lazy-mount inside runSearch so cache hits (304 / cached body)
     // skip the lazy-mount work entirely.
     let runSearch = async () => {
       let realmInstances = await resolveRealmsForFederatedRequest(
         reconciler,
         realmList,
+        { consumingRealm },
       );
       return JSON.stringify(
         await searchPrerenderedRealms(
@@ -101,9 +109,6 @@ export default function handleSearchPrerendered(opts: {
     // results across an authorization boundary.
     let jobId = searchCache
       ? sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER))
-      : null;
-    let consumingRealm = searchCache
-      ? sanitizeConsumingRealmHeader(ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER))
       : null;
     let cacheable = searchCache && jobId && consumingRealm;
 

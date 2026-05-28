@@ -769,6 +769,100 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'owner-with-broken-pet.gts': `
+                import { CardDef, field, contains, linksTo, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPet extends CardDef {
+                  static displayName = "Owner With Broken Pet";
+                  @field name = contains(StringField);
+                  @field pet = linksTo(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#if @model.pet}}{{@model.pet.name}}{{/if}}</template>
+                  }
+                }
+              `,
+              // Links to ./missing-pet, which does not exist — the lazy load
+              // 404s and the prerender surfaces a not-found error for the card.
+              'owner-with-broken-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    pet: {
+                      links: {
+                        self: './missing-pet',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pet'),
+                      name: 'OwnerWithBrokenPet',
+                    },
+                  },
+                },
+              },
+              'owner-with-broken-pets.gts': `
+                import { CardDef, field, contains, linksToMany, StringField, Component } from 'https://cardstack.com/base/card-api';
+                export class Pet extends CardDef {
+                  static displayName = "Pet";
+                  @field name = contains(StringField);
+                }
+                export class OwnerWithBrokenPets extends CardDef {
+                  static displayName = "Owner With Broken Pets";
+                  @field name = contains(StringField);
+                  @field pets = linksToMany(Pet);
+                  static isolated = class extends Component<typeof this> {
+                    <template>{{@model.name}}{{#each @model.pets as |pet|}}{{#if pet}}{{pet.name}}{{/if}}{{/each}}</template>
+                  }
+                }
+              `,
+              'real-pet.json': {
+                data: {
+                  attributes: {
+                    name: 'Real Pet',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'Pet',
+                    },
+                  },
+                },
+              },
+              // One present element (./real-pet) and one broken element
+              // (./missing-pet-2, which does not exist): the good slot loads
+              // while the broken slot 404s, and the prerender surfaces a
+              // not-found error for the card.
+              'owner-with-broken-pets.json': {
+                data: {
+                  attributes: {
+                    name: 'Owner',
+                  },
+                  relationships: {
+                    'pets.0': {
+                      links: {
+                        self: './real-pet',
+                      },
+                    },
+                    'pets.1': {
+                      links: {
+                        self: './missing-pet-2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: rri('./owner-with-broken-pets'),
+                      name: 'OwnerWithBrokenPets',
+                    },
+                  },
+                },
+              },
               'rejects.gts': `
               import { CardDef, Component } from 'https://cardstack.com/base/card-api';
               export class Rejects extends CardDef {
@@ -1297,6 +1391,68 @@ module(basename(__filename), function () {
         );
       });
 
+      test('card prerender captures a broken linksTo via the relationship scan', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pet.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'prerender reports an error for the broken linksTo',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          404,
+          'a missing link target surfaces as 404',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('missing-pet'),
+          `error message names the missing link target, got: ${result.response.error?.error.message}`,
+        );
+        let deps = result.response.error?.error.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet')),
+          `deps include the broken link reference, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
+      test('card prerender captures a broken linksToMany element via the relationship scan', async function (assert) {
+        let cardURL = `${realmURL}owner-with-broken-pets.json`;
+
+        let result = await prerenderCard(prerenderer, {
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: cardURL,
+          auth: auth(),
+        });
+
+        assert.ok(
+          result.response.error,
+          'prerender reports an error for the broken linksToMany element',
+        );
+        assert.strictEqual(
+          result.response.error?.error.status,
+          404,
+          'a missing element target surfaces as 404',
+        );
+        assert.ok(
+          result.response.error?.error.message?.includes('missing-pet-2'),
+          `error message names the missing element target, got: ${result.response.error?.error.message}`,
+        );
+        let deps = result.response.error?.error.deps ?? [];
+        assert.ok(
+          deps.some((dep) => dep.includes('missing-pet-2')),
+          `deps include the broken element reference, got: ${JSON.stringify(deps)}`,
+        );
+      });
+
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 
@@ -1809,7 +1965,7 @@ module(basename(__filename), function () {
         );
       });
 
-      test('card prerender waits for query fallback search and nested relationship loads', async function (assert) {
+      test('card prerender resolves query fallback via per-URL GETs and renders nested relationships', async function (assert) {
         const cardURL = `${realmURL}directory-ops`;
         let realmServerPatch =
           installRealmServerAssertOwnRealmServerBypassPatch();
@@ -1824,9 +1980,17 @@ module(basename(__filename), function () {
           });
 
           assert.notOk(result.response.error, 'prerender succeeds');
+          // Source-mode instance loads (the prerender's contract) leave
+          // `relationships.{queryField}.data` empty in every fetched
+          // doc, so each query-backed field still fires a live
+          // `_federated-search` to populate. The PR's win lands on the
+          // *response side*: each search returns `data` + IDs but stops
+          // short of expanding the linked resources into `included[]`,
+          // so per-search payloads drop by ~10-60×. Track the search
+          // count to guard against a regression in either direction.
           assert.true(
             delayedSearchPatch.getRequestCount() > 0,
-            'fallback _search requests occurred and were delayed',
+            `prerender ran query-backed fallback _search calls (raw-source mode does not carry pre-resolved IDs): count=${delayedSearchPatch.getRequestCount()}`,
           );
 
           let isolatedHTML = cleanWhiteSpace(
@@ -2173,8 +2337,8 @@ module(basename(__filename), function () {
           'search doc includes name',
         );
         assert.ok(
-          result.response.deps.includes(`${baseRealm.url}file-api`),
-          'deps include base file-api module',
+          result.response.deps.includes(`${baseRealm.url}card-api`),
+          'deps include base card-api module (where FileDef is defined)',
         );
         assert.notOk(
           result.response.deps.includes(fileURL),
@@ -3953,7 +4117,7 @@ module(basename(__filename), function () {
                   },
                 },
               },
-              // A card that fires the boxel-render-error event (handled by the prerender route)
+              // A card that throws during render (handled by the prerender route)
               // and then blocks the event loop long enough that Ember health probe times out,
               // causing data-prerender-status to be set to 'unusable' by the error handler without
               // transitioning to the render-error route (so nothing overwrites our dataset).

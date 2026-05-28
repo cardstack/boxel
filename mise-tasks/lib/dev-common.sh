@@ -47,9 +47,17 @@ PGROUP_GRACE_SECS=2
 # parent terminal killed) that prevented the trap from firing. Default
 # location prefers $XDG_RUNTIME_DIR (typically /run/user/$UID, mode 0700,
 # per-user) over /tmp (world-writable sticky) so the file can't be
-# symlink-targeted by another local user. Override via BOXEL_DEV_ALL_PIDFILE
-# for parallel dev sessions / tests.
-PIDFILE="${BOXEL_DEV_ALL_PIDFILE:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all.pids}"
+# symlink-targeted by another local user.
+#
+# The `$$` suffix makes the pidfile unique to *this* dev-all session —
+# without it, a Ctrl-C + restart cycle would race: dev-all #2's
+# `init_pidfile` wipes the shared file and writes #2's pgroup leaders,
+# then dev-all #1's still-watching guardian fires and reads #2's
+# leaders as if they were its own, sending SIGTERM/SIGKILL to #2's
+# services. The shared-path heritage is what caused vite-serve to be
+# `Killed: 9` on dev-all restart. Override via BOXEL_DEV_ALL_PIDFILE
+# for explicit harnesses that need a known path.
+PIDFILE="${BOXEL_DEV_ALL_PIDFILE:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-$$.pids}"
 
 # Reset the pidfile at script start. Stale pids from a previous run would
 # either be reused by unrelated processes or simply gone, both bad. `rm -f`
@@ -106,7 +114,13 @@ kill_from_pidfile() {
 #
 # Implementation notes:
 #   - `setsid` puts the guardian in its own session so it doesn't get
-#     SIGHUP'd when dev-all's session dies.
+#     SIGHUP'd when dev-all's session dies. macOS doesn't ship setsid in
+#     the base system (it's a Linux util-linux tool); we fall through to
+#     plain `&` + `disown` + nohup-style ignored SIGHUP. The trap path is
+#     still the primary cleanup signal — this guardian is a safety net
+#     that only matters when the trap is denied a chance to fire — so
+#     the marginal session-isolation guarantee setsid adds isn't worth
+#     a hard dependency on util-linux.
 #   - stdin/stdout/stderr are redirected away from the terminal so the
 #     guardian can survive after the user's shell exits.
 #   - Output goes to a log file so the user can audit what fired.
@@ -120,7 +134,16 @@ spawn_cleanup_guardian() {
   _scg_parent_pid="$1"
   _scg_log="${BOXEL_DEV_ALL_GUARDIAN_LOG:-${XDG_RUNTIME_DIR:-/tmp}/boxel-dev-all-guardian.log}"
   _scg_lib="$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
-  setsid sh -c "
+  if command -v setsid >/dev/null 2>&1; then
+    _scg_session_prefix="setsid"
+  else
+    # macOS fallback: no session-leader detachment, but `trap '' HUP` in
+    # the guardian body makes SIGHUP a no-op so a terminal hangup on the
+    # parent shell doesn't kill us before cleanup runs.
+    _scg_session_prefix=""
+  fi
+  $_scg_session_prefix sh -c "
+    trap '' HUP
     exec </dev/null >>'$_scg_log' 2>&1
     echo \"[guardian \$(date +%H:%M:%S)] watching dev-all pid $_scg_parent_pid (pidfile $PIDFILE)\"
     while kill -0 $_scg_parent_pid 2>/dev/null; do
@@ -253,6 +276,16 @@ _kill_tree_walk() {
 #     but the X-Boxel-Assume-User CORS header in the icons invocation is
 #     Boxel-specific and won't appear in unrelated http-server instances.
 sweep_orphaned_services() {
+  # If another dev-all/dev session is alive, the regex sweep would
+  # false-positive match its child processes (vite-serve, realm-server,
+  # workers, etc.) and SIGKILL them — argv patterns can't distinguish
+  # sessions. Skip in that case and let the other session's own
+  # guardian + per-session pidfile handle its own subtree on exit.
+  # `mise run kill-all` opts in via SWEEP_FORCE=1 when the user is
+  # explicitly trying to nuke everything regardless.
+  if [ -z "${SWEEP_FORCE:-}" ] && pgrep -f '/mise-tasks/dev-all$|/mise-tasks/dev$' >/dev/null 2>&1; then
+    return 0
+  fi
   REPO_ROOT_RE="$(printf '%s' "$REPO_ROOT" | sed -E 's/[][\\.*^$+?(){}|]/\\&/g')"
   TSNODE_RE="${REPO_ROOT_RE}/packages/realm-server/node_modules.*--transpileOnly (worker|main|prerender)"
   VITE_SERVE_RE="scripts/vite-serve\.js"

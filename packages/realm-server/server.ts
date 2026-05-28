@@ -97,6 +97,15 @@ export function createListener(
   log: ReturnType<typeof logger>,
   app: { callback: Koa['callback'] },
 ): { server: RealmHttpServer; proto: 'http' | 'https/h2' } {
+  // Env mode (Traefik in front): force plain HTTP regardless of
+  // whether the TLS env vars are set. They may have leaked in from a
+  // parent shell that ran env-vars.sh in standard mode before
+  // BOXEL_ENVIRONMENT was exported, which would otherwise make us
+  // terminate TLS while Traefik plain-HTTP-proxies to us — every
+  // request then fails with "HTTP/0.9 when not allowed" → 502.
+  if (process.env.BOXEL_ENVIRONMENT) {
+    return { server: http.createServer(app.callback()), proto: 'http' };
+  }
   let certFile = process.env[TLS_CERT_FILE_ENV];
   let keyFile = process.env[TLS_KEY_FILE_ENV];
   if (!certFile || !keyFile) {
@@ -268,6 +277,8 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
+  private matrixAdminUsername: string | undefined;
+  private matrixAdminPassword: string | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -298,6 +309,8 @@ export class RealmServer {
     assetsURL,
     getIndexHTML,
     matrixRegistrationSecret,
+    matrixAdminUsername,
+    matrixAdminPassword,
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
@@ -317,6 +330,8 @@ export class RealmServer {
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
+    matrixAdminUsername?: string;
+    matrixAdminPassword?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     enableFileWatcher?: boolean;
     domainsForPublishedRealms?: {
@@ -353,6 +368,8 @@ export class RealmServer {
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
+    this.matrixAdminUsername = matrixAdminUsername;
+    this.matrixAdminPassword = matrixAdminPassword;
     this.getRegistrationSecret = getRegistrationSecret;
     this.domainsForPublishedRealms = domainsForPublishedRealms;
     // Pass-by-reference: handlers and the reconciler both mutate this
@@ -456,6 +473,8 @@ export class RealmServer {
           assetsURL: this.assetsURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
+          matrixAdminUsername: this.matrixAdminUsername,
+          matrixAdminPassword: this.matrixAdminPassword,
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reconciler: this.reconciler,
@@ -528,9 +547,62 @@ export class RealmServer {
     return [...this.realms];
   }
 
+  // Test-only accessor for the on-disk root that source/published realm
+  // disk_ids resolve under. Exposed so download-realm tests can stage a
+  // source realm at <realmsRootPath>/<disk_id> + matching realm_registry
+  // row to exercise the post-restart code path (CS-11270) without
+  // spinning up a full RealmServer for a second realm.
+  get testingOnlyRealmsRootPath() {
+    return this.realmsRootPath;
+  }
+
+  // Test-only accessor for the reconciler. Exposed so realm-auth-test
+  // can inspect knownByUrl / mounted as preconditions and assert that
+  // _realm-auth does not cold-mount during request handling.
+  get testingOnlyReconciler() {
+    return this.reconciler;
+  }
+
   testingOnlyUnmountRealms() {
     for (let realm of this.realms) {
       this.virtualNetwork.unmount(realm.handle);
+    }
+  }
+
+  // Drop a realm from this process's in-memory view to simulate a
+  // post-restart state, without tearing down its disk mount, indexer,
+  // or matrix client. Two regression-test shapes need different
+  // amounts of eviction:
+  //
+  //   - Default (keepMounted: false) — remove from BOTH `realms[]` and
+  //     `reconciler.mounted`, leaving only the realm_registry row /
+  //     `knownByUrl` entry. This is the true post-restart state for a
+  //     non-pinned realm: a handler that wants the realm must resolve
+  //     it from the registry (and would cold-mount via lookupOrMount
+  //     if it actually needs a started Realm). realm-auth-test uses
+  //     this to prove `_realm-auth` issues a JWT from registry
+  //     presence alone, without mounting.
+  //
+  //   - keepMounted: true — remove from `realms[]` only, leaving the
+  //     realm in `reconciler.mounted`. Use this for handlers that DO
+  //     route through `reconciler.lookupOrMount` (e.g. the
+  //     `_grafana-reindex` path): the test proves the handler consults
+  //     the reconciler rather than iterating `realms[]`, while the
+  //     mounted fast-path keeps `lookupOrMount` from constructing a
+  //     second `Realm` against the already-mounted disk (which would
+  //     race on workers / matrix / queue subscribers). The genuine
+  //     cold-mount path is covered against the reconciler directly in
+  //     lazy-mount-test.ts.
+  testingOnlyEvictRealmFromRealmsList(
+    url: string,
+    opts?: { keepMounted?: boolean },
+  ): void {
+    let idx = this.realms.findIndex((r) => r.url === url);
+    if (idx !== -1) {
+      this.realms.splice(idx, 1);
+    }
+    if (!opts?.keepMounted) {
+      this.reconciler.mounted.delete(url);
     }
   }
 

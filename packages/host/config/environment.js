@@ -62,6 +62,7 @@ function environmentDefaults() {
       realmServerURL: 'https://localhost:4201/',
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
+      matrixURL: 'http://localhost:8008',
       baseRealmURL: 'https://localhost:4201/base/',
       catalogRealmURL: 'https://localhost:4201/catalog/',
       skillsRealmURL: 'https://localhost:4201/skills/',
@@ -70,14 +71,22 @@ function environmentDefaults() {
   }
   let slug = getEnvSlug();
   let realmHost = `realm-server.${slug}.localhost`;
+  // Env-mode services sit behind Traefik, which terminates TLS on :443
+  // with the mkcert leaf and 308-redirects :80 to https. The host page
+  // is loaded over https, so the realm URLs the host bundle fetches
+  // must match — http URLs trigger mixed-content blocking, and the
+  // CORS preflight refuses to follow Traefik's http→https redirect
+  // ("Redirect is not allowed for a preflight request"). Mirrors the
+  // standard-mode `https://localhost:4201` defaults above.
   return {
-    realmServerURL: `http://${realmHost}/`,
+    realmServerURL: `https://${realmHost}/`,
     realmHost,
-    iconsURL: `http://icons.${slug}.localhost`,
-    baseRealmURL: `http://${realmHost}/base/`,
-    catalogRealmURL: `http://${realmHost}/catalog/`,
-    skillsRealmURL: `http://${realmHost}/skills/`,
-    openRouterRealmURL: `http://${realmHost}/openrouter/`,
+    iconsURL: `https://icons.${slug}.localhost`,
+    matrixURL: `https://matrix.${slug}.localhost`,
+    baseRealmURL: `https://${realmHost}/base/`,
+    catalogRealmURL: `https://${realmHost}/catalog/`,
+    skillsRealmURL: `https://${realmHost}/skills/`,
+    openRouterRealmURL: `https://${realmHost}/openrouter/`,
   };
 }
 
@@ -108,7 +117,13 @@ module.exports = function (environment) {
     },
     logLevels:
       process.env.LOG_LEVELS || '*=info,matrix=info,realm:events=debug',
-    matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    // In environment mode, use computed Traefik hostname (not env var,
+    // which may be stale from mise's shell-activation cache in standard
+    // mode and would otherwise force an http:// matrix URL onto an
+    // https:// host page).
+    matrixURL: process.env.BOXEL_ENVIRONMENT
+      ? defaults.matrixURL
+      : process.env.MATRIX_URL || defaults.matrixURL,
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,

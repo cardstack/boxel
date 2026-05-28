@@ -151,12 +151,13 @@ export async function createRealm(
     });
 
     // CS-10053: publishable lives in realm_metadata now, not the
-    // sidecar. The legacy .realm.json is no longer written here;
-    // hostHome/interactHome (still sidecar-owned until CS-10055)
-    // are absent on a fresh realm and don't need a placeholder file.
-    // Reset all mutable metadata columns on conflict so a stale row
-    // (e.g. left over from a previous realm at the same URL whose
-    // delete didn't clean up) doesn't bleed into the new realm.
+    // sidecar. The legacy .realm.json is no longer written here, and
+    // a fresh realm has no hostRoutingRules / hostHome to seed (host
+    // mode picks them up from the realm.json card once an operator
+    // sets one via /_config). Reset all mutable metadata columns on
+    // conflict so a stale row (e.g. left over from a previous realm
+    // at the same URL whose delete didn't clean up) doesn't bleed
+    // into the new realm.
     await query(dbAdapter, [
       `INSERT INTO realm_metadata (url, publishable, show_as_catalog) VALUES (`,
       param(url),

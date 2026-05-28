@@ -91,6 +91,17 @@ type Options = {
   // missed `type:` filter resolution inherits the originating
   // priority. Defaults to 0 when absent.
   priority?: number;
+  // When true, `loadLinks` populates `relationships.{field}.data` for
+  // query-backed `linksTo` / `linksToMany` fields but does NOT push
+  // the linked resources into `included[]`. Static linksTo / linksToMany
+  // still expand transitively. Set by the realm-server handlers when
+  // the request originates inside a prerender — the caller can resolve
+  // the listed IDs via per-URL fetches, and the eager closure is a
+  // wasted round-trip in that context. The umbrella relationship
+  // carries `links.search` only when written by `applyQueryResults`,
+  // so that key is the per-field "is this query-backed?" signal at
+  // follow time.
+  skipQueryBackedExpansion?: boolean;
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -527,6 +538,8 @@ export class RealmIndexQueryEngine {
     return {
       url: file.canonicalURL,
       html,
+      ...(file.displayNames?.[0] ? { cardType: file.displayNames[0] } : {}),
+      ...(file.iconHtml ? { iconHtml: file.iconHtml } : {}),
       ...(usedRenderType ? { usedRenderType } : {}),
     };
   }
@@ -1269,6 +1282,31 @@ export class RealmIndexQueryEngine {
           : opts?.linkFields
             ? { ...opts, linkFields: undefined }
             : opts;
+        if (activeOpts?.skipQueryBackedExpansion && resource.relationships) {
+          // Strip `fieldName.N` sub-entries from query-backed fields
+          // before traversal: the host deserializer treats every
+          // per-item entry as a follow-able relationship and expects
+          // its target in `included[]`, so leaving them on the wire
+          // alongside an empty `included[]` produces orphan-link
+          // errors. The umbrella entry (`fieldName`) stays — it
+          // carries `links.search` and `data: [array of IDs]` for the
+          // host's per-URL hydration path.
+          for (let fieldName of Object.keys(resource.relationships)) {
+            let umbrella = resource.relationships[fieldName];
+            if (
+              !umbrella ||
+              Array.isArray(umbrella) ||
+              !umbrella.links?.search
+            ) {
+              continue;
+            }
+            for (let key of Object.keys(resource.relationships)) {
+              if (key !== fieldName && key.startsWith(`${fieldName}.`)) {
+                delete resource.relationships[key];
+              }
+            }
+          }
+        }
         let processed = new Set<string>();
 
         for (let entry of relationshipEntries(resource.relationships)) {
@@ -1281,6 +1319,24 @@ export class RealmIndexQueryEngine {
             !activeOpts.linkFields.includes(fieldName)
           ) {
             continue;
+          }
+          if (activeOpts?.skipQueryBackedExpansion) {
+            // applyQueryResults is the only writer of
+            // `umbrella.links.search`, so its presence on the
+            // top-level field umbrella means this field is
+            // query-backed. Skip all `${fieldName}` and
+            // `${fieldName}.N` entries in this case — they're
+            // populated and serialized as relationship data, but the
+            // linked resources are not added to `included[]`. The
+            // prerender caller materializes them via per-URL fetches.
+            let umbrella = resource.relationships?.[fieldName];
+            if (
+              umbrella &&
+              !Array.isArray(umbrella) &&
+              umbrella.links?.search
+            ) {
+              continue;
+            }
           }
           if (!relationship.links?.self) {
             continue;

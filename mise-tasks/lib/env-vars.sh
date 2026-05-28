@@ -47,6 +47,16 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export ENV_SLUG
   export ENV_MODE=true
 
+  # Drop standard-mode TLS env vars if they leaked in from a parent
+  # shell or a prior mise activation. In env mode Traefik terminates
+  # TLS in front of plain-HTTP services; leaving these set tells vite
+  # and the realm-server to terminate TLS themselves, so Traefik then
+  # speaks HTTP to a TLS-expecting upstream and every request fails
+  # with "HTTP/0.9 when not allowed". NODE_EXTRA_CA_CERTS is kept —
+  # Node clients still need to trust Traefik's mkcert leaf.
+  unset REALM_SERVER_TLS_CERT_FILE
+  unset REALM_SERVER_TLS_KEY_FILE
+
   # Service URLs (Traefik hostnames). Traefik terminates TLS on :443
   # with the mkcert leaf (`infra:ensure-dev-cert` provisioned;
   # traefik/dynamic/tls.yml references). Plain :80 routes 308-redirect
@@ -222,4 +232,27 @@ else
       export PUPPETEER_EXECUTABLE_PATH="/Applications/Chromium.app/Contents/MacOS/Chromium"
     fi
   fi
+fi
+
+# Trust the mkcert root CA in Node clients regardless of env-mode vs
+# standard mode. Both modes serve the same mkcert leaf — standard
+# mode via the realm-server's own h2 dispatcher, env mode via Traefik
+# in front of plain-HTTP services — so any Node-side fetch to
+# `https://host/matrix/realm-server.<...>.localhost` needs the CA
+# trusted to pass `tls.checkServerIdentity`. Without this, env-mode
+# realm-server's startup `getIndexHTML()` smoke-test fetch fails with
+# `TypeError: fetch failed` and `process.exit(-2)` — the visible
+# symptom is realm-server crash-looping and every public URL 502-ing.
+if command -v mkcert >/dev/null 2>&1; then
+  _BOXEL_MKCERT_CAROOT="$(mkcert -CAROOT 2>/dev/null || true)"
+  if [ -n "$_BOXEL_MKCERT_CAROOT" ] && [ -f "$_BOXEL_MKCERT_CAROOT/rootCA.pem" ]; then
+    # NODE_EXTRA_CA_CERTS accepts a single PEM file path (not a
+    # colon-separated list). If the dev has already pointed it at
+    # something, leave their value in place — they presumably have
+    # mkcert's CA bundled in already, or know what they're doing.
+    if [ -z "${NODE_EXTRA_CA_CERTS:-}" ]; then
+      export NODE_EXTRA_CA_CERTS="$_BOXEL_MKCERT_CAROOT/rootCA.pem"
+    fi
+  fi
+  unset _BOXEL_MKCERT_CAROOT
 fi

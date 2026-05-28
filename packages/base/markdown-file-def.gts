@@ -439,6 +439,7 @@ class Head extends Component<typeof MarkdownDef> {
 
 export class MarkdownDef extends FileDef {
   static displayName = 'Markdown';
+  static icon = MarkdownIcon;
   static acceptTypes = '.md,.markdown';
 
   @field title = contains(StringField);

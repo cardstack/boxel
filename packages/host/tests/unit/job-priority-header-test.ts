@@ -10,7 +10,7 @@ import { resolveOutboundJobPriority } from '@cardstack/host/services/store';
 // extracted so its policy can be pinned without acceptance-test
 // scaffolding.
 //
-// Two states gated by `__boxelDuringPrerender`:
+// Two states gated by `__boxelRenderContext`:
 //   - inside prerender → forward (preserve 0)
 //   - outside prerender → user-initiated (10) by default
 module('Unit | job-priority-header | resolveOutboundJobPriority', function () {
@@ -25,7 +25,7 @@ module('Unit | job-priority-header | resolveOutboundJobPriority', function () {
       );
     });
 
-    test('returns userInitiatedPriority when __boxelDuringPrerender is false', function (assert) {
+    test('returns userInitiatedPriority when __boxelRenderContext is false', function (assert) {
       assert.strictEqual(
         resolveOutboundJobPriority({
           duringPrerender: false,
@@ -56,8 +56,8 @@ module('Unit | job-priority-header | resolveOutboundJobPriority', function () {
       );
     });
 
-    test('rejects a truthy but non-boolean __boxelDuringPrerender — uses strict === true', function (assert) {
-      // If `__boxelDuringPrerender` somehow ended up as a stringy
+    test('rejects a truthy but non-boolean __boxelRenderContext — uses strict === true', function (assert) {
+      // If `__boxelRenderContext` somehow ended up as a stringy
       // truthy value (e.g. set by a future code path that didn't
       // coerce), the policy must NOT silently flip to "forward 0";
       // a real user-facing fetch would then queue behind background

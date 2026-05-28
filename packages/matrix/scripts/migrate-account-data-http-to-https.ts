@@ -33,17 +33,32 @@ const REVERSE = process.argv.includes('--reverse');
 const FROM_SCHEME = REVERSE ? 'https' : 'http';
 const TO_SCHEME = REVERSE ? 'http' : 'https';
 
-// Only flip the three known localhost realm-server canonicals (mirrors
-// the postgres migration `1779100257124_canonical-url-http-to-https.js`,
-// which covers :4201, :4202, and :4205). Production / staging realm URLs
-// are real hostnames and would never appear in a local synapse, so a
-// broader regex would just create the opportunity to corrupt unrelated
-// data.
-const URL_PREFIXES_TO_FLIP = [
-  `${FROM_SCHEME}://localhost:4201/`,
-  `${FROM_SCHEME}://localhost:4202/`,
-  `${FROM_SCHEME}://localhost:4205/`,
-];
+// Match the local realm-server canonicals — both the standard-mode
+// `localhost:42XX` ports (mirrors the postgres migration
+// `1779100257124_canonical-url-http-to-https.js`, which covers :4201,
+// :4202, and :4205) and the env-mode Traefik hostnames under
+// `*.localhost` (e.g. `realm-server.<slug>.localhost`,
+// `icons.<slug>.localhost`). Production / staging realm URLs are real
+// hostnames and would never appear in a local synapse, so the
+// `.localhost` tail keeps the touch-set scoped to local dev data.
+const STANDARD_MODE_PORTS = new Set(['4201', '4202', '4205']);
+
+function shouldFlipScheme(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== `${FROM_SCHEME}:`) return false;
+  if (parsed.hostname === 'localhost') {
+    return STANDARD_MODE_PORTS.has(parsed.port);
+  }
+  // Env-mode Traefik hostnames: any `<...>.localhost`. RFC 6761
+  // reserves `.localhost` as loopback, so this can't false-match a
+  // real production hostname.
+  return parsed.hostname.endsWith('.localhost');
+}
 
 interface LoginResponse {
   access_token: string;
@@ -177,11 +192,9 @@ async function putRealmsAccountData(
 function rewriteURLs(urls: string[]): { urls: string[]; changedCount: number } {
   let changedCount = 0;
   let rewritten = urls.map((url) => {
-    for (let prefix of URL_PREFIXES_TO_FLIP) {
-      if (url.startsWith(prefix)) {
-        changedCount++;
-        return `${TO_SCHEME}://${url.slice(`${FROM_SCHEME}://`.length)}`;
-      }
+    if (shouldFlipScheme(url)) {
+      changedCount++;
+      return `${TO_SCHEME}://${url.slice(`${FROM_SCHEME}://`.length)}`;
     }
     return url;
   });

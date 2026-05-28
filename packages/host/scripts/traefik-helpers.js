@@ -6,18 +6,14 @@
 
 const path = require('path');
 const fs = require('fs');
+const { sanitizeSlug } = require('../../../scripts/env-slug.js');
 
 function getEnvSlug() {
-  // Prefer ENV_SLUG from mise's env-vars.sh (canonical: scripts/env-slug.sh);
-  // fall back to computing it for non-mise contexts.
+  // Prefer ENV_SLUG from mise's env-vars.sh (already pre-sanitized by
+  // scripts/env-slug.sh); fall back to sanitizing BOXEL_ENVIRONMENT
+  // directly for non-mise contexts.
   if (process.env.ENV_SLUG) return process.env.ENV_SLUG;
-  const raw = process.env.BOXEL_ENVIRONMENT || '';
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  return sanitizeSlug(process.env.BOXEL_ENVIRONMENT);
 }
 
 function getTraefikDynamicDir() {
@@ -75,6 +71,25 @@ function registerWithTraefik(slug, hostname, port) {
   const tmpPath = configPath + '.tmp';
   fs.writeFileSync(tmpPath, entry, 'utf-8');
   fs.renameSync(tmpPath, configPath);
+  kickTraefikIfNeeded();
+}
+
+// Bounce Traefik on macOS after a config write — see the matching
+// helper in packages/realm-server/lib/dev-service-registry.ts for the
+// rationale (Docker Desktop's bind mounts don't propagate inotify,
+// and Traefik v3 file provider has no polling option).
+function kickTraefikIfNeeded() {
+  if (process.platform !== 'darwin') return;
+  const { spawn } = require('child_process');
+  const child = spawn('docker', ['restart', 'boxel-traefik'], {
+    stdio: 'ignore',
+    detached: true,
+  });
+  child.on('error', () => {
+    // Docker not running, container missing, etc. — readiness probes
+    // through Traefik will surface the underlying problem.
+  });
+  child.unref();
 }
 
 module.exports = { getEnvSlug, getTraefikDynamicDir, registerWithTraefik };

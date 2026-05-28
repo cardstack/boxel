@@ -61,6 +61,11 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
             message: string;
             status?: number;
           }>;
+          // The IDs the parent's `relationships.{field}.data` named.
+          // Used when `cards` is empty because the server skipped the
+          // expansion in prerender mode — the resource fetches each
+          // ID by URL instead of running a live re-query.
+          cardURLs?: string[];
         }
       | undefined;
     dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
@@ -228,21 +233,25 @@ export class SearchResource<
       this.#log.info(
         `apply seed for search resource (one-time); count=${seed.cards.length}; searchURL=${seed.searchURL}`,
       );
-      // Non-live callers can treat the seed as authoritative ONLY when
-      // it actually carries content. Two signals say "authoritative":
+      // Non-live (prerender) callers treat the parent doc's
+      // serialized `relationships.{field}.data` as authoritative —
+      // the indexer just wrote it. Any of:
       //   - seed.cards.length > 0: the parent serialized resolved
-      //     instances in this document; we have the answer.
-      //   - seed.searchURL is set: query-field capture in
-      //     `query-field-support.ts::captureQueryFieldSeedData` only
-      //     populates `seedSearchURL` when the relationship is fully
-      //     resolved (its `shouldTreatEmptySeedAsUnresolved` branch
-      //     leaves it `null` for empty seeds that need a fallback
-      //     search). A non-null URL means the IDs are known.
-      // An empty seed with no searchURL is the explicit "unresolved,
-      // please run the client-side fallback query" signal — let it
-      // fall through to perform() even in non-live mode.
+      //     instances in this document.
+      //   - seed.cardURLs is defined: captureQueryFieldSeedData saw
+      //     the parent's relationship data array (even if empty) and
+      //     captured the IDs. An empty array means "no items" — the
+      //     parent doc says this field has no entries — and is just
+      //     as authoritative as a populated one in prerender.
+      //   - seed.searchURL is set: legacy authoritative signal (the
+      //     parent's `links.search` only ships when the relationship
+      //     is fully resolved).
+      // Live-SPA callers (`isLive: true`) ignore this branch entirely
+      // and always perform() to pick up concurrent writes.
       let seedIsAuthoritative =
-        seed.cards.length > 0 || Boolean(seed.searchURL);
+        seed.cards.length > 0 ||
+        seed.cardURLs !== undefined ||
+        Boolean(seed.searchURL);
       if (!isLive && seedIsAuthoritative) {
         // The parent document already serialized the relationship set
         // we are resolving, so a re-query would only re-derive the
@@ -418,9 +427,39 @@ export class SearchResource<
         'search-resource:applySeed',
       );
       await Promise.resolve();
-      this._meta = seed.meta ?? { page: { total: seed.cards.length } };
+      // When the parent doc named relationship IDs in
+      // `relationships.{field}.data` but didn't include the resolved
+      // cards in `included` (the prerender-mode server skip), load
+      // each named ID by URL instead of running a live re-query.
+      // Per-URL GETs are stable (deterministic by URL) — the realm
+      // server's instance-GET in prerender mode also skips
+      // query-backed expansion, so each GET is cheap.
+      let cards = seed.cards;
+      if (cards.length === 0 && seed.cardURLs && seed.cardURLs.length > 0) {
+        let results = await Promise.all(
+          seed.cardURLs.map(async (url) => {
+            try {
+              return await this.runtimeStore.get(url, {
+                dependencyTrackingContext,
+              });
+            } catch (err) {
+              console.warn(
+                `SearchResource: failed to load seed cardURL ${url}`,
+                err,
+              );
+              return undefined;
+            }
+          }),
+        );
+        cards = results.filter((r) => {
+          if (r == null) return false;
+          let type = (r as unknown as { type?: string })?.type;
+          return type !== 'card-error';
+        }) as unknown as T[];
+      }
+      this._meta = seed.meta ?? { page: { total: cards.length } };
       this._errors = seed.errors;
-      await this.updateInstances(seed.cards, dependencyTrackingContext);
+      await this.updateInstances(cards, dependencyTrackingContext);
     },
   );
 
@@ -488,6 +527,7 @@ export function getSearch<T extends CardDef | FileDef = CardDef>(
             message: string;
             status?: number;
           }>;
+          cardURLs?: string[];
         }
       | undefined;
     dependencyTracking?: RuntimeDependencyTrackingContext | undefined;

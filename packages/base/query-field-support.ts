@@ -34,6 +34,14 @@ import { initSharedState } from './shared-state';
 interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
+  // When the parent doc carries `relationships.{field}.data` IDs but
+  // no resolved cards in `included` (the server's
+  // skipQueryBackedExpansion path), captureQueryFieldSeedData stashes
+  // the IDs here. The SearchResource consumes them in prerender mode
+  // to load each card by URL instead of running a live re-query —
+  // turning the cascade of `_federated-search` QUERY calls into a
+  // batch of stable per-card GETs.
+  seedCardURLs?: string[];
   seedRealms?: string[];
   seedErrors?: Array<{
     realm: string;
@@ -147,6 +155,7 @@ export function ensureQueryFieldSearchResource(
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
+            cardURLs: fieldState?.seedCardURLs,
           }
         : undefined,
     },
@@ -357,6 +366,46 @@ export function captureQueryFieldSeedData(
   let shouldTreatEmptySeedAsUnresolved =
     fieldState.seedRecords.length === 0 &&
     (seedComesFromSearch || relationshipHasUnhydratedTargets);
+  // Capture the relationship's serialized IDs as a fallback the
+  // SearchResource consumes when the parent doc didn't include the
+  // resolved cards — the prerender-mode server skip leaves
+  // `relationship.data` populated but `included` empty, and the host
+  // materializes each listed ID via a per-URL GET instead of running
+  // a live `_federated-search`.
+  //
+  // Trust the IDs whenever the umbrella carries `links.search`:
+  // `applyQueryResults` is the only writer of that key, so its
+  // presence is the unambiguous signal that the indexer (not the
+  // user's raw source file) resolved this field. The IDs in
+  // `relationship.data` are resource pointers the indexer wrote
+  // alongside `links.search`, so they're authoritative regardless
+  // of whether the document also inlined the resolved instances in
+  // `included[]` — query-backed fields on `_federated-search`
+  // responses intentionally skip that inline in prerender mode.
+  //
+  // A raw source's empty `data: []` lacks `links.search` and must
+  // NOT be treated as an authoritative empty seed — the
+  // SearchResource needs to fall through to a live query to
+  // populate the field for the first time.
+  let relationshipIsIndexerResolved = Boolean(relationship?.links?.search);
+  let seedCardURLsUntrustworthy = !relationshipIsIndexerResolved;
+  if (seedCardURLsUntrustworthy) {
+    fieldState.seedCardURLs = undefined;
+  } else if (Array.isArray(relationship?.data)) {
+    fieldState.seedCardURLs = relationship.data
+      .map((entry) => {
+        let id = (entry as { id?: unknown })?.id;
+        return typeof id === 'string' ? id : undefined;
+      })
+      .filter((id): id is string => Boolean(id));
+  } else if (
+    relationship?.data &&
+    typeof (relationship.data as { id?: unknown }).id === 'string'
+  ) {
+    fieldState.seedCardURLs = [(relationship.data as { id: string }).id];
+  } else {
+    fieldState.seedCardURLs = undefined;
+  }
   fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
     ? null
     : (relationship?.links?.search ?? null);

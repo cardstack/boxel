@@ -2550,8 +2550,8 @@ export class PagePool {
     }
     await page.evaluateOnNewDocument(() => {
       (
-        globalThis as unknown as { __boxelDuringPrerender?: boolean }
-      ).__boxelDuringPrerender = true;
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
     });
   }
 

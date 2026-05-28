@@ -108,6 +108,21 @@ export default class Overlays extends Component<OverlaySignature> {
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
 
+  // When the cursor leaves the underlying card it may still be travelling to
+  // floating chrome rendered above the card (e.g. the type-label tab in
+  // OperatorModeOverlays which sits a couple of pixels above the card's top
+  // edge). We defer the hover clear so the cursor can bridge that gap; any
+  // mouseenter on the chrome cancels the pending clear.
+  private hoverClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Subclasses opt into a hover-bridge delay by overriding this getter.
+  // The base Overlays has no floating chrome, so the default is immediate
+  // (0ms) — preserving existing immediate-clear behaviour for consumers
+  // like spec-preview and playground-panel.
+  protected get hoverClearDelayMs(): number {
+    return 0;
+  }
+
   protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
@@ -118,6 +133,12 @@ export default class Overlays extends Component<OverlaySignature> {
       floating.style.width = width + 'px';
       floating.style.height = height + 'px';
       floating.style.position = 'absolute';
+      // Mirror the underlying card's corner radius so any decorative
+      // outline / box-shadow on the overlay follows the same curve.
+      if (reference instanceof Element) {
+        floating.style.borderRadius =
+          window.getComputedStyle(reference).borderRadius;
+      }
       return {
         x: rects.reference.x,
         y: rects.reference.y,
@@ -149,6 +170,7 @@ export default class Overlays extends Component<OverlaySignature> {
         continue;
       }
       let mouseenter = (_ev: MouseEvent) => {
+        this.cancelHoverClear();
         if (this.currentlyHoveredCard === renderedCard) {
           return;
         }
@@ -159,12 +181,18 @@ export default class Overlays extends Component<OverlaySignature> {
         if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
           return;
         }
-        this.setCurrentlyHoveredCard(null);
+        this.scheduleHoverClear();
       };
       let click = (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
+        if (this.shouldSwallowCardClick()) {
+          // A subclass is currently holding chrome open (e.g. an overlay
+          // dropdown is open). This click is the outside-click that's about
+          // to dismiss that chrome — don't *also* open the underlying card.
+          return;
+        }
         this.openOrSelectCard(
           renderedCard.cardDefOrId,
           this.getFormatForCard(renderedCard),
@@ -210,6 +238,56 @@ export default class Overlays extends Component<OverlaySignature> {
     renderedCard: RenderedCardForOverlayActions | null,
   ) {
     this.currentlyHoveredCard = renderedCard;
+  }
+
+  @action
+  protected scheduleHoverClear() {
+    if (this.shouldDelayHoverClear()) {
+      return;
+    }
+    if (this.hoverClearTimer) {
+      return;
+    }
+    this.hoverClearTimer = setTimeout(() => {
+      this.hoverClearTimer = null;
+      if (this.shouldDelayHoverClear()) {
+        // A subclass began holding hover state (e.g. menu opened) while the
+        // timer was pending — re-schedule so we'll re-check after the hold
+        // lifts.
+        this.scheduleHoverClear();
+        return;
+      }
+      this.setCurrentlyHoveredCard(null);
+    }, this.hoverClearDelayMs);
+  }
+
+  @action
+  protected cancelHoverClear() {
+    if (this.hoverClearTimer) {
+      clearTimeout(this.hoverClearTimer);
+      this.hoverClearTimer = null;
+    }
+  }
+
+  /**
+   * Hook for subclasses to pin the current hover state. While this returns
+   * true, scheduleHoverClear is a no-op and any in-flight timer re-schedules
+   * itself. Use for "the cursor logically left but we don't want to dismiss
+   * the chrome yet" — e.g. a dropdown opened from the chrome is now floating
+   * in a portal outside the overlay.
+   */
+  protected shouldDelayHoverClear(): boolean {
+    return false;
+  }
+
+  /**
+   * Hook for subclasses to suppress the default card-open behavior on click.
+   * Use when the overlay has floating chrome whose outside-click dismissal
+   * shouldn't also trigger card navigation (e.g. clicking outside an open
+   * dropdown menu).
+   */
+  protected shouldSwallowCardClick(): boolean {
+    return false;
   }
 
   @action protected openOrSelectCard(
@@ -336,6 +414,10 @@ export default class Overlays extends Component<OverlaySignature> {
   private teardownBoundRenderedCards() {
     for (let [element, handlers] of this.boundRenderedCardElements) {
       this.unbindRenderedCardElement(element, handlers);
+    }
+    if (this.hoverClearTimer) {
+      clearTimeout(this.hoverClearTimer);
+      this.hoverClearTimer = null;
     }
     this.currentlyHoveredCard = null;
   }

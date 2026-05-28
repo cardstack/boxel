@@ -109,6 +109,9 @@ import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
 import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
+import BrokenLinkTemplate, {
+  type BrokenLinkFormat,
+} from './default-templates/broken-link-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
@@ -120,6 +123,7 @@ import ImageDefFittedTemplate from './default-templates/image-def-fitted';
 import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
+import ImageIcon from '@cardstack/boxel-icons/image';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -156,14 +160,19 @@ import {
   beginComputePass,
   endComputePass,
   entangleWithCardTracking,
+  getBrokenLinks,
   getDataBucket,
   getFieldDescription,
   getFieldOverrides,
   getFields,
+  getRelationship,
   getter,
   isArrayOfCardOrField,
   isCard,
   isCardOrField,
+  isLinkError,
+  isLinkNotFound,
+  isNonPresentLink,
   isNotLoadedValue,
   notifyCardTracking,
   peekAtField,
@@ -172,8 +181,12 @@ import {
   relationshipMeta,
   setFieldDescription,
   setRealmContextOnField,
+  type BrokenLinkFinding,
   type ComputePassSnapshot,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
   type NotLoadedValue,
+  type RelationshipState,
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
@@ -196,10 +209,12 @@ export {
   beginComputePass,
   endComputePass,
   deserialize,
+  getBrokenLinks,
   getCardMeta,
   getDataBucket,
   getFieldDescription,
   getFields,
+  getRelationship,
   peekAtField,
   isCard,
   isField,
@@ -216,10 +231,12 @@ export {
   ensureQueryFieldSearchResource,
   getStore,
   type BoxComponent,
+  type BrokenLinkFinding,
   type ComputePassSnapshot,
   type DeserializeOpts,
   type GetMenuItemParams,
   type JSONAPISingleResourceDocument,
+  type RelationshipState,
   type ResourceID,
   type SerializeOpts,
 };
@@ -438,6 +455,11 @@ export type GetSearchResourceFuncOpts = {
       message: string;
       status?: number;
     }>;
+    // IDs the parent doc named in `relationships.{field}.data`. Used
+    // by the SearchResource when `cards` is empty and the parent
+    // skipped query-backed expansion — the resource loads each ID by
+    // URL instead of running a live re-query.
+    cardURLs?: string[];
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -1133,6 +1155,24 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 }
 
+// Wire fragment for a non-present link — the union of not-loaded and the
+// terminal link-error / link-not-found sentinels. All three serialize to the
+// identical not-loaded shape: the broken reference is preserved as a
+// relationship link (with no errorDoc or discriminator) so a save→reload cycle
+// reconstructs the state from the live target rather than persisting transient
+// failure data. Shared by the singular and plural linksTo serializers so the
+// two paths cannot drift.
+function serializeNonPresentLink(
+  reference: string,
+  relationshipType: string,
+  opts?: SerializeOpts,
+): Relationship {
+  return {
+    links: { self: makeRelativeURL(reference, opts) },
+    data: { type: relationshipType, id: reference },
+  };
+}
+
 class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly fieldType = 'linksTo';
   private cardThunk: () => CardT;
@@ -1201,6 +1241,14 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       lazilyLoadLink(instance, this, maybeNotLoaded.reference);
       return undefined;
     }
+    // link-error / link-not-found are terminal failure states planted by
+    // lazilyLoadLink. They surface to userland as `undefined` (the same shape a
+    // not-loaded link produces) and are NOT retried — re-reading must not kick
+    // off another fetch. `getRelationship` is the only way to observe the
+    // structured failure from outside this module.
+    if (isLinkError(maybeNotLoaded) || isLinkNotFound(maybeNotLoaded)) {
+      return undefined;
+    }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
     return value;
@@ -1215,6 +1263,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (instance == null) {
       return null;
     }
+    // A terminal sentinel queries by its reference, the same as a not-loaded
+    // link — the broken reference is preserved in the search doc.
+    if (isNonPresentLink(instance)) {
+      return { id: instance.reference };
+    }
     return this.card[queryableValue](instance, stack);
   }
 
@@ -1227,15 +1280,18 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     let relationshipType = isFileDef(this.card)
       ? FileMetaResourceType
       : CardResourceType;
-    if (isNotLoadedValue(value)) {
+    // A terminal sentinel (link-error / link-not-found) serializes the same way
+    // a not-loaded link does — the reference is preserved as a relationship
+    // link so a save→reload cycle keeps the broken reference rather than
+    // silently dropping it.
+    if (isNonPresentLink(value)) {
       return {
         relationships: {
-          [this.name]: {
-            links: {
-              self: makeRelativeURL(value.reference, opts),
-            },
-            data: { type: relationshipType, id: value.reference },
-          },
+          [this.name]: serializeNonPresentLink(
+            value.reference,
+            relationshipType,
+            opts,
+          ),
         },
       };
     }
@@ -1404,7 +1460,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       );
     }
     if (value) {
-      if (isNotLoadedValue(value)) {
+      if (isNonPresentLink(value)) {
         return value;
       }
       if (isFileDef(this.card) && !value.id) {
@@ -1490,30 +1546,41 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       <template>
         <CardCrudFunctionsConsumer as |cardCrudFunctions|>
           <DefaultFormatsConsumer as |defaultFormats|>
-            {{#if
-              (shouldRenderEditor @format defaultFormats.cardDef isComputed)
-            }}
-              <LinksToEditor
-                @model={{(getInnerModel)}}
-                @field={{linksToField}}
-                @typeConstraint={{@typeConstraint}}
-                @createCard={{cardCrudFunctions.createCard}}
-                ...attributes
-              />
-            {{else}}
-              {{#let (fieldComponent linksToField model) as |FieldComponent|}}
-                <FieldComponent
-                  @format={{getChildFormat
-                    @format
-                    defaultFormats.cardDef
-                    model
-                    isFileDefField
-                  }}
-                  @displayContainer={{@displayContainer}}
+            {{#let (brokenSingularLink model linksToField.name) as |broken|}}
+              {{#if
+                (shouldRenderEditor @format defaultFormats.cardDef isComputed)
+              }}
+                <LinksToEditor
+                  @model={{(getInnerModel)}}
+                  @field={{linksToField}}
+                  @brokenLink={{broken}}
+                  @typeConstraint={{@typeConstraint}}
+                  @createCard={{cardCrudFunctions.createCard}}
                   ...attributes
                 />
-              {{/let}}
-            {{/if}}
+              {{else if broken}}
+                <BrokenLinkTemplate
+                  @brokenUrl={{broken.reference}}
+                  @errorDoc={{broken.errorDoc}}
+                  @state={{broken.kind}}
+                  @format={{brokenLinkFormat @format defaultFormats.cardDef}}
+                  ...attributes
+                />
+              {{else}}
+                {{#let (fieldComponent linksToField model) as |FieldComponent|}}
+                  <FieldComponent
+                    @format={{getChildFormat
+                      @format
+                      defaultFormats.cardDef
+                      model
+                      isFileDefField
+                    }}
+                    @displayContainer={{@displayContainer}}
+                    ...attributes
+                  />
+                {{/let}}
+              {{/if}}
+            {{/let}}
           </DefaultFormatsConsumer>
         </CardCrudFunctionsConsumer>
       </template>
@@ -1612,6 +1679,15 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       return this.emptyValue(instance) as BaseInstanceType<FieldT>;
     }
 
+    // A whole-field terminal sentinel (a computed linksToMany that consumes an
+    // upstream link which resolved to an error / not-found) is terminal: surface
+    // an empty array to userland and do NOT retrigger the loader. Per-slot
+    // terminal sentinels living inside the array are handled below — they are
+    // simply skipped by the not-loaded retrigger scan.
+    if (isLinkError(value) || isLinkNotFound(value)) {
+      return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+    }
+
     if (!Array.isArray(value)) {
       throw new Error(
         `LinksToMany field '${
@@ -1686,7 +1762,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
             `the linksToMany field '${this.name}' contains a primitive card '${instance.name}'`,
           );
         }
-        if (isNotLoadedValue(instance)) {
+        if (isNonPresentLink(instance)) {
           return { id: instance.reference };
         }
         return this.card[queryableValue](instance, stack);
@@ -1712,8 +1788,9 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     }
 
     // this can be a not loaded value happen when the linksToMany is a
-    // computed that consumes a linkTo field that is not loaded
-    if (isNotLoadedValue(values)) {
+    // computed that consumes a linkTo field that is not loaded (or a terminal
+    // error / not-found sentinel surfacing through the same computed path)
+    if (isNonPresentLink(values)) {
       return { relationships: {} };
     }
 
@@ -1745,13 +1822,12 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         };
         return;
       }
-      if (isNotLoadedValue(value)) {
-        relationships[`${this.name}\.${i}`] = {
-          links: {
-            self: makeRelativeURL(value.reference, opts),
-          },
-          data: { type: relationshipType, id: value.reference },
-        };
+      if (isNonPresentLink(value)) {
+        relationships[`${this.name}\.${i}`] = serializeNonPresentLink(
+          value.reference,
+          relationshipType,
+          opts,
+        );
         return;
       }
       if (isFileDef(this.card) && !value.id) {
@@ -1976,7 +2052,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     let expectedCard = this.declaredCard;
     for (let value of values) {
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         !instanceOf(value, expectedCard)
       ) {
@@ -1985,7 +2061,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         );
       }
       if (
-        !isNotLoadedValue(value) &&
+        !isNonPresentLink(value) &&
         value != null &&
         isFileDef(expectedCard) &&
         !value.id
@@ -2030,6 +2106,59 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       field: this,
       cardTypeFor,
     });
+  }
+}
+
+// Read the singular `linksTo` relationship state for the field named
+// `fieldName` on the card that `model` boxes, returning the state only when it
+// is a terminal failure (`error` / `not-found`). Every other kind — including
+// `not-loaded` and `not-set`, which the field getter also surfaces as
+// `undefined` — yields `undefined` here so the caller falls through to the
+// normal render path. `getRelationship` is a pure read (it never retriggers
+// `lazilyLoadLink`), so this is the single call per render that distinguishes a
+// broken link from an absent one.
+function brokenSingularLink(
+  model: Box<CardDef>,
+  fieldName: string,
+): Extract<RelationshipState, { kind: 'error' | 'not-found' }> | undefined {
+  let owner = model.value;
+  if (owner == null) {
+    return undefined;
+  }
+  let state = getRelationship(owner, fieldName);
+  if (Array.isArray(state)) {
+    return undefined;
+  }
+  if (state.kind === 'error' || state.kind === 'not-found') {
+    return state;
+  }
+  return undefined;
+}
+
+// The broken-link placeholder stands in for the card that failed to load, so it
+// adopts the same footprint the card would have had. The placeholder defines
+// only four footprints (`isolated` / `fitted` / `embedded` / `atom`), so every
+// other reachable `Format` is mapped to its nearest stand-in rather than cast:
+// `edit` collapses to `fitted` (mirroring `getChildFormat`, since a computed
+// linksTo can reach the view path in edit format and a card def has no editable
+// slot when it can't load); `head` / `metadata` / `markdown` / `form` have no
+// dedicated placeholder footprint and fall back to the general-purpose
+// `embedded` layout.
+export function brokenLinkFormat(
+  format: Format | undefined,
+  defaultFormat: Format,
+): BrokenLinkFormat {
+  let effectiveFormat = format ?? defaultFormat;
+  switch (effectiveFormat) {
+    case 'isolated':
+    case 'fitted':
+    case 'atom':
+    case 'embedded':
+      return effectiveFormat;
+    case 'edit':
+      return 'fitted';
+    default:
+      return 'embedded';
   }
 }
 
@@ -2284,7 +2413,7 @@ export class BaseDef {
                 }) ?? null,
             ];
           }
-          if (isNotLoadedValue(rawValue)) {
+          if (isNonPresentLink(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
               normalizedId = resolveRef(
@@ -2864,6 +2993,7 @@ export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
+  static icon = ImageIcon;
   static acceptTypes = 'image/*';
 
   @field width = contains(NumberField);
@@ -3344,10 +3474,6 @@ function lazilyLoadLink(
         (instance as any)[field.name] = fieldValue;
       }
     } catch (e) {
-      // we replace the node-loaded value with a null
-      // TODO in the future consider recording some link meta that this reference is actually missing
-      (instance as any)[field.name] = null;
-
       let error = e as Error;
       let isMissingFile =
         (isCardError(error) && error.status === 404) ||
@@ -3394,17 +3520,48 @@ function lazilyLoadLink(
         }
       }
       payloadError.deps = [...deps];
-      let payload = JSON.stringify({
-        type: 'error',
-        error: payloadError,
-      });
-      // We use a custom event for render errors--otherwise QUnit will report a "global error"
-      // when we use a promise rejection to signal to the prerender that there was an error
-      // even though everything is working as designed. QUnit is very noisy about these errors...
-      const event = new CustomEvent('boxel-render-error', {
-        detail: { reason: payload },
-      });
-      globalThis.dispatchEvent(event);
+
+      // Plant a typed sentinel into the data bucket (singular) or the failed
+      // array slot(s) (plural), replacing the legacy `field = null` write. The
+      // field getter surfaces these as `undefined` to userland — the same
+      // surface a not-loaded link produces — and never retriggers the loader
+      // for them; `getRelationship` is the only way to read the structured
+      // failure from outside this module. HTTP 404 → `link-not-found`, every
+      // other failure → `link-error`.
+      let errorDoc: SerializedError = {
+        ...payloadError,
+        additionalErrors: payloadError.additionalErrors ?? null,
+      };
+      let sentinel: LinkErrorValue | LinkNotFoundValue = isMissingFile
+        ? { type: 'link-not-found', reference, errorDoc }
+        : { type: 'link-error', reference, errorDoc };
+      if (pluralArgs) {
+        // Swap the sentinel into the slot(s) whose reference just failed,
+        // leaving the WatchedArray identity intact so Glimmer re-renders. We
+        // match the same not-loaded entries the success path would have
+        // replaced with the loaded card.
+        let { value } = pluralArgs;
+        for (let [index, item] of value.entries()) {
+          if (!isNotLoadedValue(item)) {
+            continue;
+          }
+          let notLoadedRef = resolveCardReference(
+            item.reference,
+            instance.id ?? instance[relativeTo],
+          );
+          if (reference === notLoadedRef) {
+            value[index] = sentinel;
+          }
+        }
+      } else {
+        // Mirror `setField`'s notification (minus validate, which rejects a
+        // non-card value): write the bucket, notify change subscribers, then
+        // card tracking. Without the `notifySubscribers` call, `subscribeToChanges`
+        // listeners would observe a successful lazy load but not a failed one.
+        getDataBucket(instance).set(field.name, sentinel);
+        notifySubscribers(instance, field.name, sentinel);
+        notifyCardTracking(instance);
+      }
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);
@@ -3420,7 +3577,7 @@ function trackRuntimeRelationshipDependency(
   declaredCard: LinkableDefConstructor,
   dependencyTrackingContext?: RuntimeDependencyTrackingContext,
 ): void {
-  if (!value || isNotLoadedValue(value)) {
+  if (!value || isNonPresentLink(value)) {
     return;
   }
   let id = (value as { id?: unknown }).id;

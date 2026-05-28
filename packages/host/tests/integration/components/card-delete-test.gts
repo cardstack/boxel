@@ -597,6 +597,12 @@ module('Integration | card-delete', function (hooks) {
     assert
       .dom('[data-test-copy-button]')
       .containsText('Copy 2 Cards', 'button text is correct');
+    // The per-card more-options menu lives inside the type-label tab, which
+    // only renders on hover — re-hover Pet/mango to surface it again.
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"] .field-component-card`,
+      'mouseenter',
+    );
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
     );
