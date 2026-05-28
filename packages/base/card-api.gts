@@ -214,6 +214,7 @@ export {
   getFieldDescription,
   getFields,
   getRelationship,
+  isNonPresentLink,
   peekAtField,
   isCard,
   isField,

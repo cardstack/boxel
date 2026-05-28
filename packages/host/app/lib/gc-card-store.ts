@@ -1032,10 +1032,10 @@ function findInstances(
   if (isFileDefInstance(obj)) {
     return [obj];
   }
-  if (
-    (obj as { type?: unknown; reference?: unknown }).type === 'not-loaded' &&
-    typeof (obj as { reference?: unknown }).reference === 'string'
-  ) {
+  // A sentinel in the bucket (not-loaded / link-error / link-not-found) is
+  // never an instance and never owns instance references — skip the recursion
+  // so its `errorDoc` and `reference` fields are not walked as a generic object.
+  if (api.isNonPresentLink(obj)) {
     return [];
   }
   if (isBaseDefInstance(obj)) {
