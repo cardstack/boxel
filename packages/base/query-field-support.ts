@@ -11,6 +11,7 @@ import type {
   Query,
   QueryWithInterpolations,
   RuntimeDependencyTrackingContext,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
   cardIdToURL,
@@ -119,7 +120,13 @@ export function ensureQueryFieldSearchResource(
 
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
-  let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
+  let args = () =>
+    resolveQueryAndRealm(
+      instance,
+      field,
+      fieldDefinition,
+      store.virtualNetwork,
+    );
 
   // Inside a prerender the parent doc's `relationships.{field}.data` is
   // the authoritative cardinality for this field — the indexer just
@@ -419,6 +426,7 @@ function resolveQueryAndRealm(
   instance: BaseDef,
   field: Field,
   fieldDefinition: FieldDefinition,
+  virtualNetwork: VirtualNetwork | undefined,
 ): { realmHref: string; searchURL: string; query: Query } | undefined {
   let realmURL: URL | undefined = (instance as any)[realmURLSymbol];
   if (!realmURL) {
@@ -437,8 +445,11 @@ function resolveQueryAndRealm(
     fieldPath,
     resolvePathValue: (path) => resolveInstancePathValue(instance, path),
     relativeTo: (instance as CardDef).id
-      ? cardIdToURL((instance as CardDef).id)
+      ? virtualNetwork
+        ? virtualNetwork.toURL((instance as CardDef).id)
+        : cardIdToURL((instance as CardDef).id)
       : realmURL,
+    virtualNetwork,
   });
 
   if (!normalized) {
