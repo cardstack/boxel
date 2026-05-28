@@ -338,10 +338,12 @@ module('Integration | overlay-menu-items', function (hooks) {
     )) as HTMLElement;
     let styles = window.getComputedStyle(label);
 
-    // The rounded corners live in the clip-path, not border-radius. Combining
-    // the two leaves a light-grey anti-aliasing seam at the corners, so the
-    // label must keep its corner rounding entirely within the clip shape on
-    // every corner — a partial radius on any side reintroduces the seam.
+    // The visible "rounded" corners live in the clip-path as 4px bevels on
+    // the left side. Combining border-radius with clip-path at those same
+    // corners leaves a light-grey anti-aliasing seam, so the left corners
+    // must keep their rounding entirely within the clip shape. (The right
+    // side is the slope; border-radius there is either clipped away or
+    // would only blunt the slope tip, so no seam risk.)
     assert.notEqual(
       styles.clipPath,
       'none',
@@ -349,14 +351,12 @@ module('Integration | overlay-menu-items', function (hooks) {
     );
     for (let corner of [
       'borderTopLeftRadius',
-      'borderTopRightRadius',
-      'borderBottomRightRadius',
       'borderBottomLeftRadius',
     ] as const) {
       assert.strictEqual(
         styles[corner],
         '0px',
-        `${corner} is 0 (corner rounding is folded into the clip-path)`,
+        `${corner} is 0 (left-corner rounding is folded into the clip-path)`,
       );
     }
   });
