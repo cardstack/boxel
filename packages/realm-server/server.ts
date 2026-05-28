@@ -287,16 +287,43 @@ function installHttp2Diagnostics(
     session.on('timeout', () => log.warn(`[h2-diag] session timeout`));
   });
 
+  // Get-or-create the per-stream record. Both the `stream` and `request`
+  // events populate it, and either may fire first: the compat `request`
+  // listener that `createSecureServer(..., app.callback())` registers runs
+  // before this function's `stream` listener and emits `request`
+  // synchronously, so for a normal request the record is created from the
+  // `request` side; a stream that stalls before the app ever dispatches is
+  // created from the `stream` side with `sawRequest` left false. (Creating it
+  // only from `stream` would always report `sawRequest=false`, defeating the
+  // app-hang-vs-transport-stall distinction.)
+  function trackStream(
+    stream: http2.ServerHttp2Stream,
+    method: string,
+    path: string,
+  ): TrackedStream {
+    let rec = open.get(stream);
+    if (!rec) {
+      rec = {
+        id: nextId++,
+        method,
+        path,
+        startedAt: Date.now(),
+        sawRequest: false,
+        everStalled: false,
+      };
+      open.set(stream, rec);
+    }
+    return rec;
+  }
+
   tlsServer.on('stream', (stream, headers) => {
-    let tracked: TrackedStream = {
-      id: nextId++,
-      method: String(headers[':method'] ?? '?'),
-      path: String(headers[':path'] ?? '?'),
-      startedAt: Date.now(),
-      sawRequest: false,
-      everStalled: false,
-    };
-    open.set(stream, tracked);
+    trackStream(
+      stream,
+      String(headers[':method'] ?? '?'),
+      String(headers[':path'] ?? '?'),
+    );
+    // The `stream` event always fires for an h2 stream, so attach the close
+    // cleanup here exactly once regardless of which event created the record.
     stream.once('close', () => {
       let rec = open.get(stream);
       open.delete(stream);
@@ -312,11 +339,14 @@ function installHttp2Diagnostics(
   });
 
   tlsServer.on('request', (req, res) => {
-    let rec = open.get(req.stream);
-    if (rec) {
-      rec.sawRequest = true;
-      rec.res = res;
+    // h1 requests (allowHTTP1) have no backing h2 stream; only h2 is in scope.
+    let stream = req.stream as http2.ServerHttp2Stream | undefined;
+    if (stream == null) {
+      return;
     }
+    let rec = trackStream(stream, req.method ?? '?', req.url ?? '?');
+    rec.sawRequest = true;
+    rec.res = res;
   });
 
   let timer = setInterval(() => {
