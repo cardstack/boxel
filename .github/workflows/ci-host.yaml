@@ -121,6 +121,15 @@ jobs:
           sudo service upower restart
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:host | tee -a /tmp/server.log &
+        env:
+          # mise run test-services:host invokes start-server-and-test
+          # internally to wait for base realm + matrix + smtp + icons + host.
+          # `DEBUG: start-server-and-test` makes that wait propagate
+          # `log: true` + `verbose: true` to wait-on so each readiness probe
+          # logs its HTTP status / connection error. Output here is captured
+          # to /tmp/server.log (this step is backgrounded), so it surfaces
+          # in the "Print realm server logs" step at the end of the job.
+          DEBUG: start-server-and-test
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -130,6 +139,16 @@ jobs:
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          # start-server-and-test reads DEBUG and propagates `log: true` +
+          # `verbose: true` to wait-on, so each readiness-probe attempt
+          # prints its HTTP status / connection error in real time on this
+          # step's foreground stdout. That distinguishes "server not
+          # listening" (ECONNREFUSED) from "server returning 503" (indexing
+          # not done) from "server hanging mid-request" when the wait-on
+          # timer fires — the backgrounded "Start test services" step's
+          # output is run-p / tee buffered and can't carry that signal in
+          # real time, so the foreground probe is the diagnostic channel.
+          DEBUG: start-server-and-test
 
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -140,7 +159,22 @@ jobs:
           retention-days: 30
       - name: Print realm server logs
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        run: |
+          echo "===== /tmp/server.log ====="
+          cat /tmp/server.log || true
+          # Each backgrounded service (realm-server, worker, prerender,
+          # prerender-mgr) pipes through dev-log-tee.sh, which writes a
+          # per-service file under /tmp/boxel-logs/. Those file writes are
+          # line-buffered by `tee` itself, independent of the run-p / outer
+          # tee pipeline that buffers /tmp/server.log — so they often carry
+          # finer-grained timing for a single service than the interleaved
+          # server.log does.
+          for f in /tmp/boxel-logs/*.log; do
+            [ -f "$f" ] || continue
+            echo
+            echo "===== $f ====="
+            cat "$f"
+          done
 
   host-test:
     name: Host Tests
@@ -190,6 +224,10 @@ jobs:
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
+          # See the Live Tests job's matching env comment — DEBUG turns the
+          # inner start-server-and-test wait-on probes verbose so per-probe
+          # HTTP status / connection error reaches /tmp/server.log.
+          DEBUG: start-server-and-test
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -250,6 +288,11 @@ jobs:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          # See the Live Tests job's matching env comment — DEBUG makes
+          # start-server-and-test wait-on log each readiness probe's HTTP
+          # status / connection error in real time on this step's
+          # foreground stdout when the timer fires.
+          DEBUG: start-server-and-test
         working-directory: packages/host
 
       - name: Upload junit report to GitHub Actions Artifacts
@@ -272,7 +315,22 @@ jobs:
           retention-days: 30
       - name: Print realm server logs
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        run: |
+          echo "===== /tmp/server.log ====="
+          cat /tmp/server.log || true
+          # Each backgrounded service (realm-server, worker, prerender,
+          # prerender-mgr) pipes through dev-log-tee.sh, which writes a
+          # per-service file under /tmp/boxel-logs/. Those file writes are
+          # line-buffered by `tee` itself, independent of the run-p / outer
+          # tee pipeline that buffers /tmp/server.log — so they often carry
+          # finer-grained timing for a single service than the interleaved
+          # server.log does.
+          for f in /tmp/boxel-logs/*.log; do
+            [ -f "$f" ] || continue
+            echo
+            echo "===== $f ====="
+            cat "$f"
+          done
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
