@@ -28,6 +28,7 @@ import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 import * as Sentry from '@sentry/node';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { createRoutes } from './routes';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import { createSendEvent } from './handlers/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm';
 import { createServeIndex } from './handlers/serve-index';
@@ -292,6 +293,7 @@ export class RealmServer {
     | undefined;
   private prerenderer: Prerenderer | undefined;
   private reconciler: RealmRegistryReconciler;
+  private searchCache: JobScopedSearchCache;
 
   constructor({
     serverURL,
@@ -314,6 +316,7 @@ export class RealmServer {
     getRegistrationSecret,
     domainsForPublishedRealms,
     prerenderer,
+    searchCache,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -339,6 +342,10 @@ export class RealmServer {
       boxelSite?: string;
     };
     prerenderer?: Prerenderer;
+    // Optional so test harnesses that construct a RealmServer directly get a
+    // private cache for free. main.ts passes a shared instance so the
+    // JobsFinishedListener can evict the same cache the handlers populate.
+    searchCache?: JobScopedSearchCache;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -379,6 +386,7 @@ export class RealmServer {
     this.realms = realms;
     this.reconciler = reconciler;
     this.prerenderer = prerenderer;
+    this.searchCache = searchCache ?? new JobScopedSearchCache();
   }
 
   @Memoize()
@@ -478,6 +486,7 @@ export class RealmServer {
           domainsForPublishedRealms: this.domainsForPublishedRealms,
           prerenderer: this.prerenderer,
           reconciler: this.reconciler,
+          searchCache: this.searchCache,
         }),
       )
       .use(
