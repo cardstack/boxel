@@ -20,7 +20,6 @@ import {
 import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import { windowErrorHandler } from '@cardstack/host/lib/window-error-handler';
 import { REALM_INDEX_BOILERPLATE_HTML } from '@cardstack/host/utils/realm-index-boilerplate';
 
 import {
@@ -52,7 +51,6 @@ import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
-let onError: (event: Event) => void;
 
 function unwrap(html: string): string {
   return html
@@ -83,23 +81,6 @@ module(`Integration | realm indexing`, function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
-    onError = function (event: Event) {
-      let localIndexer = getService('local-indexer');
-      windowErrorHandler({
-        event,
-        setStatusToUnusable() {
-          localIndexer.prerenderStatus = 'unusable';
-        },
-        setError(error) {
-          localIndexer.renderError = error;
-        },
-      });
-    };
-    window.addEventListener('boxel-render-error', onError);
-  });
-
-  hooks.afterEach(function (this: RenderingTestContext) {
-    window.removeEventListener('boxel-render-error', onError);
   });
 
   setupLocalIndexing(hooks);
