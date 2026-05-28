@@ -4117,7 +4117,7 @@ module(basename(__filename), function () {
                   },
                 },
               },
-              // A card that fires the boxel-render-error event (handled by the prerender route)
+              // A card that throws during render (handled by the prerender route)
               // and then blocks the event loop long enough that Ember health probe times out,
               // causing data-prerender-status to be set to 'unusable' by the error handler without
               // transitioning to the render-error route (so nothing overwrites our dataset).
