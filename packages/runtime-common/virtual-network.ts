@@ -155,15 +155,6 @@ export class VirtualNetwork {
   }
 
   /**
-   * Convert an RRI to a URL object. If the RRI is in prefix form, resolves
-   * via the registered realm mappings; if it's already a URL form, parses
-   * directly. Throws if the prefix is unregistered and the value isn't a
-   * parseable URL — that's intentional: bare local identifiers can't be
-   * resolved to a realm location.
-   *
-   * Replacement for the deprecated `cardIdToURL()`.
-   */
-  /**
    * Resolve `reference` (relative path, prefix-form RRI, or URL string)
    * to a canonical URL object using `relativeTo` as the base when
    * `reference` is relative. Replacement for the deprecated module-level
@@ -190,6 +181,15 @@ export class VirtualNetwork {
     }
   }
 
+  /**
+   * Convert an RRI to a URL object. If the RRI is in prefix form, resolves
+   * via the registered realm mappings; if it's already a URL form, parses
+   * directly. Throws if the prefix is unregistered and the value isn't a
+   * parseable URL — that's intentional: bare local identifiers can't be
+   * resolved to a realm location.
+   *
+   * Replacement for the deprecated `cardIdToURL()`.
+   */
   toURL(rri: string): URL {
     let resolved = this.resolveRRIToURL(rri);
     if (resolved !== undefined) {
