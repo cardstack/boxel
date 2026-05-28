@@ -331,9 +331,10 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       assert
         .dom('.utility-menu-trigger')
         .containsText(`${totalCardCount}`, 'All cards are now selected');
-      assert.ok(
-        getsDuringSelectAll < totalCardCount,
-        `Select All should not load an instance per card (store.get called ${getsDuringSelectAll}x while selecting ${totalCardCount} cards)`,
+      assert.strictEqual(
+        getsDuringSelectAll,
+        0,
+        `Select All should not load any instance (selections are tracked by id); store.get was called ${getsDuringSelectAll}x while selecting ${totalCardCount} cards`,
       );
     } finally {
       (store as any).get = originalGet;
