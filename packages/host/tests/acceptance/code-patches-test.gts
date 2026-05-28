@@ -25,6 +25,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -1600,6 +1601,71 @@ ${REPLACE_MARKER}
       .doesNotExist(
         'Code patch sent before act mode is still not auto-applied',
       );
+  });
+
+  test('LLM mode for a message is resolved by room order, not just timestamp', async function (assert) {
+    // Matrix origin_server_ts has millisecond resolution, so a message and a
+    // mode transition can share a timestamp. The active mode for a message must
+    // be decided by where the transition sits relative to the message in the
+    // timeline, not by a bare timestamp comparison. Inject events with explicit
+    // (and deliberately colliding) timestamps so the tie-break is exercised
+    // deterministically rather than by chance.
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let llmMode = (mode: 'ask' | 'act', ts: number) =>
+      simulateRemoteMessage(
+        roomId,
+        '@testuser:localhost',
+        { mode },
+        { type: APP_BOXEL_LLM_MODE, state_key: '', origin_server_ts: ts },
+      );
+    let aiMessage = (ts: number) =>
+      simulateRemoteMessage(
+        roomId,
+        '@aibot:localhost',
+        {
+          body: 'hello',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        { origin_server_ts: ts },
+      );
+
+    // Injection order is room order; for equal timestamps a stable sort keeps it.
+    llmMode('act', 1000);
+    let msgActBeforeTie = aiMessage(2000); // act@1000 precedes; ask@2000 below comes later
+    llmMode('ask', 2000); // shares the message's ms but lands after it
+    llmMode('act', 2000); // ask -> act, both at 2000, act inserted later
+    let msgActWinsTie = aiMessage(2000); // act@2000 precedes it in room order
+    llmMode('ask', 3000);
+    let msgAskBeforeLateAct = aiMessage(4000);
+    llmMode('act', 4000); // shares the message's ms but lands after it
+
+    await settled();
+
+    let roomResource = getService('matrix-service').roomResources.get(roomId)!;
+
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgActBeforeTie),
+      'act',
+      'a later same-ms switch to ask does not retroactively change the message',
+    );
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgActWinsTie),
+      'act',
+      'on a same-ms ask->act tie the later transition (act) wins for a following message',
+    );
+    assert.strictEqual(
+      roomResource.getActiveLLMModeForMessage(msgAskBeforeLateAct),
+      'ask',
+      'a same-ms switch to act after the message does not back-date onto it',
+    );
   });
 
   test<TestContextWithSave>('automatic Accept All spinner appears in Act mode for multiple patches', async function (assert) {
