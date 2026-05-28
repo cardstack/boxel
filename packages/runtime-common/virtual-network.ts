@@ -171,14 +171,30 @@ export class VirtualNetwork {
     } else if (typeof relativeTo === 'string') {
       base = relativeTo as RealmResourceIdentifier;
     }
-    try {
-      return this.toURL(this.resolveRRI(reference, base));
-    } catch {
-      // resolveRRI's relative-against-prefix-form branches iterate VN's
-      // own map directly; if the prefix is only registered on the
-      // deprecated global, defer to it.
-      return new URL(globalResolveCardReference(reference, relativeTo));
+    // When `relativeTo` is a prefix-form string whose prefix isn't in
+    // this VN's map, `resolveRRI` would throw because its
+    // relative-against-prefix-form branches iterate VN's own mappings.
+    // Defer to the deprecated global resolver for that exact case so
+    // globally-registered prefixes still resolve. Other `resolveRRI`
+    // failures (e.g. its deliberate rejection of `/`-rooted and `~/`
+    // refs) propagate.
+    if (
+      typeof base === 'string' &&
+      !base.startsWith('http://') &&
+      !base.startsWith('https://')
+    ) {
+      let baseInVN = false;
+      for (let [prefix] of this.realmMappings) {
+        if (base.startsWith(prefix)) {
+          baseInVN = true;
+          break;
+        }
+      }
+      if (!baseInVN) {
+        return new URL(globalResolveCardReference(reference, relativeTo));
+      }
     }
+    return this.toURL(this.resolveRRI(reference, base));
   }
 
   /**
