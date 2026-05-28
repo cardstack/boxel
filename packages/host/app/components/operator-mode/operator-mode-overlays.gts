@@ -447,14 +447,8 @@ export default class OperatorModeOverlays extends Overlays {
       }
       let boundary = findAdornLabelBoundary(cardEl);
       if (!boundary) {
-        console.warn(
-          `[adorn-debug] no boundary for card id=${cardEl.getAttribute('data-boxel-card-id') ?? '?'}`,
-        );
         return undefined;
       }
-      console.log(
-        `[adorn-debug] boundary tag=${boundary.tagName} cls="${boundary.className}"`,
-      );
 
       label.style.position = 'fixed';
       label.style.top = '0';
@@ -489,7 +483,6 @@ export default class OperatorModeOverlays extends Overlays {
         label.setAttribute('data-side', side);
 
         let anchorLeftX: number;
-        let widthApplied: string;
         if (shouldOverflow) {
           let anchorRightX = cardRect.right - (radius - 4);
           let unclampedLeft = anchorRightX - labelWidth;
@@ -503,33 +496,22 @@ export default class OperatorModeOverlays extends Overlays {
             // there's room to spare).
             anchorLeftX = unclampedLeft;
             label.style.maxWidth = 'max-content';
-            widthApplied = 'max-content (overflow-fits)';
           } else {
             // Label can't fit inside the boundary at natural width;
             // clamp the un-anchored edge and let the ellipsis show.
             anchorLeftX = boundaryLeftLimit;
             let width = Math.max(0, anchorRightX - anchorLeftX);
             label.style.maxWidth = width + 'px';
-            widthApplied = `${width}px (overflow-clamped)`;
           }
         } else {
           anchorLeftX = cardRect.left - 4;
           label.style.maxWidth = 'max-content';
-          widthApplied = 'max-content (fits)';
         }
         label.style.left = anchorLeftX + 'px';
         label.style.top =
           (side === 'top'
             ? cardRect.top - labelHeight - 2
             : cardRect.bottom + 2) + 'px';
-
-        let textPreview = label.textContent
-          ?.replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 60);
-        console.log(
-          `[adorn-debug] text="${textPreview}" scrollWidth=${labelWidth} card=(l=${Math.round(cardRect.left)},r=${Math.round(cardRect.right)},w=${Math.round(cardRect.width)}) boundary=(l=${Math.round(boundaryRect.left)},r=${Math.round(boundaryRect.right)},w=${Math.round(boundaryRect.width)}) radius=${radius} availableWithinCard=${Math.round(availableWithinCard)} shouldOverflow=${shouldOverflow} wasOverflowing=${wasOverflowing} anchorLeftX=${Math.round(anchorLeftX)} widthApplied="${widthApplied}"`,
-        );
       };
 
       return autoUpdate(cardEl, label, update);
