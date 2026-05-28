@@ -470,13 +470,26 @@ export default class OperatorModeOverlays extends Overlays {
         let widthApplied: string;
         if (shouldOverflow) {
           let anchorRightX = cardRect.right - (radius - 4);
-          anchorLeftX = Math.max(
-            boundaryRect.left + 4,
-            anchorRightX - labelWidth,
-          );
-          let width = Math.max(0, anchorRightX - anchorLeftX);
-          label.style.maxWidth = width + 'px';
-          widthApplied = `${width}px (overflow)`;
+          let unclampedLeft = anchorRightX - labelWidth;
+          let boundaryLeftLimit = boundaryRect.left + 4;
+          if (unclampedLeft >= boundaryLeftLimit) {
+            // Natural width fits inside the boundary — use
+            // max-content so the browser sizes to the true intrinsic
+            // width (scrollWidth is integer-rounded, so writing it
+            // back as `max-width: Npx` would shave a sub-pixel
+            // remainder and trip text-overflow:ellipsis even though
+            // there's room to spare).
+            anchorLeftX = unclampedLeft;
+            label.style.maxWidth = 'max-content';
+            widthApplied = 'max-content (overflow-fits)';
+          } else {
+            // Label can't fit inside the boundary at natural width;
+            // clamp the un-anchored edge and let the ellipsis show.
+            anchorLeftX = boundaryLeftLimit;
+            let width = Math.max(0, anchorRightX - anchorLeftX);
+            label.style.maxWidth = width + 'px';
+            widthApplied = `${width}px (overflow-clamped)`;
+          }
         } else {
           anchorLeftX = cardRect.left - 4;
           label.style.maxWidth = 'max-content';
