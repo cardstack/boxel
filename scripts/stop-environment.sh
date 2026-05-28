@@ -39,6 +39,7 @@ if [ -z "$BRANCH" ]; then
 fi
 
 SLUG=$(compute_env_slug "$BRANCH")
+DB_SLUG=$(pg_db_slug "$SLUG")
 
 echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 
@@ -51,7 +52,7 @@ echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 # Exclude this script itself and grep.
 
 # Build a pattern that matches the slug in various contexts
-MATCH_PATTERN="${SLUG}\.localhost|realms/${SLUG}|boxel_${SLUG}|BOXEL_ENVIRONMENT=${BRANCH}"
+MATCH_PATTERN="${SLUG}\.localhost|realms/${SLUG}|boxel_${DB_SLUG}|BOXEL_ENVIRONMENT=${BRANCH}"
 
 # Extract dynamic ports from Traefik configs so we can match processes by port
 if [ -d "$TRAEFIK_DIR" ]; then
@@ -164,7 +165,7 @@ fi
 
 # --- 4. Optionally drop per-environment databases ---
 if [ "$DROP_DB" = true ]; then
-  for DB_NAME in "boxel_${SLUG}" "boxel_test_${SLUG}"; do
+  for DB_NAME in "boxel_${DB_SLUG}" "boxel_test_${DB_SLUG}"; do
     if docker exec boxel-pg psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
       if [ "$DRY_RUN" = true ]; then
         echo "Would drop database $DB_NAME"
