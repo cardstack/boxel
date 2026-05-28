@@ -41,27 +41,31 @@ class RoutingRuleAtom extends Component<typeof RoutingRuleField> {
 class RoutingRuleEdit extends Component<typeof RoutingRuleField> {
   <template>
     <div class='routing-rule-edit' data-test-routing-rule-edit>
-      <label class='field'>
-        <span class='label'>Path</span>
+      <div class='path-cell'>
         <@fields.path />
-      </label>
-      <label class='field'>
-        <span class='label'>Instance</span>
+      </div>
+      <span class='arrow' aria-hidden='true'>→</span>
+      <div class='instance-cell'>
         <@fields.instance @lockConsumingRealm={{true}} />
-      </label>
+      </div>
     </div>
     <style scoped>
       .routing-rule-edit {
         display: grid;
+        grid-template-columns: minmax(8rem, 14rem) auto 1fr;
+        align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .field {
-        display: grid;
-        gap: var(--boxel-sp-xxs);
+      .path-cell :deep(input) {
+        font-family: var(--boxel-font-family-mono, monospace);
       }
-      .label {
-        font: 600 var(--boxel-font-sm);
+      .arrow {
         color: var(--boxel-450);
+        font-size: var(--boxel-font-size);
+        user-select: none;
+      }
+      .instance-cell {
+        min-width: 0;
       }
     </style>
   </template>
@@ -119,6 +123,83 @@ class RealmConfigEmbedded extends Component<typeof RealmConfig> {
         color: var(--boxel-450);
         font: var(--boxel-font-sm);
         margin-left: auto;
+      }
+    </style>
+  </template>
+}
+
+class RealmConfigEdit extends Component<typeof RealmConfig> {
+  <template>
+    <article class='realm-config-edit' data-test-realm-config-edit>
+      <section class='section'>
+        <h2 class='section-title'>Appearance</h2>
+        <label class='field'>
+          <span class='field-label'>Icon URL</span>
+          <@fields.iconURL />
+        </label>
+        <label class='field'>
+          <span class='field-label'>Background URL</span>
+          <@fields.backgroundURL />
+        </label>
+      </section>
+
+      <section class='section'>
+        <h2 class='section-title'>Host Routing Rules</h2>
+        <p class='help'>
+          Map static paths within this realm to a card to render in host mode.
+        </p>
+        <div class='rules' data-test-host-routing-rules-edit>
+          <@fields.hostRoutingRules />
+        </div>
+      </section>
+
+      <section class='section'>
+        <h2 class='section-title'>Advanced</h2>
+        <label class='field checkbox-field'>
+          <@fields.includePrerenderedDefaultRealmIndex />
+          <span class='field-label'>
+            Keep the full prerendered isolated HTML for the realm's default
+            CardsGrid index card.
+          </span>
+        </label>
+      </section>
+    </article>
+    <style scoped>
+      .realm-config-edit {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .section {
+        display: grid;
+        gap: var(--boxel-sp-sm);
+      }
+      .section-title {
+        margin: 0;
+        font: 600 var(--boxel-font);
+        color: var(--boxel-dark, #000);
+      }
+      .field {
+        display: grid;
+        gap: var(--boxel-sp-xxs);
+      }
+      .field-label {
+        font: 500 var(--boxel-font-sm);
+        color: var(--boxel-450);
+      }
+      .checkbox-field {
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .checkbox-field .field-label {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-dark, #000);
+      }
+      .help {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        color: var(--boxel-450);
       }
     </style>
   </template>
@@ -230,4 +311,5 @@ export class RealmConfig extends CardDef {
 
   static embedded = RealmConfigEmbedded;
   static isolated = RealmConfigIsolated;
+  static edit = RealmConfigEdit;
 }
