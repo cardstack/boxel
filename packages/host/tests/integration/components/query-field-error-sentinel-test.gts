@@ -142,12 +142,19 @@ module(
         attributes: { cardTitle },
         meta: {
           adoptsFrom: { module: testRRI('test-cards'), name: 'Host' },
+          // The query branch of the field getter resolves
+          // `$this.cardTitle` interpolation against the instance's realm
+          // — without `realmURL` on meta, `resolveQueryAndRealm` returns
+          // undefined and the SearchResource.modify lifecycle returns
+          // before it can run the search task. The whole failure-surface
+          // path under test is gated on that search running.
+          realmURL: testRealmURL,
         },
       };
       return (await createFromSerialized(
         resource as any,
         { data: resource } as any,
-        undefined,
+        new URL(testRealmURL),
       )) as CardDefType;
     }
 

@@ -250,6 +250,19 @@ function surfaceSearchResourceErrorState(
   }
 
   let sentinel = buildQueryFieldSentinel(instance, field, errors);
+  // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Surface should
+  // only ever plant a sentinel for a genuine search failure; a sighting
+  // during a same-realm successful-query test (e.g. realm-server-tests
+  // shard 3) means something is misclassifying success as failure.
+  // eslint-disable-next-line no-console
+  console.error('[CS-11221 DIAG] surface plant sentinel', {
+    fieldName: field.name,
+    ownerId: (instance as CardDef).id ?? '(unsaved)',
+    sentinelType: sentinel.type,
+    errorCount: errors.length,
+    firstErrorStatus: errors[0]?.error?.status,
+    firstErrorMessage: errors[0]?.error?.message,
+  });
   bucket.set(field.name, sentinel);
   fieldState.surfacedErrorSentinel = sentinel;
 }

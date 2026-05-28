@@ -498,14 +498,23 @@ export class SearchResource<
         if (didCancel(err)) {
           throw err;
         }
-        // A whole-resource search failure (the QUERY call rejected, or the
-        // response payload was malformed) surfaces on `errors`. Consumers in
-        // card-api recognize a non-empty `errors` array and plant a
-        // resource-level sentinel in the query-field bucket; getRelationship
-        // exposes the typed failure state. The load itself completes — the
-        // tracked `loaded` promise resolves rather than rejects — so callers
-        // awaiting it observe a completed-with-errors render instead of an
-        // exception they would otherwise have to catch.
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        // Loud `console.error` so CI logs surface every search-task
+        // failure that flows into the new `_errors` channel; this is the
+        // signal that lets us trace which scenarios trigger the
+        // sentinel-planting path and rule it in or out as the cause of
+        // realm-server-tests shard regressions.
+        console.error('[CS-11221 DIAG] search task caught error', {
+          query: JSON.stringify(query),
+          realms: this.realmsToSearch,
+          errMessage: (err as { message?: unknown })?.message,
+          errStatus: (err as { status?: unknown })?.status,
+          errName: (err as { name?: unknown })?.name,
+          errStack: ((err as { stack?: unknown })?.stack as string)
+            ?.split('\n')
+            .slice(0, 8)
+            .join('\n'),
+        });
         this.#log.error(`search task failed`, err);
         this._errors = [searchErrorEntry(err)];
         this._meta = { page: { total: 0 } };

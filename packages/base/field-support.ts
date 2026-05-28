@@ -698,6 +698,21 @@ export function getBrokenLinks(
       let state = getRelationship(instance as CardDef, fieldName);
       for (let entry of Array.isArray(state) ? state : [state]) {
         if (entry.kind === 'error' || entry.kind === 'not-found') {
+          // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. The
+          // declared-`linksTo` scan should only find a broken link for a
+          // failed lazy-load; query-field findings are skipped above. A
+          // sighting on a test that doesn't intentionally break a
+          // declared `linksTo` means something else is misclassifying
+          // state, and we want a clear trail in the CI log.
+          // eslint-disable-next-line no-console
+          console.error('[CS-11221 DIAG] getBrokenLinks finding', {
+            ownerId: (instance as CardDef).id ?? '(unsaved)',
+            ownerType: instance?.constructor?.name,
+            fieldName,
+            fieldType: field.fieldType,
+            kind: entry.kind,
+            reference: entry.reference,
+          });
           findings.push({
             fieldName,
             kind: entry.kind,
