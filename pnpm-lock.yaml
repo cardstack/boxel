@@ -1682,9 +1682,18 @@ importers:
 
   packages/catalog:
     dependencies:
+      '@floating-ui/dom':
+        specifier: 'catalog:'
+        version: 1.7.6
+      css-what:
+        specifier: ^8.0.0
+        version: 8.0.0
       ember-modify-based-class-resource:
         specifier: 'catalog:'
         version: 1.1.2(@glimmer/component@2.1.1)(@glint/template@1.7.7)(ember-resources@7.0.7(@glimmer/component@2.1.1)(@glint/template@1.7.7))
+      ember-provide-consume-context:
+        specifier: ^0.8.0
+        version: 0.8.0(@ember/test-helpers@5.4.2(@babel/core@7.29.0)(@glint/template@1.7.7))(@glimmer/component@2.1.1)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
     devDependencies:
       '@babel/plugin-proposal-decorators':
         specifier: 'catalog:'
@@ -1707,6 +1716,9 @@ importers:
       '@glint/ember-tsc':
         specifier: 'catalog:'
         version: 1.5.0(typescript@5.9.3)
+      '@glint/template':
+        specifier: 'catalog:'
+        version: 1.7.7
       '@types/lodash':
         specifier: 'catalog:'
         version: 4.17.24
@@ -8618,6 +8630,10 @@ packages:
   css-what@6.2.2:
     resolution: {integrity: sha512-u/O3vwbptzhMs3L1fQE82ZSLHQQfto5gyZzwteVIEyeaY5Fc7R4dapF/BvRoSYFeqfBk4m0V1Vafq5Pjv25wvA==}
     engines: {node: '>= 6'}
+
+  css-what@8.0.0:
+    resolution: {integrity: sha512-DH0Bqq3DNp5tdOReuNyAA+Ev4Y2GS5FMbZpeTLP6C4CDi0h5nL0BmUPChXw3o/qbHLDWHl49sbNqQVY7bMSDdw==}
+    engines: {node: '>=20.19.0'}
 
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
@@ -21813,6 +21829,8 @@ snapshots:
       source-map-js: 1.2.1
 
   css-what@6.2.2: {}
+
+  css-what@8.0.0: {}
 
   cssesc@3.0.0: {}
 

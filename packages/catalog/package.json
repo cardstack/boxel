@@ -8,6 +8,7 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@glint/template": "catalog:",
     "@ember/test-helpers": "catalog:",
     "@glint/ember-tsc": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -35,7 +36,10 @@
     "tracked-built-ins": "catalog:"
   },
   "dependencies": {
-    "ember-modify-based-class-resource": "catalog:"
+    "@floating-ui/dom": "catalog:",
+    "css-what": "^8.0.0",
+    "ember-modify-based-class-resource": "catalog:",
+    "ember-provide-consume-context": "^0.8.0"
   },
   "scripts": {
     "catalog:setup": "[ -d contents ] || git clone git@github.com:cardstack/boxel-catalog.git contents || git clone https://github.com/cardstack/boxel-catalog.git contents || { echo 'both ssh and https clone failed; check GitHub auth and network'; exit 1; }",
