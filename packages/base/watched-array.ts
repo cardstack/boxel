@@ -1,8 +1,10 @@
 // Reading `proxy[rawValues]` returns the underlying backing array with every
-// slot intact — including the link sentinels that the index getter hides from
-// userland. Only the link-aware modules in `packages/base` (card-api.gts,
-// field-support.ts) read through this to inspect or swap sentinels; everything
-// else sees the `Card | undefined` per-slot surface.
+// slot intact — including any values the index getter hides from userland.
+// `WatchedArray` is generic: when a `hideSlot` predicate is supplied the masked
+// per-slot surface is `T | undefined` (for the `linksToMany` caller, that is
+// `Card | undefined`); without one the array is unmasked. Only the link-aware
+// modules in `packages/base` (card-api.gts, field-support.ts) read through this
+// escape hatch to inspect or swap the hidden values.
 export const rawValues = Symbol.for('@cardstack/watched-array:raw-values');
 
 // Return the raw backing array for a value that may be a `WatchedArray` proxy
@@ -53,9 +55,11 @@ class WatchedArray<T> {
         }
         if (hideSlot !== undefined) {
           let index = arrayIndex(prop);
-          if (index !== undefined) {
-            let value = target[index];
-            if (hideSlot(value)) {
+          // Only consult the predicate for indices that actually hold a value;
+          // an out-of-range read (`arr[999]`) falls straight through to
+          // `undefined` without handing the predicate a missing slot.
+          if (index !== undefined && index < target.length) {
+            if (hideSlot(target[index])) {
               return undefined;
             }
           }

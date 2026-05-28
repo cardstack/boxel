@@ -1795,7 +1795,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     let relationships: Record<string, Relationship> = {};
     // Iterate the raw backing array so broken slots serialize their reference
     // through `serializeNonPresentLink` instead of collapsing to `data: null`.
-    rawArrayValues(values).map((value, i) => {
+    rawArrayValues(values).forEach((value, i) => {
       if (value == null) {
         relationships[`${this.name}\.${i}`] = {
           links: {
