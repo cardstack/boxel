@@ -35,6 +35,7 @@ module('Integration | Component | card-header', function (hooks) {
   test('the card title stays centered whether or not the selection utility menu is present', async function (assert) {
     await render(
       <template>
+        {{! template-lint-disable no-inline-styles }}
         <div style='width: 600px'>
           <CardHeader
             @cardTitle='A Centered Card Title'
@@ -55,6 +56,7 @@ module('Integration | Component | card-header', function (hooks) {
 
     await render(
       <template>
+        {{! template-lint-disable no-inline-styles }}
         <div style='width: 600px'>
           <CardHeader
             @cardTitle='A Centered Card Title'
