@@ -395,6 +395,7 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
+        max-width: var(--boxel-xxs-container);
       }
       .info > span {
         text-overflow: ellipsis;
