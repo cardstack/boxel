@@ -425,13 +425,14 @@ export default class OperatorModeOverlays extends Overlays {
       }
       let boundary = findAdornLabelBoundary(cardEl);
       if (!boundary) {
-        console.warn('[adorn-debug] no boundary for card', cardEl);
+        console.warn(
+          `[adorn-debug] no boundary for card id=${cardEl.getAttribute('data-boxel-card-id') ?? '?'}`,
+        );
         return undefined;
       }
-      console.log('[adorn-debug] boundary:', boundary, {
-        tag: boundary.tagName,
-        cls: boundary.className,
-      });
+      console.log(
+        `[adorn-debug] boundary tag=${boundary.tagName} cls="${boundary.className}"`,
+      );
 
       label.style.position = 'fixed';
       label.style.top = '0';
@@ -487,26 +488,13 @@ export default class OperatorModeOverlays extends Overlays {
             ? cardRect.top - labelHeight - 2
             : cardRect.bottom + 2) + 'px';
 
-        console.log('[adorn-debug] update', {
-          text: label.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60),
-          labelWidth_scrollWidth: labelWidth,
-          card: {
-            l: Math.round(cardRect.left),
-            r: Math.round(cardRect.right),
-            w: Math.round(cardRect.width),
-          },
-          boundary: {
-            l: Math.round(boundaryRect.left),
-            r: Math.round(boundaryRect.right),
-            w: Math.round(boundaryRect.width),
-          },
-          radius,
-          availableWithinCard: Math.round(availableWithinCard),
-          shouldOverflow,
-          wasOverflowing,
-          anchorLeftX: Math.round(anchorLeftX),
-          widthApplied,
-        });
+        let textPreview = label.textContent
+          ?.replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 60);
+        console.log(
+          `[adorn-debug] text="${textPreview}" scrollWidth=${labelWidth} card=(l=${Math.round(cardRect.left)},r=${Math.round(cardRect.right)},w=${Math.round(cardRect.width)}) boundary=(l=${Math.round(boundaryRect.left)},r=${Math.round(boundaryRect.right)},w=${Math.round(boundaryRect.width)}) radius=${radius} availableWithinCard=${Math.round(availableWithinCard)} shouldOverflow=${shouldOverflow} wasOverflowing=${wasOverflowing} anchorLeftX=${Math.round(anchorLeftX)} widthApplied="${widthApplied}"`,
+        );
       };
 
       return autoUpdate(cardEl, label, update);
