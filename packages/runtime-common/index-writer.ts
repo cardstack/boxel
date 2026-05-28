@@ -200,10 +200,9 @@ export class Batch {
     this.ready = this.setupBatch();
   }
 
-  // During the CS-10752 migration window these defer to the deprecated
-  // module-level resolver when no VirtualNetwork was threaded in (e.g. the
-  // worker-manager / copy-task callers). Once every caller supplies a VN the
-  // fallback branch — and the global registry it relies on — goes away.
+  // Prefix checks and unresolution prefer the threaded VirtualNetwork, and
+  // fall back to the deprecated module-level resolver when a Batch is
+  // constructed without one (e.g. the worker-manager and copy-task paths).
   private isRegisteredPrefix(reference: string): boolean {
     return this.virtualNetwork
       ? this.virtualNetwork.isRegisteredPrefix(reference)
