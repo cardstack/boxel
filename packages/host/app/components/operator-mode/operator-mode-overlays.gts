@@ -8,6 +8,7 @@ import {
   autoUpdate,
   computePosition,
   flip,
+  limitShift,
   offset,
   shift,
   size,
@@ -477,7 +478,17 @@ export default class OperatorModeOverlays extends Overlays {
           middleware: [
             offset({ mainAxis: 2, crossAxis }),
             flip({ boundary, padding: 4 }),
-            shift({ boundary, padding: 4 }),
+            // limitShift gives the label a small budget (~16px) of
+            // horizontal slack to nudge inside the boundary before
+            // size starts truncating. Without the limit, shift would
+            // drag the tab arbitrarily far from the hovered card to
+            // fit a long type-name in the boundary, breaking the
+            // visual association between the slope and the card.
+            shift({
+              boundary,
+              padding: 4,
+              limiter: limitShift({ offset: 16 }),
+            }),
             size({
               boundary,
               padding: 4,
