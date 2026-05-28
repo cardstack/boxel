@@ -571,6 +571,73 @@ module('Integration | RichMarkdownField', function (hooks) {
       );
   });
 
+  test('unresolved block ref with fitted size spec carries the card footprint', async function (assert) {
+    // Exercises the base default-templates/markdown.gts path (mirrors the
+    // host's rendered-markdown coverage). The broken-link box should adopt
+    // the fitted format class + inline width/height so the layout matches
+    // the eventual card.
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'article.gts': { ArticleCard },
+        'article-fitted-unresolved.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `::card[https://nonexistent.example/BlogPost/gone | 400x200]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(
+      `${testRealmURL}article-fitted-unresolved`,
+    )) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
+      { timeout: 10_000 },
+    );
+
+    let brokenBlock = document.querySelector(
+      '[data-test-markdown-bfm-unresolved-block]',
+    ) as HTMLElement | null;
+    assert.ok(brokenBlock, 'broken-link block exists');
+    assert
+      .dom(brokenBlock)
+      .hasClass(
+        'markdown-bfm-broken--fitted',
+        'fitted ref carries the fitted footprint class',
+      );
+    let style = brokenBlock?.getAttribute('style') ?? '';
+    assert.true(
+      /width:\s*400px/.test(style),
+      `broken-link inline style includes width: 400px (got "${style}")`,
+    );
+    assert.true(
+      /height:\s*200px/.test(style),
+      `broken-link inline style includes height: 200px (got "${style}")`,
+    );
+  });
+
   test('linkedCards resolve when markdown uses relative card references', async function (assert) {
     class Pet extends CardDef {
       static displayName = 'Pet';

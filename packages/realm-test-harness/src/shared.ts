@@ -131,7 +131,10 @@ export type SpawnedProcess = ChildProcess & {
 
 export type StartedCompatRealmProxy = {
   listenPort: number;
-  setTargetPort(targetPort: number): void;
+  setTargetPort(
+    targetPort: number,
+    describeUpstreamHealth?: () => string,
+  ): void;
   stop(): Promise<void>;
 };
 
