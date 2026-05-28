@@ -704,10 +704,7 @@ module(basename(__filename), function () {
       let deps = (entry?.deps ?? []).map((d) =>
         d.endsWith('.json') ? d.slice(0, -5) : d,
       );
-      assert.ok(
-        deps.includes(`${testRealm}post`),
-        'deps include post module',
-      );
+      assert.ok(deps.includes(`${testRealm}post`), 'deps include post module');
       assert.ok(
         deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
         'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
@@ -4594,13 +4591,12 @@ module(basename(__filename), function () {
           'instance-error',
           'ringo is in error state once its adoptsFrom module is missing',
         );
-        if (ringoErrored?.type !== 'instance-error') {
-          return;
+        if (ringoErrored?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoErrored.error, 'missing-pet-target'),
+            'ringo error doc names the missing module — used below as the inheritance probe',
+          );
         }
-        assert.ok(
-          hasErrorDetail(ringoErrored.error, 'missing-pet-target'),
-          'ringo error doc names the missing module — used below as the inheritance probe',
-        );
 
         // hassan (linksTo ringo) must NOT inherit ringo's error doc — and
         // critically, must NOT itself be in error. The broken slot renders
@@ -4617,8 +4613,7 @@ module(basename(__filename), function () {
         assert.ok(
           hassanDeps.some(
             (dep) =>
-              dep === `${testRealm}ringo.json` ||
-              dep === `${testRealm}ringo`,
+              dep === `${testRealm}ringo.json` || dep === `${testRealm}ringo`,
           ),
           'hassan deps still include ringo so invalidation fan-out continues to reach hassan when ringo changes',
         );
@@ -4659,21 +4654,20 @@ module(basename(__filename), function () {
            export class Pet extends OnlyExistsInDreams {}`,
         );
 
-        let ringoAfterModuleBreak =
-          await realm.realmIndexQueryEngine.instance(
-            new URL(`${testRealm}ringo`),
-          );
-        if (ringoAfterModuleBreak?.type !== 'instance-error') {
-          assert.ok(
-            false,
-            `expected ringo to be in instance-error via module→instance cascade, got ${ringoAfterModuleBreak?.type}`,
-          );
-          return;
-        }
-        assert.ok(
-          hasErrorDetail(ringoAfterModuleBreak.error, 'does-not-exist'),
-          'module→instance: ringo inherits Pet module error in additionalErrors',
+        let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
         );
+        assert.strictEqual(
+          ringoAfterModuleBreak?.type,
+          'instance-error',
+          'ringo cascades to instance-error via module→instance propagation',
+        );
+        if (ringoAfterModuleBreak?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoAfterModuleBreak.error, 'does-not-exist'),
+            'module→instance: ringo inherits Pet module error in additionalErrors',
+          );
+        }
       });
 
       test('can write several module files at once', async function (assert) {
