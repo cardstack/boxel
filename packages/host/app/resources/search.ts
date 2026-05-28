@@ -17,10 +17,8 @@ import type {
   ErrorEntry,
   RealmIdentifier,
   RuntimeDependencyTrackingContext,
-  SerializedError,
 } from '@cardstack/runtime-common';
 import {
-  isCardError,
   subscribeToRealm,
   isFileDefInstance,
   logger as runtimeLogger,
@@ -477,119 +475,26 @@ export class SearchResource<
       let dependencyTrackingContext = this.dependencyTrackingContext(
         'search-resource:search',
       );
-      try {
-        let { instances, meta } = await this.runtimeStore.search<T>(
-          query,
-          this.realmsToSearch,
-          {
-            includeMeta: true,
-            dependencyTrackingContext,
-          },
-        );
-        this.#log.info(
-          `search task complete; total instances=${instances.length}; refs=${instances
-            .map((r) => r.id)
-            .join(',')}`,
-        );
-        this._meta = meta;
-        this._errors = undefined;
-        await this.updateInstances(instances, dependencyTrackingContext);
-      } catch (err) {
-        if (didCancel(err)) {
-          throw err;
-        }
-        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        // Loud `console.error` so CI logs surface every search-task
-        // failure that flows into the new `_errors` channel; this is the
-        // signal that lets us trace which scenarios trigger the
-        // sentinel-planting path and rule it in or out as the cause of
-        // realm-server-tests shard regressions.
-        console.error('[CS-11221 DIAG] search task caught error', {
-          query: JSON.stringify(query),
-          realms: this.realmsToSearch,
-          errMessage: (err as { message?: unknown })?.message,
-          errStatus: (err as { status?: unknown })?.status,
-          errName: (err as { name?: unknown })?.name,
-          errStack: ((err as { stack?: unknown })?.stack as string)
-            ?.split('\n')
-            .slice(0, 8)
-            .join('\n'),
-        });
-        this.#log.error(`search task failed`, err);
-        this._errors = [searchErrorEntry(err)];
-        this._meta = { page: { total: 0 } };
-        if (this._instances.length > 0) {
-          // Route through `updateInstances` so the diff-driven
-          // `addReference` / `dropReference` bookkeeping the store relies on
-          // stays balanced. A bare splice would leave the previously-loaded
-          // instances pinned in the store's identity map and reference count
-          // after the UI has discarded them.
-          try {
-            await this.updateInstances([], dependencyTrackingContext);
-          } catch (cleanupErr) {
-            if (didCancel(cleanupErr)) {
-              throw cleanupErr;
-            }
-            this.#log.error(`search cleanup failed`, cleanupErr);
-          }
-        }
-      }
+      let { instances, meta } = await this.runtimeStore.search<T>(
+        query,
+        this.realmsToSearch,
+        {
+          includeMeta: true,
+          dependencyTrackingContext,
+        },
+      );
+      this.#log.info(
+        `search task complete; total instances=${instances.length}; refs=${instances
+          .map((r) => r.id)
+          .join(',')}`,
+      );
+      this._meta = meta;
+      this._errors = undefined;
+      await this.updateInstances(instances, dependencyTrackingContext);
     } finally {
       waiter.endAsync(token);
     }
   });
-}
-
-// Build an `ErrorEntry` for the SearchResource's `_errors` channel from an
-// arbitrary throwable caught in the search task. Preserve the same fields the
-// declared-`linksTo` producer (`lazilyLoadLink`) carries through when the
-// upstream error is a `CardError` — `additionalErrors` and `deps` flow
-// through to the planted sentinel's `errorDoc` and downstream to
-// `getRelationship` and `getBrokenLinks`, so a federated-search failure shows
-// the same depth of detail as a single-card lazy-load failure does.
-function searchErrorEntry(err: unknown): ErrorEntry {
-  let status =
-    typeof (err as { status?: unknown })?.status === 'number'
-      ? ((err as { status: number }).status as number)
-      : 500;
-  let message =
-    typeof (err as { message?: unknown })?.message === 'string'
-      ? ((err as { message: string }).message as string)
-      : String(err);
-  let stack =
-    typeof (err as { stack?: unknown })?.stack === 'string'
-      ? ((err as { stack: string }).stack as string)
-      : undefined;
-  let title = status === 404 ? 'Link Not Found' : 'Search Error';
-  let serialized: SerializedError = {
-    title,
-    status,
-    message,
-    stack,
-    additionalErrors: null,
-  };
-  if (isCardError(err)) {
-    if (err.additionalErrors?.length) {
-      serialized.additionalErrors = err.additionalErrors.map(
-        (additionalError) => {
-          let normalized = additionalError as Partial<SerializedError>;
-          return {
-            title: normalized.title,
-            status: normalized.status,
-            message: normalized.message,
-            stack: normalized.stack,
-          };
-        },
-      );
-    }
-    if (err.deps?.length) {
-      serialized.deps = [...err.deps];
-    }
-  }
-  return {
-    type: 'instance-error',
-    error: serialized,
-  };
 }
 
 // WARNING! please don't import this directly into your component's module.

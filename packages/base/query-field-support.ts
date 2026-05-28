@@ -134,7 +134,11 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
-    surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+    // DIAGNOSTIC (CS-11221): surface call temporarily disabled to confirm
+    // whether surface or the search-task catch is the source of shard-3
+    // regressions. If shard 3 goes green with this disabled, the
+    // tolerance machinery needs different plumbing.
+    // surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
     return searchResource;
   }
 
@@ -183,7 +187,9 @@ export function ensureQueryFieldSearchResource(
   );
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
-  surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
+  // DIAGNOSTIC (CS-11221): surface call temporarily disabled. See the
+  // matching comment on the cached-return path above.
+  // surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
 
   return searchResource;
 }
