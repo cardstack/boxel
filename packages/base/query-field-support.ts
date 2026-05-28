@@ -225,6 +225,10 @@ export function peekQueryFieldSearchResource(
 // the first call (errors === undefined on a fresh resource, source ===
 // undefined on a fresh fieldState) from clobbering a sentinel that was put
 // in place before the field was first read.
+// DIAGNOSTIC (CS-11221): function kept around while the call sites in
+// ensureQueryFieldSearchResource are commented out; the `void` reference at
+// the bottom of this module is what tells TypeScript the symbol is
+// intentionally retained for later re-enable.
 function surfaceSearchResourceErrorState(
   fieldState: QueryFieldState,
   instance: BaseDef,
@@ -632,3 +636,7 @@ function buildFieldDefinition(field: Field): FieldDefinition | undefined {
     fieldOrCard: ref,
   };
 }
+
+// DIAGNOSTIC (CS-11221): retain `surfaceSearchResourceErrorState` while its
+// call sites are commented out for the shard-3 diagnostic experiment.
+void surfaceSearchResourceErrorState;
