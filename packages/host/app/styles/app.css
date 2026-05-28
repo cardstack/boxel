@@ -13,6 +13,32 @@
   --host-search-sheet-z-index: 300;
 
   --host-workspace-chooser-z-index: 200;
+
+  /* Adorn palette — the teal-accented hover / selection visual used
+     by the workspace cards-grid overlays, the search sheet, and the
+     card chooser. --boxel-teal (#00ffba) is the light accent shipped
+     by boxel-ui; the darker accent is exclusive to the Adorn treatment
+     and is used when both hovered and selected. */
+  --adorn-accent-light: var(--boxel-teal);
+  --adorn-accent: #00da9f;
+}
+
+/* Adorn stroke utility. Apply this class to any card-like element
+   to get the Adorn outline: 2px teal stroke on hover, 4px on
+   selection, darker teal when both. Hover is read from both the
+   `:hover` pseudo-class and an explicit `.hovered` class so consumers
+   that track hover via JS (e.g. when the element itself has
+   `pointer-events: none`) can drive the state too. */
+.adorn-stroke:hover:not(.selected),
+.adorn-stroke.hovered:not(.selected) {
+  box-shadow: 0 0 0 2px var(--adorn-accent-light);
+}
+.adorn-stroke.selected {
+  box-shadow: 0 0 0 4px var(--adorn-accent-light);
+}
+.adorn-stroke.selected:hover,
+.adorn-stroke.selected.hovered {
+  box-shadow: 0 0 0 4px var(--adorn-accent);
 }
 
 .error {

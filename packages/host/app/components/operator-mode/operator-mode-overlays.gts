@@ -43,6 +43,9 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
+import AdornLabel from '@cardstack/host/components/adorn/adorn-label';
+import AdornSelectChip from '@cardstack/host/components/adorn/adorn-select-chip';
+
 import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 
 import type {
@@ -102,7 +105,7 @@ export default class OperatorModeOverlays extends Overlays {
         {{#if (or isSelected isHovered)}}
           <div
             class={{cn
-              'actions-overlay'
+              'actions-overlay adorn-stroke'
               selected=isSelected
               hovered=isHovered
               field=(this.isField renderedCard)
@@ -122,8 +125,7 @@ export default class OperatorModeOverlays extends Overlays {
                 when there isn't room above and truncating with an
                 ellipsis when there isn't room sideways. }}
             {{#if isHovered}}
-              <div
-                class='adorn-label'
+              <AdornLabel
                 data-test-overlay-label
                 {{this.trackLabelOverflow renderedCard.element}}
                 {{on 'mouseenter' this.cancelHoverClear}}
@@ -140,13 +142,6 @@ export default class OperatorModeOverlays extends Overlays {
                 <span class='adorn-label-text'>
                   {{this.getCardTypeName cardDefOrId renderedCard}}
                 </span>
-                {{! Wrap BoxelDropdown so the trigger and its
-                    portal-origin element count as a single flex item
-                    of the label. Otherwise the label grows by one
-                    flex-gap as soon as the menu opens (the open-state
-                    wormhole-origin becomes a flex item where the
-                    closed-state placeholder was display none), and
-                    the label would shift on every menu open/close. }}
                 <span class='adorn-label-dropdown'>
                   <BoxelDropdown
                     @registerAPI={{this.registerDropdownAPI renderedCard}}
@@ -176,10 +171,12 @@ export default class OperatorModeOverlays extends Overlays {
                     </:content>
                   </BoxelDropdown>
                 </span>
-              </div>
+              </AdornLabel>
             {{/if}}
 
-            {{! Selection indicator — bottom-right rounded square chip }}
+            {{! Selection indicator — bottom-right rounded square chip.
+                Wrap AdornSelectChip in a button so it can be clicked
+                to toggle selection. }}
             {{#if (this.isButtonDisplayed 'select' renderedCard)}}
               <button
                 type='button'
@@ -190,38 +187,7 @@ export default class OperatorModeOverlays extends Overlays {
                 aria-pressed={{if isSelected 'true' 'false'}}
                 data-test-overlay-select={{removeFileExtension cardId}}
               >
-                {{#if isSelected}}
-                  <svg
-                    class='adorn-select-icon'
-                    viewBox='0 0 14 14'
-                    fill='none'
-                    aria-hidden='true'
-                  >
-                    <circle cx='7' cy='7' r='7' fill='#0a2e1c' />
-                    <path
-                      d='M3.5 7.5L5.5 9.5L10.5 4.5'
-                      stroke='currentColor'
-                      stroke-width='1.5'
-                      stroke-linecap='round'
-                      stroke-linejoin='round'
-                    />
-                  </svg>
-                {{else}}
-                  <svg
-                    class='adorn-select-icon'
-                    viewBox='-1 -1 16 16'
-                    fill='none'
-                    aria-hidden='true'
-                  >
-                    <circle
-                      cx='7'
-                      cy='7'
-                      r='6.5'
-                      stroke='#0a2e1c'
-                      stroke-width='1.5'
-                    />
-                  </svg>
-                {{/if}}
+                <AdornSelectChip @selected={{isSelected}} />
               </button>
             {{/if}}
           </div>
@@ -230,12 +196,6 @@ export default class OperatorModeOverlays extends Overlays {
     {{/each}}
     <style scoped>
       .actions-overlay {
-        /* Adorn accent palette (local to operator-mode overlay).
-           --boxel-teal (#00ffba) is the light accent already in boxel-ui;
-           the medium and dark values are exclusive to this overlay. */
-        --adorn-accent-light: var(--boxel-teal);
-        --adorn-accent: #00da9f;
-
         pointer-events: none;
         container-name: actions-overlay;
         container-type: size;
@@ -243,13 +203,12 @@ export default class OperatorModeOverlays extends Overlays {
            overlay's bounding box without being clipped. */
         overflow: visible;
       }
-
-      /* Hover, not selected: 2px outer stroke */
-      .actions-overlay.hovered:not(.selected) {
-        box-shadow: 0 0 0 2px var(--adorn-accent-light);
-      }
-
-      /* Selected: 4px outer stroke */
+      /* Switch the label's background to the darker accent when the
+         underlying card is selected. AdornLabel reads `--adorn-label-bg`
+         from any cascading ancestor; the variable here propagates down
+         through the rendered label even though AdornLabel positions
+         itself with position:fixed (CSS custom properties cascade
+         through the DOM tree, not the layout tree). */
       .actions-overlay.selected {
         box-shadow: 0 0 0 4px var(--adorn-accent-light);
       }
@@ -323,6 +282,7 @@ export default class OperatorModeOverlays extends Overlays {
          flex-gap as soon as the menu opens, shifting the label
          on click. */
       .adorn-label-dropdown {
+        --adorn-label-bg: var(--adorn-accent);
         display: inline-flex;
         align-items: center;
       }
@@ -341,26 +301,19 @@ export default class OperatorModeOverlays extends Overlays {
         background: rgba(0, 0, 0, 0.12);
       }
 
-      /* Selection indicator — rounded square chip at the bottom-right corner. */
+      /* Selection-toggle button: positions the AdornSelectChip in
+         the bottom-right corner of the overlay and turns it into an
+         interactive control. */
       .adorn-select-button {
         position: absolute;
         bottom: 4px;
         right: 4px;
-        width: 20px;
-        height: 20px;
-        padding: 3px;
+        padding: 0;
         border: none;
-        border-radius: 5px;
-        background: var(--adorn-accent-light);
-        color: var(--adorn-accent-light);
+        background: none;
         cursor: pointer;
         pointer-events: auto;
         z-index: 1;
-      }
-      .adorn-select-icon {
-        display: block;
-        width: 14px;
-        height: 14px;
       }
 
       /* Field overlays (containsMany items, linksToMany items) don't get the
@@ -370,14 +323,17 @@ export default class OperatorModeOverlays extends Overlays {
         display: none;
       }
 
-      /* Compact mode for small atom-format cards */
+      /* Compact mode for small atom-format cards. Override sizes on
+         AdornLabel/AdornSelectChip via :global because those classes
+         live on elements rendered by the AdornLabel/AdornSelectChip
+         components and aren't visible to this stylesheet's scope. */
       @container actions-overlay (aspect-ratio > 2.0) and (height <= 57px) {
-        .adorn-label {
+        :global(.adorn-label) {
           padding: 2px 10px 2px 5px;
           font-size: 9px;
           gap: 4px;
         }
-        .adorn-label-icon {
+        :global(.adorn-label-icon) {
           width: 11px;
           height: 11px;
         }
@@ -388,13 +344,15 @@ export default class OperatorModeOverlays extends Overlays {
           --boxel-icon-button-height: 14px;
         }
         .adorn-select-button {
-          width: 16px;
-          height: 16px;
-          padding: 2px;
           bottom: 2px;
           right: 2px;
         }
-        .adorn-select-icon {
+        :global(.adorn-select-chip) {
+          width: 16px;
+          height: 16px;
+          padding: 2px;
+        }
+        :global(.adorn-select-icon) {
           width: 12px;
           height: 12px;
         }
