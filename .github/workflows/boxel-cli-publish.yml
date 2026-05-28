@@ -54,9 +54,15 @@ concurrency:
 jobs:
   unstable:
     name: Publish unstable
+    # Manual trigger is restricted to "Use workflow from: main" so the workflow
+    # YAML interpreting the publish is always main's (defense in depth — the
+    # checkout step below also pins `ref: main`).
     if: >-
       github.actor != 'github-actions[bot]'
-      && (github.event_name == 'push' || inputs.confirm == '')
+      && (
+        github.event_name == 'push'
+        || (inputs.confirm == '' && github.ref == 'refs/heads/main')
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -297,7 +303,10 @@ jobs:
 
   stable:
     name: Promote latest unstable to stable
-    if: github.event_name == 'workflow_dispatch' && inputs.confirm == 'promote'
+    # Any non-empty `confirm` routes here so the validation step below can
+    # error loudly on a typo. Gating on `confirm == 'promote'` here would make
+    # a typo skip both jobs and look like a successful no-op run.
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm != ''
     runs-on: ubuntu-latest
     steps:
       - name: Validate confirmation
