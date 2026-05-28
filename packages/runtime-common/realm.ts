@@ -233,7 +233,7 @@ function isDuringPrerenderRequest(request: Request): boolean {
 
 // Fields owned by the RealmConfig card instance at /realm.json. A PATCH
 // /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
-// PROPERTIES is rejected — there is no longer a sidecar catch-all.
+// PROPERTIES is rejected — unrecognized keys have no storage target.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -6363,8 +6363,8 @@ export class Realm {
         // Opt-in field: only an explicit `true` is meaningful (every
         // consumer checks `=== true`). An unset BooleanField serializes
         // as `false` once the card is indexed, so collapse anything but
-        // `true` to null to keep the disk-read and index-read paths — and
-        // the pre-card sidecar behavior — consistent.
+        // `true` to null — /_info then reports the same "not opted in"
+        // value whether or not the card has been indexed yet.
         if (attrs.includePrerenderedDefaultRealmIndex === true) {
           realmInfo.includePrerenderedDefaultRealmIndex = true;
         }

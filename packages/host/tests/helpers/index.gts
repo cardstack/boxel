@@ -2175,11 +2175,10 @@ export async function waitForNewRoomSkillsLoaded(roomId: string) {
   }
 }
 
-// Builds the JSON string for a /realm.json RealmConfig card from the
-// legacy sidecar-shaped config object that tests used to write to
-// .realm.json. The card stores `name` under cardInfo.name (matching the
-// CardDef slot); other fields land on attributes directly. Pass `null`
-// for the value if you intentionally want the field omitted.
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields
+// land on attributes directly. Omit a key to leave that field unset.
 export function realmConfigCardJSON(
   config: {
     name?: string;

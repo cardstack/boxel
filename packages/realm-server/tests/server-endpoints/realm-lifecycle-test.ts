@@ -90,8 +90,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           owner,
           endpoint,
         );
-        // Defensive: the legacy .realm.json sidecar is gone — neither
-        // createRealm nor any other write path should produce one.
+        // No write path produces a .realm.json sidecar; createRealm
+        // writes only the realm.json RealmConfig card.
         assert.notOk(
           existsSync(join(realmPath, '.realm.json')),
           'no .realm.json sidecar is written by createRealm',

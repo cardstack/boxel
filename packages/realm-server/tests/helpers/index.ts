@@ -2483,11 +2483,11 @@ export const cardInfo = {
   cardThumbnailURL: null,
 };
 
-// Builds the JSON string for a /realm.json RealmConfig card from the legacy
-// sidecar-shaped config object that tests used to write to .realm.json. The
-// card stores `name` under cardInfo.name (matching the CardDef slot); other
-// fields land on attributes directly. Mirrors the host helper so realm-server
-// tests can build the same shape without depending on host.
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields land
+// on attributes directly. Mirrors the host helper so realm-server tests can
+// build the same shape without depending on host.
 export function realmConfigCardJSON(
   config: {
     name?: string;

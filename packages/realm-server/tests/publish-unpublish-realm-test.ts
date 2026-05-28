@@ -671,9 +671,9 @@ module(basename(__filename), function () {
           'realm_server_3',
           ...sourceRealmURL.pathname.split('/').filter(Boolean),
         );
-        // publishable is owned by realm_metadata after CS-10053 — the
-        // realm createRealm flow already seeded the row with
-        // publishable=true, so nothing extra is needed here.
+        // publishable is owned by the realm_metadata table; createRealm
+        // already seeded the row with publishable=true, so nothing extra
+        // is needed here.
 
         let homeCardPath = 'SiteConfig/custom-home';
         let absoluteHomeLink = `${sourceRealmUrlString}${homeCardPath}`;
