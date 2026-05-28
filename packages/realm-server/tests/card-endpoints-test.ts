@@ -211,13 +211,16 @@ module(basename(__filename), function () {
           });
         });
 
-        test('serves a card error request without last known good state', async function (assert) {
+        test('serves a card with a broken linksTo target as a normal instance — the broken slot is surfaced via the relationship reference, not as a server error', async function (assert) {
           let response = await request
             .get('/missing-link')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -228,49 +231,17 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          delete errorBody.meta.stack;
-          assert.strictEqual(errorBody.id, `${testRealmHref}missing-link`);
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
-          );
-          assert.strictEqual(errorBody.realm, testRealmHref);
-          assert.strictEqual(
-            errorBody.meta.lastKnownGoodHtml,
-            null,
-            'no last known good html is present',
+            json.data.id,
+            `${testRealmHref}missing-link`,
+            'response carries the requested card id',
           );
           assert.strictEqual(
-            errorBody.meta.cardTitle,
-            null,
-            'no card title is present',
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
-          assert.ok(
-            Array.isArray(errorBody.meta.scopedCssUrls),
-            'scoped css urls are present',
-          );
-          if (errorBody.meta.scopedCssUrls.length > 0) {
-            assert.ok(
-              errorBody.meta.scopedCssUrls.every((scopedCssUrl: string) =>
-                scopedCssUrl.endsWith('.glimmer-scoped.css'),
-              ),
-              'scoped css urls have the expected suffix',
-            );
-          } else {
-            assert.deepEqual(
-              errorBody.meta.scopedCssUrls,
-              [],
-              'scoped css urls can be empty when no styles are collected',
-            );
-          }
         });
 
         test('includes FileDef resources for file links in included payload', async function (assert) {
@@ -1048,7 +1019,7 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
-        test('serves a card error request with last known good state', async function (assert) {
+        test('patching a card to point at a missing linksTo target keeps the card itself indexable — GET returns the card as a normal instance with the broken reference preserved on the wire', async function (assert) {
           await request
             .patch('/hassan')
             .send({
@@ -1075,8 +1046,11 @@ module(basename(__filename), function () {
             .get('/hassan')
             .set('Accept', 'application/vnd.card+json');
 
-          assert.strictEqual(response.status, 500, 'HTTP 500 status');
-          let json = response.body;
+          assert.strictEqual(
+            response.status,
+            200,
+            `HTTP 200 status: ${response.text}`,
+          );
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
             testRealmHref,
@@ -1087,29 +1061,16 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-
-          let errorBody = json.errors[0];
-          let lastKnownGoodHtml = cleanWhiteSpace(
-            errorBody.meta.lastKnownGoodHtml,
-          );
-
-          assert.ok(
-            errorBody.meta.stack.includes('at Realm.getSourceOrRedirect'),
-            'stack trace is correct',
-          );
-          assert.strictEqual(errorBody.status, 404);
-          assert.strictEqual(errorBody.title, 'Link Not Found');
+          let json = response.body;
           assert.strictEqual(
-            errorBody.message,
-            `missing file ${testRealmHref}does-not-exist.json`,
+            json.data.id,
+            `${testRealmHref}hassan`,
+            'response carries the requested card id',
           );
-          assert.ok(lastKnownGoodHtml.includes('Hassan has a friend'));
-          assert.ok(lastKnownGoodHtml.includes('Jade'));
-          let scopedCssUrls = errorBody.meta.scopedCssUrls;
-          assertScopedCssUrlsContain(
-            assert,
-            scopedCssUrls,
-            cardDefModuleDependencies,
+          assert.strictEqual(
+            json.data.relationships?.friend?.links?.self,
+            './does-not-exist',
+            'broken friend relationship is preserved on the wire as a reference — the consumer renders the placeholder, the server does not error',
           );
         });
       });

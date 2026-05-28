@@ -3563,6 +3563,83 @@ function lazilyLoadLink(
   })();
 }
 
+// Replace any linksTo / linksToMany bucket entry on `consumer` that points
+// to `deletedRef` with a `link-not-found` sentinel, and notify subscribers
+// so the placeholder render takes over the slot. Returns true when at
+// least one slot was rewritten. The host's store calls this from its
+// realm-event handler when an instance is removed: the deleted target's
+// loaded card is still hard-referenced by every consumer that has it in
+// memory, and without this rewrite the consumer's render stays stale
+// until something else forces a re-render. Mirrors the sentinel shape
+// `lazilyLoadLink` plants for a 404 — same `link-not-found` discriminator,
+// same `errorDoc.status: 404`, same `deps` (both id and `.json` forms) so
+// downstream invalidation behaves identically to a real fetch failure.
+export function notifyLinksToTargetDeleted(
+  consumer: CardDef,
+  deletedRef: string,
+): boolean {
+  let bucket = getDataBucket(consumer);
+  let fields = getFields(consumer, { includeComputeds: false });
+  let referenceWithJson = deletedRef.endsWith('.json')
+    ? deletedRef
+    : `${deletedRef}.json`;
+  let referenceWithoutJson = deletedRef.replace(/\.json$/, '');
+  let buildSentinel = (): LinkNotFoundValue => ({
+    type: 'link-not-found',
+    reference: referenceWithoutJson,
+    errorDoc: {
+      title: 'Link Not Found',
+      status: 404,
+      message: `missing file ${referenceWithJson}`,
+      deps: [referenceWithoutJson, referenceWithJson],
+      additionalErrors: null,
+    } as SerializedError,
+  });
+  let changed = false;
+  for (let [fieldName, field] of Object.entries(fields)) {
+    if (!field) {
+      continue;
+    }
+    if (field.fieldType === 'linksTo') {
+      let current = bucket.get(fieldName);
+      if (
+        current &&
+        typeof current === 'object' &&
+        'id' in current &&
+        (current as { id?: unknown }).id === referenceWithoutJson
+      ) {
+        let sentinel = buildSentinel();
+        bucket.set(fieldName, sentinel);
+        notifySubscribers(consumer, fieldName, sentinel);
+        notifyCardTracking(consumer);
+        changed = true;
+      }
+    } else if (field.fieldType === 'linksToMany') {
+      let arr = bucket.get(fieldName);
+      if (Array.isArray(arr)) {
+        let arrChanged = false;
+        for (let [index, item] of arr.entries()) {
+          if (
+            item &&
+            typeof item === 'object' &&
+            'id' in item &&
+            (item as { id?: unknown }).id === referenceWithoutJson
+          ) {
+            arr[index] = buildSentinel();
+            arrChanged = true;
+          }
+        }
+        if (arrChanged) {
+          notifySubscribers(consumer, fieldName, arr);
+          notifyCardTracking(consumer);
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+}
+
 function trackRuntimeRelationshipDependency(
   value: unknown,
   declaredCard: LinkableDefConstructor,

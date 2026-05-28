@@ -1391,7 +1391,7 @@ module(basename(__filename), function () {
         );
       });
 
-      test('card prerender captures a broken linksTo via the relationship scan', async function (assert) {
+      test('card prerender succeeds for a card with a broken linksTo target — the broken slot is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
         let cardURL = `${realmURL}owner-with-broken-pet.json`;
 
         let result = await prerenderCard(prerenderer, {
@@ -1402,27 +1402,22 @@ module(basename(__filename), function () {
           auth: auth(),
         });
 
-        assert.ok(
+        assert.notOk(
           result.response.error,
-          'prerender reports an error for the broken linksTo',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          404,
-          'a missing link target surfaces as 404',
+          `prerender succeeds despite the broken linksTo — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
         );
         assert.ok(
-          result.response.error?.error.message?.includes('missing-pet'),
-          `error message names the missing link target, got: ${result.response.error?.error.message}`,
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
         );
-        let deps = result.response.error?.error.deps ?? [];
+        let deps = result.response.deps ?? [];
         assert.ok(
           deps.some((dep) => dep.includes('missing-pet')),
-          `deps include the broken link reference, got: ${JSON.stringify(deps)}`,
+          `deps include the broken link reference so invalidation can reach the card if the target is created later, got: ${JSON.stringify(deps)}`,
         );
       });
 
-      test('card prerender captures a broken linksToMany element via the relationship scan', async function (assert) {
+      test('card prerender succeeds for a card with a broken linksToMany element — the broken element is captured in deps for invalidation, the entry indexes cleanly', async function (assert) {
         let cardURL = `${realmURL}owner-with-broken-pets.json`;
 
         let result = await prerenderCard(prerenderer, {
@@ -1433,20 +1428,15 @@ module(basename(__filename), function () {
           auth: auth(),
         });
 
-        assert.ok(
+        assert.notOk(
           result.response.error,
-          'prerender reports an error for the broken linksToMany element',
-        );
-        assert.strictEqual(
-          result.response.error?.error.status,
-          404,
-          'a missing element target surfaces as 404',
+          `prerender succeeds despite the broken linksToMany element — broken slot renders inline, error: ${JSON.stringify(result.response.error?.error ?? null)}`,
         );
         assert.ok(
-          result.response.error?.error.message?.includes('missing-pet-2'),
-          `error message names the missing element target, got: ${result.response.error?.error.message}`,
+          result.response.serialized,
+          'prerender returns the serialized JSON:API document',
         );
-        let deps = result.response.error?.error.deps ?? [];
+        let deps = result.response.deps ?? [];
         assert.ok(
           deps.some((dep) => dep.includes('missing-pet-2')),
           `deps include the broken element reference, got: ${JSON.stringify(deps)}`,
@@ -4674,7 +4664,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('missing link surfaces 404 without eviction', async function (assert) {
+        test('a card whose linksTo target is missing prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}missing-link`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4685,12 +4675,10 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for missing link');
-          assert.strictEqual(
-            response.error?.error.message,
-            `missing file ${realmURL1}missing-owner.json`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 404);
           assert.false(
             result.pool.evicted,
             'missing link does not evict prerender page',
@@ -4701,7 +4689,7 @@ module(basename(__filename), function () {
           );
         });
 
-        test('fetch failed surfaces error without eviction', async function (assert) {
+        test('a card whose linksTo target fails to fetch prerenders cleanly and does not evict the page', async function (assert) {
           const testCardURL = `${realmURL2}fetch-failed`;
           let result = await prerenderCard(prerenderer, {
             affinityType: 'realm',
@@ -4712,19 +4700,17 @@ module(basename(__filename), function () {
           });
           let { response } = result;
 
-          assert.ok(response.error, 'error present for fetch failed');
-          assert.strictEqual(
-            response.error?.error.message,
-            `unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed`,
+          assert.notOk(
+            response.error,
+            `prerender succeeds — broken slot renders inline, error: ${JSON.stringify(response.error?.error ?? null)}`,
           );
-          assert.strictEqual(response.error?.error.status, 500);
           assert.false(
             result.pool.evicted,
-            'fetch failed does not evict prerender page',
+            'fetch-failed link does not evict prerender page',
           );
           assert.false(
             result.pool.timedOut,
-            'fetch failed does not mark prerender timeout',
+            'fetch-failed link does not mark prerender timeout',
           );
         });
 
