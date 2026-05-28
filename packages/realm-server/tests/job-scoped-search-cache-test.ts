@@ -424,6 +424,60 @@ module(basename(__filename), function (hooks) {
       );
     });
 
+    test('janitor flushes stale local stats even when clearJob never ran for the job', async function (assert) {
+      let cache = new JobScopedSearchCache(dbAdapter, { ttlMs: 20 });
+
+      // A miss records a per-process #stats entry for this job.
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate: async () => makeDoc('first'),
+      });
+      assert.strictEqual(
+        cache.trackedStatJobCount,
+        1,
+        'a miss records a local stats entry',
+      );
+
+      // The shared rows vanish without this process running clearJob — a peer
+      // replica cleared them first, or the janitor reclaimed them on a missed
+      // NOTIFY. The local #stats entry would otherwise linger forever.
+      await query(dbAdapter, [
+        `DELETE FROM job_scoped_search_cache`,
+      ] as Expression);
+
+      await new Promise((r) => setTimeout(r, 40)); // age the stat past the 20ms TTL
+      await cache.sweepExpired();
+
+      assert.strictEqual(
+        cache.trackedStatJobCount,
+        0,
+        'the orphaned stats entry was flushed rather than retained indefinitely',
+      );
+    });
+
+    test('janitor keeps local stats for a job still within the TTL', async function (assert) {
+      let cache = new JobScopedSearchCache(dbAdapter, { ttlMs: 60_000 });
+
+      await cache.getOrPopulate({
+        jobId: '42.1',
+        realms: [realmA],
+        query: makeQuery(),
+        opts: undefined,
+        populate: async () => makeDoc('first'),
+      });
+
+      await cache.sweepExpired();
+
+      assert.strictEqual(
+        cache.trackedStatJobCount,
+        1,
+        'a fresh stats entry survives the sweep',
+      );
+    });
+
     test('computeETag: stable across calls with identical inputs', function (assert) {
       let cache = new JobScopedSearchCache(dbAdapter);
       let a = cache.computeETag({

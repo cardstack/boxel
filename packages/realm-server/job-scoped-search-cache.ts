@@ -64,7 +64,18 @@ export class JobScopedSearchCache {
   // are dropped via `clearJob`. Off by default; enable via
   // `LOG_LEVELS=job-scoped-search-cache=debug`. Cross-replica hit rates aren't
   // aggregated — each replica reports what it observed.
-  #stats = new Map<string, { hits: number; misses: number }>();
+  //
+  // `clearJob` is the normal flush path, but it isn't guaranteed to run for
+  // every job this process observed: a peer replica can `clearJob` the shared
+  // rows first (so this process's jobs_finished sweep never sees the job id),
+  // or the rows can be reclaimed by the janitor on a missed NOTIFY. Without a
+  // backstop those entries would accumulate forever. So each entry carries the
+  // time it was last touched, and the janitor flushes (and drops) any entry not
+  // touched within the TTL — the same age bound the DB rows themselves obey.
+  #stats = new Map<
+    string,
+    { hits: number; misses: number; lastTouchedAt: number }
+  >();
 
   constructor(
     dbAdapter: DBAdapter,
@@ -87,7 +98,10 @@ export class JobScopedSearchCache {
     let existing = await this.#getCachedByHash(args.jobId, hash);
     if (existing !== undefined) {
       let stat = this.#stats.get(args.jobId);
-      if (stat) stat.hits += 1;
+      if (stat) {
+        stat.hits += 1;
+        stat.lastTouchedAt = Date.now();
+      }
       return existing;
     }
 
@@ -97,10 +111,11 @@ export class JobScopedSearchCache {
     // cache entry.
     let stat = this.#stats.get(args.jobId);
     if (!stat) {
-      stat = { hits: 0, misses: 0 };
+      stat = { hits: 0, misses: 0, lastTouchedAt: Date.now() };
       this.#stats.set(args.jobId, stat);
     }
     stat.misses += 1;
+    stat.lastTouchedAt = Date.now();
 
     await query(this.#dbAdapter, [
       `INSERT INTO ${TABLE} (job_id, inner_key_hash, result) VALUES (`,
@@ -171,6 +186,12 @@ export class JobScopedSearchCache {
     return rows[0]?.count ?? 0;
   }
 
+  // Count of jobs this process is holding local #stats for. Bounded by the
+  // stale-stats janitor; exposed so tests can assert that backstop runs.
+  get trackedStatJobCount(): number {
+    return this.#stats.size;
+  }
+
   // Job-id-based weak ETag. Same `(jobId, realms, query, opts)` always produces
   // the same value for an entry's lifetime; a different jobId yields a
   // different ETag so a stale If-None-Match from a previous batch never matches
@@ -208,7 +229,9 @@ export class JobScopedSearchCache {
   }
 
   // Delete rows older than the TTL — the rows a job left behind because some
-  // replica missed its jobs_finished NOTIFY. Best-effort.
+  // replica missed its jobs_finished NOTIFY. Best-effort. Also flushes local
+  // #stats entries that have aged out, so they can't accumulate when clearJob
+  // never runs for a job this process observed (see #flushStaleStats).
   async sweepExpired(): Promise<void> {
     try {
       await query(this.#dbAdapter, [
@@ -219,6 +242,7 @@ export class JobScopedSearchCache {
     } catch (err: unknown) {
       log.warn(`job-scoped search cache janitor sweep failed: ${String(err)}`);
     }
+    this.#flushStaleStats();
   }
 
   // Single sink for the once-per-job stats log, emitted from clearJob.
@@ -234,6 +258,21 @@ export class JobScopedSearchCache {
       `job-scoped search cache stats job=${jobId} hits=${stat.hits} misses=${stat.misses} hitRate=${hitRate} (${reason})`,
     );
     this.#stats.delete(jobId);
+  }
+
+  // Flush #stats entries that haven't been touched within the TTL. clearJob
+  // handles the normal eviction, but a job's stats outlive its rows whenever
+  // clearJob never runs for it on this process — a peer replica cleared the
+  // shared rows first, or the janitor reclaimed them on a missed NOTIFY. An
+  // entry stops being touched once its job stops issuing reads, so aging out at
+  // the TTL bounds the map without dropping stats for a still-active job.
+  #flushStaleStats(): void {
+    let cutoff = Date.now() - this.#ttlMs;
+    for (let [jobId, stat] of this.#stats) {
+      if (stat.lastTouchedAt < cutoff) {
+        this.#flushStats(jobId, 'expired');
+      }
+    }
   }
 }
 

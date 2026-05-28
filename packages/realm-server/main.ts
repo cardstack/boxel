@@ -741,10 +741,11 @@ const smokeTestHostApp = async () => {
   });
   await indexUpdatedListener.start();
 
-  // CS-11179: NOTIFY-driven eviction for the in-memory JobScopedSearchCache.
-  // On `jobs_finished` it drops the finished job's cache entries immediately
-  // instead of waiting for their TTL. Shares the same searchCache instance the
-  // request handlers populate (passed into RealmServer above).
+  // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
+  // On `jobs_finished` it drops the finished job's cache rows immediately
+  // instead of waiting for the janitor to reclaim them past their TTL. Shares
+  // the same searchCache instance the request handlers populate (passed into
+  // RealmServer above).
   jobsFinishedListener = new JobsFinishedListener({
     dbAdapter,
     searchCache,
