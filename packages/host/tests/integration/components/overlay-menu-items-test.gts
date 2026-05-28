@@ -344,17 +344,14 @@ module('Integration | overlay-menu-items', function (hooks) {
 
     // The label's anchor is decided after the ResizeObserver fires; give
     // the browser a frame so the post-layout decision is recorded.
-    await waitUntil(
-      () => label.getBoundingClientRect().width > 0,
-      { timeout: 1000 },
-    );
+    await waitUntil(() => label.getBoundingClientRect().width > 0, {
+      timeout: 1000,
+    });
 
     let labelRect = label.getBoundingClientRect();
     let overlayRect = overlay.getBoundingClientRect();
     let radius = parseFloat(
-      window
-        .getComputedStyle(overlay)
-        .getPropertyValue('--card-corner-radius'),
+      window.getComputedStyle(overlay).getPropertyValue('--card-corner-radius'),
     );
 
     if (label.hasAttribute('data-overflow')) {
