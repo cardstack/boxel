@@ -424,12 +424,19 @@ module(
       }
     });
 
-    test('getBrokenLinks reports a query-field finding when the resource errors', async function (this: RenderingTestContext, assert) {
+    test('getBrokenLinks skips query-field findings even when the resource has errored', async function (this: RenderingTestContext, assert) {
+      // Query-backed `linksTo` / `linksToMany` fields participate in the
+      // tolerance state machine via `getRelationship`, but they intentionally
+      // do not flow through `getBrokenLinks`. The legacy broken-link scan
+      // converts findings into render errors (instance-error) at the indexer,
+      // which would mis-classify cards whose query failed for soft reasons
+      // (cross-realm assertions, federated partial failures) — outcomes the
+      // query branch must surface as state, not as render failure.
       await setupRealm();
       let host = (await makeHost('Nonexistent')) as CardDefType & {
         favorite: unknown;
       };
-      let { getBrokenLinks, getDataBucket } = cardApi;
+      let { getBrokenLinks, getDataBucket, getRelationship } = cardApi;
       let { isLinkError } = fieldSupport;
 
       let unmount = failFederatedSearchWith(500, 'realm exploded');
@@ -439,14 +446,15 @@ module(
 
         let findings = getBrokenLinks(host);
         let favoriteFinding = findings.find((f) => f.fieldName === 'favorite');
-        assert.ok(
+        assert.notOk(
           favoriteFinding,
-          'getBrokenLinks captures the query-field as a broken-link finding',
+          'getBrokenLinks does NOT report query-field findings',
         );
-        if (favoriteFinding) {
-          assert.strictEqual(favoriteFinding.kind, 'error');
-          assert.strictEqual(favoriteFinding.errorDoc.status, 500);
-        }
+
+        // The structured state is still observable through getRelationship —
+        // that is the public surface query-field consumers branch on.
+        let state = singularState(getRelationship(host, 'favorite'));
+        assert.strictEqual(state.kind, 'error');
       } finally {
         unmount();
       }

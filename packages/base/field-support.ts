@@ -677,6 +677,18 @@ export function getBrokenLinks(
     if (!field || field.computeVia) {
       continue;
     }
+    // Query-backed `linksTo` / `linksToMany` fields (the `{ query }` form
+    // resolved through `_federated-search`) sit outside the
+    // broken-link / declared-`linksTo` scan: their failure surface is
+    // `getRelationship`, not the indexer-side cascade. A search resource
+    // can fail for "soft" reasons that should not classify the consuming
+    // card as instance-error (cross-realm assertions, transient federated
+    // failures), and the field getter already routes them through a
+    // structured state machine. Skip them here so a planted resource-level
+    // sentinel does not flow into a render error.
+    if (field.queryDefinition) {
+      continue;
+    }
     // Only inspect fields already in the data bucket — reading an absent field
     // through the getter would initialize it (see above).
     if (!bucket.has(fieldName)) {
