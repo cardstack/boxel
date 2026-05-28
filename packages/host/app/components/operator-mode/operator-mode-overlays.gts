@@ -65,19 +65,13 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
 
-// Walks up from a rendered card's DOM element to find the nearest
-// enclosing rendered-card wrapper (`[data-boxel-card-id]`) — i.e. the
-// card this card is embedded in. Top-level cards have no such wrapper,
-// so we fall back to the operator-mode stack item's content area,
-// which is the visual frame that should bound the label.
+// The label's outward growth should be bounded by the visible frame
+// of the operator-mode stack item — that's the box that defines the
+// "page" the card is rendered on, and it keeps the label out of the
+// chrome around it (sidebar, dialog title bar). Within that frame
+// the label is free to extend across sibling cards / columns when
+// the hovered card is near an edge.
 function findAdornLabelBoundary(cardEl: HTMLElement): HTMLElement | null {
-  let cur = cardEl.parentElement;
-  while (cur) {
-    if (cur.hasAttribute('data-boxel-card-id')) {
-      return cur;
-    }
-    cur = cur.parentElement;
-  }
   return cardEl.closest<HTMLElement>('.stack-item-content');
 }
 
