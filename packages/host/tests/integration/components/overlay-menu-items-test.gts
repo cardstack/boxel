@@ -319,4 +319,45 @@ module('Integration | overlay-menu-items', function (hooks) {
         'the card-flavored URL label is suppressed for file targets',
       );
   });
+
+  test('hover type-label tab clips its shape without a separate border-radius', async function (assert) {
+    setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    let overlaySelector = `[data-test-overlay-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    await waitFor(`[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`);
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
+      'mouseenter',
+    );
+    let label = (await waitFor(
+      `${overlaySelector} [data-test-overlay-label]`,
+    )) as HTMLElement;
+    let styles = window.getComputedStyle(label);
+
+    // The visible "rounded" corners live in the clip-path as 4px bevels on
+    // the left side. Combining border-radius with clip-path at those same
+    // corners leaves a light-grey anti-aliasing seam, so the left corners
+    // must keep their rounding entirely within the clip shape. (The right
+    // side is the slope; border-radius there is either clipped away or
+    // would only blunt the slope tip, so no seam risk.)
+    assert.notEqual(
+      styles.clipPath,
+      'none',
+      'type-label tab clips its flag shape via clip-path',
+    );
+    for (let corner of [
+      'borderTopLeftRadius',
+      'borderBottomLeftRadius',
+    ] as const) {
+      assert.strictEqual(
+        styles[corner],
+        '0px',
+        `${corner} is 0 (left-corner rounding is folded into the clip-path)`,
+      );
+    }
+  });
 });
