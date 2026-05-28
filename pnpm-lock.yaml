@@ -2846,6 +2846,9 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.20.0
+      puppeteer:
+        specifier: ^24.8.2
+        version: 24.43.1(typescript@5.9.3)
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@24.12.4)(typescript@5.9.3)
