@@ -2138,7 +2138,7 @@ function brokenSingularLink(
 // slot when it can't load); `head` / `metadata` / `markdown` / `form` have no
 // dedicated placeholder footprint and fall back to the general-purpose
 // `embedded` layout.
-function brokenLinkFormat(
+export function brokenLinkFormat(
   format: Format | undefined,
   defaultFormat: Format,
 ): BrokenLinkFormat {
@@ -3553,18 +3553,6 @@ function lazilyLoadLink(
         notifySubscribers(instance, field.name, sentinel);
         notifyCardTracking(instance);
       }
-
-      let payload = JSON.stringify({
-        type: 'error',
-        error: payloadError,
-      });
-      // We use a custom event for render errors--otherwise QUnit will report a "global error"
-      // when we use a promise rejection to signal to the prerender that there was an error
-      // even though everything is working as designed. QUnit is very noisy about these errors...
-      const event = new CustomEvent('boxel-render-error', {
-        detail: { reason: payload },
-      });
-      globalThis.dispatchEvent(event);
     } finally {
       deferred.fulfill();
       inflightLoads.delete(key);

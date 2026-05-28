@@ -632,10 +632,9 @@ export interface BrokenLinkFinding {
 
 // Walk the rendered instance graph and collect every `linksTo` / `linksToMany`
 // relationship currently in an `'error'` or `'not-found'` state. This is the
-// intended read surface for the indexer's broken-link error capture: a caller
-// scans the instance after the store has settled and builds a structured
-// failure payload from the findings. (Wiring it into the prerender / render
-// route is tracked separately; nothing in production calls this yet.)
+// read surface for the indexer's broken-link error capture: the prerender and
+// render route scan the instance after the store has settled and build a
+// structured failure payload from the findings.
 //
 // The walk recurses to match the coverage the legacy `boxel-render-error`
 // dispatch had — that event fired for any failed lazy load anywhere in the
