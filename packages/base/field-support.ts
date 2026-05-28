@@ -22,6 +22,7 @@ import {
   type SerializeOpts,
 } from './card-serialization';
 import { initSharedState } from './shared-state';
+import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import type { ConfigurationInput, FieldConfiguration } from './card-api';
@@ -613,7 +614,12 @@ export function getRelationship<T extends CardDef = CardDef>(
         `expected ${fieldName} to be an array but was ${typeof related}`,
       );
     }
-    return related.map((entry) => relationshipStateForEntry<T>(entry));
+    // Read the raw backing array: per-slot index access hides the broken-link
+    // sentinels (surfacing them as `undefined`), but `getRelationship` is the
+    // typed surface whose whole job is to report each slot's true state.
+    return rawArrayValues(related).map((entry) =>
+      relationshipStateForEntry<T>(entry),
+    );
   }
 
   return relationshipStateForEntry<T>(related);
@@ -760,9 +766,7 @@ export function relationshipMeta(
   return toLegacyRelationshipMeta(state);
 }
 
-function toLegacyRelationshipMeta(
-  state: RelationshipState,
-): RelationshipMeta {
+function toLegacyRelationshipMeta(state: RelationshipState): RelationshipMeta {
   // Legacy callers only branched on 'loaded' vs 'not-loaded'; the new error /
   // not-found kinds did not exist when the contract was written. Map them to
   // 'not-loaded' so existing consumers see a stable shape until migration.
