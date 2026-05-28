@@ -188,11 +188,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     // Drop the slot by position on the raw backing array so the other slots —
     // including any broken sentinels — are preserved verbatim. Filtering the
     // masked field value would turn every other broken slot into `undefined`.
-    let raw = rawArrayValues(
+    let raw = rawArrayValues<CardDef>(
       (this.args.model.value as any)[this.args.field.name] ?? [],
     );
     (this.args.model.value as any)[this.args.field.name] = raw.filter(
-      (_c: CardDef, i: number) => i !== index,
+      (_c, i) => i !== index,
     );
   };
 }
