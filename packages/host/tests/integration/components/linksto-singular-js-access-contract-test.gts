@@ -325,12 +325,18 @@ module('Integration | linksTo singular JS-access contract', function (hooks) {
       /undefined/,
       'raw property access throws TypeError',
     );
-    // No bucket entry exists for an unassigned link, so the field getter must
-    // not synthesize a sentinel either — the audit guard is structural.
-    assert.strictEqual(
-      bucketEntry(person, 'pet'),
-      undefined,
-      'no sentinel was planted for an unassigned link',
+    // The bucket may cache `null` (from LinksTo.emptyValue()) after the first
+    // read, but it must never be a sentinel object — userland sees only the
+    // unified nullish surface, and the field getter is responsible for the
+    // normalization rather than the bucket.
+    let entry = bucketEntry(person, 'pet');
+    assert.false(
+      isLinkError(entry),
+      'no link-error sentinel was planted for an unassigned link',
+    );
+    assert.false(
+      isLinkNotFound(entry),
+      'no link-not-found sentinel was planted for an unassigned link',
     );
   });
 
