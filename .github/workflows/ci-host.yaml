@@ -421,27 +421,58 @@ jobs:
       - name: Start env-mode test services
         run: mise run test-services:host | tee -a /tmp/server.log &
 
-      # Validate the CS-11275 fix end-to-end: an UNAUTHENTICATED reader must
-      # get 200 (not 401) on base and skills _info once the stack is up.
+      # Validate the CS-11275 fix end-to-end AND wait until the realm-server's
+      # own readiness check passes — _readiness-check is what test-services:host
+      # gates its second stage on, so it covers full indexing (and the prerender
+      # standby that base indexing depends on). A subsequent settle pause lets
+      # the prerender's standby pool fully populate before the test runner
+      # spawns its own chrome instance, since concurrent chrome lifecycle
+      # events can otherwise trigger NetworkChangeNotifier and abort the
+      # prerender's still-loading standby pages.
       - name: Wait for realms and assert public-read parity
         run: |
           set -u
-          base="https://realm-server.ci.localhost/base/_info"
-          skills="https://realm-server.ci.localhost/skills/_info"
           accept='application/vnd.api+json'
+          ready='_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson'
+          info='_info'
+          base_ready="https://realm-server.ci.localhost/base/${ready}"
+          skills_info="https://realm-server.ci.localhost/skills/${info}"
+          base_info="https://realm-server.ci.localhost/base/${info}"
+
           ok=0
           for i in $(seq 1 120); do
-            code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
-              -H "Accept: ${accept}" --max-time 10 "$skills" || echo 000)
+            code=$(curl -sS -o /tmp/base_ready.json -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 15 "$base_ready" || echo 000)
             if [ "$code" = "200" ]; then ok=1; break; fi
-            echo "attempt $i: skills/_info -> $code (waiting)"
+            echo "attempt $i: base/_readiness-check -> $code (waiting)"
             sleep 10
           done
-          echo "=== base/_info (unauthenticated) ==="
-          curl -sS -o /dev/null -w 'base/_info -> %{http_code}\n' \
-            -H "Accept: ${accept}" --max-time 10 "$base" || true
-          echo "=== skills/_info (unauthenticated) ==="
-          echo "skills/_info -> $code"
+          if [ "$ok" != "1" ]; then
+            echo "::error::base/_readiness-check did not return 200 within timeout (last $code)"
+            exit 1
+          fi
+
+          # Public-read parity: must be 200 unauthenticated.
+          skills_code=$(curl -sS -o /tmp/skills_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$skills_info" || echo 000)
+          base_code=$(curl -sS -o /tmp/base_info.json -w '%{http_code}' \
+            -H "Accept: ${accept}" --max-time 15 "$base_info" || echo 000)
+          echo "skills/_info -> $skills_code"
+          echo "base/_info   -> $base_code"
+          if [ "$skills_code" != "200" ] || [ "$base_code" != "200" ]; then
+            echo "::error::Public-read parity broken (skills=$skills_code base=$base_code)"
+            exit 1
+          fi
+          echo "::notice::Environment-mode public-read parity confirmed (skills/_info and base/_info -> 200 unauthenticated)"
+
+      # Give the prerender's standby pool a moment to fully populate before the
+      # test runner launches its own chrome instance. Without this, the
+      # standby pages can still be loading host.ci.localhost asset chunks when
+      # the test starts, and the resulting flurry of chrome lifecycle events
+      # trips NetworkChangeNotifier, aborting the still-loading standby with
+      # ERR_NETWORK_CHANGED and leaving prerender unavailable to indexing.
+      - name: Settle prerender standby pool
+        run: sleep 60
           cat /tmp/skills_info.json || true
           echo
           if [ "$ok" != "1" ]; then
