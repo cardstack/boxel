@@ -23,9 +23,11 @@ Use this skill for Boxel card and app development. Keep the top-level guidance l
 
 These three files establish the data model, the `contains` vs `linksTo` rule, required formats, inherited fields, and common import patterns.
 
-
 ## Load By Task
 
+- Reusing boxel-ui components instead of hand-rolling HTML (search the
+  catalog for an existing component spec before writing any UI):
+  `boxel-ui-component-discovery`
 - Card structure and safe patterns:
   `references/dev-core-patterns.md`
 - Templates, delegated rendering, and field access:

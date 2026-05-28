@@ -33,9 +33,7 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          path: boxel
-      - uses: ./boxel/.github/actions/init
+      - uses: ./.github/actions/init
 
       - name: Clone cardstack/boxel-catalog into packages/catalog/contents
         # The generator writes into packages/catalog/contents/Spec/ — the working
@@ -43,17 +41,17 @@ jobs:
         # write target for the generator AND the working copy we'll commit and
         # push at the end of the job.
         run: |
-          git clone "https://x-access-token:${BOXEL_CATALOG_PUSH_TOKEN}@github.com/cardstack/boxel-catalog.git" boxel/packages/catalog/contents
+          git clone "https://x-access-token:${BOXEL_CATALOG_PUSH_TOKEN}@github.com/cardstack/boxel-catalog.git" packages/catalog/contents
         env:
           BOXEL_CATALOG_PUSH_TOKEN: ${{ secrets.BOXEL_CATALOG_PUSH_TOKEN }}
 
       - name: Generate component specs into the catalog working tree
         run: pnpm run generate:component-specs
-        working-directory: boxel/packages/boxel-ui/addon
+        working-directory: packages/boxel-ui/addon
 
       - name: Commit and push to cardstack/boxel-catalog
         run: |
-          cd boxel/packages/catalog/contents
+          cd packages/catalog/contents
           git config user.name "boxel-ui-specs-bot"
           git config user.email "boxel-ui-specs-bot@users.noreply.github.com"
           if git diff --quiet --exit-code -- Spec/; then
