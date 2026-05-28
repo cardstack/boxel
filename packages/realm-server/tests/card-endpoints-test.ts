@@ -1081,6 +1081,10 @@ module(basename(__filename), function () {
             { errorStatus: 403, expectedHttp: 403 },
             { errorStatus: 422, expectedHttp: 422 },
             { errorStatus: 500, expectedHttp: 500 },
+            // An unregistered-but-in-range upstream status (e.g. a proxied
+            // 520) is still mirrored and must not throw while building the
+            // error response.
+            { errorStatus: 520, expectedHttp: 520 },
             // An existing-but-errored card is never "not found": a
             // recorded 404 (e.g. the error's underlying cause was a
             // missing linked instance) falls back to 500 so that a 404

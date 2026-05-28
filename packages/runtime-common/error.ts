@@ -700,7 +700,7 @@ export function systemError({
   body,
   id,
   lid,
-  status = 500,
+  status: httpStatus = 500,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -715,7 +715,14 @@ export function systemError({
   status?: number;
 }): Response {
   let err = new CardError(message, {
-    status,
+    status: httpStatus,
+    // Supply a title explicitly so the CardError constructor never falls
+    // back to `getReasonPhrase`, which throws for unregistered codes — a
+    // mirrored upstream status (e.g. a proxied 520/499) would otherwise
+    // turn the error response itself into an unhandled failure. The
+    // `statuses` lookup returns undefined for unknown codes rather than
+    // throwing, and we backstop that with a generic phrase.
+    title: status.message[httpStatus] || `HTTP ${httpStatus}`,
     ...(id ? { id } : {}),
     ...(lid ? { lid } : {}),
   });
