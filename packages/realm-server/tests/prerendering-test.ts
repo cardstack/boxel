@@ -785,7 +785,10 @@ module(basename(__filename), function () {
                 }
               `,
               // Links to ./missing-pet, which does not exist — the lazy load
-              // 404s and the prerender surfaces a not-found error for the card.
+              // 404s and the broken slot renders the placeholder. The card
+              // itself indexes cleanly; the missing target is carried in
+              // `deps` so invalidation can reach the card if the target is
+              // created later.
               'owner-with-broken-pet.json': {
                 data: {
                   attributes: {
@@ -835,9 +838,9 @@ module(basename(__filename), function () {
                 },
               },
               // One present element (./real-pet) and one broken element
-              // (./missing-pet-2, which does not exist): the good slot loads
-              // while the broken slot 404s, and the prerender surfaces a
-              // not-found error for the card.
+              // (./missing-pet-2, which does not exist): the present slot
+              // loads while the broken slot 404s and renders the
+              // per-element placeholder. The card itself indexes cleanly.
               'owner-with-broken-pets.json': {
                 data: {
                   attributes: {
