@@ -383,21 +383,22 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         },
         'Person/error.json': {
+          // Lands as instance-error from the seed indexing pass because it
+          // adopts from a module that does not exist in the realm. Module
+          // → instance propagation surfaces the missing module as the
+          // instance's own error_doc, so the operator-mode UI tests see an
+          // error card with a `missing file …` payload — same shape as the
+          // earlier broken-linksTo fixture produced, now driven by a missing
+          // adoptsFrom module since broken-linksTo no longer demotes the
+          // consuming instance.
           data: {
             attributes: {
               firstName: 'Error',
             },
-            relationships: {
-              pet: {
-                links: {
-                  self: './missing-link',
-                },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: testRRI('person'),
-                name: 'Person',
+                module: testRRI('Person/missing-person'),
+                name: 'MissingPerson',
               },
             },
           },
@@ -549,21 +550,23 @@ module('Acceptance | operator mode tests', function (hooks) {
     'card with an error that has a last known good state',
     function (hooks) {
       hooks.beforeEach(async function () {
+        // Flip Person/fadhlan to adopt from a missing module so it lands as
+        // instance-error on re-index. The card's last-known-good HTML —
+        // captured by the prior clean indexing pass — survives the flip
+        // and is what the tests below assert against. Broken-linksTo no
+        // longer demotes a consumer post-CS-11212, so a missing adoptsFrom
+        // module is the new lever for "make this card error" UI tests.
         await testRealm.write(
           'Person/fadhlan.json',
           JSON.stringify({
             data: {
-              relationships: {
-                pet: {
-                  links: {
-                    self: './missing-link',
-                  },
-                },
+              attributes: {
+                firstName: 'Fadhlan',
               },
               meta: {
                 adoptsFrom: {
-                  module: testRRI('person'),
-                  name: 'Person',
+                  module: testRRI('Person/missing-person'),
+                  name: 'MissingPerson',
                 },
               },
             },
@@ -658,11 +661,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       .exists('the error state of the card is displayed');
     assert
       .dom('[data-test-error-message]')
-      .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
+      .includesText(`missing file ${testRealmURL}Person/missing-person`);
     await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
-      .includesText(`Person/missing-link.json not found`);
+      .includesText(`Person/missing-person`);
   });
 
   test('error card header more-options menu includes Copy Card URL', async function (assert) {
