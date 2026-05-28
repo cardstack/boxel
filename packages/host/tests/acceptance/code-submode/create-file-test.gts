@@ -1318,6 +1318,16 @@ export class TestCard extends CardDef {
   });
 
   module('when a selected spec uses a prefix-form ref', function (hooks) {
+    // hooks.before (once-per-module) is intentional — the prefix needs
+    // to be registered before `setupAcceptanceTestRealm` indexes
+    // `spec/animal.json`, whose `adoptsFrom` ref is `@test-realm/test2/
+    // animal`. `hooks.beforeEach` runs *after* setupApplicationTest's
+    // own beforeEach (which is where the indexer fires), so registration
+    // would be too late. Uses the deprecated global registry directly
+    // because no VN is in scope at module-setup time (getService isn't
+    // usable in hooks.before). The VN.addRealmMapping bridge mirrors
+    // registrations into both stores, so the global form is observable
+    // on migrated paths too.
     hooks.before(function () {
       registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
     });

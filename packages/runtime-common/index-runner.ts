@@ -31,8 +31,9 @@ import {
   type TimingDiagnostics,
 } from './index';
 import { moduleFrom } from './code-ref';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
-import { resolveCardReference } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { canonicalURL } from './index-runner/dependency-url';
@@ -59,6 +60,7 @@ export class IndexRunner {
   #prerenderer: Prerenderer;
   #auth: string;
   #realmURL: URL;
+  #virtualNetwork: VirtualNetwork;
   #realmInfo?: RealmInfo;
   #moduleCacheContext?: {
     resolvedRealmURL: string;
@@ -100,6 +102,7 @@ export class IndexRunner {
     reader,
     indexWriter,
     definitionLookup,
+    virtualNetwork,
     ignoreData = {},
     jobInfo,
     jobPriority,
@@ -114,6 +117,7 @@ export class IndexRunner {
     reader: Reader;
     indexWriter: IndexWriter;
     definitionLookup: DefinitionLookup;
+    virtualNetwork: VirtualNetwork;
     ignoreData?: Record<string, string>;
     prerenderer: Prerenderer;
     auth: string;
@@ -135,6 +139,7 @@ export class IndexRunner {
     this.#realmPaths = new RealmPaths(realmURL);
     this.#reader = reader;
     this.#realmURL = realmURL;
+    this.#virtualNetwork = virtualNetwork;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
     this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
@@ -148,6 +153,7 @@ export class IndexRunner {
     this.#definitionLookup = definitionLookup;
     this.#dependencyResolver = new IndexRunnerDependencyManager({
       realmURL: this.#realmURL,
+      virtualNetwork: this.#virtualNetwork,
       readDefinitionCacheEntries: async (moduleIds) => {
         if (moduleIds.length === 0) {
           return {};
@@ -181,6 +187,7 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
@@ -341,6 +348,7 @@ export class IndexRunner {
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
+      current.#virtualNetwork,
     );
     urls.forEach((url) =>
       current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
@@ -469,6 +477,7 @@ export class IndexRunner {
         auth: this.#auth,
         batchId: this.#batchId,
         prerenderer: this.#prerenderer,
+        virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         logDebug: (message) => this.#log.debug(message),
         logWarn: (message) => this.#log.warn(message),
@@ -645,7 +654,7 @@ export class IndexRunner {
       let row = bestByUrl.get(url.href);
       if (row?.deps?.length) {
         for (let dep of row.deps) {
-          let resolved = canonicalURL(dep, url.href);
+          let resolved = canonicalURL(dep, url.href, this.#virtualNetwork);
           // `.json` marks an instance dep and `.glimmer-scoped.css`
           // marks an inline-styles artifact; everything else in the
           // deps array is a module URL (stored extensionless after
@@ -708,7 +717,7 @@ export class IndexRunner {
       if (typeof module !== 'string') {
         return undefined;
       }
-      return canonicalURL(module, url.href);
+      return canonicalURL(module, url.href, this.#virtualNetwork);
     } catch {
       return undefined;
     }
@@ -762,7 +771,12 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
+        deps: [
+          this.#virtualNetwork.resolveRRI(
+            moduleFrom(resource.meta.adoptsFrom),
+            url as RealmResourceIdentifier,
+          ),
+        ],
       },
       status,
     );
@@ -812,6 +826,7 @@ export class IndexRunner {
         precomputedRenderResult: renderResult,
         timingDiagnostics,
         dependencyResolver: this.#dependencyResolver,
+        virtualNetwork: this.#virtualNetwork,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),
         logWarn: (message) => this.#log.warn(message),
@@ -860,6 +875,7 @@ export class IndexRunner {
       precomputedRenderResult: renderResult,
       timingDiagnostics,
       dependencyResolver: this.#dependencyResolver,
+      virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
         await this.batch.updateEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(

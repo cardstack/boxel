@@ -68,6 +68,7 @@ function makeTaskArgs({
     indexWriter: {} as any,
     prerenderer,
     definitionLookup: {} as any,
+    virtualNetwork: {} as any,
     log: {
       debug: () => {},
       info: () => {},

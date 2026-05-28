@@ -7,6 +7,7 @@ import type {
   Saved,
 } from './resource-types';
 import type { CodeRef, ResolvedCodeRef } from './code-ref';
+import type { VirtualNetwork } from './virtual-network';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
@@ -1098,20 +1099,25 @@ export function trimExecutableExtension(
 export function internalKeyFor(
   ref: CodeRef,
   relativeTo: RealmResourceIdentifier | URL | undefined,
+  virtualNetwork?: VirtualNetwork,
 ): string {
   if (!('type' in ref)) {
-    let resolved = resolveCardReference(ref.module, relativeTo);
+    let resolved = virtualNetwork
+      ? virtualNetwork.resolveURL(ref.module, relativeTo).href
+      : resolveCardReference(ref.module, relativeTo);
     let module: string = trimExecutableExtension(rri(resolved));
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
-    module = unresolveCardReference(module);
+    module = virtualNetwork
+      ? virtualNetwork.unresolveURL(module)
+      : unresolveCardReference(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
     case 'ancestorOf':
-      return `${internalKeyFor(ref.card, relativeTo)}/ancestor`;
+      return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/ancestor`;
     case 'fieldOf':
-      return `${internalKeyFor(ref.card, relativeTo)}/fields/${ref.field}`;
+      return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/fields/${ref.field}`;
   }
 }
 
@@ -1206,8 +1212,13 @@ export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
 
-export function isLocalId(id: string) {
-  return !id.startsWith('http') && !isRegisteredPrefix(id);
+export function isLocalId(id: string, virtualNetwork?: VirtualNetwork) {
+  return (
+    !id.startsWith('http') &&
+    !(virtualNetwork
+      ? virtualNetwork.isRegisteredPrefix(id)
+      : isRegisteredPrefix(id))
+  );
 }
 
 export function isBrowserTestEnv() {

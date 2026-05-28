@@ -13,7 +13,7 @@ import {
   relationshipEntries,
   isCodeRef,
 } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { isMeta, type CardFields, type Meta } from './resource-types';
 import type { DefinitionLookup } from './definition-lookup';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
@@ -24,11 +24,13 @@ export default async function serialize({
   definition,
   relativeTo,
   definitionLookup,
+  virtualNetwork,
 }: {
   doc: LooseSingleCardDocument;
   definition: Definition;
   relativeTo: URL;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<LooseSingleCardDocument> {
   const realmURL = doc.data.meta?.realmURL
     ? new URL(doc.data.meta.realmURL)
@@ -95,6 +97,7 @@ export default async function serialize({
       relativeTo,
       realmURL,
       definitionLookup,
+      virtualNetwork,
     });
     if (processedRelationships) {
       result.data.relationships = processedRelationships;
@@ -285,6 +288,7 @@ async function processRelationships({
   relativeTo,
   realmURL,
   definitionLookup,
+  virtualNetwork,
 }: {
   relationships: NonNullable<CardResource['relationships']>;
   definition: Definition;
@@ -292,6 +296,7 @@ async function processRelationships({
   relativeTo: URL;
   realmURL?: URL;
   definitionLookup: DefinitionLookup;
+  virtualNetwork: VirtualNetwork;
 }): Promise<NonNullable<CardResource['relationships']> | undefined> {
   const result: NonNullable<CardResource['relationships']> = {};
 
@@ -305,7 +310,7 @@ async function processRelationships({
         if (realmURL && selfLink) {
           try {
             selfLink = makeRelativeReference(
-              new URL(resolveCardReference(selfLink, relativeTo)),
+              virtualNetwork.resolveURL(selfLink, relativeTo),
               relativeTo,
               realmURL,
             );

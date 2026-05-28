@@ -22,7 +22,6 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
-  cardIdToURL,
   rri,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -416,7 +415,9 @@ export default class RenderRoute extends Route<Model> {
       let instance = (await this.store.addFileMeta(
         resource,
         doc,
-        resource.id ? cardIdToURL(resource.id) : undefined,
+        resource.id
+          ? this.network.virtualNetwork.toURL(resource.id)
+          : undefined,
       )) as unknown as CardDef;
 
       let state = new TrackedMap<string, unknown>();
