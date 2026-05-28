@@ -270,14 +270,16 @@ export default class OperatorModeOverlays extends Overlays {
         text-transform: uppercase;
         white-space: nowrap;
         overflow: hidden;
+        border-radius: 5px 0 0 5px;
         clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
         pointer-events: auto;
         z-index: 1;
         filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
       }
-      /* When floating-ui flips the label below the card, mirror the
-         clip-path vertically so the slope still points toward the
-         card (now upward from the bottom-right corner). */
+      /* When the label flips below the card, mirror the clip-path
+         vertically so the slope still points toward the card (now
+         upward from the bottom-right corner). The rounded corners
+         stay on the left side either way. */
       .adorn-label[data-side='bottom'] {
         clip-path: polygon(0 100%, calc(100% - 13px) 100%, 100% 0, 0 0);
       }
