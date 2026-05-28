@@ -39,6 +39,14 @@ import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler';
 const TLS_CERT_FILE_ENV = 'REALM_SERVER_TLS_CERT_FILE';
 const TLS_KEY_FILE_ENV = 'REALM_SERVER_TLS_KEY_FILE';
 
+// Opt-in HTTP/2 stall diagnostics (see installHttp2Diagnostics). Off by
+// default; set in the host-test CI job so an intermittent "request accepted
+// but never answered" h2 stall dumps its full session/stream state instead of
+// surfacing only as an opaque 60s host-test timeout. The h2 path is never
+// reached in production (BOXEL_ENVIRONMENT short-circuits to plain HTTP above),
+// so this only ever runs in local dev / CI.
+const HTTP2_DIAGNOSTICS_ENV = 'REALM_SERVER_HTTP2_DIAGNOSTICS';
+
 export type RealmHttpServer =
   | http.Server
   | http2.Http2SecureServer
@@ -142,6 +150,9 @@ export function createListener(
     );
     return { server: http.createServer(app.callback()), proto: 'http' };
   }
+  if (process.env[HTTP2_DIAGNOSTICS_ENV]) {
+    installHttp2Diagnostics(tlsServer, log);
+  }
   let redirectServer = http.createServer(redirectToHttps);
   // Track every accepted socket so shutdown can force-close them. Without
   // this, `dispatcher.close()` waits for active HTTP/2 sessions and
@@ -212,6 +223,134 @@ export function createListener(
     activeSockets.clear();
   };
   return { server: dispatcher, proto: 'https/h2' };
+}
+
+// Instrument the HTTP/2 secure server so an intermittent stall — a stream that
+// is accepted but whose response never reaches the browser — is observable
+// instead of surfacing only as a downstream 60s host-test timeout. The flake
+// has been isolated to "something in the Chrome ↔ Node http2 path" (the h1
+// toggle made it vanish and the byte-peek dispatcher was exonerated), but the
+// mechanism is still unknown. This narrows it down by answering, for any
+// long-open stream:
+//   - did the app ever produce a response? (sawRequest / res.writableEnded /
+//     headersSent) — distinguishes an app-side hang from an h2 transport stall
+//   - is the stream flow-control-blocked? (stream localWindowSize, session
+//     effectiveLocalWindowSize / remoteWindowSize / outboundQueueSize)
+//   - is the connection over its stream budget? (local/remote
+//     maxConcurrentStreams vs. live open-stream count)
+//   - how did it finally end? (rstCode / aborted on close)
+// Read-only: it attaches observer listeners and reads getters, never consuming
+// the stream body or writing a response, so it cannot perturb the path it
+// watches. Periodic so a single stuck stream is dumped repeatedly and its
+// window/queue evolution is visible.
+function installHttp2Diagnostics(
+  tlsServer: http2.Http2SecureServer,
+  log: ReturnType<typeof logger>,
+) {
+  const STALL_THRESHOLD_MS = 8000;
+  const SWEEP_INTERVAL_MS = 5000;
+
+  interface TrackedStream {
+    id: number;
+    method: string;
+    path: string;
+    startedAt: number;
+    sawRequest: boolean;
+    res?: http2.Http2ServerResponse;
+    everStalled: boolean;
+  }
+
+  let nextId = 0;
+  let sessions = new Set<http2.ServerHttp2Session>();
+  let open = new Map<http2.ServerHttp2Stream, TrackedStream>();
+
+  tlsServer.on('session', (session) => {
+    sessions.add(session);
+    log.info(`[h2-diag] session opened (live sessions=${sessions.size})`);
+    session.on('close', () => {
+      sessions.delete(session);
+      log.info(`[h2-diag] session closed (live sessions=${sessions.size})`);
+    });
+    session.on('error', (e) =>
+      log.warn(`[h2-diag] session error: ${e.message}`),
+    );
+    session.on('frameError', (type, code, id) =>
+      log.warn(
+        `[h2-diag] session frameError type=${type} code=${code} streamId=${id}`,
+      ),
+    );
+    session.on('goaway', (code, lastStreamID) =>
+      log.warn(
+        `[h2-diag] session goaway errorCode=${code} lastStreamID=${lastStreamID}`,
+      ),
+    );
+    session.on('timeout', () => log.warn(`[h2-diag] session timeout`));
+  });
+
+  tlsServer.on('stream', (stream, headers) => {
+    let tracked: TrackedStream = {
+      id: nextId++,
+      method: String(headers[':method'] ?? '?'),
+      path: String(headers[':path'] ?? '?'),
+      startedAt: Date.now(),
+      sawRequest: false,
+      everStalled: false,
+    };
+    open.set(stream, tracked);
+    stream.once('close', () => {
+      let rec = open.get(stream);
+      open.delete(stream);
+      if (rec && rec.everStalled) {
+        log.warn(
+          `[h2-diag] stream #${rec.id} ${rec.method} ${rec.path} CLOSED after ` +
+            `${Date.now() - rec.startedAt}ms rstCode=${stream.rstCode} ` +
+            `aborted=${stream.aborted} sawRequest=${rec.sawRequest} ` +
+            `resWritableEnded=${rec.res?.writableEnded ?? 'n/a'}`,
+        );
+      }
+    });
+  });
+
+  tlsServer.on('request', (req, res) => {
+    let rec = open.get(req.stream);
+    if (rec) {
+      rec.sawRequest = true;
+      rec.res = res;
+    }
+  });
+
+  let timer = setInterval(() => {
+    let now = Date.now();
+    for (let [stream, rec] of open) {
+      let age = now - rec.startedAt;
+      if (age < STALL_THRESHOLD_MS) {
+        continue;
+      }
+      rec.everStalled = true;
+      let session = stream.session;
+      let ss = session?.state ?? {};
+      let st = stream.state ?? {};
+      log.warn(
+        `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
+          `sawRequest=${rec.sawRequest} ` +
+          `res(headersSent=${rec.res?.headersSent ?? 'n/a'} ` +
+          `writableEnded=${rec.res?.writableEnded ?? 'n/a'}) ` +
+          `stream(closed=${stream.closed} destroyed=${stream.destroyed} ` +
+          `aborted=${stream.aborted} ` +
+          `localClose=${st.localClose} remoteClose=${st.remoteClose} ` +
+          `localWindow=${st.localWindowSize}) ` +
+          `session(closed=${session?.closed} destroyed=${session?.destroyed} ` +
+          `outboundQueueSize=${ss.outboundQueueSize} ` +
+          `effectiveLocalWindow=${ss.effectiveLocalWindowSize} ` +
+          `effectiveRecvData=${ss.effectiveRecvDataLength} ` +
+          `remoteWindow=${ss.remoteWindowSize} liveStreams=${open.size}) ` +
+          `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
+          `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
+      );
+    }
+  }, SWEEP_INTERVAL_MS);
+  // Don't let the sweep timer hold the process open during shutdown.
+  timer.unref?.();
 }
 
 // Same-port 308 redirect for plain-text HTTP requests that land on the

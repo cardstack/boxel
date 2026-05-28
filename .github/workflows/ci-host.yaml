@@ -190,6 +190,10 @@ jobs:
         run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
+          # Dump HTTP/2 session/stream state for any realm-server stream that
+          # stalls, to localize the Chrome ↔ Node http2 hang behind the flaky
+          # 60s host-test timeouts. Diagnostics-only; see server.ts.
+          REALM_SERVER_HTTP2_DIAGNOSTICS: '1'
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
