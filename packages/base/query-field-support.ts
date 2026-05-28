@@ -68,8 +68,9 @@ interface QueryFieldState {
   // time surface ran. Tracking this lets surface short-circuit on
   // unchanged errors (the common per-render no-op case) and detect a
   // real transition into / out of the errored state without reading
-  // the bucket on every call.
-  surfacedErrorSource?: readonly unknown[] | null;
+  // the bucket on every call. Stored as-is — including `undefined` —
+  // so the steady-state no-errors render hits the identity check.
+  surfacedErrorSource?: readonly unknown[];
 }
 
 const queryFieldSeedFromSearchSymbol = Symbol.for(
@@ -228,7 +229,11 @@ function surfaceSearchResourceErrorState(
   if (errors === fieldState.surfacedErrorSource) {
     return;
   }
-  fieldState.surfacedErrorSource = errors ?? null;
+  // Store the snapshot as-is (including `undefined`) so the next-render
+  // identity check matches when `searchResource.errors` is still undefined —
+  // coercing to `null` would miss the early-return and force an extra
+  // bucket read per render.
+  fieldState.surfacedErrorSource = errors;
 
   let bucket = getDataBucket(instance);
   let existing = bucket.get(field.name);

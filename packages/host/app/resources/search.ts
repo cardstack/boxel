@@ -17,8 +17,10 @@ import type {
   ErrorEntry,
   RealmIdentifier,
   RuntimeDependencyTrackingContext,
+  SerializedError,
 } from '@cardstack/runtime-common';
 import {
+  isCardError,
   subscribeToRealm,
   isFileDefInstance,
   logger as runtimeLogger,
@@ -530,10 +532,12 @@ export class SearchResource<
 }
 
 // Build an `ErrorEntry` for the SearchResource's `_errors` channel from an
-// arbitrary throwable caught in the search task. The fields preserve enough
-// detail (status, message, stack) for the resource-level sentinel that the
-// card-api getter plants in the query-field bucket, and for `getRelationship`
-// to expose downstream.
+// arbitrary throwable caught in the search task. Preserve the same fields the
+// declared-`linksTo` producer (`lazilyLoadLink`) carries through when the
+// upstream error is a `CardError` — `additionalErrors` and `deps` flow
+// through to the planted sentinel's `errorDoc` and downstream to
+// `getRelationship` and `getBrokenLinks`, so a federated-search failure shows
+// the same depth of detail as a single-card lazy-load failure does.
 function searchErrorEntry(err: unknown): ErrorEntry {
   let status =
     typeof (err as { status?: unknown })?.status === 'number'
@@ -548,15 +552,34 @@ function searchErrorEntry(err: unknown): ErrorEntry {
       ? ((err as { stack: string }).stack as string)
       : undefined;
   let title = status === 404 ? 'Link Not Found' : 'Search Error';
+  let serialized: SerializedError = {
+    title,
+    status,
+    message,
+    stack,
+    additionalErrors: null,
+  };
+  if (isCardError(err)) {
+    if (err.additionalErrors?.length) {
+      serialized.additionalErrors = err.additionalErrors.map(
+        (additionalError) => {
+          let normalized = additionalError as Partial<SerializedError>;
+          return {
+            title: normalized.title,
+            status: normalized.status,
+            message: normalized.message,
+            stack: normalized.stack,
+          };
+        },
+      );
+    }
+    if (err.deps?.length) {
+      serialized.deps = [...err.deps];
+    }
+  }
   return {
     type: 'instance-error',
-    error: {
-      title,
-      status,
-      message,
-      stack,
-      additionalErrors: null,
-    },
+    error: serialized,
   };
 }
 

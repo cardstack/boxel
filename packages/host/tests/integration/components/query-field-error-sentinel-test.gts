@@ -303,8 +303,8 @@ module(
     test('successful query-field resolution does not plant a sentinel', async function (this: RenderingTestContext, assert) {
       await setupRealm();
       let host = (await makeHost('Anchor')) as CardDefType & {
-        favorite: unknown;
-        matches: unknown;
+        favorite: { name?: string } | undefined;
+        matches: Array<{ name?: string }>;
       };
       let { getDataBucket } = cardApi;
       let { isLinkError, isLinkNotFound } = fieldSupport;
@@ -331,6 +331,25 @@ module(
       assert.false(
         isLinkNotFound(matchesBucket),
         'plural query-field bucket holds no link-not-found sentinel on a successful search',
+      );
+
+      // Also assert the search actually resolved to the realm's Anchor card
+      // so a regression that returned empty for every query (which would
+      // also pass the no-sentinel assertions above) is caught.
+      assert.strictEqual(
+        host.favorite?.name,
+        'Anchor',
+        'singular query field resolved to the realm-backed Anchor instance',
+      );
+      assert.strictEqual(
+        host.matches.length,
+        1,
+        'plural query field resolved to exactly the realm-backed Anchor instance',
+      );
+      assert.strictEqual(
+        host.matches[0]?.name,
+        'Anchor',
+        'plural query-field result is the Anchor card',
       );
     });
 
