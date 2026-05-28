@@ -456,6 +456,29 @@ jobs:
       # locally; the realm URLs baked into the bundle point at the env-mode
       # realm-server through Traefik. Scaling to the full sharded suite is the
       # follow-up once this slice is green.
+      # Diagnostic: the prerender's standby page (origin host.ci.localhost)
+      # fails to load base modules from realm-server.ci.localhost with a CORS
+      # "No Access-Control-Allow-Origin" error. Mimic that cross-origin module
+      # fetch directly to see whether the realm-server (behind Traefik) emits
+      # ACAO for a cross-subdomain Origin, separating a persistent CORS/Traefik
+      # gap from a transient network-change race.
+      - name: Diagnose cross-origin module CORS (prerender path)
+        continue-on-error: true
+        run: |
+          set -x
+          echo "=== preflight (OPTIONS) ==="
+          curl -sS -i -X OPTIONS \
+            -H "Origin: https://host.ci.localhost" \
+            -H "Access-Control-Request-Method: GET" \
+            --max-time 15 https://realm-server.ci.localhost/base/card-api \
+            | grep -iE '^HTTP/|access-control-allow-origin|access-control-allow-methods' || true
+          echo "=== actual GET with Origin ==="
+          curl -sS -D - -o /dev/null \
+            -H "Origin: https://host.ci.localhost" \
+            -H "Accept: */*" \
+            --max-time 15 https://realm-server.ci.localhost/base/card-api \
+            | grep -iE '^HTTP/|access-control-allow-origin|content-type' || true
+
       # In-progress slice: running the realm-touching suite in env mode still
       # surfaces harness issues unrelated to the public-read fix (the catalog
       # modal's realm list doesn't populate against the hybrid mocked /
