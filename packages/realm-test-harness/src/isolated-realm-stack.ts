@@ -230,13 +230,19 @@ async function fetchUpstreamWithRetry(
   init: RequestInit,
   method: string,
 ): Promise<Response> {
+  let signal = init.signal ?? undefined;
   let startedAt = Date.now();
   let attempt = 0;
   for (;;) {
     try {
       return await fetch(upstreamURL, init);
     } catch (error) {
+      // Once the proxy is stopping its abort signal fires; never retry then.
+      // The retry loop is what keeps the proxy's connections alive against a
+      // torn-down upstream, blocking `server.close()` and the realm stack's
+      // teardown — so a shutdown must short-circuit it immediately.
       let canRetry =
+        !signal?.aborted &&
         attempt < UPSTREAM_RETRY_BACKOFF_MS.length &&
         isRetryableUpstreamError(error, method);
       if (!canRetry) {
@@ -256,7 +262,19 @@ async function fetchUpstreamWithRetry(
           `(attempt ${attempt + 1}, code=${connectErrorCode(error)}) after ${delay}ms`,
       );
       attempt++;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      // Abortable backoff: a shutdown mid-sleep wakes immediately so the
+      // next iteration sees the aborted signal and bails.
+      await new Promise<void>((resolve) => {
+        let t = setTimeout(resolve, delay);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
     }
   }
 }
@@ -276,9 +294,22 @@ async function startCompatRealmProxy({
   // only place that state reaches CI — it rides out in the prerender's
   // captured render error.
   let describeUpstreamHealth: (() => string) | undefined;
+  // Flipped by `stop()`. The signal aborts in-flight upstream fetches (and
+  // their retry backoff); the flag refuses new requests. Together they let
+  // `server.close()` resolve promptly instead of waiting on retry loops
+  // against a torn-down upstream — the thing that otherwise wedges realm
+  // stack teardown and stalls the next test's bring-up.
+  let stopping = false;
+  let stopAbort = new AbortController();
   let actualListenPort = listenPort;
   let server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
+      if (stopping) {
+        res.statusCode = 503;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('software-factory compat proxy stopping');
+        return;
+      }
       if (targetPort == null) {
         res.statusCode = 503;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
@@ -311,6 +342,7 @@ async function startCompatRealmProxy({
             headers,
             body: body as BodyInit | undefined,
             redirect: 'manual',
+            signal: stopAbort.signal,
           },
           req.method ?? 'GET',
         );
@@ -383,6 +415,12 @@ async function startCompatRealmProxy({
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${targetPort ?? 'unset'} stopping`,
       );
+      // Refuse new requests, abort in-flight upstream fetches + their retry
+      // backoff, and force-close any keep-alive sockets so `server.close()`
+      // can't hang on a request looping against a dead upstream.
+      stopping = true;
+      stopAbort.abort();
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
