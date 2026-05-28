@@ -200,9 +200,37 @@ export class VirtualNetwork {
     });
 
     return withRetries(new URL(request.url), () =>
-      fetcher(this.nativeFetch, handlers)(request, init),
+      fetcher(this.timedFetch, handlers)(request, init),
     );
   }
+
+  // Native fetch wrapped with a per-call abort watchdog for the retryable
+  // test-env hosts (see shouldRetryFetch / withRetries). A lost
+  // localhost:4201/base/* request sometimes arrives not as a `TypeError: Failed
+  // to fetch` — which withRetries already catches and retries — but as a
+  // connection that is accepted and then never answered: the fetch promise
+  // neither resolves nor rejects. That leaves the `fetcher` test-waiter open
+  // forever, so `settled()` never returns and the test dies with an opaque 60s
+  // QUnit timeout. Aborting the attempt turns the hang into a TimeoutError that
+  // propagates through `fetcher` (releasing the waiter) and into the retry loop,
+  // so a transient stall recovers instead of timing out the whole test. Gated on
+  // `__environment === 'test'`, so production fetch behaviour is unchanged.
+  // `fetcher` always hands the inner fetch a freshly cloned Request, so
+  // overriding its signal here can never disturb a body a retry will reuse.
+  private timedFetch: typeof globalThis.fetch = (input, init) => {
+    if (
+      (globalThis as any).__environment === 'test' &&
+      input instanceof Request
+    ) {
+      let url = new URL(input.url);
+      if (shouldRetryFetch(url)) {
+        input = new Request(input, {
+          signal: AbortSignal.timeout(perAttemptTimeoutMs),
+        });
+      }
+    }
+    return this.nativeFetch(input, init);
+  };
 
   // This method is used to handle the boundary between the real and virtual network,
   // when a request is made to the realm from the realm server - it maps requests
@@ -286,6 +314,12 @@ export function isUrlLike(moduleIdentifier: string): boolean {
 // behaviour is unaffected.
 const maxAttempts = 10;
 const backOffMs = 100;
+// Per-attempt watchdog for the retryable test-env hosts below. Bounds how long a
+// single attempt may stay in flight before it is aborted into a (retryable)
+// TimeoutError — see `timedFetch`. Sized generously above any real CI response
+// time (these reads are sub-second normally) while leaving several attempts'
+// worth of headroom inside QUnit's 60s per-test budget.
+const perAttemptTimeoutMs = 15_000;
 const retryableLocalHosts = new Set(['localhost', '127.0.0.1']);
 
 function shouldRetryFetch(url: URL) {
@@ -326,9 +360,9 @@ async function withRetries(
         throw err;
       }
       console.error(
-        `Encountered fetch failed for ${
-          url.href
-        } retry attempt #${attempt} in ${attempt * backOffMs}ms`,
+        `Encountered fetch failed for ${url.href} (${
+          err?.name ?? 'Error'
+        }) retry attempt #${attempt} in ${attempt * backOffMs}ms`,
       );
       await new Promise((r) => setTimeout(r, attempt * backOffMs));
     }
