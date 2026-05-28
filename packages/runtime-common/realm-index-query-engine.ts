@@ -398,6 +398,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
@@ -647,6 +649,8 @@ export class RealmIndexQueryEngine {
     let codeRef = codeRefWithAbsoluteIdentifier(
       resource.meta.adoptsFrom,
       relativeTo,
+      undefined,
+      this.#realm.virtualNetwork,
     );
     if (!isResolvedCodeRef(codeRef)) {
       return;

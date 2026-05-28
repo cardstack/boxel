@@ -20,6 +20,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { cardIdToURL } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
@@ -137,12 +138,14 @@ export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
   relativeTo?: RealmResourceIdentifier | URL | undefined,
   opts?: { trimExecutableExtension?: true },
+  virtualNetwork?: VirtualNetwork,
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(
-        ref.module,
-        relativeTo,
+      let moduleHref = (
+        virtualNetwork
+          ? virtualNetwork.resolveURL(ref.module, relativeTo).href
+          : resolveCardReference(ref.module, relativeTo)
       ) as RealmResourceIdentifier;
       if (opts?.trimExecutableExtension) {
         moduleHref = trimExecutableExtension(moduleHref);
@@ -152,7 +155,15 @@ export function codeRefWithAbsoluteIdentifier(
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
+  return {
+    ...ref,
+    card: codeRefWithAbsoluteIdentifier(
+      ref.card,
+      relativeTo,
+      undefined,
+      virtualNetwork,
+    ),
+  };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -170,8 +181,11 @@ export async function loadCardDef(
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
+  let virtualNetwork = loader.getVirtualNetwork();
   if (!('type' in ref)) {
-    let resolvedModuleURL = resolveCardReference(ref.module, opts?.relativeTo);
+    let resolvedModuleURL = virtualNetwork
+      ? virtualNetwork.resolveURL(ref.module, opts?.relativeTo).href
+      : resolveCardReference(ref.module, opts?.relativeTo);
     let module = await loader.import<Record<string, any>>(
       resolvedModuleURL,
       opts.dependencyTrackingContext,
@@ -192,8 +206,11 @@ export async function loadCardDef(
     return maybeCard;
   }
 
+  let resolvedFromRef = virtualNetwork
+    ? virtualNetwork.resolveURL(moduleFrom(ref), opts?.relativeTo).href
+    : resolveCardReference(moduleFrom(ref), opts?.relativeTo);
   let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${resolveCardReference(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
+    `Cannot find card ${humanReadable(ref)}. Make sure ${resolvedFromRef} exports ${exportFrom(ref)}`,
     {
       status: 404,
     },
@@ -388,14 +405,24 @@ export async function getNarrowestType(
   return narrowestType;
 }
 
-export function resolveAdoptedCodeRef(instance: CardDef) {
+export function resolveAdoptedCodeRef(
+  instance: CardDef,
+  virtualNetwork?: VirtualNetwork,
+) {
   let adoptsFrom = instance[meta]?.adoptsFrom as CodeRef;
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
+  let base =
+    instance[relativeTo] ||
+    (virtualNetwork
+      ? virtualNetwork.toURL(instance.id)
+      : cardIdToURL(instance.id));
   let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
-    instance[relativeTo] || cardIdToURL(instance.id),
+    base,
+    undefined,
+    virtualNetwork,
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -403,7 +430,10 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   return resolved;
 }
 
-export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
+export function resolveAdoptsFrom(
+  card: CardDef,
+  virtualNetwork?: VirtualNetwork,
+): ResolvedCodeRef | undefined {
   let metadata = (card as any)[meta];
   let adoptsFrom = metadata?.adoptsFrom as CodeRef | undefined;
   let baseURL = (() => {
@@ -412,7 +442,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
       return undefined;
     }
     try {
-      return cardIdToURL(id);
+      return virtualNetwork ? virtualNetwork.toURL(id) : cardIdToURL(id);
     } catch {
       return undefined;
     }
@@ -421,7 +451,12 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(
+      ref,
+      baseURL,
+      undefined,
+      virtualNetwork,
+    );
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {
