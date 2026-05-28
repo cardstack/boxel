@@ -695,11 +695,6 @@ export class Realm {
   #router: Router;
   #log = logger('realm');
   #perfLog = logger('perf');
-  // [readiness-diag] — opt-in logger, off in production, enabled in CI
-  // host tests via `readiness-diag=debug` in HOST_TEST_LOG_LEVELS.
-  // Remove this field together with the [readiness-diag] call sites
-  // once the CI readiness-check timeout flake is rooted out.
-  #readinessDiag = logger('readiness-diag');
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
@@ -1076,19 +1071,7 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ) {
-    // [readiness-diag] — entry / fulfillment markers. The per-realm
-    // startup heartbeat lives in #startup so that wait-on's 0.5–2s
-    // probe cadence doesn't multiply heartbeat intervals (~300 of them
-    // accumulating across a 10-minute hang) on a single Deferred.
-    let waitStart = Date.now();
-    this.#readinessDiag.debug(
-      `readiness check requested for realm ${this.url}`,
-    );
     await this.#startedUp.promise;
-    let totalElapsed = ((Date.now() - waitStart) / 1000).toFixed(1);
-    this.#readinessDiag.debug(
-      `readiness check fulfilled for realm ${this.url} (waited ${totalElapsed}s)`,
-    );
 
     return createResponse({
       body: null,
@@ -2473,109 +2456,54 @@ export class Realm {
   async #startup(opts?: { fromScratchIndexPriority?: number }) {
     await Promise.resolve();
     let startTime = Date.now();
-    // [readiness-diag] — every `this.#readinessDiag.debug(...)` line in
-    // this method is a temporary phase marker for the CI readiness-check
-    // timeout flake. The whole logger is opt-in (off in production, on
-    // in CI host tests via HOST_TEST_LOG_LEVELS). Remove the call sites
-    // together with the `#readinessDiag` field once root cause is found.
-    this.#readinessDiag.debug(`startup begin for realm ${this.url}`);
-    // [readiness-diag] — one heartbeat per realm-lifetime, not per
-    // readiness-probe (wait-on polls every 0.5–2s; a per-request
-    // heartbeat would multiply to hundreds of concurrent intervals).
-    // Cleared in the finally below so a startup that fails or throws
-    // doesn't leak the timer past the lifetime of this method.
-    let heartbeat: ReturnType<typeof setInterval> | undefined = setInterval(
-      () => {
-        let elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        this.#readinessDiag.debug(
-          `startup still pending for realm ${this.url} (elapsed=${elapsed}s)`,
-        );
-      },
-      15_000,
-    );
-    if (
-      heartbeat &&
-      typeof (heartbeat as unknown as { unref?: () => void }).unref ===
-        'function'
-    ) {
-      (heartbeat as unknown as { unref: () => void }).unref();
-    }
-    try {
-      if (this.#copiedFromRealm) {
-        this.#readinessDiag.debug(
-          `startup phase=copy from ${this.#copiedFromRealm.href} for realm ${this.url}`,
-        );
-        await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-        this.#readinessDiag.debug(
-          `startup phase=copy resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-        );
+    if (this.#copiedFromRealm) {
+      await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
+        realmURL: this.url,
+      });
+    } else {
+      let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
+      if (isNewIndex || this.#fullIndexOnStartup) {
+        if (this.#fullIndexOnStartup) {
+          // CS-11245: bootstrap realms (kind='bootstrap': base,
+          // catalog, skills, …) full-index on every realm-server
+          // boot. On a rolling deploy the worker that picks up the
+          // resulting from-scratch-index job fans HTTP source reads
+          // through the LB, which can route to a still-warm
+          // pre-deploy peer whose `#sourceCache` was populated from
+          // pre-rsync bytes. `getSourceOrRedirect` would return those
+          // stale bytes and the reindex would persist them into
+          // `boxel_index.pristine_doc` plus sticky `error_doc` rows
+          // that survive past fleet stabilization (see CS-11245 for
+          // the originating incident). Broadcast a per-realm
+          // NOTIFY so every peer drops its entries for this URL and
+          // the next read falls through to `/persistent/` (EFS,
+          // already brought up to date by this container's
+          // `setup:<realm>-in-deployment` rsync at PID 1). The local
+          // clear is a no-op on a freshly booted container; the
+          // broadcast is what does the work. Skipped on the
+          // `isNewIndex` branch — that branch fires for first-ever
+          // mounts (e.g., brand-new publish), where peer caches for
+          // a never-before-seen URL are empty by construction.
+          await this.clearLocalSourceCachesAndBroadcast();
+        }
+        let priority =
+          opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
+        let promise = this.#realmIndexUpdater.fullIndex(priority);
+        if (isNewIndex) {
+          // we only await the full indexing at boot if this is a brand new index
+          await promise;
+        }
+        // not sure how useful this event is--nothing is currently listening for
+        // it, and it may happen during or after the full index...
         this.broadcastRealmEvent({
           eventName: 'index',
-          indexType: 'copy',
-          sourceRealmURL: this.#copiedFromRealm.href,
+          indexType: 'full',
           realmURL: this.url,
         });
-      } else {
-        let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
-        this.#readinessDiag.debug(
-          `startup isNewIndex=${isNewIndex} fullIndexOnStartup=${this.#fullIndexOnStartup} for realm ${this.url}`,
-        );
-        if (isNewIndex || this.#fullIndexOnStartup) {
-          if (this.#fullIndexOnStartup) {
-            // CS-11245: bootstrap realms (kind='bootstrap': base,
-            // catalog, skills, …) full-index on every realm-server
-            // boot. On a rolling deploy the worker that picks up the
-            // resulting from-scratch-index job fans HTTP source reads
-            // through the LB, which can route to a still-warm
-            // pre-deploy peer whose `#sourceCache` was populated from
-            // pre-rsync bytes. `getSourceOrRedirect` would return those
-            // stale bytes and the reindex would persist them into
-            // `boxel_index.pristine_doc` plus sticky `error_doc` rows
-            // that survive past fleet stabilization (see CS-11245 for
-            // the originating incident). Broadcast a per-realm
-            // NOTIFY so every peer drops its entries for this URL and
-            // the next read falls through to `/persistent/` (EFS,
-            // already brought up to date by this container's
-            // `setup:<realm>-in-deployment` rsync at PID 1). The local
-            // clear is a no-op on a freshly booted container; the
-            // broadcast is what does the work. Skipped on the
-            // `isNewIndex` branch — that branch fires for first-ever
-            // mounts (e.g., brand-new publish), where peer caches for
-            // a never-before-seen URL are empty by construction.
-            await this.clearLocalSourceCachesAndBroadcast();
-          }
-          let priority =
-            opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-          let promise = this.#realmIndexUpdater.fullIndex(priority);
-          if (isNewIndex) {
-            // we only await the full indexing at boot if this is a brand new index
-            this.#readinessDiag.debug(
-              `startup awaiting fullIndex (new index) for realm ${this.url}`,
-            );
-            await promise;
-            this.#readinessDiag.debug(
-              `startup fullIndex resolved for realm ${this.url} (elapsed=${Date.now() - startTime}ms)`,
-            );
-          } else {
-            this.#readinessDiag.debug(
-              `startup kicked off fire-and-forget fullIndex for realm ${this.url}`,
-            );
-          }
-          // not sure how useful this event is--nothing is currently listening for
-          // it, and it may happen during or after the full index...
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'full',
-            realmURL: this.url,
-          });
-        }
-      }
-      this.#readinessDiag.debug(
-        `startup complete for realm ${this.url} in ${Date.now() - startTime}ms`,
-      );
-    } finally {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
       }
     }
 

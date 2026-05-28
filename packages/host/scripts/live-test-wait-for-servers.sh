@@ -27,8 +27,13 @@ if [ -n "$REALM_URL" ]; then
   REALM_READY="${REALM_SCHEME}://${REALM_HOST}${READY_PATH}"
   READY_URLS="$BASE_REALM_READY|$REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 else
-  SOFTWARE_FACTORY_REALM_READY="https-get://localhost:4201/software-factory/${READY_PATH}"
-  READY_URLS="$BASE_REALM_READY|$SOFTWARE_FACTORY_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
+  # The live-test job uses the skills realm as its empty-by-default test
+  # discovery target (no *.test.gts files = single "no realm tests found"
+  # passing assert). Skills is small and is hosted by every host CI job
+  # already, so waiting on its readiness adds little beyond what base
+  # already incurs.
+  SKILLS_REALM_READY="https-get://localhost:4201/skills/${READY_PATH}"
+  READY_URLS="$BASE_REALM_READY|$SKILLS_REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 fi
 
 # See test-wait-for-servers.sh for the rationale on
@@ -36,7 +41,14 @@ fi
 # https-get://localhost:42XX needs the strictSSL escape hatch under
 # start-server-and-test, otherwise the readiness probe flakes against
 # the self-signed mkcert leaf.
-WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
+#
+# WAIT_ON_TIMEOUT covers the from-scratch index of every realm the
+# realm-server starts at boot — base + skills + openrouter run serially
+# under --migrateDB, and on a slow CI runner that can take several minutes
+# before the last readiness check flips to 200. 12 minutes gives enough
+# headroom for a slow runner without masking a true hang (a real hang
+# burns the full window regardless).
+WAIT_ON_TIMEOUT=720000 NODE_NO_WARNINGS=1 START_SERVER_AND_TEST_INSECURE=1 \
   REALM_URL="${REALM_URL:-}" start-server-and-test \
   'pnpm run wait' \
   "$READY_URLS" \
