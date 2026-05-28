@@ -3595,6 +3595,19 @@ export function notifyLinksToTargetDeleted(
       additionalErrors: null,
     } as SerializedError,
   });
+  // The loaded card's `.id` is normally the bare reference (no `.json`),
+  // but file-backed instances can carry the `.json` form. Normalize both
+  // sides of the comparison so either shape matches.
+  let matchesDeletedRef = (candidate: unknown): boolean => {
+    if (!candidate || typeof candidate !== 'object' || !('id' in candidate)) {
+      return false;
+    }
+    let rawId = (candidate as { id?: unknown }).id;
+    if (typeof rawId !== 'string') {
+      return false;
+    }
+    return rawId.replace(/\.json$/, '') === referenceWithoutJson;
+  };
   let changed = false;
   for (let [fieldName, field] of Object.entries(fields)) {
     if (!field) {
@@ -3602,12 +3615,7 @@ export function notifyLinksToTargetDeleted(
     }
     if (field.fieldType === 'linksTo') {
       let current = bucket.get(fieldName);
-      if (
-        current &&
-        typeof current === 'object' &&
-        'id' in current &&
-        (current as { id?: unknown }).id === referenceWithoutJson
-      ) {
+      if (matchesDeletedRef(current)) {
         let sentinel = buildSentinel();
         bucket.set(fieldName, sentinel);
         notifySubscribers(consumer, fieldName, sentinel);
@@ -3619,12 +3627,7 @@ export function notifyLinksToTargetDeleted(
       if (Array.isArray(arr)) {
         let arrChanged = false;
         for (let [index, item] of arr.entries()) {
-          if (
-            item &&
-            typeof item === 'object' &&
-            'id' in item &&
-            (item as { id?: unknown }).id === referenceWithoutJson
-          ) {
+          if (matchesDeletedRef(item)) {
             arr[index] = buildSentinel();
             arrChanged = true;
           }
