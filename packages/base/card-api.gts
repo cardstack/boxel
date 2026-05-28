@@ -1246,7 +1246,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     }
     let value = getter(instance, this);
     trackRuntimeRelationshipDependency(value, this.card);
-    return value;
+    // An unset linksTo falls through to LinksTo.emptyValue() which returns
+    // `null`; the userland contract is that every non-present state — including
+    // not-set — surfaces as `undefined`, so all four non-present discriminants
+    // collapse to one nullish shape.
+    return value ?? undefined;
   }
 
   queryableValue(instance: any, stack: CardDef[]): any {
