@@ -323,20 +323,11 @@ export default class OperatorModeOverlays extends Overlays {
         display: none;
       }
 
-      /* Compact mode for small atom-format cards. Override sizes on
-         AdornLabel/AdornSelectChip via :global because those classes
-         live on elements rendered by the AdornLabel/AdornSelectChip
-         components and aren't visible to this stylesheet's scope. */
+      /* Compact mode — when the actions-overlay is small (atom-format
+         cards), shrink the operator-mode-specific bits. The shared
+         AdornLabel / AdornSelectChip compact-mode sizing lives in
+         app.css and applies via the same @container query. */
       @container actions-overlay (aspect-ratio > 2.0) and (height <= 57px) {
-        :global(.adorn-label) {
-          padding: 2px 10px 2px 5px;
-          font-size: 9px;
-          gap: 4px;
-        }
-        :global(.adorn-label-icon) {
-          width: 11px;
-          height: 11px;
-        }
         .adorn-label-menu {
           width: 14px;
           height: 14px;
@@ -346,15 +337,6 @@ export default class OperatorModeOverlays extends Overlays {
         .adorn-select-button {
           bottom: 2px;
           right: 2px;
-        }
-        :global(.adorn-select-chip) {
-          width: 16px;
-          height: 16px;
-          padding: 2px;
-        }
-        :global(.adorn-select-icon) {
-          width: 12px;
-          height: 12px;
         }
       }
     </style>

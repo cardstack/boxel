@@ -41,6 +41,111 @@
   box-shadow: 0 0 0 4px var(--adorn-accent);
 }
 
+/* Adorn type-label flag tab. <AdornLabel> renders the outer div with
+   class .adorn-label and yields its default block; consumers place
+   `.adorn-label-icon`, `.adorn-label-text`, and an optional
+   `.adorn-label-dropdown` (wraps an in-tab menu) inside.
+   Positioning is the consumer's responsibility. Background reads
+   `--adorn-label-bg` so any ancestor can override (operator-mode
+   uses this to switch to the darker accent when the underlying
+   card is selected). When the label flips below the card the
+   consumer writes `data-side='bottom'` on the label and the
+   clip-path mirrors vertically. */
+.adorn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px 3px 7px;
+  background: var(--adorn-label-bg, var(--adorn-accent-light));
+  color: #0a2e1c;
+  font: 700 10px/1 var(--boxel-font-family, inherit);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  border-radius: 5px 0 0 5px;
+  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 100%, 0 100%);
+  z-index: 1;
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.2));
+}
+.adorn-label[data-side='bottom'] {
+  clip-path: polygon(0 100%, calc(100% - 13px) 100%, 100% 0, 0 0);
+}
+.adorn-label-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #0a2e1c;
+}
+.adorn-label-text {
+  /* `min-width: 0` lets the flex item shrink below its min-content
+     size when the label is capped by a max-width; without it,
+     text-overflow:ellipsis can't kick in. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Wrap any in-tab menu (e.g. BoxelDropdown) in
+   `<span class='adorn-label-dropdown'>` so its trigger and the
+   portal-origin element it ships count as a single flex item of
+   the label. Otherwise the label's natural width grows by one
+   flex-gap when the menu opens (the open-state wormhole-origin
+   becomes a flex item where the closed-state placeholder was
+   display:none), shifting the label on every menu open/close. */
+.adorn-label-dropdown {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Adorn selection chip — small teal rounded-square shown at the
+   card's bottom-right corner. <AdornSelectChip> renders the chip
+   itself; positioning + interactivity (if any) are the consumer's
+   responsibility. */
+.adorn-select-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 5px;
+  background: var(--adorn-label-bg, var(--adorn-accent-light));
+  color: var(--adorn-accent-light);
+  z-index: 1;
+}
+.adorn-select-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+/* Compact mode — when an Adorn-treated card is rendered into a small
+   container (atom-format cards in operator-mode), shrink the label
+   and chip. The `actions-overlay` container is named by operator-
+   mode, so this rule only fires inside that context; other Adorn
+   consumers (search results, card chooser) keep the full-size
+   primitives. */
+@container actions-overlay (aspect-ratio > 2.0) and (height <= 57px) {
+  .adorn-label {
+    padding: 2px 10px 2px 5px;
+    font-size: 9px;
+    gap: 4px;
+  }
+  .adorn-label-icon {
+    width: 11px;
+    height: 11px;
+  }
+  .adorn-select-chip {
+    width: 16px;
+    height: 16px;
+    padding: 2px;
+  }
+  .adorn-select-icon {
+    width: 12px;
+    height: 12px;
+  }
+}
+
 .error {
   color: var(--boxel-error-100);
 }

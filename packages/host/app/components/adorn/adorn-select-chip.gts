@@ -5,8 +5,11 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 // unfilled circle outline by default and a filled-with-check icon
 // when `@selected` is true. Positioning + interactivity are the
 // caller's responsibility: operator-mode wraps the chip in a button
-// so it can be clicked to toggle selection, while purely-decorative
-// callers can mount it as-is.
+// so it can be clicked to toggle selection; purely-decorative callers
+// (e.g. the card chooser) mount it as-is.
+//
+// The visual styling for `.adorn-select-chip` and `.adorn-select-icon`
+// lives in `app/styles/app.css`.
 interface AdornSelectChipSignature {
   Args: {
     selected?: boolean;
@@ -44,25 +47,6 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
         </svg>
       {{/if}}
     </span>
-    <style scoped>
-      :global(.adorn-select-chip) {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        padding: 3px;
-        border-radius: 5px;
-        background: var(--adorn-label-bg, var(--adorn-accent-light));
-        color: var(--adorn-accent-light);
-        z-index: 1;
-      }
-      :global(.adorn-select-icon) {
-        display: block;
-        width: 14px;
-        height: 14px;
-      }
-    </style>
   </template>;
 
 export default AdornSelectChip;
