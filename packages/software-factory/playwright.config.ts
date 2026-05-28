@@ -8,7 +8,7 @@ import { defineConfig } from '@playwright/test';
 // the child output (`inherit`) and forward the serve-realm child's stdout
 // to the test output. Shell env still wins via `??=`.
 const defaultPlaywrightLogLevels =
-  '*=info,render-desync=info,prerenderer-chrome=none';
+  '*=info,render-desync=info,prerenderer-chrome=info';
 process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
 process.env.TEST_HARNESS_DEBUG_SERVER ??= '1';
 process.env.TEST_HARNESS_FORWARD_REALM_LOGS ??= '1';
