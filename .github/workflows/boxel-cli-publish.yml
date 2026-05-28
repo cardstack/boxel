@@ -344,8 +344,8 @@ jobs:
           # See the unstable job's "Publish to npm" step for the full
           # rationale on the dep ordering — `build:test-harness` reads from
           # `packages/host/dist/`, so the host's dev bundle has to exist
-          # before we can build the slim harness, and the host's vite build
-          # in turn needs `@cardstack/boxel-ui`'s `dist/`, which itself
+          # before we can build the bundled test harness, and the host's vite
+          # build in turn needs `@cardstack/boxel-ui`'s `dist/`, which itself
           # needs `@cardstack/boxel-icons`'s `declarations/` for its type
           # build. Plain `pnpm --filter <name>` does NOT include workspace
           # deps, so they have to be built explicitly.
