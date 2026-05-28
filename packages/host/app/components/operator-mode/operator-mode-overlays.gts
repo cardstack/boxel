@@ -425,17 +425,19 @@ export default class OperatorModeOverlays extends Overlays {
       }
       let boundary = findAdornLabelBoundary(cardEl);
       if (!boundary) {
+        console.warn('[adorn-debug] no boundary for card', cardEl);
         return undefined;
       }
+      console.log('[adorn-debug] boundary:', boundary, {
+        tag: boundary.tagName,
+        cls: boundary.className,
+      });
 
       label.style.position = 'fixed';
       label.style.top = '0';
       label.style.left = '0';
 
       let update = () => {
-        // Read the natural content width by clearing max-width
-        // first; otherwise a previously-applied cap would make
-        // scrollWidth read back the clamped width.
         label.style.maxWidth = 'none';
         let labelWidth = label.scrollWidth;
         let labelHeight = label.offsetHeight;
@@ -455,8 +457,6 @@ export default class OperatorModeOverlays extends Overlays {
           label.removeAttribute('data-overflow');
         }
 
-        // Decide vertical side: prefer above, flip below if there
-        // isn't room inside the boundary above the card.
         let spaceAbove = cardRect.top - boundaryRect.top;
         let spaceBelow = boundaryRect.bottom - cardRect.bottom;
         let side: 'top' | 'bottom' =
@@ -465,16 +465,8 @@ export default class OperatorModeOverlays extends Overlays {
             : 'bottom';
         label.setAttribute('data-side', side);
 
-        // Anchor the appropriate horizontal edge to the card. In the
-        // overflow case we clamp the un-anchored edge to the
-        // boundary so the ellipsis kicks in instead of spilling
-        // outside the containing card. In the fits-the-card case we
-        // hand the browser `max-width: max-content` rather than a
-        // measured pixel value — `scrollWidth` is an integer, so
-        // converting it back to `max-width: Npx` shaves the
-        // sub-pixel remainder off and triggers `text-overflow:
-        // ellipsis` on a label that obviously had room to spare.
         let anchorLeftX: number;
+        let widthApplied: string;
         if (shouldOverflow) {
           let anchorRightX = cardRect.right - (radius - 4);
           anchorLeftX = Math.max(
@@ -483,15 +475,38 @@ export default class OperatorModeOverlays extends Overlays {
           );
           let width = Math.max(0, anchorRightX - anchorLeftX);
           label.style.maxWidth = width + 'px';
+          widthApplied = `${width}px (overflow)`;
         } else {
           anchorLeftX = cardRect.left - 4;
           label.style.maxWidth = 'max-content';
+          widthApplied = 'max-content (fits)';
         }
         label.style.left = anchorLeftX + 'px';
         label.style.top =
           (side === 'top'
             ? cardRect.top - labelHeight - 2
             : cardRect.bottom + 2) + 'px';
+
+        console.log('[adorn-debug] update', {
+          text: label.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60),
+          labelWidth_scrollWidth: labelWidth,
+          card: {
+            l: Math.round(cardRect.left),
+            r: Math.round(cardRect.right),
+            w: Math.round(cardRect.width),
+          },
+          boundary: {
+            l: Math.round(boundaryRect.left),
+            r: Math.round(boundaryRect.right),
+            w: Math.round(boundaryRect.width),
+          },
+          radius,
+          availableWithinCard: Math.round(availableWithinCard),
+          shouldOverflow,
+          wasOverflowing,
+          anchorLeftX: Math.round(anchorLeftX),
+          widthApplied,
+        });
       };
 
       return autoUpdate(cardEl, label, update);
