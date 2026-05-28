@@ -475,27 +475,79 @@ export class SearchResource<
       let dependencyTrackingContext = this.dependencyTrackingContext(
         'search-resource:search',
       );
-      let { instances, meta } = await this.runtimeStore.search<T>(
-        query,
-        this.realmsToSearch,
-        {
-          includeMeta: true,
-          dependencyTrackingContext,
-        },
-      );
-      this.#log.info(
-        `search task complete; total instances=${instances.length}; refs=${instances
-          .map((r) => r.id)
-          .join(',')}`,
-      );
-      this._meta = meta;
-      this._errors = undefined;
-      await this.updateInstances(instances, dependencyTrackingContext);
+      try {
+        let { instances, meta } = await this.runtimeStore.search<T>(
+          query,
+          this.realmsToSearch,
+          {
+            includeMeta: true,
+            dependencyTrackingContext,
+          },
+        );
+        this.#log.info(
+          `search task complete; total instances=${instances.length}; refs=${instances
+            .map((r) => r.id)
+            .join(',')}`,
+        );
+        this._meta = meta;
+        this._errors = undefined;
+        await this.updateInstances(instances, dependencyTrackingContext);
+      } catch (err) {
+        if (didCancel(err)) {
+          throw err;
+        }
+        // A whole-resource search failure (the QUERY call rejected, or the
+        // response payload was malformed) surfaces on `errors`. Consumers in
+        // card-api recognize a non-empty `errors` array and plant a
+        // resource-level sentinel in the query-field bucket; getRelationship
+        // exposes the typed failure state. The load itself completes — the
+        // tracked `loaded` promise resolves rather than rejects — so callers
+        // awaiting it observe a completed-with-errors render instead of an
+        // exception they would otherwise have to catch.
+        this.#log.error(`search task failed`, err);
+        this._errors = [searchErrorEntry(err)];
+        this._meta = { page: { total: 0 } };
+        if (this._instances.length > 0) {
+          this._instances.splice(0, this._instances.length);
+        }
+      }
     } finally {
       waiter.endAsync(token);
     }
   });
 }
+
+// Build an `ErrorEntry` for the SearchResource's `_errors` channel from an
+// arbitrary throwable caught in the search task. The fields preserve enough
+// detail (status, message, stack) for the resource-level sentinel that the
+// card-api getter plants in the query-field bucket, and for `getRelationship`
+// to expose downstream.
+function searchErrorEntry(err: unknown): ErrorEntry {
+  let status =
+    typeof (err as { status?: unknown })?.status === 'number'
+      ? ((err as { status: number }).status as number)
+      : 500;
+  let message =
+    typeof (err as { message?: unknown })?.message === 'string'
+      ? ((err as { message: string }).message as string)
+      : String(err);
+  let stack =
+    typeof (err as { stack?: unknown })?.stack === 'string'
+      ? ((err as { stack: string }).stack as string)
+      : undefined;
+  let title = status === 404 ? 'Link Not Found' : 'Search Error';
+  return {
+    type: 'instance-error',
+    error: {
+      title,
+      status,
+      message,
+      stack,
+      additionalErrors: null,
+    },
+  };
+}
+
 // WARNING! please don't import this directly into your component's module.
 // Rather please instead use:
 // ```

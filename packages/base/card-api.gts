@@ -1220,6 +1220,15 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
         this,
         dependencyTrackingContext,
       );
+      // `ensureQueryFieldSearchResource` mirrors the resource's error state
+      // into the bucket. The recognition pattern mirrors the declared
+      // `linksTo` path above — a terminal `link-error` / `link-not-found`
+      // sentinel surfaces as `undefined`, and `getRelationship` is the
+      // structured read.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        return undefined;
+      }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
       let value = (records as any[])[0] as BaseInstanceType<CardT> | undefined;
       trackRuntimeRelationshipDependency(
@@ -1649,6 +1658,14 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         this,
         dependencyTrackingContext,
       )!;
+      // Resource-level failure: `ensureQueryFieldSearchResource` plants a
+      // single whole-field sentinel in the bucket (the search fails as a
+      // unit, not per element). The empty array hands callers a usable
+      // shape; the structured failure surfaces through `getRelationship`.
+      let bucketEntry = deserialized.get(this.name);
+      if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        return this.emptyValue(instance) as BaseInstanceType<FieldT>;
+      }
       let records = searchResource.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,

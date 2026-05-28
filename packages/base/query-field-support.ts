@@ -6,11 +6,13 @@ import type {
   StoreSearchResource,
 } from './card-api';
 import type {
+  ErrorEntry,
   FieldDefinition,
   LooseCardResource,
   Query,
   QueryWithInterpolations,
   RuntimeDependencyTrackingContext,
+  SerializedError,
 } from '@cardstack/runtime-common';
 import {
   cardIdToURL,
@@ -30,6 +32,13 @@ import {
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
 import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
+import {
+  getDataBucket,
+  isLinkError,
+  isLinkNotFound,
+  type LinkErrorValue,
+  type LinkNotFoundValue,
+} from './field-support';
 
 interface QueryFieldState {
   seedSearchURL?: string | null;
@@ -114,6 +123,7 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
+    surfaceSearchResourceErrorState(instance, field, searchResource);
     return searchResource;
   }
 
@@ -162,8 +172,98 @@ export function ensureQueryFieldSearchResource(
   );
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
+  surfaceSearchResourceErrorState(instance, field, searchResource);
 
   return searchResource;
+}
+
+// Peek at the search resource already created for a query field, without
+// triggering creation. Returns `undefined` when the resource hasn't been
+// instantiated yet (no consumer has read the field). Pure read — useful for
+// callers that want to inspect resolved state without registering as
+// reactive consumers of the field.
+export function peekQueryFieldSearchResource(
+  instance: BaseDef,
+  fieldName: string,
+): StoreSearchResource | undefined {
+  return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
+}
+
+// Mirror the SearchResource's resource-level error state onto the data bucket
+// so the field getter and `getRelationship` recognize the same sentinels they
+// already handle for direct `linksTo`. Reading `searchResource.errors` here
+// also entangles the calling field-getter render with the resource's tracked
+// failure channel — a later transition into or out of an errored state
+// re-invokes the getter without further plumbing.
+//
+// Idempotency: when the resource has no errors we leave the bucket alone
+// unless a stale sentinel from an earlier failure is still planted there, in
+// which case we drop it so the next getter call falls through to the live
+// records. When errors are present we only re-plant if the sentinel shape
+// would actually change — repeated calls with the same first-error are
+// no-ops.
+function surfaceSearchResourceErrorState(
+  instance: BaseDef,
+  field: Field,
+  searchResource: StoreSearchResource,
+): void {
+  let errors = searchResource.errors;
+  let bucket = getDataBucket(instance);
+  let existing = bucket.get(field.name);
+  if (!errors || errors.length === 0) {
+    if (isLinkError(existing) || isLinkNotFound(existing)) {
+      bucket.delete(field.name);
+    }
+    return;
+  }
+  let sentinel = buildQueryFieldSentinel(instance, field, errors);
+  if (
+    (isLinkError(existing) || isLinkNotFound(existing)) &&
+    existing.type === sentinel.type &&
+    existing.reference === sentinel.reference &&
+    existing.errorDoc === sentinel.errorDoc
+  ) {
+    return;
+  }
+  bucket.set(field.name, sentinel);
+}
+
+function buildQueryFieldSentinel(
+  instance: BaseDef,
+  field: Field,
+  errors: ErrorEntry[],
+): LinkErrorValue | LinkNotFoundValue {
+  // A search resource fails as a unit, so we pick the first reported error
+  // for the discriminator (404 → `link-not-found`, anything else →
+  // `link-error`) and hand the entire SerializedError through as `errorDoc`.
+  // Picking the first error mirrors how `lazilyLoadLink` builds its sentinel
+  // from the single failing fetch, and keeps the surface uniform across the
+  // declared and query-field producers.
+  let firstError = errors[0].error;
+  let status = firstError.status;
+  let isMissing = status === 404;
+  let errorDoc: SerializedError = {
+    ...firstError,
+    additionalErrors: firstError.additionalErrors ?? null,
+  };
+  let reference = queryFieldErrorReference(instance, field);
+  return isMissing
+    ? { type: 'link-not-found', reference, errorDoc }
+    : { type: 'link-error', reference, errorDoc };
+}
+
+function queryFieldErrorReference(instance: BaseDef, field: Field): string {
+  // A query field has no single linked-card URL the way a declared `linksTo`
+  // does — the resource is the unit of failure. Use the owning card's id
+  // (qualified with the field name) when available so the reference is
+  // diagnosable in logs and persisted error docs. Unsaved owners fall back to
+  // a synthetic identifier; the reference is read by humans / by
+  // `getRelationship` consumers but never resolved as a URL.
+  let owner = (instance as CardDef).id;
+  if (typeof owner === 'string' && owner.length > 0) {
+    return `${owner}#${field.name}`;
+  }
+  return `query-field:${field.name}`;
 }
 
 function trackQueryFieldLoads(
