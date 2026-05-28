@@ -402,6 +402,17 @@ export default class CardPrerender extends Component {
               type: 'instance-error',
             };
           }
+          // Plant cardType from the source-derived tracker if the upstream
+          // error payload didn't carry it. Without this, errored rows have
+          // search_doc._cardType=null and the cards-grid "All Cards" filter
+          // (not eq _cardType=Cards Grid) excludes them — invisible errors
+          // that the user can never click into.
+          if (!cardError.cardType) {
+            let primed = this.#cardTypeTracker.get(context);
+            if (primed) {
+              cardError = { ...cardError, cardType: primed };
+            }
+          }
           this.store.resetCache();
         } finally {
           this.#cardTypeTracker.set(context, undefined);
