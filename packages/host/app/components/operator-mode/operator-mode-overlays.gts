@@ -472,9 +472,14 @@ export default class OperatorModeOverlays extends Overlays {
         label.setAttribute('data-side', side);
 
         // Anchor the appropriate horizontal edge to the card, then
-        // clamp the other edge against the boundary. The clamp
-        // result is the label's max-width; the anchored edge stays
-        // put.
+        // (in the overflow case only) clamp the un-anchored edge
+        // against the boundary so the ellipsis kicks in instead of
+        // spilling outside the containing card. When the label fits
+        // the card by construction (!shouldOverflow), we use the
+        // natural width and skip the boundary clamp — otherwise a
+        // boundary whose right edge sits just past the card's would
+        // shave a few pixels off the label and trigger the ellipsis
+        // unnecessarily.
         let anchorRightX: number;
         let anchorLeftX: number;
         if (shouldOverflow) {
@@ -485,10 +490,7 @@ export default class OperatorModeOverlays extends Overlays {
           );
         } else {
           anchorLeftX = cardRect.left - 4;
-          anchorRightX = Math.min(
-            boundaryRect.right - 4,
-            anchorLeftX + labelWidth,
-          );
+          anchorRightX = anchorLeftX + labelWidth;
         }
         let width = Math.max(0, anchorRightX - anchorLeftX);
         label.style.maxWidth = width + 'px';
