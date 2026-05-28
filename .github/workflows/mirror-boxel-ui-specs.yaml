@@ -18,8 +18,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/boxel-ui/addon/src/components/**/usage.gts'
-      - 'packages/boxel-ui/addon/bin/generate-component-specs.mjs'
+      - "packages/boxel-ui/addon/src/components/**/usage.gts"
+      - "packages/boxel-ui/addon/bin/generate-component-specs.mjs"
 
 permissions:
   contents: read

@@ -74,6 +74,7 @@ module('factory-entrypoint', function (hooks) {
       openRouterApiKey: undefined,
       debug: undefined,
       retryBlocked: true,
+      enableBoxelUiDiscovery: undefined,
     });
   });
 

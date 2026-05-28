@@ -58,7 +58,7 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder';
-import { deriveCatalogRealmUrl } from '../factory-target-realm';
+import { deriveCatalogRealmUrl } from '../factory-catalog-realm';
 import { jsonSchemaToZodShape } from '../factory-tool-schema-adapter';
 import { logger } from '../logger';
 

@@ -52,7 +52,7 @@ import {
   type FactoryTool,
   type ToolCallEntry,
 } from '../factory-tool-builder';
-import { deriveCatalogRealmUrl } from '../factory-target-realm';
+import { deriveCatalogRealmUrl } from '../factory-catalog-realm';
 import { logger } from '../logger';
 import {
   assembleBootstrapPrompt,
