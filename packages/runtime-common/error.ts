@@ -700,6 +700,7 @@ export function systemError({
   body,
   id,
   lid,
+  status = 500,
 }: {
   requestContext: RequestContext;
   message: string;
@@ -707,9 +708,14 @@ export function systemError({
   body?: Record<string, any>;
   id?: string;
   lid?: string;
+  // HTTP status for the response. Defaults to 500; callers serving an
+  // index error row pass the underlying error's status so a card whose
+  // recorded failure is, say, an auth or validation error returns that
+  // status rather than masquerading as a realm outage.
+  status?: number;
 }): Response {
   let err = new CardError(message, {
-    status: 500,
+    status,
     ...(id ? { id } : {}),
     ...(lid ? { lid } : {}),
   });
