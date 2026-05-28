@@ -277,7 +277,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card {
         display: flex;
         flex-direction: column;
-        width: var(--boxel-xxs-container);
+        width: fit-content;
         position: relative;
         cursor: pointer;
         --item-container-border-color: transparent;
