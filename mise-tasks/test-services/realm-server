@@ -32,11 +32,12 @@ WAIT_ON_TIMEOUT=900000 \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
+  SKIP_SOFTWARE_FACTORY=true \
   NODE_NO_WARNINGS=1 \
   START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
+    "${BASE_REALM_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'
