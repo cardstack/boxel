@@ -1105,11 +1105,14 @@ module(basename(__filename), function () {
               title: 'Some Error',
               additionalErrors: null,
             };
+            // The instance row is keyed by `url` with the `.json` suffix;
+            // the bare card URL is the `file_alias`. Match either so the
+            // error flag lands on the row the GET read resolves.
             for (let table of ['boxel_index', 'boxel_index_working']) {
               await dbAdapter.execute(
                 `UPDATE ${table}
                  SET has_error = TRUE, error_doc = $1::jsonb
-                 WHERE url = $2`,
+                 WHERE (url = $2 OR file_alias = $2) AND type = 'instance'`,
                 {
                   bind: [JSON.stringify(errorDoc), cardURL],
                 },
