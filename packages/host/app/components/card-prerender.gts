@@ -684,7 +684,6 @@ export default class CardPrerender extends Component {
     }
   }
 
-
   private waitForLinkedData = async () => {
     await Promise.resolve(); // ensure lazy link fetches enqueue
     await this.store.loaded();
