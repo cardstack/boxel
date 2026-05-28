@@ -44,7 +44,7 @@ export async function loadRealmTests(application) {
   }
 
   const realmURL =
-    urlParams.get('realmURL') ?? 'http://localhost:4201/software-factory/';
+    urlParams.get('realmURL') ?? 'https://localhost:4201/skills/';
 
   const [
     helpers,
