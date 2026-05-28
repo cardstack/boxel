@@ -14,12 +14,13 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import type NetworkService from '@cardstack/host/services/network';
+
+import RealmService from '@cardstack/host/services/realm';
+
 import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import type { RelationshipState } from 'https://cardstack.com/base/card-api';
 import type * as FieldSupportModule from 'https://cardstack.com/base/field-support';
-
-import type NetworkService from '@cardstack/host/services/network';
-import RealmService from '@cardstack/host/services/realm';
 
 import {
   provideConsumeContext,
@@ -152,7 +153,10 @@ module(
 
     // Mount a temporary network handler that fails every `_federated-search`
     // request. Returns the unmount fn so the test can restore the network.
-    function failFederatedSearchWith(status: number, message: string): () => void {
+    function failFederatedSearchWith(
+      status: number,
+      message: string,
+    ): () => void {
       let network = getService('network') as NetworkService;
       let handler = async (req: Request) => {
         let url = new URL(req.url);
@@ -180,9 +184,7 @@ module(
       try {
         // reading the field kicks off the search through the failing handler
         void host.favorite;
-        await waitUntil(() =>
-          isLinkError(getDataBucket(host).get('favorite')),
-        );
+        await waitUntil(() => isLinkError(getDataBucket(host).get('favorite')));
 
         assert.true(
           isLinkError(getDataBucket(host).get('favorite')),
@@ -195,7 +197,11 @@ module(
         );
 
         let state = singularState(getRelationship(host, 'favorite'));
-        assert.strictEqual(state.kind, 'error', "getRelationship kind === 'error'");
+        assert.strictEqual(
+          state.kind,
+          'error',
+          "getRelationship kind === 'error'",
+        );
         if (state.kind === 'error') {
           assert.true(state.isError);
           assert.strictEqual(state.value, undefined);
@@ -204,9 +210,14 @@ module(
             500,
             'errorDoc carries the upstream status',
           );
+          assert.strictEqual(
+            typeof state.reference,
+            'string',
+            'errored relationship state reference is a string',
+          );
           assert.ok(
-            typeof state.reference === 'string' && state.reference.length > 0,
-            'errored relationship state carries a non-empty reference',
+            state.reference.length > 0,
+            'errored relationship state reference is non-empty',
           );
         }
       } finally {
@@ -251,9 +262,7 @@ module(
       let unmount = failFederatedSearchWith(500, 'realm exploded');
       try {
         void host.matches;
-        await waitUntil(() =>
-          isLinkError(getDataBucket(host).get('matches')),
-        );
+        await waitUntil(() => isLinkError(getDataBucket(host).get('matches')));
 
         assert.true(
           isLinkError(getDataBucket(host).get('matches')),
@@ -308,12 +317,20 @@ module(
       let matchesBucket = getDataBucket(host).get('matches');
 
       assert.false(
-        isLinkError(favoriteBucket) || isLinkNotFound(favoriteBucket),
-        'singular query-field bucket holds no error sentinel on a successful search',
+        isLinkError(favoriteBucket),
+        'singular query-field bucket holds no link-error sentinel on a successful search',
       );
       assert.false(
-        isLinkError(matchesBucket) || isLinkNotFound(matchesBucket),
-        'plural query-field bucket holds no error sentinel on a successful search',
+        isLinkNotFound(favoriteBucket),
+        'singular query-field bucket holds no link-not-found sentinel on a successful search',
+      );
+      assert.false(
+        isLinkError(matchesBucket),
+        'plural query-field bucket holds no link-error sentinel on a successful search',
+      );
+      assert.false(
+        isLinkNotFound(matchesBucket),
+        'plural query-field bucket holds no link-not-found sentinel on a successful search',
       );
     });
 
@@ -373,7 +390,11 @@ module(
 
       let value = host.matches as unknown as unknown[];
       assert.ok(Array.isArray(value), 'array accessor returns an array');
-      assert.strictEqual(value.length, 0, 'array accessor returns an empty array');
+      assert.strictEqual(
+        value.length,
+        0,
+        'array accessor returns an empty array',
+      );
       assert.true(isLinkError(getDataBucket(host).get('matches')));
 
       let states = pluralState(getRelationship(host, 'matches'));
@@ -395,9 +416,7 @@ module(
       let unmount = failFederatedSearchWith(500, 'realm exploded');
       try {
         void host.favorite;
-        await waitUntil(() =>
-          isLinkError(getDataBucket(host).get('favorite')),
-        );
+        await waitUntil(() => isLinkError(getDataBucket(host).get('favorite')));
 
         let findings = getBrokenLinks(host);
         let favoriteFinding = findings.find((f) => f.fieldName === 'favorite');
