@@ -667,6 +667,96 @@ jobs:
           path: /tmp/host-dist.log
           retention-days: 30
 
+  # Proof-of-concept: boot the realm-server test stack under environment
+  # mode (BOXEL_ENVIRONMENT set -> Traefik, *.localhost hostnames, per-slug
+  # paths) and assert the public-read parity gate the host PoC already
+  # validates. A single shard of the realm-server suite then runs under
+  # the same env-mode environment as a non-blocking slice, exercising any
+  # code path that branches on isEnvironmentMode() / reads BOXEL_ENVIRONMENT
+  # (dev-service-registry, prerender/config, manager-server, prerenderer,
+  # synapse, worker-manager, setup-localhost-resolver, registry-backfill).
+  # Scaling to all 6 shards is the follow-up once this is green.
+  realm-server-test-env-mode-poc:
+    name: Realm Server Env-Mode PoC
+    needs: [change-check]
+    if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    env:
+      BOXEL_ENVIRONMENT: ci
+      SKIP_CATALOG: "true"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
+
+      - name: Install mkcert root into system trust store
+        run: mkcert -install
+      - name: Start Traefik
+        run: mise run infra:ensure-traefik
+
+      - name: Build boxel-ui and boxel-icons
+        run: mise run build:ui
+
+      # The prerender (used by realm-server indexing) loads the host app from
+      # host.ci.localhost, so the host dist must be built with the same slug
+      # baked into its realm URLs.
+      - name: Build env-mode host dist
+        run: NODE_OPTIONS="--max_old_space_size=4096" pnpm build
+        working-directory: packages/host
+
+      - name: Start env-mode test services
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
+
+      - name: Wait for realms and assert public-read parity
+        run: |
+          set -u
+          accept='application/vnd.api+json'
+          ok=0
+          for i in $(seq 1 120); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Accept: ${accept}" --max-time 10 \
+              "https://realm-server.ci.localhost/skills/_info" || echo 000)
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            echo "attempt $i: skills/_info -> $code (waiting)"
+            sleep 10
+          done
+          curl -sS -o /dev/null -w 'base/_info -> %{http_code}\n' \
+            -H "Accept: ${accept}" --max-time 10 \
+            "https://realm-server.ci.localhost/base/_info" || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::skills/_info did not return 200 unauthenticated in env mode (got $code)"
+            exit 1
+          fi
+          echo "::notice::Environment-mode public-read parity confirmed for realm-server test stack"
+
+      - name: Compute shard test modules
+        id: shard_modules
+        run: echo "modules=$(node scripts/shard-test-modules.js 1 6)" >> "$GITHUB_OUTPUT"
+        working-directory: packages/realm-server
+
+      # First slice: run shard 1/6 of the realm-server suite against the
+      # env-mode stack above. Kept non-blocking so the parity gate above
+      # remains the job's required signal while integration-level fallout
+      # against the env-mode stack is matured.
+      - name: Run realm-server shard 1/6 in env mode (in progress, non-blocking)
+        continue-on-error: true
+        run: pnpm test
+        working-directory: packages/realm-server
+        env:
+          TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
+
+      - name: Print server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log || true
+
   realm-server-merge-reports:
     name: Merge Realm Server reports and publish
     if: ${{ !cancelled() && (needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
