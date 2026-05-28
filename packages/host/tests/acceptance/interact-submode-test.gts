@@ -1225,20 +1225,18 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist('card error state is NOT displayed');
 
+      // Cause error: missing adoptsFrom module. Broken-linksTo no longer
+      // demotes the consuming card, so this is the new lever for "make
+      // this card error" live-update assertions.
       await realm.write(
         'Person/fadhlan.json',
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              pet: {
-                links: { self: './missing' },
-              },
-            },
             meta: {
               adoptsFrom: {
-                module: rri('../person'),
-                name: 'Person',
+                module: rri('../missing-person'),
+                name: 'MissingPerson',
               },
             },
           },
@@ -1258,9 +1256,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         JSON.stringify({
           data: {
             type: 'card',
-            relationships: {
-              pet: { links: { self: null } },
-            },
             meta: {
               adoptsFrom: {
                 module: rri('../person'),
