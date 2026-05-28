@@ -1,4 +1,10 @@
-import { waitFor, click, triggerEvent, find } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  triggerEvent,
+  find,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -320,7 +326,7 @@ module('Integration | overlay-menu-items', function (hooks) {
       );
   });
 
-  test('hover type-label tab is right-justified so long names overflow off the left edge', async function (assert) {
+  test('hover type-label tab anchors left while it fits and clamps to the corner radius when it overflows', async function (assert) {
     setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -335,17 +341,44 @@ module('Integration | overlay-menu-items', function (hooks) {
 
     let label = find(`${overlaySelector} [data-test-overlay-label]`)!;
     let overlay = find(overlaySelector)!;
+
+    // The label's anchor is decided after the ResizeObserver fires; give
+    // the browser a frame so the post-layout decision is recorded.
+    await waitUntil(
+      () => label.getBoundingClientRect().width > 0,
+      { timeout: 1000 },
+    );
+
     let labelRect = label.getBoundingClientRect();
     let overlayRect = overlay.getBoundingClientRect();
-
-    // The tab is anchored to the card's top-right corner: its right edge hugs
-    // the overlay's right edge (within the 4px selection-stroke inset) while
-    // long names overflow off the left. So the label's right edge sits closer
-    // to the overlay's right edge than its left edge does to the left edge.
-    assert.ok(
-      Math.abs(labelRect.right - overlayRect.right) <=
-        Math.abs(labelRect.left - overlayRect.left),
-      "type-label tab is right-justified (anchored to the card's right edge)",
+    let radius = parseFloat(
+      window
+        .getComputedStyle(overlay)
+        .getPropertyValue('--card-corner-radius'),
     );
+
+    if (label.hasAttribute('data-overflow')) {
+      // Right edge clamps to the start of the card's top-right corner
+      // radius (with the 4px selection-stroke bleed on that side), and
+      // the leftward growth overflows past the overlay's left edge.
+      assert.ok(
+        Math.abs(overlayRect.right - labelRect.right - (radius - 4)) <= 2,
+        "overflowing label's right edge sits at the card's corner-radius point",
+      );
+      assert.ok(
+        labelRect.left < overlayRect.left,
+        'overflowing label extends past the overlay left edge',
+      );
+    } else {
+      // Fits: hugs the overlay's left edge with the 4px bleed.
+      assert.ok(
+        Math.abs(labelRect.left - (overlayRect.left - 4)) <= 2,
+        "fitting label is anchored to the overlay's left edge",
+      );
+      assert.ok(
+        labelRect.right <= overlayRect.right - radius + 2,
+        "fitting label's right edge stays before the corner-radius point",
+      );
+    }
   });
 });

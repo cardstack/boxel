@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
 
@@ -104,11 +105,15 @@ export default class OperatorModeOverlays extends Overlays {
             style={{renderedCard.overlayZIndexStyle}}
             ...attributes
           >
-            {{! Type-label tab — hover only, anchored top-right, overflows off the left when long }}
+            {{! Type-label tab — hover only. Anchored top-left while it
+                fits; once it can't grow further right without entering the
+                card's corner radius it pivots to a right anchor at that
+                point and overflows off the left edge instead. }}
             {{#if isHovered}}
               <div
                 class='adorn-label'
                 data-test-overlay-label
+                {{this.trackLabelOverflow}}
                 {{on 'mouseenter' this.cancelHoverClear}}
                 {{on 'mouseleave' this.scheduleHoverClear}}
               >
@@ -233,15 +238,19 @@ export default class OperatorModeOverlays extends Overlays {
         box-shadow: 0 0 0 4px var(--adorn-accent);
       }
 
-      /* Type-label tab — flag shape with sloped right edge, anchored above
-         the card's top-right corner so its right edge aligns with the 4px
-         selection stroke. Long names overflow off the card's left edge
-         rather than the right. */
+      /* Type-label tab — flag shape with sloped right edge. The
+         `left` value is computed in JS (see trackLabelOverflow): for
+         labels that fit, it pins to -4px so the left edge lines up
+         with the 4px selection-stroke inset; for labels that don't
+         fit, [data-overflow] is set and `left` becomes a negative
+         pixel value that places the label's right edge at the start
+         of the card's top-right corner radius, letting the extra
+         width spill off the card's left edge. */
       .adorn-label {
         position: absolute;
         bottom: calc(100% + 2px);
-        right: -4px;
-        left: auto;
+        left: -4px;
+        right: auto;
         top: auto;
         display: inline-flex;
         align-items: center;
@@ -360,6 +369,56 @@ export default class OperatorModeOverlays extends Overlays {
     // needs to bridge that gap without the chrome dismissing itself.
     return 100;
   }
+
+  // Positions the type-label tab so it hugs the card's top-left corner
+  // when its content fits, or pins its right edge to the start of the
+  // card's top-right corner radius (overflowing off the left edge) when
+  // it doesn't. The position is written as an integer-pixel `left`
+  // value rather than CSS `right: calc(...)`, because velcro's
+  // floating-ui autoUpdate re-fires on DOM mutations (e.g. when the
+  // menu dropdown opens), and the sub-pixel overlay width it writes
+  // would otherwise shift a right-anchored label by a pixel or two.
+  // Observes the label's stable children plus the overlay parent —
+  // never the label itself — and uses integer clientWidth / scrollWidth
+  // readings plus 4px hysteresis to keep sub-pixel wobble from flipping
+  // the overflow decision.
+  private trackLabelOverflow = modifier((label: HTMLElement) => {
+    let overlay = label.closest<HTMLElement>('.actions-overlay');
+    if (!overlay) {
+      return;
+    }
+    let update = () => {
+      let radiusStr = window
+        .getComputedStyle(overlay)
+        .getPropertyValue('--card-corner-radius')
+        .trim();
+      let radius = parseFloat(radiusStr) || 0;
+      let overlayWidth = overlay.clientWidth;
+      let labelWidth = label.scrollWidth;
+      // The label has a 4px bleed on its anchored side so its edge
+      // lines up with the selection stroke. That bleed counts as
+      // usable space on whichever side it's not currently on.
+      let available = overlayWidth - radius + 4;
+      let wasOverflowing = label.hasAttribute('data-overflow');
+      let shouldOverflow = wasOverflowing
+        ? !(labelWidth + 4 < available) // hysteresis: only exit overflow once comfortably under
+        : labelWidth > available;
+      if (shouldOverflow) {
+        label.setAttribute('data-overflow', '');
+        label.style.left = overlayWidth - radius + 4 - labelWidth + 'px';
+      } else {
+        label.removeAttribute('data-overflow');
+        label.style.left = '-4px';
+      }
+    };
+    let observer = new ResizeObserver(update);
+    observer.observe(overlay);
+    for (let child of Array.from(label.children)) {
+      observer.observe(child);
+    }
+    update();
+    return () => observer.disconnect();
+  });
 
   protected override shouldDelayHoverClear(): boolean {
     return this.openDropdownCount > 0;
