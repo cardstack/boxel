@@ -106,6 +106,38 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   return null;
 }
 
+export type BfmBlockFormat = 'embedded' | 'fitted' | 'isolated';
+
+/**
+ * Derives the block-level render format and an optional inline sizing style
+ * (`width`/`height`) from a BFM block-ref element's `data-boxel-bfm-*`
+ * attributes. Shared so that resolved cards, the loading shimmer, and the
+ * broken-link placeholder all occupy the same footprint as the eventual card.
+ */
+export function bfmBlockFormatAndSize(
+  formatAttr: string | undefined,
+  widthAttr: string | undefined,
+  heightAttr: string | undefined,
+): { format: BfmBlockFormat; sizeStyle?: string } {
+  let format: BfmBlockFormat =
+    formatAttr === 'fitted' || formatAttr === 'isolated'
+      ? formatAttr
+      : 'embedded';
+  if (format !== 'fitted') {
+    return { format };
+  }
+  let parts: string[] = [];
+  if (widthAttr && /^\d+%$/.test(widthAttr)) {
+    parts.push(`width: ${widthAttr}`);
+  } else if (widthAttr && /^\d+$/.test(widthAttr)) {
+    parts.push(`width: ${widthAttr}px`);
+  }
+  if (heightAttr && /^\d+$/.test(heightAttr)) {
+    parts.push(`height: ${heightAttr}px`);
+  }
+  return { format, sizeStyle: parts.length ? parts.join('; ') : undefined };
+}
+
 /**
  * Splits the content between `[` and `]` in a BFM directive into the URL
  * part and an optional size specifier (after `|`).
