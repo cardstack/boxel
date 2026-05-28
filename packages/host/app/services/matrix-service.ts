@@ -1805,17 +1805,24 @@ export default class MatrixService extends Service {
       reasoningEffort === undefined
     ) {
       let roomData = this.getRoomData(roomId);
-      let priorEvents = (roomData?.events ?? [])
-        .filter((e) => e.type === APP_BOXEL_ACTIVE_LLM)
-        .map((e) => e as ActiveLLMEvent)
-        .filter(
-          (e) =>
-            e.content.model === model &&
-            e.content.toolsSupported !== undefined &&
-            e.content.inputModalities !== undefined,
-        )
-        .sort((a, b) => (b.origin_server_ts ?? 0) - (a.origin_server_ts ?? 0));
-      let mostRecent = priorEvents[0];
+      let mostRecent: ActiveLLMEvent | undefined;
+      for (let e of roomData?.events ?? []) {
+        if (e.type !== APP_BOXEL_ACTIVE_LLM) continue;
+        let candidate = e as ActiveLLMEvent;
+        if (
+          candidate.content.model !== model ||
+          candidate.content.toolsSupported === undefined ||
+          candidate.content.inputModalities === undefined
+        ) {
+          continue;
+        }
+        if (
+          !mostRecent ||
+          (candidate.origin_server_ts ?? 0) > (mostRecent.origin_server_ts ?? 0)
+        ) {
+          mostRecent = candidate;
+        }
+      }
       if (mostRecent) {
         if (toolsSupported === undefined) {
           toolsSupported = mostRecent.content.toolsSupported;

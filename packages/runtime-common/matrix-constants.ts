@@ -79,10 +79,10 @@ export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 // capability fields on the wire (silent-tools-off bug — see CS-11249).
 //
 // Refresh: re-derive from `https://openrouter.ai/api/v1/models` when the
-// curated set changes. Derivation rules mirror
-// `packages/host/app/commands/sync-openrouter-models.ts:67-141`:
-//   toolsSupported  = supported_parameters.includes('tools')
-//   inputModalities = architecture.input_modalities (verbatim)
+// curated set changes. Derivation rules mirror the computed fields on the
+// `OpenRouterModel` card (`packages/openrouter-realm/openrouter-model.gts`):
+//   toolsSupported  = supportedParameters.includes('tools')
+//   inputModalities = architecture.inputModalities (verbatim)
 // `reasoningEffort` is intentionally not modeled here — it's a user choice,
 // not a model capability. Callers / SystemCard supply it; the fallback never
 // auto-fills it.
