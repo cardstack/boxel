@@ -27,6 +27,8 @@ jobs:
   build:
     name: Build and cache test web assets
     runs-on: ubuntu-latest
+    env:
+      TEST_WEB_ASSETS_INPUTS_HASH: ${{ hashFiles('package.json', 'pnpm-lock.yaml', '.mise.toml', 'packages/base/**', 'packages/boxel-icons/**', 'packages/boxel-ui/**', 'packages/catalog/**', 'packages/host/**', 'packages/runtime-common/**') }}
     concurrency:
       group: test-web-assets-${{ inputs.caller }}-${{ github.ref }}-${{ github.sha }}
       cancel-in-progress: false
@@ -44,9 +46,8 @@ jobs:
         id: keys
         shell: bash
         run: |
-          ref_slug="$(echo "${GITHUB_REF}" | tr '/' '_')"
           skip_catalog="${{ inputs.skip_catalog }}"
-          cache_key="test-web-assets-v2-${RUNNER_OS}-${ref_slug}-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
+          cache_key="test-web-assets-v3-${RUNNER_OS}-${TEST_WEB_ASSETS_INPUTS_HASH}-skip-catalog-${skip_catalog}"
           artifact_name="test-web-assets-${GITHUB_SHA}-skip-catalog-${skip_catalog}"
           echo "cache_key=$cache_key" >> "$GITHUB_OUTPUT"
           echo "artifact_name=$artifact_name" >> "$GITHUB_OUTPUT"

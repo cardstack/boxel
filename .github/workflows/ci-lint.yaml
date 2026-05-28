@@ -53,67 +53,62 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run build
         working-directory: packages/boxel-ui/addon
-      - name: Lint Boxel UI Test App
+      - name: Lint remaining packages
         if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/boxel-ui/test-app
-      - name: Lint Host
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/host
-      - name: Lint Matrix
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/matrix
-      - name: Lint Realm Server
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/realm-server
-      - name: Lint Realm Test Harness
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/realm-test-harness
-      - name: Lint Runtime Common
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/runtime-common
-      - name: Lint Billing
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/billing
-      - name: Lint Postgres
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/postgres
-      - name: Lint Base Realm
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/base
-      - name: Lint Experiments Realm
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/experiments-realm
-      - name: Lint Software Factory
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/software-factory
-      - name: Lint Boxel Tools VS Code extension
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/vscode-boxel-tools
-      - name: Lint ESLint Plugin
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/eslint-plugin-boxel
-      - name: Lint AI Bot
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/ai-bot
-      - name: Lint Bot Runner
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/bot-runner
-      - name: Lint Boxel CLI
-        if: ${{ !cancelled() }}
-        run: pnpm run lint
-        working-directory: packages/boxel-cli
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_lint() {
+            local label="$1"
+            local dir="$2"
+
+            echo "::group::${label}"
+            pnpm --dir "$dir" run lint
+            echo "::endgroup::"
+          }
+
+          (
+            set -euo pipefail
+            run_lint "Lint Boxel UI Test App" packages/boxel-ui/test-app
+            run_lint "Lint Host" packages/host
+            run_lint "Lint Base Realm" packages/base
+            run_lint "Lint ESLint Plugin" packages/eslint-plugin-boxel
+          ) &
+          pids=("$!")
+
+          (
+            set -euo pipefail
+            run_lint "Lint Matrix" packages/matrix
+            run_lint "Lint Realm Server" packages/realm-server
+            run_lint "Lint Runtime Common" packages/runtime-common
+            run_lint "Lint Experiments Realm" packages/experiments-realm
+          ) &
+          pids+=("$!")
+
+          (
+            set -euo pipefail
+            run_lint "Lint Realm Test Harness" packages/realm-test-harness
+            run_lint "Lint Billing" packages/billing
+            run_lint "Lint Postgres" packages/postgres
+            run_lint "Lint AI Bot" packages/ai-bot
+          ) &
+          pids+=("$!")
+
+          (
+            set -euo pipefail
+            run_lint "Lint Software Factory" packages/software-factory
+            run_lint "Lint Boxel Tools VS Code extension" packages/vscode-boxel-tools
+            run_lint "Lint Bot Runner" packages/bot-runner
+            run_lint "Lint Boxel CLI" packages/boxel-cli
+          ) &
+          pids+=("$!")
+
+          failures=0
+          for pid in "${pids[@]}"; do
+            if ! wait "$pid"; then
+              failures=1
+            fi
+          done
+
+          exit "$failures"
