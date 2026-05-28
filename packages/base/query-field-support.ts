@@ -34,8 +34,6 @@ import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 import {
   getDataBucket,
-  isLinkError,
-  isLinkNotFound,
   type LinkErrorValue,
   type LinkNotFoundValue,
 } from './field-support';
@@ -60,6 +58,18 @@ interface QueryFieldState {
   }>;
   searchResource?: StoreSearchResource;
   renderCycleBarrier?: Promise<void>;
+  // The sentinel `surfaceSearchResourceErrorState` planted on the most
+  // recent transition into an errored state, kept as an identity handle
+  // so the clear-on-recovery path can tell `our sentinel` apart from a
+  // hand-planted / deserialized / externally-set bucket entry it must
+  // leave alone.
+  surfacedErrorSentinel?: LinkErrorValue | LinkNotFoundValue;
+  // The `searchResource.errors` array reference we acted on the last
+  // time surface ran. Tracking this lets surface short-circuit on
+  // unchanged errors (the common per-render no-op case) and detect a
+  // real transition into / out of the errored state without reading
+  // the bucket on every call.
+  surfacedErrorSource?: readonly unknown[] | null;
 }
 
 const queryFieldSeedFromSearchSymbol = Symbol.for(
@@ -123,7 +133,7 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
-    surfaceSearchResourceErrorState(instance, field, searchResource);
+    surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
     return searchResource;
   }
 
@@ -172,7 +182,7 @@ export function ensureQueryFieldSearchResource(
   );
   fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
-  surfaceSearchResourceErrorState(instance, field, searchResource);
+  surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
 
   return searchResource;
 }
@@ -196,36 +206,47 @@ export function peekQueryFieldSearchResource(
 // failure channel — a later transition into or out of an errored state
 // re-invokes the getter without further plumbing.
 //
-// Idempotency: when the resource has no errors we leave the bucket alone
-// unless a stale sentinel from an earlier failure is still planted there, in
-// which case we drop it so the next getter call falls through to the live
-// records. When errors are present we only re-plant if the sentinel shape
-// would actually change — repeated calls with the same first-error are
-// no-ops.
+// Ownership: the clear-on-recovery path acts only on sentinels we planted
+// ourselves (tracked by identity via `fieldState.surfacedErrorSentinel`). A
+// hand-planted or deserialized sentinel — or any other bucket entry that
+// happens to be in a sentinel shape — is left alone, so external producers
+// can put state into the bucket without surface racing them and erasing it.
+//
+// Short-circuit: the `errors` array carries identity across reads when the
+// SearchResource hasn't transitioned, so an unchanged snapshot lets surface
+// return without touching the bucket. The early-return is also what keeps
+// the first call (errors === undefined on a fresh resource, source ===
+// undefined on a fresh fieldState) from clobbering a sentinel that was put
+// in place before the field was first read.
 function surfaceSearchResourceErrorState(
+  fieldState: QueryFieldState,
   instance: BaseDef,
   field: Field,
   searchResource: StoreSearchResource,
 ): void {
   let errors = searchResource.errors;
+  if (errors === fieldState.surfacedErrorSource) {
+    return;
+  }
+  fieldState.surfacedErrorSource = errors ?? null;
+
   let bucket = getDataBucket(instance);
   let existing = bucket.get(field.name);
+
   if (!errors || errors.length === 0) {
-    if (isLinkError(existing) || isLinkNotFound(existing)) {
+    if (
+      fieldState.surfacedErrorSentinel &&
+      existing === fieldState.surfacedErrorSentinel
+    ) {
       bucket.delete(field.name);
     }
+    fieldState.surfacedErrorSentinel = undefined;
     return;
   }
+
   let sentinel = buildQueryFieldSentinel(instance, field, errors);
-  if (
-    (isLinkError(existing) || isLinkNotFound(existing)) &&
-    existing.type === sentinel.type &&
-    existing.reference === sentinel.reference &&
-    existing.errorDoc === sentinel.errorDoc
-  ) {
-    return;
-  }
   bucket.set(field.name, sentinel);
+  fieldState.surfacedErrorSentinel = sentinel;
 }
 
 function buildQueryFieldSentinel(

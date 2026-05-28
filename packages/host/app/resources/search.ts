@@ -508,7 +508,19 @@ export class SearchResource<
         this._errors = [searchErrorEntry(err)];
         this._meta = { page: { total: 0 } };
         if (this._instances.length > 0) {
-          this._instances.splice(0, this._instances.length);
+          // Route through `updateInstances` so the diff-driven
+          // `addReference` / `dropReference` bookkeeping the store relies on
+          // stays balanced. A bare splice would leave the previously-loaded
+          // instances pinned in the store's identity map and reference count
+          // after the UI has discarded them.
+          try {
+            await this.updateInstances([], dependencyTrackingContext);
+          } catch (cleanupErr) {
+            if (didCancel(cleanupErr)) {
+              throw cleanupErr;
+            }
+            this.#log.error(`search cleanup failed`, cleanupErr);
+          }
         }
       }
     } finally {
