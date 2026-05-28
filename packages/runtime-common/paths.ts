@@ -3,21 +3,27 @@ import type {
   RealmIdentifier,
   RealmResourceIdentifier,
 } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 interface LocalOptions {
   preserveQuerystring?: boolean;
 }
 export class RealmPaths {
   readonly url: string;
+  private virtualNetwork: VirtualNetwork | undefined;
 
-  constructor(realmURL: URL);
-  constructor(realmId: RealmIdentifier);
-  constructor(realmURLOrId: URL | RealmIdentifier) {
+  constructor(realmURL: URL, virtualNetwork?: VirtualNetwork);
+  constructor(realmId: RealmIdentifier, virtualNetwork?: VirtualNetwork);
+  constructor(
+    realmURLOrId: URL | RealmIdentifier,
+    virtualNetwork?: VirtualNetwork,
+  ) {
     if (realmURLOrId instanceof URL) {
       this.url = ensureTrailingSlash(decodeURI(realmURLOrId.href));
     } else {
       this.url = ensureTrailingSlash(realmURLOrId);
     }
+    this.virtualNetwork = virtualNetwork;
   }
 
   get realmId(): RealmIdentifier {
@@ -108,8 +114,12 @@ export class RealmPaths {
     let realmURL: string;
     let inputURL: string;
     try {
-      realmURL = cardIdToURL(this.url).href;
-      inputURL = cardIdToURL(inputStr).href;
+      realmURL = this.virtualNetwork
+        ? this.virtualNetwork.toURL(this.url).href
+        : cardIdToURL(this.url).href;
+      inputURL = this.virtualNetwork
+        ? this.virtualNetwork.toURL(inputStr).href
+        : cardIdToURL(inputStr).href;
     } catch {
       return false;
     }
