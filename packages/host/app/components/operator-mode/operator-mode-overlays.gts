@@ -4,15 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import DotsVertical from '@cardstack/boxel-icons/dots-vertical';
-import {
-  autoUpdate,
-  computePosition,
-  flip,
-  limitShift,
-  offset,
-  shift,
-  size,
-} from '@floating-ui/dom';
+import { autoUpdate } from '@floating-ui/dom';
 import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import { velcro } from 'ember-velcro';
@@ -72,7 +64,6 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
-import type { Middleware, Placement } from '@floating-ui/dom';
 
 // Walks up from a rendered card's DOM element to find the nearest
 // enclosing rendered-card wrapper (`[data-boxel-card-id]`) — i.e. the
@@ -131,12 +122,11 @@ export default class OperatorModeOverlays extends Overlays {
             style={{renderedCard.overlayZIndexStyle}}
             ...attributes
           >
-            {{! Type-label tab — hover only. Position is driven by
-                floating-ui (offset + flip + shift + size) so the label
-                stays inside the containing card's footprint, flipping
-                below the card when there isn't room above and
-                truncating with an ellipsis when there isn't room
-                sideways. }}
+            {{! Type-label tab — hover only. trackLabelOverflow
+                positions the label inline so it stays inside the
+                containing card's footprint, flipping below the card
+                when there isn't room above and truncating with an
+                ellipsis when there isn't room sideways. }}
             {{#if isHovered}}
               <div
                 class='adorn-label'
@@ -403,29 +393,37 @@ export default class OperatorModeOverlays extends Overlays {
     return 100;
   }
 
-  // Positions the type-label tab via floating-ui (offset + flip + shift
-  // + size) so it stays inside the containing card's footprint:
+  // Positions the type-label tab manually inside the containing
+  // card's footprint, so its slope stays anchored to the hovered
+  // card and long type-names get truncated with an ellipsis when
+  // they would otherwise spill into the chrome around the
+  // containing card.
   //
+  // Behavior:
   // - While the natural label width fits the card's interior (card
-  //   width minus the top-right corner radius plus 4px stroke bleed),
-  //   the label is anchored to the card's top-left corner; otherwise
+  //   width minus the top-right corner radius plus 4px stroke
+  //   bleed), the label is anchored top-left at the card; otherwise
   //   it pins its right edge to the corner-radius point and grows
-  //   leftward. (4px hysteresis at the threshold keeps sub-pixel
-  //   wobble — e.g. from velcro re-firing when a menu opens — from
+  //   leftward. (4px hysteresis keeps sub-pixel wobble from
   //   flipping the placement decision.)
-  // - `flip` switches the label below the card when there isn't room
-  //   above (a [data-side="bottom"] attribute mirrors the clip-path
-  //   vertically in CSS so the slope still points toward the card).
-  // - `shift` slides the label horizontally to stay inside the
-  //   boundary; `size` caps its max-width to whatever's still
-  //   available, and the CSS text-overflow:ellipsis truncates the
-  //   text rather than letting the label spill into the chrome
-  //   surrounding the containing card.
+  // - If there isn't room above the card inside the boundary, the
+  //   label flips below; a [data-side] attribute drives the CSS
+  //   that mirrors the clip-path vertically so the slope still
+  //   points toward the card.
+  // - The label's max-width is capped to the space available
+  //   between the anchored edge and the boundary; CSS
+  //   text-overflow:ellipsis truncates the type-name rather than
+  //   letting the label spill outside the containing card.
   //
   // The boundary is the closest enclosing rendered-card wrapper
   // (`[data-boxel-card-id]`) — i.e. the card this card is embedded
   // in. Top-level cards fall back to the operator-mode stack item's
   // content area.
+  //
+  // Floating-ui's `autoUpdate` only triggers the re-fire on scroll,
+  // resize, and ancestor mutations; the placement math is direct
+  // because floating-ui's flip + shift + size middleware aren't a
+  // clean fit for the right-anchored-with-truncation pattern.
   private trackLabelOverflow = modifier(
     (label: HTMLElement, [cardEl]: [HTMLElement | undefined]) => {
       if (!cardEl) {
@@ -440,22 +438,19 @@ export default class OperatorModeOverlays extends Overlays {
       label.style.top = '0';
       label.style.left = '0';
 
-      let placementSide: Middleware = {
-        name: 'placement-side',
-        fn: (state) => {
-          let side = state.placement.startsWith('bottom') ? 'bottom' : 'top';
-          if (label.getAttribute('data-side') !== side) {
-            label.setAttribute('data-side', side);
-          }
-          return {};
-        },
-      };
-
       let update = () => {
-        let cardStyles = window.getComputedStyle(cardEl);
-        let radius = parseFloat(cardStyles.borderTopRightRadius) || 0;
-        let availableWithinCard = cardEl.clientWidth - radius + 4;
+        // Read the natural content width by clearing max-width
+        // first; otherwise a previously-applied cap would make
+        // scrollWidth read back the clamped width.
+        label.style.maxWidth = 'none';
         let labelWidth = label.scrollWidth;
+        let labelHeight = label.offsetHeight;
+
+        let cardRect = cardEl.getBoundingClientRect();
+        let boundaryRect = boundary.getBoundingClientRect();
+        let radius =
+          parseFloat(window.getComputedStyle(cardEl).borderTopRightRadius) || 0;
+        let availableWithinCard = cardRect.width - radius + 4;
         let wasOverflowing = label.hasAttribute('data-overflow');
         let shouldOverflow = wasOverflowing
           ? !(labelWidth + 4 < availableWithinCard)
@@ -465,46 +460,43 @@ export default class OperatorModeOverlays extends Overlays {
         } else {
           label.removeAttribute('data-overflow');
         }
-        let placement: Placement = shouldOverflow ? 'top-end' : 'top-start';
-        // Cross-axis offset replicates the prior 4px stroke bleed on
-        // the anchored side. For top-start the bleed is 4px left of
-        // the card's left edge (-4 cross-axis); for top-end the right
-        // edge sits at the start of the card's corner radius, i.e.
-        // (radius - 4)px left of the card's right edge.
-        let crossAxis = shouldOverflow ? -(radius - 4) : -4;
-        computePosition(cardEl, label, {
-          placement,
-          strategy: 'fixed',
-          middleware: [
-            offset({ mainAxis: 2, crossAxis }),
-            flip({ boundary, padding: 4 }),
-            // limitShift gives the label a small budget (~16px) of
-            // horizontal slack to nudge inside the boundary before
-            // size starts truncating. Without the limit, shift would
-            // drag the tab arbitrarily far from the hovered card to
-            // fit a long type-name in the boundary, breaking the
-            // visual association between the slope and the card.
-            shift({
-              boundary,
-              padding: 4,
-              limiter: limitShift({ offset: 16 }),
-            }),
-            size({
-              boundary,
-              padding: 4,
-              apply({ availableWidth, elements }) {
-                elements.floating.style.maxWidth =
-                  Math.max(0, availableWidth) + 'px';
-              },
-            }),
-            placementSide,
-          ],
-        }).then(({ x, y }) => {
-          Object.assign(label.style, {
-            left: `${x}px`,
-            top: `${y}px`,
-          });
-        });
+
+        // Decide vertical side: prefer above, flip below if there
+        // isn't room inside the boundary above the card.
+        let spaceAbove = cardRect.top - boundaryRect.top;
+        let spaceBelow = boundaryRect.bottom - cardRect.bottom;
+        let side: 'top' | 'bottom' =
+          spaceAbove >= labelHeight + 2 || spaceAbove >= spaceBelow
+            ? 'top'
+            : 'bottom';
+        label.setAttribute('data-side', side);
+
+        // Anchor the appropriate horizontal edge to the card, then
+        // clamp the other edge against the boundary. The clamp
+        // result is the label's max-width; the anchored edge stays
+        // put.
+        let anchorRightX: number;
+        let anchorLeftX: number;
+        if (shouldOverflow) {
+          anchorRightX = cardRect.right - (radius - 4);
+          anchorLeftX = Math.max(
+            boundaryRect.left + 4,
+            anchorRightX - labelWidth,
+          );
+        } else {
+          anchorLeftX = cardRect.left - 4;
+          anchorRightX = Math.min(
+            boundaryRect.right - 4,
+            anchorLeftX + labelWidth,
+          );
+        }
+        let width = Math.max(0, anchorRightX - anchorLeftX);
+        label.style.maxWidth = width + 'px';
+        label.style.left = anchorLeftX + 'px';
+        label.style.top =
+          (side === 'top'
+            ? cardRect.top - labelHeight - 2
+            : cardRect.bottom + 2) + 'px';
       };
 
       return autoUpdate(cardEl, label, update);
