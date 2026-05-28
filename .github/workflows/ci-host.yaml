@@ -457,7 +457,7 @@ jobs:
       # realm-server through Traefik. Scaling to the full sharded suite is the
       # follow-up once this slice is green.
       - name: Run card-catalog tests in env mode
-        run: dbus-run-session -- ember exam --path ./dist --filter "card-catalog" --preserve-test-name
+        run: dbus-run-session -- pnpm exec ember exam --path ./dist --filter "card-catalog" --preserve-test-name
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
