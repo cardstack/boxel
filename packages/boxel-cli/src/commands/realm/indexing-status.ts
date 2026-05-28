@@ -1,0 +1,143 @@
+import type { Command } from 'commander';
+import {
+  getProfileManager,
+  NO_ACTIVE_PROFILE_ERROR,
+  type ProfileManager,
+} from '../../lib/profile-manager';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
+import { cliLog } from '../../lib/cli-log';
+
+export interface IndexingStatusCommandOptions {
+  profileManager?: ProfileManager;
+}
+
+export interface IndexingErrorEntry {
+  type: 'indexing-error';
+  id: string;
+  attributes: {
+    errorDoc: SerializedErrorLike | null;
+    timingDiagnostics: Record<string, unknown> | null;
+  };
+}
+
+export interface IndexingStatusDocument {
+  data: IndexingErrorEntry[];
+}
+
+export interface IndexingStatusResult {
+  ok: boolean;
+  document?: IndexingStatusDocument;
+  error?: string;
+}
+
+// Subset of SerializedError from @cardstack/runtime-common/error. Kept local
+// so the CLI doesn't import the full error module just for a type.
+interface SerializedErrorLike {
+  message?: string;
+  title?: string;
+  status?: number;
+  [key: string]: unknown;
+}
+
+interface IndexingStatusCliOptions {
+  realm: string;
+  json?: boolean;
+}
+
+const SHORT_MESSAGE_MAX = 100;
+
+export async function indexingStatus(
+  realmUrl: string,
+  options: IndexingStatusCommandOptions = {},
+): Promise<IndexingStatusResult> {
+  let pm = options.profileManager ?? getProfileManager();
+  let active = pm.getActiveProfile();
+  if (!active) {
+    return { ok: false, error: NO_ACTIVE_PROFILE_ERROR };
+  }
+
+  let endpoint = `${ensureTrailingSlash(realmUrl)}_indexing-errors`;
+
+  try {
+    let response = await pm.authedRealmFetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: SupportedMimeType.JSONAPI },
+    });
+
+    if (!response.ok) {
+      let body = await response.text().catch(() => '(no body)');
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let document = (await response.json()) as IndexingStatusDocument;
+    return { ok: true, document };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export function shortErrorMessage(
+  errorDoc: SerializedErrorLike | null | undefined,
+): string {
+  if (!errorDoc) {
+    return '<no error document>';
+  }
+  let raw = errorDoc.title ?? errorDoc.message ?? '<no message>';
+  let collapsed = raw.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= SHORT_MESSAGE_MAX) {
+    return collapsed;
+  }
+  return `${collapsed.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
+}
+
+export function registerIndexingStatusCommand(realm: Command): void {
+  realm
+    .command('indexing-status')
+    .description(
+      'List every card or module in a realm whose latest indexing attempt errored',
+    )
+    .requiredOption('--realm <realm-url>', 'The realm URL to query')
+    .option('--json', 'Output the full JSON-API document')
+    .action(async (opts: IndexingStatusCliOptions) => {
+      let result = await indexingStatus(opts.realm, {});
+
+      if (opts.json) {
+        cliLog.output(JSON.stringify(result.document ?? { data: [] }, null, 2));
+        if (!result.ok) {
+          console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+          process.exit(1);
+        }
+        return;
+      }
+
+      if (!result.ok) {
+        console.error(`${FG_RED}Error:${RESET} ${result.error}`);
+        process.exit(1);
+      }
+
+      let entries = result.document?.data ?? [];
+      if (entries.length === 0) {
+        console.log(`${FG_GREEN}No indexing errors.${RESET}`);
+        return;
+      }
+
+      console.log(
+        `${FG_GREEN}${entries.length} indexing error${
+          entries.length === 1 ? '' : 's'
+        } for ${opts.realm}:${RESET}`,
+      );
+      for (let entry of entries) {
+        console.log(
+          `${entry.id}  ${shortErrorMessage(entry.attributes.errorDoc)}`,
+        );
+      }
+    });
+}

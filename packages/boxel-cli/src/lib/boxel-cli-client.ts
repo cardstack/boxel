@@ -31,6 +31,10 @@ import {
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
+import {
+  indexingStatus as coreIndexingStatus,
+  type IndexingStatusResult,
+} from '../commands/realm/indexing-status';
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -131,6 +135,7 @@ export interface AtomicResult {
 }
 
 export type { CancelIndexingResult };
+export type { IndexingStatusResult };
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -413,6 +418,15 @@ export class BoxelCLIClient {
       profileManager: this.pm,
       cancelPending: true,
     });
+  }
+
+  /**
+   * List every card or module in a realm whose latest indexing attempt
+   * errored. Returns the raw JSON-API document along with an `ok` flag for
+   * transport-level failures.
+   */
+  async realmIndexingStatus(realmUrl: string): Promise<IndexingStatusResult> {
+    return coreIndexingStatus(realmUrl, { profileManager: this.pm });
   }
 
   /**

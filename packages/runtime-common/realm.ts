@@ -955,6 +955,11 @@ export class Realm {
         this.publishability.bind(this),
       )
       .get(
+        '/_indexing-errors',
+        SupportedMimeType.JSONAPI,
+        this.indexingErrors.bind(this),
+      )
+      .get(
         '/_card-dependencies',
         SupportedMimeType.CardDependencies,
         this.getCardDependencies.bind(this),
@@ -5928,6 +5933,44 @@ export class Realm {
           warningTypes: warningTypes.length ? warningTypes : undefined,
         },
       },
+    };
+
+    return createResponse({
+      body: JSON.stringify(doc, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      },
+      requestContext,
+    });
+  }
+
+  private async indexingErrors(
+    _request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let sourceRealmURL = ensureTrailingSlash(this.url);
+
+    let rows = (await query(this.#dbAdapter, [
+      `SELECT url, error_doc, timing_diagnostics FROM boxel_index WHERE realm_url =`,
+      param(sourceRealmURL),
+      `AND has_error = TRUE`,
+      `AND (is_deleted IS NULL OR is_deleted = FALSE)`,
+      `ORDER BY url`,
+    ])) as {
+      url: string;
+      error_doc: unknown | null;
+      timing_diagnostics: unknown | null;
+    }[];
+
+    let doc = {
+      data: rows.map((row) => ({
+        type: 'indexing-error',
+        id: row.url,
+        attributes: {
+          errorDoc: row.error_doc,
+          timingDiagnostics: row.timing_diagnostics,
+        },
+      })),
     };
 
     return createResponse({
