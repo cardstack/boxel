@@ -636,9 +636,8 @@ export interface BrokenLinkFinding {
 // render route scan the instance after the store has settled and build a
 // structured failure payload from the findings.
 //
-// The walk recurses to match the coverage the legacy `boxel-render-error`
-// dispatch had — that event fired for any failed lazy load anywhere in the
-// rendered graph, not just the root card:
+// The walk recurses so a broken link anywhere in the rendered graph is
+// captured, not just one held directly by the root card:
 //   - present `linksTo` / `linksToMany` values are recursed into, since a
 //     loaded linked card can itself hold a link that was dereferenced (and
 //     failed) during this render;
