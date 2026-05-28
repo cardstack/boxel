@@ -326,7 +326,7 @@ module('Integration | overlay-menu-items', function (hooks) {
       );
   });
 
-  test('hover type-label tab anchors left while it fits and clamps to the corner radius when it overflows', async function (assert) {
+  test('hover type-label tab anchors left while it fits and clamps to the corner radius when it overflows, and stays inside the containing card', async function (assert) {
     setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -334,48 +334,61 @@ module('Integration | overlay-menu-items', function (hooks) {
       },
     );
     let cardSelector = `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    let parentSelector = `[data-test-card="${testRealmURL}ParentCard/1"]`;
     let overlaySelector = `[data-test-overlay-card="${testRealmURL}CardWithCustomMenu/1"]`;
     await waitFor(cardSelector);
     await triggerEvent(cardSelector, 'mouseenter');
-    await waitFor(`${overlaySelector} [data-test-overlay-label]`);
+    let label = (await waitFor(
+      `${overlaySelector} [data-test-overlay-label]`,
+    )) as HTMLElement;
+    let card = find(cardSelector) as HTMLElement;
+    let boundary = find(parentSelector) as HTMLElement;
 
-    let label = find(`${overlaySelector} [data-test-overlay-label]`)!;
-    let overlay = find(overlaySelector)!;
-
-    // The label's anchor is decided after the ResizeObserver fires; give
-    // the browser a frame so the post-layout decision is recorded.
+    // Floating-ui positions asynchronously via Promise; wait for the
+    // label to acquire a non-zero footprint before measuring.
     await waitUntil(() => label.getBoundingClientRect().width > 0, {
       timeout: 1000,
     });
 
     let labelRect = label.getBoundingClientRect();
-    let overlayRect = overlay.getBoundingClientRect();
-    let radius = parseFloat(
-      window.getComputedStyle(overlay).getPropertyValue('--card-corner-radius'),
-    );
+    let cardRect = card.getBoundingClientRect();
+    let boundaryRect = boundary.getBoundingClientRect();
+    let radius = parseFloat(window.getComputedStyle(card).borderTopRightRadius);
 
     if (label.hasAttribute('data-overflow')) {
-      // Right edge clamps to the start of the card's top-right corner
-      // radius (with the 4px selection-stroke bleed on that side), and
-      // the leftward growth overflows past the overlay's left edge.
+      // Long-name case: right edge sits at the start of the card's
+      // top-right corner radius (with the 4px stroke bleed), and the
+      // extra width spills off the card's left edge.
       assert.ok(
-        Math.abs(overlayRect.right - labelRect.right - (radius - 4)) <= 2,
+        Math.abs(cardRect.right - labelRect.right - (radius - 4)) <= 2,
         "overflowing label's right edge sits at the card's corner-radius point",
       );
       assert.ok(
-        labelRect.left < overlayRect.left,
-        'overflowing label extends past the overlay left edge',
+        labelRect.left < cardRect.left,
+        'overflowing label extends past the card left edge',
       );
     } else {
-      // Fits: hugs the overlay's left edge with the 4px bleed.
+      // Short-name case: hugs the card's left edge with the 4px bleed.
       assert.ok(
-        Math.abs(labelRect.left - (overlayRect.left - 4)) <= 2,
-        "fitting label is anchored to the overlay's left edge",
+        Math.abs(labelRect.left - (cardRect.left - 4)) <= 2,
+        "fitting label is anchored to the card's left edge",
       );
       assert.ok(
-        labelRect.right <= overlayRect.right - radius + 2,
+        labelRect.right <= cardRect.right - radius + 2,
         "fitting label's right edge stays before the corner-radius point",
       );
     }
+
+    // Either way, floating-ui's shift/size keep the label inside the
+    // containing-card boundary (a few pixels of slop for sub-pixel
+    // rounding, the shift padding, and the drop-shadow's render box).
+    assert.ok(
+      labelRect.left >= boundaryRect.left - 4,
+      'label left edge stays inside the containing card',
+    );
+    assert.ok(
+      labelRect.right <= boundaryRect.right + 4,
+      'label right edge stays inside the containing card',
+    );
   });
 });

@@ -135,16 +135,9 @@ export default class Overlays extends Component<OverlaySignature> {
       floating.style.position = 'absolute';
       // Mirror the underlying card's corner radius so any decorative
       // outline / box-shadow on the overlay follows the same curve.
-      // Also surface the top-right radius as --card-corner-radius so chrome
-      // anchored above the card (e.g. the adorn-label tab) can clamp itself
-      // to where the rounded corner starts on the right.
       if (reference instanceof Element) {
-        let styles = window.getComputedStyle(reference);
-        floating.style.borderRadius = styles.borderRadius;
-        floating.style.setProperty(
-          '--card-corner-radius',
-          styles.borderTopRightRadius,
-        );
+        floating.style.borderRadius =
+          window.getComputedStyle(reference).borderRadius;
       }
       return {
         x: rects.reference.x,

@@ -124,7 +124,7 @@ class AdornOverflowDemoIsolated extends Component<typeof AdornOverflowDemo> {
   </template>
 }
 
-export default class AdornOverflowDemo extends CardDef {
+export class AdornOverflowDemo extends CardDef {
   static displayName = 'Adorn Overflow Demo';
 
   @field backlog = linksToMany(ProjectInitiativeTask);
