@@ -450,6 +450,18 @@ jobs:
           fi
           echo "::notice::Environment-mode public-read parity confirmed (skills/_info -> 200 unauthenticated)"
 
+      # First real-test iteration: run the canonical realm-touching suite that
+      # the ticket reported failing in env mode (Integration | card-catalog)
+      # against the env-mode dist built above. testem serves the prebuilt page
+      # locally; the realm URLs baked into the bundle point at the env-mode
+      # realm-server through Traefik. Scaling to the full sharded suite is the
+      # follow-up once this slice is green.
+      - name: Run card-catalog tests in env mode
+        run: dbus-run-session -- ember exam --path ./dist --filter "card-catalog" --preserve-test-name
+        working-directory: packages/host
+        env:
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+
       - name: Print server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log || true
