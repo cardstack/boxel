@@ -357,9 +357,22 @@ function installHttp2Diagnostics(
         continue;
       }
       rec.everStalled = true;
+      // `stream.session` can be undefined once a stalled stream's session has
+      // gone away — keep the optional chaining rather than assuming it's live.
       let session = stream.session;
-      let ss = session?.state ?? {};
-      let st = stream.state ?? {};
+      let ss = session?.state;
+      let st = stream.state;
+      // maxConcurrentStreams is negotiated per-session, so the budget signal
+      // must compare against this session's own live stream count, not the
+      // process-wide total (which spans every browser session).
+      let liveThisSession = 0;
+      if (session) {
+        for (let other of open.keys()) {
+          if (other.session === session) {
+            liveThisSession++;
+          }
+        }
+      }
       log.warn(
         `[h2-diag] STALLED stream #${rec.id} ${rec.method} ${rec.path} age=${age}ms ` +
           `sawRequest=${rec.sawRequest} ` +
@@ -367,13 +380,14 @@ function installHttp2Diagnostics(
           `writableEnded=${rec.res?.writableEnded ?? 'n/a'}) ` +
           `stream(closed=${stream.closed} destroyed=${stream.destroyed} ` +
           `aborted=${stream.aborted} ` +
-          `localClose=${st.localClose} remoteClose=${st.remoteClose} ` +
-          `localWindow=${st.localWindowSize}) ` +
+          `localClose=${st?.localClose} remoteClose=${st?.remoteClose} ` +
+          `localWindow=${st?.localWindowSize}) ` +
           `session(closed=${session?.closed} destroyed=${session?.destroyed} ` +
-          `outboundQueueSize=${ss.outboundQueueSize} ` +
-          `effectiveLocalWindow=${ss.effectiveLocalWindowSize} ` +
-          `effectiveRecvData=${ss.effectiveRecvDataLength} ` +
-          `remoteWindow=${ss.remoteWindowSize} liveStreams=${open.size}) ` +
+          `outboundQueueSize=${ss?.outboundQueueSize} ` +
+          `effectiveLocalWindow=${ss?.effectiveLocalWindowSize} ` +
+          `effectiveRecvData=${ss?.effectiveRecvDataLength} ` +
+          `remoteWindow=${ss?.remoteWindowSize} ` +
+          `liveStreamsThisSession=${liveThisSession} liveStreamsTotal=${open.size}) ` +
           `maxConcurrentStreams(local=${session?.localSettings?.maxConcurrentStreams} ` +
           `remote=${session?.remoteSettings?.maxConcurrentStreams})`,
       );
