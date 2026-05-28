@@ -179,7 +179,9 @@ module('Acceptance | prerender | html', function (hooks) {
       @field friendsOfFriend = linksToMany(() => Person, {
         computeVia(this: Person) {
           if (Array.isArray(this.friends) && this.friends.length > 0) {
-            return this.friends[0].friends;
+            // Per-slot access is `Card | undefined`: a not-loaded/broken first
+            // slot reads as `undefined`, so optional-chain before traversing.
+            return this.friends[0]?.friends;
           }
           return [];
         },
