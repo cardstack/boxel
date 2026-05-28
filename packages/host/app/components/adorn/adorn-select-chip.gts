@@ -1,25 +1,28 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-// AdornSelectChip: the small teal rounded-square selection chip shown
-// at the bottom-right corner of an Adorn-treated card. Renders an
+// AdornSelectChip: small teal rounded-square selection chip shown at
+// the bottom-right corner of an Adorn-treated card. Renders an
 // unfilled circle outline by default and a filled-with-check icon
-// when `@selected` is true. Positioning + interactivity are the
-// caller's responsibility: operator-mode wraps the chip in a button
-// so it can be clicked to toggle selection; purely-decorative callers
-// (e.g. the card chooser) mount it as-is.
+// when `@selected` is true.
 //
-// The visual styling for `.adorn-select-chip` and `.adorn-select-icon`
-// lives in `app/styles/app.css`.
-interface AdornSelectChipSignature {
+// `@compact` shrinks the chip + icon for narrow containers (atom-
+// format cards in operator-mode).
+//
+// Positioning and interactivity are the consumer's responsibility:
+// operator-mode wraps the chip in a button so it can be clicked to
+// toggle selection; purely-decorative consumers (search results,
+// card chooser) mount it as-is.
+export interface AdornSelectChipSignature {
   Args: {
     selected?: boolean;
+    compact?: boolean;
   };
   Element: HTMLSpanElement;
 }
 
 const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
   <template>
-    <span class='adorn-select-chip' ...attributes>
+    <span class='adorn-select-chip {{if @compact "compact"}}' ...attributes>
       {{#if @selected}}
         <svg
           class='adorn-select-icon'
@@ -47,6 +50,34 @@ const AdornSelectChip: TemplateOnlyComponent<AdornSelectChipSignature> =
         </svg>
       {{/if}}
     </span>
+    <style scoped>
+      .adorn-select-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 3px;
+        border-radius: 5px;
+        background: var(--adorn-label-bg, var(--adorn-accent-light));
+        color: var(--adorn-accent-light);
+        z-index: 1;
+      }
+      .adorn-select-chip.compact {
+        width: 16px;
+        height: 16px;
+        padding: 2px;
+      }
+      .adorn-select-icon {
+        display: block;
+        width: 14px;
+        height: 14px;
+      }
+      .adorn-select-chip.compact .adorn-select-icon {
+        width: 12px;
+        height: 12px;
+      }
+    </style>
   </template>;
 
 export default AdornSelectChip;
