@@ -1,11 +1,17 @@
 import { defineConfig } from '@playwright/test';
 
-// `render-desync=info` stays on so the desync detector's verdicts (warns
-// on detection, plus any debug logs we add later) make it into CI output;
-// everything else is at the same warn-baseline as before CS-10860.
+// TEMPORARY diagnostic verbosity (revert before merge): surface what the
+// harness and the realm-server / worker / prerender children are doing so
+// the residual `instantiate-card` upstream-unreachable race (now fast-
+// failing post-hard-stop) is legible in CI. `*=info` lifts the harness
+// loggers above the warn baseline; the two TEST_HARNESS_* knobs stream
+// the child output (`inherit`) and forward the serve-realm child's stdout
+// to the test output. Shell env still wins via `??=`.
 const defaultPlaywrightLogLevels =
-  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,render-desync=info,prerenderer-chrome=none';
+  '*=info,render-desync=info,prerenderer-chrome=none';
 process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
+process.env.TEST_HARNESS_DEBUG_SERVER ??= '1';
+process.env.TEST_HARNESS_FORWARD_REALM_LOGS ??= '1';
 
 const realmPort = Number(process.env.TEST_HARNESS_REALM_PORT ?? 4205);
 const realmURL =
