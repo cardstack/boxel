@@ -51,10 +51,7 @@ import {
   resolveFileDefCodeRef,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import {
-  DEFAULT_LLM_LIST,
-  DEFAULT_LLM_ID_TO_NAME,
-} from '@cardstack/runtime-common/matrix-constants';
+import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import ENV from '@cardstack/host/config/environment';
@@ -1117,17 +1114,24 @@ export default class Room extends Component<Signature> {
       return options;
     }
 
-    // Fallback to hardcoded list for backwards compatibility
-    let ids = [
-      ...new Set([...DEFAULT_LLM_LIST, ...this.args.roomResource.usedLLMs]),
-    ]
-      .filter(Boolean)
-      .sort();
+    // Fallback to the realm-independent curated list. Merge in any models the
+    // room has already used so prior chats stay selectable; their display name
+    // is the raw model id when not in the curated set.
+    let fallbackById = new Map(
+      DEFAULT_FALLBACK_MODELS.map((m) => [m.modelId, m]),
+    );
+    let allIds = new Set<string>(fallbackById.keys());
+    for (let usedLLM of this.args.roomResource.usedLLMs) {
+      if (usedLLM) {
+        allIds.add(usedLLM);
+      }
+    }
+    let ids = [...allIds].sort();
 
     return ids.map((id) => ({
       id,
       modelId: id,
-      name: DEFAULT_LLM_ID_TO_NAME[id] ?? id,
+      name: fallbackById.get(id)?.displayName ?? id,
     }));
   }
 

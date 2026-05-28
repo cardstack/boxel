@@ -1,10 +1,12 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import SvgIcon from '@cardstack/boxel-icons/file-type-svg';
 import ImageDef from './image-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
 import { extractSvgDimensions } from './svg-meta-extractor';
 
 export class SvgDef extends ImageDef {
   static displayName = 'SVG Image';
+  static icon = SvgIcon;
   static acceptTypes = '.svg,image/svg+xml';
 
   static async extractAttributes(

@@ -380,9 +380,9 @@ export default class CommandService extends Service {
           }
 
           // Get the LLM mode that was active when this message was created
-          let messageTimestamp = message.created.getTime();
-          let activeModeAtMessageTime =
-            roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+          let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+            message.eventId,
+          );
 
           // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
           // or if requiresApproval is false
@@ -469,6 +469,15 @@ export default class CommandService extends Service {
         }
         let message = roomResource.messages.find((m) => m.eventId === eventId);
         if (!message) {
+          // The event was queued for auto-apply but its message isn't in the
+          // room timeline yet — room processing lagged or dropped it. The event
+          // is consumed here and never retried, so a patch that should
+          // auto-apply silently won't. Log enough to recognize that race.
+          if (isTesting()) {
+            console.log(
+              `[code-patch-autoapply] event ${eventId} queued but no matching message in room ${roomId}; isProcessing=${roomResource.isProcessing}, messageCount=${roomResource.messages.length}`,
+            );
+          }
           continue;
         }
         if (message.agentId !== this.matrixService.agentId) {
@@ -477,11 +486,29 @@ export default class CommandService extends Service {
         }
 
         // Get the LLM mode that was active when this message was created
-        let messageTimestamp = message.created.getTime();
-        let activeModeAtMessageTime =
-          roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+        let activeModeAtMessageTime = roomResource.getActiveLLMModeForMessage(
+          message.eventId,
+        );
         // Only auto-apply if in 'act' mode
         if (activeModeAtMessageTime !== 'act') {
+          let llmModeEvents = roomResource.llmModeEvents;
+          if (
+            isTesting() &&
+            llmModeEvents.some((e) => (e as any).content?.mode === 'act')
+          ) {
+            // The room has used 'act' mode, so a non-'act' resolution here is
+            // worth recording: it pins the message against every mode
+            // transition — the data needed to explain an auto-apply that
+            // didn't fire.
+            console.log(
+              `[code-patch-autoapply] event ${eventId} resolved to LLM mode "${activeModeAtMessageTime}" at message timestamp ${message.created.getTime()}; mode transitions: ${JSON.stringify(
+                llmModeEvents.map((e) => ({
+                  ts: e.origin_server_ts,
+                  mode: (e as any).content?.mode,
+                })),
+              )}`,
+            );
+          }
           continue;
         }
 
@@ -823,6 +850,18 @@ export default class CommandService extends Service {
         if (patchResult.status === 'applied') {
           this.executedCommandRequestIds.add(
             `${codeData.eventId}:${codeData.codeBlockIndex}`,
+          );
+        } else if (isTesting() && this.acceptingAllRoomIds.has(roomId)) {
+          // During an auto-apply / accept-all run a non-'applied' result means
+          // the patch never reaches the "applied" UI state a caller may be
+          // waiting on. Record why (e.g. a search block that no longer matches
+          // because a prior chained patch hadn't landed yet).
+          console.log(
+            `[code-patch-autoapply] patch ${codeData.eventId}:${codeData.codeBlockIndex} on ${fileUrl} did not apply (status=${patchResult.status}${
+              patchResult.failureReason
+                ? `, reason=${patchResult.failureReason}`
+                : ''
+            })`,
           );
         }
       }

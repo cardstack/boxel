@@ -74,6 +74,66 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
 // - packages/host/README.md for how to add new models
 export const DEFAULT_LLM_LIST = Object.keys(DEFAULT_LLM_ID_TO_NAME);
 
+// Realm-independent fallback model surface. Used when SystemCard /
+// SystemCard.modelConfigurations is unavailable so we never ship undefined
+// capability fields on the wire (silent-tools-off bug — see CS-11249).
+//
+// Refresh: re-derive from `https://openrouter.ai/api/v1/models` when the
+// curated set changes. Derivation rules mirror the computed fields on the
+// `OpenRouterModel` card (`packages/openrouter-realm/openrouter-model.gts`):
+//   toolsSupported  = supportedParameters.includes('tools')
+//   inputModalities = architecture.inputModalities (verbatim)
+// `reasoningEffort` is intentionally not modeled here — it's a user choice,
+// not a model capability. Callers / SystemCard supply it; the fallback never
+// auto-fills it.
+export interface FallbackModelConfig {
+  modelId: string;
+  displayName: string;
+  toolsSupported: boolean;
+  inputModalities: string[];
+}
+
+export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
+  {
+    modelId: 'anthropic/claude-sonnet-4.6',
+    displayName: 'Anthropic: Claude Sonnet 4.6',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'anthropic/claude-opus-4.7',
+    displayName: 'Anthropic: Claude Opus 4.7',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'google/gemini-3-flash-preview',
+    displayName: 'Google: Gemini 3 Flash Preview',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file', 'audio', 'video'],
+  },
+  {
+    modelId: 'google/gemini-3.1-pro-preview',
+    displayName: 'Google: Gemini 3.1 Pro Preview',
+    toolsSupported: true,
+    inputModalities: ['audio', 'file', 'image', 'text', 'video'],
+  },
+  {
+    modelId: 'openai/gpt-5.4',
+    displayName: 'OpenAI: GPT-5.4',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'openai/gpt-5.5',
+    displayName: 'OpenAI: GPT-5.5',
+    toolsSupported: true,
+    inputModalities: ['file', 'image', 'text'],
+  },
+] as const;
+
+export const DEFAULT_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-4.6';
+
 export const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 export const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
 export const SLIDING_SYNC_LIST_RANGE_END = 9;

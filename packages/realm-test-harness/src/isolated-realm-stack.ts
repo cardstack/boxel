@@ -145,6 +145,140 @@ function describeCompatProxyError(error: unknown): string {
   return parts.join(' <- ');
 }
 
+// Snapshot the upstream realm-server's state for a compat-proxy give-up
+// 502 body. Liveness comes straight off the child handle's
+// exitCode/signalCode; `recordedExit` is what the harness's own exit
+// listener saw (covers the clean SIGTERM/SIGINT teardown the listener
+// stays quiet about). Tails the buffered output so the body stays bounded
+// when it rides out in the prerender's captured render error.
+function describeRealmServerHealth(
+  realmServer: { exitCode: number | null; signalCode: NodeJS.Signals | null },
+  recordedExit: { code: number | null; signal: string | null } | null,
+  getServerLogs: () => string,
+): string {
+  let alive = realmServer.exitCode === null && realmServer.signalCode === null;
+  let state = alive
+    ? 'alive but not answering (process up, port refused/unresponsive)'
+    : `exited (exitCode=${realmServer.exitCode ?? recordedExit?.code ?? 'null'}, signal=${
+        realmServer.signalCode ?? recordedExit?.signal ?? 'null'
+      })`;
+  let logs = getServerLogs();
+  let tail = logs ? tailChars(logs, 4000) : '<no buffered output>';
+  return `upstream realm-server health: ${state}\nupstream realm-server recent output:\n${tail}`;
+}
+
+// Keep only the last `max` characters, trimmed to a line boundary so the
+// snapshot doesn't start mid-line.
+function tailChars(text: string, max: number): string {
+  if (text.length <= max) {
+    return text;
+  }
+  let tail = text.slice(text.length - max);
+  let newline = tail.indexOf('\n');
+  return `…${newline >= 0 ? tail.slice(newline + 1) : tail}`;
+}
+
+// Connection-phase upstream failure codes worth retrying. The
+// realm-server this proxy fronts is torn down and restarted on a stable
+// port between tests, so a render's module fetch can land in the brief
+// window where the port has no listener (ECONNREFUSED) or isn't
+// resolvable yet. These errors happen before any request bytes reach the
+// server, so retrying is side-effect-free for every HTTP method.
+const RETRYABLE_CONNECT_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+// A reset or broken pipe can surface after the request was already
+// written, so only retry these for methods with no server-side effect.
+const RETRYABLE_IDEMPOTENT_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+// ~2.1s total across the retries — long enough to ride out a realm-server
+// restart's bind gap, short enough not to stall an in-flight render.
+const UPSTREAM_RETRY_BACKOFF_MS = [50, 150, 300, 600, 1000];
+
+function connectErrorCode(error: unknown): string | undefined {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    let code = (current as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      return code;
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+function isRetryableUpstreamError(error: unknown, method: string): boolean {
+  let code = connectErrorCode(error);
+  if (!code) {
+    return false;
+  }
+  if (RETRYABLE_CONNECT_CODES.has(code)) {
+    return true;
+  }
+  return IDEMPOTENT_METHODS.has(method) && RETRYABLE_IDEMPOTENT_CODES.has(code);
+}
+
+// Retries connection-phase failures with a bounded backoff before letting
+// the error propagate to the proxy's 502 handler. On give-up it annotates
+// the error with the attempt count and elapsed time so the 502 body can
+// report them — the realm child's logs are buffered out of CI output,
+// while the 502 body surfaces in the prerender's captured render error.
+async function fetchUpstreamWithRetry(
+  upstreamURL: URL,
+  init: RequestInit,
+  method: string,
+): Promise<Response> {
+  let signal = init.signal ?? undefined;
+  let startedAt = Date.now();
+  let attempt = 0;
+  for (;;) {
+    try {
+      return await fetch(upstreamURL, init);
+    } catch (error) {
+      // Once the proxy is stopping its abort signal fires; never retry then.
+      // The retry loop is what keeps the proxy's connections alive against a
+      // torn-down upstream, blocking `server.close()` and the realm stack's
+      // teardown — so a shutdown must short-circuit it immediately.
+      let canRetry =
+        !signal?.aborted &&
+        attempt < UPSTREAM_RETRY_BACKOFF_MS.length &&
+        isRetryableUpstreamError(error, method);
+      if (!canRetry) {
+        if (error instanceof Error) {
+          let annotated = error as Error & {
+            compatProxyAttempts?: number;
+            compatProxyElapsedMs?: number;
+          };
+          annotated.compatProxyAttempts = attempt + 1;
+          annotated.compatProxyElapsedMs = Date.now() - startedAt;
+        }
+        throw error;
+      }
+      let delay = UPSTREAM_RETRY_BACKOFF_MS[attempt];
+      realmLog.info(
+        `startCompatRealmProxy: retrying upstream fetch to ${upstreamURL.href} ` +
+          `(attempt ${attempt + 1}, code=${connectErrorCode(error)}) after ${delay}ms`,
+      );
+      attempt++;
+      // Abortable backoff: a shutdown mid-sleep wakes immediately so the
+      // next iteration sees the aborted signal and bails.
+      await new Promise<void>((resolve) => {
+        let t = setTimeout(resolve, delay);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
+  }
+}
+
 async function startCompatRealmProxy({
   listenPort,
 }: {
@@ -152,9 +286,30 @@ async function startCompatRealmProxy({
 }): Promise<StartedCompatRealmProxy> {
   realmLog.debug(`startCompatRealmProxy: requested listenPort=${listenPort}`);
   let targetPort: number | undefined;
+  // Set alongside the target port: returns a one-shot snapshot of the
+  // upstream realm-server child's liveness and recent buffered output. The
+  // child's stdout/stderr are otherwise only flushed to CI on an
+  // unexpected exit, so when the upstream stops answering while the proxy
+  // is up (the ECONNREFUSED-mid-render flake) the give-up 502 body is the
+  // only place that state reaches CI — it rides out in the prerender's
+  // captured render error.
+  let describeUpstreamHealth: (() => string) | undefined;
+  // Flipped by `stop()`. The signal aborts in-flight upstream fetches (and
+  // their retry backoff); the flag refuses new requests. Together they let
+  // `server.close()` resolve promptly instead of waiting on retry loops
+  // against a torn-down upstream — the thing that otherwise wedges realm
+  // stack teardown and stalls the next test's bring-up.
+  let stopping = false;
+  let stopAbort = new AbortController();
   let actualListenPort = listenPort;
   let server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
+      if (stopping) {
+        res.statusCode = 503;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('software-factory compat proxy stopping');
+        return;
+      }
       if (targetPort == null) {
         res.statusCode = 503;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
@@ -180,12 +335,17 @@ async function startCompatRealmProxy({
           ),
         ) as Record<string, string>;
         headers['x-boxel-forwarded-url'] = incomingURL.href;
-        let response = await fetch(upstreamURL, {
-          method: req.method,
-          headers,
-          body: body as BodyInit | undefined,
-          redirect: 'manual',
-        });
+        let response = await fetchUpstreamWithRetry(
+          upstreamURL,
+          {
+            method: req.method,
+            headers,
+            body: body as BodyInit | undefined,
+            redirect: 'manual',
+            signal: stopAbort.signal,
+          },
+          req.method ?? 'GET',
+        );
 
         let responseHeaders = new Headers(response.headers);
         let location = responseHeaders.get('location');
@@ -211,13 +371,23 @@ async function startCompatRealmProxy({
         res.end(Buffer.from(await response.arrayBuffer()));
       } catch (error) {
         let description = describeCompatProxyError(error);
+        let annotated = error as {
+          compatProxyAttempts?: number;
+          compatProxyElapsedMs?: number;
+        };
+        let suffix =
+          annotated?.compatProxyAttempts != null
+            ? ` after ${annotated.compatProxyAttempts} attempt(s) over ${annotated.compatProxyElapsedMs}ms`
+            : '';
+        let health = describeUpstreamHealth?.() ?? '';
         realmLog.warn(
-          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}: ${description}`,
+          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}${suffix}: ${description}`,
         );
         res.statusCode = 502;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
         res.end(
-          `software-factory compat proxy failed for ${upstreamURL.href}: ${description}`,
+          `software-factory compat proxy failed for ${upstreamURL.href}${suffix}: ${description}` +
+            (health ? `\n${health}` : ''),
         );
       }
     },
@@ -234,8 +404,9 @@ async function startCompatRealmProxy({
   realmLog.debug(`startCompatRealmProxy: listening on ${actualListenPort}`);
   return {
     listenPort: actualListenPort,
-    setTargetPort(nextTargetPort: number) {
+    setTargetPort(nextTargetPort: number, nextDescribeUpstreamHealth) {
       targetPort = nextTargetPort;
+      describeUpstreamHealth = nextDescribeUpstreamHealth;
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${nextTargetPort} ready`,
       );
@@ -244,6 +415,12 @@ async function startCompatRealmProxy({
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${targetPort ?? 'unset'} stopping`,
       );
+      // Refuse new requests, abort in-flight upstream fetches + their retry
+      // backoff, and force-close any keep-alive sockets so `server.close()`
+      // can't hang on a request looping against a dead upstream.
+      stopping = true;
+      stopAbort.abort();
+      (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
@@ -691,13 +868,21 @@ export async function startIsolatedRealmStack({
 
     // Release the realm-server port holder right before the child binds.
     await realmServerPortInfo.releaseHolder();
+    let realmServerSpawnedAt = Date.now();
     let realmServer = spawn('ts-node', serverArgs, {
       cwd: realmServerDir,
       env,
       stdio: managedProcessStdio,
     }) as SpawnedProcess;
     let getServerLogs = captureProcessLogs(realmServer);
+    // Record every exit — including the clean SIGTERM/SIGINT case the warn
+    // below intentionally stays quiet about — so the compat proxy's
+    // upstream-health probe can report whether a mid-render ECONNREFUSED
+    // was the realm-server dying vs. being alive-but-not-listening.
+    let realmServerExit: { code: number | null; signal: string | null } | null =
+      null;
     realmServer.on('exit', (code, signal) => {
+      realmServerExit = { code, signal };
       if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
         return;
       }
@@ -714,7 +899,18 @@ export async function startIsolatedRealmStack({
         label: 'realm server',
         process: realmServer,
       });
-      compatProxy.setTargetPort(realmServerRuntime.port);
+      // Time to bind: the realm-server only writes this metadata after it
+      // clears its `smokeTestHostApp` host-readiness wait and calls
+      // `server.listen`. A large value here means the port was refused for
+      // that whole window — the ECONNREFUSED-to-realm-server flake.
+      realmLog.info(
+        `realm server bound port ${realmServerRuntime.port} after ${
+          Date.now() - realmServerSpawnedAt
+        }ms`,
+      );
+      compatProxy.setTargetPort(realmServerRuntime.port, () =>
+        describeRealmServerHealth(realmServer, realmServerExit, getServerLogs),
+      );
       await Promise.race([
         waitForReady(
           realmServer,
@@ -734,6 +930,9 @@ export async function startIsolatedRealmStack({
         ),
         createProcessExitPromise(workerManager, 'worker manager'),
       ]);
+      realmLog.info(
+        `realm server ready after ${Date.now() - realmServerSpawnedAt}ms total`,
+      );
 
       return {
         compatProxy,

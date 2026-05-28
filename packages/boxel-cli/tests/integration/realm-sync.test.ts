@@ -173,13 +173,16 @@ async function establishBaseline(
   await sleep(1100);
 }
 
-// Read a remote source file, retrying for up to `timeoutMs` if the body
-// doesn't yet contain `expectedSubstring`. Returns the final body either way
-// — callers assert on it. `retries` is the number of additional fetches
-// performed beyond the first attempt (0 = matched on first read), so
-// `retries > 0` is the unambiguous signal that the post-sync read had to
-// wait for the realm to settle. `elapsedMs` is for context only; it tracks
-// network + sleep, so it is non-zero even on a first-shot success.
+// Read a remote source file, retrying for up to `timeoutMs` until the body
+// contains `expectedSubstring`. A non-OK response (e.g. a transient 404 while
+// a freshly-written file is not yet visible during the brief post-write
+// window) is treated as a "not yet" signal and keeps the loop polling rather
+// than throwing — so callers tolerate both stale content and a not-yet-visible
+// file. Returns the final body either way — callers assert on it. `retries` is
+// the number of additional fetches performed beyond the first attempt (0 =
+// matched on first read), so `retries > 0` is the unambiguous signal that the
+// read had to wait for the realm to settle. `elapsedMs` is for context only;
+// it tracks network + sleep, so it is non-zero even on a first-shot success.
 async function fetchRemoteFileEventually(
   realmUrl: string,
   relPath: string,
@@ -189,10 +192,16 @@ async function fetchRemoteFileEventually(
   const start = Date.now();
   let attempts = 0;
   let body = '';
+  let url = buildFileUrl(realmUrl, relPath);
   while (Date.now() - start < timeoutMs) {
     attempts++;
-    body = await fetchRemoteFile(realmUrl, relPath);
-    if (body.includes(expectedSubstring)) {
+    let response = await profileManager.authedRealmFetch(url, {
+      headers: { Accept: 'application/vnd.card+source' },
+    });
+    // Drain the body so the connection can be reused, and keep it for the
+    // caller's on-miss diagnostic dump.
+    body = await response.text().catch(() => '');
+    if (response.ok && body.includes(expectedSubstring)) {
       return { body, elapsedMs: Date.now() - start, retries: attempts - 1 };
     }
     await sleep(100);
@@ -643,15 +652,50 @@ describe('realm sync (integration)', () => {
       'export const v = "remote";\n',
     );
 
+    // Pre-sync snapshot — confirm each side holds the bytes we just wrote
+    // before syncing. The remote read polls because writeRemoteFile just
+    // *created* overlap.gts: under the same brief post-write visibility lag
+    // this test guards against, an immediate single-shot GET of a
+    // freshly-created file can 404 (which would throw and reintroduce a
+    // setup flake). fetchRemoteFileEventually returns the last body without
+    // throwing, so the snapshot stays diagnostic-only. If a future failure
+    // shows mismatched state here, the bug is upstream of sync
+    // (writeLocalFile / writeRemoteFile didn't land), not conflict resolution.
+    const preLocal = readLocalFile(localDir, 'overlap.gts');
+    const { body: preRemote } = await fetchRemoteFileEventually(
+      realmUrl,
+      'overlap.gts',
+      'v = "remote"',
+    );
+
     await sync(localDir, realmUrl, {
       preferLocal: true,
       profileManager,
     });
 
-    // Local should win
-    expect(await fetchRemoteFile(realmUrl, 'overlap.gts')).toContain(
-      'v = "local"',
-    );
+    // Local should win. Poll-retry the remote read to distinguish "sync didn't
+    // push" from "push landed but a brief post-write visibility race made the
+    // GET read stale bytes" — the same race-prone shape (concurrent
+    // local+remote mutation immediately followed by sync) the baseline
+    // conflict test guards against. `retries > 0` on a passing assertion
+    // points at the visibility race; a miss with retries exhausted means the
+    // bytes never settled within the timeout.
+    const {
+      body: remoteAfter,
+      elapsedMs,
+      retries,
+    } = await fetchRemoteFileEventually(realmUrl, 'overlap.gts', 'v = "local"');
+
+    if (!remoteAfter.includes('v = "local"')) {
+      console.error(
+        `[first-sync-overlap-prefer-local diagnostics] preLocal=${JSON.stringify(preLocal)} ` +
+          `preRemote=${JSON.stringify(preRemote)} ` +
+          `remoteAfter=${JSON.stringify(remoteAfter)} ` +
+          `retries=${retries} elapsedMs=${elapsedMs} realmUrl=${realmUrl}`,
+      );
+    }
+
+    expect(remoteAfter).toContain('v = "local"');
   });
 
   it('delete-vs-change conflict with --prefer-local deletes remote', async () => {

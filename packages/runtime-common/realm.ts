@@ -65,7 +65,9 @@ import {
   query,
   param,
   dbExpression,
+  dbAdapterQuerier,
   isValidPrerenderedHtmlFormat,
+  type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -3085,22 +3087,30 @@ export class Realm {
     }
 
     let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
-    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
-      // Winner path: a peer may have written between our miss and our
-      // lock acquisition; re-read so we don't redo their work AND
-      // refresh our captured generation in case a tombstone landed.
-      let recheck = await this.#readTranspileCacheRow(canonicalPath);
-      if (recheck?.result) {
-        return recheck.result;
-      }
-      let result = await this.#materializeAndTranspile(fileRef, etag);
-      await this.#writeTranspileCacheRow(
-        canonicalPath,
-        result,
-        recheck?.generation ?? 0,
-      );
-      return result;
-    });
+    let attempt = await coordinator.tryAcquireAndRun(
+      coalesceKey,
+      async (querier) => {
+        // Winner path: a peer may have written between our miss and our
+        // lock acquisition; re-read so we don't redo their work AND
+        // refresh our captured generation in case a tombstone landed.
+        // Run the re-read and the persist on the coordinator's pinned
+        // querier so this whole coordinated transpile holds exactly one
+        // pool connection — the lock connection — rather than pinning it
+        // and then checking out more for these queries.
+        let recheck = await this.#readTranspileCacheRow(canonicalPath, querier);
+        if (recheck?.result) {
+          return recheck.result;
+        }
+        let result = await this.#materializeAndTranspile(fileRef, etag);
+        await this.#writeTranspileCacheRow(
+          canonicalPath,
+          result,
+          recheck?.generation ?? 0,
+          querier,
+        );
+        return result;
+      },
+    );
     if (attempt.acquired) {
       return attempt.result;
     }
@@ -3127,14 +3137,20 @@ export class Realm {
     return result;
   }
 
-  async #readTranspileCacheRow(canonicalPath: string): Promise<
+  async #readTranspileCacheRow(
+    canonicalPath: string,
+    // When provided (winner path), reads run on the coordinator's pinned
+    // lock connection; otherwise they fall back to the shared pool.
+    querier?: Querier,
+  ): Promise<
     | {
         result?: ModuleTranspileResult;
         generation: number;
       }
     | undefined
   > {
-    let rows = (await query(this.#dbAdapter, [
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    let rows = (await runQuery([
       'SELECT body, headers, dependency_keys, generation',
       'FROM',
       MODULE_TRANSPILE_CACHE_TABLE,
@@ -3209,8 +3225,27 @@ export class Realm {
     canonicalPath: string,
     result: ModuleTranspileResult,
     capturedGeneration: number,
+    // When provided (winner path), the UPSERT runs on the coordinator's
+    // pinned lock connection — so it commits with the lock + NOTIFY and
+    // doesn't check out a second pool client. Otherwise it falls back to
+    // the shared pool, autocommitting on its own connection.
+    querier?: Querier,
   ): Promise<void> {
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    // On the pinned-querier path this UPSERT runs inside the
+    // coordinator's lock transaction. L2 persistence is best-effort, but
+    // a pg error here would abort that transaction and break the
+    // coordinator's following pg_notify + COMMIT — failing a request that
+    // could otherwise serve the already-transpiled bytes. Wrap the write
+    // in a savepoint so a failure rolls back just this statement and
+    // leaves the enclosing transaction usable. On the shared adapter each
+    // query autocommits on its own connection, so no savepoint is needed.
+    let inLockTransaction = querier != null;
+    const savepoint = 'transpile_cache_write';
     try {
+      if (inLockTransaction) {
+        await runQuery([`SAVEPOINT ${savepoint}`]);
+      }
       // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
       // if the row's current generation is still <= capturedGeneration.
       // If an invalidate has tombstoned-and-bumped the row past that
@@ -3220,7 +3255,7 @@ export class Realm {
       // that case the WHERE 0 <= 0 still allows a no-op same-gen
       // overwrite which is benign because the bytes are deterministic
       // for the same source.
-      await query(this.#dbAdapter, [
+      await runQuery([
         'INSERT INTO',
         MODULE_TRANSPILE_CACHE_TABLE,
         '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
@@ -3252,11 +3287,25 @@ export class Realm {
         'created_at = EXCLUDED.created_at',
         `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
       ]);
+      if (inLockTransaction) {
+        await runQuery([`RELEASE SAVEPOINT ${savepoint}`]);
+      }
     } catch (err: unknown) {
       // L2 persistence is best-effort. A transient pg failure must not
       // break the response the caller is about to serve — they already
       // have the bytes in memory. Log and move on; the next reader will
       // re-try the write.
+      if (inLockTransaction) {
+        // Roll back just the failed write so the coordinator's enclosing
+        // lock transaction stays usable for its pg_notify + COMMIT.
+        try {
+          await runQuery([`ROLLBACK TO SAVEPOINT ${savepoint}`]);
+        } catch (rollbackErr: unknown) {
+          this.#log.warn(
+            `ROLLBACK TO SAVEPOINT after ${MODULE_TRANSPILE_CACHE_TABLE} write failure failed for ${this.url}${canonicalPath}: ${String(rollbackErr)}`,
+          );
+        }
+      }
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );

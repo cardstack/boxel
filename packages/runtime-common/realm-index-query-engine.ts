@@ -523,6 +523,8 @@ export class RealmIndexQueryEngine {
     return {
       url: file.canonicalURL,
       html,
+      ...(file.displayNames?.[0] ? { cardType: file.displayNames[0] } : {}),
+      ...(file.iconHtml ? { iconHtml: file.iconHtml } : {}),
       ...(usedRenderType ? { usedRenderType } : {}),
     };
   }

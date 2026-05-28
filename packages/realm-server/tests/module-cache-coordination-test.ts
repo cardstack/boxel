@@ -235,6 +235,71 @@ module(basename(__filename), function () {
       }
     });
 
+    test('tryAcquireAndRun: a savepoint-guarded fn write failure does not abort the lock transaction', async function (assert) {
+      // A winner runs its DB work on the pinned querier inside the
+      // coordinator's lock transaction. A best-effort write (like the
+      // transpile cache UPSERT) that fails must NOT poison that
+      // transaction, or the coordinator's pg_notify + COMMIT would fail
+      // and the already-produced result would never be served. Wrapping
+      // the write in a savepoint keeps the transaction usable.
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        const outcome = await coordinator.tryAcquireAndRun(
+          'savepoint-key',
+          async (querier) => {
+            await querier(['SAVEPOINT best_effort_write']);
+            try {
+              await querier(['SELECT * FROM table_that_does_not_exist']);
+            } catch {
+              // Best-effort: swallow and roll back just this statement.
+              await querier(['ROLLBACK TO SAVEPOINT best_effort_write']);
+            }
+            // The connection must be usable again after the rollback — a
+            // real follow-on write would succeed here. Issuing one proves
+            // the savepoint recovered the transaction; without it this
+            // query would error with "current transaction is aborted".
+            const rows = await querier(['SELECT 1 AS ok']);
+            return Number(rows[0].ok);
+          },
+        );
+
+        // acquired:true is only returned after the coordinator's pg_notify
+        // and COMMIT both ran on this same connection — a transaction left
+        // aborted by the inner failure would have made those throw and
+        // rejected instead. So this single assertion proves both that the
+        // post-rollback query succeeded and that the lock transaction
+        // committed cleanly.
+        assert.deepEqual(outcome, { acquired: true, result: 1 });
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+
+    test('tryAcquireAndRun: an unguarded fn write failure aborts the lock transaction and the winner throws', async function (assert) {
+      // Documents why the savepoint above is required: without it, a
+      // swallowed write failure leaves the transaction aborted, so the
+      // coordinator's pg_notify + COMMIT fail and the winner rejects
+      // instead of returning its result.
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        await assert.rejects(
+          coordinator.tryAcquireAndRun('unguarded-key', async (querier) => {
+            try {
+              await querier(['SELECT * FROM table_that_does_not_exist']);
+            } catch {
+              // Swallow like a best-effort write, but with no savepoint the
+              // transaction is now aborted.
+            }
+            return 'returned-but-transaction-poisoned';
+          }),
+        );
+      } finally {
+        await coordinator.shutDown();
+      }
+    });
+
     test('waitForKey: resolves on NOTIFY before timeout', async function (assert) {
       const coordinator = new ModuleCacheCoordinator({ dbAdapter });
       await coordinator.start();
@@ -327,6 +392,85 @@ module(basename(__filename), function () {
       await coordinator.shutDown();
       await wait;
       assert.true(resolved, 'parked waiter resolved on shutdown');
+    });
+  });
+
+  // Each distinct coalesce key wins its OWN advisory lock, so a burst of
+  // distinct-key callers produces that many concurrent winners — there is
+  // no loser path to throttle them (the schema editor alone fetches ~31
+  // distinct cold base modules in one page load). Each winner pins one
+  // pool connection for its lock transaction; if its `fn` also had to
+  // check out a SECOND pool client for the cache re-read + persist, then
+  // once concurrent winners reach the pool ceiling every pinned
+  // connection's `fn` would block waiting for a client its peers hold —
+  // a self-deadlock that hangs all module serving. Threading the pinned
+  // querier into `fn` keeps a coordinated load to exactly one connection,
+  // so winners drain through a pool far smaller than their count.
+  module('ModuleCacheCoordinator pool exhaustion', function (hooks) {
+    let savedPoolMax: string | undefined;
+    hooks.before(function () {
+      savedPoolMax = process.env.PG_POOL_MAX;
+      // Force a pool smaller than the concurrent-winner count below so the
+      // test would deadlock if a winner needed a second connection.
+      process.env.PG_POOL_MAX = '2';
+    });
+    hooks.after(function () {
+      if (savedPoolMax === undefined) {
+        delete process.env.PG_POOL_MAX;
+      } else {
+        process.env.PG_POOL_MAX = savedPoolMax;
+      }
+    });
+
+    let dbAdapter: PgAdapter;
+    setupDB(hooks, {
+      before: async (adapter) => {
+        dbAdapter = adapter;
+      },
+    });
+
+    test('concurrent distinct-key winners doing DB work on the pinned querier do not deadlock a small pool', async function (assert) {
+      const coordinator = new ModuleCacheCoordinator({ dbAdapter });
+      await coordinator.start();
+      try {
+        const winnerCount = 5; // > PG_POOL_MAX (2)
+        const runs = Array.from({ length: winnerCount }, (_unused, i) =>
+          coordinator.tryAcquireAndRun(
+            `pool-exhaustion-key-${i}`,
+            async (querier) => {
+              // DB work a winner must do while holding the lock. Routing it
+              // through the pinned querier (instead of the shared dbAdapter)
+              // is what keeps this to a single pool connection.
+              const rows = await querier(['SELECT', param(i), '::int AS n']);
+              return Number(rows[0].n);
+            },
+          ),
+        );
+
+        const timeout = new Promise<never>((_resolve, reject) => {
+          const t = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  'coordinated transpiles deadlocked: winners did not all complete — pinned querier likely not being used for fn DB work',
+                ),
+              ),
+            20_000,
+          );
+          (t as { unref?: () => void }).unref?.();
+        });
+
+        const outcomes = await Promise.race([Promise.all(runs), timeout]);
+        assert.deepEqual(
+          outcomes
+            .map((o) => (o.acquired ? o.result : 'loser'))
+            .sort((a, b) => Number(a) - Number(b)),
+          [0, 1, 2, 3, 4],
+          'all distinct-key winners acquired and completed',
+        );
+      } finally {
+        await coordinator.shutDown();
+      }
     });
   });
 
