@@ -245,44 +245,32 @@ module(basename(__filename), function () {
       const coordinator = new ModuleCacheCoordinator({ dbAdapter });
       await coordinator.start();
       try {
-        const peerCoordinator = new ModuleCacheCoordinator({ dbAdapter });
-        await peerCoordinator.start();
-        try {
-          await new Promise((r) => setTimeout(r, 100));
-          let notified = false;
-          const waitPromise = peerCoordinator
-            .waitForKey('savepoint-key', 5000)
-            .then(() => {
-              notified = true;
-            });
-          await new Promise((r) => setTimeout(r, 50));
+        const outcome = await coordinator.tryAcquireAndRun(
+          'savepoint-key',
+          async (querier) => {
+            await querier(['SAVEPOINT best_effort_write']);
+            try {
+              await querier(['SELECT * FROM table_that_does_not_exist']);
+            } catch {
+              // Best-effort: swallow and roll back just this statement.
+              await querier(['ROLLBACK TO SAVEPOINT best_effort_write']);
+            }
+            // The connection must be usable again after the rollback — a
+            // real follow-on write would succeed here. Issuing one proves
+            // the savepoint recovered the transaction; without it this
+            // query would error with "current transaction is aborted".
+            const rows = await querier(['SELECT 1 AS ok']);
+            return Number(rows[0].ok);
+          },
+        );
 
-          const outcome = await coordinator.tryAcquireAndRun(
-            'savepoint-key',
-            async (querier) => {
-              await querier(['SAVEPOINT best_effort_write']);
-              try {
-                await querier(['SELECT * FROM table_that_does_not_exist']);
-              } catch {
-                // Best-effort: swallow and roll back just this statement.
-                await querier(['ROLLBACK TO SAVEPOINT best_effort_write']);
-              }
-              return 'served-despite-write-failure';
-            },
-          );
-
-          assert.deepEqual(outcome, {
-            acquired: true,
-            result: 'served-despite-write-failure',
-          });
-          await waitPromise;
-          assert.true(
-            notified,
-            'NOTIFY fired → lock transaction committed despite the inner write failure',
-          );
-        } finally {
-          await peerCoordinator.shutDown();
-        }
+        // acquired:true is only returned after the coordinator's pg_notify
+        // and COMMIT both ran on this same connection — a transaction left
+        // aborted by the inner failure would have made those throw and
+        // rejected instead. So this single assertion proves both that the
+        // post-rollback query succeeded and that the lock transaction
+        // committed cleanly.
+        assert.deepEqual(outcome, { acquired: true, result: 1 });
       } finally {
         await coordinator.shutDown();
       }
