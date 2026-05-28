@@ -27,29 +27,21 @@ To build the entire repository and run the application, follow these steps:
    pnpm install
    ```
 
-4. Build the boxel-ui addon:
-
-   ```zsh
-   cd ./packages/boxel-ui/addon
-   pnpm rebuild:icons
-   pnpm build
-   ```
-
-5. Build the boxel-icons:
+4. Build the boxel-icons:
 
    ```zsh
    cd ./packages/boxel-icons
    pnpm build
    ```
 
-6. Build the host:
+5. Build the host:
 
    ```zsh
    cd ./packages/host
    pnpm start
    ```
 
-7. Run the realm server:
+6. Run the realm server:
 
    ```zsh
    cd ./packages/realm-server
@@ -66,14 +58,14 @@ To build the entire repository and run the application, follow these steps:
    })
    ```
 
-8. Register ALL:
+7. Register ALL:
 
    ```zsh
    cd ./packages/matrix
    pnpm register-all
    ```
 
-9. Verify registration:
+8. Verify registration:
 
    ```zsh
    cd ./packages/matrix
@@ -82,20 +74,20 @@ To build the entire repository and run the application, follow these steps:
 
    Visit http://localhost:8080. Type in Username = "admin", Password: "password" Homeserver URL: http://localhost:8008
 
-10. Host App
-    - Visit https://localhost:4200/
-    - Enter the registration flow and create a Boxel Account
-    - When prompted for an authentication token, type in "dev-token"
+9. Host App
+   - Visit https://localhost:4200/
+   - Enter the registration flow and create a Boxel Account
+   - When prompted for an authentication token, type in "dev-token"
 
-11. Validate email for login
+10. Validate email for login
     - Visit SMTP UI at http://localhost:5001/
     - Validate email
     - Go back to Host https://localhost:4200/ and login
 
-12. Perform "Setup up Secure Payment Method" flow
+11. Perform "Setup up Secure Payment Method" flow
     - More detailed steps can be found in our [README](README.md) Payment Setup section
 
-13. Run ai bot (Optional):
+12. Run ai bot (Optional):
 
     ```zsh
     cd ./packages/ai-bot
