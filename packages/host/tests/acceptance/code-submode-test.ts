@@ -50,6 +50,7 @@ import {
   setupUserSubscription,
   assertMessages,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -491,12 +492,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
               backgroundURL:
                 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
               iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -508,11 +509,11 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
               backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
               iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -524,12 +525,12 @@ module('Acceptance | code submode tests', function (_hooks) {
           contents: {
             ...SYSTEM_CARD_FIXTURE_CONTENTS,
             'hello.txt': txtSource,
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: `Catalog Realm`,
               backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
               iconURL:
                 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
-            },
+            }),
           },
         });
         await setupAcceptanceTestRealm({
@@ -886,12 +887,12 @@ module('Acceptance | code submode tests', function (_hooks) {
             'z18.json': '{}',
             'z19.json': '{}',
             'zzz/zzz/file.json': '{}',
-            '.realm.json': {
+            'realm.json': realmConfigCardJSON({
               name: 'Test Workspace B',
               backgroundURL:
                 'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
               iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-            },
+            }),
             'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },
         }),

@@ -207,7 +207,7 @@ export const testRealmInfo = {
   realmUserId: testRealmServerMatrixUserId,
   publishable: null,
   lastPublishedAt: null,
-  includePrerenderedDefaultRealmIndex: false,
+  includePrerenderedDefaultRealmIndex: null,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -1925,7 +1925,7 @@ function realmEventIsIndex(
 }
 
 // The three realm fixtures available under tests/fixtures/. See CS-10009.
-//   blank      — `.realm.json: {}` only; for tests that need a working realm
+//   blank      — empty directory; for tests that need a working realm
 //                with no card content.
 //   simple     — one card def (Person), one instance, one non-card file; for
 //                tests that need *some* indexed content but nothing exotic.
@@ -2588,3 +2588,44 @@ export const cardInfo = {
   summary: null,
   cardThumbnailURL: null,
 };
+
+// Builds the JSON string for a /realm.json RealmConfig card from a flat
+// config object ({ name, iconURL, backgroundURL, ... }). The card stores
+// `name` under cardInfo.name (matching the CardDef slot); other fields land
+// on attributes directly. Mirrors the host helper so realm-server tests can
+// build the same shape without depending on host.
+export function realmConfigCardJSON(
+  config: {
+    name?: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    includePrerenderedDefaultRealmIndex?: boolean;
+  } = {},
+): string {
+  let attrs: Record<string, unknown> = {};
+  if (config.name !== undefined) {
+    attrs.cardInfo = { name: config.name };
+  }
+  if (config.iconURL !== undefined) {
+    attrs.iconURL = config.iconURL;
+  }
+  if (config.backgroundURL !== undefined) {
+    attrs.backgroundURL = config.backgroundURL;
+  }
+  if (config.includePrerenderedDefaultRealmIndex !== undefined) {
+    attrs.includePrerenderedDefaultRealmIndex =
+      config.includePrerenderedDefaultRealmIndex;
+  }
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: attrs,
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/realm-config',
+          name: 'RealmConfig',
+        },
+      },
+    },
+  });
+}

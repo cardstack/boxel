@@ -233,12 +233,9 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. Anything
-// not in this set falls through to the legacy `.realm.json` sidecar
-// catch-all (which is itself on the way out — see CS-11131). hostHome
-// is no longer here: CS-10055 unified it into hostRoutingRules under
-// `path: "/"`, so a hostHome PATCH is just an attempted write to an
-// unrecognized key.
+// Fields owned by the RealmConfig card instance at /realm.json. A PATCH
+// /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
+// PROPERTIES is rejected — unrecognized keys have no storage target.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -248,7 +245,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
-// upsertRealmMetadata rather than the sidecar.
+// upsertRealmMetadata.
 const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
@@ -1888,11 +1885,7 @@ export class Realm {
     }
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
-      if (
-        [...addedFiles, ...updatedFiles].some(
-          (f) => f === '.realm.json' || f === 'realm.json',
-        )
-      ) {
+      if ([...addedFiles, ...updatedFiles].some((f) => f === 'realm.json')) {
         this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
@@ -6346,8 +6339,8 @@ export class Realm {
   // realm's `lastPublishedAt` map (which feeds into `RealmInfo` and
   // therefore the card+json ETag's hash) is computed from
   // `realm_registry` rows where `source_url = this.url`; publishing
-  // X' from X bumps that map but doesn't otherwise touch X's
-  // `.realm.json` or `realm_metadata`, so without this hook a 304
+  // X' from X bumps that map but doesn't otherwise touch the
+  // RealmConfig card or `realm_metadata`, so without this hook a 304
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
@@ -6355,10 +6348,7 @@ export class Realm {
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let localPath: LocalPath = this.paths.local(fileURL);
-    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
-      this.readFileAsText(localPath, undefined),
+    let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
     ]);
@@ -6366,41 +6356,16 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
-      showAsCatalog: null,
+      showAsCatalog: metadata.showAsCatalog,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
         this.#matrixClient.matrixURL.href,
       ),
-      publishable: null,
+      publishable: metadata.publishable,
       lastPublishedAt,
       includePrerenderedDefaultRealmIndex: null,
     };
-
-    if (realmConfig) {
-      try {
-        let realmConfigJson = JSON.parse(realmConfig.content);
-        realmInfo.name = realmConfigJson.name ?? realmInfo.name;
-        realmInfo.backgroundURL =
-          realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.realmUserId = ensureFullMatrixUserId(
-          realmConfigJson.realmUserId ??
-            (this.#matrixClient.getUserId()! || this.#matrixClient.username),
-          this.#matrixClient.matrixURL.href,
-        );
-        realmInfo.lastPublishedAt =
-          realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
-      } catch (e) {
-        this.#log.warn(`failed to parse realm config: ${e}`);
-      }
-    }
-
-    // showAsCatalog and publishable live in realm_metadata after CS-10053.
-    // The sidecar-parse block above intentionally does not read them; the
-    // DB is the only source.
-    realmInfo.showAsCatalog = metadata.showAsCatalog;
-    realmInfo.publishable = metadata.publishable;
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
     // file is the source of truth — patchRealmConfig writes it, publish
@@ -6444,11 +6409,13 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // Opt-in field: only an explicit `true` is meaningful (every
+        // consumer checks `=== true`). An unset BooleanField serializes
+        // as `false` once the card is indexed, so collapse anything but
+        // `true` to null — /_info then reports the same "not opted in"
+        // value whether or not the card has been indexed yet.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6482,11 +6449,10 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // See the disk-overlay note above: collapse non-`true` to null so
+        // an unset field (which indexes as `false`) doesn't flip /_info.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6573,21 +6539,27 @@ export class Realm {
 
     let cardAttrs: Record<string, unknown> = {};
     let metadataAttrs: Record<string, unknown> = {};
-    let sidecarAttrs: Record<string, unknown> = {};
+    let unknownKeys: string[] = [];
     for (let [key, value] of Object.entries(attributes)) {
       if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
         cardAttrs[key] = value;
       } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
         metadataAttrs[key] = value;
       } else {
-        sidecarAttrs[key] = value;
+        unknownKeys.push(key);
       }
     }
+    if (unknownKeys.length > 0) {
+      return badRequest({
+        message: `Unknown realm config attribute(s): ${unknownKeys.join(', ')}`,
+        requestContext,
+      });
+    }
 
-    // Read and validate BOTH files before writing anything. A mixed PATCH
-    // like { name, publishable } touches the card, the realm_metadata
-    // table, and possibly the sidecar; we don't want a malformed sidecar
-    // to surface 500 *after* the card has already been mutated.
+    // Read and validate the card before writing anything. A mixed PATCH
+    // like { name, publishable } touches the card and the realm_metadata
+    // table; we don't want a malformed card to surface 500 *after* the
+    // metadata has already been mutated.
     let cardPath: LocalPath | undefined;
     let cardDoc:
       | {
@@ -6675,44 +6647,8 @@ export class Realm {
       }
     }
 
-    let realmConfigPath: LocalPath | undefined;
-    let realmConfig: Record<string, unknown> | undefined;
-    if (Object.keys(sidecarAttrs).length > 0) {
-      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
-      realmConfig = {};
-      let existingConfig = await this.readFileAsText(
-        realmConfigPath,
-        undefined,
-      );
-      if (existingConfig?.content) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(existingConfig.content);
-        } catch (e: any) {
-          return systemError({
-            requestContext,
-            message: `Unable to parse existing realm config: ${e.message}`,
-          });
-        }
-        if (!isPlainObject(parsed)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config is not a JSON object`,
-          });
-        }
-        realmConfig = parsed as Record<string, unknown>;
-      }
-      Object.assign(realmConfig!, sidecarAttrs);
-    }
-
     if (cardPath !== undefined && cardDoc !== undefined) {
       await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
-    }
-    if (realmConfigPath !== undefined && realmConfig !== undefined) {
-      await this.write(
-        realmConfigPath,
-        JSON.stringify(realmConfig, null, 2) + '\n',
-      );
     }
     if (Object.keys(metadataAttrs).length > 0) {
       await this.upsertRealmMetadata({

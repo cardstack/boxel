@@ -43,7 +43,7 @@ export interface RegistryBackfillOpts {
 
 // Runs the boot-time backfill of realm_registry:
 //   1. Bootstrap rows from CLI args (upserted, always pinned=true)
-//   2. Source rows from realmsRootPath/<owner>/<endpoint>/.realm.json
+//   2. Source rows from realmsRootPath/<owner>/<endpoint>/realm.json
 //      (inserted if absent, pinned=false)
 //   3. Warns on registry rows whose disk path is missing
 //   4. Warns on bootstrap rows that no longer have a matching CLI arg
@@ -160,7 +160,7 @@ async function upsertSourceRealms(opts: RegistryBackfillOpts): Promise<number> {
         continue;
       }
       const endpoint = realmEntry.name;
-      if (!existsSync(join(ownerDir, endpoint, '.realm.json'))) {
+      if (!existsSync(join(ownerDir, endpoint, 'realm.json'))) {
         continue;
       }
       // URL construction matches server.ts:loadRealms so a Realm constructed
@@ -211,11 +211,11 @@ async function warnOnOrphans(opts: RegistryBackfillOpts): Promise<void> {
   async function checkOne(row: { url: string; kind: string; disk_id: string }) {
     let realmJson: string;
     if (row.kind === 'source') {
-      realmJson = join(opts.realmsRootPath, row.disk_id, '.realm.json');
+      realmJson = join(opts.realmsRootPath, row.disk_id, 'realm.json');
     } else if (row.kind === 'published') {
-      realmJson = join(publishedRoot, row.disk_id, '.realm.json');
+      realmJson = join(publishedRoot, row.disk_id, 'realm.json');
     } else if (row.kind === 'bootstrap') {
-      realmJson = join(row.disk_id, '.realm.json');
+      realmJson = join(row.disk_id, 'realm.json');
     } else {
       return;
     }

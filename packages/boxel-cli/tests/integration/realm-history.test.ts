@@ -198,13 +198,13 @@ describe('realm history (integration)', () => {
       expect(result.error).toContain('Checkpoint not found');
     });
 
-    it('preserves .realm.json across restore', async () => {
+    it('preserves untracked dotfiles across restore', async () => {
       const cm = new CheckpointManager(workspaceDir);
       writeFile('a.gts', 'original');
       const target = await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'added' },
       ]);
-      writeFile('.realm.json', '{"name":"test"}');
+      writeFile('.gitkeep', 'marker');
       writeFile('a.gts', 'modified');
       await cm.createCheckpoint('manual', [
         { file: 'a.gts', status: 'modified' },
@@ -215,9 +215,9 @@ describe('realm history (integration)', () => {
       });
 
       expect(result.ok).toBe(true);
-      const realmJsonPath = path.join(workspaceDir, '.realm.json');
-      expect(fs.existsSync(realmJsonPath)).toBe(true);
-      expect(fs.readFileSync(realmJsonPath, 'utf8')).toBe('{"name":"test"}');
+      const dotfilePath = path.join(workspaceDir, '.gitkeep');
+      expect(fs.existsSync(dotfilePath)).toBe(true);
+      expect(fs.readFileSync(dotfilePath, 'utf8')).toBe('marker');
     });
 
     it('returns an error for an invalid reference', async () => {

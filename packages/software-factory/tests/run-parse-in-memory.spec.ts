@@ -40,7 +40,7 @@ async function clearParseableFixtures(
   for (let filename of listingBefore.filenames ?? []) {
     if (!parseablePattern.test(filename)) continue;
     // Keep realm metadata files.
-    if (filename.endsWith('.realm.json') || filename === 'index.json') continue;
+    if (filename === 'realm.json' || filename === 'index.json') continue;
     let deleteResult = await client.delete(realmUrl, filename);
     expect(
       deleteResult.ok,

@@ -22,6 +22,7 @@ import {
   testRealmURL,
   testRRI,
   testRealmInfo,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -232,7 +233,10 @@ module('Integration | commands | transform-cards', function (hooks) {
         'prefix-name-command.ts': { default: PrefixNameCommand },
         'uppercase-name-command.ts': { default: UppercaseNameCommand },
         'add-metadata-command.ts': { default: AddMetadataCommand },
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-t.png" }`,
+        'realm.json': realmConfigCardJSON({
+          name: realmName,
+          iconURL: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
+        }),
       },
     });
   });

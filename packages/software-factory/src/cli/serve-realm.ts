@@ -21,8 +21,7 @@ let log = logger('serve-realm');
 // Last matching pattern wins. Must agree with the same constant in
 // `cli/cache-realm.ts` so the per-process realm and the cached template
 // see the exact same fixture contents.
-const SF_CARD_DEFINITIONS_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+const SF_CARD_DEFINITIONS_GLOB = '*.gts realm.json !document.gts !wiki.gts';
 
 function cardDefinitionsOnly(relativePath: string): boolean {
   let filename = relativePath.split('/').pop() ?? relativePath;

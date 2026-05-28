@@ -25,6 +25,7 @@ import {
   setupOperatorModeStateCleanup,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -112,7 +113,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
           'Person/fadhlan.json': new Person({
             firstName: 'Fadhlan',
           }),
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       });
     });

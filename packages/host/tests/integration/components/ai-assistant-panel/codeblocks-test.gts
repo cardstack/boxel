@@ -30,6 +30,7 @@ import {
   setupOnSave,
   getMonacoContent,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -167,7 +168,7 @@ export default class MyComponent extends Component {
             country: 'Indonesia',
           }),
         }),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
 

@@ -20,8 +20,7 @@ const KNOWN_FLAGS = new Set(['--force']);
 // documents) which tests don't depend on and which would slow indexing.
 // Format: space-separated patterns; prefix with `!` to exclude. Last
 // matching pattern wins.
-const SF_CARD_DEFINITIONS_GLOB =
-  '*.gts .realm.json realm.json !document.gts !wiki.gts';
+const SF_CARD_DEFINITIONS_GLOB = '*.gts realm.json !document.gts !wiki.gts';
 
 function cardDefinitionsOnly(relativePath: string): boolean {
   let filename = relativePath.split('/').pop() ?? relativePath;

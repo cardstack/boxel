@@ -18,6 +18,7 @@ import {
   setupRealmServerEndpoints,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -117,7 +118,7 @@ export default class TestCommand extends Command {
 export class TestSpec extends Spec {
   static displayName = 'Test Spec';
 }`,
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       }),
     );

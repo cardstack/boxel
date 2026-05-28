@@ -26,6 +26,7 @@ import {
   setupOnSave,
   setupRealmServerEndpoints,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -621,12 +622,12 @@ module('Acceptance | Spec preview', function (hooks) {
               },
             },
           },
-          '.realm.json': {
+          'realm.json': realmConfigCardJSON({
             name: 'Test Workspace B',
             backgroundURL:
               'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
             iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
+          }),
         },
       });
       await setupAcceptanceTestRealm({

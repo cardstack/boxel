@@ -92,7 +92,7 @@ module('discoverEvaluableFiles', function () {
       client: stubClient([
         'Cards/my-card.json',
         'index.json',
-        '.realm.json',
+        'realm.json',
         'README.md',
         'hello.gts',
       ]),
