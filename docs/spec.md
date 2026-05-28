@@ -105,9 +105,12 @@ Spec JSON with:
 
 ##### Developer workflow
 
-The generated specs are **not committed to the boxel repo**. The
-`cardstack/boxel-catalog` repo is the source of truth — boxel just owns
-the generator and the inputs (`usage.gts`).
+The generated specs are **not committed anywhere** — neither to the
+boxel repo nor to `cardstack/boxel-catalog`. They're treated as build
+artifacts of `boxel-ui` and regenerated fresh at realm-server deployment
+time. The inputs (`usage.gts`) in boxel are the source of truth; the
+deployed catalog content is whatever the generator produces against
+the deployed commit.
 
 1. Edit the component's `usage.gts`. Make sure the primary
    `<FreestyleUsage>` block has a `@description='…'` attribute and
@@ -121,29 +124,26 @@ the generator and the inputs (`usage.gts`).
    `packages/catalog/contents/`, which is gitignored from boxel).
    Output: `packages/catalog/contents/Spec/boxel-ui-<slug>.json`.
 3. Commit only your `usage.gts` change to your boxel PR — no spec JSON
-   needs to land in the boxel repo.
-4. On merge to `main`, the
-   `.github/workflows/mirror-boxel-ui-specs.yaml` job clones
-   `cardstack/boxel-catalog`, regenerates the specs, and pushes the
-   diff. That repo is `git pull`ed by realm-server at deploy startup
-   and full-indexed.
+   needs to land in any repo.
+4. On deploy, the realm-server's `setup:catalog-in-deployment` script
+   pulls latest `boxel-catalog`, then runs the generator against the
+   deployed `usage.gts` files, then rsyncs the merged tree into
+   `/persistent/catalog/`. The deployed catalog is full-indexed at
+   startup.
 
 ##### Gotchas
 
 - `packages/catalog/contents/` is its own git repo (clone of
-  `cardstack/boxel-catalog`), gitignored from boxel. Edits made
-  directly there do **not** appear in boxel PRs. The mirror workflow
-  is the publish path.
-- Because the generator regenerates fresh on every mirror run, there
-  is no in-boxel-repo drift-detection step. If you change `usage.gts`
+  `cardstack/boxel-catalog`), gitignored from boxel. The generator
+  drops `boxel-ui-*.json` files into that working tree locally. Treat
+  those as transient — running `pnpm --dir packages/catalog catalog:update`
+  will stash them automatically if a `git pull` would conflict.
+- Because the generator regenerates fresh on every deploy, there is
+  no in-boxel-repo drift-detection step. If you change `usage.gts`
   but don't run the generator locally to eyeball the result, the
-  catalog still ends up correct — but you only see what the agent will
-  read at runtime once the mirror PR lands. Running the generator
-  locally before pushing is the recommended habit.
-- The CI mirror job needs a deploy key or fine-grained PAT for
-  `cardstack/boxel-catalog`, stored as the repo secret
-  `BOXEL_CATALOG_PUSH_TOKEN`. Until that's wired up, the workflow runs
-  but fails at the push step.
+  deployed catalog still ends up correct — but you only see what the
+  agent will read at runtime after the next deploy. Running the
+  generator locally before pushing is the recommended habit.
 
 ### 4. App Specs (`specType: 'app'`)
 
