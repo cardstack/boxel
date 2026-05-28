@@ -5,20 +5,20 @@
 // `http://` to `https://` (migration 1779100257124). That earlier migration
 // rewrote URL substrings across most text/JSONB columns, but realm-server
 // re-inserts its bootstrap rows on every boot, so a developer who started
-// the realm-server under the old scheme ends up with both an HTTP row and
-// an HTTPS row for the same realm path.
-//
-// The HTTP row's `realm_user_permissions` sibling was rewritten to HTTPS
-// by 1779100257124, so when the file-watcher fires on the HTTP-keyed
-// Realm instance, `getRealmOwnerUserId` can't find any permission row at
-// the HTTP URL and throws "Cannot determine realm owner for realm
+// the realm-server under the old scheme ends up with leftover HTTP rows in
+// `realm_registry` that no longer have a matching `realm_user_permissions`
+// row (those were all rewritten to HTTPS). When the file-watcher fires on
+// the HTTP-keyed Realm instance, `getRealmOwnerUserId` finds no permission
+// row and throws "Cannot determine realm owner for realm
 // http://localhost:42XX/...".
 //
-// Fix: delete every HTTP-canonical row that has an HTTPS sibling at the
-// equivalent path — those are guaranteed stale duplicates. HTTP rows
-// without an HTTPS sibling (a realm that has never been re-bootstrapped
-// under the new scheme) are left alone, since deleting them could orphan
-// user content tied only to the HTTP URL.
+// Fix: delete every HTTP-canonical localhost row in `realm_registry` that
+// has no matching `realm_user_permissions` row at that exact URL. That
+// captures both the duplicate case (an HTTPS sibling now owns the
+// permissions) and the retired-realm case (legacy-catalog had its HTTPS
+// rows removed entirely by 1779348449320 + 1779720206026, leaving the
+// HTTP registry row as a dangling orphan). Realms that genuinely exist
+// only at HTTP would still have HTTP permission rows and are left alone.
 //
 // Staging / production use real hostnames, never `localhost`, so the
 // pattern matches no rows there and the migration is a safe no-op.
@@ -35,9 +35,9 @@ exports.up = (pgm) => {
   pgm.sql(`
     DELETE FROM realm_registry stale
     WHERE stale.url LIKE 'http://localhost:%'
-      AND EXISTS (
-        SELECT 1 FROM realm_registry current
-        WHERE current.url = REPLACE(stale.url, 'http://', 'https://')
+      AND NOT EXISTS (
+        SELECT 1 FROM realm_user_permissions
+        WHERE realm_url = stale.url
       )
   `);
 };
