@@ -26,7 +26,9 @@ function binaryParser(
 }
 
 module(`server-endpoints/${basename(__filename)}`, function (hooks) {
-  let context = setupServerEndpointsTest(hooks);
+  // Use the `simple` fixture so the realm has real card files to assert
+  // the archive contains; the `blank` fixture has no card content.
+  let context = setupServerEndpointsTest(hooks, { fixture: 'simple' });
 
   test('downloads realm as a zip archive', async function (assert) {
     let response = await context.request
@@ -53,7 +55,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'zip file signature is present',
     );
     assert.ok(
-      response.body.includes(Buffer.from('.realm.json')),
+      response.body.includes(Buffer.from('person.gts')),
       'archive includes realm files',
     );
   });
@@ -193,8 +195,23 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     let realmDir = join(realmsRootPath, realmId);
     mkdirSync(realmDir, { recursive: true });
     writeFileSync(
-      join(realmDir, '.realm.json'),
-      JSON.stringify({ name: 'CS-11270 regression realm' }, null, 2),
+      join(realmDir, 'realm.json'),
+      JSON.stringify(
+        {
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'CS-11270 regression realm' } },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/realm-config',
+                name: 'RealmConfig',
+              },
+            },
+          },
+        },
+        null,
+        2,
+      ),
     );
     writeFileSync(join(realmDir, 'marker.txt'), 'cs-11270-regression-marker');
 

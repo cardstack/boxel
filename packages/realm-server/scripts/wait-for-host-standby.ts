@@ -32,6 +32,11 @@
 // against a genuinely broken vite — in normal dev that ceiling is never
 // reached.
 
+// First, so this probe's own progress logs flush in real time instead of
+// at process exit (Node block-buffers writes to a pipe; in CI this script
+// runs piped through run-p + tee, so retry-attempt output otherwise hides
+// behind buffering until teardown).
+import '../lib/unbuffer-stdio';
 import puppeteer, { type Browser } from 'puppeteer';
 
 const PER_ATTEMPT_TIMEOUT_MS = 30_000;

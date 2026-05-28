@@ -17,6 +17,7 @@ import {
   setupRealmCacheTeardown,
   setupUserSubscription,
   visitOperatorMode,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -71,11 +72,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Workspace A',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Workspace A' }),
         'index.json': {
           data: {
             type: 'card',
@@ -97,11 +94,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         '@testuser:localhost': ['read', 'write', 'realm-owner'],
       },
       contents: {
-        '.realm.json': {
-          name: 'Workspace B',
-          backgroundURL: null,
-          iconURL: null,
-        },
+        'realm.json': realmConfigCardJSON({ name: 'Workspace B' }),
         'index.json': {
           data: {
             type: 'card',

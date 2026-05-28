@@ -32,8 +32,6 @@ import {
 } from './lib/dev-service-registry';
 import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 import { runRegistryBackfillWithAdvisoryLock } from './lib/realm-registry-backfill';
-import { runRealmMetadataBackfillWithAdvisoryLock } from './lib/realm-metadata-backfill';
-import { runRealmConfigCardBackfillWithAdvisoryLock } from './lib/realm-config-card-backfill';
 import {
   RealmRegistryReconciler,
   type RealmRegistryRow,
@@ -427,34 +425,6 @@ const smokeTestHostApp = async () => {
   // Guarded by a pg advisory lock so, in a future multi-instance deployment,
   // only one process does the disk scan per startup wave (CS-10890).
   await runRegistryBackfillWithAdvisoryLock(dbAdapter, {
-    dbAdapter,
-    realmsRootPath,
-    serverURL: new URL(String(serverURL)),
-    bootstrapRealms: paths.map((p, i) => ({
-      diskPath: String(p),
-      url: hrefs[i][0],
-    })),
-  });
-
-  // CS-10053: copy showAsCatalog/publishable from .realm.json into the
-  // realm_metadata table on first boot, then trim those keys from the
-  // sidecar. Idempotent on subsequent boots.
-  await runRealmMetadataBackfillWithAdvisoryLock(dbAdapter, {
-    dbAdapter,
-    realmsRootPath,
-    serverURL: new URL(String(serverURL)),
-    bootstrapRealms: paths.map((p, i) => ({
-      diskPath: String(p),
-      url: hrefs[i][0],
-    })),
-  });
-
-  // CS-11150: materialize a RealmConfig card at /realm.json from the
-  // legacy .realm.json sidecar wherever the card is still absent, then
-  // trim the migrated keys from the sidecar. Unblocks the sidecar
-  // removal in CS-11131. Idempotent — once a realm has a card, future
-  // boots skip it.
-  await runRealmConfigCardBackfillWithAdvisoryLock(dbAdapter, {
     dbAdapter,
     realmsRootPath,
     serverURL: new URL(String(serverURL)),

@@ -36,6 +36,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   cardDefFieldCount,
+  realmConfigCardJSON,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -49,12 +50,12 @@ const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
 const testPrefixRealmURL2 = `@test-realm/test2/`;
 
 const files: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Test Workspace A',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
     iconURL: testRealmAIconURL,
-  },
+  }),
   'index.json': {
     data: {
       type: 'card',
@@ -216,12 +217,12 @@ const files: Record<string, any> = {
 };
 
 const filesB: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Test Workspace B',
     backgroundURL:
       'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
     iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-  },
+  }),
   'index.json': {
     data: {
       type: 'card',

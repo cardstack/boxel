@@ -240,6 +240,23 @@ jobs:
           # because production strips the test entry (`tests/index.html`)
           # entirely. Only sourcemaps are dropped; the resulting harness
           # is ~60MB unpacked / ~15MB compressed.
+          #
+          # Build workspace deps in topological order before the host:
+          #   * @cardstack/boxel-icons — boxel-ui's `build:types` resolves
+          #     `@cardstack/boxel-icons/*` against its `declarations/`,
+          #     which only exists after the icons package is built.
+          #   * @cardstack/boxel-ui    — the host's vite build imports
+          #     `@cardstack/boxel-ui/styles/global.css`, which resolves
+          #     to the addon's `dist/`.
+          # Plain `pnpm --filter <name>` does NOT include workspace
+          # dependencies; they must be built explicitly (or with the
+          # `<name>...` syntax). Without this chain the host build fails
+          # with "Rolldown failed to resolve import
+          # @cardstack/boxel-ui/styles/global.css" — and before that,
+          # boxel-ui's own type build can fail on missing boxel-icons
+          # declarations.
+          pnpm --filter @cardstack/boxel-icons build
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm run build
           # Use --no-git-checks because the workflow's commit + tag is already
@@ -324,10 +341,16 @@ jobs:
         working-directory: packages/boxel-cli
         run: |
           set -euo pipefail
-          # See the unstable job's "Publish to npm" step for the rationale —
-          # `build:test-harness` reads from `packages/host/dist/`, so the
-          # host's dev bundle has to exist before we can build the slim
-          # harness.
+          # See the unstable job's "Publish to npm" step for the full
+          # rationale on the dep ordering — `build:test-harness` reads from
+          # `packages/host/dist/`, so the host's dev bundle has to exist
+          # before we can build the bundled test harness, and the host's vite
+          # build in turn needs `@cardstack/boxel-ui`'s `dist/`, which itself
+          # needs `@cardstack/boxel-icons`'s `declarations/` for its type
+          # build. Plain `pnpm --filter <name>` does NOT include workspace
+          # deps, so they have to be built explicitly.
+          pnpm --filter @cardstack/boxel-icons build
+          pnpm --filter @cardstack/boxel-ui build
           pnpm --filter @cardstack/host build
           pnpm build
 

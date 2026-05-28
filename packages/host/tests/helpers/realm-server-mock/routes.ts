@@ -561,12 +561,26 @@ async function readRealmConfigFromAdapter(
   adapter: TestRealmAdapter,
 ): Promise<Record<string, unknown> | null> {
   await adapter.ready;
-  let fileRef = await adapter.openFile('.realm.json');
+  let fileRef = await adapter.openFile('realm.json');
   if (!fileRef || typeof fileRef.content !== 'string') {
     return null;
   }
   try {
-    return JSON.parse(fileRef.content) as Record<string, unknown>;
+    let card = JSON.parse(fileRef.content) as {
+      data?: { attributes?: Record<string, unknown> };
+    };
+    let attrs = card?.data?.attributes ?? {};
+    // Flatten the card shape into the legacy sidecar key-set so the
+    // overrides applier doesn't need to know about cardInfo. `name`
+    // lives under cardInfo on the card (matching the CardDef slot),
+    // every other migrated key sits on attributes directly.
+    let cardInfo = (attrs as { cardInfo?: { name?: unknown } }).cardInfo;
+    return {
+      ...attrs,
+      ...(cardInfo && typeof cardInfo.name === 'string'
+        ? { name: cardInfo.name }
+        : {}),
+    } as Record<string, unknown>;
   } catch (error) {
     console.warn(
       `[realm-server-mock] _info invalid realm config ${JSON.stringify({

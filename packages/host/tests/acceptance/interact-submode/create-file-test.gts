@@ -17,6 +17,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -28,10 +29,10 @@ import { setupApplicationTest } from '../../helpers/setup';
 const userRealm = 'http://test-realm/user/apple-grove/';
 
 const testRealmFiles: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Test Workspace',
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
-  },
+  }),
   'pet.gts': `
     import { CardDef, Component } from "https://cardstack.com/base/card-api";
     export default class Pet extends CardDef {
@@ -150,10 +151,10 @@ const testRealmFiles: Record<string, any> = {
 };
 
 const userRealmFiles: Record<string, any> = {
-  '.realm.json': {
+  'realm.json': realmConfigCardJSON({
     name: 'Apple Grove',
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-a.png',
-  },
+  }),
   'plant.gts': `
     import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
     export class Plant extends CardDef {

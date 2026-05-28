@@ -39,6 +39,7 @@ import {
   getMonacoContent,
   setMonacoContent,
   setupOperatorModeStateCleanup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -279,7 +280,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         },
         'hello.txt': 'Hello, world!',
         'index.json': new CardsGrid(),
-        '.realm.json': `{ "name": "${realmName}" }`,
+        'realm.json': realmConfigCardJSON({ name: realmName }),
       },
     });
   });

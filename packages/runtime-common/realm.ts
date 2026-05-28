@@ -64,7 +64,9 @@ import {
   query,
   param,
   dbExpression,
+  dbAdapterQuerier,
   isValidPrerenderedHtmlFormat,
+  type Querier,
   type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
@@ -230,12 +232,9 @@ function isDuringPrerenderRequest(request: Request): boolean {
   return (request.headers.get(DURING_PRERENDER_HEADER) ?? '').length > 0;
 }
 
-// Fields owned by the RealmConfig card instance at /realm.json. Anything
-// not in this set falls through to the legacy `.realm.json` sidecar
-// catch-all (which is itself on the way out — see CS-11131). hostHome
-// is no longer here: CS-10055 unified it into hostRoutingRules under
-// `path: "/"`, so a hostHome PATCH is just an attempted write to an
-// unrecognized key.
+// Fields owned by the RealmConfig card instance at /realm.json. A PATCH
+// /_config attribute outside this set and outside REALM_CONFIG_METADATA_-
+// PROPERTIES is rejected — unrecognized keys have no storage target.
 const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
   'name',
   'backgroundURL',
@@ -245,7 +244,7 @@ const REALM_CONFIG_CARD_PROPERTIES = new Set<string>([
 ]);
 
 // Fields owned by the realm_metadata DB table. Routes through
-// upsertRealmMetadata rather than the sidecar.
+// upsertRealmMetadata.
 const REALM_CONFIG_METADATA_PROPERTIES = new Set<string>(['publishable']);
 
 export interface FileRef {
@@ -1895,11 +1894,7 @@ export class Realm {
     }
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
-      if (
-        [...addedFiles, ...updatedFiles].some(
-          (f) => f === '.realm.json' || f === 'realm.json',
-        )
-      ) {
+      if ([...addedFiles, ...updatedFiles].some((f) => f === 'realm.json')) {
         this.invalidateCachedRealmInfo();
       }
       this.broadcastRealmEvent({
@@ -3094,22 +3089,30 @@ export class Realm {
     }
 
     let coalesceKey = `transpile|${this.url}|${canonicalPath}`;
-    let attempt = await coordinator.tryAcquireAndRun(coalesceKey, async () => {
-      // Winner path: a peer may have written between our miss and our
-      // lock acquisition; re-read so we don't redo their work AND
-      // refresh our captured generation in case a tombstone landed.
-      let recheck = await this.#readTranspileCacheRow(canonicalPath);
-      if (recheck?.result) {
-        return recheck.result;
-      }
-      let result = await this.#materializeAndTranspile(fileRef, etag);
-      await this.#writeTranspileCacheRow(
-        canonicalPath,
-        result,
-        recheck?.generation ?? 0,
-      );
-      return result;
-    });
+    let attempt = await coordinator.tryAcquireAndRun(
+      coalesceKey,
+      async (querier) => {
+        // Winner path: a peer may have written between our miss and our
+        // lock acquisition; re-read so we don't redo their work AND
+        // refresh our captured generation in case a tombstone landed.
+        // Run the re-read and the persist on the coordinator's pinned
+        // querier so this whole coordinated transpile holds exactly one
+        // pool connection — the lock connection — rather than pinning it
+        // and then checking out more for these queries.
+        let recheck = await this.#readTranspileCacheRow(canonicalPath, querier);
+        if (recheck?.result) {
+          return recheck.result;
+        }
+        let result = await this.#materializeAndTranspile(fileRef, etag);
+        await this.#writeTranspileCacheRow(
+          canonicalPath,
+          result,
+          recheck?.generation ?? 0,
+          querier,
+        );
+        return result;
+      },
+    );
     if (attempt.acquired) {
       return attempt.result;
     }
@@ -3136,14 +3139,20 @@ export class Realm {
     return result;
   }
 
-  async #readTranspileCacheRow(canonicalPath: string): Promise<
+  async #readTranspileCacheRow(
+    canonicalPath: string,
+    // When provided (winner path), reads run on the coordinator's pinned
+    // lock connection; otherwise they fall back to the shared pool.
+    querier?: Querier,
+  ): Promise<
     | {
         result?: ModuleTranspileResult;
         generation: number;
       }
     | undefined
   > {
-    let rows = (await query(this.#dbAdapter, [
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    let rows = (await runQuery([
       'SELECT body, headers, dependency_keys, generation',
       'FROM',
       MODULE_TRANSPILE_CACHE_TABLE,
@@ -3218,8 +3227,27 @@ export class Realm {
     canonicalPath: string,
     result: ModuleTranspileResult,
     capturedGeneration: number,
+    // When provided (winner path), the UPSERT runs on the coordinator's
+    // pinned lock connection — so it commits with the lock + NOTIFY and
+    // doesn't check out a second pool client. Otherwise it falls back to
+    // the shared pool, autocommitting on its own connection.
+    querier?: Querier,
   ): Promise<void> {
+    let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    // On the pinned-querier path this UPSERT runs inside the
+    // coordinator's lock transaction. L2 persistence is best-effort, but
+    // a pg error here would abort that transaction and break the
+    // coordinator's following pg_notify + COMMIT — failing a request that
+    // could otherwise serve the already-transpiled bytes. Wrap the write
+    // in a savepoint so a failure rolls back just this statement and
+    // leaves the enclosing transaction usable. On the shared adapter each
+    // query autocommits on its own connection, so no savepoint is needed.
+    let inLockTransaction = querier != null;
+    const savepoint = 'transpile_cache_write';
     try {
+      if (inLockTransaction) {
+        await runQuery([`SAVEPOINT ${savepoint}`]);
+      }
       // INSERT a row at `capturedGeneration`. On conflict, UPDATE only
       // if the row's current generation is still <= capturedGeneration.
       // If an invalidate has tombstoned-and-bumped the row past that
@@ -3229,7 +3257,7 @@ export class Realm {
       // that case the WHERE 0 <= 0 still allows a no-op same-gen
       // overwrite which is benign because the bytes are deterministic
       // for the same source.
-      await query(this.#dbAdapter, [
+      await runQuery([
         'INSERT INTO',
         MODULE_TRANSPILE_CACHE_TABLE,
         '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
@@ -3261,11 +3289,25 @@ export class Realm {
         'created_at = EXCLUDED.created_at',
         `WHERE ${MODULE_TRANSPILE_CACHE_TABLE}.generation <= EXCLUDED.generation`,
       ]);
+      if (inLockTransaction) {
+        await runQuery([`RELEASE SAVEPOINT ${savepoint}`]);
+      }
     } catch (err: unknown) {
       // L2 persistence is best-effort. A transient pg failure must not
       // break the response the caller is about to serve — they already
       // have the bytes in memory. Log and move on; the next reader will
       // re-try the write.
+      if (inLockTransaction) {
+        // Roll back just the failed write so the coordinator's enclosing
+        // lock transaction stays usable for its pg_notify + COMMIT.
+        try {
+          await runQuery([`ROLLBACK TO SAVEPOINT ${savepoint}`]);
+        } catch (rollbackErr: unknown) {
+          this.#log.warn(
+            `ROLLBACK TO SAVEPOINT after ${MODULE_TRANSPILE_CACHE_TABLE} write failure failed for ${this.url}${canonicalPath}: ${String(rollbackErr)}`,
+          );
+        }
+      }
       this.#log.warn(
         `${MODULE_TRANSPILE_CACHE_TABLE} insert failed for ${this.url}${canonicalPath}: ${String(err)}`,
       );
@@ -6310,8 +6352,8 @@ export class Realm {
   // realm's `lastPublishedAt` map (which feeds into `RealmInfo` and
   // therefore the card+json ETag's hash) is computed from
   // `realm_registry` rows where `source_url = this.url`; publishing
-  // X' from X bumps that map but doesn't otherwise touch X's
-  // `.realm.json` or `realm_metadata`, so without this hook a 304
+  // X' from X bumps that map but doesn't otherwise touch the
+  // RealmConfig card or `realm_metadata`, so without this hook a 304
   // would be served against the *pre-publish* hash forever.
   invalidateCachedRealmInfo(): void {
     this.#cachedRealmInfo = null;
@@ -6319,10 +6361,7 @@ export class Realm {
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
-    let fileURL = this.paths.fileURL(`.realm.json`);
-    let localPath: LocalPath = this.paths.local(fileURL);
-    let [realmConfig, lastPublishedAt, metadata] = await Promise.all([
-      this.readFileAsText(localPath, undefined),
+    let [lastPublishedAt, metadata] = await Promise.all([
       this.getLastPublishedAt(),
       this.getRealmMetadata(),
     ]);
@@ -6330,41 +6369,16 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
-      showAsCatalog: null,
+      showAsCatalog: metadata.showAsCatalog,
       visibility: await this.visibility(),
       realmUserId: ensureFullMatrixUserId(
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
         this.#matrixClient.matrixURL.href,
       ),
-      publishable: null,
+      publishable: metadata.publishable,
       lastPublishedAt,
       includePrerenderedDefaultRealmIndex: null,
     };
-
-    if (realmConfig) {
-      try {
-        let realmConfigJson = JSON.parse(realmConfig.content);
-        realmInfo.name = realmConfigJson.name ?? realmInfo.name;
-        realmInfo.backgroundURL =
-          realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.realmUserId = ensureFullMatrixUserId(
-          realmConfigJson.realmUserId ??
-            (this.#matrixClient.getUserId()! || this.#matrixClient.username),
-          this.#matrixClient.matrixURL.href,
-        );
-        realmInfo.lastPublishedAt =
-          realmConfigJson.lastPublishedAt || realmInfo.lastPublishedAt;
-      } catch (e) {
-        this.#log.warn(`failed to parse realm config: ${e}`);
-      }
-    }
-
-    // showAsCatalog and publishable live in realm_metadata after CS-10053.
-    // The sidecar-parse block above intentionally does not read them; the
-    // DB is the only source.
-    realmInfo.showAsCatalog = metadata.showAsCatalog;
-    realmInfo.publishable = metadata.publishable;
 
     // Overlay from the RealmConfig card file at /realm.json on disk. The
     // file is the source of truth — patchRealmConfig writes it, publish
@@ -6408,11 +6422,13 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // Opt-in field: only an explicit `true` is meaningful (every
+        // consumer checks `=== true`). An unset BooleanField serializes
+        // as `false` once the card is indexed, so collapse anything but
+        // `true` to null — /_info then reports the same "not opted in"
+        // value whether or not the card has been indexed yet.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6446,11 +6462,10 @@ export class Realm {
           realmInfo.iconURL =
             typeof attrs.iconURL === 'string' ? attrs.iconURL : null;
         }
-        if ('includePrerenderedDefaultRealmIndex' in attrs) {
-          realmInfo.includePrerenderedDefaultRealmIndex =
-            typeof attrs.includePrerenderedDefaultRealmIndex === 'boolean'
-              ? attrs.includePrerenderedDefaultRealmIndex
-              : null;
+        // See the disk-overlay note above: collapse non-`true` to null so
+        // an unset field (which indexes as `false`) doesn't flip /_info.
+        if (attrs.includePrerenderedDefaultRealmIndex === true) {
+          realmInfo.includePrerenderedDefaultRealmIndex = true;
         }
       }
     } catch (e) {
@@ -6537,21 +6552,27 @@ export class Realm {
 
     let cardAttrs: Record<string, unknown> = {};
     let metadataAttrs: Record<string, unknown> = {};
-    let sidecarAttrs: Record<string, unknown> = {};
+    let unknownKeys: string[] = [];
     for (let [key, value] of Object.entries(attributes)) {
       if (REALM_CONFIG_CARD_PROPERTIES.has(key)) {
         cardAttrs[key] = value;
       } else if (REALM_CONFIG_METADATA_PROPERTIES.has(key)) {
         metadataAttrs[key] = value;
       } else {
-        sidecarAttrs[key] = value;
+        unknownKeys.push(key);
       }
     }
+    if (unknownKeys.length > 0) {
+      return badRequest({
+        message: `Unknown realm config attribute(s): ${unknownKeys.join(', ')}`,
+        requestContext,
+      });
+    }
 
-    // Read and validate BOTH files before writing anything. A mixed PATCH
-    // like { name, publishable } touches the card, the realm_metadata
-    // table, and possibly the sidecar; we don't want a malformed sidecar
-    // to surface 500 *after* the card has already been mutated.
+    // Read and validate the card before writing anything. A mixed PATCH
+    // like { name, publishable } touches the card and the realm_metadata
+    // table; we don't want a malformed card to surface 500 *after* the
+    // metadata has already been mutated.
     let cardPath: LocalPath | undefined;
     let cardDoc:
       | {
@@ -6639,44 +6660,8 @@ export class Realm {
       }
     }
 
-    let realmConfigPath: LocalPath | undefined;
-    let realmConfig: Record<string, unknown> | undefined;
-    if (Object.keys(sidecarAttrs).length > 0) {
-      realmConfigPath = this.paths.local(this.paths.fileURL('.realm.json'));
-      realmConfig = {};
-      let existingConfig = await this.readFileAsText(
-        realmConfigPath,
-        undefined,
-      );
-      if (existingConfig?.content) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(existingConfig.content);
-        } catch (e: any) {
-          return systemError({
-            requestContext,
-            message: `Unable to parse existing realm config: ${e.message}`,
-          });
-        }
-        if (!isPlainObject(parsed)) {
-          return systemError({
-            requestContext,
-            message: `Existing realm config is not a JSON object`,
-          });
-        }
-        realmConfig = parsed as Record<string, unknown>;
-      }
-      Object.assign(realmConfig!, sidecarAttrs);
-    }
-
     if (cardPath !== undefined && cardDoc !== undefined) {
       await this.write(cardPath, JSON.stringify(cardDoc, null, 2) + '\n');
-    }
-    if (realmConfigPath !== undefined && realmConfig !== undefined) {
-      await this.write(
-        realmConfigPath,
-        JSON.stringify(realmConfig, null, 2) + '\n',
-      );
     }
     if (Object.keys(metadataAttrs).length > 0) {
       await this.upsertRealmMetadata({

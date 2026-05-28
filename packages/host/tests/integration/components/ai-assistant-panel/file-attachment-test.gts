@@ -29,6 +29,7 @@ import {
   setupOperatorModeStateCleanup,
   setupRealmCacheTeardown,
   withCachedRealmSetup,
+  realmConfigCardJSON,
 } from '../../../helpers';
 import {
   CardDef,
@@ -122,7 +123,7 @@ module('Integration | ai-assistant-panel | file-attachment', function (hooks) {
           'person.gts': { Person },
           'pet.gts': { Pet },
           'Person/fadhlan.json': new Person({ firstName: 'Fadhlan' }),
-          '.realm.json': `{ "name": "${realmName}" }`,
+          'realm.json': realmConfigCardJSON({ name: realmName }),
         },
       });
     });

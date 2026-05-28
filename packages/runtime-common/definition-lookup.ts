@@ -8,6 +8,7 @@ import {
   query,
   separatedByCommas,
   type Expression,
+  type Querier,
 } from './expression';
 import { clampSerializedError, type SerializedError } from './error';
 import {
@@ -254,12 +255,18 @@ export interface PopulateCoordinator {
   // `{ acquired: false }` immediately so the caller can transition to
   // the loser path.
   //
-  // `fn` runs against the shared dbAdapter (separate pool connections
-  // for any DB work it does). The pinned connection inside this helper
-  // only holds the advisory lock + emits the NOTIFY + commits.
+  // `fn` receives the pinned querier that holds the advisory lock. DB
+  // work it does through that querier shares the lock's single pinned
+  // connection rather than checking out additional pool clients — which
+  // matters because each distinct coalesce key wins its own lock, so a
+  // burst of N distinct-key winners would otherwise pin N connections
+  // AND each need another for its own queries, deadlocking the pool when
+  // N approaches the pool ceiling. Callers that don't need the querier
+  // (their inner work is a prerender or otherwise not DB-bound) may
+  // ignore it and continue using the shared dbAdapter.
   tryAcquireAndRun<T>(
     coalesceKey: string,
-    fn: () => Promise<T>,
+    fn: (querier: Querier) => Promise<T>,
   ): Promise<{ acquired: true; result: T } | { acquired: false }>;
   // Wait until a NOTIFY for `coalesceKey` arrives on the populate
   // channel, or `timeoutMs` elapses — whichever comes first. Resolves in

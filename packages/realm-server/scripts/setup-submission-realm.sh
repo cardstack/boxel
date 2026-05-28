@@ -10,14 +10,6 @@ if [ -z "$SUBMISSION_REALM_PATH" ]; then
 fi
 
 mkdir -p "$SUBMISSION_REALM_PATH"
-if [ ! -f "$SUBMISSION_REALM_PATH/.realm.json" ]; then
-  cat > "$SUBMISSION_REALM_PATH/.realm.json" << 'EOF'
-{
-  "showAsCatalog": false,
-  "publishable": false
-}
-EOF
-fi
 if [ ! -f "$SUBMISSION_REALM_PATH/realm.json" ]; then
   cat > "$SUBMISSION_REALM_PATH/realm.json" << 'EOF'
 {

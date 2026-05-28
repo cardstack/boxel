@@ -27,6 +27,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupUserSubscription,
+  realmConfigCardJSON,
 } from '../helpers';
 import { viewCardDemoCardSource } from '../helpers/cards/view-card-demo';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -355,12 +356,12 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
-        '.realm.json': {
+        'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
+        }),
       },
     });
 

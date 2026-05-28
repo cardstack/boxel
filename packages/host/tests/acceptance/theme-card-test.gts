@@ -23,6 +23,7 @@ import {
   testRealmURL,
   withCachedRealmSetup,
   type TestContextWithSave,
+  realmConfigCardJSON,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -242,9 +243,7 @@ module('Acceptance | theme-card-test', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'checkbox-card.gts': { CheckboxCard },
-          '.realm.json': {
-            name: 'Theme Playground',
-          },
+          'realm.json': realmConfigCardJSON({ name: 'Theme Playground' }),
           'starry-night.json': {
             data: {
               meta: {

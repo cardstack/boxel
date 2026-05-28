@@ -362,10 +362,7 @@ export function isIgnored(
     return false; // you can't ignore the entire realm
   }
   if (
-    [
-      `${realmURL.href}.realm.json`,
-      `${realmURL.href}.template-lintrc.js`,
-    ].includes(url.href) ||
+    [`${realmURL.href}.template-lintrc.js`].includes(url.href) ||
     url.href.startsWith(`${realmURL.href}.git/`)
   ) {
     return true;

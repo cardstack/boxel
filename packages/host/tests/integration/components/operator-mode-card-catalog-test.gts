@@ -1427,7 +1427,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 15 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -1441,7 +1441,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 15 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 16 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -1454,7 +1454,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 14 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 15 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
   });
 

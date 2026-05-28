@@ -22,6 +22,7 @@ import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   testRealmInfo,
+  realmConfigCardJSON,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -91,12 +92,12 @@ module('Acceptance | host submode', function (hooks) {
     realmContents = {
       ...SYSTEM_CARD_FIXTURE_CONTENTS,
       'index.json': new CardsGrid(),
-      '.realm.json': {
+      'realm.json': realmConfigCardJSON({
         name: 'Test Workspace B',
         backgroundURL:
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
         iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-      },
+      }),
       'person.gts': personCardSource,
       'view-card-demo.gts': viewCardDemoCardSource,
       'Person/1.json': {

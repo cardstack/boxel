@@ -53,7 +53,7 @@ export type SynapseInstance = {
 };
 
 export interface RealmConfig {
-  /** Directory containing the realm fixture (`.realm.json`, cards, etc). */
+  /** Directory containing the realm fixture (`realm.json`, cards, etc). */
   dir: string;
   /** Path under the realm-server URL the realm mounts at, e.g. 'test/'. */
   path: string;
@@ -131,7 +131,10 @@ export type SpawnedProcess = ChildProcess & {
 
 export type StartedCompatRealmProxy = {
   listenPort: number;
-  setTargetPort(targetPort: number): void;
+  setTargetPort(
+    targetPort: number,
+    describeUpstreamHealth?: () => string,
+  ): void;
   stop(): Promise<void>;
 };
 

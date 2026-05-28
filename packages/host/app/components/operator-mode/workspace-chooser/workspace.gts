@@ -1045,7 +1045,7 @@ function summarizeWorkspaceContents(
   return fileURLs.reduce(
     (summary, fileURL) => {
       let path = new URL(fileURL).pathname;
-      if (path.endsWith('/.realm.json') || path.endsWith('/realm.json')) {
+      if (path.endsWith('/realm.json')) {
         return summary;
       }
       if (path.endsWith('.json')) {
