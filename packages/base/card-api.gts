@@ -1227,6 +1227,16 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       // structured read.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        // eslint-disable-next-line no-console
+        console.error(
+          '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
         return undefined;
       }
       let records = (searchResource as any)?.instances ?? ([] as any[]);
@@ -1664,6 +1674,16 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       // shape; the structured failure surfaces through `getRelationship`.
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
+        // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
+        // eslint-disable-next-line no-console
+        console.error(
+          '[CS-11221 DIAG] linksToMany getter returning emptyValue (bucket sentinel)',
+          {
+            fieldName: this.name,
+            ownerType: instance?.constructor?.name,
+            sentinelType: (bucketEntry as { type?: string })?.type,
+          },
+        );
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
       let records = searchResource.instances ?? ([] as any[]);
