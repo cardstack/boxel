@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
-class ProjectInitiativeTask extends CardDef {
+export class ProjectInitiativeTask extends CardDef {
   static displayName = 'Cross-Functional Strategic Initiative Planning Task';
   @field title = contains(StringField);
 
