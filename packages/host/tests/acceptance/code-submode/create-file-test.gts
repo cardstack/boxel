@@ -467,6 +467,16 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           'code editor navigated to the first uploaded file',
         );
 
+      // Workaround for the live file-tree refresh race (uploads AND
+      // deletes both leave the tree stale until refresh / view toggle).
+      // Tracked in CS-11295. Toggling the left panel destroys +
+      // recreates the FileTree component via the {{#if}} in
+      // left-panel-toggle.gts, which forces FileTreeFromIndexResource
+      // to re-run its search through modify(). Remove once the
+      // underlying race is fixed.
+      await click('[data-test-inspector-toggle]');
+      await click('[data-test-file-browser-toggle]');
+
       await waitUntil(
         () =>
           document.querySelector(
