@@ -471,29 +471,28 @@ export default class OperatorModeOverlays extends Overlays {
             : 'bottom';
         label.setAttribute('data-side', side);
 
-        // Anchor the appropriate horizontal edge to the card, then
-        // (in the overflow case only) clamp the un-anchored edge
-        // against the boundary so the ellipsis kicks in instead of
-        // spilling outside the containing card. When the label fits
-        // the card by construction (!shouldOverflow), we use the
-        // natural width and skip the boundary clamp — otherwise a
-        // boundary whose right edge sits just past the card's would
-        // shave a few pixels off the label and trigger the ellipsis
-        // unnecessarily.
-        let anchorRightX: number;
+        // Anchor the appropriate horizontal edge to the card. In the
+        // overflow case we clamp the un-anchored edge to the
+        // boundary so the ellipsis kicks in instead of spilling
+        // outside the containing card. In the fits-the-card case we
+        // hand the browser `max-width: max-content` rather than a
+        // measured pixel value — `scrollWidth` is an integer, so
+        // converting it back to `max-width: Npx` shaves the
+        // sub-pixel remainder off and triggers `text-overflow:
+        // ellipsis` on a label that obviously had room to spare.
         let anchorLeftX: number;
         if (shouldOverflow) {
-          anchorRightX = cardRect.right - (radius - 4);
+          let anchorRightX = cardRect.right - (radius - 4);
           anchorLeftX = Math.max(
             boundaryRect.left + 4,
             anchorRightX - labelWidth,
           );
+          let width = Math.max(0, anchorRightX - anchorLeftX);
+          label.style.maxWidth = width + 'px';
         } else {
           anchorLeftX = cardRect.left - 4;
-          anchorRightX = anchorLeftX + labelWidth;
+          label.style.maxWidth = 'max-content';
         }
-        let width = Math.max(0, anchorRightX - anchorLeftX);
-        label.style.maxWidth = width + 'px';
         label.style.left = anchorLeftX + 'px';
         label.style.top =
           (side === 'top'
