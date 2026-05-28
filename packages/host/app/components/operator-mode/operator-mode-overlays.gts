@@ -140,33 +140,42 @@ export default class OperatorModeOverlays extends Overlays {
                 <span class='adorn-label-text'>
                   {{this.getCardTypeName cardDefOrId renderedCard}}
                 </span>
-                <BoxelDropdown
-                  @registerAPI={{this.registerDropdownAPI renderedCard}}
-                  @onClose={{this.handleMenuClose}}
-                >
-                  <:trigger as |bindings|>
-                    <IconButton
-                      @icon={{DotsVertical}}
-                      class='adorn-label-menu'
-                      aria-label='Options'
-                      data-test-overlay-more-options
-                      {{bindings}}
-                      {{on
-                        'click'
-                        (fn this.handleMenuTriggerClick renderedCard)
-                      }}
-                    />
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      @closeMenu={{dd.close}}
-                      @items={{this.getMenuItemsForCard
-                        cardDefOrId
-                        renderedCard
-                      }}
-                    />
-                  </:content>
-                </BoxelDropdown>
+                {{! Wrap BoxelDropdown so the trigger and its
+                    portal-origin element count as a single flex item
+                    of the label. Otherwise the label grows by one
+                    flex-gap as soon as the menu opens (the open-state
+                    wormhole-origin becomes a flex item where the
+                    closed-state placeholder was display none), and
+                    the label would shift on every menu open/close. }}
+                <span class='adorn-label-dropdown'>
+                  <BoxelDropdown
+                    @registerAPI={{this.registerDropdownAPI renderedCard}}
+                    @onClose={{this.handleMenuClose}}
+                  >
+                    <:trigger as |bindings|>
+                      <IconButton
+                        @icon={{DotsVertical}}
+                        class='adorn-label-menu'
+                        aria-label='Options'
+                        data-test-overlay-more-options
+                        {{bindings}}
+                        {{on
+                          'click'
+                          (fn this.handleMenuTriggerClick renderedCard)
+                        }}
+                      />
+                    </:trigger>
+                    <:content as |dd|>
+                      <Menu
+                        @closeMenu={{dd.close}}
+                        @items={{this.getMenuItemsForCard
+                          cardDefOrId
+                          renderedCard
+                        }}
+                      />
+                    </:content>
+                  </BoxelDropdown>
+                </span>
               </div>
             {{/if}}
 
@@ -300,6 +309,17 @@ export default class OperatorModeOverlays extends Overlays {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      /* BoxelDropdown wrapper. Inline-flex so the trigger and the
+         portal-origin element (which appears beside the trigger when
+         the menu is open) live inside their own flex container
+         instead of being two direct flex items of the label. Without
+         this wrapper, the label's natural width grows by one
+         flex-gap as soon as the menu opens, shifting the label
+         on click. */
+      .adorn-label-dropdown {
+        display: inline-flex;
+        align-items: center;
       }
       .adorn-label-menu {
         width: 18px;
