@@ -748,11 +748,7 @@ module('Unit | index-writer', function (hooks) {
     // the error_doc (the indexer mirrors diagnostics onto
     // error_doc.diagnostics for UI compat); they're verified
     // separately below.
-    let {
-      indexed_at: _remove,
-      diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
     // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
@@ -840,11 +836,7 @@ module('Unit | index-writer', function (hooks) {
       'SELECT * FROM boxel_index WHERE realm_version = 2 AND type = \'instance\' AND has_error = TRUE ORDER BY url COLLATE "POSIX"',
       { coerceTypes },
     )) as unknown as BoxelIndexTable[];
-    let {
-      indexed_at: _remove,
-      diagnostics,
-      ...errorEntry
-    } = rawErrorEntry;
+    let { indexed_at: _remove, diagnostics, ...errorEntry } = rawErrorEntry;
     assert.ok(errorEntry.error_doc, 'row has an error_doc');
     // The indexer mirrors `diagnostics` onto `error_doc.diagnostics`
     // for UI compat. Strip it out before the deep-equal (and verify the
