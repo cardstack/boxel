@@ -20,11 +20,6 @@
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "*.{js,ts,gjs,gts}": "node scripts/lint-autofix.mjs eslint",
-    "*.hbs": "node scripts/lint-autofix.mjs ember-template-lint",
-    "*.{json,md,css,scss,yml,yaml,html}": "node scripts/lint-autofix.mjs prettier"
-  },
   "devDependencies": {
     "@actions/core": "catalog:",
     "@actions/github": "catalog:",
