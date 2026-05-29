@@ -369,8 +369,16 @@ jobs:
   # the Traefik/DB/port footprint never collides across shards or PRs, and
   # a fixed slug keeps the env-mode build reproducible.
   host-test-env-mode-poc:
-    name: Host Env-Mode PoC
+    name: Host Env-Mode (shard ${{ matrix.shardIndex }}, ${{ matrix.shardTotal }})
     runs-on: ubuntu-latest
+    concurrency:
+      group: host-env-mode-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        shardTotal: [20]
     env:
       BOXEL_ENVIRONMENT: ci
       SKIP_CATALOG: "true"
@@ -474,18 +482,21 @@ jobs:
       - name: Settle prerender standby pool
         run: sleep 60
 
-      # In-progress slice: running the realm-touching suite in env mode still
-      # surfaces harness issues unrelated to the public-read fix (the catalog
-      # modal's realm list doesn't populate against the hybrid mocked /
-      # real-realm setup yet). Kept non-blocking so the public-read parity
-      # assertion above remains the job's gate while this is matured toward
-      # the full sharded suite.
-      - name: Run card-catalog tests in env mode (in progress, non-blocking)
+      # Run this shard of the host QUnit suite against the env-mode stack
+      # above, using the same partitioning the standard host-test job uses
+      # (HOST_TEST_PARTITION/COUNT consumed by packages/host/package.json's
+      # ember-test-pre-built script: ember exam --split COUNT --partition INDEX).
+      # Kept non-blocking so the public-read parity gate above remains the
+      # required per-shard signal while any env-mode-specific test fallout
+      # is matured; promote to required once stable across all shards.
+      - name: Run host shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }} in env mode (non-blocking)
         continue-on-error: true
-        run: dbus-run-session -- pnpm exec ember exam --path ./dist --filter "card-catalog" --preserve-test-name
+        run: dbus-run-session -- pnpm ember-test-pre-built
         working-directory: packages/host
         env:
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+          HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
+          HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
 
       - name: Print server logs
         if: ${{ !cancelled() }}
