@@ -32,9 +32,9 @@ import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { pull as realmPull } from '../commands/realm/pull';
 import { sync as realmSync, type SyncResult } from '../commands/realm/sync';
 import {
-  indexingStatus as coreIndexingStatus,
-  type IndexingStatusResult,
-} from '../commands/realm/indexing-status';
+  indexingErrors as coreIndexingErrors,
+  type IndexingErrorsResult,
+} from '../commands/realm/indexing-errors';
 import { waitForReady as coreWaitForReady } from '../commands/realm/wait-for-ready';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
@@ -135,7 +135,7 @@ export interface AtomicResult {
 }
 
 export type { CancelIndexingResult };
-export type { IndexingStatusResult };
+export type { IndexingErrorsResult };
 
 export class BoxelCLIClient {
   private pm: ProfileManager;
@@ -425,8 +425,8 @@ export class BoxelCLIClient {
    * errored. Returns the raw JSON-API document along with an `ok` flag for
    * transport-level failures.
    */
-  async realmIndexingStatus(realmUrl: string): Promise<IndexingStatusResult> {
-    return coreIndexingStatus(realmUrl, { profileManager: this.pm });
+  async realmIndexingErrors(realmUrl: string): Promise<IndexingErrorsResult> {
+    return coreIndexingErrors(realmUrl, { profileManager: this.pm });
   }
 
   /**

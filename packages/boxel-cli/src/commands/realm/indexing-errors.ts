@@ -9,7 +9,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 import { FG_GREEN, FG_RED, RESET } from '../../lib/colors';
 import { cliLog } from '../../lib/cli-log';
 
-export interface IndexingStatusCommandOptions {
+export interface IndexingErrorsCommandOptions {
   profileManager?: ProfileManager;
 }
 
@@ -22,13 +22,13 @@ export interface IndexingErrorEntry {
   };
 }
 
-export interface IndexingStatusDocument {
+export interface IndexingErrorsDocument {
   data: IndexingErrorEntry[];
 }
 
-export interface IndexingStatusResult {
+export interface IndexingErrorsResult {
   ok: boolean;
-  document?: IndexingStatusDocument;
+  document?: IndexingErrorsDocument;
   error?: string;
 }
 
@@ -41,17 +41,17 @@ interface SerializedErrorLike {
   [key: string]: unknown;
 }
 
-interface IndexingStatusCliOptions {
+interface IndexingErrorsCliOptions {
   realm: string;
   json?: boolean;
 }
 
 const SHORT_MESSAGE_MAX = 100;
 
-export async function indexingStatus(
+export async function indexingErrors(
   realmUrl: string,
-  options: IndexingStatusCommandOptions = {},
-): Promise<IndexingStatusResult> {
+  options: IndexingErrorsCommandOptions = {},
+): Promise<IndexingErrorsResult> {
   let pm = options.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
@@ -74,7 +74,7 @@ export async function indexingStatus(
       };
     }
 
-    let document = (await response.json()) as IndexingStatusDocument;
+    let document = (await response.json()) as IndexingErrorsDocument;
     return { ok: true, document };
   } catch (err) {
     return {
@@ -98,23 +98,28 @@ export function shortErrorMessage(
   return `${collapsed.slice(0, SHORT_MESSAGE_MAX - 1)}…`;
 }
 
-export function registerIndexingStatusCommand(realm: Command): void {
+export function registerIndexingErrorsCommand(realm: Command): void {
   realm
-    .command('indexing-status')
+    .command('indexing-errors')
     .description(
       'List every card or module in a realm whose latest indexing attempt errored',
     )
     .requiredOption('--realm <realm-url>', 'The realm URL to query')
     .option('--json', 'Output the full JSON-API document')
-    .action(async (opts: IndexingStatusCliOptions) => {
-      let result = await indexingStatus(opts.realm, {});
+    .action(async (opts: IndexingErrorsCliOptions) => {
+      let result = await indexingErrors(opts.realm, {});
 
       if (opts.json) {
-        cliLog.output(JSON.stringify(result.document ?? { data: [] }, null, 2));
+        // Emit a discriminated payload on the error branch so a consumer
+        // reading only stdout can tell "request failed" apart from "the
+        // realm is healthy". Mirroring the failure on stderr + exit(1)
+        // keeps the signal for humans and shell scripts.
         if (!result.ok) {
+          cliLog.output(JSON.stringify({ error: result.error }, null, 2));
           console.error(`${FG_RED}Error:${RESET} ${result.error}`);
           process.exit(1);
         }
+        cliLog.output(JSON.stringify(result.document ?? { data: [] }, null, 2));
         return;
       }
 

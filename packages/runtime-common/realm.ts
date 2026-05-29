@@ -5948,6 +5948,16 @@ export class Realm {
     _request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
+    // Drain any in-flight incremental indexing before reading boxel_index.
+    // With CS-11003's deferred indexing on +source POSTs, a caller that
+    // pushes a fix and immediately polls this endpoint could otherwise
+    // see a stale snapshot — either still reporting an error the just-
+    // pushed fix cleared, or missing a fresh failure from the same write.
+    // Same hazard publishability() guards against (see realm.ts:5629).
+    let pending = this.incrementalIndexing();
+    if (pending) {
+      await pending;
+    }
     let sourceRealmURL = ensureTrailingSlash(this.url);
 
     let rows = (await query(this.#dbAdapter, [

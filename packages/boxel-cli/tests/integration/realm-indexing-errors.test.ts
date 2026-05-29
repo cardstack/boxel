@@ -4,10 +4,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
-  indexingStatus,
+  indexingErrors,
   shortErrorMessage,
   type IndexingErrorEntry,
-} from '../../src/commands/realm/indexing-status';
+} from '../../src/commands/realm/indexing-errors';
 import { ProfileManager } from '../../src/lib/profile-manager';
 import {
   startTestRealmServer,
@@ -41,9 +41,9 @@ afterAll(async () => {
   await stopTestRealmServer();
 });
 
-describe('realm indexing-status (integration)', () => {
+describe('realm indexing-errors (integration)', () => {
   it('returns ok with an empty data array for a healthy realm', async () => {
-    let result = await indexingStatus(realmUrl, { profileManager });
+    let result = await indexingErrors(realmUrl, { profileManager });
     expect(result.ok).toBe(true);
     expect(result.document).toBeDefined();
     expect(Array.isArray(result.document!.data)).toBe(true);
@@ -64,26 +64,29 @@ describe('realm indexing-status (integration)', () => {
     };
     let timingDiagnostics = { invalidationId: 'inv-cli-test-1', ms: 17 };
 
-    for (let table of ['boxel_index', 'boxel_index_working']) {
-      await dbAdapter!.execute(
-        `INSERT INTO ${table}
-           (url, file_alias, type, realm_version, realm_url,
-            has_error, error_doc, timing_diagnostics, is_deleted)
-         VALUES ($1, $2, 'instance', 1, $3,
-                 TRUE, $4::jsonb, $5::jsonb, FALSE)`,
-        {
-          bind: [
-            cardURL,
-            fileAlias,
-            realmUrl,
-            JSON.stringify(errorDoc),
-            JSON.stringify(timingDiagnostics),
-          ],
-        },
-      );
-    }
+    // Seed via direct INSERT rather than fullIndex() because this suite's
+    // noopPrerenderer cannot extract types from `.gts` modules — any
+    // .gts seeded in the fileSystem would land as a "File extract error"
+    // row and poison the empty-realm assertion above. Only `boxel_index`
+    // is needed since the /_indexing-errors endpoint reads it directly.
+    await dbAdapter!.execute(
+      `INSERT INTO boxel_index
+         (url, file_alias, type, realm_version, realm_url,
+          has_error, error_doc, timing_diagnostics, is_deleted)
+       VALUES ($1, $2, 'instance', 1, $3,
+               TRUE, $4::jsonb, $5::jsonb, FALSE)`,
+      {
+        bind: [
+          cardURL,
+          fileAlias,
+          realmUrl,
+          JSON.stringify(errorDoc),
+          JSON.stringify(timingDiagnostics),
+        ],
+      },
+    );
 
-    let result = await indexingStatus(realmUrl, { profileManager });
+    let result = await indexingErrors(realmUrl, { profileManager });
     expect(result.ok).toBe(true);
     expect(result.document!.data.length).toBe(1);
 
@@ -95,7 +98,7 @@ describe('realm indexing-status (integration)', () => {
   });
 
   it('returns ok=false when the realm is unreachable', async () => {
-    let result = await indexingStatus('http://127.0.0.1:1/fake/', {
+    let result = await indexingErrors('http://127.0.0.1:1/fake/', {
       profileManager,
     });
     expect(result.ok).toBe(false);
@@ -105,7 +108,7 @@ describe('realm indexing-status (integration)', () => {
   it('returns NO_ACTIVE_PROFILE_ERROR when no profile is active', async () => {
     let emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-empty-'));
     let emptyManager = new ProfileManager(emptyDir);
-    let result = await indexingStatus(realmUrl, {
+    let result = await indexingErrors(realmUrl, {
       profileManager: emptyManager,
     });
     expect(result.ok).toBe(false);
@@ -121,6 +124,6 @@ describe('realm indexing-status (integration)', () => {
       'multi line message',
     );
     expect(shortErrorMessage(null)).toBe('<no error document>');
-    expect(shortErrorMessage({}).startsWith('<no message>')).toBe(true);
+    expect(shortErrorMessage({})).toBe('<no message>');
   });
 });

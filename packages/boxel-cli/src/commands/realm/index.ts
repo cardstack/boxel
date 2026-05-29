@@ -2,7 +2,7 @@ import type { Command } from 'commander';
 import { registerCancelIndexingCommand } from './cancel-indexing';
 import { registerCreateCommand } from './create';
 import { registerHistoryCommand } from './history';
-import { registerIndexingStatusCommand } from './indexing-status';
+import { registerIndexingErrorsCommand } from './indexing-errors';
 import { registerListCommand } from './list';
 import { registerMilestoneCommand } from './milestone';
 import { registerPublishCommand } from './publish';
@@ -23,7 +23,7 @@ export function registerRealmCommand(program: Command): void {
   registerCancelIndexingCommand(realm);
   registerCreateCommand(realm);
   registerHistoryCommand(realm);
-  registerIndexingStatusCommand(realm);
+  registerIndexingErrorsCommand(realm);
   registerListCommand(realm);
   registerMilestoneCommand(realm);
   registerPublishCommand(realm);
