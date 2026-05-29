@@ -2638,39 +2638,57 @@
           "type": "constant"
         },
         {
+          "current": {},
           "datasource": {
             "type": "cloudwatch",
             "uid": "cef5x9o3yzawwf"
           },
-          "definition": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "definition": "regions()",
           "hide": 2,
+          "includeAll": false,
+          "label": "Region",
+          "name": "region",
+          "options": [],
+          "query": "regions()",
+          "refresh": 1,
+          "regex": "",
+          "skipUrlSync": true,
+          "type": "query"
+        },
+        {
+          "current": {},
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "cef5x9o3yzawwf"
+          },
+          "definition": "dimension_values($region,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "hide": 0,
           "includeAll": false,
           "label": "Prerender Manager ALB",
           "multi": false,
           "name": "prerender_manager_lb",
           "options": [],
-          "query": "dimension_values(default,AWS/ApplicationELB,RequestCount,LoadBalancer)",
+          "query": "dimension_values($region,AWS/ApplicationELB,RequestCount,LoadBalancer)",
           "refresh": 1,
           "regex": "/prerender[-_]?(manager|mgr)/i",
-          "skipUrlSync": true,
           "sort": 1,
           "type": "query"
         },
         {
+          "current": {},
           "datasource": {
             "type": "cloudwatch",
             "uid": "cef5x9o3yzawwf"
           },
-          "definition": "dimension_values(default,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
-          "hide": 2,
+          "definition": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
+          "hide": 0,
           "includeAll": false,
           "label": "Prerender Manager target group",
           "multi": false,
           "name": "prerender_manager_tg",
           "options": [],
-          "query": "dimension_values(default,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
+          "query": "dimension_values($region,AWS/ApplicationELB,HealthyHostCount,TargetGroup,{\"LoadBalancer\":\"$prerender_manager_lb\"})",
           "refresh": 1,
-          "skipUrlSync": true,
           "sort": 1,
           "type": "query"
         }
