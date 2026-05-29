@@ -137,8 +137,8 @@ module(basename(__filename), function (hooks) {
       browserManager,
       boxelHostURL: 'http://localhost:4200',
       // Large on purpose: the early-abort must not depend on this firing.
-      // If the abort regresses, the stuck first attempt waits this long and
-      // the QUnit timeout below trips deterministically.
+      // If the abort regresses, each poisoned attempt waits this long and the
+      // creation chain can't finish anywhere near the deadlines below.
       standbyTimeoutMs: 30_000,
       disableFileAdmission: true,
     });
@@ -146,46 +146,43 @@ module(basename(__filename), function (hooks) {
     return pool;
   }
 
-  test('standby creation recovers fast from a transient cert-verifier change', async function (assert) {
-    // The first standby is poisoned by the verifier transient and never
-    // boots; with maxPages:1 it owns the only pool slot. Without the
-    // early-abort, `getPage` cannot get a tab until that attempt times out
-    // (`standbyTimeoutMs`, 30s above) and the retry boots. With it, the
-    // poisoned attempt is discarded the instant the failure is seen and
-    // the retried standby boots in milliseconds.
+  test('a cert-verifier change aborts standby loading instead of stalling on the timeout', async function (assert) {
+    // Every standby load is poisoned on a script and never boots, so no
+    // booting standby can leak through the pool's concurrent refill — the
+    // only observable is how long the creation chain takes to give up.
+    // `warmStandbys` awaits that chain to completion: with the early-abort
+    // each attempt is discarded the instant the failure is seen, so the
+    // retries exhaust within ~a second; without it every attempt waits out
+    // the full `standbyTimeoutMs` (30s above), so the chain can't finish
+    // anywhere near the deadline below.
+    //
+    // An explicit race (rather than `assert.timeout`) keeps a regression a
+    // clean assertion here instead of letting the 30s attempts linger and
+    // assert after the test finished. Both branches resolve to a `settled`
+    // flag so the outcome is always reported by the assertion, never thrown.
     let browserManager = makeBrowserStub({
-      // First context poisoned on a script and never boots; the retry,
-      // created once the verifier has settled, boots normally.
-      pageOptionsForAttempt: (attempt) =>
-        attempt === 0
-          ? {
-              emitCertVerifierFailure: true,
-              failedResourceType: 'script',
-              boots: false,
-            }
-          : { emitCertVerifierFailure: false, boots: true },
+      pageOptionsForAttempt: () => ({
+        emitCertVerifierFailure: true,
+        failedResourceType: 'script',
+        boots: false,
+      }),
     });
     let pool = makePool(browserManager);
 
-    // Race against an explicit deadline rather than `assert.timeout` so a
-    // regression fails as a clean assertion here instead of letting the
-    // 30s standby attempt linger and assert after the test finished. The
-    // margin is generous against the sub-second happy path yet far below
-    // the 30s stall a dropped early-abort would produce.
-    let getPage = pool.getPage('A');
-    getPage.catch(() => {}); // swallow late rejection if the deadline wins
-    let result = await Promise.race([
-      getPage.then((page) => ({ page })),
-      new Promise<{ page: undefined }>((resolve) =>
-        setTimeout(() => resolve({ page: undefined }), 8_000),
+    let outcome = await Promise.race([
+      pool.warmStandbys().then(
+        () => ({ settled: true }),
+        () => ({ settled: true }),
+      ),
+      new Promise<{ settled: false }>((resolve) =>
+        setTimeout(() => resolve({ settled: false }), 8_000),
       ),
     ]);
 
-    assert.ok(
-      result.page,
-      'getPage recovers and resolves well before the standby timeout',
+    assert.true(
+      outcome.settled,
+      'standby loading gives up fast (early-abort) rather than stalling on the 30s timeout',
     );
-    result.page?.release();
   });
 
   test('a non-critical cert-verifier failure does not abort the readiness wait', async function (assert) {

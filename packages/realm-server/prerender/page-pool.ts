@@ -1524,18 +1524,32 @@ export class PagePool {
     fn: () => Promise<T>,
     pageId: string,
   ): Promise<T> {
-    let result: T | { timeout: true } = await Promise.race([
-      fn(),
-      new Promise<{ timeout: true }>((resolve) =>
-        setTimeout(() => resolve({ timeout: true }), this.#standbyTimeoutMs),
-      ),
-    ]);
-    if (result && typeof result === 'object' && 'timeout' in result) {
-      let message = `Standby page ${pageId} timed out after ${this.#standbyTimeoutMs}ms`;
-      log.error(message);
-      throw new Error(message);
+    // Clear the timer once `fn` settles (resolve OR reject) so a fast
+    // outcome — including the cert-verifier early-abort — doesn't leave a
+    // standbyTimeoutMs-long timer pending, which would otherwise keep the
+    // event loop alive well past the work it was guarding.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      let result: T | { timeout: true } = await Promise.race([
+        fn(),
+        new Promise<{ timeout: true }>((resolve) => {
+          timer = setTimeout(
+            () => resolve({ timeout: true }),
+            this.#standbyTimeoutMs,
+          );
+        }),
+      ]);
+      if (result && typeof result === 'object' && 'timeout' in result) {
+        let message = `Standby page ${pageId} timed out after ${this.#standbyTimeoutMs}ms`;
+        log.error(message);
+        throw new Error(message);
+      }
+      return result;
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
     }
-    return result;
   }
 
   #touchLRU(affinityKey: string) {
