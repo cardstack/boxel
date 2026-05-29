@@ -70,13 +70,17 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
 
-// The label's outward growth is bounded by the enclosing
-// AdornContext. The context aligns with the visible outer container
-// of adorn-decorated items (the operator-mode overlay row, a search-
-// results list, a card-chooser grid), so its bounding rect is the
-// region the label may extend into.
+// The label's outward growth is bounded by the visible outer
+// container of adorn-decorated items. We find that container by
+// walking up to the closest `<AdornContext>` marker, then taking
+// its parent element: AdornContext itself renders as
+// `display: contents` so it doesn't disrupt the consumer's layout,
+// which means its own bounding rect is empty — but its parent is
+// the element the consumer mounted the context inside of, and
+// that's the visual region we want.
 function findAdornLabelBoundary(cardEl: HTMLElement): HTMLElement | null {
-  return cardEl.closest<HTMLElement>('.adorn-context');
+  let marker = cardEl.closest<HTMLElement>('.adorn-context');
+  return marker?.parentElement ?? null;
 }
 
 // Adorn's `@compact` variant shrinks the label and selection chip

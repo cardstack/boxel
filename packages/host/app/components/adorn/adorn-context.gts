@@ -15,24 +15,31 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 //     (the rules respond to both `:hover` and an explicit `.hovered`
 //     class so consumers that drive hover from JS can opt in too).
 //   - Marks the bounding region for dynamic label positioning. The
-//     `<AdornLabel>` component's overflow-tracking modifier finds
-//     the closest enclosing `.adorn-context` and uses that
-//     element's bounding rect as the boundary the label must stay
-//     inside.
+//     overflow-tracking machinery walks up from the hovered card to
+//     the closest `<AdornContext>`, then uses the **parent** of the
+//     context as the boundary — AdornContext itself renders as
+//     `display: contents`, so its own rect is empty, but its parent
+//     is the visible container the consumer mounted it inside of.
 //
-// Consumers wrap a list of adornable items once and render
-// `<AdornLabel>` / `<AdornSelectChip>` directly inside each item.
+// Mount AdornContext as a child of whatever visible element should
+// bound label growth (operator-mode mounts it inside the stack
+// item's content area; the search results pane mounts it inside the
+// search-sheet content; the card chooser inside the catalog modal).
+// Then render `<AdornLabel>` / `<AdornSelectChip>` directly inside
+// each item.
 //
 // Usage:
 //
-//   <AdornContext>
-//     {{#each cards as |card|}}
-//       <div class={{cn 'my-card adorn-stroke' selected=card.selected}}>
-//         <AdornLabel><:text>{{card.typeName}}</:text></AdornLabel>
-//         <AdornSelectChip @selected={{card.selected}} />
-//       </div>
-//     {{/each}}
-//   </AdornContext>
+//   <div class='outer-container'>
+//     <AdornContext>
+//       {{#each cards as |card|}}
+//         <div class={{cn 'my-card adorn-stroke' selected=card.selected}}>
+//           <AdornLabel><:text>{{card.typeName}}</:text></AdornLabel>
+//           <AdornSelectChip @selected={{card.selected}} />
+//         </div>
+//       {{/each}}
+//     </AdornContext>
+//   </div>
 interface AdornContextSignature {
   Element: HTMLDivElement;
   Blocks: {
