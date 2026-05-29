@@ -69,6 +69,8 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import consumeContext from '../../helpers/consume-context';
 
+import { removeFileExtension } from '../../utils/card-search/types';
+
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import NeighborStackTriggerButton, {
@@ -569,10 +571,16 @@ export default class InteractSubmode extends Component {
     async (selectedCards: CardDefOrId[], stackItem: StackItem) => {
       let waiterToken = waiter.beginAsync();
       try {
+        // Prerendered-card IDs arrive with the `.json` file extension on
+        // them, but the canonical card id (and `cardToDelete.id` in the
+        // delete handler) is the extensionless URL. Strip the extension
+        // here so prune-on-delete and copy lookups match.
         let ids = selectedCards
-          .map((cardDefOrId) =>
-            typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id,
-          )
+          .map((cardDefOrId) => {
+            let raw =
+              typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
+            return raw ? removeFileExtension(raw) : undefined;
+          })
           .filter(Boolean) as string[];
 
         let selected = cardSelections.get(stackItem);
