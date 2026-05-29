@@ -407,10 +407,10 @@ export default class CardPrerender extends Component {
           // search_doc._cardType=null and the cards-grid "All Cards" filter
           // (not eq _cardType=Cards Grid) excludes them — invisible errors
           // that the user can never click into.
-          if (!cardError.cardType) {
+          if (cardError && !cardError.cardType) {
             let primed = this.#cardTypeTracker.get(context);
             if (primed) {
-              cardError = { ...cardError, cardType: primed };
+              cardError.cardType = primed;
             }
           }
           this.store.resetCache();
