@@ -694,7 +694,11 @@ module(basename(__filename), function () {
               static displayName = "Home";
             }
           `);
-        assert.strictEqual(moduleResponse.status, 204, 'source home module written');
+        assert.strictEqual(
+          moduleResponse.status,
+          204,
+          'source home module written',
+        );
 
         let instanceResponse = await request
           .post(`${sourceRealmPath}home.json`)
@@ -708,7 +712,11 @@ module(basename(__filename), function () {
               },
             }),
           );
-        assert.strictEqual(instanceResponse.status, 204, 'source home instance written');
+        assert.strictEqual(
+          instanceResponse.status,
+          204,
+          'source home instance written',
+        );
 
         let publishResponse = await request
           .post('/_publish-realm')
@@ -742,7 +750,12 @@ module(basename(__filename), function () {
           async () => {
             let rows = await dbAdapter.execute(
               `SELECT 1 FROM boxel_index WHERE realm_url = $1 AND url = $2 LIMIT 1`,
-              { bind: [resolvedPublishedRealmURL, `${resolvedPublishedRealmURL}home.gts`] },
+              {
+                bind: [
+                  resolvedPublishedRealmURL,
+                  `${resolvedPublishedRealmURL}home.gts`,
+                ],
+              },
             );
             return rows.length > 0 ? rows : undefined;
           },
