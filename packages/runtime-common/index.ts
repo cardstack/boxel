@@ -1233,4 +1233,3 @@ export {
   type BotCommandFilter,
   type BotCommandMatrixFilter,
 } from './bot-command';
-export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

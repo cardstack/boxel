@@ -52,7 +52,7 @@ import {
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_LLM,
+  DEFAULT_FALLBACK_MODEL_ID,
 } from '../matrix-constants';
 import { decodeCommandRequest } from '../commands';
 import type { CommandRequest } from '../commands';
@@ -2250,7 +2250,7 @@ function getActiveLLMDetails(eventlist: DiscreteMatrixEvent[]): {
   ) as ActiveLLMEvent | undefined;
   if (!activeLLMEvent) {
     return {
-      model: DEFAULT_LLM,
+      model: DEFAULT_FALLBACK_MODEL_ID,
       toolsSupported: undefined,
       reasoningEffort: undefined,
     };
