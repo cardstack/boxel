@@ -499,7 +499,6 @@ export class SearchResource<
           throw err;
         }
         // DIAGNOSTIC LOGGING (CS-11221).
-        // eslint-disable-next-line no-console
         console.error('[CS-11221 DIAG] search task caught error', {
           query: JSON.stringify(query),
           realms: this.realmsToSearch,

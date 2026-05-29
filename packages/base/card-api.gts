@@ -1228,7 +1228,6 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        // eslint-disable-next-line no-console
         console.error(
           '[CS-11221 DIAG] linksTo getter returning undefined (bucket sentinel)',
           {
@@ -1675,7 +1674,6 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       let bucketEntry = deserialized.get(this.name);
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes.
-        // eslint-disable-next-line no-console
         console.error(
           '[CS-11221 DIAG] linksToMany getter returning emptyValue (bucket sentinel)',
           {

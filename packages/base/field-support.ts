@@ -704,7 +704,6 @@ export function getBrokenLinks(
           // reading `instance.id` here would write the `id` field's
           // emptyValue into the bucket and violate the pure-read contract
           // the surrounding `getBrokenLinks` upholds.
-          // eslint-disable-next-line no-console
           console.error('[CS-11221 DIAG] getBrokenLinks finding', {
             ownerType: instance?.constructor?.name,
             fieldName,

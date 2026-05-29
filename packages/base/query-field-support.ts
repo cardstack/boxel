@@ -258,7 +258,6 @@ function surfaceSearchResourceErrorState(
   // DIAGNOSTIC LOGGING (CS-11221) — remove after CI passes. Don't read
   // `instance.id` here: the field getter for `id` initializes the bucket
   // via emptyValue, violating the pure-read contract callers depend on.
-  // eslint-disable-next-line no-console
   console.error('[CS-11221 DIAG] surface plant sentinel', {
     fieldName: field.name,
     ownerType: instance?.constructor?.name,
