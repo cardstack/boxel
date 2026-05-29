@@ -2527,5 +2527,81 @@ module(basename(__filename), function () {
         'reader hit the cache the pre-warm wrote — no second prerender',
       );
     });
+
+    test('pre-warm does not persist error entries for modules that fail to prerender', async function (assert) {
+      // The realm-wide `.gts`/`.gjs` sweep speculatively warms every card
+      // module, so it also touches `.gts` files that aren't cards and fail
+      // to prerender (a non-card `realm.gts`). A non-missing prerender
+      // error must NOT be persisted — that would pollute the modules cache
+      // with error rows no reader asked for.
+      let erroringModule = `${realmURL}realm.gts`;
+      let errorPrerenderer: Prerenderer = {
+        async prerenderModule(args: ModulePrerenderArgs) {
+          prerenderModuleCalls++;
+          return Promise.resolve({
+            id: args.url,
+            status: 'error',
+            nonce: '12345',
+            isShimmed: false,
+            lastModified: +new Date(),
+            createdAt: +new Date(),
+            deps: [],
+            definitions: {},
+            error: {
+              type: 'module-error',
+              error: {
+                id: args.url,
+                message: 'simulated non-card module render failure',
+                status: 500,
+                title: 'Module error',
+                deps: [],
+                additionalErrors: null,
+              },
+            },
+          }) as Promise<ModuleRenderResponse>;
+        },
+        async prerenderVisit() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+      };
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        errorPrerenderer,
+        createVirtualNetwork(),
+        testCreatePrerenderAuth,
+      );
+
+      let entry = await workerLookup.populateDefinitionCacheEntry({
+        moduleURL: erroringModule,
+        realmURL,
+        resolvedRealmURL: realmURL,
+        cacheScope: 'realm-auth',
+        cacheUserId: testUserId,
+        prerenderUserId: testUserId,
+        priority: 0,
+      });
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'pre-warm did attempt the prerender',
+      );
+      assert.strictEqual(
+        entry,
+        undefined,
+        'pre-warm returns undefined for a module that failed to prerender',
+      );
+      let rows = await adapter.execute(
+        `SELECT url, error_doc FROM modules WHERE url = $1`,
+        { bind: [erroringModule] },
+      );
+      assert.strictEqual(
+        rows.length,
+        0,
+        'pre-warm persisted no row (no error_doc) for the failed module',
+      );
+    });
   });
 });

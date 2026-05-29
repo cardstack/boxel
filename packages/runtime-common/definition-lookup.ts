@@ -496,6 +496,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.loadDefinitionCacheEntry({
       ...args,
       moduleURL: canonicalURL(args.moduleURL, undefined, this.#virtualNetwork),
+      // Pre-warm is speculative and best-effort: the IndexRunner sweeps
+      // every realm `.gts`/`.gjs` to prime sibling card modules, so it
+      // also touches modules that aren't cards and fail to prerender
+      // (e.g. a non-card `realm.gts`). Persisting those errors would
+      // pollute the modules cache with rows no reader asked for. Skip
+      // error persistence here; if a module is genuinely needed and
+      // genuinely errors, the on-demand lookup during the visit phase
+      // re-derives and caches the error.
+      skipErrorPersist: true,
     });
   }
 
@@ -511,6 +520,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
     let key = inFlightKey(args);
     let existing = this.#inFlight.get(key);
@@ -585,6 +595,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId: string;
       prerenderUserId: string;
       priority?: number;
+      skipErrorPersist?: boolean;
     },
     coordinator: PopulateCoordinator,
   ): Promise<DefinitionCacheEntry | undefined> {
@@ -634,6 +645,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId,
     prerenderUserId,
     priority,
+    skipErrorPersist,
   }: {
     moduleURL: string;
     realmURL: string;
@@ -642,6 +654,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
     // Snapshot invalidation generations BEFORE the first await.
     // clearRealmDefinitions (and any future synchronous bump) runs entirely before
@@ -686,6 +699,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         this.isMissingModuleError(response, candidateURL)
       ) {
         continue;
+      }
+      if (skipErrorPersist && response.status === 'error') {
+        // Speculative pre-warm: don't leave error state behind for a
+        // module that failed to prerender. Returning here without
+        // persisting reverts to the same outcome as a pre-warm miss —
+        // the visit phase re-derives and caches the error if the module
+        // is genuinely needed.
+        return undefined;
       }
       if (this.generationChanged(resolvedRealmURL, moduleURL, startSnapshot)) {
         // Invalidate (or a wider cache wipe) ran while we were prerendering.
