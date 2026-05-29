@@ -66,7 +66,7 @@ export interface BrokenLinkSummary {
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
-// `boxel_index.timing_diagnostics`. All fields optional — older host
+// `boxel_index.diagnostics`. All fields optional — older host
 // builds that predate the counters omit the block entirely.
 export interface PrerenderMetaDiagnostics {
   // Number of `computeVia` invocations that ran during the
@@ -85,7 +85,7 @@ export interface PrerenderMetaDiagnostics {
   searchDocMs?: number;
   // Broken `linksTo` / `linksToMany` targets found on the rendered
   // instance after the store settled. Captured by the render.meta scan
-  // and persisted to `boxel_index.timing_diagnostics.brokenLinks` so
+  // and persisted to `boxel_index.diagnostics.brokenLinks` so
   // cards-with-broken-links are cheaply enumerable. Omitted entirely
   // when the card has no broken links.
   brokenLinks?: BrokenLinkSummary[];
@@ -101,7 +101,7 @@ export interface PrerenderMeta {
   types: string[] | null;
   // Optional host-side timing block. The Prerenderer lifts this onto
   // `response.meta.diagnostics` so it persists to
-  // `boxel_index.timing_diagnostics` for SQL-side perf triage.
+  // `boxel_index.diagnostics` for SQL-side perf triage.
   diagnostics?: PrerenderMetaDiagnostics;
 }
 
@@ -263,7 +263,7 @@ export interface RenderTimeoutDiagnostics {
       // — e.g. a priority-10 file render stuck behind a priority-0
       // module call sticks out cleanly. Optional in the schema even
       // though fresh producers always emit a value: the same shape is
-      // deserialized from `boxel_index.timing_diagnostics`, where rows
+      // deserialized from `boxel_index.diagnostics`, where rows
       // persisted before priority threading landed will lack the
       // field. Consumers should treat absent as `0`.
       priority?: number;
@@ -271,7 +271,7 @@ export interface RenderTimeoutDiagnostics {
   };
   // Host-emitted computed-field counters lifted out of
   // PrerenderMeta.diagnostics so they ride alongside the existing
-  // server-observed timings in `boxel_index.timing_diagnostics`.
+  // server-observed timings in `boxel_index.diagnostics`.
   computedCalls?: number;
   computedCacheHits?: number;
   serializeMs?: number;
@@ -284,7 +284,7 @@ export interface RenderError extends ErrorEntry {
   // in-flight loads, blocked-timer summary, etc.) produced by
   // `withTimeout`. The Prerenderer lifts these onto
   // `response.meta.diagnostics` before returning, where the indexer
-  // picks them up and persists them into `timing_diagnostics`. The
+  // picks them up and persists them into `diagnostics`. The
   // field is dropped from the final response — callers should read
   // `response.meta.diagnostics` instead.
   diagnostics?: RenderTimeoutDiagnostics;
@@ -346,7 +346,7 @@ export interface ModulePrerenderModel {
 
 export interface ModuleRenderResponse extends ModulePrerenderModel {
   // Server-observed timing breakdown, carried in the response body
-  // so the indexer can persist it onto `boxel_index.timing_diagnostics`
+  // so the indexer can persist it onto `boxel_index.diagnostics`
   // for both in-process and remote prerender paths without needing a
   // separate side channel.
   meta?: PrerenderResponseMeta;
@@ -360,7 +360,7 @@ export interface PrerenderResponseMeta {
   // blocked-timer summary, etc.). Populated by the Prerenderer from
   // both its own timing measurements and any `RenderError.diagnostics`
   // lifted out of embedded errors. The indexer picks this up, merges
-  // in the HTTP `requestId`, and persists into `timing_diagnostics`.
+  // in the HTTP `requestId`, and persists into `diagnostics`.
   diagnostics?: RenderTimeoutDiagnostics;
   // HTTP correlation ID stamped by the prerender server's Koa layer.
   // Lets operators join client → manager → prerender-server logs for
@@ -368,14 +368,17 @@ export interface PrerenderResponseMeta {
   requestId?: string;
 }
 
-// The shape persisted to `boxel_index.timing_diagnostics`. Extends
-// `RenderTimeoutDiagnostics` (which already carries `requestId`) with
-// two write-side stamps applied at `IndexWriter.updateEntry` time:
+// The shape persisted to `boxel_index.diagnostics`. Named `Diagnostics`
+// (not `TimingDiagnostics`) because the block is no longer purely about
+// timing: it also carries `brokenLinks`, the broken-link findings the
+// render surfaced. Extends `RenderTimeoutDiagnostics` (which already
+// carries `requestId`) with two write-side stamps applied at
+// `IndexWriter.updateEntry` time:
 //
 //   - `invalidationId` — one UUID per `Batch`; every row touched by
 //     the same indexing pass (incremental fan-out or fromScratch)
 //     shares it, so operators can `SELECT ... WHERE
-//     timing_diagnostics->>'invalidationId' = '<id>'` and see the
+//     diagnostics->>'invalidationId' = '<id>'` and see the
 //     whole batch.
 //   - `indexedAt` — wall-clock the write happened.
 //
@@ -384,7 +387,7 @@ export interface PrerenderResponseMeta {
 // write-side stamps come from the IndexWriter. Any stage may skip
 // pieces that aren't applicable (e.g. non-timeout renders have no
 // `renderStage`, in-process callers have no `requestId`).
-export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
+export interface Diagnostics extends RenderTimeoutDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
   // Broken-link findings lifted from the render.meta `diagnostics` block
@@ -395,14 +398,14 @@ export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to
-// `*.timing_diagnostics` columns. Keeps the rich host-side payload (from
+// `*.diagnostics` columns. Keeps the rich host-side payload (from
 // `meta.diagnostics`) at the top level and promotes the HTTP `requestId`
 // alongside it for jsonb-path querying. Returns `undefined` when there's
 // nothing to persist. Used by both the indexer (boxel_index rows) and the
 // definition-lookup module-cache writer (modules rows).
 export function flattenPrerenderMeta(
   meta: PrerenderResponseMeta | undefined,
-): TimingDiagnostics | undefined {
+): Diagnostics | undefined {
   if (!meta) return undefined;
   let diagnostics = meta.diagnostics ?? {};
   let hasRequestId = meta.requestId != null;
@@ -514,7 +517,7 @@ export interface RenderVisitResponse {
   pageUnusableError?: RenderError;
   // See ModuleRenderResponse.meta — server-observed timing breakdown
   // embedded in the response so the indexer can persist it to
-  // `boxel_index.timing_diagnostics`.
+  // `boxel_index.diagnostics`.
   meta?: PrerenderResponseMeta;
 }
 

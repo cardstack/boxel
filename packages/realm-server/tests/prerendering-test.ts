@@ -1452,7 +1452,7 @@ module(basename(__filename), function () {
         // the settled instance, attaches the findings to its diagnostics
         // block, and the Prerenderer lifts that onto
         // `response.meta.diagnostics` — exactly the blob the indexer flattens
-        // into `boxel_index.timing_diagnostics`.
+        // into `boxel_index.diagnostics`.
         let result = await prerenderer.prerenderVisit({
           affinityType: 'realm',
           affinityValue: realmURL,
@@ -2192,7 +2192,7 @@ module(basename(__filename), function () {
         // block so operators can classify the stall. Diagnostics
         // live on `response.meta.diagnostics` (the consolidated
         // channel — the indexer reads from there and persists into
-        // `boxel_index.timing_diagnostics`, mirroring to
+        // `boxel_index.diagnostics`, mirroring to
         // `error_doc.diagnostics` at write time for UI compat).
         let diagnostics = (timedOut.response as any)?.meta?.diagnostics;
         assert.strictEqual(
@@ -2309,7 +2309,7 @@ module(basename(__filename), function () {
 
           // Diagnostics live on `response.meta.diagnostics` — the
           // consolidated channel the indexer reads from and persists
-          // onto `boxel_index.timing_diagnostics` (mirrored to
+          // onto `boxel_index.diagnostics` (mirrored to
           // `error_doc.diagnostics` for UI compat).
           let diagnostics = (result.response as any)?.meta?.diagnostics;
           assert.strictEqual(

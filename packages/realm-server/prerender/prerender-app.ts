@@ -41,7 +41,7 @@ const defaultPrerenderServerPort = 4221;
 
 // Stamp the per-request `requestId` onto `response.meta.requestId`
 // so it flows through the same channel as timings / host-side
-// diagnostics and ends up on `boxel_index.timing_diagnostics` for
+// diagnostics and ends up on `boxel_index.diagnostics` for
 // cross-log grepping. The launch/waits/render/total timings are
 // already attached inside Prerenderer (regardless of HTTP vs
 // in-process); this layer just adds the HTTP-only correlation id.

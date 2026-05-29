@@ -29,7 +29,7 @@ export interface SerializedError {
   stack?: string;
   // Structured render-timeout diagnostics (e.g. launchMs, waits,
   // renderStage, queryLoadsInFlight). The source of truth is the
-  // `boxel_index.timing_diagnostics` column; the IndexWriter copies
+  // `boxel_index.diagnostics` column; the IndexWriter copies
   // the payload onto this field when persisting an error row so the
   // existing UI read path (formattedError → CardErrorJSONAPI.meta.
   // diagnostics) continues to work unchanged.

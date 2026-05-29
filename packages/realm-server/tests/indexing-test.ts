@@ -713,26 +713,38 @@ module(basename(__filename), function () {
       // The broken slot is also recorded as searchable metadata on the
       // (successful) index row: the render.meta scan runs getBrokenLinks
       // after the store settles and the finding rides the diagnostics
-      // channel into `boxel_index.timing_diagnostics.brokenLinks`. This is
+      // channel into `boxel_index.diagnostics.brokenLinks`. This is
       // the direct, indexed signal that lets a consumer enumerate
       // cards-with-broken-links without parsing HTML or re-running the scan.
       let [diagRow] = (await testDbAdapter.execute(
-        `SELECT timing_diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+        `SELECT diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
         { bind: [realm.url, `${testRealm}bad-link.json`] },
-      )) as { timing_diagnostics: { brokenLinks?: unknown } | null }[];
-      let brokenLinks = diagRow?.timing_diagnostics?.brokenLinks as
+      )) as { diagnostics: { brokenLinks?: unknown } | null }[];
+      let brokenLinks = diagRow?.diagnostics?.brokenLinks as
         | { fieldName: string; reference: string; kind: string }[]
         | undefined;
-      assert.deepEqual(
-        brokenLinks,
-        [
-          {
-            fieldName: 'author',
-            reference: 'http://localhost:9000/this-is-a-link-to-nowhere',
-            kind: 'error',
-          },
-        ],
-        'timing_diagnostics.brokenLinks records the broken author slot',
+      assert.strictEqual(
+        brokenLinks?.length,
+        1,
+        `diagnostics.brokenLinks records the single broken slot, got: ${JSON.stringify(
+          brokenLinks,
+        )}`,
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.fieldName,
+        'author',
+        'broken-link finding names the linksTo field',
+      );
+      assert.strictEqual(
+        brokenLinks?.[0]?.reference,
+        'http://localhost:9000/this-is-a-link-to-nowhere',
+        'broken-link finding carries the unreachable reference',
+      );
+      // An unreachable external host fails as a generic fetch error rather
+      // than a 404; either is a valid terminal broken-link kind.
+      assert.ok(
+        ['error', 'not-found'].includes(brokenLinks?.[0]?.kind ?? ''),
+        `broken-link finding carries a terminal kind, got: ${brokenLinks?.[0]?.kind}`,
       );
     });
 

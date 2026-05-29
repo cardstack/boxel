@@ -11,7 +11,7 @@ import {
   type LocalPath,
   type LooseCardResource,
   type RenderResponse,
-  type TimingDiagnostics,
+  type Diagnostics,
 } from '../index';
 import {
   CardError,
@@ -38,8 +38,8 @@ export interface CardIndexerOptions {
   // by the fused indexer.
   precomputedRenderResult: RenderResponse;
   // Timing / diagnostic payload attached to the fused-visit
-  // response; persisted onto `boxel_index.timing_diagnostics`.
-  timingDiagnostics?: TimingDiagnostics;
+  // response; persisted onto `boxel_index.diagnostics`.
+  diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -59,7 +59,7 @@ export async function performCardIndexing({
   auth: _auth,
   jobInfo,
   precomputedRenderResult,
-  timingDiagnostics,
+  diagnostics,
   dependencyResolver,
   updateEntry,
   logWarn,
@@ -199,7 +199,7 @@ export async function performCardIndexing({
     logWarn(
       `${jobIdentity(jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
     );
-    await updateEntry(instanceURL, { ...renderError, timingDiagnostics });
+    await updateEntry(instanceURL, { ...renderError, diagnostics });
     return;
   }
 
@@ -244,7 +244,7 @@ export async function performCardIndexing({
         typeof searchDoc?._cardType === 'string'
           ? searchDoc._cardType
           : undefined,
-      timingDiagnostics,
+      diagnostics,
     });
     return;
   }
@@ -265,6 +265,6 @@ export async function performCardIndexing({
     types: types!,
     displayNames: displayNames ?? [],
     deps,
-    timingDiagnostics,
+    diagnostics,
   });
 }

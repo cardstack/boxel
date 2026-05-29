@@ -145,7 +145,7 @@ export default class RenderMetaRoute extends Route<Model> {
     // retriggering a load. The card still indexes as `type='instance'`
     // (the broken slot renders a placeholder); this block is the only
     // direct, indexed signal of which slots are broken, persisted to
-    // `boxel_index.timing_diagnostics.brokenLinks`. Guarded like the
+    // `boxel_index.diagnostics.brokenLinks`. Guarded like the
     // compute-pass hooks above: a stale base/card-api build loaded during
     // a cold boot may predate the export, in which case we omit the
     // findings and the render still produces a correct meta doc.

@@ -8,7 +8,7 @@ import { decorateRenderErrorDiagnostics } from '../prerender/prerender-app';
 // breadcrumbs lifted from `RenderError.diagnostics`, and the HTTP
 // correlation ID) ends up on `response.meta`, not on any embedded
 // inner `SerializedError`. The indexer reads from `response.meta`
-// and persists into `boxel_index.timing_diagnostics`; the error-row
+// and persists into `boxel_index.diagnostics`; the error-row
 // write path also copies the same blob onto `error_doc.diagnostics`
 // so the UI read surface (CardErrorJSONAPI.meta.diagnostics) keeps
 // working without a schema rename. The point of these tests is to
@@ -168,7 +168,7 @@ module(basename(__filename), function () {
 
     test('decorator populates response.meta even when there is no embedded error (successful render)', function (assert) {
       // Successful renders still get timing summaries so the indexer
-      // can persist them onto `timing_diagnostics` — that's the whole
+      // can persist them onto `diagnostics` — that's the whole
       // point of the consolidated column: operators can retrospectively
       // ask "why did this instance take N seconds?" regardless of
       // error status.
@@ -191,7 +191,7 @@ module(basename(__filename), function () {
       // but render.meta records the broken slot on the card's success-path
       // diagnostics block. The decorator must lift that onto
       // response.meta.diagnostics — the consolidated channel the indexer
-      // flattens into `boxel_index.timing_diagnostics.brokenLinks`.
+      // flattens into `boxel_index.diagnostics.brokenLinks`.
       let response: FakeVisitResponse = {
         card: {
           diagnostics: {
