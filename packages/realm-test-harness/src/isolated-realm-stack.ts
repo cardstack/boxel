@@ -328,15 +328,24 @@ export async function startCompatRealmProxy({
         // timeout and the proxy's stopAbort signal so a hung handoff
         // still surfaces a 503 (not an indefinite wait).
         let timedOut = false;
-        await Promise.race([
-          targetReady,
-          new Promise<void>((resolveTimeout) =>
-            setTimeout(() => {
-              timedOut = true;
-              resolveTimeout();
-            }, PROXY_TARGET_WAIT_TIMEOUT_MS),
-          ),
-        ]);
+        let waitTimer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            targetReady,
+            new Promise<void>((resolveTimeout) => {
+              waitTimer = setTimeout(() => {
+                timedOut = true;
+                resolveTimeout();
+              }, PROXY_TARGET_WAIT_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          // Clear the timer whenever `targetReady` wins the race — an
+          // un-cleared 30s timer keeps the event loop (and the Playwright
+          // worker) alive past teardown. Harmless when the timer is the
+          // one that fired.
+          clearTimeout(waitTimer);
+        }
         if (stopping || timedOut || targetPort == null) {
           res.statusCode = 503;
           res.setHeader('content-type', 'text/plain; charset=utf-8');
