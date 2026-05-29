@@ -13,6 +13,7 @@ import {
   SupportedMimeType,
   jobIdentity,
   Deferred,
+  isBrowserTestEnv,
   RealmPaths,
   type IndexWriter,
   type Batch,
@@ -599,6 +600,19 @@ export class IndexRunner {
     invalidations: URL[],
     allRealmCardModules: string[] = [],
   ): Promise<void> {
+    // Pre-warm exists to keep the prerender server's affinity-scoped tab
+    // pool from deadlocking when a mid-render `lookupDefinition` fires a
+    // same-affinity sub-`prerenderModule`. The in-browser realm (host
+    // tests run a Realm + IndexRunner inside a Chrome tab) has no separate
+    // prerender server and no tab pool, so pre-warm is pointless there.
+    // It is also actively harmful: the in-browser realm shares the global
+    // card-reference prefix registry with the host, so populating the
+    // definition cache before the host registers a prefix bakes in keys
+    // the prefixed reader can't match. A real server never sees this — it
+    // only receives resolved URLs over the wire. Skip pre-warm in-browser.
+    if (isBrowserTestEnv()) {
+      return;
+    }
     if (invalidations.length === 0 && allRealmCardModules.length === 0) {
       return;
     }
