@@ -1,4 +1,10 @@
-import { waitFor, click, triggerEvent } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  triggerEvent,
+  find,
+} from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { getService } from '@universal-ember/test-support';
@@ -320,44 +326,73 @@ module('Integration | overlay-menu-items', function (hooks) {
       );
   });
 
-  test('hover type-label tab clips its shape without a separate border-radius', async function (assert) {
+  test('hover type-label tab anchors left while it fits and clamps to the corner radius when it overflows, and stays inside the containing card', async function (assert) {
     setCardInOperatorModeState([`${testRealmURL}ParentCard/1`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
+    let cardSelector = `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`;
+    let parentSelector = `[data-test-card="${testRealmURL}ParentCard/1"]`;
     let overlaySelector = `[data-test-overlay-card="${testRealmURL}CardWithCustomMenu/1"]`;
-    await waitFor(`[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`);
-    await triggerEvent(
-      `[data-test-card="${testRealmURL}CardWithCustomMenu/1"]`,
-      'mouseenter',
-    );
+    await waitFor(cardSelector);
+    await triggerEvent(cardSelector, 'mouseenter');
     let label = (await waitFor(
       `${overlaySelector} [data-test-overlay-label]`,
     )) as HTMLElement;
-    let styles = window.getComputedStyle(label);
+    let card = find(cardSelector) as HTMLElement;
+    let boundary = find(parentSelector) as HTMLElement;
 
-    // The visible "rounded" corners live in the clip-path as 4px bevels on
-    // the left side. Combining border-radius with clip-path at those same
-    // corners leaves a light-grey anti-aliasing seam, so the left corners
-    // must keep their rounding entirely within the clip shape. (The right
-    // side is the slope; border-radius there is either clipped away or
-    // would only blunt the slope tip, so no seam risk.)
-    assert.notEqual(
-      styles.clipPath,
-      'none',
-      'type-label tab clips its flag shape via clip-path',
-    );
-    for (let corner of [
-      'borderTopLeftRadius',
-      'borderBottomLeftRadius',
-    ] as const) {
-      assert.strictEqual(
-        styles[corner],
-        '0px',
-        `${corner} is 0 (left-corner rounding is folded into the clip-path)`,
+    // trackLabelOverflow sets `style.left = '0'` synchronously at
+    // setup, then writes the computed `Npx` value when its update
+    // runs. The label has its natural content width as soon as it's
+    // inserted (so `width > 0` is not a strong-enough signal), but
+    // the inline `left` is in `px` form only after the positioner
+    // has fired. Wait on that to know the JS positioning has landed.
+    await waitUntil(() => label.style.left.endsWith('px'), {
+      timeout: 1000,
+    });
+
+    let labelRect = label.getBoundingClientRect();
+    let cardRect = card.getBoundingClientRect();
+    let boundaryRect = boundary.getBoundingClientRect();
+    let radius = parseFloat(window.getComputedStyle(card).borderTopRightRadius);
+
+    if (label.hasAttribute('data-overflow')) {
+      // Long-name case: right edge sits at the start of the card's
+      // top-right corner radius (with the 4px stroke bleed), and the
+      // extra width spills off the card's left edge.
+      assert.ok(
+        Math.abs(cardRect.right - labelRect.right - (radius - 4)) <= 2,
+        "overflowing label's right edge sits at the card's corner-radius point",
+      );
+      assert.ok(
+        labelRect.left < cardRect.left,
+        'overflowing label extends past the card left edge',
+      );
+    } else {
+      // Short-name case: hugs the card's left edge with the 4px bleed.
+      assert.ok(
+        Math.abs(labelRect.left - (cardRect.left - 4)) <= 2,
+        "fitting label is anchored to the card's left edge",
+      );
+      assert.ok(
+        labelRect.right <= cardRect.right - radius + 2,
+        "fitting label's right edge stays before the corner-radius point",
       );
     }
+
+    // Either way the label stays inside the visible stack-item frame
+    // (a few pixels of slop for sub-pixel rounding and the
+    // drop-shadow's render box).
+    assert.ok(
+      labelRect.left >= boundaryRect.left - 4,
+      'label left edge stays inside the containing card',
+    );
+    assert.ok(
+      labelRect.right <= boundaryRect.right + 4,
+      'label right edge stays inside the containing card',
+    );
   });
 });
