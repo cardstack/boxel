@@ -104,6 +104,7 @@ export class ModuleContentsResource
     let moduleSyntax = new ModuleSyntax(
       executableFile.content,
       executableFile.url,
+      this.network.virtualNetwork,
     );
     let declarations =
       await this.moduleContentsService.assembleFromModuleSyntax(
