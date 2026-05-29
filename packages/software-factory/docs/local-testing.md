@@ -97,6 +97,16 @@ pnpm factory:go \
 - `--debug` — verbose logs: LLM prompts, tool calls + results, and
   QUnit `console.log` output as tests run.
 
+> **Testing discovery?** `--enable-boxel-ui-discovery` is not on
+> `main` yet — it lives on the
+> `cs-10527-component-specs-for-searchable-reusable-ui-components`
+> branch (CS-10527). Check that branch out before running with the
+> flag, otherwise `factory:go` rejects it as an unknown argument:
+>
+> ```bash
+> git checkout cs-10527-component-specs-for-searchable-reusable-ui-components
+> ```
+
 **Concrete example:**
 
 ```bash
