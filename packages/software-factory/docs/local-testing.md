@@ -110,12 +110,25 @@ pnpm factory:go \
 > git checkout cs-10527-component-specs-for-searchable-reusable-ui-components
 > ```
 
-**Concrete example:**
+**Concrete example (local):**
 
 ```bash
 pnpm factory:go \
   --brief-url https://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm https://localhost:4201/user/sticky-note-9708/ \
+  --enable-boxel-ui-discovery \
+  --debug
+```
+
+**Concrete example (staging):**
+
+Switch to a staging profile first (`boxel profile switch <staging-id>`),
+then point both URLs at `realms-staging.stack.cards`:
+
+```bash
+pnpm factory:go \
+  --brief-url https://realms-staging.stack.cards/software-factory/Wiki/sticky-note \
+  --target-realm https://realms-staging.stack.cards/<your-username>/sticky-note-9708/ \
   --enable-boxel-ui-discovery \
   --debug
 ```
@@ -146,12 +159,23 @@ Brief: <BRIEF_URL>
 Target realm: <TARGET_REALM_URL>
 ```
 
-**Concrete example:**
+**Concrete example (local):**
 
 ```
 Run the software factory per docs/runbook.md.
 Brief: https://localhost:4201/software-factory/Wiki/sticky-note
 Target realm: https://localhost:4201/user/sticky-note-d4f1-1/
+```
+
+**Concrete example (staging):**
+
+With a staging profile selected, point both URLs at
+`realms-staging.stack.cards`:
+
+```
+Run the software factory per docs/runbook.md.
+Brief: https://realms-staging.stack.cards/software-factory/Wiki/sticky-note
+Target realm: https://realms-staging.stack.cards/<your-username>/sticky-note-d4f1-1/
 ```
 
 > Always include "per docs/runbook.md". Without it, the agent falls
