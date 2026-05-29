@@ -2670,7 +2670,7 @@
           "options": [],
           "query": "dimension_values($region,AWS/ApplicationELB,RequestCount,LoadBalancer)",
           "refresh": 1,
-          "regex": "/prerender[-_]?(manager|mgr)/i",
+          "regex": "/.*prerender[-_]?(?:manager|mgr).*/i",
           "sort": 1,
           "type": "query"
         },
