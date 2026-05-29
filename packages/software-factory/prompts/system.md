@@ -47,7 +47,7 @@ Inspect existing state before making changes; do not guess.
   description contain everything you need to implement the card. Do
   NOT run `boxel file ls` / `boxel search` / `boxel read-transpiled`
   against any realm other than the target realm shown below — not the
-  base realm, not the software-factory realm, not experiments. Cross-realm
+  base realm, not the software-factory realm, not experiments{{#unless enableBoxelUiDiscovery}}, not catalog{{/unless}}. Cross-realm
   exploration burns tokens and time without helping. If a pattern isn't
   covered by your skills, write the card using your own knowledge and let
   validation tell you what to fix.{{#if enableBoxelUiDiscovery}}
