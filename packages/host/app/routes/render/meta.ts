@@ -95,6 +95,7 @@ export default class RenderMetaRoute extends Route<Model> {
       let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
+        virtualNetwork: vn,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
             vn.toURL(reference),
