@@ -1,5 +1,5 @@
-import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
@@ -10,8 +10,8 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
-import type NetworkService from '@cardstack/host/services/network';
 import type { TypeOption } from '@cardstack/host/resources/type-summaries';
+import type NetworkService from '@cardstack/host/services/network';
 
 export interface TypeFilter {
   options: TypeOption[];

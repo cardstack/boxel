@@ -8,11 +8,12 @@ import {
   type RenderError,
 } from '@cardstack/runtime-common';
 
+import type NetworkService from '@cardstack/host/services/network';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { getClass, getTypes } from './meta';
 
-import type NetworkService from '@cardstack/host/services/network';
 import type { Model as ParentModel } from '../render';
 
 export type Model = PrerenderTypes | RenderError | undefined;
