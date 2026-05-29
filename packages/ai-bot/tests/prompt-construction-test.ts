@@ -12,7 +12,9 @@ import {
   APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
   APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+  DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -7014,6 +7016,153 @@ module('set model in prompt', (hooks) => {
         TOOL_CALL_CHECK_CORRECTNESS,
       ],
       'every tool_call must have a matching tool result, including the drifted write-text-file one',
+    );
+  });
+});
+
+module('fill missing capability fields from fallback constant', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  hooks.afterEach(() => {
+    fakeMatrixClient.resetSentEvents();
+  });
+
+  // Minimal eventList with a single user message plus an active-LLM event.
+  // The active-LLM event content is supplied by the caller so each test can
+  // exercise a specific shape (no caps, explicit false, healthy, non-curated).
+  function buildEventList(
+    activeLLMContent: Record<string, unknown> | null,
+  ): DiscreteMatrixEvent[] {
+    const events: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'hello',
+          format: 'org.matrix.custom.html',
+          clientGeneratedId: 'user-msg-1',
+          data: { context: {} },
+        } as CardMessageContent,
+        origin_server_ts: 1,
+        unsigned: { age: 1 },
+        event_id: 'user-msg-event-1',
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent,
+    ];
+    if (activeLLMContent !== null) {
+      events.push({
+        type: APP_BOXEL_ACTIVE_LLM,
+        room_id: 'room-id-1',
+        sender: '@user:localhost',
+        content: activeLLMContent,
+        state_key: '',
+        origin_server_ts: 2,
+        unsigned: { age: 1 },
+        event_id: 'active-llm-event-1',
+      } as unknown as DiscreteMatrixEvent);
+    }
+    return events;
+  }
+
+  test('older room: curated model with no capability fields → caps filled from constant', async () => {
+    const claudeRow = DEFAULT_FALLBACK_MODELS.find(
+      (m) => m.modelId === 'anthropic/claude-sonnet-4.6',
+    )!;
+    const eventList = buildEventList({ model: claudeRow.modelId });
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(model, claudeRow.modelId, 'event model passes through');
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'toolsSupported filled from DEFAULT_FALLBACK_MODELS row',
+    );
+  });
+
+  test('explicit toolsSupported: false on event is respected (no fill)', async () => {
+    const eventList = buildEventList({
+      model: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: false,
+    });
+
+    const { toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      toolsSupported,
+      false,
+      'explicit false is not overwritten by the constant',
+    );
+  });
+
+  test('healthy room: explicit caps pass through unchanged', async () => {
+    const eventList = buildEventList({
+      model: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: true,
+    });
+
+    const { toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'explicit true is preserved (no overwrite)',
+    );
+  });
+
+  test('non-curated model with undefined caps stays undefined (known limitation)', async () => {
+    const eventList = buildEventList({ model: 'some/unknown-model' });
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(model, 'some/unknown-model');
+    assert.strictEqual(
+      toolsSupported,
+      undefined,
+      'non-curated models are not in the constant — leave undefined',
+    );
+  });
+
+  test('no active-LLM event in history: caps come from the default fallback row', async () => {
+    const eventList = buildEventList(null);
+
+    const { model, toolsSupported } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.strictEqual(
+      model,
+      DEFAULT_FALLBACK_MODEL_ID,
+      'no-event branch uses DEFAULT_FALLBACK_MODEL_ID',
+    );
+    assert.strictEqual(
+      toolsSupported,
+      true,
+      'no-event branch fills toolsSupported from the default row',
     );
   });
 });
