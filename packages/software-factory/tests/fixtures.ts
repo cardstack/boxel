@@ -403,6 +403,15 @@ async function startRealmProcess(
 
   let stop = async () => {
     try {
+      // Tell the worker-scoped compat proxy to block (not 502) any
+      // incoming requests from the prerender's standby pool while the
+      // realm-server is being recreated. Without this, refills queued
+      // during the kill→bind window race the dying upstream, cache the
+      // failure as a broken module load, and the standby page sits in
+      // a permanently unusable state until the prerender's 90s render
+      // timeout evicts it. Cleared in `setTargetPort` once the new
+      // realm-server is bound.
+      testWorkerCompatProxy.clearTargetPort();
       if (runningChild.exitCode === null) {
         killProcessGroup(runningChild.pid!, 'SIGTERM');
         await new Promise<void>((resolve, reject) => {

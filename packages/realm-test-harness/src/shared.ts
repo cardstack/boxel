@@ -141,6 +141,14 @@ export type StartedCompatRealmProxy = {
     targetPort: number,
     describeUpstreamHealth?: () => string,
   ): void;
+  /**
+   * Mark the upstream as transitioning (no current target). Incoming
+   * requests will block briefly waiting for `setTargetPort` instead of
+   * 502-ing against a torn-down realm-server — this prevents the
+   * prerender's standby pages from caching broken module loads during
+   * the per-test realm-server restart window.
+   */
+  clearTargetPort(): void;
   stop(): Promise<void>;
 };
 

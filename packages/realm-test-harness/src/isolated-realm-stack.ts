@@ -286,6 +286,17 @@ export async function startCompatRealmProxy({
 }): Promise<StartedCompatRealmProxy> {
   realmLog.debug(`startCompatRealmProxy: requested listenPort=${listenPort}`);
   let targetPort: number | undefined;
+  // Notifier for `clearTargetPort()` → `setTargetPort()` round-trips. While
+  // `targetPort` is unset, incoming requests `await` this promise instead
+  // of 502-ing against a non-existent upstream. Recreated on each
+  // `clearTargetPort` call so the next `setTargetPort` can resolve a
+  // fresh set of waiters.
+  let targetReady: Promise<void> = Promise.resolve();
+  let resolveTargetReady: (() => void) | undefined;
+  // Cap how long a single request will block waiting for a new target.
+  // 30s is well under Playwright's 300s test timeout and the 240s
+  // metadata-file wait in fixtures.ts.
+  const PROXY_TARGET_WAIT_TIMEOUT_MS = 30_000;
   // Set alongside the target port: returns a one-shot snapshot of the
   // upstream realm-server child's liveness and recent buffered output. The
   // child's stdout/stderr are otherwise only flushed to CI on an
@@ -311,10 +322,27 @@ export async function startCompatRealmProxy({
         return;
       }
       if (targetPort == null) {
-        res.statusCode = 503;
-        res.setHeader('content-type', 'text/plain; charset=utf-8');
-        res.end('software-factory compat proxy target is not ready');
-        return;
+        // Per-test realm-server restart in progress. Block briefly so the
+        // prerender's standby refill doesn't pin a broken page-load state
+        // for 90s waiting for `#standby-ready`. Cap with both an explicit
+        // timeout and the proxy's stopAbort signal so a hung handoff
+        // still surfaces a 503 (not an indefinite wait).
+        let timedOut = false;
+        await Promise.race([
+          targetReady,
+          new Promise<void>((resolveTimeout) =>
+            setTimeout(() => {
+              timedOut = true;
+              resolveTimeout();
+            }, PROXY_TARGET_WAIT_TIMEOUT_MS),
+          ),
+        ]);
+        if (stopping || timedOut || targetPort == null) {
+          res.statusCode = 503;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.end('software-factory compat proxy target is not ready');
+          return;
+        }
       }
       let incomingURL = new URL(
         req.url ?? '/',
@@ -407,8 +435,24 @@ export async function startCompatRealmProxy({
     setTargetPort(nextTargetPort: number, nextDescribeUpstreamHealth) {
       targetPort = nextTargetPort;
       describeUpstreamHealth = nextDescribeUpstreamHealth;
+      // Release any requests that blocked while the previous target was
+      // cleared (per-test realm-server restart window).
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${nextTargetPort} ready`,
+      );
+    },
+    clearTargetPort() {
+      if (targetPort == null && resolveTargetReady != null) {
+        return; // already in "transitioning" state
+      }
+      targetPort = undefined;
+      targetReady = new Promise<void>((resolveReady) => {
+        resolveTargetReady = resolveReady;
+      });
+      realmLog.debug(
+        `startCompatRealmProxy: ${actualListenPort} -> (transitioning, awaiting next setTargetPort)`,
       );
     },
     async stop() {
@@ -420,6 +464,11 @@ export async function startCompatRealmProxy({
       // can't hang on a request looping against a dead upstream.
       stopping = true;
       stopAbort.abort();
+      // Release any requests blocked in `targetReady` so they observe
+      // `stopping=true` and short-circuit to 503 instead of hanging until
+      // PROXY_TARGET_WAIT_TIMEOUT_MS.
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
