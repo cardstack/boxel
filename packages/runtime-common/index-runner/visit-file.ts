@@ -20,6 +20,7 @@ import {
 } from '../index';
 import { CardError } from '../error';
 import { resolveFileDefCodeRef } from '../file-def-code-ref';
+import type { VirtualNetwork } from '../virtual-network';
 
 interface VisitFileFusedOptions {
   url: URL;
@@ -41,6 +42,7 @@ interface VisitFileFusedOptions {
   // traffic that happens to land on the same warm tab.
   batchId: string;
   prerenderer: Prerenderer;
+  virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
   logDebug(message: string): void;
   logWarn(message: string): void;
@@ -83,6 +85,7 @@ export async function visitFileForIndexingFused({
   auth,
   batchId,
   prerenderer,
+  virtualNetwork,
   consumeClearCacheForRender,
   logDebug,
   logWarn,
@@ -157,7 +160,7 @@ export async function visitFileForIndexingFused({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
 
   let clearCache = consumeClearCacheForRender();
   let renderOptions: RenderRouteOptions = {

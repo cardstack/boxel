@@ -369,10 +369,12 @@ const smokeTestHostApp = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
-  // One process-wide job-scoped search cache, shared between the request
-  // handlers (via RealmServer → createRoutes) and the JobsFinishedListener
-  // so a `jobs_finished` NOTIFY evicts the same entries the handlers populate.
-  let searchCache = new JobScopedSearchCache();
+  // DB-backed job-scoped search cache, shared across replicas via Postgres.
+  // One instance per process, shared between the request handlers (via
+  // RealmServer → createRoutes) and the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
+  let searchCache = new JobScopedSearchCache(dbAdapter);
+  searchCache.startJanitor();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
@@ -621,6 +623,7 @@ const smokeTestHostApp = async () => {
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
+    searchCache.stopJanitor();
     httpServer.close(() => {
       (async () => {
         await Promise.all([
@@ -738,10 +741,11 @@ const smokeTestHostApp = async () => {
   });
   await indexUpdatedListener.start();
 
-  // CS-11179: NOTIFY-driven eviction for the in-memory JobScopedSearchCache.
-  // On `jobs_finished` it drops the finished job's cache entries immediately
-  // instead of waiting for their TTL. Shares the same searchCache instance the
-  // request handlers populate (passed into RealmServer above).
+  // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
+  // On `jobs_finished` it drops the finished job's cache rows immediately
+  // instead of waiting for the janitor to reclaim them past their TTL. Shares
+  // the same searchCache instance the request handlers populate (passed into
+  // RealmServer above).
   jobsFinishedListener = new JobsFinishedListener({
     dbAdapter,
     searchCache,

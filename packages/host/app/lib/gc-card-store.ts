@@ -23,6 +23,7 @@ import {
   type CardError,
   type SingleCardDocument,
   type SingleFileMetaDocument,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -158,6 +159,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #referenceCount: ReferenceCount;
   #idResolver = new IDResolver();
   #fetch: typeof globalThis.fetch;
+  #virtualNetwork: VirtualNetwork;
   #inFlight: Set<Promise<unknown>> = new Set();
   #loadGeneration = 0; // increments whenever a new load is tracked
   #nextLoadId = 1;
@@ -198,11 +200,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   constructor(
     referenceCount: ReferenceCount,
     fetch: typeof globalThis.fetch,
+    virtualNetwork: VirtualNetwork,
     storeHooks?: StoreHooks,
   ) {
     this.#referenceCount = referenceCount;
     this.#fetch = fetch;
+    this.#virtualNetwork = virtualNetwork;
     this.#storeHooks = storeHooks;
+  }
+
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
   }
 
   getCard(id: string): CardDef | undefined {
@@ -243,7 +251,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.trackLoad(promise);
       return await promise;
     }
-    promise = loadCardDocument(this.#fetch, url);
+    promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
     this.#cardDocsInFlight.set(url, promise);
     this.#cardDocStartedAt.set(url, Date.now());
     this.trackLoad(promise);
@@ -272,7 +280,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       this.trackLoad(promise);
       return await promise;
     }
-    promise = loadFileMetaDocument(this.#fetch, url);
+    promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
     this.#fileMetaDocsInFlight.set(url, promise);
     this.#fileMetaStartedAt.set(url, Date.now());
     this.trackLoad(promise);

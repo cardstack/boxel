@@ -1,6 +1,5 @@
 import { Deferred } from './deferred';
 import {
-  resolveCardReference,
   rri,
   type RealmResourceIdentifier,
   type RealmIdentifier,
@@ -770,6 +769,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #virtualNetwork: VirtualNetwork;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so a /_config PATCH (or any other path that nulls
@@ -793,6 +793,10 @@ export class Realm {
 
   get realmServerURL(): string {
     return this.#realmServerURL;
+  }
+
+  get virtualNetwork(): VirtualNetwork {
+    return this.#virtualNetwork;
   }
 
   constructor(
@@ -836,6 +840,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
     this.#adapter = adapter;
     this.#queue = queue;
+    this.#virtualNetwork = virtualNetwork;
     this.#fullIndexOnStartup = opts?.fullIndexOnStartup ?? false;
     this.#fromScratchIndexPriority =
       opts?.fromScratchIndexPriority ?? systemInitiatedPriority;
@@ -853,35 +858,39 @@ export class Realm {
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
     let owner: string | undefined;
-    let _fetch = fetcher(virtualNetwork.fetch, [
-      // when we run cards directly in node we do so under the authority of the
-      // realm server so that we can assume the user that owns this realm. this
-      // logic will eventually go away after we refactor to running cards only
-      // in headless chrome.
-      async (req, next) => {
-        if (!owner) {
-          owner = await this.getRealmOwnerUserId();
-        }
-        req.headers.set('X-Boxel-Assume-User', owner);
-        return next(req);
-      },
-      async (req, next) => {
-        return (await maybeHandleScopedCSSRequest(req)) || next(req);
-      },
-      async (request, next) => {
-        if (!this.paths.inRealm(rri(request.url))) {
-          return next(request);
-        }
-        return await this.internalHandle(request, true);
-      },
-      authorizationMiddleware(
-        // ditto with above, we run cards under the authority of the realm
-        // server so that we can assume user that owns this realm. refactor this
-        // back to using the realm's own matrix client after running cards in
-        // headless chrome lands.
-        new RealmAuthDataSource(this.#matrixClient, () => _fetch),
-      ),
-    ]);
+    let _fetch = fetcher(
+      virtualNetwork.fetch,
+      [
+        // when we run cards directly in node we do so under the authority of the
+        // realm server so that we can assume the user that owns this realm. this
+        // logic will eventually go away after we refactor to running cards only
+        // in headless chrome.
+        async (req, next) => {
+          if (!owner) {
+            owner = await this.getRealmOwnerUserId();
+          }
+          req.headers.set('X-Boxel-Assume-User', owner);
+          return next(req);
+        },
+        async (req, next) => {
+          return (await maybeHandleScopedCSSRequest(req)) || next(req);
+        },
+        async (request, next) => {
+          if (!this.paths.inRealm(rri(request.url))) {
+            return next(request);
+          }
+          return await this.internalHandle(request, true);
+        },
+        authorizationMiddleware(
+          // ditto with above, we run cards under the authority of the realm
+          // server so that we can assume user that owns this realm. refactor this
+          // back to using the realm's own matrix client after running cards in
+          // headless chrome lands.
+          new RealmAuthDataSource(this.#matrixClient, () => _fetch),
+        ),
+      ],
+      virtualNetwork,
+    );
 
     // Wrap to retain realm context for definition lookups
     this.#definitionLookup = definitionLookup.forRealm(this);
@@ -3977,7 +3986,10 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+    let fileDefCodeRef = resolveFileDefCodeRef(
+      new URL(fileURL),
+      this.#virtualNetwork,
+    );
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
@@ -4050,7 +4062,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(new URL(fileURL)));
+        : resolveFileDefCodeRef(new URL(fileURL), this.#virtualNetwork));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {
@@ -4364,8 +4376,12 @@ export class Realm {
 
       if (
         originalClone.meta?.adoptsFrom &&
-        internalKeyFor(patch.meta.adoptsFrom, url) !==
-          internalKeyFor(originalClone.meta.adoptsFrom, url)
+        internalKeyFor(patch.meta.adoptsFrom, url, this.#virtualNetwork) !==
+          internalKeyFor(
+            originalClone.meta.adoptsFrom,
+            url,
+            this.#virtualNetwork,
+          )
       ) {
         return badRequest({
           message: `Cannot change card instance type to ${JSON.stringify(
@@ -4482,10 +4498,7 @@ export class Realm {
           });
           visitModuleDeps(resource, (moduleURL, setModuleURL) => {
             setModuleURL(
-              resolveCardReference(
-                moduleURL,
-                instanceURL,
-              ) as RealmResourceIdentifier,
+              this.#virtualNetwork.resolveRRI(moduleURL, rri(instanceURL)),
             );
           });
         }
@@ -4629,7 +4642,7 @@ export class Realm {
     // say "not foreign" and the guard would silently fail to fire.
     let resolved: string;
     try {
-      resolved = resolveCardReference(dep, undefined);
+      resolved = this.#virtualNetwork.toURL(dep).href;
     } catch {
       // Bare specifier with no matching prefix mapping. `loadLinks`
       // can't fetch it, so it's not a request-time mutation source —
@@ -6649,6 +6662,7 @@ export class Realm {
       definition,
       relativeTo,
       definitionLookup: this.#definitionLookup,
+      virtualNetwork: this.#virtualNetwork,
     });
   }
 

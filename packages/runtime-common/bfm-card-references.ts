@@ -1,5 +1,6 @@
 import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 import { trimJsonExtension } from './url';
 import { FITTED_FORMATS } from './formats';
 import type { TokenizerAndRendererExtension } from './marked.mts';
@@ -11,9 +12,15 @@ const FENCED_CODE_RE = /```[\s\S]*?```/g;
 // (e.g. `code`, ``code``, ```code```).
 const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
-function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
+function resolveUrl(
+  ref: string,
+  baseUrl: string | undefined,
+  virtualNetwork?: VirtualNetwork,
+): string | null {
   try {
-    return resolveCardReference(ref, baseUrl || undefined);
+    return virtualNetwork
+      ? virtualNetwork.resolveURL(ref, baseUrl || undefined).href
+      : resolveCardReference(ref, baseUrl || undefined);
   } catch {
     return null;
   }
@@ -171,6 +178,7 @@ export function extractBfmReferences(
   markdown: string,
   baseUrl: string,
   keywords: string[],
+  virtualNetwork?: VirtualNetwork,
 ): BfmReference[] {
   // Strip code blocks so references inside them are not extracted
   let stripped = markdown
@@ -187,7 +195,7 @@ export function extractBfmReferences(
 
     for (let match of stripped.matchAll(blockRe)) {
       let { url: rawUrl } = splitBfmContent(match[1]);
-      let resolved = resolveUrl(rawUrl, baseUrl);
+      let resolved = resolveUrl(rawUrl, baseUrl, virtualNetwork);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -197,7 +205,7 @@ export function extractBfmReferences(
       }
     }
     for (let match of stripped.matchAll(inlineRe)) {
-      let resolved = resolveUrl(match[1], baseUrl);
+      let resolved = resolveUrl(match[1], baseUrl, virtualNetwork);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -230,8 +238,11 @@ export function extractBfmReferences(
 export function extractCardReferenceUrls(
   markdown: string,
   baseUrl: string,
+  virtualNetwork?: VirtualNetwork,
 ): string[] {
-  return extractBfmReferences(markdown, baseUrl, ['card']).map((r) => r.url);
+  return extractBfmReferences(markdown, baseUrl, ['card'], virtualNetwork).map(
+    (r) => r.url,
+  );
 }
 
 /**
