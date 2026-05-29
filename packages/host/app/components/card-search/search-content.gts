@@ -27,6 +27,7 @@ import type { PrerenderedCard } from '@cardstack/host/components/prerendered-car
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
@@ -145,6 +146,7 @@ interface Signature {
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
 
 export default class SearchContent extends Component<Signature> {
+  @service declare network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service('recent-cards-service')
@@ -207,7 +209,7 @@ export default class SearchContent extends Component<Signature> {
     // Consume selectedTypeIds outside the ternary so the tracking
     // dependency is always established, even when the query is skipped.
     const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-      internalKeyFor(ref, undefined),
+      internalKeyFor(ref, undefined, this.network.virtualNetwork),
     );
     return {
       query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)

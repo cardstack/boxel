@@ -33,7 +33,6 @@ const CARDS_GRID_REF = {
   module: 'https://cardstack.com/base/cards-grid',
   name: 'CardsGrid',
 } as ResolvedCodeRef;
-const CARDS_GRID_INTERNAL_KEY = internalKeyFor(CARDS_GRID_REF, undefined);
 
 export interface Model {
   instance: CardDef;
@@ -142,8 +141,10 @@ export default class RenderHtmlRoute extends Route<Model> {
     if (!topType) {
       return false;
     }
-    let topKey = internalKeyFor(topType, undefined);
-    if (topKey !== CARDS_GRID_INTERNAL_KEY) {
+    let vn = this.network.virtualNetwork;
+    let topKey = internalKeyFor(topType, undefined, vn);
+    let cardsGridKey = internalKeyFor(CARDS_GRID_REF, undefined, vn);
+    if (topKey !== cardsGridKey) {
       return false;
     }
     let info = this.realm.info(cardRealmURL.href);

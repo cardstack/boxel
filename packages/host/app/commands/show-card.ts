@@ -13,6 +13,7 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
@@ -21,6 +22,7 @@ export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ShowCardInput,
   typeof CardDef
 > {
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
   @service declare private store: StoreService;
@@ -77,7 +79,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         );
       }
       this.playgroundPanelService.persistSelections(
-        internalKeyFor(cardDefRef, undefined),
+        internalKeyFor(cardDefRef, undefined, this.network.virtualNetwork),
         rri(input.cardId),
         (input.format as Format) || 'isolated',
         undefined,

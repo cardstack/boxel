@@ -146,7 +146,9 @@ export default class RenderMetaRoute extends Route<Model> {
     return {
       serialized,
       displayNames,
-      types: types.map((t) => internalKeyFor(t, undefined)),
+      types: types.map((t) =>
+        internalKeyFor(t, undefined, this.network.virtualNetwork),
+      ),
       searchDoc,
       deps,
       diagnostics,
