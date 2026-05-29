@@ -200,6 +200,10 @@ This is an example of what you should be seeing when you visit the newly created
 
 <img width="1889" height="1176" alt="image" src="https://github.com/user-attachments/assets/0ab22084-94a8-421b-831a-e6f54ec083bb" />
 
+If you click on Issue Board, you will see that the software factory marked all the tickets as "Done":
+
+<img width="1457" height="957" alt="image" src="https://github.com/user-attachments/assets/92fbbafa-3478-43aa-a93b-48bde4d9ea65" />
+
 
 For the full breakdown of every step the agent performs, what it
 invokes, and the expected output, see [docs/runbook.md](./runbook.md).
