@@ -729,12 +729,29 @@ export class Loader {
         urlOrRequest instanceof Request
           ? urlOrRequest.url
           : String(urlOrRequest);
-      this.log.error(`fetch failed for ${url}`, err);
+      // `err.code` is present in Node (undici surfaces ECONNREFUSED /
+      // ENOTFOUND / etc.) but absent in browsers — Chromium logs the
+      // underlying `net::ERR_*` through its own network-layer channel
+      // rather than the JS Error. Include whatever's available so the
+      // synthetic Response carries the most specific detail we can get
+      // wherever the loader runs.
+      let detail = err?.code
+        ? `${err.message} (${err.code})`
+        : (err?.message ?? String(err));
+      this.log.error(`fetch failed for ${url}: ${detail}`, err);
 
-      return new Response(`fetch failed for ${url}`, {
+      let synthetic = new Response(`fetch failed for ${url}: ${detail}`, {
         status: 500,
-        statusText: err.message,
+        statusText: detail.slice(0, 200) || 'fetch failed',
       });
+      // Mark this Response as a transport-level (server-unreachable) failure.
+      // The thrown CardError above this gets flagged downstream so callers
+      // know not to poison the module cache with this exception — a
+      // "Failed to fetch" means the server wasn't there, not that the
+      // module is broken.
+      (synthetic as any)[Symbol.for('boxel-loader-transient-fetch-failure')] =
+        true;
+      return synthetic;
     }
   };
 
@@ -819,11 +836,23 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
-      this.setModule(moduleIdentifier, {
-        state: 'broken',
-        exception,
-        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-      });
+      if (
+        (exception as { isTransientFetchFailure?: boolean })
+          ?.isTransientFetchFailure
+      ) {
+        // Inability to talk to the server isn't a deterministic property
+        // of the module — caching this as `broken` would poison the
+        // module entry for the lifetime of this loader (every future
+        // `import` would rethrow without retrying). Drop the entry so
+        // the next `import` re-enters `fetchModule` and refetches.
+        this.modules.delete(trimModuleIdentifier(moduleIdentifier));
+      } else {
+        this.setModule(moduleIdentifier, {
+          state: 'broken',
+          exception,
+          consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+        });
+      }
       module.deferred.fulfill();
       throw exception;
     }
@@ -1053,6 +1082,19 @@ export class Loader {
     }
     if (!response.ok) {
       let error = await CardError.fromFetchResponse(moduleURL.href, response);
+      // Surfaced from `_fetch`'s catch: the request never reached the
+      // server. Tag the error so `fetchModule` skips caching it as a
+      // broken module — transport-level failures are non-deterministic
+      // and the next import should retry rather than replay this error.
+      if (
+        (response as unknown as Record<symbol, unknown>)[
+          Symbol.for('boxel-loader-transient-fetch-failure')
+        ]
+      ) {
+        (
+          error as CardError & { isTransientFetchFailure?: boolean }
+        ).isTransientFetchFailure = true;
+      }
       throw error;
     }
 

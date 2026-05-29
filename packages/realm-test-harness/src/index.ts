@@ -28,6 +28,10 @@ export {
 
 export { startHarnessPrerenderServer } from './support-services';
 
+export { startCompatRealmProxy } from './isolated-realm-stack';
+
+export type { StartedCompatRealmProxy } from './shared';
+
 export * from './runtime-metadata';
 
 export {

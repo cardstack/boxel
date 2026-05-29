@@ -79,6 +79,12 @@ export interface FactoryRealmOptions {
   realmServerPort?: number;
   /** Explicit prerender URL to reuse instead of starting a new prerender. */
   prerenderURL?: string;
+  /** When true, skip creating an in-stack compat proxy — the caller owns
+   *  it externally (typically a Playwright worker fixture that keeps the
+   *  proxy alive across per-test serve-realm spawns) and calls
+   *  `setTargetPort` itself after reading the realm-server port from this
+   *  child's metadata file. */
+  noCompatProxy?: boolean;
 }
 
 export interface FactoryRealmTemplate {
@@ -135,6 +141,14 @@ export type StartedCompatRealmProxy = {
     targetPort: number,
     describeUpstreamHealth?: () => string,
   ): void;
+  /**
+   * Mark the upstream as transitioning (no current target). Incoming
+   * requests will block briefly waiting for `setTargetPort` instead of
+   * 502-ing against a torn-down realm-server — this prevents the
+   * prerender's standby pages from caching broken module loads during
+   * the per-test realm-server restart window.
+   */
+  clearTargetPort(): void;
   stop(): Promise<void>;
 };
 
