@@ -689,8 +689,24 @@ export class IndexRunner {
     // `buildLookupContext` and persist nothing — pre-warm would log
     // success while doing nothing. This is the same context the read-only
     // batch reader uses (`getModuleCacheContext` → `getCachedDefinitionsBatch`).
-    let { resolvedRealmURL, cacheScope, authUserId } =
-      await this.getModuleCacheContext();
+    //
+    // Resolving the context fetches realm `_info`, which can transiently
+    // fail. Pre-warm is best-effort, so a failure here must degrade to a
+    // warn/skip — the visit phase still populates on demand — rather than
+    // throwing out of this method and aborting the whole indexing run.
+    let resolvedRealmURL: string;
+    let cacheScope: CacheScope;
+    let authUserId: string;
+    try {
+      ({ resolvedRealmURL, cacheScope, authUserId } =
+        await this.getModuleCacheContext());
+    } catch (err) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm: could not resolve cache context for realm ${this.realmURL.href}; the visit phase will populate on demand`,
+        err,
+      );
+      return;
+    }
 
     // The visit-phase reader (the realm-server's realm-scoped lookup)
     // keys a private realm's modules cache on (realm-auth, realm-owner
