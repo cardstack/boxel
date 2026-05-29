@@ -17,7 +17,13 @@
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix",
     "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
-    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types"
+    "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build:types",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{js,ts,gjs,gts}": "node scripts/lint-autofix.mjs eslint",
+    "*.hbs": "node scripts/lint-autofix.mjs ember-template-lint",
+    "*.{json,md,css,scss,yml,yaml,html}": "node scripts/lint-autofix.mjs prettier"
   },
   "devDependencies": {
     "@actions/core": "catalog:",
@@ -28,6 +34,7 @@
     "@glimmer/component": "catalog:",
     "@glimmer/syntax": "^0.95.0",
     "@glimmer/tracking": "^1.1.2",
+    "@glint/ember-tsc": "catalog:",
     "@playwright/test": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
@@ -40,10 +47,11 @@
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-prefer-let": "catalog:",
     "eslint-plugin-prettier": "catalog:",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "typescript": "catalog:",
-    "@glint/ember-tsc": "catalog:"
+    "typescript": "catalog:"
   },
   "engines": {
     "pnpm": "^11"
