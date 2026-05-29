@@ -260,12 +260,17 @@ export default class OperatorModeOverlays extends Overlays {
       }
 
       /* Type-label tab — flag shape with sloped right edge. The
-         `top` and `left` are written inline by trackLabelOverflow via
-         floating-ui (position is `fixed`, viewport-relative). The
+         `top` and `left` are written inline by trackLabelOverflow,
+         relative to the actions-overlay offset parent (which velcro
+         keeps aligned with the card). Absolute (not fixed) so the
+         positioning is naturally interpreted in the overlay's local
+         coordinate space — fixed would be sensitive to any
+         transformed ancestor (e.g. the test runner's `#ember-testing`
+         scale wrapper) creating a different containing block. The
          flag shape is defined entirely by clip-path so it can mirror
          vertically when the label flips below the card. */
       .adorn-label {
-        position: fixed;
+        position: absolute;
         top: 0;
         left: 0;
         display: inline-flex;
@@ -450,7 +455,7 @@ export default class OperatorModeOverlays extends Overlays {
         return undefined;
       }
 
-      label.style.position = 'fixed';
+      label.style.position = 'absolute';
       label.style.top = '0';
       label.style.left = '0';
 
@@ -507,11 +512,41 @@ export default class OperatorModeOverlays extends Overlays {
           anchorLeftX = cardRect.left - 4;
           label.style.maxWidth = 'max-content';
         }
-        label.style.left = anchorLeftX + 'px';
-        label.style.top =
-          (side === 'top'
+        let anchorTopY =
+          side === 'top'
             ? cardRect.top - labelHeight - 2
-            : cardRect.bottom + 2) + 'px';
+            : cardRect.bottom + 2;
+
+        // The label's anchor positions (anchorLeftX, anchorTopY) are
+        // in viewport coordinates. With `position: absolute`, the
+        // inline `left`/`top` write to the offset-parent's local
+        // coordinate space — which can be scaled relative to the
+        // viewport (e.g. `#ember-testing` applies `scale(0.5)` in
+        // the test runner). Read the offset parent's rect vs its
+        // unscaled `offsetWidth/offsetHeight` to recover the scale
+        // factors, then convert the viewport anchor into the offset
+        // parent's local space.
+        let offsetParent = label.offsetParent as HTMLElement | null;
+        let parentRect = offsetParent
+          ? offsetParent.getBoundingClientRect()
+          : new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+        let scaleX =
+          offsetParent && offsetParent.offsetWidth > 0
+            ? parentRect.width / offsetParent.offsetWidth
+            : 1;
+        let scaleY =
+          offsetParent && offsetParent.offsetHeight > 0
+            ? parentRect.height / offsetParent.offsetHeight
+            : 1;
+        if (!Number.isFinite(scaleX) || scaleX === 0) {
+          scaleX = 1;
+        }
+        if (!Number.isFinite(scaleY) || scaleY === 0) {
+          scaleY = 1;
+        }
+        label.style.left =
+          (anchorLeftX - parentRect.left) / scaleX + 'px';
+        label.style.top = (anchorTopY - parentRect.top) / scaleY + 'px';
       };
 
       return autoUpdate(cardEl, label, update);
