@@ -8,7 +8,6 @@ import { isEqual } from 'lodash';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  cardIdToURL,
   identifyCard,
   internalKeyFor,
   logger,
@@ -23,6 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type NetworkService from '@cardstack/host/services/network';
 
 import type {
   BaseDef,
@@ -40,6 +40,7 @@ const computePerfLog = logger('host:computed-perf');
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
+  @service declare private network: NetworkService;
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -91,12 +92,13 @@ export default class RenderMetaRoute extends Route<Model> {
     let passSnapshot: ComputePassSnapshot | undefined;
     try {
       let serializeStart = performance.now();
+      let vn = this.network.virtualNetwork;
       serialized = api.serializeCard(instance, {
         includeComputeds: true,
         maybeRelativeReference: (reference: string) =>
           maybeRelativeReference(
-            cardIdToURL(reference),
-            cardIdToURL(instance.id),
+            vn.toURL(reference),
+            vn.toURL(instance.id),
             instance[realmURL],
           ),
       }) as SingleCardDocument;

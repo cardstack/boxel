@@ -24,6 +24,7 @@ import {
   BASE_FILE_DEF_CODE_REF,
   resolveFileDefCodeRef,
 } from '../file-def-code-ref';
+import type { VirtualNetwork } from '../virtual-network';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -44,6 +45,7 @@ export interface FileIndexerOptions {
   // persisted onto `boxel_index.diagnostics` for this file's row.
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
+  virtualNetwork: VirtualNetwork;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -64,6 +66,7 @@ export async function performFileIndexing({
   precomputedRenderResult,
   diagnostics,
   dependencyResolver,
+  virtualNetwork,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
@@ -71,7 +74,7 @@ export async function performFileIndexing({
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
   let fileTypeRefs = [fileDefCodeRef];
   if (
     fileDefCodeRef.module !== BASE_FILE_DEF_CODE_REF.module ||
@@ -156,7 +159,7 @@ export async function performFileIndexing({
   }
 
   let fallbackTypes = fileTypeRefs.map((ref: ResolvedCodeRef) =>
-    internalKeyFor(ref, undefined),
+    internalKeyFor(ref, undefined, virtualNetwork),
   );
   let fileTypes = extractResult.types ?? fallbackTypes;
   let deps = new Set(extractResult.deps ?? []);

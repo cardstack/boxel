@@ -114,14 +114,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     args.serverURL,
   );
   let router = new Router();
-  // One job-scoped same-realm search cache per realm-server process,
-  // created by the composition root (main.ts) and shared with the
-  // JobsFinishedListener so a `jobs_finished` NOTIFY can evict a job's
-  // entries immediately rather than waiting on TTL (CS-11179). The cache
-  // still TTL-evicts entries after its configured TTL (DEFAULT_TTL_MS) as
-  // the missed-NOTIFY backstop (hits do NOT refresh the TTL — tying it to
-  // populate time bounds the leak deterministically). Hard-capped to bound
-  // worst-case memory under a synthetic-jobId flood.
+  // One job-scoped search cache per realm-server process, created by the
+  // composition root (main.ts) and shared with the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY can evict a finished job's entries immediately. An
+  // age-based janitor reclaims any entries a job leaves behind on a missed
+  // NOTIFY.
   let searchCache = args.searchCache;
 
   let createRealmDeps: CreateRealmDeps = {

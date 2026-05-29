@@ -24,8 +24,6 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -174,7 +172,7 @@ module('Integration | Store', function (hooks) {
   });
 
   hooks.afterEach(function () {
-    unregisterCardReferencePrefix('@test-prefix/');
+    getService('network').virtualNetwork.removeRealmMapping('@test-prefix/');
   });
 
   test('can peek a card instance', async function (assert) {
@@ -264,7 +262,10 @@ module('Integration | Store', function (hooks) {
   });
 
   test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
-    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+    getService('network').virtualNetwork.addRealmMapping(
+      '@test-prefix/',
+      testRealmURL,
+    );
 
     storeService.addReference('@test-prefix/Person/hassan');
     await storeService.flush();

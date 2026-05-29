@@ -128,7 +128,7 @@ export default function handleSearchPrerendered(opts: {
       });
       let ifNoneMatch = ctxt.get('If-None-Match');
       if (ifNoneMatch && ifNoneMatchMatches(ifNoneMatch, expectedEtag)) {
-        let cached = searchCache!.peek({
+        let cached = await searchCache!.getCached({
           jobId: jobId!,
           realms: realmList,
           query: parsed.cardsQuery,
