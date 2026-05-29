@@ -683,10 +683,41 @@ export class IndexRunner {
       return;
     }
 
+    // Supply the cache context explicitly. The worker constructs a bare
+    // `CachingDefinitionLookup` with no registered realm, so the
+    // self-resolving `getCachedDefinitions` would return null from
+    // `buildLookupContext` and persist nothing — pre-warm would log
+    // success while doing nothing. This is the same context the read-only
+    // batch reader uses (`getModuleCacheContext` → `getCachedDefinitionsBatch`).
+    let { resolvedRealmURL, cacheScope, authUserId } =
+      await this.getModuleCacheContext();
+
+    // The visit-phase reader (the realm-server's realm-scoped lookup)
+    // keys a private realm's modules cache on (realm-auth, realm-owner
+    // user id). Writing a different key — e.g. an empty user id — would
+    // replace the silent no-op with a silent *mismatch*: pre-warm would
+    // persist rows the reader never reads. A private realm with no owner
+    // user id is a misconfiguration that should never happen
+    // (`realmOwnerUserId` is derived from the realm username); if it does,
+    // skip pre-warm and let the visit phase populate on demand rather than
+    // writing keys the reader can't read.
+    if (cacheScope === 'realm-auth' && !authUserId) {
+      this.#log.warn(
+        `${jobIdentity(this.#jobInfo)} skipping module pre-warm for private realm ${this.realmURL.href}: empty cache user id would write cache keys the visit phase cannot read`,
+      );
+      return;
+    }
+
     let failed = 0;
     for (let moduleUrl of toWarm) {
       try {
-        await this.#definitionLookup.getCachedDefinitions(moduleUrl, {
+        await this.#definitionLookup.populateDefinitionCacheEntry({
+          moduleURL: moduleUrl,
+          realmURL: this.realmURL.href,
+          resolvedRealmURL,
+          cacheScope,
+          cacheUserId: authUserId,
+          prerenderUserId: this.#realmOwnerUserId,
           priority: this.#jobPriority,
         });
       } catch {

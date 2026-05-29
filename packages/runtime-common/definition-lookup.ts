@@ -285,6 +285,21 @@ export interface DefinitionLookupOptions {
   priority?: number;
 }
 
+// Explicit cache context for a read-through populate. Callers that
+// already know the realm context (the IndexRunner pre-warm, which runs
+// in the worker against a bare lookup that has no registered realm and
+// thus cannot self-resolve a context) supply it directly instead of
+// relying on `buildLookupContext`'s `#realms` / remote-probe resolution.
+export interface PopulateDefinitionCacheEntryArgs {
+  moduleURL: string;
+  realmURL: string;
+  resolvedRealmURL: string;
+  cacheScope: CacheScope;
+  cacheUserId: string;
+  prerenderUserId: string;
+  priority?: number;
+}
+
 export interface DefinitionLookup {
   lookupDefinition(
     codeRef: ResolvedCodeRef,
@@ -305,6 +320,14 @@ export interface DefinitionLookup {
   getCachedDefinitions(
     moduleUrl: string,
     opts?: DefinitionLookupOptions,
+  ): Promise<DefinitionCacheEntry | undefined>;
+  // Like getCachedDefinitions, but the caller supplies the cache context
+  // explicitly rather than letting `buildLookupContext` self-resolve it.
+  // Required by callers running against a lookup with no registered realm
+  // (the worker's IndexRunner pre-warm), where self-resolution returns
+  // null and the populate silently no-ops.
+  populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
   ): Promise<DefinitionCacheEntry | undefined>;
   getCachedDefinitionsBatch(
     query: DefinitionCacheEntryQuery,
@@ -464,6 +487,15 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId,
       prerenderUserId,
       priority: opts?.priority,
+    });
+  }
+
+  async populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
+  ): Promise<DefinitionCacheEntry | undefined> {
+    return await this.loadDefinitionCacheEntry({
+      ...args,
+      moduleURL: canonicalURL(args.moduleURL, undefined, this.#virtualNetwork),
     });
   }
 
@@ -1838,6 +1870,12 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
     opts?: DefinitionLookupOptions,
   ): Promise<DefinitionCacheEntry | undefined> {
     return await this.#inner.getCachedDefinitions(moduleUrl, opts);
+  }
+
+  async populateDefinitionCacheEntry(
+    args: PopulateDefinitionCacheEntryArgs,
+  ): Promise<DefinitionCacheEntry | undefined> {
+    return await this.#inner.populateDefinitionCacheEntry(args);
   }
 
   async getCachedDefinitionsBatch(
