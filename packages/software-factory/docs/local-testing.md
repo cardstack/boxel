@@ -196,5 +196,10 @@ Issues, card definitions, instances, and Spec.
 - Local: `https://localhost:4200/user/sticky-note-d4f1-1/`
 - Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note-d4f1-1/`
 
+This is an example of what you should be seeing when you visit the newly created realm:
+
+<img width="1889" height="1176" alt="image" src="https://github.com/user-attachments/assets/0ab22084-94a8-421b-831a-e6f54ec083bb" />
+
+
 For the full breakdown of every step the agent performs, what it
 invokes, and the expected output, see [docs/runbook.md](./runbook.md).
