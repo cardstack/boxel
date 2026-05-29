@@ -37,6 +37,7 @@ import {
 import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';
 
 import type LoaderService from '../services/loader-service';
+import type NetworkService from '../services/network';
 import type RealmServerService from '../services/realm-server';
 
 const waiter = buildWaiter('prerendered-search-resource:search-waiter');
@@ -55,6 +56,7 @@ export interface Args {
 
 export class PrerenderedSearchResource extends Resource<Args> {
   @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
   @service declare private realmServer: RealmServerService;
 
   private realmsToSearch: string[] = [];
@@ -328,7 +330,11 @@ export class PrerenderedSearchResource extends Resource<Args> {
     let isFileMeta = !!json.meta.isFileMeta;
     return {
       instances: json.data.filter(Boolean).map((r) => {
-        let realmUrl = resolveCardRealmUrl(r.id, resolvedRealms);
+        let realmUrl = resolveCardRealmUrl(
+          r.id,
+          resolvedRealms,
+          this.network.virtualNetwork,
+        );
         return new PrerenderedCard(
           {
             url: r.id,

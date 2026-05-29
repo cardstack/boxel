@@ -24,11 +24,33 @@
         }
       ]
     },
-    "description": "Per-service deep-dive for the Worker ECS service. Currently stub-only — shows filtered logs from Loki. CloudWatch CPU / memory / running-task-count panels are TBD and will land when ECS cluster naming is standardized in observability config.",
+    "description": "Per-service deep-dive for the Worker ECS service (`boxel-worker-${env}`). Covers (1) fleet sizing and resource utilisation from CloudWatch, (2) the supervised-child lifecycle — boots, respawns, watchdog kills, fatal-handler exits — from Loki, (3) indexing throughput and per-job errors, and (4) per-worker_id retry/timeout attribution from Postgres. Each worker task runs one `worker-manager` that forks and supervises N priority-0 / priority-10 `worker` children; the Process lifecycle row is the primary triage view for crash-loops and unclean shutdowns.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
     "links": [
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:queue"
+        ],
+        "title": "Job Queue",
+        "type": "dashboards"
+      },
+      {
+        "asDropdown": false,
+        "icon": "external link",
+        "includeVars": false,
+        "keepTime": true,
+        "tags": [
+          "workflow:indexing"
+        ],
+        "title": "Indexing",
+        "type": "dashboards"
+      },
       {
         "asDropdown": false,
         "icon": "external link",
@@ -44,17 +66,1028 @@
     "panels": [
       {
         "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS task count for `boxel-worker-${env}` — `Run` is RunningTaskCount, `Need` is DesiredTaskCount (both from ECS/ContainerInsights, Maximum over the panel refresh window). Run < Need usually means tasks are crashing or the service is under-scaled. Locally this shows 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 2,
+            "mappings": [
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^0\\.0*(\\d+)$",
+                  "result": {
+                    "text": "0 / $1",
+                    "color": "red"
+                  }
+                }
+              },
+              {
+                "type": "regex",
+                "options": {
+                  "pattern": "^(\\d+)\\.0*(\\d+)$",
+                  "result": {
+                    "text": "$1 / $2",
+                    "color": "green"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
+              ]
+            },
+            "unit": "none"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "id": 10,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "none",
+          "justifyMode": "center",
+          "orientation": "horizontal",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "e1",
+            "values": false
+          },
+          "textMode": "value",
+          "wideLayout": true
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "id": "a",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "id": "b",
+            "hide": true
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "expression": "a + b/100",
+            "metricQueryType": 0,
+            "metricEditorMode": 1,
+            "namespace": "",
+            "metricName": "",
+            "dimensions": {},
+            "statistic": "",
+            "period": "",
+            "region": "default",
+            "refId": "e1",
+            "id": "e1"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "convertFieldType",
+            "options": {
+              "fields": {},
+              "conversions": [
+                {
+                  "targetField": "Value",
+                  "destinationType": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "title": "Tasks (Run / Need)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Number of `job_reservations` currently held open by a worker (`completed_at IS NULL AND locked_until > NOW()`). This is the worker-side view of in-flight work — one row per child currently running a job. Compare against the Tasks panel to see how saturated the fleet is.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "blue"
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "id": 11,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT COUNT(*)::int AS active\n  FROM job_reservations\n WHERE completed_at IS NULL\n   AND locked_until > NOW();",
+            "refId": "A"
+          }
+        ],
+        "title": "Active reservations",
+        "type": "stat"
+      },
+      {
+        "datasource": {
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Worker activity rates from Loki. `indexed` is the rate of `[indexing-progress] event=file-visited` lines (files processed per second across all jobs). `errors` is the rate of `encountered error indexing` lines.",
+        "description": "Times the worker-manager watchdog force-killed a child for sitting past its reservation `locked_until + 30s` (see `monitorWorker` in worker-manager.ts). Each kill rejects the job and recycles the worker. Steady-state should be 0 — non-zero usually means a long-running prerender stalled or a deadlock.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 3
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "id": 12,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"killing worker .* due to stuck jobs\" [$__range]))",
+            "legendFormat": "kills",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Stuck-job kills (window)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Fatal in-process exits from worker children — `unhandledRejection` / `uncaughtException` caught by the `fatalExit` backstop in worker.ts, plus V8 `FATAL ERROR` heap-OOM lines. Each one is a real crash (not a SIGTERM) and is followed by the manager spawning a replacement. Steady-state should be 0.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "red",
+                  "value": 5
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "id": 13,
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "center",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto"
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"Fatal (uncaughtException|unhandledRejection) in worker child|FATAL ERROR\" [$__range]))",
+            "legendFormat": "fatals",
+            "queryType": "instant",
+            "refId": "A"
+          }
+        ],
+        "title": "Fatal exits (window)",
+        "type": "stat"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "ECS CPU and memory utilisation for `boxel-worker-${env}` on cluster `${env}` — averages over the panel refresh window. CPU runs hot during indexing bursts; sustained 90%+ on either axis usually means the task is undersized. Locally these show 'No data' — CloudWatch is staging/production only.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "transparent",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "A"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "CPU"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byFrameRefID",
+                "options": "B"
+              },
+              "properties": [
+                {
+                  "id": "displayName",
+                  "value": "Mem"
+                },
+                {
+                  "id": "unit",
+                  "value": "percent"
+                },
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 70
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 4
+        },
+        "id": 20,
+        "options": {
+          "displayMode": "gradient",
+          "orientation": "horizontal",
+          "showUnfilled": true,
+          "valueMode": "color",
+          "namePlacement": "auto",
+          "minVizWidth": 0,
+          "minVizHeight": 10,
+          "maxVizHeight": 300,
+          "sizing": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "CPUUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "AWS/ECS",
+            "metricName": "MemoryUtilization",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Average",
+            "period": "",
+            "region": "default",
+            "refId": "B"
+          }
+        ],
+        "title": "CPU & memory utilisation",
+        "type": "bargauge"
+      },
+      {
+        "datasource": {
+          "type": "cloudwatch",
+          "uid": "cef5x9o3yzawwf"
+        },
+        "description": "Running vs desired ECS task count over time. The two lines diverging (Run < Need) is the visual proof of crash-looping; Run dropping to 0 is a deploy or outage. Pairs with the Process lifecycle panels below — if Run < Need but boots > 0, replacements are starting but not completing.",
         "fieldConfig": {
           "defaults": {
             "color": {
               "mode": "palette-classic"
             },
             "custom": {
-              "axisLabel": "lines/s",
+              "axisLabel": "tasks",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "stepAfter",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Running"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Desired"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "blue"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 4
+        },
+        "id": 21,
+        "options": {
+          "legend": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "RunningTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "A",
+            "alias": "Running"
+          },
+          {
+            "datasource": {
+              "type": "cloudwatch",
+              "uid": "cef5x9o3yzawwf"
+            },
+            "namespace": "ECS/ContainerInsights",
+            "metricName": "DesiredTaskCount",
+            "metricEditorMode": 0,
+            "metricQueryType": 0,
+            "dimensions": {
+              "ClusterName": "${env}",
+              "ServiceName": "boxel-worker-${env}"
+            },
+            "statistic": "Maximum",
+            "period": "",
+            "region": "default",
+            "refId": "B",
+            "alias": "Desired"
+          }
+        ],
+        "title": "Task count over time",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Per-child lifecycle events derived from worker-manager log lines. `boots` is `[worker <id> priority <p>]: worker ready`; `respawns` is `worker <id> exited (...). spawning replacement worker`; `watchdog kills` is `killing worker <id> due to stuck jobs`; `fatals` is the in-process fatal-handler backstop. In steady state respawns track boots 1:1 — a sustained respawn rate with no matching boots means children are dying before reaching ready.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/s",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 10,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "ops"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "boots"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "respawns"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "watchdog kills"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "fatals"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "dark-red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 12
+        },
+        "id": 30,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "max"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(rate({service=\"worker\"} |~ \"\\\\[worker .* priority .*\\\\]: worker ready\" [1m]))",
+            "legendFormat": "boots",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(rate({service=\"worker\"} |~ \"exited \\\\(code=.*signal=.*\\\\)\\\\. spawning replacement worker\" [1m]))",
+            "legendFormat": "respawns",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(rate({service=\"worker\"} |~ \"killing worker .* due to stuck jobs\" [1m]))",
+            "legendFormat": "watchdog kills",
+            "queryType": "range",
+            "refId": "C"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(rate({service=\"worker\"} |~ \"Fatal (uncaughtException|unhandledRejection) in worker child|FATAL ERROR\" [1m]))",
+            "legendFormat": "fatals",
+            "queryType": "range",
+            "refId": "D"
+          }
+        ],
+        "title": "Worker process events (boots / respawns / kills)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Manager-process lifecycle stamps from the FD-level `writeSync(2, ...)` instrumentation in worker-manager.ts — these survive process death even when the log pipeline is torn down. `STARTUP` = task boot, `SIGTERM` = ECS-initiated stop (deploy / scale-in / stopTimeout), `uncaughtException` = manager itself crashed. A STARTUP not preceded by a SIGTERM in the same task means the container died without graceful signal delivery (cgroup OOM, host failure, ECS SIGKILL on stopTimeout expiry).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "events/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "STARTUP"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "SIGTERM"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "blue"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "uncaughtException"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 12
+        },
+        "id": 31,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "none"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"\\\\[worker-manager\\\\] STARTUP\" [1m]))",
+            "legendFormat": "STARTUP",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"\\\\[worker-manager\\\\] SIGTERM received\" [1m]))",
+            "legendFormat": "SIGTERM",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"\\\\[worker-manager\\\\] uncaughtException\" [1m]))",
+            "legendFormat": "uncaughtException",
+            "queryType": "range",
+            "refId": "C"
+          }
+        ],
+        "title": "Manager lifecycle stamps",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Worker activity rates from Loki. `indexed` is the rate of `[indexing-progress] event=file-visited` lines (files processed/sec across all jobs). `finished` is `[indexing-progress] event=finished` (jobs completing). `errors` is `encountered error indexing` lines (per-file failures inside a job that does not itself crash).",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "rate",
               "axisPlacement": "auto",
               "barAlignment": 0,
               "drawStyle": "line",
@@ -112,6 +1145,21 @@
             {
               "matcher": {
                 "id": "byName",
+                "options": "finished"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "green"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
                 "options": "errors"
               },
               "properties": [
@@ -128,11 +1176,11 @@
         },
         "gridPos": {
           "h": 8,
-          "w": 24,
+          "w": 12,
           "x": 0,
-          "y": 0
+          "y": 20
         },
-        "id": 2,
+        "id": 40,
         "options": {
           "legend": {
             "calcs": [
@@ -165,13 +1213,116 @@
               "type": "loki",
               "uid": "loki"
             },
+            "expr": "sum(rate({service=\"worker\"} |~ \"\\\\[indexing-progress\\\\] event=finished\" [1m]))",
+            "legendFormat": "finished",
+            "queryType": "range",
+            "refId": "B"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
             "expr": "sum(rate({service=\"worker\"} |~ \"encountered error indexing\" [1m]))",
             "legendFormat": "errors",
             "queryType": "range",
-            "refId": "B"
+            "refId": "C"
           }
         ],
-        "title": "Worker activity rate (indexed / errors)",
+        "title": "Indexing activity rate",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Resolved jobs per minute by `job_type`, taken from the `jobs` table. Lets you see whether the worker fleet is mostly indexing or whether cron-driven jobs (`daily-credit-grant`, `screenshot-card`, `run-command`) are crowding the queue.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "jobs/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "line",
+              "fillOpacity": 30,
+              "gradientMode": "opacity",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "smooth",
+              "lineWidth": 2,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "decimals": 1,
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 20
+        },
+        "id": 41,
+        "options": {
+          "legend": {
+            "calcs": [
+              "mean",
+              "lastNotNull"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '1m', 0),\n       job_type AS metric,\n       COUNT(*)::int AS value\n  FROM jobs\n WHERE status = 'resolved'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1, job_type\n ORDER BY 1, 2;",
+            "refId": "A"
+          }
+        ],
+        "title": "Jobs completed by job_type",
         "type": "timeseries"
       },
       {
@@ -179,12 +1330,461 @@
           "type": "loki",
           "uid": "loki"
         },
-        "description": "Last 1000 log lines from worker. Drill-throughs from Overview land here.",
+        "description": "Per-file indexing errors from `runtime-common/index-runner` — `encountered error indexing card instance ...` and `encountered error indexing file ...`. These are job-internal failures (a single card or file failed) that do NOT crash the worker — the worker keeps processing the rest of the job and writes an error doc for the bad entry. Distinct from the worker-level `Fatal exits` stat above.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "custom": {
+              "axisLabel": "errors/min",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 60,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "card instance errors"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "file errors"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "orange"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 28
+        },
+        "id": 50,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"encountered error indexing card instance\" [1m]))",
+            "legendFormat": "card instance errors",
+            "queryType": "range",
+            "refId": "A"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"worker\"} |~ \"encountered error indexing file\" [1m]))",
+            "legendFormat": "file errors",
+            "queryType": "range",
+            "refId": "B"
+          }
+        ],
+        "title": "Per-file indexing errors",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Jobs that pg-queue gave up on after exhausting `maxReservationCount` real attempts (only `completion_reason='completed'` reservations count — `'interrupted'`/`'timeout-expired'` retries from deploys or crashes are not penalised). A non-zero value almost always indicates a deterministic bug in the job handler rather than infrastructure noise.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "axisLabel": "abandoned/5m",
+              "axisPlacement": "auto",
+              "barAlignment": 0,
+              "drawStyle": "bars",
+              "fillOpacity": 80,
+              "gradientMode": "none",
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "viz": false
+              },
+              "lineInterpolation": "linear",
+              "lineWidth": 1,
+              "pointSize": 5,
+              "scaleDistribution": {
+                "type": "linear"
+              },
+              "showPoints": "never",
+              "spanNulls": false,
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                }
+              ]
+            },
+            "unit": "short"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "abandoned"
+              },
+              "properties": [
+                {
+                  "id": "color",
+                  "value": {
+                    "mode": "fixed",
+                    "fixedColor": "red"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 28
+        },
+        "id": 51,
+        "options": {
+          "legend": {
+            "calcs": [
+              "sum"
+            ],
+            "displayMode": "table",
+            "placement": "right",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "pluginVersion": "12.4.3",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "time_series",
+            "rawQuery": true,
+            "rawSql": "SELECT $__timeGroupAlias(finished_at, '5m', 0),\n       COUNT(*)::int AS abandoned\n  FROM jobs\n WHERE status = 'rejected'\n   AND result->>'message' LIKE 'Job abandoned after%'\n   AND finished_at IS NOT NULL\n   AND $__timeFilter(finished_at)\n GROUP BY 1\n ORDER BY 1;",
+            "refId": "A"
+          }
+        ],
+        "title": "Jobs abandoned by pg-queue (max attempts hit)",
+        "type": "timeseries"
+      },
+      {
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "cef5v5sl9k7i8f"
+        },
+        "description": "Per-worker reservation accounting over the dashboard time window, joined to `worker_id`. `completed` is real verdicts (success or task-level failure); `interrupted` means the manager force-killed during shutdown or the child crashed mid-job; `timeout_expired` means the lease ran out without a verdict (usually the watchdog reaping a stuck worker). A worker with disproportionate `interrupted` or `timeout_expired` is the one to drill into — click its row to open Logs filtered by that `worker_id`.",
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "align": "left",
+              "cellOptions": {
+                "type": "auto"
+              },
+              "filterable": true,
+              "inspect": false,
+              "minWidth": 120
+            },
+            "mappings": [],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green"
+                }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "worker_id"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "targetBlank": true,
+                      "title": "View logs for this worker",
+                      "url": "/d/fetquzizsej28b?${__url_time_range}&var-worker_id=${__data.fields.worker_id}&orgId=1&viewPanel=4"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "interrupted"
+              },
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green"
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 3
+                      },
+                      {
+                        "color": "red",
+                        "value": 10
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "gradient"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "timeout_expired"
+              },
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green"
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 1
+                      },
+                      {
+                        "color": "red",
+                        "value": 3
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "gradient"
+                  }
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "longest_held_secs"
+              },
+              "properties": [
+                {
+                  "id": "unit",
+                  "value": "s"
+                }
+              ]
+            }
+          ]
+        },
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 36
+        },
+        "id": 60,
+        "options": {
+          "cellHeight": "sm",
+          "footer": {
+            "countRows": false,
+            "enablePagination": true,
+            "fields": "",
+            "reducer": [
+              "sum"
+            ],
+            "show": false
+          },
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "interrupted"
+            }
+          ]
+        },
+        "pluginVersion": "10.4.1",
+        "targets": [
+          {
+            "datasource": {
+              "type": "grafana-postgresql-datasource",
+              "uid": "cef5v5sl9k7i8f"
+            },
+            "editorMode": "code",
+            "format": "table",
+            "rawQuery": true,
+            "rawSql": "SELECT jr.worker_id,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'completed')::int AS completed,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'interrupted')::int AS interrupted,\n       COUNT(*) FILTER (WHERE jr.completion_reason = 'timeout-expired')::int AS timeout_expired,\n       MAX(EXTRACT(EPOCH FROM (COALESCE(jr.completed_at, NOW()) - jr.created_at)))::int AS longest_held_secs,\n       MAX(jr.created_at) AS last_seen\n  FROM job_reservations jr\n WHERE $__timeFilter(jr.created_at)\n GROUP BY jr.worker_id\n ORDER BY interrupted DESC, timeout_expired DESC, completed DESC\n LIMIT 100;",
+            "refId": "A"
+          }
+        ],
+        "title": "Per-worker reservation outcomes (window)",
+        "type": "table"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Filtered error / lifecycle stream — fatal handlers, watchdog kills, indexing errors, abandoned jobs, manager STARTUP/SIGTERM stamps, and child respawns. The errors-only view triages 'something is wrong' without scrolling the firehose.",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 46
+        },
+        "id": 70,
+        "options": {
+          "dedupStrategy": "none",
+          "enableLogDetails": true,
+          "prettifyLogMessage": false,
+          "showCommonLabels": false,
+          "showLabels": false,
+          "showTime": true,
+          "sortOrder": "Descending",
+          "wrapLogMessage": true
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "{service=\"worker\"} |~ \"Fatal (uncaughtException|unhandledRejection)|FATAL ERROR|killing worker .* due to stuck jobs|encountered (error|fatal error) indexing|abandoned job .* after .* prior reservations|\\\\[worker-manager\\\\] (STARTUP|SIGTERM received|uncaughtException)|exited \\\\(code=.*signal=.*\\\\)\\\\. spawning replacement worker\"",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "title": "Errors & lifecycle stream",
+        "type": "logs"
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Last 1000 log lines from worker tasks (unfiltered). Loki label `service=\"worker\"` covers both `worker-manager` and child `worker` processes (alloy/config.alloy assigns the same label to both). Drill-throughs from Overview land here.",
         "gridPos": {
           "h": 16,
           "w": 24,
           "x": 0,
-          "y": 8
+          "y": 54
         },
         "id": 1,
         "options": {
@@ -208,7 +1808,7 @@
             "refId": "A"
           }
         ],
-        "title": "Worker logs",
+        "title": "Worker logs (all)",
         "type": "logs"
       }
     ],
@@ -218,10 +1818,18 @@
       "service:worker"
     ],
     "templating": {
-      "list": []
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
     },
     "time": {
-      "from": "now-30m",
+      "from": "now-1h",
       "to": "now"
     },
     "timepicker": {},

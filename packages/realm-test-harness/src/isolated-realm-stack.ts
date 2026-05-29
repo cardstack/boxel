@@ -279,13 +279,24 @@ async function fetchUpstreamWithRetry(
   }
 }
 
-async function startCompatRealmProxy({
+export async function startCompatRealmProxy({
   listenPort,
 }: {
   listenPort: number;
 }): Promise<StartedCompatRealmProxy> {
   realmLog.debug(`startCompatRealmProxy: requested listenPort=${listenPort}`);
   let targetPort: number | undefined;
+  // Notifier for `clearTargetPort()` → `setTargetPort()` round-trips. While
+  // `targetPort` is unset, incoming requests `await` this promise instead
+  // of 502-ing against a non-existent upstream. Recreated on each
+  // `clearTargetPort` call so the next `setTargetPort` can resolve a
+  // fresh set of waiters.
+  let targetReady: Promise<void> = Promise.resolve();
+  let resolveTargetReady: (() => void) | undefined;
+  // Cap how long a single request will block waiting for a new target.
+  // 30s is well under Playwright's 300s test timeout and the 240s
+  // metadata-file wait in fixtures.ts.
+  const PROXY_TARGET_WAIT_TIMEOUT_MS = 30_000;
   // Set alongside the target port: returns a one-shot snapshot of the
   // upstream realm-server child's liveness and recent buffered output. The
   // child's stdout/stderr are otherwise only flushed to CI on an
@@ -311,10 +322,36 @@ async function startCompatRealmProxy({
         return;
       }
       if (targetPort == null) {
-        res.statusCode = 503;
-        res.setHeader('content-type', 'text/plain; charset=utf-8');
-        res.end('software-factory compat proxy target is not ready');
-        return;
+        // Per-test realm-server restart in progress. Block briefly so the
+        // prerender's standby refill doesn't pin a broken page-load state
+        // for 90s waiting for `#standby-ready`. Cap with both an explicit
+        // timeout and the proxy's stopAbort signal so a hung handoff
+        // still surfaces a 503 (not an indefinite wait).
+        let timedOut = false;
+        let waitTimer: NodeJS.Timeout | undefined;
+        try {
+          await Promise.race([
+            targetReady,
+            new Promise<void>((resolveTimeout) => {
+              waitTimer = setTimeout(() => {
+                timedOut = true;
+                resolveTimeout();
+              }, PROXY_TARGET_WAIT_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          // Clear the timer whenever `targetReady` wins the race — an
+          // un-cleared 30s timer keeps the event loop (and the Playwright
+          // worker) alive past teardown. Harmless when the timer is the
+          // one that fired.
+          clearTimeout(waitTimer);
+        }
+        if (stopping || timedOut || targetPort == null) {
+          res.statusCode = 503;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.end('software-factory compat proxy target is not ready');
+          return;
+        }
       }
       let incomingURL = new URL(
         req.url ?? '/',
@@ -407,8 +444,24 @@ async function startCompatRealmProxy({
     setTargetPort(nextTargetPort: number, nextDescribeUpstreamHealth) {
       targetPort = nextTargetPort;
       describeUpstreamHealth = nextDescribeUpstreamHealth;
+      // Release any requests that blocked while the previous target was
+      // cleared (per-test realm-server restart window).
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
       realmLog.debug(
         `startCompatRealmProxy: ${actualListenPort} -> ${nextTargetPort} ready`,
+      );
+    },
+    clearTargetPort() {
+      if (targetPort == null && resolveTargetReady != null) {
+        return; // already in "transitioning" state
+      }
+      targetPort = undefined;
+      targetReady = new Promise<void>((resolveReady) => {
+        resolveTargetReady = resolveReady;
+      });
+      realmLog.debug(
+        `startCompatRealmProxy: ${actualListenPort} -> (transitioning, awaiting next setTargetPort)`,
       );
     },
     async stop() {
@@ -420,6 +473,11 @@ async function startCompatRealmProxy({
       // can't hang on a request looping against a dead upstream.
       stopping = true;
       stopAbort.abort();
+      // Release any requests blocked in `targetReady` so they observe
+      // `stopping=true` and short-circuit to 503 instead of hanging until
+      // PROXY_TARGET_WAIT_TIMEOUT_MS.
+      resolveTargetReady?.();
+      resolveTargetReady = undefined;
       (server as { closeAllConnections?: () => void }).closeAllConnections?.();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -512,6 +570,7 @@ export async function startIsolatedRealmStack({
   workerManagerPort: explicitWorkerManagerPort,
   realmServerPort: explicitRealmServerPort,
   prerenderURL: explicitPrerenderURL,
+  noCompatProxy,
 }: {
   realms: RealmConfig[];
   realmServerURL: URL;
@@ -533,6 +592,13 @@ export async function startIsolatedRealmStack({
    *  starting a new one. The Playwright harness keeps prerender alive for
    *  the lifetime of a testWorker and passes its URL here. */
   prerenderURL?: string;
+  /** When true, skip creating an in-stack compat proxy. The caller owns
+   *  the proxy out-of-band (e.g., the Playwright worker keeps one alive
+   *  for the whole testWorker's lifetime so the stable
+   *  compat-realm-server port has no listener gap between tests, and
+   *  calls `setTargetPort` on it itself once the realm-server binds).
+   *  The returned stack's `compatProxy` is `undefined` in that case. */
+  noCompatProxy?: boolean;
 }): Promise<RunningFactoryStack> {
   if (realms.length === 0) {
     throw new Error('startIsolatedRealmStack requires at least one realm');
@@ -626,9 +692,11 @@ export async function startIsolatedRealmStack({
         username,
       });
     }
-    let compatProxy = await startCompatRealmProxy({
-      listenPort: Number(realmServerURL.port),
-    });
+    let compatProxy = noCompatProxy
+      ? undefined
+      : await startCompatRealmProxy({
+          listenPort: Number(realmServerURL.port),
+        });
     // The software-factory Playwright harness can keep prerender alive for the
     // lifetime of a Playwright testWorker even though the realm stack itself is
     // recreated per test. When provided, reuse that long-lived prerender URL so
@@ -689,8 +757,12 @@ export async function startIsolatedRealmStack({
       LOW_CREDIT_THRESHOLD: '2000',
       LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
       BOXEL_TRUST_FORWARDED_URL: 'true',
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${compatProxy.listenPort}`,
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${compatProxy.listenPort}`,
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${
+        compatProxy?.listenPort ?? Number(realmServerURL.port)
+      }`,
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${
+        compatProxy?.listenPort ?? Number(realmServerURL.port)
+      }`,
       TEST_HARNESS_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,
       TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
     };
@@ -908,7 +980,11 @@ export async function startIsolatedRealmStack({
           Date.now() - realmServerSpawnedAt
         }ms`,
       );
-      compatProxy.setTargetPort(realmServerRuntime.port, () =>
+      // When the caller owns the proxy externally (`noCompatProxy`), they
+      // call `setTargetPort` themselves after reading the realm-server
+      // port from the metadata file this child writes — so we skip it
+      // here. Otherwise (proxy lives in this stack), repoint it now.
+      compatProxy?.setTargetPort(realmServerRuntime.port, () =>
         describeRealmServerHealth(realmServer, realmServerExit, getServerLogs),
       );
       await Promise.race([
@@ -935,12 +1011,16 @@ export async function startIsolatedRealmStack({
       );
 
       return {
+        // Undefined when the caller owns the proxy externally (see
+        // `noCompatProxy`); that proxy stays alive across this stack's
+        // teardown so the next stack can rebind the realm-server behind
+        // it without a listener gap on the stable compat port.
         compatProxy,
         prerender,
         realmServer,
         realmServerURL,
         ports: {
-          publicPort: compatProxy.listenPort,
+          publicPort: compatProxy?.listenPort ?? Number(realmServerURL.port),
           realmServerPort: realmServerRuntime.port,
           workerManagerPort: workerManagerRuntime.port,
         },

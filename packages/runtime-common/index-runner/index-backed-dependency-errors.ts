@@ -2,6 +2,7 @@ import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
 import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
 import { cardIdToURL } from '../card-reference-resolver';
+import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 import {
   canTraverseRelationshipDependency,
@@ -11,6 +12,7 @@ import {
 
 interface IndexBackedDependencyErrorOptions {
   realmURL: URL;
+  virtualNetwork?: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
@@ -20,6 +22,7 @@ interface IndexBackedDependencyErrorOptions {
 
 export class IndexBackedDependencyErrors {
   #realmURL: URL;
+  #virtualNetwork: VirtualNetwork | undefined;
   #readDefinitionCacheEntries: (
     moduleIds: string[],
   ) => Promise<DefinitionCacheEntries>;
@@ -29,11 +32,13 @@ export class IndexBackedDependencyErrors {
 
   constructor({
     realmURL,
+    virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
     getInvalidations,
   }: IndexBackedDependencyErrorOptions) {
     this.#realmURL = realmURL;
+    this.#virtualNetwork = virtualNetwork;
     this.#readDefinitionCacheEntries = readDefinitionCacheEntries;
     this.#getDependencyRows = getDependencyRows;
     this.#getInvalidations = getInvalidations;
@@ -44,7 +49,11 @@ export class IndexBackedDependencyErrors {
   }
 
   invalidateRelationshipDependencyRowCache(url: URL): void {
-    let canonical = canonicalURL(url.href, this.#realmURL.href);
+    let canonical = canonicalURL(
+      url.href,
+      this.#realmURL.href,
+      this.#virtualNetwork,
+    );
     this.#relationshipDependencyRows.delete(canonical);
   }
 
@@ -220,7 +229,11 @@ export class IndexBackedDependencyErrors {
     let pending = new Set<string>();
     let visited = new Set<string>();
     let enqueue = (dep: string, base: URL) => {
-      let normalized = normalizeDependencyForLookup(dep, base);
+      let normalized = normalizeDependencyForLookup(
+        dep,
+        base,
+        this.#virtualNetwork,
+      );
       if (!normalized || normalized.endsWith('.json')) {
         return;
       }
@@ -251,7 +264,9 @@ export class IndexBackedDependencyErrors {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = cardIdToURL(error.id);
+            base = this.#virtualNetwork
+              ? this.#virtualNetwork.toURL(error.id)
+              : cardIdToURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }
@@ -272,8 +287,18 @@ export class IndexBackedDependencyErrors {
     let pending = new Set<string>();
     let visited = new Set<string>();
     let enqueue = (dep: string, base: URL) => {
-      let normalized = normalizeStoredDependency(dep, base);
-      if (!canTraverseRelationshipDependency(normalized, this.#realmURL)) {
+      let normalized = normalizeStoredDependency(
+        dep,
+        base,
+        this.#virtualNetwork,
+      );
+      if (
+        !canTraverseRelationshipDependency(
+          normalized,
+          this.#realmURL,
+          this.#virtualNetwork,
+        )
+      ) {
         return;
       }
       if (visited.has(normalized)) {
@@ -329,8 +354,16 @@ export class IndexBackedDependencyErrors {
     relativeTo: URL,
   ): Promise<SerializedError[]> {
     let urls = [...new Set(deps)]
-      .map((dep) => normalizeStoredDependency(dep, relativeTo))
-      .filter((dep) => canTraverseRelationshipDependency(dep, this.#realmURL));
+      .map((dep) =>
+        normalizeStoredDependency(dep, relativeTo, this.#virtualNetwork),
+      )
+      .filter((dep) =>
+        canTraverseRelationshipDependency(
+          dep,
+          this.#realmURL,
+          this.#virtualNetwork,
+        ),
+      );
     if (urls.length === 0) {
       return [];
     }
@@ -340,7 +373,7 @@ export class IndexBackedDependencyErrors {
     let seenErrors = new Set<string>();
     let pendingInvalidations = new Set(
       this.#getInvalidations().map((href) =>
-        normalizeStoredDependency(href, this.#realmURL),
+        normalizeStoredDependency(href, this.#realmURL, this.#virtualNetwork),
       ),
     );
     for (let dep of urls) {

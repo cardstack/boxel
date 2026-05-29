@@ -1,9 +1,7 @@
 import { baseRealm, baseFileRef } from './constants';
 import type { ResolvedCodeRef } from './code-ref';
-import {
-  resolveCardReference,
-  type RealmResourceIdentifier,
-} from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
+import type { VirtualNetwork } from './virtual-network';
 
 export const BASE_FILE_DEF_CODE_REF = baseFileRef;
 
@@ -34,7 +32,10 @@ const FILEDEF_CODE_REF_BY_EXTENSION: Record<string, ResolvedCodeRef> = {
   },
 };
 
-export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
+export function resolveFileDefCodeRef(
+  fileURL: URL,
+  virtualNetwork: VirtualNetwork,
+): ResolvedCodeRef {
   let name = fileURL.pathname.split('/').pop() ?? '';
   let dot = name.lastIndexOf('.');
   let extension = dot === -1 ? '' : name.slice(dot).toLowerCase();
@@ -49,9 +50,7 @@ export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   }
   return {
     ...mapping,
-    module: resolveCardReference(
-      mapping.module,
-      fileURL,
-    ) as RealmResourceIdentifier,
+    module: virtualNetwork.resolveURL(mapping.module, fileURL)
+      .href as RealmResourceIdentifier,
   };
 }
