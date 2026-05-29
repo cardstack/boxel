@@ -66,9 +66,12 @@ If you already have the repo, just:
 cd <path-to>/boxel/packages/software-factory
 ```
 
-You also need a running realm server reachable at the URL you'll use.
-For local work that's `mise run dev-all` from the monorepo root
-(starts realm server, host app, icons server, Postgres, Synapse).
+The realm server at the URL you target must be reachable. If you're
+publishing to **staging or prod**, it's already running — you just
+need a profile whose credentials point at it (see step 2). If you're
+working **locally**, start it yourself with `mise run dev-all` from
+the monorepo root (starts realm server, host app, icons server,
+Postgres, Synapse).
 
 ---
 
