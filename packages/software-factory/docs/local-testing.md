@@ -139,6 +139,13 @@ issues, finishing with `outcome=all_issues_done`. See the README's
 ["What to expect on the command line"](../README.md) section for the
 full log shape and the resulting target-realm artifact tree.
 
+**See the result:** open the Boxel host app and navigate to the
+target realm to browse the generated Project, Issues, card
+definitions, instances, and Spec.
+
+- Local: `https://localhost:4200/user/sticky-note-9708/`
+- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note-9708/`
+
 ---
 
 ## Section 2 — Running the factory using the umbrella skill (`runbook.md`)
@@ -181,6 +188,13 @@ Target realm: https://realms-staging.stack.cards/<your-username>/sticky-note-d4f
 > Always include "per docs/runbook.md". Without it, the agent falls
 > back to the SDK-orchestrator path described in this package's
 > `CLAUDE.md` instead of driving the loop itself.
+
+**See the result:** when the run finishes, open the Boxel host app
+and navigate to the target realm to browse the generated Project,
+Issues, card definitions, instances, and Spec.
+
+- Local: `https://localhost:4200/user/sticky-note-d4f1-1/`
+- Staging: `https://boxel-host-staging.stack.cards/<your-username>/sticky-note-d4f1-1/`
 
 For the full breakdown of every step the agent performs, what it
 invokes, and the expected output, see [docs/runbook.md](./runbook.md).
