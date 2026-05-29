@@ -1408,100 +1408,115 @@ export class PagePool {
 
   async #loadStandbyPage(page: Page, pageId: string): Promise<void> {
     let standbyURL = `${this.#boxelHostURL}/_standby`;
-    try {
-      let response = await page.goto(standbyURL, {
-        waitUntil: 'domcontentloaded',
-        timeout: this.#standbyTimeoutMs,
-      });
-      let status = response?.status();
-      if (status === 502 || status === 503) {
-        throw new StandbyTargetNotReadyError(
-          `Standby target ${standbyURL} returned HTTP ${status}`,
-        );
-      }
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(
-          error.message,
-        )
-      ) {
-        throw new StandbyTargetNotReadyError(
-          `Standby target ${standbyURL} is not reachable yet: ${error.message}`,
-        );
-      }
-      throw error;
-    }
 
-    // The navigation above resolves on `domcontentloaded` — i.e. the HTML
-    // shell, not the booted Ember app. If the page was created during the
-    // post-launch cert-verifier reconfiguration window, every script fetch
-    // fails with ERR_CERT_VERIFIER_CHANGED, the app never boots, and
-    // `#standby-ready` never appears. Without intervention the wait below
-    // would burn the full `#standbyTimeoutMs` (30s by default) before
-    // `#createStandbyWithRetries` got a chance to retry on a fresh context —
-    // and during a from-scratch index that wasted budget can push a caller
-    // (e.g. the matrix-client realm-server startup probe) past its own
-    // deadline. Watch for the signature on a critical asset and abort the
-    // wait immediately so the retry — which lands once the verifier has
-    // settled — happens in milliseconds rather than after the timeout.
-    let ready = page.waitForFunction(() => {
-      let marker = document.querySelector('#standby-ready');
-      return !!marker;
-    });
-
-    // Test stubs of Page don't all expose the event emitter — guard the
-    // early-abort wiring the same way `#markPageAsInPrerender` guards its
+    // If the page was created during Chrome's post-launch cert-verifier
+    // reconfiguration window, its boot assets are fetched with
+    // ERR_CERT_VERIFIER_CHANGED, the Ember app never boots, and
+    // `#standby-ready` never appears. Without intervention the readiness
+    // wait below burns the full `#standbyTimeoutMs` (30s by default) before
+    // `#createStandbyWithRetries` retries on a fresh context — and during a
+    // from-scratch index that wasted budget can push a caller (e.g. the
+    // matrix-client realm-server startup probe) past its own deadline.
+    // Watch for the signature on a critical asset and abort the wait
+    // immediately so the retry — which lands once the verifier has settled —
+    // happens in milliseconds rather than after the timeout.
+    //
+    // The watcher is installed BEFORE navigation: a parser-blocking boot
+    // script (e.g. the vendor chunk) that cert-fails does so while
+    // `domcontentloaded` is still pending, so `requestfailed` would fire
+    // before a post-goto listener could attach and the signal would be
+    // missed. Test stubs of Page don't all expose the event emitter, so
+    // guard the wiring the same way `#markPageAsInPrerender` guards its
     // optional observability hook, falling back to the plain readiness wait.
-    if (typeof page.on !== 'function' || typeof page.off !== 'function') {
-      await this.#withStandbyTimeout(() => ready, pageId);
-      return;
+    let canWatchRequests =
+      typeof page.on === 'function' && typeof page.off === 'function';
+    let abortOnCertVerifierChange: ((error: Error) => void) | undefined;
+    let certVerifierChanged: Promise<never> | undefined;
+    let onRequestFailed: ((request: HTTPRequest) => void) | undefined;
+    if (canWatchRequests) {
+      certVerifierChanged = new Promise<never>((_, reject) => {
+        abortOnCertVerifierChange = reject;
+      });
+      // If the marker wins the race, this promise stays pending and is
+      // discarded; mark it handled so it never surfaces as an unhandled
+      // rejection should the context be torn down afterward.
+      certVerifierChanged.catch(() => {});
+      onRequestFailed = (request: HTTPRequest) => {
+        let errorText = request.failure()?.errorText ?? '';
+        if (!CERT_VERIFIER_CHANGED.test(errorText)) {
+          return;
+        }
+        let resourceType = request.resourceType();
+        if (
+          resourceType !== 'document' &&
+          resourceType !== 'script' &&
+          resourceType !== 'stylesheet'
+        ) {
+          return;
+        }
+        if (!abortOnCertVerifierChange) {
+          return;
+        }
+        let message =
+          `Standby target ${standbyURL} hit a transient Chrome cert-verifier ` +
+          `reconfiguration (${errorText} loading ${request.url()}); ` +
+          `retrying on a fresh context`;
+        log.debug('Standby page %s aborting early: %s', pageId, message);
+        abortOnCertVerifierChange(new StandbyTargetNotReadyError(message));
+        abortOnCertVerifierChange = undefined;
+      };
+      page.on('requestfailed', onRequestFailed);
     }
 
-    let abortOnCertVerifierChange: ((error: Error) => void) | undefined;
-    let certVerifierChanged = new Promise<never>((_, reject) => {
-      abortOnCertVerifierChange = reject;
-    });
-    // If the marker wins the race, this promise stays pending and is
-    // discarded; mark it handled so it never surfaces as an unhandled
-    // rejection should the context be torn down afterward.
-    certVerifierChanged.catch(() => {});
-    let onRequestFailed = (request: HTTPRequest) => {
-      let errorText = request.failure()?.errorText ?? '';
-      if (!CERT_VERIFIER_CHANGED.test(errorText)) {
-        return;
-      }
-      let resourceType = request.resourceType();
-      if (
-        resourceType !== 'document' &&
-        resourceType !== 'script' &&
-        resourceType !== 'stylesheet'
-      ) {
-        return;
-      }
-      if (!abortOnCertVerifierChange) {
-        return;
-      }
-      let message =
-        `Standby target ${standbyURL} hit a transient Chrome cert-verifier ` +
-        `reconfiguration (${errorText} loading ${request.url()}); ` +
-        `retrying on a fresh context`;
-      log.debug('Standby page %s aborting early: %s', pageId, message);
-      abortOnCertVerifierChange(new StandbyTargetNotReadyError(message));
-      abortOnCertVerifierChange = undefined;
-    };
-    page.on('requestfailed', onRequestFailed);
-
-    // The loser of the race below keeps running until the context is closed;
-    // attach a handler so its eventual rejection is not reported as unhandled.
-    ready.catch(() => {});
     try {
+      try {
+        let response = await page.goto(standbyURL, {
+          waitUntil: 'domcontentloaded',
+          timeout: this.#standbyTimeoutMs,
+        });
+        let status = response?.status();
+        if (status === 502 || status === 503) {
+          throw new StandbyTargetNotReadyError(
+            `Standby target ${standbyURL} returned HTTP ${status}`,
+          );
+        }
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(
+            error.message,
+          )
+        ) {
+          throw new StandbyTargetNotReadyError(
+            `Standby target ${standbyURL} is not reachable yet: ${error.message}`,
+          );
+        }
+        throw error;
+      }
+
+      // The navigation above resolves on `domcontentloaded` — the HTML shell,
+      // not the booted Ember app — so the readiness marker is awaited next. A
+      // cert-verifier failure seen during navigation has already rejected
+      // `certVerifierChanged`, so the race short-circuits immediately.
+      let ready = page.waitForFunction(() => {
+        let marker = document.querySelector('#standby-ready');
+        return !!marker;
+      });
+      // The loser of the race keeps running until the context is closed;
+      // attach a handler so its eventual rejection is not reported as
+      // unhandled.
+      ready.catch(() => {});
       await this.#withStandbyTimeout(
-        () => Promise.race([ready, certVerifierChanged]),
+        () =>
+          certVerifierChanged
+            ? Promise.race([ready, certVerifierChanged])
+            : ready,
         pageId,
       );
     } finally {
-      page.off('requestfailed', onRequestFailed);
+      if (onRequestFailed) {
+        page.off('requestfailed', onRequestFailed);
+      }
     }
   }
 

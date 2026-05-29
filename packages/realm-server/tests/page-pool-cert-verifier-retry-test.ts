@@ -28,16 +28,30 @@ interface PageStubOptions {
 
 function makePageStub(opts: PageStubOptions, context: any) {
   let requestFailedListeners: Array<(request: any) => void> = [];
+  function emitCertVerifierFailure() {
+    let request = {
+      failure: () => ({ errorText: 'net::ERR_CERT_VERIFIER_CHANGED' }),
+      resourceType: () => opts.failedResourceType ?? 'script',
+      url: () => 'https://localhost:4200/assets/app.js',
+    };
+    for (let l of requestFailedListeners) {
+      l(request);
+    }
+  }
   let page = {
     async goto() {
+      // Production attaches the `requestfailed` watcher BEFORE navigating: a
+      // parser-blocking boot script cert-fails while `domcontentloaded` is
+      // still pending. Mirror that ordering by firing the failure during
+      // `goto`, before it resolves on `domcontentloaded`.
+      if (opts.emitCertVerifierFailure) {
+        emitCertVerifierFailure();
+      }
       return { status: () => 200 };
     },
     waitForFunction() {
       if (opts.boots) {
-        // Resolve a tick after the `requestfailed` macrotask below so that,
-        // when a non-critical failure is emitted, the resource-type filter
-        // is genuinely exercised before the marker wins the race.
-        return new Promise((resolve) => setTimeout(() => resolve(true), 10));
+        return Promise.resolve(true);
       }
       // A standby stuck behind the verifier reconfiguration never boots; a
       // regression that drops the early-abort would await this until the
@@ -59,22 +73,6 @@ function makePageStub(opts: PageStubOptions, context: any) {
         return;
       }
       requestFailedListeners.push(listener);
-      if (!opts.emitCertVerifierFailure) {
-        return;
-      }
-      // `#loadStandbyPage` attaches the listener only after `goto`
-      // resolves, so by now the navigation is done — fire on the next
-      // tick to mimic an asset fetch cancelled mid-load.
-      setTimeout(() => {
-        let request = {
-          failure: () => ({ errorText: 'net::ERR_CERT_VERIFIER_CHANGED' }),
-          resourceType: () => opts.failedResourceType ?? 'script',
-          url: () => 'https://localhost:4200/assets/app.js',
-        };
-        for (let l of requestFailedListeners) {
-          l(request);
-        }
-      }, 0);
     },
     off(event: string, listener: (request: any) => void) {
       if (event !== 'requestfailed') {
