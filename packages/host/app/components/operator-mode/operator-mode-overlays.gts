@@ -375,30 +375,52 @@ export default class OperatorModeOverlays extends Overlays {
   // AdornContext and toggle a `.compact` class on the overlay.
   private compactCards = new TrackedSet<HTMLElement>();
 
+  // Single ResizeObserver shared across all overlay elements in this
+  // component. Each `trackCompact` modifier instance registers its
+  // overlay element via `observe()` and unregisters via `unobserve()`
+  // on teardown — so the per-overlay overhead is one WeakMap entry
+  // and one entry in the observer's observation set, no per-overlay
+  // ResizeObserver instance.
+  private overlayToCard = new WeakMap<HTMLElement, HTMLElement>();
+  private compactObserver = new ResizeObserver((entries) => {
+    for (let entry of entries) {
+      let overlay = entry.target as HTMLElement;
+      let cardEl = this.overlayToCard.get(overlay);
+      if (!cardEl) continue;
+      let { width, height } = entry.contentRect;
+      let isCompact = shouldRenderCompact(width, height);
+      if (isCompact && !this.compactCards.has(cardEl)) {
+        this.compactCards.add(cardEl);
+      } else if (!isCompact && this.compactCards.has(cardEl)) {
+        this.compactCards.delete(cardEl);
+      }
+    }
+  });
+
   private trackCompact = modifier(
     (overlay: HTMLElement, [cardEl]: [HTMLElement | undefined]) => {
       if (!cardEl) {
         return undefined;
       }
-      let check = () => {
-        let { width, height } = overlay.getBoundingClientRect();
-        if (shouldRenderCompact(width, height)) {
-          if (!this.compactCards.has(cardEl)) {
-            this.compactCards.add(cardEl);
-          }
-        } else if (this.compactCards.has(cardEl)) {
-          this.compactCards.delete(cardEl);
-        }
-      };
-      let observer = new ResizeObserver(check);
-      observer.observe(overlay);
-      check();
+      this.overlayToCard.set(overlay, cardEl);
+      this.compactObserver.observe(overlay);
+      // Seed the initial state; the observer won't have fired yet.
+      let { width, height } = overlay.getBoundingClientRect();
+      if (shouldRenderCompact(width, height)) {
+        this.compactCards.add(cardEl);
+      }
       return () => {
-        observer.disconnect();
+        this.compactObserver.unobserve(overlay);
+        this.overlayToCard.delete(overlay);
         this.compactCards.delete(cardEl);
       };
     },
   );
+
+  willDestroy() {
+    super.willDestroy?.();
+    this.compactObserver.disconnect();
+  }
 
   @action
   private isCompact(cardEl: HTMLElement | undefined): boolean {
