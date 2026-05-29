@@ -2644,7 +2644,7 @@
             "uid": "cef5x9o3yzawwf"
           },
           "definition": "regions()",
-          "hide": 2,
+          "hide": 0,
           "includeAll": false,
           "label": "Region",
           "name": "region",
@@ -2670,7 +2670,7 @@
           "options": [],
           "query": "dimension_values($region,AWS/ApplicationELB,ActiveConnectionCount,LoadBalancer)",
           "refresh": 1,
-          "regex": "/.*prerender[-_]?(?:manager|mgr).*/i",
+          "regex": "",
           "sort": 1,
           "type": "query"
         },
