@@ -40,6 +40,8 @@ import { RealmFileChangesListener } from './lib/realm-file-changes-listener';
 import { RealmIndexUpdatedListener } from './lib/realm-index-updated-listener';
 import { ModuleCacheInvalidationListener } from './lib/module-cache-invalidation-listener';
 import { ModuleCacheCoordinator } from './lib/module-cache-coordination';
+import { JobsFinishedListener } from './lib/jobs-finished-listener';
+import { JobScopedSearchCache } from './job-scoped-search-cache';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
@@ -367,9 +369,16 @@ const smokeTestHostApp = async () => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  // DB-backed job-scoped search cache, shared across replicas via Postgres.
+  // One instance per process, shared between the request handlers (via
+  // RealmServer → createRoutes) and the JobsFinishedListener so a
+  // `jobs_finished` NOTIFY evicts the same entries the handlers populate.
+  let searchCache = new JobScopedSearchCache(dbAdapter);
+  searchCache.startJanitor();
   let reconciler: RealmRegistryReconciler | undefined;
   let fileChangesListener: RealmFileChangesListener | undefined;
   let indexUpdatedListener: RealmIndexUpdatedListener | undefined;
+  let jobsFinishedListener: JobsFinishedListener | undefined;
   let moduleCacheInvalidationListener:
     | ModuleCacheInvalidationListener
     | undefined;
@@ -554,6 +563,7 @@ const smokeTestHostApp = async () => {
     grafanaSecret: GRAFANA_SECRET,
     dbAdapter,
     queue,
+    searchCache,
     definitionLookup,
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
@@ -613,12 +623,14 @@ const smokeTestHostApp = async () => {
     if (typeof (httpServer as any).closeAllConnections === 'function') {
       (httpServer as any).closeAllConnections();
     }
+    searchCache.stopJanitor();
     httpServer.close(() => {
       (async () => {
         await Promise.all([
           reconciler?.shutDown(),
           fileChangesListener?.shutDown(),
           indexUpdatedListener?.shutDown(),
+          jobsFinishedListener?.shutDown(),
           moduleCacheInvalidationListener?.shutDown(),
           moduleCacheCoordinator?.shutDown(),
         ]);
@@ -728,6 +740,17 @@ const smokeTestHostApp = async () => {
     lookupMountedRealm: (url) => realms.find((r) => r.url === url),
   });
   await indexUpdatedListener.start();
+
+  // CS-11179: NOTIFY-driven eviction for the DB-backed JobScopedSearchCache.
+  // On `jobs_finished` it drops the finished job's cache rows immediately
+  // instead of waiting for the janitor to reclaim them past their TTL. Shares
+  // the same searchCache instance the request handlers populate (passed into
+  // RealmServer above).
+  jobsFinishedListener = new JobsFinishedListener({
+    dbAdapter,
+    searchCache,
+  });
+  await jobsFinishedListener.start();
 
   // Cross-instance module-cache invalidation (CS-10952). When a peer
   // realm-server emits NOTIFY module_cache_invalidated, replay the bump on

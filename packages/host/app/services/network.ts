@@ -38,10 +38,11 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
-    return fetcher(this.fetch, [
-      authorizationMiddleware(this.realm),
-      authErrorEventMiddleware(),
-    ]);
+    return fetcher(
+      this.fetch,
+      [authorizationMiddleware(this.realm), authErrorEventMiddleware()],
+      this.virtualNetwork,
+    );
   }
 
   get mount() {

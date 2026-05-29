@@ -390,6 +390,7 @@ export default class CardHeader extends Component<Signature> {
         }
 
         .actions {
+          position: relative;
           display: flex;
           align-items: center;
           margin-left: auto;
@@ -421,10 +422,16 @@ export default class CardHeader extends Component<Signature> {
           background-color: var(--boxel-light);
         }
 
+        /* The selection pill floats out of the actions flex flow, anchored
+           just left of the action buttons. Keeping it out of flow means its
+           presence doesn't widen the actions column, which would otherwise
+           shift the centered card title off-center. */
         .utility-menu-positioner {
           --utility-menu-trigger-height: 26px;
-          position: relative;
-          margin-right: var(--boxel-sp);
+          position: absolute;
+          right: calc(100% + var(--boxel-sp-5xs));
+          top: 50%;
+          transform: translateY(-50%);
           width: 1px;
           height: var(--utility-menu-trigger-height);
         }

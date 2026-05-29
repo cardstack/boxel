@@ -5,6 +5,7 @@ import type {
 } from '../index';
 import type { DefinitionCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
+import type { VirtualNetwork } from '../virtual-network';
 import { canonicalURL } from './dependency-url';
 import { IndexBackedDependencyErrors } from './index-backed-dependency-errors';
 import {
@@ -16,6 +17,7 @@ type OrderingDependencyRow = Pick<DependencyIndexRow, 'url' | 'type' | 'deps'>;
 
 interface DependencyResolverOptions {
   realmURL: URL;
+  virtualNetwork: VirtualNetwork;
   readDefinitionCacheEntries(
     moduleIds: string[],
   ): Promise<DefinitionCacheEntries>;
@@ -41,17 +43,21 @@ export class IndexRunnerDependencyManager {
   ) => Promise<OrderingDependencyRow[]>;
   #indexBackedDependencyErrors: IndexBackedDependencyErrors;
   #relationshipDependencyExtractor: RelationshipDependencyExtractor;
+  #virtualNetwork: VirtualNetwork;
 
   constructor({
     realmURL,
+    virtualNetwork,
     readDefinitionCacheEntries,
     getDependencyRows,
     getOrderingDependencyRows,
     getInvalidations,
   }: DependencyResolverOptions) {
     this.#getOrderingDependencyRows = getOrderingDependencyRows;
+    this.#virtualNetwork = virtualNetwork;
     this.#indexBackedDependencyErrors = new IndexBackedDependencyErrors({
       realmURL,
+      virtualNetwork,
       readDefinitionCacheEntries,
       getDependencyRows,
       getInvalidations,
@@ -59,6 +65,7 @@ export class IndexRunnerDependencyManager {
     this.#relationshipDependencyExtractor = new RelationshipDependencyExtractor(
       {
         realmURL,
+        virtualNetwork,
       },
     );
   }
@@ -95,7 +102,7 @@ export class IndexRunnerDependencyManager {
       }
       let base = new URL(row.url);
       for (let dep of row.deps ?? []) {
-        let normalized = canonicalURL(dep, base.href);
+        let normalized = canonicalURL(dep, base.href, this.#virtualNetwork);
         if (!byHref.has(normalized) || normalized === row.url) {
           continue;
         }

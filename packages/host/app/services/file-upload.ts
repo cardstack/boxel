@@ -55,6 +55,7 @@ export default class FileUploadService extends Service {
 
   @tracked activeUploads: FileUploadTask[] = [];
   private queuedLocalFilesForTesting: (File | null)[] = [];
+  private queuedLocalFileBatchesForTesting: File[][] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -102,9 +103,20 @@ export default class FileUploadService extends Service {
     return file ?? undefined;
   }
 
+  async pickLocalFiles(opts?: { acceptTypes?: string }): Promise<File[]> {
+    if (isTesting()) {
+      return this.queuedLocalFileBatchesForTesting.shift() ?? [];
+    }
+    return this._openNativeFilePickerMulti(opts?.acceptTypes);
+  }
+
   // Test seam for local-file attachment flow
   __queueLocalFileForTesting(file: File | null) {
     this.queuedLocalFilesForTesting.push(file);
+  }
+
+  __queueLocalFileBatchForTesting(files: File[]) {
+    this.queuedLocalFileBatchesForTesting.push(files);
   }
 
   private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
@@ -133,6 +145,36 @@ export default class FileUploadService extends Service {
       'cancel',
       () => {
         deferred.fulfill(null);
+        input.remove();
+      },
+      { once: true },
+    );
+
+    input.click();
+    return deferred.promise;
+  }
+
+  private _openNativeFilePickerMulti(acceptTypes?: string): Promise<File[]> {
+    let deferred = new Deferred<File[]>();
+    let input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = acceptTypes ?? '';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    input.addEventListener(
+      'change',
+      () => {
+        deferred.fulfill(input.files ? Array.from(input.files) : []);
+        input.remove();
+      },
+      { once: true },
+    );
+    input.addEventListener(
+      'cancel',
+      () => {
+        deferred.fulfill([]);
         input.remove();
       },
       { once: true },

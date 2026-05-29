@@ -326,6 +326,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   getAuthedFetch,
   prerenderer,
   definitionLookup,
+  virtualNetwork,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -349,6 +350,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       reader,
       indexWriter,
       definitionLookup,
+      virtualNetwork,
       jobInfo,
       jobPriority: jobInfo?.priority,
       reportStatus,
@@ -399,6 +401,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   getAuthedFetch,
   prerenderer,
   definitionLookup,
+  virtualNetwork,
   createPrerenderAuth,
 }) =>
   async function (args) {
@@ -423,6 +426,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       reader,
       indexWriter,
       definitionLookup,
+      virtualNetwork,
       jobInfo,
       jobPriority: jobInfo?.priority,
       reportStatus,
