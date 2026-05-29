@@ -27,6 +27,13 @@ NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-
 # on wait-on (overriding NODE_TLS_REJECT_UNAUTHORIZED), so the documented
 # INSECURE flag is the right escape hatch. Does not affect services
 # under test.
+#
+# REALM_SERVER_SKIP_BOOT_INDEX=true is scoped to the phase-1 dev realm
+# server (base/skills/openrouter/software-factory) only — not the phase-2
+# node-test realm, which the suite reads indexed content from. Those boot
+# realms only need to serve source for the suite, so skipping their
+# from-scratch index keeps `_readiness-check` fast and frees the prerender
+# pool for the tests' own renders.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
@@ -35,7 +42,7 @@ WAIT_ON_TIMEOUT=900000 \
   NODE_NO_WARNINGS=1 \
   START_SERVER_AND_TEST_INSECURE=1 \
   start-server-and-test \
-    'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
+    'REALM_SERVER_SKIP_BOOT_INDEX=true run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
     "${BASE_REALM_READY}|${REALM_READY_SCHEME}://${REALM_BASE_URL#*://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
