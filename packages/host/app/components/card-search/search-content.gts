@@ -281,7 +281,7 @@ export default class SearchContent extends Component<Signature> {
         };
       }
       const selectedTypeIds = this.args.typeFilter.selected.map((ref) =>
-        internalKeyFor(ref, undefined),
+        internalKeyFor(ref, undefined, this.network.virtualNetwork),
       );
       return {
         query: buildRecentsQuery(
