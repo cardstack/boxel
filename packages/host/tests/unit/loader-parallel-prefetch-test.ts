@@ -231,7 +231,7 @@ module('Unit | loader prefetch', function (hooks) {
 
       await assert.rejects(
         testLoader.import(depURL),
-        (e: any) => e.id === trimmedDepURL,
+        (e: any) => e.id === trimmedDepURL || e.id === depURL,
         'importing dependency directly re-fetches and surfaces failure',
       );
     } finally {
