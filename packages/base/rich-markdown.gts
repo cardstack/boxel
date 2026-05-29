@@ -218,6 +218,7 @@ export class RichMarkdownField extends FieldDef {
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
+              @cardReferenceVirtualNetwork={{this.virtualNetwork}}
               @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             />
