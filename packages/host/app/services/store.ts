@@ -1602,7 +1602,20 @@ export default class StoreService extends Service implements StoreInterface {
       }
       if (isDelete) {
         await this.stopAutoSaving(instance);
+        // Snapshot the consumers BEFORE removing the deleted instance from
+        // the store. `consumersOf` walks the loaded cards and reads their
+        // linksTo refs — every consumer that has the now-deleted card in
+        // its bucket needs its slot rewritten to a link-not-found sentinel
+        // so the placeholder render takes over the slot without a
+        // navigation. Without this, the consumer's render stays stale on
+        // the now-orphaned card object until something else forces a
+        // re-render.
+        let api = await this.cardService.getAPI();
+        let consumers = this.store.consumersOf(api, instance);
         this.store.delete(instance.id);
+        for (let consumer of consumers) {
+          api.notifyLinksToTargetDeleted(consumer, instance.id);
+        }
       }
     } finally {
       this.finishTrackingCardLoad(instance.id, reloadTracker);

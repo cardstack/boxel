@@ -692,31 +692,23 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can make an error doc for a card that has a link to a URL that is not a card', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
+    test('a card whose linksTo target fails to load indexes successfully with the broken target captured in deps', async function (assert) {
+      let entry = await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}bad-link`),
       );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'unable to fetch http://localhost:9000/this-is-a-link-to-nowhere: fetch failed',
-        );
-        let actualDeps = (entry.error.errorDetail.deps ?? []).map((d) =>
-          d.endsWith('.json') ? d.slice(0, -5) : d,
-        );
-        assert.ok(
-          actualDeps.includes(`${testRealm}post`),
-          'deps include post module',
-        );
-        assert.ok(
-          actualDeps.includes(
-            `http://localhost:9000/this-is-a-link-to-nowhere`,
-          ),
-          'deps include missing link target',
-        );
-      } else {
-        assert.ok(false, 'expected search entry to be an error document');
-      }
+      assert.strictEqual(
+        entry?.type,
+        'instance',
+        'card with an unreachable linksTo target indexes as a clean instance — the broken slot renders the placeholder, the entry itself is not in error',
+      );
+      let deps = (entry?.deps ?? []).map((d) =>
+        d.endsWith('.json') ? d.slice(0, -5) : d,
+      );
+      assert.ok(deps.includes(`${testRealm}post`), 'deps include post module');
+      assert.ok(
+        deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
+        'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
@@ -3756,30 +3748,36 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument),
         );
 
+        // child-error is the only entry in indexing-error state — its
+        // adoptsFrom module is missing, so module → instance propagation
+        // demotes it. parent-rel and grandparent-rel each linksTo a
+        // downstream card; instance → instance propagation terminates at
+        // the first hop, so the consumers stay indexable. The broken slot
+        // renders the placeholder inline.
+        let childError = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childError?.type,
+          'instance-error',
+          'child-error inherits its missing adoptsFrom module via module → instance propagation',
+        );
         let parentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentBefore?.type,
-          'instance-error',
-          'parent is in error while relationship target is broken',
+          'instance',
+          'parent stays indexable while its linksTo target is broken — broken slot renders the placeholder',
         );
         let grandParentBefore = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
         );
         assert.strictEqual(
           grandParentBefore?.type,
-          'instance-error',
-          'grandparent is in error while downstream relationship target is broken',
+          'instance',
+          'grandparent stays indexable while its downstream linksTo chain reaches a broken card',
         );
-        if (grandParentBefore?.type === 'instance-error') {
-          assert.ok(
-            hasErrorDetail(grandParentBefore.error, 'missing-child'),
-            'two-hop relationship error details include missing child module context',
-          );
-        } else {
-          assert.ok(false, 'expected grandparent to be an instance error');
-        }
 
         await realm.write(
           'missing-child.gts',
@@ -3793,13 +3791,21 @@ module(basename(__filename), function () {
         `,
         );
 
+        let childErrorAfter = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}child-error`),
+        );
+        assert.strictEqual(
+          childErrorAfter?.type,
+          'instance',
+          'child-error recovers once the missing adoptsFrom module is created',
+        );
         let parentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}parent-rel`),
         );
         assert.strictEqual(
           parentAfter?.type,
           'instance',
-          'parent repairs after relationship target is fixed',
+          'parent stays a clean instance after the relationship target recovers',
         );
         let grandParentAfter = await realm.realmIndexQueryEngine.instance(
           new URL(`${testRealm}grandparent-rel`),
@@ -3807,7 +3813,7 @@ module(basename(__filename), function () {
         assert.strictEqual(
           grandParentAfter?.type,
           'instance',
-          'grandparent repairs after downstream relationship target is fixed',
+          'grandparent stays a clean instance after the downstream target recovers',
         );
 
         let parentDeps = await depsFor(`${testRealm}parent-rel.json`);
@@ -4557,6 +4563,124 @@ module(basename(__filename), function () {
             },
           });
           assert.strictEqual(result.length, 1, 'found the post instance');
+        }
+      });
+
+      test('terminates instance→instance error doc propagation at the first linksTo hop', async function (assert) {
+        // Baseline: hassan (PetPerson, linksTo Pet, links to ringo) indexes
+        // cleanly against the as-built fixture. Used as the post-recovery
+        // reference state below.
+        let hassanBaseline = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanBaseline?.type,
+          'instance',
+          'hassan is a clean instance before any breakage',
+        );
+
+        // Put ringo into instance-error state by pointing its `adoptsFrom` at
+        // a module that does not exist. Pet.gts itself stays clean, so the
+        // only error in play is at the instance level.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: {
+                  module: rri('./missing-pet-target'),
+                  name: 'MissingPet',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let ringoErrored = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoErrored?.type,
+          'instance-error',
+          'ringo is in error state once its adoptsFrom module is missing',
+        );
+        if (ringoErrored?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoErrored.error, 'missing-pet-target'),
+            'ringo error doc names the missing module — used below as the inheritance probe',
+          );
+        }
+
+        // hassan (linksTo ringo) must NOT inherit ringo's error doc — and
+        // critically, must NOT itself be in error. The broken slot renders
+        // the placeholder inline; hassan stays a fully indexable instance.
+        let hassanWithBrokenLink = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanWithBrokenLink?.type,
+          'instance',
+          'hassan with a broken linksTo target is a clean instance, not instance-error — broken slot renders the placeholder inline',
+        );
+        let hassanDeps = hassanWithBrokenLink?.deps ?? [];
+        assert.ok(
+          hassanDeps.some(
+            (dep) =>
+              dep === `${testRealm}ringo.json` || dep === `${testRealm}ringo`,
+          ),
+          'hassan deps still include ringo so invalidation fan-out continues to reach hassan when ringo changes',
+        );
+
+        // Recovery: restoring ringo re-indexes hassan via the
+        // `itemsThatReference` fan-out, and hassan returns to a clean
+        // instance entry.
+        await realm.write(
+          'ringo.json',
+          JSON.stringify({
+            data: {
+              attributes: { firstName: 'Ringo' },
+              meta: {
+                adoptsFrom: { module: rri('./pet'), name: 'Pet' },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        let hassanRecovered = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}hassan`),
+        );
+        assert.strictEqual(
+          hassanRecovered?.type,
+          'instance',
+          'hassan recovers to a clean instance once ringo is restored',
+        );
+      });
+
+      test('preserves module→instance error propagation alongside the instance→instance terminator', async function (assert) {
+        // Companion to the instance→instance terminator above: when a module
+        // breaks, instances backed by that module must still inherit the
+        // module error in `additionalErrors`. Only the instance→instance hop
+        // terminates.
+        await realm.write(
+          'pet.gts',
+          `import { OnlyExistsInDreams } from "./does-not-exist";
+           export class Pet extends OnlyExistsInDreams {}`,
+        );
+
+        let ringoAfterModuleBreak = await realm.realmIndexQueryEngine.instance(
+          new URL(`${testRealm}ringo`),
+        );
+        assert.strictEqual(
+          ringoAfterModuleBreak?.type,
+          'instance-error',
+          'ringo cascades to instance-error via module→instance propagation',
+        );
+        if (ringoAfterModuleBreak?.type === 'instance-error') {
+          assert.ok(
+            hasErrorDetail(ringoAfterModuleBreak.error, 'does-not-exist'),
+            'module→instance: ringo inherits Pet module error in additionalErrors',
+          );
         }
       });
 
