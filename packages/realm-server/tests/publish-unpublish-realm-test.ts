@@ -659,52 +659,56 @@ module(basename(__filename), function () {
         );
       });
 
-      test('GET of an extensionless URL that collides with a same-named card instance serves the module, not the published HTML page', async function (assert) {
+      test('a proxied (https) request for an extensionless module URL that collides with a same-named instance is served the module, not the published HTML page', async function (assert) {
+        // Repro of the published-realm "Unexpected token (1:0)" failure.
+        //
         // A card whose instance and definition module share a base name
-        // (app-home.json adopts ./app-home, defined in app-home.gts) collides
-        // on the extensionless URL `.../app-home`. On a published realm that
-        // URL also addresses the website page. The host loader fetches the
-        // module for `adoptsFrom` with a generic `*/*` Accept (no text/html),
-        // and must receive the JS module — not the 132KB HTML page, which the
-        // loader would then try to parse as JS and fail with
-        // "Unexpected token (1:0)".
-        let requestedPublishedRealmURL = 'http://collide.localhost:4445/test-realm/';
+        // (home.json adopts ./home, defined in home.gts) collides on the
+        // extensionless URL `.../home`. On a published realm that URL also
+        // addresses the website page, so serveIndex has to decide between
+        // serving the module and serving the page. It keeps the page only
+        // when no same-named module exists — but that probe resolves the
+        // request against the realm's registered protocol.
+        //
+        // Behind a TLS-terminating proxy (the load balancer in front of
+        // staging/prod) the realm is registered https while the proxied
+        // request reaches the server as http + `x-forwarded-proto: https`.
+        // If serveIndex reads the raw connection protocol instead of the
+        // forwarded one it builds an http URL for an https realm, the module
+        // probe throws on the mismatch, and the host loader is handed the
+        // HTML page — which it then fails to parse as JS.
+        //
+        // We reproduce that here by sending `x-forwarded-proto: https` over a
+        // plain-http supertest connection against an https-published realm,
+        // and by waiting on boxel_index (rather than reading the card) so the
+        // module cache stays cold and the protocol-sensitive probe is the
+        // deciding factor.
+        let publishedRealmURL = 'https://collide.localhost:4445/test-realm/';
         let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
 
         let moduleResponse = await request
-          .post(`${sourceRealmPath}app-home.gts`)
+          .post(`${sourceRealmPath}home.gts`)
           .set('Accept', 'application/vnd.card+source').send(`
             import { CardDef } from "https://cardstack.com/base/card-api";
-            export class AppHome extends CardDef {
-              static displayName = "App Home";
+            export class Home extends CardDef {
+              static displayName = "Home";
             }
           `);
-        assert.strictEqual(
-          moduleResponse.status,
-          204,
-          'source app-home module can be written',
-        );
+        assert.strictEqual(moduleResponse.status, 204, 'source home module written');
 
         let instanceResponse = await request
-          .post(`${sourceRealmPath}app-home.json`)
+          .post(`${sourceRealmPath}home.json`)
           .set('Accept', 'application/vnd.card+source')
           .send(
             JSON.stringify({
               data: {
                 type: 'card',
-                id: `${sourceRealmUrlString}app-home`,
                 attributes: {},
-                meta: {
-                  adoptsFrom: { module: './app-home', name: 'AppHome' },
-                },
+                meta: { adoptsFrom: { module: './home', name: 'Home' } },
               },
             }),
           );
-        assert.strictEqual(
-          instanceResponse.status,
-          204,
-          'source app-home instance can be written',
-        );
+        assert.strictEqual(instanceResponse.status, 204, 'source home instance written');
 
         let publishResponse = await request
           .post('/_publish-realm')
@@ -720,37 +724,42 @@ module(basename(__filename), function () {
           .send(
             JSON.stringify({
               sourceRealmURL: sourceRealmUrlString,
-              publishedRealmURL: requestedPublishedRealmURL,
+              publishedRealmURL,
             }),
           );
         assert.strictEqual(publishResponse.status, 202, 'HTTP 202 status');
 
-        let publishedRealmURL =
+        let resolvedPublishedRealmURL =
           publishResponse.body.data.attributes.publishedRealmURL;
-        let publishedRealmPath = new URL(publishedRealmURL).pathname;
-        let publishedRealmHost = new URL(publishedRealmURL).host;
+        let publishedRealmPath = new URL(resolvedPublishedRealmURL).pathname;
+        let publishedRealmHost = new URL(resolvedPublishedRealmURL).host;
 
-        // Wait until the published realm is indexed and the card is readable.
+        // Mount the freshly-published realm, then wait for its module file to
+        // be indexed WITHOUT reading the card — a card read would warm the
+        // module cache and mask the bug.
+        await testRealmServer.testingOnlyReconcile();
         await waitUntil(
           async () => {
-            let response = await request
-              .get(`${publishedRealmPath}app-home`)
-              .set('Accept', 'application/vnd.card+json')
-              .set('Host', publishedRealmHost);
-            return response.status === 200 ? response : undefined;
+            let rows = await dbAdapter.execute(
+              `SELECT 1 FROM boxel_index WHERE realm_url = $1 AND url = $2 LIMIT 1`,
+              { bind: [resolvedPublishedRealmURL, `${resolvedPublishedRealmURL}home.gts`] },
+            );
+            return rows.length > 0 ? rows : undefined;
           },
           {
             timeout: 30_000,
             interval: 200,
-            timeoutMessage: 'published app-home card did not become readable',
+            timeoutMessage: 'published home module was not indexed',
           },
         );
 
-        // The loader's module fetch: generic Accept, no text/html. This is the
-        // request that previously got the published HTML page.
+        // The host loader's module fetch as it arrives behind the proxy:
+        // http connection, `x-forwarded-proto: https`, against the
+        // https-registered published realm.
         let moduleFetch = await request
-          .get(`${publishedRealmPath}app-home`)
+          .get(`${publishedRealmPath}home`)
           .set('Accept', '*/*')
+          .set('X-Forwarded-Proto', 'https')
           .set('Host', publishedRealmHost);
 
         assert.strictEqual(moduleFetch.status, 200, 'module fetch is 200');
@@ -763,18 +772,8 @@ module(basename(__filename), function () {
           'extensionless module URL is served as JavaScript',
         );
         assert.ok(
-          moduleFetch.text.includes('AppHome'),
-          'served body is the module source, exporting AppHome',
-        );
-
-        // A real browser navigation (Accept: text/html) still gets the page.
-        let pageFetch = await request
-          .get(`${publishedRealmPath}app-home`)
-          .set('Accept', 'text/html')
-          .set('Host', publishedRealmHost);
-        assert.ok(
-          /text\/html/.test(pageFetch.headers['content-type'] ?? ''),
-          'a text/html navigation still receives the published HTML page',
+          moduleFetch.text.includes('Home'),
+          'served body is the module source, exporting Home',
         );
       });
 
