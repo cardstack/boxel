@@ -1446,6 +1446,96 @@ module(basename(__filename), function () {
         );
       });
 
+      test('card prerender records a broken linksTo target on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        // The broken-link findings ride the same consolidated diagnostics
+        // channel as the server timings: render.meta runs getBrokenLinks on
+        // the settled instance, attaches the findings to its diagnostics
+        // block, and the Prerenderer lifts that onto
+        // `response.meta.diagnostics` — exactly the blob the indexer flattens
+        // into `boxel_index.timing_diagnostics`.
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pet.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = (result.response.meta as any)?.diagnostics
+          ?.brokenLinks as
+          | { fieldName: string; reference: string; kind: string }[]
+          | undefined;
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has the single broken slot, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pet',
+          'broken-link finding names the linksTo field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet'),
+          `broken-link finding carries the broken reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm target is classified not-found',
+        );
+      });
+
+      test('card prerender records a broken linksToMany element on meta.diagnostics.brokenLinks for persistence', async function (assert) {
+        let result = await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realmURL,
+          realm: realmURL,
+          url: `${realmURL}owner-with-broken-pets.json`,
+          auth: auth(),
+          renderOptions: { cardRender: true },
+        });
+
+        assert.notOk(
+          result.response.card?.error,
+          'prerender succeeds — the card indexes cleanly',
+        );
+        let brokenLinks = (result.response.meta as any)?.diagnostics
+          ?.brokenLinks as
+          | { fieldName: string; reference: string; kind: string }[]
+          | undefined;
+        // Only the broken element is recorded; the present sibling slot
+        // (./real-pet) produces no finding.
+        assert.strictEqual(
+          brokenLinks?.length,
+          1,
+          `meta.diagnostics.brokenLinks has only the broken element, got: ${JSON.stringify(
+            brokenLinks,
+          )}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.fieldName,
+          'pets',
+          'broken-link finding names the linksToMany field',
+        );
+        assert.ok(
+          brokenLinks?.[0]?.reference.includes('missing-pet-2'),
+          `broken-link finding carries the broken element reference, got: ${brokenLinks?.[0]?.reference}`,
+        );
+        assert.strictEqual(
+          brokenLinks?.[0]?.kind,
+          'not-found',
+          'a missing realm element is classified not-found',
+        );
+      });
+
       test('card prerender surfaces actionable error for bad icon import', async function (assert) {
         let cardURL = `${realmURL}bad-icon-import.json`;
 

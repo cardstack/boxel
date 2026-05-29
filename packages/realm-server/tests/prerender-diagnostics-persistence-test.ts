@@ -33,6 +33,11 @@ type FakeVisitResponse = {
       // `response.meta.diagnostics` and then deleted.
       diagnostics?: Record<string, unknown>;
     };
+    // Success-path host diagnostics block (computed-field counters,
+    // broken-link findings) captured by render.meta and spread onto the
+    // card response. Lifted onto `response.meta.diagnostics` the same way
+    // as the error-path block.
+    diagnostics?: Record<string, unknown>;
   };
   meta?: {
     timing?: Record<string, unknown>;
@@ -179,6 +184,63 @@ module(basename(__filename), function () {
       assert.strictEqual(response.meta?.diagnostics?.renderElapsedMs, 2);
       assert.strictEqual(response.meta?.diagnostics?.totalElapsedMs, 3);
       assert.deepEqual(response.meta?.diagnostics?.waits, {});
+    });
+
+    test('broken-link findings on the success-path card diagnostics are lifted onto response.meta.diagnostics', function (assert) {
+      // A card with a broken linksTo indexes cleanly (no error wrapper),
+      // but render.meta records the broken slot on the card's success-path
+      // diagnostics block. The decorator must lift that onto
+      // response.meta.diagnostics — the consolidated channel the indexer
+      // flattens into `boxel_index.timing_diagnostics.brokenLinks`.
+      let response: FakeVisitResponse = {
+        card: {
+          diagnostics: {
+            serializeMs: 1.5,
+            brokenLinks: [
+              {
+                fieldName: 'pet',
+                reference: 'http://realm.example/missing-pet',
+                kind: 'not-found',
+              },
+            ],
+          },
+        } as FakeVisitResponse['card'],
+      };
+      Prerenderer.decorateRenderErrorsWithTimings(
+        response,
+        { launchMs: 1, renderMs: 2, waits: {} },
+        3,
+      );
+
+      let diagnostics = response.meta?.diagnostics;
+      assert.deepEqual(
+        diagnostics?.brokenLinks,
+        [
+          {
+            fieldName: 'pet',
+            reference: 'http://realm.example/missing-pet',
+            kind: 'not-found',
+          },
+        ],
+        'brokenLinks lifted onto response.meta.diagnostics',
+      );
+      assert.strictEqual(
+        diagnostics?.serializeMs,
+        1.5,
+        'sibling host-side counters lifted alongside brokenLinks',
+      );
+      assert.strictEqual(
+        diagnostics?.launchMs,
+        1,
+        'server timings merged into the same block',
+      );
+      // The card success-path diagnostics was a transient transport,
+      // deleted after the lift just like the error-path block.
+      assert.strictEqual(
+        response.card?.diagnostics,
+        undefined,
+        'card success-path diagnostics cleared after lift',
+      );
     });
 
     test('both decorators stack: host-lifted diagnostics + server timings + requestId coexist on response.meta', function (assert) {

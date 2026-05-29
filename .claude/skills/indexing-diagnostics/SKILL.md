@@ -1,6 +1,6 @@
 ---
 name: indexing-diagnostics
-description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`timing_diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, and (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most. Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, or when investigating the CS-10820 saturation class of incidents. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
+description: Investigate slow or failing indexing using the diagnostics persisted on every `boxel_index` row (`timing_diagnostics` JSONB column, mirrored onto `error_doc.diagnostics` for error rows) plus the matching prerender-server / manager logs. Covers (1) a render inside indexing timed out — classify which part of the prerender pipeline stalled, (2) an incremental or full reindex was slow but didn't fail — attribute time across the invalidation fan-out and find the rows that cost the most, and (3) enumerating cards with broken `linksTo` / `linksToMany` targets via `timing_diagnostics.brokenLinks` (those cards index cleanly, so this is the only indexed signal). Use when indexing fails with "Render timeout", when a user sees a 504, when a reindex took much longer than expected, when an `.gts` edit triggers a surprising amount of re-render work, when investigating the CS-10820 saturation class of incidents, or when asked to list / count cards with broken links in a realm. For staging/prod investigations this skill layers on top of `aws-access`, which provides the AWS session and the SSM port-forward path into the in-VPC database (authenticated as `claude_readonly_user`) — read that skill first when the question is about a deployed environment.
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -17,7 +17,7 @@ Both use cases read from the same data. The difference is the query you start wi
 
 Four places, all correlated:
 
-1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`.
+1. **`boxel_index.timing_diagnostics` (and `boxel_index_working.timing_diagnostics`)** — JSONB column, populated for **every** row the indexer writes, regardless of `has_error`. Source of truth for **card** renders. Carries the full `RenderTimeoutDiagnostics` payload plus three write-side stamps: `invalidationId`, `indexedAt`, `requestId`. It also carries a `brokenLinks` array on any card row whose render found a broken `linksTo` / `linksToMany` target — see [Mode E](#mode-e--enumerate-cards-with-broken-links). Note this is the one block that isn't about *timing*: a card with broken links still indexes as a clean `type='instance'` (the broken slot renders a placeholder), so `brokenLinks` is the only indexed signal that the row has a broken reference.
 2. **`modules.timing_diagnostics`** — JSONB column, populated for every row `persistModuleCacheEntry` writes (success and error paths). Source of truth for **module** renders (`prerenderModule` → definition extraction). Same `RenderTimeoutDiagnostics` shape with `requestId` flattened in; no `invalidationId` (modules don't go through `Batch.invalidate`). The row's existing `created_at` column is the wall-clock stamp for cross-table joins. See [Mode D](#mode-d--a-module-render-was-slow-or-hung) below.
 3. **`error_doc.diagnostics`** — derived copy of `timing_diagnostics`, written only for error rows on `boxel_index`. Exists so the existing UI read path (`error_doc` → `CardErrorJSONAPI.meta.diagnostics` via `formattedError`) keeps working without a schema rename. Non-error rows have `error_doc = null`; go to `timing_diagnostics` directly.
 4. **Logs** — `prerender-server`, `manager`, and `remote-prerenderer` lines all carry `requestId=…`. `grep requestId=<uuid>` collates one call across all three processes. The same `requestId` lands on both `boxel_index.timing_diagnostics->>'requestId'` and `modules.timing_diagnostics->>'requestId'`, so a hung card render and the module renders it triggered (via `getDefinition`) can be joined back to one investigation. For saturation incidents there's also the periodic `prerender-queue-snapshot` line on each prerender server.
@@ -642,6 +642,61 @@ WHERE timing_diagnostics->>'requestId' = '<request-id>';
 
 - **No partial-progress equivalent.** `modules` has no working-table sibling; the row only lands on `persistModuleCacheEntry` after the prerender returns. If a `prerenderModule` call hangs forever and the worker is killed, no row is written and Mode D has nothing to query. Cross-reference against the prerender server logs for `requestId=…` directly, same as a hung card render before the host's withTimeout fires.
 - **No invalidationId, so no Mode B fan-out.** Module renders are independent units; they don't belong to a "batch" that you can group by. If you need to attribute a slow `getDefinition` storm across many concurrent searches, you're stuck doing it via `created_at` time windows + the `#inFlight` dedupe behavior in `CachingDefinitionLookup` — i.e. one slow row may have been the bottleneck for many in-flight callers, but the `modules` table doesn't record those waiters.
+
+## Mode E — enumerate cards with broken links
+
+Unlike Modes A–D, this isn't a perf investigation: it's a realm-health / content-integrity query. A card whose `linksTo` / `linksToMany` target is unreachable (deleted, 404, upstream 5xx, network failure) **still indexes as a clean `type='instance'`** — the broken slot renders the placeholder template and the broken reference is preserved on the wire as `relationships.<field>.links.self`, identical to a not-yet-loaded link. So `has_error` is `false` and `error_doc` is `null`; nothing in the row's *status* tells you the link is broken.
+
+What records it is `timing_diagnostics.brokenLinks` — an array the host's `render.meta` route builds by running `getBrokenLinks(instance)` on the settled instance and attaching the findings to the diagnostics block. Each finding is the minimal queryable summary:
+
+```jsonc
+"brokenLinks": [
+  { "fieldName": "author", "reference": "https://realm.example/people/ringo", "kind": "not-found" },
+  { "fieldName": "pets",   "reference": "https://realm.example/pets/missing", "kind": "error" }
+]
+```
+
+- `fieldName` — the declared `linksTo` / `linksToMany` field holding the broken reference. A `linksToMany` field with one broken element produces one finding for that element; present siblings produce none.
+- `reference` — the broken target reference, as captured from relationship state.
+- `kind` — `'not-found'` for an HTTP 404 (the canonical "target was deleted" case), `'error'` for any other upstream failure (5xx, network, fetch error).
+- `errorDoc` is **not** persisted here (it's large) — read it at runtime via `getRelationship(card, fieldName)` or see it inline in the rendered placeholder. The broken target is also carried in the row's `deps`, so if the target later reappears the card is invalidated and re-rendered, clearing the finding.
+
+```sql
+-- List every card in a realm with at least one broken link, one row per
+-- broken slot. `jsonb_array_elements` fans the array out so you get the
+-- field + reference + kind per finding.
+SELECT
+  i.url,
+  bl->>'fieldName' AS field_name,
+  bl->>'reference' AS broken_reference,
+  bl->>'kind'      AS kind
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.timing_diagnostics->'brokenLinks') AS bl
+WHERE i.realm_url = 'https://localhost:4201/user/your-realm/'
+  AND i.type = 'instance'
+  AND jsonb_typeof(i.timing_diagnostics->'brokenLinks') = 'array'
+ORDER BY i.url, field_name;
+
+-- Just the count of affected cards (cheap realm-health gauge).
+SELECT count(*) AS cards_with_broken_links
+FROM boxel_index
+WHERE realm_url = 'https://localhost:4201/user/your-realm/'
+  AND type = 'instance'
+  AND jsonb_typeof(timing_diagnostics->'brokenLinks') = 'array';
+
+-- Find every card pointing at one specific broken target (e.g. to gauge
+-- the blast radius before deleting / after un-deleting a card).
+SELECT i.url, bl->>'fieldName' AS field_name, bl->>'kind' AS kind
+FROM boxel_index i
+CROSS JOIN LATERAL jsonb_array_elements(i.timing_diagnostics->'brokenLinks') AS bl
+WHERE bl->>'reference' = 'https://realm.example/people/ringo';
+```
+
+Caveats:
+
+- **Older rows predate the scan.** A row last indexed before this capability shipped has no `brokenLinks` key even if its links are broken — it'll only appear after the next reindex. Don't read "absent" as "no broken links" for stale rows; check `indexedAt` if in doubt.
+- **`boxel_index_working` carries it too**, so you can watch broken-link findings accrue mid-reindex the same way as the timing fields (see [Reading partial progress](#5-reading-partial-progress-from-boxel_index_working)).
+- This is the cheap enumeration path the rendered-HTML / `getRelationship` runtime surfaces were too expensive for — querying the column avoids parsing HTML or re-running `getBrokenLinks` per read.
 
 ## Field-by-field reading
 

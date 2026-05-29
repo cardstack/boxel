@@ -44,6 +44,25 @@ export type PatchData = {
   };
 };
 
+// A broken `linksTo` / `linksToMany` target found on the rendered
+// instance, recorded as searchable metadata on the (successful) index
+// entry. The card itself indexes as `type='instance'` — the broken slot
+// renders a placeholder and the reference is preserved on the wire — so
+// this is the only direct, indexed signal that lets a consumer (AI
+// tooling, realm-health reports) enumerate cards-with-broken-links
+// without parsing the rendered HTML or re-running `getBrokenLinks` at
+// read time. `errorDoc` is intentionally omitted: it's large, and the
+// error detail is still available at runtime via
+// `getRelationship(card, fieldName)` and inline in the rendered placeholder.
+export interface BrokenLinkSummary {
+  // The declared `linksTo` / `linksToMany` field holding the broken reference.
+  fieldName: string;
+  // The broken target reference, preserved from the relationship state.
+  reference: string;
+  // `'error'` for a generic upstream failure, `'not-found'` for an HTTP 404.
+  kind: 'error' | 'not-found';
+}
+
 // Per-render computed-field counters captured by the host's render.meta
 // route. Emitted alongside PrerenderMeta so the Prerenderer can lift them
 // onto `response.meta.diagnostics` and the indexer can persist them onto
@@ -64,6 +83,12 @@ export interface PrerenderMetaDiagnostics {
   serializeMs?: number;
   // Wall-clock of the host-side searchDoc call.
   searchDocMs?: number;
+  // Broken `linksTo` / `linksToMany` targets found on the rendered
+  // instance after the store settled. Captured by the render.meta scan
+  // and persisted to `boxel_index.timing_diagnostics.brokenLinks` so
+  // cards-with-broken-links are cheaply enumerable. Omitted entirely
+  // when the card has no broken links.
+  brokenLinks?: BrokenLinkSummary[];
 }
 
 // Shared type produced by the host app when visiting the render.meta route and
@@ -362,6 +387,11 @@ export interface PrerenderResponseMeta {
 export interface TimingDiagnostics extends RenderTimeoutDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Broken-link findings lifted from the render.meta `diagnostics` block
+  // (see `PrerenderMetaDiagnostics.brokenLinks`). Surfaced on the
+  // persisted shape so SQL-side consumers can read it as a queryable
+  // property of the index row.
+  brokenLinks?: BrokenLinkSummary[];
 }
 
 // Flatten a prerender `response.meta` block into the shape persisted to

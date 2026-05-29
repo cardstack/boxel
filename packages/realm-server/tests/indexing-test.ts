@@ -709,6 +709,31 @@ module(basename(__filename), function () {
         deps.includes(`http://localhost:9000/this-is-a-link-to-nowhere`),
         'deps include the unreachable link target so invalidation can reach this card if it becomes reachable',
       );
+
+      // The broken slot is also recorded as searchable metadata on the
+      // (successful) index row: the render.meta scan runs getBrokenLinks
+      // after the store settles and the finding rides the diagnostics
+      // channel into `boxel_index.timing_diagnostics.brokenLinks`. This is
+      // the direct, indexed signal that lets a consumer enumerate
+      // cards-with-broken-links without parsing HTML or re-running the scan.
+      let [diagRow] = (await testDbAdapter.execute(
+        `SELECT timing_diagnostics FROM boxel_index WHERE realm_url = $1 AND url = $2 AND type = 'instance'`,
+        { bind: [realm.url, `${testRealm}bad-link.json`] },
+      )) as { timing_diagnostics: { brokenLinks?: unknown } | null }[];
+      let brokenLinks = diagRow?.timing_diagnostics?.brokenLinks as
+        | { fieldName: string; reference: string; kind: string }[]
+        | undefined;
+      assert.deepEqual(
+        brokenLinks,
+        [
+          {
+            fieldName: 'author',
+            reference: 'http://localhost:9000/this-is-a-link-to-nowhere',
+            kind: 'error',
+          },
+        ],
+        'timing_diagnostics.brokenLinks records the broken author slot',
+      );
     });
 
     // Note this particular test should only be a server test as the nature of
