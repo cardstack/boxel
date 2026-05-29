@@ -310,7 +310,9 @@ module(
         .exists('editor offers a remove affordance for the broken reference');
       assert
         .dom('[data-test-add-new="pet"]')
-        .doesNotExist('the broken state offers no inline "Link" replace button');
+        .doesNotExist(
+          'the broken state offers no inline "Link" replace button',
+        );
 
       // Removing the broken reference reverts to the not-set state, whose "Link"
       // button is the single entry point for adding a working replacement.
@@ -318,7 +320,10 @@ module(
       assert
         .dom('[data-test-add-new="pet"]')
         .exists('the not-set state offers the "Link" affordance to relink')
-        .hasText('Link Pet', 'the relink control is labelled for the field type');
+        .hasText(
+          'Link Pet',
+          'the relink control is labelled for the field type',
+        );
     });
 
     test('removing a broken link reverts the slot to the empty "Link" affordance', async function (assert) {
