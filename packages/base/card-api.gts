@@ -1770,6 +1770,21 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   }
 
   queryableValue(instances: any[] | null, stack: CardDef[]): any[] | null {
+    // A whole-field sentinel (a query-field whose search resource errored, or
+    // a computed `linksToMany` that consumes an unresolved upstream link)
+    // arrives here as a single LinkErrorValue / LinkNotFoundValue / NotLoaded
+    // object — NOT an array. Without this guard, the `[...instances]` spread
+    // below would throw `instances is not iterable`, the render would fail,
+    // and the indexer would classify the consumer as instance-error — the
+    // exact cascade the field-getter side of the tolerance machine avoids.
+    // Treat a non-present whole-field sentinel as an empty plural for index
+    // purposes; the broken reference is preserved on the wire via the
+    // serializer (`relationships.{field}` carries the sentinel's `reference`),
+    // and `getRelationship` is the structured read surface for the failure
+    // state outside the index.
+    if (isNonPresentLink(instances)) {
+      return null;
+    }
     if (instances === null || instances.length === 0) {
       // we intentionally use a "null" to represent an empty plural field as
       // this is a limitation to SQLite's json_tree() function when trying to match
